@@ -290,7 +290,7 @@ Register-level constructs live in the type file:
 A whole-word fixed image is a transaction, so it stays in the PAC policy
 (`fixed-register-images`, `whole-word = true`).
 
-`dim` repeats a single word (`count` at least 2, `stride` a multiple of
+`dim` repeats a single word (`count` at least 1, `stride` a multiple of
 the register's bytes, the name holds one `%s`). `[[groups]]` repeat a set
 of registers, which take their offsets from the group's start; the group
 name holds one `%s`, `count` is at least 2, `stride` covers every register
@@ -1048,3 +1048,27 @@ other. The whole content of a register whose meaning is established is its
 `VALUE` field. Vendor names keep their
 source's spelling. `naming` applies only
 to registers and fields.
+
+### Hart-sized families
+
+A root may name `hart-facts = "../platform/chip.toml"`. The file's
+`[interrupts] harts` is a nonempty contiguous list from zero; `boot-hart`
+names primary initialization. In an inline `dim`, `count = "harts"` or
+`count = "secondary-harts"` resolves from that list before model validation.
+The generated PAC exposes the facts renderer's `HARTS`, `Hart` and
+`SecondaryHart`; fixed IDs are checked inside inline const, raw conversion
+returns an error and enum-based array selection has no dynamic bounds check.
+
+A register `dim` also accepts `first` (default zero), the first label, distinct
+from its zero-based array index. `element-resets` may list the complete reset
+images of a top-level register family; list length and reset geometry must
+agree with the family. The common reset still governs reserved-bit writes.
+An instance may have `dim`, expanding its `%s` name and base by the given
+count and byte stride before overlap and ownership validation.
+
+A native plain/read-only field may have `dim = { count = "harts", stride = -8 }`:
+its `%s` name expands from zero, its `bits` select the first lane, and the
+signed stride is in bits. Every lane must fit its register and remain
+disjoint. Readers and writers take one `Index<count>` and preserve every
+other lane and unassigned bit. The bus operation remains a whole-word access.
+Constrained fields, pointers and action fields do not admit field `dim`.

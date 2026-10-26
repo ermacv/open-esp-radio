@@ -4,6 +4,81 @@
 // The thin PAC of the chip root and its ownership policy, rendered by
 // `cargo registers` over `oer-mmio`; no `unsafe`, no raw write.
 
+/// The HP-hart count from the platform fact.
+pub const HARTS: usize = 2;
+/// A checked architectural HP-hart index; no execution authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum Hart {
+    H0 = 0,
+    H1 = 1,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidHart {
+    pub raw: u32,
+}
+impl Hart {
+    pub const fn new(raw: u32) -> Result<Self, InvalidHart> {
+        match raw {
+            0 => Ok(Self::H0),
+            1 => Ok(Self::H1),
+            _ => Err(InvalidHart { raw }),
+        }
+    }
+    /// A fixed index admitted at monomorphization, even in runtime code.
+    pub const fn constant<const ID: usize>() -> Self {
+        const {
+            assert!(ID < HARTS, "the hart lies inside the chip geometry");
+            match Self::new(ID as u32) {
+                Ok(hart) => hart,
+                Err(_) => panic!("invalid fixed hart"),
+            }
+        }
+    }
+    pub const fn get(self) -> usize {
+        self as usize
+    }
+    pub const fn index(self) -> oer_mmio::Index<HARTS> {
+        match self {
+            Self::H0 => oer_mmio::Index::constant::<0>(),
+            Self::H1 => oer_mmio::Index::constant::<1>(),
+        }
+    }
+    /// Select a hart's value without a runtime bounds check.
+    pub const fn at<T>(self, values: &[T; HARTS]) -> &T {
+        match self {
+            Self::H0 => &values[0],
+            Self::H1 => &values[1],
+        }
+    }
+    pub const fn at_mut<T>(self, values: &mut [T; HARTS]) -> &mut T {
+        match self {
+            Self::H0 => &mut values[0],
+            Self::H1 => &mut values[1],
+        }
+    }
+    pub const ALL: [Self; HARTS] = [Self::H0, Self::H1];
+    pub const SECONDARIES: [SecondaryHart; HARTS - 1] = [SecondaryHart::H1];
+}
+/// A nonboot hart and its ROM boot-word index.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SecondaryHart {
+    H1,
+}
+impl SecondaryHart {
+    pub const fn hart(self) -> Hart {
+        match self {
+            Self::H1 => Hart::H1,
+        }
+    }
+    pub const fn index(self) -> oer_mmio::Index<{ HARTS - 1 }> {
+        match self {
+            Self::H1 => oer_mmio::Index::constant::<0>(),
+        }
+    }
+}
+/// The primary initialization hart.
+pub const BOOT_HART: Hart = Hart::H0;
 /// The chip's interrupt-matrix sources.
 #[allow(
     non_camel_case_types,
@@ -970,7 +1045,7 @@ pub mod instances {
 
     /// The `INTERRUPT_CORE0` instance of [`INTERRUPT_CORE`](super::interrupt_core).
     ///
-    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L137.
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L137, ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L138.
     pub mod interrupt_core0 {
         /// The instance's base address.
         pub const BASE: usize = 0x20585000;
@@ -980,7 +1055,7 @@ pub mod instances {
 
     /// The `INTERRUPT_CORE1` instance of [`INTERRUPT_CORE`](super::interrupt_core).
     ///
-    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L138.
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L137, ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L138.
     pub mod interrupt_core1 {
         /// The instance's base address.
         pub const BASE: usize = 0x20585800;
@@ -35113,33 +35188,183 @@ pub mod bt_mac {
 
 /// The `BUS_MONITOR` block type.
 ///
-/// The HP CPUs' bus monitor and assist-debug block (ESP-IDF's ASSIST_DEBUG): each core's debug-mode status. Only the debug-mode words are modeled.
+/// The HP CPUs' bus monitor and assist-debug block (ESP-IDF's ASSIST_DEBUG): each core's debug-mode status. Debug status and PC/SP recording words are modeled.
 pub mod bus_monitor {
-    /// The `CORE_0_DEBUG_MODE` register.
-    ///
-    /// HP core 0's debug status.
-    pub mod core_0_debug_mode {
+    /// The `CORE_%s_RCD_EN` register.
+    pub mod rcd_en {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00000003;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
-        /// The register's byte offset in its block.
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x44;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x88;
+        /// The element count.
+        pub const COUNT: usize = 2;
+
+        /// Width of `CORE_RCD_RECORDEN` in bits.
+        pub const RCD_RECORDEN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CORE_RCD_RECORDEN`.
+        pub const RCD_RECORDEN_MAX: u32 = 0x1;
+        /// Positioned bits of `CORE_RCD_RECORDEN`.
+        pub const RCD_RECORDEN_MASK: u32 = 0x1;
+
+        /// Width of `CORE_RCD_PDEBUGEN` in bits.
+        pub const RCD_PDEBUGEN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CORE_RCD_PDEBUGEN`.
+        pub const RCD_PDEBUGEN_MAX: u32 = 0x1;
+        /// Positioned bits of `CORE_RCD_PDEBUGEN`.
+        pub const RCD_PDEBUGEN_MASK: u32 = 0x2;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enable real-time recording of this hart's PC and SP.
+            #[inline]
+            pub const fn rcd_recorden(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the HP CPU's debug PC output.
+            #[inline]
+            pub const fn rcd_pdebugen(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enable real-time recording of this hart's PC and SP.
+            #[inline]
+            pub const fn rcd_recorden(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the HP CPU's debug PC output.
+            #[inline]
+            pub const fn rcd_pdebugen(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Set `CORE_RCD_RECORDEN`.
+            #[inline]
+            pub fn set_rcd_recorden(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `CORE_RCD_PDEBUGEN`.
+            #[inline]
+            pub fn set_rcd_pdebugen(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+        }
+    }
+
+    /// The `CORE_%s_RCD_PDEBUGPC` register.
+    pub mod rcd_pdebugpc {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x48;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x88;
+        /// The element count.
+        pub const COUNT: usize = 2;
+
+        /// Width of `CORE_RCD_PDEBUGPC` in bits.
+        pub const RCD_PDEBUGPC_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `CORE_RCD_PDEBUGPC`.
+        pub const RCD_PDEBUGPC_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `CORE_RCD_PDEBUGPC`.
+        pub const RCD_PDEBUGPC_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The hart's sampled program counter.
+            #[inline]
+            pub const fn rcd_pdebugpc(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
+    /// The `CORE_%s_RCD_PDEBUGSP` register.
+    pub mod rcd_pdebugsp {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x4c;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x88;
+        /// The element count.
+        pub const COUNT: usize = 2;
+
+        /// Width of `CORE_RCD_PDEBUGSP` in bits.
+        pub const RCD_PDEBUGSP_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `CORE_RCD_PDEBUGSP`.
+        pub const RCD_PDEBUGSP_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `CORE_RCD_PDEBUGSP`.
+        pub const RCD_PDEBUGSP_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The hart's sampled stack pointer.
+            #[inline]
+            pub const fn rcd_pdebugsp(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
+    /// The `CORE_%s_DEBUG_MODE` register.
+    ///
+    /// HP core 0's debug status.
+    pub mod debug_mode {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000003;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
         pub const OFFSET: usize = 0x64;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x88;
+        /// The element count.
+        pub const COUNT: usize = 2;
 
-        /// Width of `CORE_0_DEBUG_MODE` in bits.
-        pub const CORE_0_DEBUG_MODE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `CORE_0_DEBUG_MODE`.
-        pub const CORE_0_DEBUG_MODE_MAX: u32 = 0x1;
-        /// Positioned bits of `CORE_0_DEBUG_MODE`.
-        pub const CORE_0_DEBUG_MODE_MASK: u32 = 0x1;
+        /// Width of `CORE_DEBUG_MODE` in bits.
+        pub const DEBUG_MODE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CORE_DEBUG_MODE`.
+        pub const DEBUG_MODE_MAX: u32 = 0x1;
+        /// Positioned bits of `CORE_DEBUG_MODE`.
+        pub const DEBUG_MODE_MASK: u32 = 0x1;
 
-        /// Width of `CORE_0_DEBUG_MODULE_ACTIVE` in bits.
-        pub const CORE_0_DEBUG_MODULE_ACTIVE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `CORE_0_DEBUG_MODULE_ACTIVE`.
-        pub const CORE_0_DEBUG_MODULE_ACTIVE_MAX: u32 = 0x1;
-        /// Positioned bits of `CORE_0_DEBUG_MODULE_ACTIVE`.
-        pub const CORE_0_DEBUG_MODULE_ACTIVE_MASK: u32 = 0x2;
+        /// Width of `CORE_DEBUG_MODULE_ACTIVE` in bits.
+        pub const DEBUG_MODULE_ACTIVE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CORE_DEBUG_MODULE_ACTIVE`.
+        pub const DEBUG_MODULE_ACTIVE_MAX: u32 = 0x1;
+        /// Positioned bits of `CORE_DEBUG_MODULE_ACTIVE`.
+        pub const DEBUG_MODULE_ACTIVE_MASK: u32 = 0x2;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -35148,58 +35373,13 @@ pub mod bus_monitor {
         impl R {
             /// Whether HP core 0 is in debugging mode.
             #[inline]
-            pub const fn core_0_debug_mode(self) -> bool {
+            pub const fn debug_mode(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
             /// Whether HP core 0's debug module is active: a debugger is attached.
             #[inline]
-            pub const fn core_0_debug_module_active(self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-        }
-    }
-
-    /// The `CORE_1_DEBUG_MODE` register.
-    ///
-    /// HP core 1's debug status.
-    pub mod core_1_debug_mode {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0x00000003;
-        /// The register's width in bits.
-        pub const WIDTH: u32 = 32;
-
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0xec;
-
-        /// Width of `CORE_1_DEBUG_MODE` in bits.
-        pub const CORE_1_DEBUG_MODE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `CORE_1_DEBUG_MODE`.
-        pub const CORE_1_DEBUG_MODE_MAX: u32 = 0x1;
-        /// Positioned bits of `CORE_1_DEBUG_MODE`.
-        pub const CORE_1_DEBUG_MODE_MASK: u32 = 0x1;
-
-        /// Width of `CORE_1_DEBUG_MODULE_ACTIVE` in bits.
-        pub const CORE_1_DEBUG_MODULE_ACTIVE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `CORE_1_DEBUG_MODULE_ACTIVE`.
-        pub const CORE_1_DEBUG_MODULE_ACTIVE_MAX: u32 = 0x1;
-        /// Positioned bits of `CORE_1_DEBUG_MODULE_ACTIVE`.
-        pub const CORE_1_DEBUG_MODULE_ACTIVE_MASK: u32 = 0x2;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// Whether HP core 1 is in debugging mode.
-            #[inline]
-            pub const fn core_1_debug_mode(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// Whether HP core 1's debug module is active: a debugger is attached.
-            #[inline]
-            pub const fn core_1_debug_module_active(self) -> bool {
+            pub const fn debug_module_active(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
         }
@@ -35227,11 +35407,11 @@ pub mod bus_monitor {
 
     impl oer_mmio::Registers for DebugModeStatusWords {
         type Sharing = oer_mmio::sharing::Owned;
-        const WORDS: &'static [usize] = &[0x64];
+        const WORDS: &'static [usize] = &[0x64, 0xec];
     }
 
     impl oer_mmio::Words for DebugModeStatusWords {
-        const OWNED: &'static [usize] = &[0x64];
+        const OWNED: &'static [usize] = &[0x64, 0xec];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -35255,10 +35435,10 @@ pub mod bus_monitor {
     }
 
     impl<P: oer_mmio::Placement> DebugModeStatus<P> {
-        /// Read `CORE_0_DEBUG_MODE`.
+        /// Read `CORE_%s_DEBUG_MODE`.
         #[inline]
-        pub fn read_core_0_debug_mode(&self) -> core_0_debug_mode::R {
-            core_0_debug_mode::R(self.0.read::<0x64>())
+        pub fn read_debug_mode(&self, index: oer_mmio::Index<2>) -> debug_mode::R {
+            debug_mode::R(self.0.read_indexed::<0x64, 0x88, 2>(index))
         }
     }
 }
@@ -77002,16 +77182,12 @@ pub mod hp_system {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// hp core0 corestalled status HP core 0 is stalled.
+            /// Read one indexed field.
             #[inline]
-            pub const fn hp_reg_core0_corestalled_st(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// hp core1 corestalled status HP core 1 is stalled.
-            #[inline]
-            pub const fn hp_reg_core1_corestalled_st(self) -> bool {
-                (self.0 & 0x00000002) != 0
+            pub const fn hp_reg_core_corestalled_st(self, index: oer_mmio::Index<2>) -> bool {
+                let shift = 0u32.wrapping_add((index.get() as u32).wrapping_mul(1u32));
+                let bits = self.0.wrapping_shr(shift);
+                (bits & 1) != 0
             }
         }
     }
@@ -85379,76 +85555,80 @@ pub mod hp_sys_clkrst {
         }
     }
 
-    /// The `HPCORE0_CTRL0` register.
+    /// The `HPCORE%s_CTRL0` register.
     ///
-    /// need_des
-    pub mod hpcore0_ctrl0 {
+    /// Per-hart CPU/CLIC clocks and global reset.
+    pub mod hpcore_ctrl0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x0000000f;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
-        /// The register's byte offset in its block.
+        /// The first element's byte offset in its block.
         pub const OFFSET: usize = 0x1c;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 2;
 
         /// The reserved bits: never a field, kept by every read-modify-write and
         /// stored at their reset value by a write from zero.
         pub const RESERVED: u32 = 0xfffffff0;
 
-        /// Width of `REG_CORE0_CLIC_CLK_EN` in bits.
-        pub const REG_CORE0_CLIC_CLK_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `REG_CORE0_CLIC_CLK_EN`.
-        pub const REG_CORE0_CLIC_CLK_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `REG_CORE0_CLIC_CLK_EN`.
-        pub const REG_CORE0_CLIC_CLK_EN_MASK: u32 = 0x1;
+        /// Width of `REG_CORE_CLIC_CLK_EN` in bits.
+        pub const REG_CORE_CLIC_CLK_EN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `REG_CORE_CLIC_CLK_EN`.
+        pub const REG_CORE_CLIC_CLK_EN_MAX: u32 = 0x1;
+        /// Positioned bits of `REG_CORE_CLIC_CLK_EN`.
+        pub const REG_CORE_CLIC_CLK_EN_MASK: u32 = 0x1;
 
-        /// Width of `REG_CORE0_CPU_CLK_EN` in bits.
-        pub const REG_CORE0_CPU_CLK_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `REG_CORE0_CPU_CLK_EN`.
-        pub const REG_CORE0_CPU_CLK_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `REG_CORE0_CPU_CLK_EN`.
-        pub const REG_CORE0_CPU_CLK_EN_MASK: u32 = 0x2;
+        /// Width of `REG_CORE_CPU_CLK_EN` in bits.
+        pub const REG_CORE_CPU_CLK_EN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `REG_CORE_CPU_CLK_EN`.
+        pub const REG_CORE_CPU_CLK_EN_MAX: u32 = 0x1;
+        /// Positioned bits of `REG_CORE_CPU_CLK_EN`.
+        pub const REG_CORE_CPU_CLK_EN_MASK: u32 = 0x2;
 
-        /// Width of `REG_CORE0_GLOBAL_RST_EN` in bits.
-        pub const REG_CORE0_GLOBAL_RST_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `REG_CORE0_GLOBAL_RST_EN`.
-        pub const REG_CORE0_GLOBAL_RST_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `REG_CORE0_GLOBAL_RST_EN`.
-        pub const REG_CORE0_GLOBAL_RST_EN_MASK: u32 = 0x4;
+        /// Width of `REG_CORE_GLOBAL_RST_EN` in bits.
+        pub const REG_CORE_GLOBAL_RST_EN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `REG_CORE_GLOBAL_RST_EN`.
+        pub const REG_CORE_GLOBAL_RST_EN_MAX: u32 = 0x1;
+        /// Positioned bits of `REG_CORE_GLOBAL_RST_EN`.
+        pub const REG_CORE_GLOBAL_RST_EN_MASK: u32 = 0x4;
 
-        /// Width of `REG_CORE0_FORCE_NORST` in bits.
-        pub const REG_CORE0_FORCE_NORST_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `REG_CORE0_FORCE_NORST`.
-        pub const REG_CORE0_FORCE_NORST_MAX: u32 = 0x1;
-        /// Positioned bits of `REG_CORE0_FORCE_NORST`.
-        pub const REG_CORE0_FORCE_NORST_MASK: u32 = 0x8;
+        /// Width of `REG_CORE_FORCE_NORST` in bits.
+        pub const REG_CORE_FORCE_NORST_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `REG_CORE_FORCE_NORST`.
+        pub const REG_CORE_FORCE_NORST_MAX: u32 = 0x1;
+        /// Positioned bits of `REG_CORE_FORCE_NORST`.
+        pub const REG_CORE_FORCE_NORST_MASK: u32 = 0x8;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// need_des
+            /// The selected hart's CLIC clock enable.
             #[inline]
-            pub const fn reg_core0_clic_clk_en(self) -> bool {
+            pub const fn reg_core_clic_clk_en(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// need_des
+            /// The selected hart's CPU clock enable.
             #[inline]
-            pub const fn reg_core0_cpu_clk_en(self) -> bool {
+            pub const fn reg_core_cpu_clk_en(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// need_des
+            /// Hold the selected hart in global reset.
             #[inline]
-            pub const fn reg_core0_global_rst_en(self) -> bool {
+            pub const fn reg_core_global_rst_en(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// need_des
+            /// Keep the selected hart out of reset.
             #[inline]
-            pub const fn reg_core0_force_norst(self) -> bool {
+            pub const fn reg_core_force_norst(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
         }
@@ -85457,186 +85637,54 @@ pub mod hp_sys_clkrst {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// need_des
+            /// The selected hart's CLIC clock enable.
             #[inline]
-            pub const fn reg_core0_clic_clk_en(&self) -> bool {
+            pub const fn reg_core_clic_clk_en(&self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// need_des
+            /// The selected hart's CPU clock enable.
             #[inline]
-            pub const fn reg_core0_cpu_clk_en(&self) -> bool {
+            pub const fn reg_core_cpu_clk_en(&self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// need_des
+            /// Hold the selected hart in global reset.
             #[inline]
-            pub const fn reg_core0_global_rst_en(&self) -> bool {
+            pub const fn reg_core_global_rst_en(&self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// need_des
+            /// Keep the selected hart out of reset.
             #[inline]
-            pub const fn reg_core0_force_norst(&self) -> bool {
+            pub const fn reg_core_force_norst(&self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Set `REG_CORE0_CLIC_CLK_EN`.
+            /// Set `REG_CORE_CLIC_CLK_EN`.
             #[inline]
-            pub fn set_reg_core0_clic_clk_en(&mut self, value: bool) -> &mut Self {
+            pub fn set_reg_core_clic_clk_en(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffe) | u32::from(value);
                 self
             }
 
-            /// Set `REG_CORE0_CPU_CLK_EN`.
+            /// Set `REG_CORE_CPU_CLK_EN`.
             #[inline]
-            pub fn set_reg_core0_cpu_clk_en(&mut self, value: bool) -> &mut Self {
+            pub fn set_reg_core_cpu_clk_en(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
                 self
             }
 
-            /// Set `REG_CORE0_GLOBAL_RST_EN`.
+            /// Set `REG_CORE_GLOBAL_RST_EN`.
             #[inline]
-            pub fn set_reg_core0_global_rst_en(&mut self, value: bool) -> &mut Self {
+            pub fn set_reg_core_global_rst_en(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
                 self
             }
 
-            /// Set `REG_CORE0_FORCE_NORST`.
+            /// Set `REG_CORE_FORCE_NORST`.
             #[inline]
-            pub fn set_reg_core0_force_norst(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
-                self
-            }
-        }
-    }
-
-    /// The `HPCORE1_CTRL0` register.
-    ///
-    /// HP core 1's CLIC and CPU clock enables and its global reset.
-    pub mod hpcore1_ctrl0 {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0x0000000f;
-        /// The register's width in bits.
-        pub const WIDTH: u32 = 32;
-
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x20;
-
-        /// The reserved bits: never a field, kept by every read-modify-write and
-        /// stored at their reset value by a write from zero.
-        pub const RESERVED: u32 = 0xfffffff0;
-
-        /// Width of `REG_CORE1_CLIC_CLK_EN` in bits.
-        pub const REG_CORE1_CLIC_CLK_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `REG_CORE1_CLIC_CLK_EN`.
-        pub const REG_CORE1_CLIC_CLK_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `REG_CORE1_CLIC_CLK_EN`.
-        pub const REG_CORE1_CLIC_CLK_EN_MASK: u32 = 0x1;
-
-        /// Width of `REG_CORE1_CPU_CLK_EN` in bits.
-        pub const REG_CORE1_CPU_CLK_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `REG_CORE1_CPU_CLK_EN`.
-        pub const REG_CORE1_CPU_CLK_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `REG_CORE1_CPU_CLK_EN`.
-        pub const REG_CORE1_CPU_CLK_EN_MASK: u32 = 0x2;
-
-        /// Width of `REG_CORE1_GLOBAL_RST_EN` in bits.
-        pub const REG_CORE1_GLOBAL_RST_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `REG_CORE1_GLOBAL_RST_EN`.
-        pub const REG_CORE1_GLOBAL_RST_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `REG_CORE1_GLOBAL_RST_EN`.
-        pub const REG_CORE1_GLOBAL_RST_EN_MASK: u32 = 0x4;
-
-        /// Width of `REG_CORE1_FORCE_NORST` in bits.
-        pub const REG_CORE1_FORCE_NORST_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `REG_CORE1_FORCE_NORST`.
-        pub const REG_CORE1_FORCE_NORST_MAX: u32 = 0x1;
-        /// Positioned bits of `REG_CORE1_FORCE_NORST`.
-        pub const REG_CORE1_FORCE_NORST_MASK: u32 = 0x8;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// HP core 1's CLIC clock enable.
-            #[inline]
-            pub const fn reg_core1_clic_clk_en(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// HP core 1's CPU clock enable.
-            #[inline]
-            pub const fn reg_core1_cpu_clk_en(self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// Holds HP core 1 in its global reset while set.
-            #[inline]
-            pub const fn reg_core1_global_rst_en(self) -> bool {
-                (self.0 & 0x00000004) != 0
-            }
-
-            /// Keeps HP core 1 out of reset.
-            #[inline]
-            pub const fn reg_core1_force_norst(self) -> bool {
-                (self.0 & 0x00000008) != 0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// HP core 1's CLIC clock enable.
-            #[inline]
-            pub const fn reg_core1_clic_clk_en(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// HP core 1's CPU clock enable.
-            #[inline]
-            pub const fn reg_core1_cpu_clk_en(&self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// Holds HP core 1 in its global reset while set.
-            #[inline]
-            pub const fn reg_core1_global_rst_en(&self) -> bool {
-                (self.0 & 0x00000004) != 0
-            }
-
-            /// Keeps HP core 1 out of reset.
-            #[inline]
-            pub const fn reg_core1_force_norst(&self) -> bool {
-                (self.0 & 0x00000008) != 0
-            }
-
-            /// Set `REG_CORE1_CLIC_CLK_EN`.
-            #[inline]
-            pub fn set_reg_core1_clic_clk_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
-                self
-            }
-
-            /// Set `REG_CORE1_CPU_CLK_EN`.
-            #[inline]
-            pub fn set_reg_core1_cpu_clk_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
-                self
-            }
-
-            /// Set `REG_CORE1_GLOBAL_RST_EN`.
-            #[inline]
-            pub fn set_reg_core1_global_rst_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
-                self
-            }
-
-            /// Set `REG_CORE1_FORCE_NORST`.
-            #[inline]
-            pub fn set_reg_core1_force_norst(&mut self, value: bool) -> &mut Self {
+            pub fn set_reg_core_force_norst(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
                 self
             }
@@ -102410,11 +102458,11 @@ pub mod hp_sys_clkrst {
 
     impl oer_mmio::Registers for HpSysClkrstCoreWords {
         type Sharing = oer_mmio::sharing::Owned;
-        const WORDS: &'static [usize] = &[0x20];
+        const WORDS: &'static [usize] = &[0x1c, 0x20];
     }
 
     impl oer_mmio::Words for HpSysClkrstCoreWords {
-        const OWNED: &'static [usize] = &[0x20];
+        const OWNED: &'static [usize] = &[0x1c, 0x20];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -102438,29 +102486,23 @@ pub mod hp_sys_clkrst {
     }
 
     impl<P: oer_mmio::Placement> HpSysClkrstCore<P> {
-        /// Read `HPCORE1_CTRL0`.
+        /// Read `HPCORE%s_CTRL0`.
         #[inline]
-        pub fn read_hpcore1_ctrl0(&self) -> hpcore1_ctrl0::R {
-            hpcore1_ctrl0::R(self.0.read::<0x20>())
+        pub fn read_hpcore_ctrl0(&self, index: oer_mmio::Index<2>) -> hpcore_ctrl0::R {
+            hpcore_ctrl0::R(self.0.read_indexed::<0x1c, 0x4, 2>(index))
         }
 
-        /// Read `HPCORE1_CTRL0`, change fields and write it back; every other bit keeps
+        /// Read `HPCORE%s_CTRL0`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_hpcore1_ctrl0(&mut self, change: impl FnOnce(&mut hpcore1_ctrl0::W)) {
-            let mut value = hpcore1_ctrl0::W(self.0.read::<0x20>());
+        pub fn modify_hpcore_ctrl0(
+            &mut self,
+            index: oer_mmio::Index<2>,
+            change: impl FnOnce(&mut hpcore_ctrl0::W),
+        ) {
+            let mut value = hpcore_ctrl0::W(self.0.read_indexed::<0x1c, 0x4, 2>(index));
             change(&mut value);
-            self.0.write::<0x20>(value.0);
-        }
-
-        /// Open (`true`) or close the `core1` clock of `CLIC` (`HP_SYS_CLKRST.HPCORE1_CTRL0.REG_CORE1_CLIC_CLK_EN`); every other bit keeps the value read.
-        ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L189.
-        #[inline]
-        pub fn set_clic_core1_clock(&mut self, on: bool) {
-            self.modify_hpcore1_ctrl0(|w| {
-                w.set_reg_core1_clic_clk_en(on);
-            });
+            self.0.write_indexed::<0x1c, 0x4, 2>(index, value.0);
         }
     }
 
@@ -118271,17 +118313,21 @@ pub mod lp_aonclkrst {
         }
     }
 
-    /// The `LP_AONCLKRST_HPCORE0_RESET_CAUSE` register.
+    /// The `LP_AONCLKRST_HPCORE%s_RESET_CAUSE` register.
     ///
     /// Why HP core 0 last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned; the ROM reads bits 6:1 of this word for core 0.
-    pub mod hpcore0_reset_cause {
+    pub mod hpcore_reset_cause {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xc000007f;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
-        /// The register's byte offset in its block.
+        /// The first element's byte offset in its block.
         pub const OFFSET: usize = 0x30;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 2;
 
         /// The reserved bits: never a field, kept by every read-modify-write and
         /// stored at their reset value by a write from zero.
@@ -118291,19 +118337,19 @@ pub mod lp_aonclkrst {
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xc0000000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_RESET_FLAG` in bits.
-        pub const HPCORE0_RESET_FLAG_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_RESET_FLAG`.
-        pub const HPCORE0_RESET_FLAG_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_RESET_FLAG`.
-        pub const HPCORE0_RESET_FLAG_MASK: u32 = 0x1;
+        /// Width of `LP_AONCLKRST_HPCORE_RESET_FLAG` in bits.
+        pub const HPCORE_RESET_FLAG_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_RESET_FLAG`.
+        pub const HPCORE_RESET_FLAG_MAX: u32 = 0x1;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_RESET_FLAG`.
+        pub const HPCORE_RESET_FLAG_MASK: u32 = 0x1;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_RESET_CAUSE` in bits.
-        pub const HPCORE0_RESET_CAUSE_WIDTH: u32 = 6;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_RESET_CAUSE`.
-        pub const HPCORE0_RESET_CAUSE_MAX: u32 = 0x3f;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_RESET_CAUSE`.
-        pub const HPCORE0_RESET_CAUSE_MASK: u32 = 0x7e;
+        /// Width of `LP_AONCLKRST_HPCORE_RESET_CAUSE` in bits.
+        pub const HPCORE_RESET_CAUSE_WIDTH: u32 = 6;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_RESET_CAUSE`.
+        pub const HPCORE_RESET_CAUSE_MAX: u32 = 0x3f;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_RESET_CAUSE`.
+        pub const HPCORE_RESET_CAUSE_MASK: u32 = 0x7e;
 
         /// Width of `CLR` in bits.
         pub const CLR_WIDTH: u32 = 1;
@@ -118312,12 +118358,12 @@ pub mod lp_aonclkrst {
         /// Positioned bits of `CLR`.
         pub const CLR_MASK: u32 = 0x40000000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_RESET_FLAG_CLR` in bits.
-        pub const HPCORE0_RESET_FLAG_CLR_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_RESET_FLAG_CLR`.
-        pub const HPCORE0_RESET_FLAG_CLR_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_RESET_FLAG_CLR`.
-        pub const HPCORE0_RESET_FLAG_CLR_MASK: u32 = 0x80000000;
+        /// Width of `LP_AONCLKRST_HPCORE_RESET_FLAG_CLR` in bits.
+        pub const HPCORE_RESET_FLAG_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_RESET_FLAG_CLR`.
+        pub const HPCORE_RESET_FLAG_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_RESET_FLAG_CLR`.
+        pub const HPCORE_RESET_FLAG_CLR_MASK: u32 = 0x80000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -118326,13 +118372,13 @@ pub mod lp_aonclkrst {
         impl R {
             /// Set when HP core 0 left reset.
             #[inline]
-            pub const fn hpcore0_reset_flag(self) -> bool {
+            pub const fn hpcore_reset_flag(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
             /// 6'h1: POR reset 6'h3: digital system software reset 6'h5: PMU HP system power down reset 6'h7: HP system reset from HP watchdog0 6'h8: HP system reset from HP watchdog1 6'h9: HP system reset from LP watchdog 6'hb: HP core reset from HP watchdog 6'hc: HP core software reset 6'hd: HP core reset from LP watchdog 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: efuse crc error reset 6'h16: HP usb jtag chip reset 6'h17: HP usb uart chip reset 6'h18: HP jtag reset 6'h1a: HP core lockup The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets.
             #[inline]
-            pub const fn hpcore0_reset_cause(self) -> oer_mmio::Bits<6> {
+            pub const fn hpcore_reset_cause(self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0 >> 1)
             }
         }
@@ -118349,96 +118395,9 @@ pub mod lp_aonclkrst {
                 self
             }
 
-            /// Set the write-trigger field `LP_AONCLKRST_HPCORE0_RESET_FLAG_CLR`.
+            /// Set the write-trigger field `LP_AONCLKRST_HPCORE_RESET_FLAG_CLR`.
             #[inline]
-            pub fn hpcore0_reset_flag_clr(&mut self) -> &mut Self {
-                self.0 |= 0x80000000;
-                self
-            }
-        }
-    }
-
-    /// The `LP_AONCLKRST_HPCORE1_RESET_CAUSE` register.
-    ///
-    /// Why HP core 1 last left reset. It holds until the next reset; the ROM reads bits 6:1 of this word for any core but core 0.
-    pub mod hpcore1_reset_cause {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xc000007f;
-        /// The register's width in bits.
-        pub const WIDTH: u32 = 32;
-
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x34;
-
-        /// The reserved bits: never a field, kept by every read-modify-write and
-        /// stored at their reset value by a write from zero.
-        pub const RESERVED: u32 = 0x3fffff80;
-
-        /// The bits of the write-trigger fields: zero in every write but a
-        /// field's explicit trigger.
-        pub const TRIGGERS: u32 = 0xc0000000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_RESET_FLAG` in bits.
-        pub const HPCORE1_RESET_FLAG_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_RESET_FLAG`.
-        pub const HPCORE1_RESET_FLAG_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_RESET_FLAG`.
-        pub const HPCORE1_RESET_FLAG_MASK: u32 = 0x1;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_RESET_CAUSE` in bits.
-        pub const HPCORE1_RESET_CAUSE_WIDTH: u32 = 6;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_RESET_CAUSE`.
-        pub const HPCORE1_RESET_CAUSE_MAX: u32 = 0x3f;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_RESET_CAUSE`.
-        pub const HPCORE1_RESET_CAUSE_MASK: u32 = 0x7e;
-
-        /// Width of `CLR` in bits.
-        pub const CLR_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `CLR`.
-        pub const CLR_MAX: u32 = 0x1;
-        /// Positioned bits of `CLR`.
-        pub const CLR_MASK: u32 = 0x40000000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_RESET_FLAG_CLR` in bits.
-        pub const HPCORE1_RESET_FLAG_CLR_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_RESET_FLAG_CLR`.
-        pub const HPCORE1_RESET_FLAG_CLR_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_RESET_FLAG_CLR`.
-        pub const HPCORE1_RESET_FLAG_CLR_MASK: u32 = 0x80000000;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// Set when HP core 1 left reset.
-            #[inline]
-            pub const fn hpcore1_reset_flag(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// 6'h1: POR reset 6'h3: digital system software reset 6'h5: PMU HP system power down reset 6'h7: HP system reset from HP watchdog0 6'h8: HP system reset from HP watchdog1 6'h9: HP system reset from LP watchdog 6'hb: HP core reset from HP watchdog 6'hc: HP core software reset 6'hd: HP core reset from LP watchdog 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: efuse crc error reset 6'h16: HP usb jtag chip reset 6'h17: HP usb uart chip reset 6'h18: HP jtag reset 6'h1a: HP core lockup The reset cause code, with the codes of HP core 0's cause field.
-            #[inline]
-            pub const fn hpcore1_reset_cause(self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0 >> 1)
-            }
-        }
-
-        /// The write-trigger fields one write of the register sets together;
-        /// every other bit of the write is zero or its fixed value.
-        pub struct T(pub(super) u32);
-
-        impl T {
-            /// Set the write-trigger field `CLR`.
-            #[inline]
-            pub fn clr(&mut self) -> &mut Self {
-                self.0 |= 0x40000000;
-                self
-            }
-
-            /// Set the write-trigger field `LP_AONCLKRST_HPCORE1_RESET_FLAG_CLR`.
-            #[inline]
-            pub fn hpcore1_reset_flag_clr(&mut self) -> &mut Self {
+            pub fn hpcore_reset_flag_clr(&mut self) -> &mut Self {
                 self.0 |= 0x80000000;
                 self
             }
@@ -118555,17 +118514,21 @@ pub mod lp_aonclkrst {
         }
     }
 
-    /// The `LP_AONCLKRST_HPCORE0_RESET_CTRL` register.
+    /// The `LP_AONCLKRST_HPCORE%s_RESET_CTRL` register.
     ///
     /// HP core 0's reset control.
-    pub mod hpcore0_reset_ctrl {
+    pub mod hpcore_reset_ctrl {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xe01fff00;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
-        /// The register's byte offset in its block.
+        /// The first element's byte offset in its block.
         pub const OFFSET: usize = 0x3c;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 2;
 
         /// The reserved bits: never a field, kept by every read-modify-write and
         /// stored at their reset value by a write from zero.
@@ -118575,61 +118538,61 @@ pub mod lp_aonclkrst {
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00100000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_STALL_WAIT` in bits.
-        pub const HPCORE0_STALL_WAIT_WIDTH: u32 = 7;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_STALL_WAIT`.
-        pub const HPCORE0_STALL_WAIT_MAX: u32 = 0x7f;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_STALL_WAIT`.
-        pub const HPCORE0_STALL_WAIT_MASK: u32 = 0x7f00;
+        /// Width of `LP_AONCLKRST_HPCORE_STALL_WAIT` in bits.
+        pub const HPCORE_STALL_WAIT_WIDTH: u32 = 7;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_STALL_WAIT`.
+        pub const HPCORE_STALL_WAIT_MAX: u32 = 0x7f;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_STALL_WAIT`.
+        pub const HPCORE_STALL_WAIT_MASK: u32 = 0x7f00;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_STALL_EN` in bits.
-        pub const HPCORE0_STALL_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_STALL_EN`.
-        pub const HPCORE0_STALL_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_STALL_EN`.
-        pub const HPCORE0_STALL_EN_MASK: u32 = 0x8000;
+        /// Width of `LP_AONCLKRST_HPCORE_STALL_EN` in bits.
+        pub const HPCORE_STALL_EN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_STALL_EN`.
+        pub const HPCORE_STALL_EN_MAX: u32 = 0x1;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_STALL_EN`.
+        pub const HPCORE_STALL_EN_MASK: u32 = 0x8000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_RESET_LENGTH` in bits.
-        pub const HPCORE0_RESET_LENGTH_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_RESET_LENGTH`.
-        pub const HPCORE0_RESET_LENGTH_MAX: u32 = 0x7;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_RESET_LENGTH`.
-        pub const HPCORE0_RESET_LENGTH_MASK: u32 = 0x70000;
+        /// Width of `LP_AONCLKRST_HPCORE_RESET_LENGTH` in bits.
+        pub const HPCORE_RESET_LENGTH_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_RESET_LENGTH`.
+        pub const HPCORE_RESET_LENGTH_MAX: u32 = 0x7;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_RESET_LENGTH`.
+        pub const HPCORE_RESET_LENGTH_MASK: u32 = 0x70000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_ENABLE_LP_WDT_RESET` in bits.
-        pub const HPCORE0_ENABLE_LP_WDT_RESET_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_ENABLE_LP_WDT_RESET`.
-        pub const HPCORE0_ENABLE_LP_WDT_RESET_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_ENABLE_LP_WDT_RESET`.
-        pub const HPCORE0_ENABLE_LP_WDT_RESET_MASK: u32 = 0x80000;
+        /// Width of `LP_AONCLKRST_HPCORE_ENABLE_LP_WDT_RESET` in bits.
+        pub const HPCORE_ENABLE_LP_WDT_RESET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_ENABLE_LP_WDT_RESET`.
+        pub const HPCORE_ENABLE_LP_WDT_RESET_MAX: u32 = 0x1;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_ENABLE_LP_WDT_RESET`.
+        pub const HPCORE_ENABLE_LP_WDT_RESET_MASK: u32 = 0x80000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_SW_RESET` in bits.
-        pub const HPCORE0_SW_RESET_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_SW_RESET`.
-        pub const HPCORE0_SW_RESET_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_SW_RESET`.
-        pub const HPCORE0_SW_RESET_MASK: u32 = 0x100000;
+        /// Width of `LP_AONCLKRST_HPCORE_SW_RESET` in bits.
+        pub const HPCORE_SW_RESET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_SW_RESET`.
+        pub const HPCORE_SW_RESET_MAX: u32 = 0x1;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_SW_RESET`.
+        pub const HPCORE_SW_RESET_MASK: u32 = 0x100000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_OCD_HALT_ON_RESET` in bits.
-        pub const HPCORE0_OCD_HALT_ON_RESET_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_OCD_HALT_ON_RESET`.
-        pub const HPCORE0_OCD_HALT_ON_RESET_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_OCD_HALT_ON_RESET`.
-        pub const HPCORE0_OCD_HALT_ON_RESET_MASK: u32 = 0x20000000;
+        /// Width of `LP_AONCLKRST_HPCORE_OCD_HALT_ON_RESET` in bits.
+        pub const HPCORE_OCD_HALT_ON_RESET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_OCD_HALT_ON_RESET`.
+        pub const HPCORE_OCD_HALT_ON_RESET_MAX: u32 = 0x1;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_OCD_HALT_ON_RESET`.
+        pub const HPCORE_OCD_HALT_ON_RESET_MASK: u32 = 0x20000000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_STAT_VECTOR_SEL` in bits.
-        pub const HPCORE0_STAT_VECTOR_SEL_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_STAT_VECTOR_SEL`.
-        pub const HPCORE0_STAT_VECTOR_SEL_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_STAT_VECTOR_SEL`.
-        pub const HPCORE0_STAT_VECTOR_SEL_MASK: u32 = 0x40000000;
+        /// Width of `LP_AONCLKRST_HPCORE_STAT_VECTOR_SEL` in bits.
+        pub const HPCORE_STAT_VECTOR_SEL_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_STAT_VECTOR_SEL`.
+        pub const HPCORE_STAT_VECTOR_SEL_MAX: u32 = 0x1;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_STAT_VECTOR_SEL`.
+        pub const HPCORE_STAT_VECTOR_SEL_MASK: u32 = 0x40000000;
 
-        /// Width of `LP_AONCLKRST_HPCORE0_LOCKUP_RESET_EN` in bits.
-        pub const HPCORE0_LOCKUP_RESET_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE0_LOCKUP_RESET_EN`.
-        pub const HPCORE0_LOCKUP_RESET_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE0_LOCKUP_RESET_EN`.
-        pub const HPCORE0_LOCKUP_RESET_EN_MASK: u32 = 0x80000000;
+        /// Width of `LP_AONCLKRST_HPCORE_LOCKUP_RESET_EN` in bits.
+        pub const HPCORE_LOCKUP_RESET_EN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE_LOCKUP_RESET_EN`.
+        pub const HPCORE_LOCKUP_RESET_EN_MAX: u32 = 0x1;
+        /// Positioned bits of `LP_AONCLKRST_HPCORE_LOCKUP_RESET_EN`.
+        pub const HPCORE_LOCKUP_RESET_EN_MASK: u32 = 0x80000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -118638,43 +118601,43 @@ pub mod lp_aonclkrst {
         impl R {
             /// need_des
             #[inline]
-            pub const fn hpcore0_stall_wait(self) -> oer_mmio::Bits<7> {
+            pub const fn hpcore_stall_wait(self) -> oer_mmio::Bits<7> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
             /// need_des
             #[inline]
-            pub const fn hpcore0_stall_en(self) -> bool {
+            pub const fn hpcore_stall_en(self) -> bool {
                 (self.0 & 0x00008000) != 0
             }
 
             /// need_des
             #[inline]
-            pub const fn hpcore0_reset_length(self) -> oer_mmio::Bits<3> {
+            pub const fn hpcore_reset_length(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 16)
             }
 
             /// write 1 to enable lp_wdt reset hpcore0 feature, write 0 to disable lp_wdt reset hpcore0 feature
             #[inline]
-            pub const fn hpcore0_enable_lp_wdt_reset(self) -> bool {
+            pub const fn hpcore_enable_lp_wdt_reset(self) -> bool {
                 (self.0 & 0x00080000) != 0
             }
 
             /// need_des
             #[inline]
-            pub const fn hpcore0_ocd_halt_on_reset(self) -> bool {
+            pub const fn hpcore_ocd_halt_on_reset(self) -> bool {
                 (self.0 & 0x20000000) != 0
             }
 
             /// 1'b1: boot from HP TCM ROM: 0x4FC00000 1'b0: boot from LP TCM RAM: 0x50108000
             #[inline]
-            pub const fn hpcore0_stat_vector_sel(self) -> bool {
+            pub const fn hpcore_stat_vector_sel(self) -> bool {
                 (self.0 & 0x40000000) != 0
             }
 
             /// write 1 to enable hpcore0 lockup reset feature, write 0 to disable hpcore0 lockup reset feature
             #[inline]
-            pub const fn hpcore0_lockup_reset_en(self) -> bool {
+            pub const fn hpcore_lockup_reset_en(self) -> bool {
                 (self.0 & 0x80000000) != 0
             }
         }
@@ -118685,312 +118648,91 @@ pub mod lp_aonclkrst {
         impl W {
             /// need_des
             #[inline]
-            pub const fn hpcore0_stall_wait(&self) -> oer_mmio::Bits<7> {
+            pub const fn hpcore_stall_wait(&self) -> oer_mmio::Bits<7> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
             /// need_des
             #[inline]
-            pub const fn hpcore0_stall_en(&self) -> bool {
+            pub const fn hpcore_stall_en(&self) -> bool {
                 (self.0 & 0x00008000) != 0
             }
 
             /// need_des
             #[inline]
-            pub const fn hpcore0_reset_length(&self) -> oer_mmio::Bits<3> {
+            pub const fn hpcore_reset_length(&self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 16)
             }
 
             /// write 1 to enable lp_wdt reset hpcore0 feature, write 0 to disable lp_wdt reset hpcore0 feature
             #[inline]
-            pub const fn hpcore0_enable_lp_wdt_reset(&self) -> bool {
+            pub const fn hpcore_enable_lp_wdt_reset(&self) -> bool {
                 (self.0 & 0x00080000) != 0
             }
 
             /// need_des
             #[inline]
-            pub const fn hpcore0_ocd_halt_on_reset(&self) -> bool {
+            pub const fn hpcore_ocd_halt_on_reset(&self) -> bool {
                 (self.0 & 0x20000000) != 0
             }
 
             /// 1'b1: boot from HP TCM ROM: 0x4FC00000 1'b0: boot from LP TCM RAM: 0x50108000
             #[inline]
-            pub const fn hpcore0_stat_vector_sel(&self) -> bool {
+            pub const fn hpcore_stat_vector_sel(&self) -> bool {
                 (self.0 & 0x40000000) != 0
             }
 
             /// write 1 to enable hpcore0 lockup reset feature, write 0 to disable hpcore0 lockup reset feature
             #[inline]
-            pub const fn hpcore0_lockup_reset_en(&self) -> bool {
+            pub const fn hpcore_lockup_reset_en(&self) -> bool {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Set `LP_AONCLKRST_HPCORE0_STALL_WAIT`.
+            /// Set `LP_AONCLKRST_HPCORE_STALL_WAIT`.
             #[inline]
-            pub fn set_hpcore0_stall_wait(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+            pub fn set_hpcore_stall_wait(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
                 self.0 = (self.0 & 0xffff80ff) | (value.get() << 8);
                 self
             }
 
-            /// Set `LP_AONCLKRST_HPCORE0_STALL_EN`.
+            /// Set `LP_AONCLKRST_HPCORE_STALL_EN`.
             #[inline]
-            pub fn set_hpcore0_stall_en(&mut self, value: bool) -> &mut Self {
+            pub fn set_hpcore_stall_en(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xffff7fff) | (u32::from(value) << 15);
                 self
             }
 
-            /// Set `LP_AONCLKRST_HPCORE0_RESET_LENGTH`.
+            /// Set `LP_AONCLKRST_HPCORE_RESET_LENGTH`.
             #[inline]
-            pub fn set_hpcore0_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+            pub fn set_hpcore_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
                 self.0 = (self.0 & 0xfff8ffff) | (value.get() << 16);
                 self
             }
 
-            /// Set `LP_AONCLKRST_HPCORE0_ENABLE_LP_WDT_RESET`.
+            /// Set `LP_AONCLKRST_HPCORE_ENABLE_LP_WDT_RESET`.
             #[inline]
-            pub fn set_hpcore0_enable_lp_wdt_reset(&mut self, value: bool) -> &mut Self {
+            pub fn set_hpcore_enable_lp_wdt_reset(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfff7ffff) | (u32::from(value) << 19);
                 self
             }
 
-            /// Set `LP_AONCLKRST_HPCORE0_OCD_HALT_ON_RESET`.
+            /// Set `LP_AONCLKRST_HPCORE_OCD_HALT_ON_RESET`.
             #[inline]
-            pub fn set_hpcore0_ocd_halt_on_reset(&mut self, value: bool) -> &mut Self {
+            pub fn set_hpcore_ocd_halt_on_reset(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
                 self
             }
 
-            /// Set `LP_AONCLKRST_HPCORE0_STAT_VECTOR_SEL`.
+            /// Set `LP_AONCLKRST_HPCORE_STAT_VECTOR_SEL`.
             #[inline]
-            pub fn set_hpcore0_stat_vector_sel(&mut self, value: bool) -> &mut Self {
+            pub fn set_hpcore_stat_vector_sel(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
                 self
             }
 
-            /// Set `LP_AONCLKRST_HPCORE0_LOCKUP_RESET_EN`.
+            /// Set `LP_AONCLKRST_HPCORE_LOCKUP_RESET_EN`.
             #[inline]
-            pub fn set_hpcore0_lockup_reset_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
-                self
-            }
-        }
-    }
-
-    /// The `LP_AONCLKRST_HPCORE1_RESET_CTRL` register.
-    ///
-    /// HP core 1's reset control.
-    pub mod hpcore1_reset_ctrl {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xe01fff00;
-        /// The register's width in bits.
-        pub const WIDTH: u32 = 32;
-
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x40;
-
-        /// The reserved bits: never a field, kept by every read-modify-write and
-        /// stored at their reset value by a write from zero.
-        pub const RESERVED: u32 = 0x1fe000ff;
-
-        /// The bits of the write-trigger fields: zero in every write but a
-        /// field's explicit trigger.
-        pub const TRIGGERS: u32 = 0x00100000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_STALL_WAIT` in bits.
-        pub const HPCORE1_STALL_WAIT_WIDTH: u32 = 7;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_STALL_WAIT`.
-        pub const HPCORE1_STALL_WAIT_MAX: u32 = 0x7f;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_STALL_WAIT`.
-        pub const HPCORE1_STALL_WAIT_MASK: u32 = 0x7f00;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_STALL_EN` in bits.
-        pub const HPCORE1_STALL_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_STALL_EN`.
-        pub const HPCORE1_STALL_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_STALL_EN`.
-        pub const HPCORE1_STALL_EN_MASK: u32 = 0x8000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_RESET_LENGTH` in bits.
-        pub const HPCORE1_RESET_LENGTH_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_RESET_LENGTH`.
-        pub const HPCORE1_RESET_LENGTH_MAX: u32 = 0x7;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_RESET_LENGTH`.
-        pub const HPCORE1_RESET_LENGTH_MASK: u32 = 0x70000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_ENABLE_LP_WDT_RESET` in bits.
-        pub const HPCORE1_ENABLE_LP_WDT_RESET_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_ENABLE_LP_WDT_RESET`.
-        pub const HPCORE1_ENABLE_LP_WDT_RESET_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_ENABLE_LP_WDT_RESET`.
-        pub const HPCORE1_ENABLE_LP_WDT_RESET_MASK: u32 = 0x80000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_SW_RESET` in bits.
-        pub const HPCORE1_SW_RESET_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_SW_RESET`.
-        pub const HPCORE1_SW_RESET_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_SW_RESET`.
-        pub const HPCORE1_SW_RESET_MASK: u32 = 0x100000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_OCD_HALT_ON_RESET` in bits.
-        pub const HPCORE1_OCD_HALT_ON_RESET_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_OCD_HALT_ON_RESET`.
-        pub const HPCORE1_OCD_HALT_ON_RESET_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_OCD_HALT_ON_RESET`.
-        pub const HPCORE1_OCD_HALT_ON_RESET_MASK: u32 = 0x20000000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_STAT_VECTOR_SEL` in bits.
-        pub const HPCORE1_STAT_VECTOR_SEL_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_STAT_VECTOR_SEL`.
-        pub const HPCORE1_STAT_VECTOR_SEL_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_STAT_VECTOR_SEL`.
-        pub const HPCORE1_STAT_VECTOR_SEL_MASK: u32 = 0x40000000;
-
-        /// Width of `LP_AONCLKRST_HPCORE1_LOCKUP_RESET_EN` in bits.
-        pub const HPCORE1_LOCKUP_RESET_EN_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `LP_AONCLKRST_HPCORE1_LOCKUP_RESET_EN`.
-        pub const HPCORE1_LOCKUP_RESET_EN_MAX: u32 = 0x1;
-        /// Positioned bits of `LP_AONCLKRST_HPCORE1_LOCKUP_RESET_EN`.
-        pub const HPCORE1_LOCKUP_RESET_EN_MASK: u32 = 0x80000000;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// need_des
-            #[inline]
-            pub const fn hpcore1_stall_wait(self) -> oer_mmio::Bits<7> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// need_des
-            #[inline]
-            pub const fn hpcore1_stall_en(self) -> bool {
-                (self.0 & 0x00008000) != 0
-            }
-
-            /// need_des
-            #[inline]
-            pub const fn hpcore1_reset_length(self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// write 1 to enable lp_wdt reset hpcore1 feature, write 0 to disable lp_wdt reset hpcore1 feature
-            #[inline]
-            pub const fn hpcore1_enable_lp_wdt_reset(self) -> bool {
-                (self.0 & 0x00080000) != 0
-            }
-
-            /// need_des
-            #[inline]
-            pub const fn hpcore1_ocd_halt_on_reset(self) -> bool {
-                (self.0 & 0x20000000) != 0
-            }
-
-            /// 1'b1: boot from HP TCM ROM: 0x4FC00000 1'b0: boot from LP TCM RAM: 0x50108000
-            #[inline]
-            pub const fn hpcore1_stat_vector_sel(self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// write 1 to enable hpcore1 lockup reset feature, write 0 to disable hpcore1 lockup reset feature
-            #[inline]
-            pub const fn hpcore1_lockup_reset_en(self) -> bool {
-                (self.0 & 0x80000000) != 0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// need_des
-            #[inline]
-            pub const fn hpcore1_stall_wait(&self) -> oer_mmio::Bits<7> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// need_des
-            #[inline]
-            pub const fn hpcore1_stall_en(&self) -> bool {
-                (self.0 & 0x00008000) != 0
-            }
-
-            /// need_des
-            #[inline]
-            pub const fn hpcore1_reset_length(&self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// write 1 to enable lp_wdt reset hpcore1 feature, write 0 to disable lp_wdt reset hpcore1 feature
-            #[inline]
-            pub const fn hpcore1_enable_lp_wdt_reset(&self) -> bool {
-                (self.0 & 0x00080000) != 0
-            }
-
-            /// need_des
-            #[inline]
-            pub const fn hpcore1_ocd_halt_on_reset(&self) -> bool {
-                (self.0 & 0x20000000) != 0
-            }
-
-            /// 1'b1: boot from HP TCM ROM: 0x4FC00000 1'b0: boot from LP TCM RAM: 0x50108000
-            #[inline]
-            pub const fn hpcore1_stat_vector_sel(&self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// write 1 to enable hpcore1 lockup reset feature, write 0 to disable hpcore1 lockup reset feature
-            #[inline]
-            pub const fn hpcore1_lockup_reset_en(&self) -> bool {
-                (self.0 & 0x80000000) != 0
-            }
-
-            /// Set `LP_AONCLKRST_HPCORE1_STALL_WAIT`.
-            #[inline]
-            pub fn set_hpcore1_stall_wait(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
-                self.0 = (self.0 & 0xffff80ff) | (value.get() << 8);
-                self
-            }
-
-            /// Set `LP_AONCLKRST_HPCORE1_STALL_EN`.
-            #[inline]
-            pub fn set_hpcore1_stall_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffff7fff) | (u32::from(value) << 15);
-                self
-            }
-
-            /// Set `LP_AONCLKRST_HPCORE1_RESET_LENGTH`.
-            #[inline]
-            pub fn set_hpcore1_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
-                self.0 = (self.0 & 0xfff8ffff) | (value.get() << 16);
-                self
-            }
-
-            /// Set `LP_AONCLKRST_HPCORE1_ENABLE_LP_WDT_RESET`.
-            #[inline]
-            pub fn set_hpcore1_enable_lp_wdt_reset(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfff7ffff) | (u32::from(value) << 19);
-                self
-            }
-
-            /// Set `LP_AONCLKRST_HPCORE1_OCD_HALT_ON_RESET`.
-            #[inline]
-            pub fn set_hpcore1_ocd_halt_on_reset(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
-                self
-            }
-
-            /// Set `LP_AONCLKRST_HPCORE1_STAT_VECTOR_SEL`.
-            #[inline]
-            pub fn set_hpcore1_stat_vector_sel(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
-                self
-            }
-
-            /// Set `LP_AONCLKRST_HPCORE1_LOCKUP_RESET_EN`.
-            #[inline]
-            pub fn set_hpcore1_lockup_reset_en(&mut self, value: bool) -> &mut Self {
+            pub fn set_hpcore_lockup_reset_en(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
                 self
             }
@@ -119868,56 +119610,34 @@ pub mod lp_aonclkrst {
     }
 
     impl<P: oer_mmio::Placement> LpAonClkrstCoreReset<P> {
-        /// Read `LP_AONCLKRST_HPCORE0_RESET_CTRL`.
+        /// Read `LP_AONCLKRST_HPCORE%s_RESET_CTRL`.
         #[inline]
-        pub fn read_hpcore0_reset_ctrl(&self) -> hpcore0_reset_ctrl::R {
-            hpcore0_reset_ctrl::R(self.0.read::<0x3c>())
+        pub fn read_hpcore_reset_ctrl(&self, index: oer_mmio::Index<2>) -> hpcore_reset_ctrl::R {
+            hpcore_reset_ctrl::R(self.0.read_indexed::<0x3c, 0x4, 2>(index))
         }
 
-        /// Write to the write-trigger field `LP_AONCLKRST_HPCORE0_SW_RESET` of `LP_AONCLKRST_HPCORE0_RESET_CTRL`, starting its
+        /// Write to the write-trigger field `LP_AONCLKRST_HPCORE_SW_RESET` of `LP_AONCLKRST_HPCORE%s_RESET_CTRL`, starting its
         /// hardware action once; every other field keeps the value read, every other trigger is zero.
         #[inline]
-        pub fn trigger_hpcore0_reset_ctrl_hpcore0_sw_reset(&mut self) {
-            self.0
-                .write::<0x3c>(self.0.read::<0x3c>() & 0xffefffff | 0x00100000);
+        pub fn trigger_hpcore_reset_ctrl_hpcore_sw_reset(&mut self, index: oer_mmio::Index<2>) {
+            self.0.write_indexed::<0x3c, 0x4, 2>(
+                index,
+                self.0.read_indexed::<0x3c, 0x4, 2>(index) & 0xffefffff | 0x00100000,
+            );
         }
 
-        /// Read `LP_AONCLKRST_HPCORE0_RESET_CTRL`, change fields and write it back; every other bit keeps
+        /// Read `LP_AONCLKRST_HPCORE%s_RESET_CTRL`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_hpcore0_reset_ctrl(
+        pub fn modify_hpcore_reset_ctrl(
             &mut self,
-            change: impl FnOnce(&mut hpcore0_reset_ctrl::W),
+            index: oer_mmio::Index<2>,
+            change: impl FnOnce(&mut hpcore_reset_ctrl::W),
         ) {
-            let mut value = hpcore0_reset_ctrl::W(self.0.read::<0x3c>() & 0xffefffff);
+            let mut value =
+                hpcore_reset_ctrl::W(self.0.read_indexed::<0x3c, 0x4, 2>(index) & 0xffefffff);
             change(&mut value);
-            self.0.write::<0x3c>(value.0);
-        }
-
-        /// Read `LP_AONCLKRST_HPCORE1_RESET_CTRL`.
-        #[inline]
-        pub fn read_hpcore1_reset_ctrl(&self) -> hpcore1_reset_ctrl::R {
-            hpcore1_reset_ctrl::R(self.0.read::<0x40>())
-        }
-
-        /// Write to the write-trigger field `LP_AONCLKRST_HPCORE1_SW_RESET` of `LP_AONCLKRST_HPCORE1_RESET_CTRL`, starting its
-        /// hardware action once; every other field keeps the value read, every other trigger is zero.
-        #[inline]
-        pub fn trigger_hpcore1_reset_ctrl_hpcore1_sw_reset(&mut self) {
-            self.0
-                .write::<0x40>(self.0.read::<0x40>() & 0xffefffff | 0x00100000);
-        }
-
-        /// Read `LP_AONCLKRST_HPCORE1_RESET_CTRL`, change fields and write it back; every other bit keeps
-        /// the value read, every write-trigger field is zero.
-        #[inline]
-        pub fn modify_hpcore1_reset_ctrl(
-            &mut self,
-            change: impl FnOnce(&mut hpcore1_reset_ctrl::W),
-        ) {
-            let mut value = hpcore1_reset_ctrl::W(self.0.read::<0x40>() & 0xffefffff);
-            change(&mut value);
-            self.0.write::<0x40>(value.0);
+            self.0.write_indexed::<0x3c, 0x4, 2>(index, value.0);
         }
     }
 
@@ -119960,74 +119680,47 @@ pub mod lp_aonclkrst {
     }
 
     impl<P: oer_mmio::Placement> LpAonResetCause<P> {
-        /// Read `LP_AONCLKRST_HPCORE0_RESET_CAUSE`.
+        /// Read `LP_AONCLKRST_HPCORE%s_RESET_CAUSE`.
         #[inline]
-        pub fn read_hpcore0_reset_cause(&self) -> hpcore0_reset_cause::R {
-            hpcore0_reset_cause::R(self.0.read::<0x30>())
+        pub fn read_hpcore_reset_cause(&self, index: oer_mmio::Index<2>) -> hpcore_reset_cause::R {
+            hpcore_reset_cause::R(self.0.read_indexed::<0x30, 0x4, 2>(index))
         }
 
-        /// Write to the write-trigger field `CLR` of `LP_AONCLKRST_HPCORE0_RESET_CAUSE`, starting its
+        /// Write to the write-trigger field `CLR` of `LP_AONCLKRST_HPCORE%s_RESET_CAUSE`, starting its
         /// hardware action once; every other field keeps the value read, every other trigger is zero.
         #[inline]
-        pub fn trigger_hpcore0_reset_cause_clr(&mut self) {
-            self.0
-                .write::<0x30>(self.0.read::<0x30>() & 0x3fffffff | 0x40000000);
+        pub fn trigger_hpcore_reset_cause_clr(&mut self, index: oer_mmio::Index<2>) {
+            self.0.write_indexed::<0x30, 0x4, 2>(
+                index,
+                self.0.read_indexed::<0x30, 0x4, 2>(index) & 0x3fffffff | 0x40000000,
+            );
         }
 
-        /// Write to the write-trigger field `LP_AONCLKRST_HPCORE0_RESET_FLAG_CLR` of `LP_AONCLKRST_HPCORE0_RESET_CAUSE`, starting its
+        /// Write to the write-trigger field `LP_AONCLKRST_HPCORE_RESET_FLAG_CLR` of `LP_AONCLKRST_HPCORE%s_RESET_CAUSE`, starting its
         /// hardware action once; every other field keeps the value read, every other trigger is zero.
         #[inline]
-        pub fn trigger_hpcore0_reset_cause_hpcore0_reset_flag_clr(&mut self) {
-            self.0
-                .write::<0x30>(self.0.read::<0x30>() & 0x3fffffff | 0x80000000);
+        pub fn trigger_hpcore_reset_cause_hpcore_reset_flag_clr(
+            &mut self,
+            index: oer_mmio::Index<2>,
+        ) {
+            self.0.write_indexed::<0x30, 0x4, 2>(
+                index,
+                self.0.read_indexed::<0x30, 0x4, 2>(index) & 0x3fffffff | 0x80000000,
+            );
         }
 
-        /// Write to the write-trigger fields of `LP_AONCLKRST_HPCORE0_RESET_CAUSE` the change sets, in one
+        /// Write to the write-trigger fields of `LP_AONCLKRST_HPCORE%s_RESET_CAUSE` the change sets, in one
         /// write, starting each one's hardware action once; every other bit is
         /// zero or its fixed value.
         #[inline]
-        pub fn trigger_hpcore0_reset_cause(
+        pub fn trigger_hpcore_reset_cause(
             &mut self,
-            change: impl FnOnce(&mut hpcore0_reset_cause::T),
+            index: oer_mmio::Index<2>,
+            change: impl FnOnce(&mut hpcore_reset_cause::T),
         ) {
-            let mut triggers = hpcore0_reset_cause::T(0);
+            let mut triggers = hpcore_reset_cause::T(0);
             change(&mut triggers);
-            self.0.write::<0x30>(triggers.0);
-        }
-
-        /// Read `LP_AONCLKRST_HPCORE1_RESET_CAUSE`.
-        #[inline]
-        pub fn read_hpcore1_reset_cause(&self) -> hpcore1_reset_cause::R {
-            hpcore1_reset_cause::R(self.0.read::<0x34>())
-        }
-
-        /// Write to the write-trigger field `CLR` of `LP_AONCLKRST_HPCORE1_RESET_CAUSE`, starting its
-        /// hardware action once; every other field keeps the value read, every other trigger is zero.
-        #[inline]
-        pub fn trigger_hpcore1_reset_cause_clr(&mut self) {
-            self.0
-                .write::<0x34>(self.0.read::<0x34>() & 0x3fffffff | 0x40000000);
-        }
-
-        /// Write to the write-trigger field `LP_AONCLKRST_HPCORE1_RESET_FLAG_CLR` of `LP_AONCLKRST_HPCORE1_RESET_CAUSE`, starting its
-        /// hardware action once; every other field keeps the value read, every other trigger is zero.
-        #[inline]
-        pub fn trigger_hpcore1_reset_cause_hpcore1_reset_flag_clr(&mut self) {
-            self.0
-                .write::<0x34>(self.0.read::<0x34>() & 0x3fffffff | 0x80000000);
-        }
-
-        /// Write to the write-trigger fields of `LP_AONCLKRST_HPCORE1_RESET_CAUSE` the change sets, in one
-        /// write, starting each one's hardware action once; every other bit is
-        /// zero or its fixed value.
-        #[inline]
-        pub fn trigger_hpcore1_reset_cause(
-            &mut self,
-            change: impl FnOnce(&mut hpcore1_reset_cause::T),
-        ) {
-            let mut triggers = hpcore1_reset_cause::T(0);
-            change(&mut triggers);
-            self.0.write::<0x34>(triggers.0);
+            self.0.write_indexed::<0x30, 0x4, 2>(index, triggers.0);
         }
     }
 
@@ -122540,33 +122233,37 @@ pub mod lp_system_reg {
         }
     }
 
-    /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1` register.
+    /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE%s` register.
     ///
     /// The boot ROM's HP core 1 entry address; zero leaves the core waiting. SOURCE: HW1_S31_BOOT_ADDRESS_20261026 verifies full-word storage including low bits and zero readback while hart1 remains held; the ROM waiting protocol was not exercised.
-    pub mod boot_addr_hp_core1 {
+    pub mod boot_addr_hp_core {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
-        /// The register's byte offset in its block.
+        /// The first element's byte offset in its block.
         pub const OFFSET: usize = 0x164;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 1;
 
-        /// Width of `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1` in bits.
-        pub const BOOT_ADDR_HP_CORE1_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1`.
-        pub const BOOT_ADDR_HP_CORE1_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1`.
-        pub const BOOT_ADDR_HP_CORE1_MASK: u32 = 0xffffffff;
+        /// Width of `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE` in bits.
+        pub const BOOT_ADDR_HP_CORE_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE`.
+        pub const BOOT_ADDR_HP_CORE_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE`.
+        pub const BOOT_ADDR_HP_CORE_MASK: u32 = 0xffffffff;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1` field.
+            /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE` field.
             #[inline]
-            pub const fn boot_addr_hp_core1(self) -> u32 {
+            pub const fn boot_addr_hp_core(self) -> u32 {
                 self.0
             }
         }
@@ -122575,15 +122272,15 @@ pub mod lp_system_reg {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1` field.
+            /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE` field.
             #[inline]
-            pub const fn boot_addr_hp_core1(&self) -> u32 {
+            pub const fn boot_addr_hp_core(&self) -> u32 {
                 self.0
             }
 
-            /// Set `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1`.
+            /// Set `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE`.
             #[inline]
-            pub fn set_boot_addr_hp_core1(&mut self, value: u32) -> &mut Self {
+            pub fn set_boot_addr_hp_core(&mut self, value: u32) -> &mut Self {
                 self.0 = value;
                 self
             }
@@ -122651,22 +122348,23 @@ pub mod lp_system_reg {
                 .write::<0x8>((self.0.read::<0x8>() & 0x9ffffffd) | 0x20000000);
         }
 
-        /// Read `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1`.
+        /// Read `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE%s`.
         #[inline]
-        pub fn read_boot_addr_hp_core1(&self) -> boot_addr_hp_core1::R {
-            boot_addr_hp_core1::R(self.0.read::<0x164>())
+        pub fn read_boot_addr_hp_core(&self, index: oer_mmio::Index<1>) -> boot_addr_hp_core::R {
+            boot_addr_hp_core::R(self.0.read_indexed::<0x164, 0x4, 1>(index))
         }
 
-        /// Read `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1`, change fields and write it back; every other bit keeps
+        /// Read `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE%s`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_boot_addr_hp_core1(
+        pub fn modify_boot_addr_hp_core(
             &mut self,
-            change: impl FnOnce(&mut boot_addr_hp_core1::W),
+            index: oer_mmio::Index<1>,
+            change: impl FnOnce(&mut boot_addr_hp_core::W),
         ) {
-            let mut value = boot_addr_hp_core1::W(self.0.read::<0x164>());
+            let mut value = boot_addr_hp_core::W(self.0.read_indexed::<0x164, 0x4, 1>(index));
             change(&mut value);
-            self.0.write::<0x164>(value.0);
+            self.0.write_indexed::<0x164, 0x4, 1>(index, value.0);
         }
     }
 }
@@ -154569,13 +154267,6 @@ pub mod pmu {
         /// stored at their reset value by a write from zero.
         pub const RESERVED: u32 = 0x0000ffff;
 
-        /// Width of `HPCORE1_SW_STALL_CODE` in bits.
-        pub const HPCORE1_SW_STALL_CODE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `HPCORE1_SW_STALL_CODE`.
-        pub const HPCORE1_SW_STALL_CODE_MAX: u32 = 0xff;
-        /// Positioned bits of `HPCORE1_SW_STALL_CODE`.
-        pub const HPCORE1_SW_STALL_CODE_MASK: u32 = 0xff0000;
-
         /// Width of `HPCORE0_SW_STALL_CODE` in bits.
         pub const HPCORE0_SW_STALL_CODE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `HPCORE0_SW_STALL_CODE`.
@@ -154583,21 +154274,24 @@ pub mod pmu {
         /// Positioned bits of `HPCORE0_SW_STALL_CODE`.
         pub const HPCORE0_SW_STALL_CODE_MASK: u32 = 0xff000000;
 
+        /// Width of `HPCORE1_SW_STALL_CODE` in bits.
+        pub const HPCORE1_SW_STALL_CODE_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `HPCORE1_SW_STALL_CODE`.
+        pub const HPCORE1_SW_STALL_CODE_MAX: u32 = 0xff;
+        /// Positioned bits of `HPCORE1_SW_STALL_CODE`.
+        pub const HPCORE1_SW_STALL_CODE_MASK: u32 = 0xff0000;
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Stall request code of HP core 1.
+            /// Read one indexed field.
             #[inline]
-            pub const fn hpcore1_sw_stall_code(self) -> u8 {
-                (self.0 >> 16) as u8
-            }
-
-            /// Stall request code of HP core 0.
-            #[inline]
-            pub const fn hpcore0_sw_stall_code(self) -> u8 {
-                (self.0 >> 24) as u8
+            pub const fn hpcore_sw_stall_code(self, index: oer_mmio::Index<2>) -> u8 {
+                let shift = 24u32.wrapping_add((index.get() as u32).wrapping_mul(4294967288u32));
+                let bits = self.0.wrapping_shr(shift);
+                bits as u8
             }
         }
 
@@ -154605,29 +154299,23 @@ pub mod pmu {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Stall request code of HP core 1.
+            /// Read one indexed field.
             #[inline]
-            pub const fn hpcore1_sw_stall_code(&self) -> u8 {
-                (self.0 >> 16) as u8
+            pub const fn hpcore_sw_stall_code(&self, index: oer_mmio::Index<2>) -> u8 {
+                let shift = 24u32.wrapping_add((index.get() as u32).wrapping_mul(4294967288u32));
+                let bits = self.0.wrapping_shr(shift);
+                bits as u8
             }
-
-            /// Stall request code of HP core 0.
+            /// Set one indexed field, preserving every other lane.
             #[inline]
-            pub const fn hpcore0_sw_stall_code(&self) -> u8 {
-                (self.0 >> 24) as u8
-            }
-
-            /// Set `HPCORE1_SW_STALL_CODE`.
-            #[inline]
-            pub fn set_hpcore1_sw_stall_code(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & 0xff00ffff) | (u32::from(value) << 16);
-                self
-            }
-
-            /// Set `HPCORE0_SW_STALL_CODE`.
-            #[inline]
-            pub fn set_hpcore0_sw_stall_code(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & 0x00ffffff) | (u32::from(value) << 24);
+            pub fn set_hpcore_sw_stall_code(
+                &mut self,
+                index: oer_mmio::Index<2>,
+                value: u8,
+            ) -> &mut Self {
+                let shift = 24u32.wrapping_add((index.get() as u32).wrapping_mul(4294967288u32));
+                let mask = 255u32.wrapping_shl(shift);
+                self.0 = (self.0 & !mask) | (u32::from(value)).wrapping_shl(shift);
                 self
             }
         }

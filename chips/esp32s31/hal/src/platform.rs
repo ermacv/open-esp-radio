@@ -39,12 +39,7 @@ pub mod system_timer;
 #[cfg(test)]
 mod tests;
 
-/// An HP core of the chip.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HpCore {
-    Core0,
-    Core1,
-}
+pub use oer_esp32s31_pac::{BOOT_HART, HARTS, Hart, SecondaryHart};
 
 /// The eFuse controller's read words of the factory MAC.
 #[must_use = "dropping a register owner permanently loses its register authority"]
@@ -158,27 +153,26 @@ impl FactoryIdentity {
 /// until the next reset.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ResetCauses {
-    core0: ResetCause,
-    core1: ResetCause,
+    causes: [ResetCause; HARTS],
 }
 
 impl ResetCauses {
     /// Read both cores' causes; the owner is not needed again.
     pub fn read<P: Placement>(registers: ResetCauseRegisters<P>) -> Self {
-        let core0 = registers.0.read_hpcore0_reset_cause().hpcore0_reset_cause();
-        let core1 = registers.0.read_hpcore1_reset_cause().hpcore1_reset_cause();
         Self {
-            core0: ResetCause::from_code(core0.get().to_le_bytes()[0]),
-            core1: ResetCause::from_code(core1.get().to_le_bytes()[0]),
+            causes: Hart::ALL.map(|hart| {
+                let cause = registers
+                    .0
+                    .read_hpcore_reset_cause(hart.index())
+                    .hpcore_reset_cause();
+                ResetCause::from_code(cause.get().to_le_bytes()[0])
+            }),
         }
     }
 
-    /// Why `core` last left reset.
-    pub const fn of(self, core: HpCore) -> ResetCause {
-        match core {
-            HpCore::Core0 => self.core0,
-            HpCore::Core1 => self.core1,
-        }
+    /// Why `hart` last left reset.
+    pub const fn of(self, hart: Hart) -> ResetCause {
+        *hart.at(&self.causes)
     }
 }
 

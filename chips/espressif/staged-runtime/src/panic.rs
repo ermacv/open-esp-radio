@@ -27,6 +27,7 @@ use oer_memory::retained::RetainedGuard;
 pub const FILE_BYTES: usize = 48;
 /// Bytes of a static panic message kept: its start.
 pub const MESSAGE_BYTES: usize = 64;
+const INVALID_HART: u32 = 2;
 const MAGIC: u32 = 0x5045_524f; // "OREP"
 
 /// Metadata safe for the image's panic hook to read. Task context keeps the
@@ -188,15 +189,84 @@ crate::retained_static! {
 }
 
 /// Take the record the previous boot's panic left, and clear it. Call once,
-/// early at boot; `None` when the previous boot did not panic, the chip lost
+/// early at boot. A retained `InvalidHart` is reported through the early console
+/// and cleared only after successful output; it is never returned as a panic.
+/// `None` when the previous boot did not panic, the chip lost
 /// power or the slot is held by a panic already being recorded.
 pub fn take_previous() -> Option<PanicRecord> {
-    SLOT.try_lock()?.take()
+    let mut slot = SLOT.try_lock()?;
+    if slot.invalid_hart().is_some() {
+        #[cfg(feature = "esp32s31")]
+        report_invalid_hart_early(&mut slot);
+        return None;
+    }
+    slot.take()
+}
+
+/// Every staged image attempts fault output during adoption, including images
+/// that do not consume ordinary previous-panic metadata.
+#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
+pub(crate) fn report_previous_fault() {
+    if let Some(mut slot) = SLOT.try_lock() {
+        report_invalid_hart_early(&mut slot);
+    }
+}
+
+#[cfg(feature = "esp32s31")]
+fn report_invalid_hart_early(slot: &mut Slot) {
+    let _reported = report_invalid_hart(slot, |note| {
+        oer_diagnostics::emit_note(note, |bytes| {
+            oer_esp32s31_hal::usb_serial_jtag::early_text(bytes)
+                .then_some(())
+                .ok_or(())
+        })
+    });
+}
+
+#[cfg(any(test, feature = "esp32s31"))]
+fn report_invalid_hart<E>(
+    slot: &mut Slot,
+    emit: impl FnOnce(&oer_diagnostics::Note<'_>) -> Result<(), E>,
+) -> Result<(), E> {
+    if let Some(raw) = slot.invalid_hart() {
+        emit(&oer_diagnostics::Note::fatal_fail(raw, "InvalidHart"))?;
+        slot.magic = 0;
+    }
+    Ok(())
+}
+
+#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
+pub(crate) fn with_invalid_hart_record<R>(raw: u32, reset: impl FnOnce() -> R) -> R {
+    let _record = SLOT.try_lock().map(|mut slot| {
+        slot.record_invalid_hart(raw);
+        slot
+    });
+    reset()
+}
+
+impl Slot {
+    fn invalid_hart(&self) -> Option<u32> {
+        (self.magic == MAGIC && self.in_interrupt == INVALID_HART && self.checksum == self.sum())
+            .then_some(self.hart)
+    }
+
+    #[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
+    fn record_invalid_hart(&mut self, raw: u32) {
+        // Keep the first completed record, including one already captured by panic entry.
+        if self.magic == MAGIC && self.checksum == self.sum() {
+            return;
+        }
+        self.hart = raw;
+        self.in_interrupt = INVALID_HART;
+        self.magic = MAGIC;
+        self.checksum = self.sum();
+    }
 }
 
 impl Slot {
     fn take(&mut self) -> Option<PanicRecord> {
         let valid = self.magic == MAGIC
+            && self.in_interrupt <= 1
             && self.checksum == self.sum()
             && self.file_length as usize <= FILE_BYTES
             && self.message_length as usize <= MESSAGE_BYTES + 1;
@@ -254,6 +324,19 @@ fn record<'a>(
     info: &'a core::panic::PanicInfo<'_>,
 ) -> Option<(RetainedGuard<'static, Slot>, PanicDetails<'a>)> {
     let hart = oer_riscv::hart_id();
+    if oer_esp32s31_hal::platform::Hart::new(hart as u32).is_err() {
+        let mut slot = SLOT.try_lock()?;
+        slot.record_invalid_hart(hart as u32);
+        return Some((
+            slot,
+            PanicDetails {
+                file: "",
+                line: 0,
+                column: 0,
+                message: Some("InvalidHart"),
+            },
+        ));
+    }
     let sp = oer_riscv::stack_pointer();
     let mepc = oer_riscv::read_mepc();
     let in_interrupt = crate::stacks::on_interrupt_stack(hart, sp);
@@ -570,5 +653,57 @@ mod tests {
         slot.line = 0;
         slot.message[0] = 1;
         assert_ne!(slot.sum(), empty);
+    }
+    #[test]
+    fn invalid_hart_retains_full_raw_id_and_never_decodes_as_a_valid_hart() {
+        let mut slot = Slot::EMPTY;
+        slot.record_invalid_hart(u32::MAX);
+        assert_eq!(slot.invalid_hart(), Some(u32::MAX));
+        slot.record_invalid_hart(3);
+        assert_eq!(
+            slot.invalid_hart(),
+            Some(u32::MAX),
+            "first fault stays intact"
+        );
+        assert!(
+            slot.take().is_none(),
+            "a fault is never a panic with a truncated hart"
+        );
+        let mut damaged = Slot::EMPTY;
+        damaged.record_invalid_hart(u32::MAX);
+        damaged.hart ^= 1;
+        assert!(
+            damaged.invalid_hart().is_none(),
+            "checksum covers the raw ID"
+        );
+    }
+    #[test]
+    fn next_boot_reports_raw_fault_and_console_refusal_keeps_it() {
+        let mut slot = Slot::EMPTY;
+        slot.record_invalid_hart(u32::MAX);
+        assert!(report_invalid_hart(&mut slot, |_| Err(())).is_err());
+        assert_eq!(slot.invalid_hart(), Some(u32::MAX));
+        let mut bytes = std::vec::Vec::new();
+        let mut console = oer_diagnostics::Console::new(|part: &[u8]| {
+            bytes.extend_from_slice(part);
+            Ok::<_, ()>(())
+        });
+        report_invalid_hart(&mut slot, |note| console.note(note)).unwrap();
+        drop(console);
+        let line = bytes
+            .strip_prefix(b"\r\n")
+            .unwrap()
+            .strip_suffix(b"\r\n")
+            .unwrap();
+        let mut decoded = [0; oer_diagnostics::MAX_PAYLOAD + 7];
+        let (_, record) = oer_diagnostics::decode(line, &mut decoded)
+            .unwrap()
+            .unwrap();
+        let oer_diagnostics::Record::Note(note) = record else {
+            panic!("a named fault note")
+        };
+        assert_eq!(note.words(), &[u32::MAX]);
+        assert_eq!(note.names(), &["InvalidHart"]);
+        assert_eq!(slot.invalid_hart(), None);
     }
 }

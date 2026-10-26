@@ -7,7 +7,7 @@ use oer_esp32s31_knowledge::reset_cause::ResetCause;
 use oer_time::{Clock, Instant};
 
 use super::{
-    EfuseRegisters, Entropy, EntropyRegisters, FactoryIdentity, HpCore, Interface, READ_GAP,
+    EfuseRegisters, Entropy, EntropyRegisters, FactoryIdentity, Hart, Interface, READ_GAP,
     ResetCauseRegisters, ResetCauses,
 };
 
@@ -51,13 +51,22 @@ fn reset_causes_decode_each_core_with_the_chip_table() {
     let causes = ResetCauses::read(
         ResetCauseRegisters::host(&mut words).expect("host memory holds the block"),
     );
-    assert_eq!(causes.of(HpCore::Core0), ResetCause::CoreSoftware);
-    assert_eq!(causes.of(HpCore::Core1), ResetCause::CoreSoftware);
+    assert_eq!(
+        causes.of(crate::platform::BOOT_HART),
+        ResetCause::CoreSoftware
+    );
+    assert_eq!(
+        causes.of(Hart::SECONDARIES[0].hart()),
+        ResetCause::CoreSoftware
+    );
     let mut words = memory(instances::lp_aon_clkrst::SIZE, u32::MAX);
     let causes = ResetCauses::read(
         ResetCauseRegisters::host(&mut words).expect("host memory holds the block"),
     );
-    assert_eq!(causes.of(HpCore::Core0), ResetCause::Other(0x3f));
+    assert_eq!(
+        causes.of(crate::platform::BOOT_HART),
+        ResetCause::Other(0x3f)
+    );
 }
 
 #[test]

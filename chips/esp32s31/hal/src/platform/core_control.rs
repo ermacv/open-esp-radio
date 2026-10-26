@@ -1,10 +1,10 @@
 //! Core control over the root's parts: each HP core's stall request and
-//! stall status, HP core 1's clocks and global reset, each core's software
-//! CPU reset, HP core 1's boot address, the system reset trigger and
+//! stall status, per-hart clocks and global resets, each core's software
+//! CPU reset, secondary boot addresses, the system reset trigger and
 //! UART0's function clock, which the boot ROM prints through
 //! after a software reset.
 
-use super::HpCore;
+use super::{Hart, SecondaryHart};
 use oer_esp32s31_pac::{
     hp_sys_clkrst::{HpSysClkrstCore, HpSysClkrstUart0},
     hp_system::HpSysCoreStallStatus,
@@ -90,13 +90,13 @@ impl Uart0ClockRegisters {
 impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     CoreControlRegisters<P, Q, R, S, T>
 {
-    /// Make hart 1's ROM jump to `entry`; zero keeps it waiting in the ROM.
+    /// Make the selected secondary's ROM jump to `entry`; zero keeps it waiting in the ROM.
     ///
     /// SOURCE: pinned rev0 ROM `ets_set_appcpu_boot_addr` (Blobray
     /// function-records): one whole-word store of the argument, then return.
-    pub(crate) fn set_boot_address(&mut self, entry: u32) {
-        self.system.modify_boot_addr_hp_core1(|word| {
-            word.set_boot_addr_hp_core1(entry);
+    pub(crate) fn set_boot_address(&mut self, hart: SecondaryHart, entry: u32) {
+        self.system.modify_boot_addr_hp_core(hart.index(), |word| {
+            word.set_boot_addr_hp_core(entry);
         });
     }
 
@@ -113,87 +113,76 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     }
 
     /// Request that `core` stall, keeping the other core's request.
-    pub fn request_stall(&mut self, core: HpCore) {
+    pub fn request_stall(&mut self, core: Hart) {
         self.set_code(core, STALL);
     }
 
     /// Request that `core` run, keeping the other core's request.
-    pub fn request_run(&mut self, core: HpCore) {
+    pub fn request_run(&mut self, core: Hart) {
         self.set_code(core, RUN);
     }
 
-    fn set_code(&mut self, core: HpCore, code: u8) {
+    fn set_code(&mut self, core: Hart, code: u8) {
         self.stall.modify_cpu_stall_sw(|request| {
-            match core {
-                HpCore::Core0 => request.set_hpcore0_sw_stall_code(code),
-                HpCore::Core1 => request.set_hpcore1_sw_stall_code(code),
-            };
+            request.set_hpcore_sw_stall_code(core.index(), code);
         });
     }
 
     /// Whether `core`'s stall request asks it to stall: the request, not the
     /// hardware's confirmation ([`is_stalled`](Self::is_stalled)).
-    pub fn stall_requested(&self, core: HpCore) -> bool {
+    pub fn stall_requested(&self, core: Hart) -> bool {
         let request = self.stall.read_cpu_stall_sw();
-        let code = match core {
-            HpCore::Core0 => request.hpcore0_sw_stall_code(),
-            HpCore::Core1 => request.hpcore1_sw_stall_code(),
-        };
+        let code = request.hpcore_sw_stall_code(core.index());
         code == STALL
     }
 
     /// Whether the hardware reports `core` stalled.
-    pub fn is_stalled(&self, core: HpCore) -> bool {
+    pub fn is_stalled(&self, core: Hart) -> bool {
         let status = self.status.read_hp_cpu_corestalled_st();
-        match core {
-            HpCore::Core0 => status.hp_reg_core0_corestalled_st(),
-            HpCore::Core1 => status.hp_reg_core1_corestalled_st(),
-        }
+        status.hp_reg_core_corestalled_st(core.index())
     }
 
-    /// Whether HP core 1 is held: its CPU clock gated and its global reset
+    /// Whether the selected HP core is held: its CPU clock gated and its global reset
     /// asserted, as ESP-IDF's single-core start leaves it.
-    pub fn core1_held(&self) -> bool {
-        let control = self.clocks.read_hpcore1_ctrl0();
-        control.reg_core1_global_rst_en() && !control.reg_core1_cpu_clk_en()
+    pub fn held(&self, core: Hart) -> bool {
+        let control = self.clocks.read_hpcore_ctrl0(core.index());
+        control.reg_core_global_rst_en() && !control.reg_core_cpu_clk_en()
     }
 
-    /// Hold HP core 1: gate its CPU and CLIC clocks and assert its global
+    /// Hold the selected HP core: gate its CPU and CLIC clocks and assert its global
     /// reset, keeping every other bit.
     ///
     /// SOURCE: ESP-IDF 4d59230d `components/esp_system/port/cpu_start.c`
     /// (the single-core start) and
     /// `components/hal/esp32s31/include/hal/cpu_utility_ll.h`.
-    pub fn hold_core1(&mut self) {
-        self.clocks.modify_hpcore1_ctrl0(|control| {
+    pub fn hold(&mut self, core: Hart) {
+        self.clocks.modify_hpcore_ctrl0(core.index(), |control| {
             control
-                .set_reg_core1_cpu_clk_en(false)
-                .set_reg_core1_clic_clk_en(false)
-                .set_reg_core1_global_rst_en(true);
+                .set_reg_core_cpu_clk_en(false)
+                .set_reg_core_clic_clk_en(false)
+                .set_reg_core_global_rst_en(true);
         });
     }
 
-    /// Release HP core 1: enable its CPU and CLIC clocks and deassert its
+    /// Release the selected HP core: enable its CPU and CLIC clocks and deassert its
     /// global reset, keeping every other bit.
     ///
     /// SOURCE: ESP-IDF 4d59230d `components/esp_system/port/cpu_start.c`
     /// (`start_other_core`).
     #[cfg(any(test, feature = "cpu1-runs"))]
-    pub fn release_core1(&mut self) {
-        self.clocks.modify_hpcore1_ctrl0(|control| {
+    pub fn release(&mut self, core: Hart) {
+        self.clocks.modify_hpcore_ctrl0(core.index(), |control| {
             control
-                .set_reg_core1_cpu_clk_en(true)
-                .set_reg_core1_clic_clk_en(true)
-                .set_reg_core1_global_rst_en(false);
+                .set_reg_core_cpu_clk_en(true)
+                .set_reg_core_clic_clk_en(true)
+                .set_reg_core_global_rst_en(false);
         });
     }
 
     /// Reset `core`'s CPU once: a pulse, not a hold.
-    pub fn reset_core(&mut self, core: HpCore) {
-        match core {
-            HpCore::Core0 => self.reset.trigger_hpcore0_reset_ctrl_hpcore0_sw_reset(),
-            HpCore::Core1 => self.reset.trigger_hpcore1_reset_ctrl_hpcore1_sw_reset(),
-        }
+    pub fn reset_core(&mut self, core: Hart) {
+        self.reset
+            .trigger_hpcore_reset_ctrl_hpcore_sw_reset(core.index());
     }
 }
 

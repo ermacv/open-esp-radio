@@ -4,7 +4,7 @@
 
 use std::{vec, vec::Vec};
 
-use super::{CoreControlRegisters, HOST_SIZES, HpCore, UART0_HOST_SIZE, Uart0ClockRegisters};
+use super::{CoreControlRegisters, HOST_SIZES, Hart, UART0_HOST_SIZE, Uart0ClockRegisters};
 
 struct Memory([Vec<u32>; 5]);
 
@@ -32,47 +32,54 @@ impl Memory {
 fn a_stall_request_names_one_core_and_keeps_the_other_core_s_request() {
     let mut memory = Memory::filled(0);
     let mut registers = memory.registers();
-    registers.request_stall(HpCore::Core1);
-    assert!(registers.stall_requested(HpCore::Core1));
-    assert!(!registers.stall_requested(HpCore::Core0));
-    registers.request_stall(HpCore::Core0);
-    registers.request_run(HpCore::Core1);
-    assert!(registers.stall_requested(HpCore::Core0));
-    assert!(!registers.stall_requested(HpCore::Core1));
+    registers.request_stall(Hart::SECONDARIES[0].hart());
+    assert!(registers.stall_requested(Hart::SECONDARIES[0].hart()));
+    assert!(!registers.stall_requested(crate::platform::BOOT_HART));
+    registers.request_stall(crate::platform::BOOT_HART);
+    registers.request_run(Hart::SECONDARIES[0].hart());
+    assert!(registers.stall_requested(crate::platform::BOOT_HART));
+    assert!(!registers.stall_requested(Hart::SECONDARIES[0].hart()));
 }
 
 #[test]
 fn the_stall_status_is_the_hardware_s_and_not_the_request() {
     let mut memory = Memory::filled(0);
     let mut registers = memory.registers();
-    registers.request_stall(HpCore::Core1);
+    registers.request_stall(Hart::SECONDARIES[0].hart());
     // Nothing reports the stall yet: the request alone is no confirmation.
-    assert!(!registers.is_stalled(HpCore::Core1));
+    assert!(!registers.is_stalled(Hart::SECONDARIES[0].hart()));
     drop(registers);
     let mut memory = Memory::filled(u32::MAX);
     let registers = memory.registers();
-    assert!(registers.is_stalled(HpCore::Core0) && registers.is_stalled(HpCore::Core1));
+    assert!(
+        registers.is_stalled(crate::platform::BOOT_HART)
+            && registers.is_stalled(Hart::SECONDARIES[0].hart())
+    );
 }
 
 #[test]
 fn holding_core_1_gates_its_clocks_and_asserts_its_reset_and_releasing_undoes_it() {
     let mut memory = Memory::filled(0);
     let mut registers = memory.registers();
-    assert!(!registers.core1_held());
-    registers.hold_core1();
-    assert!(registers.core1_held());
-    let control = registers.clocks.read_hpcore1_ctrl0();
-    assert!(!control.reg_core1_clic_clk_en() && !control.reg_core1_force_norst());
-    registers.release_core1();
-    assert!(!registers.core1_held());
-    let control = registers.clocks.read_hpcore1_ctrl0();
-    assert!(control.reg_core1_cpu_clk_en() && control.reg_core1_clic_clk_en());
+    assert!(!registers.held(Hart::SECONDARIES[0].hart()));
+    registers.hold(Hart::SECONDARIES[0].hart());
+    assert!(registers.held(Hart::SECONDARIES[0].hart()));
+    let control = registers
+        .clocks
+        .read_hpcore_ctrl0(Hart::SECONDARIES[0].hart().index());
+    assert!(!control.reg_core_clic_clk_en() && !control.reg_core_force_norst());
+    registers.release(Hart::SECONDARIES[0].hart());
+    assert!(!registers.held(Hart::SECONDARIES[0].hart()));
+    let control = registers
+        .clocks
+        .read_hpcore_ctrl0(Hart::SECONDARIES[0].hart().index());
+    assert!(control.reg_core_cpu_clk_en() && control.reg_core_clic_clk_en());
 }
 
 #[test]
 fn a_core_reset_pulses_only_that_core_s_word() {
     let mut memory = Memory::filled(0);
-    memory.registers().reset_core(HpCore::Core1);
+    memory.registers().reset_core(Hart::SECONDARIES[0].hart());
     let changed: Vec<u32> = memory.0[3]
         .iter()
         .copied()
@@ -80,7 +87,9 @@ fn a_core_reset_pulses_only_that_core_s_word() {
         .collect();
     assert_eq!(changed.len(), 1, "one word holds the pulse");
     let mut memory_core0 = Memory::filled(0);
-    memory_core0.registers().reset_core(HpCore::Core0);
+    memory_core0
+        .registers()
+        .reset_core(crate::platform::BOOT_HART);
     assert_ne!(memory.0[3], memory_core0.0[3], "each core has its own word");
 }
 
@@ -113,20 +122,20 @@ fn the_boot_address_store_replaces_the_whole_word_including_zero() {
     let entry = 0x2f01_2400;
     {
         let mut registers = memory.registers();
-        registers.set_boot_address(entry);
+        registers.set_boot_address(Hart::SECONDARIES[0], entry);
         assert_eq!(
             registers
                 .system
-                .read_boot_addr_hp_core1()
-                .boot_addr_hp_core1(),
+                .read_boot_addr_hp_core(Hart::SECONDARIES[0].index())
+                .boot_addr_hp_core(),
             entry
         );
-        registers.set_boot_address(0);
+        registers.set_boot_address(Hart::SECONDARIES[0], 0);
         assert_eq!(
             registers
                 .system
-                .read_boot_addr_hp_core1()
-                .boot_addr_hp_core1(),
+                .read_boot_addr_hp_core(Hart::SECONDARIES[0].index())
+                .boot_addr_hp_core(),
             0
         );
     }

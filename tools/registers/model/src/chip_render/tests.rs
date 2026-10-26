@@ -1344,3 +1344,134 @@ fn layout_constant_values_are_checked_even_in_runtime_builders() {
         "{errors}"
     );
 }
+
+#[test]
+fn hart_geometry_accepts_one_and_three_and_rejects_runtime_constant_misuse() {
+    for n in [1, 3] {
+        let rust = oer_espressif_facts::generate::hart_geometry(n, 0).expect("synthetic geometry");
+        let main = format!(
+            r#"fn main() {{
+            assert_eq!(HARTS, {n});
+            assert_eq!(Hart::ALL.len(), HARTS);
+            assert_eq!(Hart::SECONDARIES.len(), HARTS - 1);
+            for (raw, hart) in Hart::ALL.into_iter().enumerate() {{
+                assert_eq!(Hart::new(raw as u32), Ok(hart));
+                assert_eq!(hart.index().get(), raw);
+            }}
+            assert_eq!(Hart::new({n}), Err(InvalidHart {{ raw: {n} }}));
+            assert_eq!(Hart::new(u32::MAX), Err(InvalidHart {{ raw: u32::MAX }}));
+        }}"#
+        );
+        run(&rust, &main);
+        let bad = refused(
+            &rust,
+            &format!("fn main() {{ let _ = Hart::constant::<{n}>(); }}"),
+        );
+        assert!(bad.contains("E0080"), "{bad}");
+        let mismatched = rust.replace(
+            &format!("HARTS: usize = {n}"),
+            &format!("HARTS: usize = {}", n + 1),
+        );
+        let bad = refused(&mismatched, "fn main() {}");
+        assert!(bad.contains("mismatched types"), "{bad}");
+    }
+}
+
+#[test]
+fn symbolic_hart_fields_preserve_every_other_lane_for_n_one_and_three() {
+    for n in [1, 3] {
+        let directory = edited(&[
+            (
+                "chip.toml",
+                "chip = \"testchip\"",
+                "chip = \"testchip\"\nhart-facts = \"platform.toml\"",
+            ),
+            (
+                "types/counter.toml",
+                "name = \"STEP\"",
+                "name = \"STEP%s\"\ndim = { count = \"harts\", stride = 4 }",
+            ),
+        ]);
+        std::fs::write(
+            directory.path().join("platform.toml"),
+            format!("[interrupts]\nharts = {:?}\n", (0..n).collect::<Vec<_>>()),
+        )
+        .unwrap();
+        let (model, policy) = load(directory.path());
+        let rust = render(&model, &policy).unwrap();
+        run(
+            &rust,
+            r#"fn main() {
+            let mut words = [u32::MAX; 4];
+            let mut mode = counter::Mode::host(&mut words).unwrap();
+            for hart in Hart::ALL {
+                mode.modify_mode(|w| { w.set_step(hart.index(), oer_mmio::Bits::constant::<0>()); });
+                let r = mode.read_mode();
+                for peer in Hart::ALL {
+                    assert_eq!(r.step(peer.index()).get(), if peer.get() <= hart.get() { 0 } else { 15 });
+                }
+            }
+            drop(mode);
+            assert_eq!(words[2] >> (4 * HARTS), u32::MAX >> (4 * HARTS), "unassigned bits kept");
+        }"#,
+        );
+    }
+}
+
+#[test]
+fn instance_families_follow_one_and_three_harts_and_invalid_lists_are_refused() {
+    for harts in [vec![0], vec![0, 1, 2], vec![1], vec![0, 0], vec![]] {
+        let directory = edited(&[
+            (
+                "chip.toml",
+                "chip = \"testchip\"",
+                "chip = \"testchip\"\nhart-facts = \"platform.toml\"",
+            ),
+            (
+                "chip.toml",
+                "name = \"COUNTER\"",
+                "name = \"COUNTER%s\"\ndim = { count = \"harts\", stride = 0x1000 }",
+            ),
+        ]);
+        std::fs::write(
+            directory.path().join("platform.toml"),
+            format!("[interrupts]\nharts = {harts:?}\n"),
+        )
+        .unwrap();
+        let evidence =
+            RegisterEvidenceSet::load_all(&[directory.path().join("evidence.toml")]).unwrap();
+        let model = ChipModel::load(&directory.path().join("chip.toml"), &evidence);
+        if harts == [0] || harts == [0, 1, 2] {
+            let model = model.unwrap();
+            assert_eq!(
+                model
+                    .instances()
+                    .iter()
+                    .filter(|i| i.block_type == "COUNTER")
+                    .count(),
+                harts.len()
+            );
+        } else {
+            assert!(model.is_err());
+        }
+    }
+}
+
+#[test]
+fn indexed_fields_follow_the_block_prefix_rule() {
+    let rust = rendered_with(&[(
+        "types/radio.toml",
+        "name = \"RAD_ENABLE\"\nbits = \"0\"",
+        "name = \"RAD_HART%s_ENABLE\"\ndim = { count = 2, stride = 1 }\nbits = \"0\"",
+    )]);
+    run(
+        &rust,
+        r#"fn main() {
+        let mut memory = [0_u32; 0x40];
+        let (mut task, _) = radio::radio0_host(&mut memory).unwrap();
+        task.modify_config(|w| { w.set_hart_enable(oer_mmio::Index::constant::<1>(), true); });
+        assert!(task.read_config().hart_enable(oer_mmio::Index::constant::<1>()));
+        assert!(!task.read_config().hart_enable(oer_mmio::Index::constant::<0>()));
+    }"#,
+    );
+}

@@ -273,7 +273,7 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
     const LEVEL_BITS: u8 = facts::LEVEL_BITS;
 
     fn hart(&self) -> u8 {
-        0
+        crate::platform::BOOT_HART.get() as u8
     }
 
     fn verify_configuration(&self) -> Result<(), Error> {

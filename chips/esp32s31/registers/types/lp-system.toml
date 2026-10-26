@@ -72,12 +72,13 @@ bits = "31"
 class = "plain"
 
 [[registers]]
-name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1"
+name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE%s"
 offset = 0x164
+dim = { count = "secondary-harts", first = 1, stride = 4 }
 description = "The boot ROM's HP core 1 entry address; zero leaves the core waiting. SOURCE: HW1_S31_BOOT_ADDRESS_20261026 verifies full-word storage including low bits and zero readback while hart1 remains held; the ROM waiting protocol was not exercised."
 reset = { value = 0 }
 
 [[registers.fields]]
-name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1"
+name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE"
 bits = "31:0"
 class = "plain"

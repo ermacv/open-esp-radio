@@ -121,7 +121,7 @@ fn interrupt_stack_guard_bytes(hart: usize) -> usize {
 /// it. Other harts may have different allocations.
 #[cfg(target_arch = "riscv32")]
 pub fn irq_stack_bytes() -> usize {
-    interrupt_stack(0).map_or(0, |stack| stack.len())
+    interrupt_stack(oer_esp32s31_hal::platform::BOOT_HART.get()).map_or(0, |stack| stack.len())
 }
 
 /// Bytes of the CPU0 PSRAM task stack, as the runtime linker script reserved

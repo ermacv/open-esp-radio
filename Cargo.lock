@@ -3381,6 +3381,7 @@ dependencies = [
 name = "oer-registers-model"
 version = "0.1.0"
 dependencies = [
+ "oer-espressif-facts",
  "oer-registers-contracts",
  "serde",
  "syn 2.0.119",

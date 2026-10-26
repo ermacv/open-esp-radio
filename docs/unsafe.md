@@ -183,7 +183,8 @@ caller `const fn` does not turn that admission into a compile-time proof.
 ([PAC](../chips/esp32s31/pac/README.md)).
 
 The HAL's core-control partition owns `LP_SYS.SYS_CTRL` and
-`BOOT_ADDR_HP_CORE1` alongside its stall, clock and reset words. Bootstrap
+`BOOT_ADDR_HP_CORE%s` for the sourced secondary harts alongside indexed
+stall, clock and reset words. Bootstrap
 containment and fatal reset use those owned typed accessors, with no ROM
 FFI. A mixed-word trigger preserves ordinary fields and unassigned bits,
 writes zero to every WTC lane and every other WT lane, and asserts only its
@@ -191,6 +192,19 @@ selected WT field; it grants no generic modify of a WTC word. The reset
 path keeps the existing ClaimCell election through the trigger, then waits
 for interrupts forever if hardware has not reset it. A path refused by
 that election retains the existing watchdog outcome.
+
+The PAC's `Hart` is generated from the platform's HP-hart list, with checked
+raw conversion and fixed-index admission inside inline const. Its exhaustive
+selection of per-hart arrays adds no runtime bounds panic. `SecondaryHart`
+names only nonboot harts and their ROM boot-word indices. Neither type grants
+execution or register ownership. The HAL's fatal proof carries a checked
+identity or `Fault::InvalidHart { raw }`; an invalid identity receives no
+hart's ClaimCell key. The staged fatal path retains its full raw ID in the
+existing record slot and requests reset through a sealed free control owner;
+a lent or held owner is never taken over. An unavailable reset owner retains
+the existing terminal watchdog outcome. Runtime adoption emits the previous boot's fault through
+the existing `FatalFail` note, including images without a previous-panic reader, clearing the slot only after successful output.
+No new unsafe boundary is involved.
 
 The crates below cover distinct obligations: singleton acquisition and MMIO
 serialization, stable addresses and CPU/DMA transfer, target ABI and placement,

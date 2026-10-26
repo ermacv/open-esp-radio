@@ -229,6 +229,19 @@ moves; ownership, orchestration and wiring are rebuilt.
   tasks run on the static executor (`chips/espressif/executor`), in static
   slots, polled by direct calls, with one waker vtable whose data names the
   executor and task.
+- **Hart topology.** ESP32-S31's `[interrupts] harts` in
+  `chips/esp32s31/platform/chip.toml` is the sole HP-hart cardinality;
+  `boot-hart` names primary initialization. Facts derive the host core count,
+  vector geometry and the PAC's checked `Hart`, `SecondaryHart` and `HARTS`.
+  Per-hart register and instance families take their counts from that list;
+  typed indices connect their geometry to HAL reads and writes. Fixed indices
+  and list/count mismatches fail during the build. Every current image keeps
+  secondary harts contained; `cpu1-runs` is rejected at compile time.
+  An architectural ID outside this list is `InvalidHart { raw }`, never a
+  different hart. The fatal path records the full raw ID, quarantines free
+  control owners and requests reset; it never takes a lent or held owner.
+  The next boot reports the retained fault before clearing it; console
+  refusal retains the record.
 - **Register model.** The chip is block types (one hardware block each,
   offsets from its base) placed by a root at their addresses, with its
   interrupt sources, analog-I2C bytes (a separate space addressed by block

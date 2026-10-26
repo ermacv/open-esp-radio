@@ -4,48 +4,74 @@ schema = 3
 
 [type]
 name = "BUS_MONITOR"
-description = "The HP CPUs' bus monitor and assist-debug block (ESP-IDF's ASSIST_DEBUG): each core's debug-mode status. Only the debug-mode words are modeled."
-sources = ["ESP_IDF_4D59230D_S31_BUS_MONITOR_DEBUG_MODE"]
+description = "The HP CPUs' bus monitor and assist-debug block (ESP-IDF's ASSIST_DEBUG): each core's debug-mode status. Debug status and PC/SP recording words are modeled."
+sources = ["ESP_IDF_4D59230D_S31_BUS_MONITOR_DEBUG_MODE", "ESP_IDF_4D59230D_S31_BUS_MONITOR_RECORD"]
 
 [review]
-sources = ["ESP_IDF_4D59230D_S31_BUS_MONITOR_DEBUG_MODE"]
+sources = ["ESP_IDF_4D59230D_S31_BUS_MONITOR_DEBUG_MODE", "ESP_IDF_4D59230D_S31_BUS_MONITOR_RECORD"]
 provenance = "imported"
 accuracy = "exact"
 completeness = "partial"
 naming = "vendor"
 
 [[registers]]
-name = "CORE_0_DEBUG_MODE"
+name = "CORE_%s_DEBUG_MODE"
 offset = 0x64
+dim = { count = "harts", stride = 0x88 }
 description = "HP core 0's debug status."
 reset = { value = 0x0, mask = 0x3 }
 
 [[registers.fields]]
-name = "CORE_0_DEBUG_MODE"
+name = "CORE_DEBUG_MODE"
 bits = "0"
 class = "read-only"
 description = "Whether HP core 0 is in debugging mode."
 
 [[registers.fields]]
-name = "CORE_0_DEBUG_MODULE_ACTIVE"
+name = "CORE_DEBUG_MODULE_ACTIVE"
 bits = "1"
 class = "read-only"
 description = "Whether HP core 0's debug module is active: a debugger is attached."
 
+
 [[registers]]
-name = "CORE_1_DEBUG_MODE"
-offset = 0xec
-description = "HP core 1's debug status."
-reset = { value = 0x0, mask = 0x3 }
+name = "CORE_%s_RCD_EN"
+offset = 0x44
+dim = { count = "harts", stride = 0x88 }
+reset = { value = 0 }
 
 [[registers.fields]]
-name = "CORE_1_DEBUG_MODE"
+name = "CORE_RCD_RECORDEN"
 bits = "0"
-class = "read-only"
-description = "Whether HP core 1 is in debugging mode."
+class = "plain"
+description = "Enable real-time recording of this hart's PC and SP."
 
 [[registers.fields]]
-name = "CORE_1_DEBUG_MODULE_ACTIVE"
+name = "CORE_RCD_PDEBUGEN"
 bits = "1"
+class = "plain"
+description = "Enable the HP CPU's debug PC output."
+
+[[registers]]
+name = "CORE_%s_RCD_PDEBUGPC"
+offset = 0x48
+dim = { count = "harts", stride = 0x88 }
+reset = { value = 0 }
+
+[[registers.fields]]
+name = "CORE_RCD_PDEBUGPC"
+bits = "31:0"
 class = "read-only"
-description = "Whether HP core 1's debug module is active: a debugger is attached."
+description = "The hart's sampled program counter."
+
+[[registers]]
+name = "CORE_%s_RCD_PDEBUGSP"
+offset = 0x4c
+dim = { count = "harts", stride = 0x88 }
+reset = { value = 0 }
+
+[[registers.fields]]
+name = "CORE_RCD_PDEBUGSP"
+bits = "31:0"
+class = "read-only"
+description = "The hart's sampled stack pointer."

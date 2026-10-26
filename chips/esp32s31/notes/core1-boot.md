@@ -1,8 +1,8 @@
 # How core 1 starts
 
-Core 1 (hart 1) runs no code of this repository unless an image names a root
-for it. Three facts hold that together; the first is this note, the second and
-third are checked by the image gate (`docs/memory.md`, Stacks).
+Every current image keeps the secondary HP hart contained. HAL and runtime
+reject `cpu1-runs` at compile time; an image root alone cannot enable it.
+The platform HP-hart list defines the geometry and the boot role.
 
 ## 1. The mask ROM starts core 1 only at an explicit boot address
 
@@ -36,16 +36,27 @@ in reset (below), and the entries of both stages (`_start` of the bootstrap,
 
 ## 2. The bootstrap holds core 1 in reset
 
-The HAL's SoC initialization (`oer_esp32s31_hal::boot::soc`, `contain_hart1`),
-which the bootstrap runs first, requests core 1's stall, gates its core and
-CLIC clocks, sets its global reset and clears its ROM boot address
+The HAL's SoC initialization (`oer_esp32s31_hal::boot::soc`, `contain_secondaries`),
+which the bootstrap runs first, iterates the generated secondary identities,
+requests their stalls, gates their core and CLIC clocks, holds their global
+resets and clears their indexed ROM boot addresses
 (SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`,
-ESP-IDF `system_internal.c:61-100`). Only `Cores::start_hart1` undoes it; it
+ESP-IDF `system_internal.c:61-100`). Only `Cores::start` undoes it; it
 exists under the HAL's `cpu1-runs` feature, which the crate refuses.
 
 ## 3. Nothing in an image reaches the starter
 
 The image gate rejects an image whose call graph reaches the starter symbols
-of `[core_start]` in `chip.toml`, and an interrupt-table entry with
-`core = 1`, unless that image's `stack.toml` declares core 1 used and proves
+of `[core-start]` in `chip.toml`, and an interrupt-table entry with
+`hart 1`, unless that image's `stack.toml` declares core 1 used and proves
 its roots.
+
+The register model describes stall-code and status lanes, clock/reset words,
+reset causes, secondary ROM boot words and matrix banks as indexed families.
+The local CLIC address is context-relative, not an absolute hart-indexed bank;
+its owned activation remains the boot-hart controller.
+
+SOURCE: `hw1-20261026-boot-07`, `research/hw-interrupt-facts.md`: inherited
+MNLBITS after ROM is one. This is distinct from the header's reset value;
+HAL writes its selected MNLBITS explicitly. Boot-word readback while the
+secondary is held establishes storage semantics, not secondary execution.

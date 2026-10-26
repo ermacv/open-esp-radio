@@ -11,8 +11,8 @@ use crate::platform::core_control::{
 };
 
 use super::{
-    CoresError, Hart1, HpCore, StopError, Stopped, hart1, operate, park_hart1, prepare_reset,
-    reset_with, restore_uart0_with, stop_with,
+    CoreState, CoresError, Hart, StopError, Stopped, operate, park, prepare_reset, reset_with,
+    restore_uart0_with, state, stop_with,
 };
 
 type HostRegisters<'a> = CoreControlRegisters<Host<'a>, Host<'a>, Host<'a>, Host<'a>, Host<'a>>;
@@ -36,9 +36,10 @@ fn fatal_masks_before_lending_its_hart_and_halts_after_the_path() {
                 mie.set(false);
                 steps.borrow_mut().push("disable");
             },
+            super::current_hart,
             |fatal| {
                 assert_eq!((threshold.get(), mie.get()), (u8::MAX, false));
-                assert_eq!(fatal.hart(), HpCore::Core0);
+                assert_eq!(fatal.hart(), Ok(crate::platform::BOOT_HART));
                 steps.borrow_mut().push("path");
             },
             || {
@@ -85,17 +86,29 @@ impl Memory {
 fn the_owner_s_operations_borrow_the_words_until_a_fatal_path_holds_them() {
     let empty = ClaimCell::<HostRegisters<'_>>::new();
     assert_eq!(
-        operate(&empty, |words| hart1(words)),
+        operate(&empty, |words| state(words, Hart::SECONDARIES[0])),
         Err(CoresError::NotInstalled)
     );
     let mut memory = Memory::new(0);
     let cell = memory.cell();
-    assert_eq!(operate(&cell, |words| hart1(words)), Ok(Hart1::Released));
-    assert_eq!(operate(&cell, park_hart1), Ok(()));
-    assert_eq!(operate(&cell, |words| hart1(words)), Ok(Hart1::Held));
-    assert_eq!(stop_with(&cell, HpCore::Core0, 4), Ok(Stopped::Held));
     assert_eq!(
-        operate(&cell, |words| hart1(words)),
+        operate(&cell, |words| state(words, Hart::SECONDARIES[0])),
+        Ok(CoreState::Released)
+    );
+    assert_eq!(
+        operate(&cell, |words| park(words, Hart::SECONDARIES[0])),
+        Ok(())
+    );
+    assert_eq!(
+        operate(&cell, |words| state(words, Hart::SECONDARIES[0])),
+        Ok(CoreState::Held)
+    );
+    assert_eq!(
+        stop_with(&cell, crate::platform::BOOT_HART, 4),
+        Ok([None, Some(Stopped::Held)])
+    );
+    assert_eq!(
+        operate(&cell, |words| state(words, Hart::SECONDARIES[0])),
         Err(CoresError::Stopped),
         "the fatal path keeps the words"
     );
@@ -105,10 +118,16 @@ fn the_owner_s_operations_borrow_the_words_until_a_fatal_path_holds_them() {
 fn the_first_fatal_hart_wins_and_the_other_hart_loses() {
     let mut memory = Memory::new(u32::MAX);
     let cell = memory.cell();
-    assert_eq!(stop_with(&cell, HpCore::Core1, 4), Ok(Stopped::Stalled));
-    assert_eq!(stop_with(&cell, HpCore::Core0, 4), Err(StopError::Lost));
     assert_eq!(
-        stop_with(&cell, HpCore::Core1, 4),
+        stop_with(&cell, Hart::SECONDARIES[0].hart(), 4),
+        Ok([Some(Stopped::Stalled), None])
+    );
+    assert_eq!(
+        stop_with(&cell, crate::platform::BOOT_HART, 4),
+        Err(StopError::Lost)
+    );
+    assert_eq!(
+        stop_with(&cell, Hart::SECONDARIES[0].hart(), 4),
         Err(StopError::Reentered)
     );
 }
@@ -117,31 +136,44 @@ fn the_first_fatal_hart_wins_and_the_other_hart_loses() {
 fn a_fatal_path_never_takes_the_words_from_an_operation() {
     let mut memory = Memory::new(u32::MAX);
     let cell = memory.cell();
-    let during = operate(&cell, |_| stop_with(&cell, HpCore::Core0, 4));
+    let during = operate(&cell, |_| stop_with(&cell, crate::platform::BOOT_HART, 4));
     assert_eq!(during, Ok(Err(StopError::Busy)));
-    assert_eq!(stop_with(&cell, HpCore::Core0, 4), Ok(Stopped::Stalled));
+    assert_eq!(
+        stop_with(&cell, crate::platform::BOOT_HART, 4),
+        Ok([None, Some(Stopped::Stalled)])
+    );
 }
 
 #[test]
 fn a_held_hart_1_is_stopped_without_a_stall_request() {
     let mut memory = Memory::new(0);
-    memory.registers().hold_core1();
+    memory.registers().hold(Hart::SECONDARIES[0].hart());
     let cell = memory.cell();
-    assert_eq!(stop_with(&cell, HpCore::Core0, 4), Ok(Stopped::Held));
+    assert_eq!(
+        stop_with(&cell, crate::platform::BOOT_HART, 4),
+        Ok([None, Some(Stopped::Held)])
+    );
     drop(cell);
-    assert!(!memory.registers().stall_requested(HpCore::Core1));
+    assert!(
+        !memory
+            .registers()
+            .stall_requested(Hart::SECONDARIES[0].hart())
+    );
 }
 
 #[test]
 fn a_running_other_hart_is_stopped_once_the_hardware_reports_it_stalled() {
     let mut memory = Memory::new(u32::MAX);
     let cell = memory.cell();
-    assert_eq!(stop_with(&cell, HpCore::Core0, 4), Ok(Stopped::Stalled));
+    assert_eq!(
+        stop_with(&cell, crate::platform::BOOT_HART, 4),
+        Ok([None, Some(Stopped::Stalled)])
+    );
     drop(cell);
     let registers = memory.registers();
-    assert!(registers.stall_requested(HpCore::Core1));
+    assert!(registers.stall_requested(Hart::SECONDARIES[0].hart()));
     assert!(
-        !registers.stall_requested(HpCore::Core0),
+        !registers.stall_requested(crate::platform::BOOT_HART),
         "a hart never stalls itself"
     );
 }
@@ -150,11 +182,14 @@ fn a_running_other_hart_is_stopped_once_the_hardware_reports_it_stalled() {
 fn hart_1_s_fatal_path_stalls_hart_0() {
     let mut memory = Memory::new(u32::MAX);
     let cell = memory.cell();
-    assert_eq!(stop_with(&cell, HpCore::Core1, 4), Ok(Stopped::Stalled));
+    assert_eq!(
+        stop_with(&cell, Hart::SECONDARIES[0].hart(), 4),
+        Ok([Some(Stopped::Stalled), None])
+    );
     drop(cell);
     let registers = memory.registers();
-    assert!(registers.stall_requested(HpCore::Core0));
-    assert!(!registers.stall_requested(HpCore::Core1));
+    assert!(registers.stall_requested(crate::platform::BOOT_HART));
+    assert!(!registers.stall_requested(Hart::SECONDARIES[0].hart()));
 }
 
 #[test]
@@ -162,11 +197,11 @@ fn a_stall_the_hardware_never_reports_is_unconfirmed_and_the_reset_still_holds_t
     let mut memory = Memory::new(0);
     let cell = memory.cell();
     assert_eq!(
-        stop_with(&cell, HpCore::Core0, 4),
+        stop_with(&cell, crate::platform::BOOT_HART, 4),
         Err(StopError::Unconfirmed)
     );
     // The words stay the fatal path's: its reset still prepares the ROM.
-    assert_eq!(reset_with(&cell, HpCore::Core0), Ok(()));
+    assert_eq!(reset_with(&cell, crate::platform::BOOT_HART), Ok(()));
     drop(cell);
     assert_eq!(memory.0[4][0x164 / 4], 0);
     assert_eq!(memory.0[4][0x8 / 4], 0x9fff_ffff);
@@ -176,8 +211,11 @@ fn a_stall_the_hardware_never_reports_is_unconfirmed_and_the_reset_still_holds_t
 fn a_lost_or_busy_election_touches_no_word() {
     let mut memory = Memory::new(u32::MAX);
     let cell = memory.cell();
-    assert!(stop_with(&cell, HpCore::Core1, 4).is_ok());
-    assert_eq!(reset_with(&cell, HpCore::Core0), Err(StopError::Lost));
+    assert!(stop_with(&cell, Hart::SECONDARIES[0].hart(), 4).is_ok());
+    assert_eq!(
+        reset_with(&cell, crate::platform::BOOT_HART),
+        Err(StopError::Lost)
+    );
 
     drop(cell);
     assert!(
@@ -188,7 +226,7 @@ fn a_lost_or_busy_election_touches_no_word() {
     let mut idle = Memory::new(u32::MAX);
     let before = idle.0.clone();
     let cell = idle.cell();
-    let during = operate(&cell, |_| reset_with(&cell, HpCore::Core0));
+    let during = operate(&cell, |_| reset_with(&cell, crate::platform::BOOT_HART));
     assert_eq!(during, Ok(Err(StopError::Busy)));
     drop(cell);
     assert_eq!(idle.0, before, "no word changed");
@@ -197,11 +235,11 @@ fn a_lost_or_busy_election_touches_no_word() {
 #[test]
 fn the_reset_clears_the_boot_address_and_resets_and_stalls_the_other_hart() {
     let mut memory = Memory::new(0);
-    prepare_reset(&mut memory.registers(), HpCore::Core0);
+    prepare_reset(&mut memory.registers(), crate::platform::BOOT_HART);
     assert_eq!(memory.0[4][0x164 / 4], 0);
     let registers = memory.registers();
-    assert!(registers.stall_requested(HpCore::Core1));
-    assert!(!registers.stall_requested(HpCore::Core0));
+    assert!(registers.stall_requested(Hart::SECONDARIES[0].hart()));
+    assert!(!registers.stall_requested(crate::platform::BOOT_HART));
     drop(registers);
     let [_, _, _, reset, _] = &memory.0;
     assert_eq!(
@@ -215,9 +253,12 @@ fn the_reset_clears_the_boot_address_and_resets_and_stalls_the_other_hart() {
 fn a_reset_after_the_stop_keeps_its_words_and_one_without_them_touches_nothing() {
     let mut memory = Memory::new(u32::MAX);
     let cell = memory.cell();
-    assert!(stop_with(&cell, HpCore::Core1, 4).is_ok());
-    assert_eq!(reset_with(&cell, HpCore::Core1), Ok(()));
-    assert_eq!(reset_with(&cell, HpCore::Core0), Err(StopError::Lost));
+    assert!(stop_with(&cell, Hart::SECONDARIES[0].hart(), 4).is_ok());
+    assert_eq!(reset_with(&cell, Hart::SECONDARIES[0].hart()), Ok(()));
+    assert_eq!(
+        reset_with(&cell, crate::platform::BOOT_HART),
+        Err(StopError::Lost)
+    );
     drop(cell);
     assert_eq!(memory.0[4][0x164 / 4], 0);
     assert_eq!(memory.0[4][0x8 / 4], 0x9fff_ffff);
@@ -227,7 +268,7 @@ fn a_reset_after_the_stop_keeps_its_words_and_one_without_them_touches_nothing()
 fn a_reset_without_installed_words_is_left_to_the_watchdog() {
     let cell = ClaimCell::<HostRegisters<'_>>::new();
     assert_eq!(
-        reset_with(&cell, HpCore::Core0),
+        reset_with(&cell, crate::platform::BOOT_HART),
         Err(StopError::NotInstalled)
     );
 }
@@ -256,8 +297,8 @@ fn a_reset_that_cannot_hold_the_core_control_words_still_restores_uart0() {
     // The cores' owner runs an operation the fatal path interrupted.
     let during = operate(&core_cell, |_| {
         (
-            reset_with(&core_cell, HpCore::Core0),
-            restore_uart0_with(&uart0, HpCore::Core0),
+            reset_with(&core_cell, crate::platform::BOOT_HART),
+            restore_uart0_with(&uart0, crate::platform::BOOT_HART),
         )
     });
     assert_eq!(during, Ok((Err(StopError::Busy), true)));
@@ -274,15 +315,84 @@ fn uart0_is_restored_by_the_first_fatal_hart_and_again_only_on_that_hart() {
             .install(Uart0ClockRegisters::host(&mut words).expect("host memory holds the block"))
             .is_ok()
     );
-    assert!(restore_uart0_with(&uart0, HpCore::Core1));
+    assert!(restore_uart0_with(&uart0, Hart::SECONDARIES[0].hart()));
     assert!(
-        !restore_uart0_with(&uart0, HpCore::Core0),
+        !restore_uart0_with(&uart0, crate::platform::BOOT_HART),
         "the other hart reaches no word"
     );
     assert!(
-        restore_uart0_with(&uart0, HpCore::Core1),
+        restore_uart0_with(&uart0, Hart::SECONDARIES[0].hart()),
         "a reset after a stop restores it again"
     );
     drop(uart0);
     assert!(uart0_gate_open(&words));
+}
+
+#[test]
+fn invalid_architectural_identity_is_retained_as_a_fault_after_masking() {
+    use core::cell::Cell;
+    use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+    let masked = Cell::new(false);
+    let terminal = catch_unwind(AssertUnwindSafe(|| {
+        super::fatal_with(
+            || (),
+            || masked.set(true),
+            || {
+                assert!(masked.get());
+                Err(super::Fault::InvalidHart { raw: u32::MAX })
+            },
+            |fatal| {
+                assert_eq!(
+                    fatal.hart(),
+                    Err(super::Fault::InvalidHart { raw: u32::MAX })
+                )
+            },
+            || resume_unwind(std::boxed::Box::new(())),
+        )
+    }));
+    assert!(terminal.is_err());
+}
+
+#[test]
+fn invalid_hart_reset_seals_without_a_false_key_or_a_peer_stall() {
+    let mut memory = Memory::new(u32::MAX);
+    let before = memory.0.clone();
+    let cell = memory.cell();
+    assert_eq!(super::reset_quarantined_with(&cell, u32::MAX), Ok(()));
+    assert!(cell.lend(|_| ()).is_err(), "the owner remains quarantined");
+    drop(cell);
+    assert_eq!(
+        memory.0[0], before[0],
+        "unknown identity stalls no selected peer"
+    );
+    assert_eq!(memory.0[1], before[1]);
+    assert_eq!(memory.0[2], before[2]);
+    assert_eq!(memory.0[3], before[3]);
+    assert_eq!(
+        memory.0[4].iter().filter(|word| **word == 0).count(),
+        Hart::SECONDARIES.len(),
+        "secondary boot words are cleared"
+    );
+    assert_eq!(
+        memory.0[4]
+            .iter()
+            .zip(&before[4])
+            .filter(|(after, before)| after != before)
+            .count(),
+        Hart::SECONDARIES.len() + 1,
+        "only boot words and the reset trigger change"
+    );
+}
+
+#[test]
+fn invalid_hart_reset_never_takes_over_a_borrowed_owner() {
+    let mut memory = Memory::new(u32::MAX);
+    let before = memory.0.clone();
+    let cell = memory.cell();
+    assert_eq!(
+        cell.lend(|_| super::reset_quarantined_with(&cell, u32::MAX)),
+        Ok(Err(StopError::InvalidHart { raw: u32::MAX }))
+    );
+    drop(cell);
+    assert_eq!(memory.0, before);
 }

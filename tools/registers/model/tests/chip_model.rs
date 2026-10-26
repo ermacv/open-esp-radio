@@ -1141,10 +1141,10 @@ rejects!(
     ErrorKind::Duplicate(_)
 );
 rejects!(
-    dim_of_one,
+    dim_of_zero,
     "types/timg.toml",
     "count = 2, stride = 4",
-    "count = 1, stride = 4",
+    "count = 0, stride = 4",
     ErrorKind::Dim(_)
 );
 rejects!(

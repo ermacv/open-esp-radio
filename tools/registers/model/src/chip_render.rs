@@ -112,6 +112,12 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
         "// The thin PAC of the chip root and its ownership policy, rendered by\n\
          // `cargo registers` over `oer-mmio`; no `unsafe`, no raw write.\n\n",
     );
+    if let Some(geometry) = model.hart_geometry {
+        output.push_str(
+            &oer_espressif_facts::generate::hart_geometry(geometry.harts, geometry.boot_hart)
+                .map_err(|e| Error::new("hart-facts", e.to_string()))?,
+        );
+    }
     render_interrupts(&mut output, model);
     render_instances(&mut output, model, &plans);
     for plan in plans.values() {

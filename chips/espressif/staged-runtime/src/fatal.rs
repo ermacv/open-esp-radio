@@ -18,7 +18,13 @@ pub use cores::{Fatal, StopError, StopTheWorld};
 /// unless `fatal_path` stopped it.
 #[cfg(target_arch = "riscv32")]
 pub fn fatal_halt(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
-    cores::fatal(fatal_path)
+    cores::fatal(|fatal| {
+        if fatal.hart().is_err() {
+            reset_recording_with(fatal, |_| ());
+        } else {
+            fatal_path(fatal);
+        }
+    })
 }
 
 /// Reset the chip from a fatal path that records its state first: mask this
@@ -30,12 +36,27 @@ pub fn fatal_halt(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
 pub fn reset_recording(
     record: impl for<'a, 'b> FnOnce(Result<&'b cores::StopTheWorld<'a>, cores::StopError>),
 ) -> ! {
-    cores::fatal(|fatal| {
+    cores::fatal(|fatal| reset_recording_with(fatal, record))
+}
+
+#[cfg(target_arch = "riscv32")]
+fn reset_recording_with(
+    fatal: cores::Fatal<'_>,
+    record: impl for<'a, 'b> FnOnce(Result<&'b cores::StopTheWorld<'a>, cores::StopError>),
+) {
+    let hart = fatal.hart();
+    let reset = || {
         let stop = cores::stop_the_world(&fatal);
         record(stop.as_ref().map_err(|error| *error));
         drop(stop);
         let cores::AwaitWatchdog { reason: _ } = cores::software_reset(fatal);
-    })
+    };
+    match hart {
+        Ok(_) => reset(),
+        Err(cores::Fault::InvalidHart { raw }) => {
+            crate::panic::with_invalid_hart_record(raw, reset)
+        }
+    }
 }
 
 /// Reset the chip from a fatal path that records nothing

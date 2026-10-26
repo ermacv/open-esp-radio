@@ -10,13 +10,13 @@ pub(crate) mod postmortem;
 mod watchdog;
 
 pub(super) fn boot_evidence() -> oer_hil_protocol::base::BootEvidence {
-    use oer_esp32s31_hal::platform::{HpCore, ResetCause as Cause};
+    use oer_esp32s31_hal::platform::ResetCause as Cause;
     use oer_hil_protocol::base::{BootEvidence, ResetReason};
     // The console serves boot evidence from core 0.
     let cause = RESET_CAUSES
         .try_get()
         .expect("the boot reads the reset causes before serving evidence")
-        .of(HpCore::Core0);
+        .of(oer_esp32s31_hal::platform::BOOT_HART);
     BootEvidence {
         reset_reason: match cause {
             Cause::CoreSoftware => ResetReason::Software,
