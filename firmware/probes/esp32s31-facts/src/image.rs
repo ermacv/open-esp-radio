@@ -19,6 +19,7 @@ mod opaque_wave2;
 mod ble;
 mod ble_wave2;
 mod generic;
+mod lp_softreset;
 mod radio_local;
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
@@ -209,6 +210,26 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 13,
         run: opaque::temperature,
+    },
+    Probe {
+        id: 105,
+        run: lp_softreset::compare,
+    },
+    Probe {
+        id: 106,
+        run: lp_softreset::rollover,
+    },
+    Probe {
+        id: 107,
+        run: lp_softreset::both,
+    },
+    Probe {
+        id: 108,
+        run: lp_softreset::control,
+    },
+    Probe {
+        id: 109,
+        run: lp_softreset::observe,
     },
     Probe {
         id: 102,
@@ -464,7 +485,9 @@ extern "C" fn facts_main() -> ! {
     // One take for the entire loader session. Commands reuse these owners;
     // the debugger never re-enters _start merely to select another leaf.
     let prior = retained_record();
-    let mut request = if prior[0] == 0xfac70007 && prior[1] == 0x687731 {
+    let mut request = if lp_softreset::is_record(&prior) {
+        109
+    } else if prior[0] == 0xfac70007 && prior[1] == 0x687731 {
         8
     } else {
         u32::MAX
