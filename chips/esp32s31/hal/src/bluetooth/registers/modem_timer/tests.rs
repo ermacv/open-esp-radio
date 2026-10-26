@@ -18,7 +18,10 @@ use super::{
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PreparationOperation {
-    GeneratedTransaction,
+    PrepareControls,
+    SamplePending,
+    Clear34AllOnes,
+    EnableRollover,
     DeviceFence,
 }
 
@@ -335,32 +338,73 @@ impl ModemLpTimerInterruptTransaction for InterruptRecorder {
     }
 }
 
-#[derive(Default)]
-struct Recorder(Vec<PreparationOperation>);
+struct PreparationModel {
+    operations: Vec<PreparationOperation>,
+    pending: super::BluetoothModemLpTimerPendingObservation,
+    rollover_armed: bool,
+    output: bool,
+}
 
-impl ModemLpTimerTransaction for Recorder {
-    fn prepare_hardware(&mut self) {
-        self.0.push(PreparationOperation::GeneratedTransaction);
+impl ModemLpTimerTransaction for PreparationModel {
+    fn prepare_controls(&mut self) {
+        self.operations.push(PreparationOperation::PrepareControls);
+        self.rollover_armed = false;
+        self.output = false;
     }
 
+    fn sample_pending(&mut self) -> super::BluetoothModemLpTimerPendingObservation {
+        self.operations.push(PreparationOperation::SamplePending);
+        self.pending
+    }
+    fn clear_pending_with_command(&mut self) {
+        self.operations.push(PreparationOperation::Clear34AllOnes);
+        // SOURCE: HW9_S31_LP_CLEAR34_20261027, hw9-20261027-lp-06.
+        // Model the measured command effect, not a passive host-memory store.
+        self.pending = Default::default();
+        self.output = false;
+    }
+    fn enable_rollover(&mut self) {
+        self.operations.push(PreparationOperation::EnableRollover);
+        self.rollover_armed = true;
+        self.output = self.pending.state_002c() != 0;
+    }
     fn fence(&mut self) {
-        self.0.push(PreparationOperation::DeviceFence);
+        self.operations.push(PreparationOperation::DeviceFence);
     }
 }
 
 #[test]
-fn source_127_preparation_fences_after_the_generated_transaction() {
-    let mut recorder = Recorder::default();
-
-    execute_modem_lp_timer_prepare(&mut recorder);
-
-    assert_eq!(
-        recorder.0,
-        [
-            PreparationOperation::GeneratedTransaction,
-            PreparationOperation::DeviceFence,
-        ]
-    );
+fn preparation_returns_pending_before_clear34_erases_both_tested_causes() {
+    for (software, rollover) in [(0, 0), (7, 0), (0, 3), (7, 3)] {
+        let inherited = super::BluetoothModemLpTimerPendingObservation {
+            state_0024: software,
+            state_002c: rollover,
+        };
+        let mut model = PreparationModel {
+            operations: Vec::new(),
+            pending: inherited,
+            rollover_armed: true,
+            output: software != 0 || rollover != 0,
+        };
+        let stale = execute_modem_lp_timer_prepare(&mut model);
+        assert_eq!(
+            stale, inherited,
+            "the observation precedes the destructive command"
+        );
+        assert_eq!(model.pending, Default::default());
+        assert!(model.rollover_armed);
+        assert!(!model.output, "arming cannot redeliver inherited rollover");
+        assert_eq!(
+            model.operations,
+            [
+                PreparationOperation::PrepareControls,
+                PreparationOperation::SamplePending,
+                PreparationOperation::Clear34AllOnes,
+                PreparationOperation::EnableRollover,
+                PreparationOperation::DeviceFence,
+            ]
+        );
+    }
 }
 
 #[test]
@@ -843,4 +887,231 @@ fn entries_during_p2_work_retain_dispatch_and_epoch_until_the_plan_returns() {
     assert!(work.dispatch_requested());
     assert_eq!(work.instant().bits(), 0x0100_0003);
     assert_eq!(work.epoch().high_byte(), 1);
+}
+
+#[test]
+fn prepare_exposes_each_inherited_pending_lane_through_the_pac() {
+    use super::super::host::HostMemory;
+    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
+    for (software, rollover) in [(0, 0), (7, 0), (0, 3), (7, 3)] {
+        let mut memory = HostMemory::filled(0);
+        memory.timer[word_0024_opaque::OFFSET / 4] = 0xaabb_cc00 | software;
+        memory.timer[word_002c_opaque::OFFSET / 4] = 0xddee_ff00 | rollover;
+        {
+            let (_, _, mut timer) = memory.owners();
+            let stale = timer.prepare_registers();
+            assert_eq!(u32::from(stale.state_0024()), software);
+            assert_eq!(u32::from(stale.state_002c()), rollover);
+        }
+        // Plain PAC host memory does not emulate +0x34 command effects;
+        // PreparationModel tests the measured destructive clear above.
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum StopOp {
+    DisableDelivery,
+    StopCounter,
+    Fence,
+    SamplePending,
+    ReadStatus,
+    ClearRollover,
+    ClearPending,
+}
+struct StopRecorder {
+    clock: oer_time_virtual::VirtualClock,
+    counter_running: bool,
+    stopped_counter: u64,
+    delivery_enabled: bool,
+    source_127_high: bool,
+    pending: super::BluetoothModemLpTimerPendingObservation,
+    status: u32,
+    ops: Vec<StopOp>,
+}
+impl StopRecorder {
+    fn new(pending: super::BluetoothModemLpTimerPendingObservation, status: u32) -> Self {
+        Self {
+            clock: oer_time_virtual::VirtualClock::new(),
+            counter_running: true,
+            stopped_counter: 0,
+            delivery_enabled: true,
+            source_127_high: status != 0,
+            pending,
+            status,
+            ops: Vec::new(),
+        }
+    }
+
+    fn counter(&self) -> u64 {
+        use oer_time::Clock;
+        if self.counter_running {
+            self.clock.now().as_micros()
+        } else {
+            self.stopped_counter
+        }
+    }
+
+    fn is_quiet(&self) -> bool {
+        !self.counter_running
+            && !self.delivery_enabled
+            && !self.source_127_high
+            && self.status == 0
+            && self.pending == Default::default()
+    }
+}
+
+impl super::ModemLpTimerStopTransaction for StopRecorder {
+    fn disable_delivery(&mut self) {
+        self.ops.push(StopOp::DisableDelivery);
+        self.delivery_enabled = false;
+        self.status = 0;
+        self.source_127_high = false;
+    }
+    fn stop_counter(&mut self) {
+        self.ops.push(StopOp::StopCounter);
+        self.stopped_counter = self.counter();
+        self.counter_running = false;
+    }
+    fn sample_pending(&mut self) -> super::BluetoothModemLpTimerPendingObservation {
+        self.ops.push(StopOp::SamplePending);
+        self.pending
+    }
+    fn read_status(&mut self) -> u32 {
+        self.ops.push(StopOp::ReadStatus);
+        self.status
+    }
+    fn clear_rollover(&mut self) {
+        self.ops.push(StopOp::ClearRollover);
+        self.pending.state_002c = 0;
+    }
+    fn clear_pending(&mut self) {
+        self.ops.push(StopOp::ClearPending);
+        self.pending = Default::default();
+        self.status = 0;
+        self.source_127_high = false;
+    }
+    fn fence(&mut self) {
+        self.ops.push(StopOp::Fence);
+    }
+}
+
+#[test]
+fn shutdown_returns_pending_then_leaves_the_counter_bytes_status_and_output_quiet() {
+    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::Bits0_31Opaque;
+    // SOURCE: HW6_S31_LP_QUIET_20261026, hw6-20261026-reset-02.
+    for (software, rollover, status) in [
+        (9, 0, Bits0_31Opaque::CompareSoftwarePending),
+        (0, 5, Bits0_31Opaque::RolloverPending),
+        (9, 5, Bits0_31Opaque::BothMeasuredPending),
+    ] {
+        let pending = super::BluetoothModemLpTimerPendingObservation {
+            state_0024: software,
+            state_002c: rollover,
+        };
+        let mut recorder = StopRecorder::new(pending, status.bits());
+        recorder
+            .clock
+            .advance(oer_time::Duration::from_micros(3000))
+            .unwrap();
+        let counter_before_stop = recorder.counter();
+        assert!(!recorder.is_quiet());
+        assert_eq!(super::execute_modem_lp_timer_stop(&mut recorder), pending);
+        assert!(recorder.is_quiet());
+        recorder
+            .clock
+            .advance(oer_time::Duration::from_micros(4096))
+            .unwrap();
+        assert_eq!(recorder.counter(), counter_before_stop);
+        assert_eq!(
+            recorder.ops,
+            [
+                StopOp::DisableDelivery,
+                StopOp::StopCounter,
+                StopOp::Fence,
+                StopOp::SamplePending,
+                StopOp::ClearPending,
+                StopOp::Fence,
+            ]
+        );
+    }
+}
+
+#[test]
+fn shutdown_samples_both_bytes_before_clearing_both_whole_words() {
+    use super::super::host::HostMemory;
+    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
+    let mut memory = HostMemory::filled(0);
+    memory.timer[word_0024_opaque::OFFSET / 4] = 0xaabb_cc07;
+    memory.timer[word_002c_opaque::OFFSET / 4] = 0xddee_ff03;
+    {
+        let (_, _, mut timer) = memory.owners();
+        let pending = timer.stop_for_shutdown();
+        assert_eq!(pending.state_0024(), 7);
+        assert_eq!(pending.state_002c(), 3);
+    }
+    assert_eq!(memory.timer[word_0024_opaque::OFFSET / 4], 0);
+    assert_eq!(memory.timer[word_002c_opaque::OFFSET / 4], 0);
+}
+
+#[test]
+fn stopped_rollover_is_acknowledged_once_without_arming_or_dispatch() {
+    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::Bits0_31Opaque;
+    for status in [Bits0_31Opaque::Inactive, Bits0_31Opaque::RolloverPending] {
+        let pending = super::BluetoothModemLpTimerPendingObservation {
+            state_0024: 0,
+            state_002c: 5,
+        };
+        let mut recorder = StopRecorder::new(pending, status.bits());
+        let mut epoch = BluetoothModemLpTimerEpoch::new();
+        assert_eq!(
+            super::execute_modem_lp_timer_stopped_interrupt(&mut recorder, &mut epoch),
+            Ok(
+                super::BluetoothModemLpTimerStoppedInterruptObservation::RolloverAcknowledged(
+                    pending
+                )
+            )
+        );
+        assert_eq!(epoch.high_byte(), 1);
+        assert_eq!(
+            recorder.ops,
+            [
+                StopOp::ReadStatus,
+                StopOp::SamplePending,
+                StopOp::ClearRollover,
+                StopOp::Fence
+            ]
+        );
+        recorder.ops.clear();
+        assert_eq!(
+            super::execute_modem_lp_timer_stopped_interrupt(&mut recorder, &mut epoch),
+            Ok(super::BluetoothModemLpTimerStoppedInterruptObservation::Quiet)
+        );
+        assert_eq!(epoch.high_byte(), 1);
+        assert_eq!(recorder.ops, [StopOp::ReadStatus, StopOp::SamplePending]);
+    }
+}
+
+#[test]
+fn stopped_software_pending_and_unknown_status_fault_without_acknowledgement() {
+    for (software, status) in [(7, 0), (0, u32::MAX)] {
+        let pending = super::BluetoothModemLpTimerPendingObservation {
+            state_0024: software,
+            state_002c: 3,
+        };
+        let mut recorder = StopRecorder::new(pending, status);
+        let mut epoch = BluetoothModemLpTimerEpoch::new();
+        let error =
+            super::execute_modem_lp_timer_stopped_interrupt(&mut recorder, &mut epoch).unwrap_err();
+        assert_eq!(
+            error,
+            if software != 0 {
+                super::BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending(pending)
+            } else {
+                super::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(status)
+            }
+        );
+        assert_eq!(recorder.pending, pending);
+        assert_eq!(epoch.high_byte(), 0);
+        assert_eq!(recorder.ops, [StopOp::ReadStatus, StopOp::SamplePending]);
+    }
 }

@@ -26,6 +26,7 @@ enum Op {
     ApplyPlan,
     ObserveTimer,
     StopTimer,
+    StoppedTimerStep,
     CloseBank,
 }
 
@@ -35,6 +36,8 @@ enum Step {
     Spurious,
     Rearmed,
     Pending,
+    Rollover,
+    Unknown,
 }
 
 /// The hardware the fake owners reach, shared by every owner of one test.
@@ -65,7 +68,8 @@ struct ReleaseProof;
 struct Scheduler;
 struct TimerInitialized(Shared);
 struct Timer(Shared);
-struct TimerPending(Shared, bool);
+struct TimerPending(Shared, bool, bool);
+struct StoppedTimer(Shared);
 struct Work;
 struct Plan;
 struct Compare;
@@ -82,7 +86,8 @@ impl GateHardware for Fake {
     type TimerPending = TimerPending;
     type TimerWork = Work;
     type TimerPlan = Plan;
-    type CompareDisabled = Compare;
+    type StoppedTimer = StoppedTimer;
+    type StopProof = Compare;
 
     fn open_bank(setup: Setup) -> FakeBank {
         record(&setup.0, Op::PrepareOutput);
@@ -124,14 +129,18 @@ impl GateHardware for Fake {
         match step {
             Step::Spurious => TimerEntry::Spurious(timer),
             Step::Rearmed => TimerEntry::Rearmed(timer),
-            Step::Pending => TimerEntry::SoftwarePending(TimerPending(timer.0, false), Work),
+            Step::Pending => TimerEntry::SoftwarePending(TimerPending(timer.0, true, false), Work),
+            Step::Rollover => {
+                TimerEntry::SoftwarePending(TimerPending(timer.0, false, false), Work)
+            }
+            Step::Unknown => panic!("unknown status only scripted while stopped"),
         }
     }
 
     fn apply_timer_plan(timer: TimerPending, _: Plan) -> TimerEntry<Timer, TimerPending, Work> {
         record(&timer.0, Op::ApplyPlan);
-        if timer.1 {
-            TimerEntry::SoftwarePending(TimerPending(timer.0, false), Work)
+        if timer.2 {
+            TimerEntry::SoftwarePending(TimerPending(timer.0, true, false), Work)
         } else {
             TimerEntry::Rearmed(Timer(timer.0))
         }
@@ -141,13 +150,40 @@ impl GateHardware for Fake {
         let mut model = timer.0.lock().unwrap();
         model.ops.push(Op::ObserveTimer);
         if matches!(model.timer.pop_front(), Some(Step::Pending)) {
-            timer.1 = true;
+            timer.2 = true;
         }
     }
 
-    fn stop_timer(timer: &mut Timer) -> Compare {
+    fn stop_timer(timer: Timer) -> (StoppedTimer, Compare) {
         record(&timer.0, Op::StopTimer);
-        Compare
+        (StoppedTimer(timer.0), Compare)
+    }
+
+    fn stop_pending_timer(timer: TimerPending) -> Result<(StoppedTimer, Compare), TimerPending> {
+        if timer.1 || timer.2 {
+            return Err(timer);
+        }
+        Ok(Self::stop_timer(Timer(timer.0)))
+    }
+
+    fn step_stopped_timer(
+        timer: &mut StoppedTimer,
+    ) -> Result<
+        bluetooth::BluetoothModemLpTimerStoppedInterruptObservation,
+        bluetooth::BluetoothModemLpTimerStoppedInterruptFault,
+    > {
+        use bluetooth::{
+            BluetoothModemLpTimerStoppedInterruptFault as Fault,
+            BluetoothModemLpTimerStoppedInterruptObservation as Ack,
+        };
+        let mut model = timer.0.lock().unwrap();
+        model.ops.push(Op::StoppedTimerStep);
+        match model.timer.pop_front().unwrap_or(Step::Spurious) {
+            Step::Spurious | Step::Rearmed => Ok(Ack::Quiet),
+            Step::Rollover => Ok(Ack::RolloverAcknowledged(Default::default())),
+            Step::Pending => Err(Fault::SoftwarePending(Default::default())),
+            Step::Unknown => Err(Fault::UnexpectedStatus(u32::MAX)),
+        }
     }
 
     fn close_bank(bank: FakeBank, _: ReleaseProof) -> Result<Released, FakeBank> {
@@ -209,6 +245,7 @@ impl Harness {
                 reply: host::deferred_signal(),
                 cells,
                 fault,
+                stopped_timer_fault: Box::leak(Box::new(OnceValue::new())),
             },
         );
         let (gate, port) = ends.with_ring(Ring(rings.clone()));
@@ -311,8 +348,7 @@ fn opening_prepares_the_output_then_starts_the_timer_in_the_handler() {
     let mut harness = Harness::new();
     harness.open();
     assert_eq!(harness.rings.load(Ordering::Relaxed), 1);
-    // The doorbell first, then the gate's request, then this entry's
-    // sample of every source.
+    // No timer owner is held before Open; output preparation then starts it.
     assert_eq!(
         harness.ops(),
         [
@@ -322,7 +358,6 @@ fn opening_prepares_the_output_then_starts_the_timer_in_the_handler() {
             Op::ChannelRequest,
             Op::Primary,
             Op::Nrt,
-            Op::TimerStep,
         ]
     );
     assert!(harness.part.is_open());
@@ -396,7 +431,7 @@ fn the_timer_hands_its_software_work_to_the_task_and_comes_back() {
     harness.enter();
     let ops = harness.ops();
     assert!(ops.contains(&Op::ApplyPlan));
-    assert_eq!(ops.last(), Some(&Op::TimerStep));
+    assert_eq!(&ops[..3], &[Op::Acknowledge, Op::ApplyPlan, Op::TimerStep]);
     assert!(!harness.fault.load(Ordering::Acquire));
 }
 
@@ -452,7 +487,7 @@ fn the_timer_leaves_only_stopped_and_on_request() {
     // The handler retains the owner but cannot stop until the plan arrives.
     assert!(matches!(
         harness.exchange(Request::StopTimer),
-        Ok(Reply::Refused(GateError::TimerNotReady))
+        Ok(Reply::Refused(GateError::TimerDispatchPending))
     ));
     assert!(harness.port.submit_plan(Plan).is_ok());
     harness.ops();
@@ -463,7 +498,10 @@ fn the_timer_leaves_only_stopped_and_on_request() {
     assert!(harness.ops().contains(&Op::StopTimer));
     // Stopped, the handler still quiets the timer's status.
     harness.enter();
-    assert_eq!(harness.ops().last(), Some(&Op::TimerStep));
+    assert_eq!(
+        &harness.ops()[..2],
+        &[Op::Acknowledge, Op::StoppedTimerStep]
+    );
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
         Ok(Reply::Timer(_))
@@ -485,6 +523,14 @@ fn stopped_timer_work_is_retained_as_a_fault() {
     harness.enter();
     assert!(harness.fault.load(Ordering::Acquire));
     assert!(harness.port.take_work().is_none());
+    assert_eq!(
+        harness.part.stopped_timer_fault(),
+        Some(
+            bluetooth::BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending(
+                Default::default()
+            )
+        )
+    );
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
         Ok(Reply::Refused(GateError::TimerNotStopped))
@@ -531,6 +577,7 @@ fn a_foreign_executor_cannot_await_a_reply() {
             reply: host::foreign_signal(),
             cells,
             fault: Box::leak(Box::new(AtomicBool::new(false))),
+            stopped_timer_fault: Box::leak(Box::new(OnceValue::new())),
         },
     );
     let (mut gate, _port) = ends.with_ring(Ring(Arc::new(AtomicUsize::new(0))));
@@ -568,5 +615,161 @@ fn an_event_between_plan_and_application_waits_for_the_retained_owner() {
     assert_eq!(ops[1], Op::ApplyPlan);
     assert!(harness.port.take_work().is_some());
     assert_eq!(is_pending(harness.cells), (false, true));
+    assert!(!harness.fault.load(Ordering::Acquire));
+}
+
+#[test]
+fn stopped_rollover_is_acknowledged_and_the_owner_can_reunite() {
+    let mut harness = Harness::new();
+    harness.open();
+    assert!(matches!(
+        harness.exchange(Request::StopTimer),
+        Ok(Reply::TimerStopped(_))
+    ));
+    harness
+        .clock
+        .advance(oer_time::Duration::from_micros(10))
+        .unwrap();
+    harness.script(|m| m.timer.push_back(Step::Rollover));
+    harness.enter();
+    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(harness.port.take_work().is_none());
+    assert!(matches!(
+        harness.exchange(Request::TakeTimer),
+        Ok(Reply::Timer(_))
+    ));
+}
+
+#[test]
+fn stop_accepts_rollover_only_planning_after_the_task_drained() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness
+        .clock
+        .advance(oer_time::Duration::from_micros(10))
+        .unwrap();
+    harness.script(|m| m.timer.push_back(Step::Rollover));
+    harness.enter();
+    assert!(matches!(harness.part.timer, super::Timer::AwaitingPlan(_)));
+    // No plan is returned by the already-drained task.
+    assert!(matches!(
+        harness.exchange(Request::StopTimer),
+        Ok(Reply::TimerStopped(_))
+    ));
+    // Retirement discards only the late rollover snapshot/epoch projection.
+    let _rollover = harness.port.take_work().unwrap();
+    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(matches!(
+        harness.exchange(Request::TakeTimer),
+        Ok(Reply::Timer(_))
+    ));
+    assert!(harness.port.take_work().is_none());
+}
+
+#[test]
+fn a_dispatch_retained_during_rollover_planning_refuses_stop() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.script(|m| m.timer.push_back(Step::Rollover));
+    harness.enter();
+    let _rollover = harness.port.take_work().unwrap();
+    harness.script(|m| m.timer.push_back(Step::Pending));
+    harness.enter();
+    harness.ops();
+    assert!(matches!(
+        harness.exchange(Request::StopTimer),
+        Ok(Reply::Refused(GateError::TimerDispatchPending))
+    ));
+    assert!(!harness.ops().contains(&Op::StopTimer));
+    assert!(matches!(harness.part.timer, super::Timer::AwaitingPlan(_)));
+    assert!(harness.port.submit_plan(Plan).is_ok());
+    harness.enter();
+    assert!(
+        harness.port.take_work().is_some(),
+        "dispatch remains deliverable"
+    );
+}
+
+#[test]
+fn stopped_unknown_status_uses_the_existing_fault_path() {
+    let mut harness = Harness::new();
+    harness.open();
+    assert!(matches!(
+        harness.exchange(Request::StopTimer),
+        Ok(Reply::TimerStopped(_))
+    ));
+    harness.script(|m| m.timer.push_back(Step::Unknown));
+    harness.enter();
+    assert!(harness.fault.load(Ordering::Acquire));
+    assert!(harness.part.retained.stopped.is_some());
+    assert_eq!(
+        harness.part.stopped_timer_fault(),
+        Some(bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(u32::MAX))
+    );
+    harness.enter();
+    assert_eq!(
+        harness.part.stopped_timer_fault(),
+        Some(bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(u32::MAX))
+    );
+    assert!(matches!(
+        harness.exchange(Request::TakeTimer),
+        Ok(Reply::Refused(GateError::TimerNotStopped))
+    ));
+}
+
+#[test]
+fn retirement_discards_a_same_entry_rollover_snapshot_only_after_stop() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness
+        .clock
+        .advance(oer_time::Duration::from_micros(10))
+        .unwrap();
+    harness.script(|m| m.timer.push_back(Step::Rollover));
+    let mut cx = Context::from_waker(Waker::noop());
+    {
+        let mut retiring = pin!(stop_timer_for_retirement(&mut harness.gate, &harness.port));
+        assert!(retiring.as_mut().poll(&mut cx).is_pending());
+        harness.part.service(&harness.clock);
+        assert!(matches!(harness.part.timer, super::Timer::Stopped(_)));
+        assert_eq!(
+            harness.port.pending.len(),
+            1,
+            "late snapshot is still queued before retire resumes"
+        );
+        assert!(matches!(
+            retiring.as_mut().poll(&mut cx),
+            Poll::Ready(Ok(Compare))
+        ));
+    }
+    assert!(
+        harness.port.take_work().is_none(),
+        "retire drained the late rollover projection"
+    );
+    assert!(!harness.fault.load(Ordering::Acquire));
+}
+
+#[test]
+fn retirement_refuses_a_same_entry_dispatch_without_draining_its_work() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.ops();
+    harness.script(|m| m.timer.push_back(Step::Pending));
+    let mut cx = Context::from_waker(Waker::noop());
+    {
+        let mut retiring = pin!(stop_timer_for_retirement(&mut harness.gate, &harness.port));
+        assert!(retiring.as_mut().poll(&mut cx).is_pending());
+        harness.part.service(&harness.clock);
+        assert!(matches!(
+            retiring.as_mut().poll(&mut cx),
+            Poll::Ready(Err(GateError::TimerDispatchPending))
+        ));
+    }
+    assert!(matches!(harness.part.timer, super::Timer::AwaitingPlan(_)));
+    assert!(
+        harness.port.take_work().is_some(),
+        "dispatch remains available to its worker"
+    );
+    assert!(!harness.ops().contains(&Op::StopTimer));
     assert!(!harness.fault.load(Ordering::Acquire));
 }

@@ -86,6 +86,7 @@ pub(crate) struct Boot {
     arena: Option<Placed<Arena>>,
     port_epoch: u64,
     reply: Option<(rpc::Command, bridge::Response)>,
+    stop_reporter: bridge::StopReporter,
     profile: Profile,
     address: [u8; 6],
 }
@@ -217,6 +218,9 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(arena) = ARENA.take() else {
         crate::fail("arena")
     };
+    let Some((stop_reporter, stop_reports)) = bridge::stop_reports() else {
+        crate::fail("stop-report-storage")
+    };
     let Some(boot) = BOOT.try_init(Boot {
         actor: Some(actor),
         inbox: Some(inbox),
@@ -229,6 +233,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         arena: Some(arena),
         port_epoch: 0,
         reply: None,
+        stop_reporter,
         profile,
         address: base,
     }) else {
@@ -247,7 +252,15 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let watchdog = runtime.watchdogs.rtc;
     app.run(&mut router, tokens.wake, software.irq0, move |spawner| {
         let (_, power) = permission(profile);
-        if AppTasks::serve(spawner, console, pads, rng, bridge::frontend(), power).is_err()
+        if AppTasks::serve(
+            spawner,
+            console,
+            pads,
+            rng,
+            bridge::frontend(stop_reports),
+            power,
+        )
+        .is_err()
             || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
         {
             crate::fail("app-tasks");
@@ -298,16 +311,20 @@ fn worker(boot: &'static mut Boot) -> Worker {
             }
             boot.port_epoch = command.epoch;
             boot.reply = Some((command, reply));
-            {
+            let pending = {
                 let mut pool = core::pin::pin!(with_pool_async(async |pool| {
                     let mut epoch = core::pin::pin!(with_epoch_async(async |epoch| {
                         let mut installed =
                             core::pin::pin!(installed::run(boot, pool, epoch, timer));
-                        installed.as_mut().await;
+                        installed.as_mut().await
                     }));
-                    epoch.as_mut().await;
+                    epoch.as_mut().await
                 }));
-                pool.as_mut().await;
+                pool.as_mut().await
+            };
+            let bytes = [pending.state_0024(), pending.state_002c()];
+            if let Err(mut report) = boot.stop_reporter.try_send(bytes) {
+                fail(&mut report, &mut boot.reply).await;
             }
             // Every scoped future and its old generative authority ended;
             // the actual arena and cold owners are back in Boot.

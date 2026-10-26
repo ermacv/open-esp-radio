@@ -33,6 +33,7 @@ pub struct ControllerLowPowerHardwareInitialized<
 > {
     scheduler: SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>,
     timer_hardware: Option<ModemLpTimerLowPowerHardwareInitializedOwner>,
+    stale_pending: oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
 }
 
 /// Lossless failure to initialize the disjoint modem low-power timer owner.
@@ -113,10 +114,13 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
         match self.try_initialize_low_power_hardware_with(|task| {
             task.initialize_modem_lp_timer_hardware()
         }) {
-            Ok((scheduler, timer_hardware)) => Ok(ControllerLowPowerHardwareInitialized {
-                scheduler,
-                timer_hardware: Some(timer_hardware),
-            }),
+            Ok((scheduler, (timer_hardware, stale_pending))) => {
+                Ok(ControllerLowPowerHardwareInitialized {
+                    scheduler,
+                    timer_hardware: Some(timer_hardware),
+                    stale_pending,
+                })
+            }
             Err((scheduler, error)) => {
                 Err(ControllerLowPowerHardwareInitializationFailure { scheduler, error })
             }
@@ -127,6 +131,13 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
 impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: ControllerMemory>
     ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>
 {
+    /// Inherited pending bytes sampled and cleared before rollover was armed.
+    pub const fn stale_pending_observation(
+        &self,
+    ) -> oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
+        self.stale_pending
+    }
+
     /// Number of scheduler modem-timer slots retained by this exact epoch.
     pub const fn modem_timer_capacity(&self) -> usize {
         self.scheduler.modem_timer_capacity()

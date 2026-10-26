@@ -127725,7 +127725,7 @@ pub mod modem_pwr {
 
     /// The `WORD_002C_OPAQUE` register.
     ///
-    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; independent source-127 delivery is unproved. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7).
+    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state independently raised source 127. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26.
     pub mod word_002c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127807,7 +127807,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0038_OPAQUE` register.
     ///
-    /// A nonzero complete word selects the common timer handler; status encoding, internal action and source-127 output equation are unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5).
+    /// A nonzero complete word selects the common timer handler. Measured isolated rollover, compare/software and combined status images are named; other causes, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26.
     pub mod word_0038_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127824,6 +127824,45 @@ pub mod modem_pwr {
         /// Positioned bits of `BITS_0_31_OPAQUE`.
         pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
 
+        /// The declared values of the `BITS_0_31_OPAQUE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Bits0_31Opaque {
+            Inactive = 0x0,
+            RolloverPending = 0x2,
+            CompareSoftwarePending = 0x40000,
+            BothMeasuredPending = 0x40002,
+        }
+
+        impl Bits0_31Opaque {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 0
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Inactive),
+                    0x2 => Some(Self::RolloverPending),
+                    0x40000 => Some(Self::CompareSoftwarePending),
+                    0x40002 => Some(Self::BothMeasuredPending),
+                    _ => None,
+                }
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -127833,6 +127872,12 @@ pub mod modem_pwr {
             #[inline]
             pub const fn bits_0_31_opaque(self) -> u32 {
                 self.0
+            }
+
+            /// The `BITS_0_31_OPAQUE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn bits_0_31_opaque_variant(self) -> Option<Bits0_31Opaque> {
+                Bits0_31Opaque::from_bits(self.0)
             }
         }
     }
@@ -134407,7 +134452,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_0024_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT.
+        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_0024(&mut self) {
             self.0.write::<0x24>(0x00000000);
@@ -134415,7 +134460,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_002C_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT.
+        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_002c(&mut self) {
             self.0.write::<0x2c>(0x00000000);
@@ -134423,7 +134468,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0004_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE.
+        /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE, HW_BLE_LP_CAUSES_2026_10_26.
         #[inline]
         pub fn prepare_bluetooth_modem_lp_timer_command_0004(&mut self) {
             self.0.write::<0x4>(0x00000001);
@@ -134439,7 +134484,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0xffffffff`, undeclared bits included (`MODEM_PWR.WORD_0014_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE.
+        /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE, HW_BLE_LP_CAUSES_2026_10_26.
         #[inline]
         pub fn prepare_bluetooth_modem_lp_timer_command_0014(&mut self) {
             self.0.write::<0x14>(0xffffffff);

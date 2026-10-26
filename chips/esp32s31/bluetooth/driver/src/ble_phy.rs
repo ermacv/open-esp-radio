@@ -25,7 +25,11 @@ use oer_esp32s31_hal::bluetooth::engine::{
 
 /// Observation that the source-owned normal BLE PHY transaction completed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BlePhyInitializationReport;
+pub struct BlePhyInitializationReport {
+    /// Inherited LP timer state cleared before rollover delivery was armed.
+    pub stale_lp_timer_pending:
+        oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+}
 
 /// One post-enable timing observation in the retained always-awake epoch.
 ///
@@ -168,8 +172,9 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
     /// The bank leaves this engine's custody here for the first time, its
     /// output not prepared, together with the unstarted timer: the gate of
     /// their interrupt handler prepares the output, then starts the timer,
-    /// when the epoch opens, so no source is armed while the task holds its
-    /// owner. This complete initialization is the matching Controller epoch.
+    /// when the epoch opens. Preparation already arms rollover with the
+    /// counter stopped, after reporting and clearing inherited pending.
+    /// This complete initialization is the matching Controller epoch.
     pub fn activate(self) -> BlePhyRuntime<'cells, MODEM_TIMER_CAPACITY, X, M> {
         let Self {
             mut controller,
@@ -225,11 +230,11 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
                 _controller: self,
             });
         }
+        let report = BlePhyInitializationReport {
+            stale_lp_timer_pending: self.stale_pending_observation(),
+        };
         let controller = self;
-        Ok(ControllerBlePhyEngineInitialized {
-            controller,
-            report: BlePhyInitializationReport,
-        })
+        Ok(ControllerBlePhyEngineInitialized { controller, report })
     }
 }
 

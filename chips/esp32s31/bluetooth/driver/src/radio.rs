@@ -89,7 +89,10 @@ enum State<E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
     Ready(Option<ControllerBlePhyEngineInitialized<'static, MT, X, M>>),
     Running,
     Retired(Option<ControllerRetired<M>>),
-    Reset(Option<oer_esp32s31_hal::dma_static::Placed<M::Storage>>),
+    Reset {
+        arena: Option<oer_esp32s31_hal::dma_static::Placed<M::Storage>>,
+        pending: oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+    },
     FactoryFailed(E),
     HalFailed(ControllerHalInitializationFailure<M>),
     SchedulerFailed(SchedulerInitializationFailure<'static, MT, X, M>),
@@ -176,16 +179,16 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         (
             oer_esp32s31_hal::dma_static::Placed<M::Storage>,
             BluetoothInterruptGate<ChipGate, X, R>,
+            oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
         ),
         Self,
     > {
-        let arena = match &mut self.state {
-            State::Reset(arena) => arena.take(),
-            _ => None,
-        };
-        match arena {
-            Some(arena) => Ok((arena, self.gate)),
-            None => Err(self),
+        match &mut self.state {
+            State::Reset { arena, pending } => match arena.take() {
+                Some(arena) => Ok((arena, self.gate, *pending)),
+                None => Err(self),
+            },
+            _ => Err(self),
         }
     }
 }
@@ -305,7 +308,10 @@ where
         };
         match pending.reunite(&mut self.gate).await {
             Ok(returned) => {
-                self.state = State::Reset(Some(returned.arena));
+                self.state = State::Reset {
+                    arena: Some(returned.arena),
+                    pending: returned.pending,
+                };
                 Ok(returned.clocked)
             }
             Err(error) => {

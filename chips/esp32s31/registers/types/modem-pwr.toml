@@ -72,11 +72,11 @@ sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
 completeness = "partial"
 
 [review.entity."WORD_002C_OPAQUE.LOW_BYTE"]
-sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26"]
 completeness = "partial"
 
 [review.entity."WORD_0038_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
+sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -925,7 +925,7 @@ class = "plain"
 [[registers]]
 name = "WORD_002C_OPAQUE"
 offset = 0x2c
-description = "The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; independent source-127 delivery is unproved. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7)."
+description = "The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state independently raised source 127. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26."
 
 [[registers.fields]]
 name = "LOW_BYTE"
@@ -945,12 +945,18 @@ class = "write-only"
 [[registers]]
 name = "WORD_0038_OPAQUE"
 offset = 0x38
-description = "A nonzero complete word selects the common timer handler; status encoding, internal action and source-127 output equation are unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5)."
+description = "A nonzero complete word selects the common timer handler. Measured isolated rollover, compare/software and combined status images are named; other causes, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26."
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
 bits = "31:0"
 class = "read-only"
+values = [
+  { name = "INACTIVE", value = 0 },
+  { name = "ROLLOVER_PENDING", value = 0x2 },
+  { name = "COMPARE_SOFTWARE_PENDING", value = 0x40000 },
+  { name = "BOTH_MEASURED_PENDING", value = 0x40002 },
+]
 
 [[registers]]
 name = "WORD_0040_OPAQUE"

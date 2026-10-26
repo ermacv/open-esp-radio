@@ -84,19 +84,19 @@ impl<M: ControllerMemory> TaskResources<M> {
     /// after the reset.
     ///
     /// The caller has released Controller output, had the timer's handler
-    /// disable its compare and left the shared PHY domain and BTBB; the
-    /// controller-time worker holds no request.
+    /// stop its counter and both measured delivery lanes and left the
+    /// shared PHY domain and BTBB; the controller-time worker holds no request.
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn shut_down<B: PlatformClockBackend, T>(
         self,
         radio: &mut RadioDomain<B, T>,
         output: oer_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
-        compare: oer_esp32s31_hal::bluetooth::ModemLpTimerCompareDisabled,
+        stopped: oer_esp32s31_hal::bluetooth::ModemLpTimerStopped,
     ) -> Result<
         oer_esp32s31_hal::bluetooth::engine::EngineResetTimerPending<M>,
         oer_esp32s31_hal::bluetooth::engine::EngineShutdownFailure<M>,
     > {
-        self.engine.shut_down(radio, output, compare)
+        self.engine.shut_down(radio, output, stopped)
     }
 
     /// Preserve pending or faulted time ownership before any terminal extraction.
@@ -150,7 +150,13 @@ impl<M: ControllerMemory> TaskResources<M> {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn initialize_modem_lp_timer_hardware(
         &mut self,
-    ) -> Result<ModemLpTimerLowPowerHardwareInitializedOwner, BluetoothModemLpTimerOwnerError> {
+    ) -> Result<
+        (
+            ModemLpTimerLowPowerHardwareInitializedOwner,
+            oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+        ),
+        BluetoothModemLpTimerOwnerError,
+    > {
         self.engine.initialize_modem_lp_timer_hardware()
     }
 

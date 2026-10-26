@@ -19,9 +19,8 @@ impl Control for Model {
     }
     fn reset_controller(&mut self) {
         self.reset_count += 1;
-        if self.reset_ok {
-            self.counter_running = false;
-        }
+        // SOURCE: HW6_S31_LP_RESET_RETENTION_20261026,
+        // hw6-20261026-reset-02: Controller reset leaves LP running.
     }
     fn reset_released(&self) -> bool {
         self.reset_ok
@@ -58,7 +57,7 @@ fn outstanding_time_timer_or_baseband_prevent_shutdown_mutation() {
     }
 }
 #[test]
-fn reset_readback_is_required_before_returning_hardware_ownership() {
+fn reset_readback_admits_controller_reunion_but_does_not_stop_lp() {
     for reset_ok in [false, true] {
         let mut model = Model {
             pending: false,
@@ -77,6 +76,6 @@ fn reset_readback_is_required_before_returning_hardware_ownership() {
             }
         );
         assert_eq!(model.reset_count, 1);
-        assert_eq!(model.counter_running, !reset_ok);
+        assert!(model.counter_running, "Controller reset does not stop LP");
     }
 }

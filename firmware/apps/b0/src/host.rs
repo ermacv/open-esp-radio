@@ -234,6 +234,7 @@ pub async fn serve(
         entropy: RandomValue(None),
     };
     let mut poster = channel.0;
+    let reports = channel.1;
     let mut joined = None;
     let mut reset = None;
     loop {
@@ -267,6 +268,7 @@ pub async fn serve(
                 joined: proof,
                 output: Ok(Disposition::Reset(token)),
             } => {
+                report_shutdown(&mut io, &reports).await;
                 joined = Some(proof);
                 reset = Some(token);
             }
@@ -274,10 +276,31 @@ pub async fn serve(
                 output: Ok(Disposition::Stop),
                 ..
             } => {
+                report_shutdown(&mut io, &reports).await;
                 let _ = io.send(&StopComplete).await;
                 return;
             }
             _ => core::future::pending::<()>().await,
         }
+    }
+}
+
+async fn report_shutdown(io: &mut Io, reports: &bridge::StopReports) {
+    use oer_firmware_apps_b0::shutdown_observation::ShutdownObservation;
+    let pending = match reports.try_receive() {
+        Ok(pending) => pending,
+        Err(_) => {
+            tx::fail_stop(
+                || (),
+                &mut io.console,
+                &HardwareError([0x10, 1, Fault::Accounting as u8]),
+            )
+            .await;
+            oer_firmware_apps_b0::handoff::park_failure((), || ()).await
+        }
+    };
+    let report = ShutdownObservation::new(pending);
+    if io.send(&report).await.is_err() {
+        oer_firmware_apps_b0::handoff::park_failure(report, || ()).await;
     }
 }
