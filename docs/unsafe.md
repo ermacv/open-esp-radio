@@ -106,10 +106,32 @@ model, with the owners of its policy's parts, into the chip PAC's
   `write_shared`: a device word is not Rust memory, and the block's writes
   are whole-word stores that read nothing back, so every execution context
   reaches its one owner through `&self`.
-- `oer_mmio::fence`, the device-access ordering instruction.
 - `VolatileCell`, the volatile word of the generated memory layouts; both
   the cell and the layouts derive `Zeroable`. The constructors of
   `DmaWindowAddress` and `DmaRef` are `unsafe`.
+
+`oer-riscv` (`portable/riscv`) is the only crate with `asm!` for architectural
+operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
+debug triggers, waits and barriers. Its safe functions have no memory
+precondition. Installing trap vectors and `mscratch` is unsafe because the
+entries, table and exclusive interrupt stack must implement a live trap ABI.
+Entering stage two is unsafe: `jump_to_entry` requires the checked entry of a
+published image that installs its own stack. Its inlined assembly disables
+interrupts, executes both instruction-publication barriers and jumps to the
+constant entry in one block.
+Every instruction site has one narrow `// SAFETY:` proof. Moving instructions
+into this crate may increase its unsafe count only while the branch total
+decreases and no caller's count increases; runtime panic counts never increase.
+Device ordering is `oer_riscv::fence`, including the host compiler fence;
+`oer-mmio` contains no architectural instruction or barrier API.
+
+Outside `oer-riscv`, firmware assembly is only `global_asm!`/`naked_asm!` for
+entry/trap ABI work: staged-bootstrap's `entry.rs`, staged-runtime's `entry.rs`
+and trap-frame/stack entries in `stacks.rs`, and bootstrap/probe images. The
+layer test
+`architectural_instructions_stay_in_oer_riscv` lists these owners and locations
+and rejects inline operations even there. Host compiler fixtures are test
+inputs, not firmware instruction owners.
 
 A generated register writer takes typed field values only: `bool`, a value
 enum, an exact-width integer or `oer_mmio::Bits<WIDTH>`; a reader returns
@@ -427,10 +449,11 @@ needs:
 - The staged runtime defines the image entry (`entry!`, the `Handoff` and
   `Adopted::enable_interrupts`), the sections the linker script maps
   (`placed_static!`, `retained_static!`), the panic hook and
-  exception handler symbols (`panic_hook!`, `exception_handler!`), the trap
-  CSRs (`trap`) and the linked sections (`layout`). Images and HIL agents
-  reach these through safe APIs and forbid unsafe code. The image linker
-  places strict code in SRAM from interrupt, exception and panic analysis.
+  exception handler symbols (`panic_hook!`, `exception_handler!`), trap
+  snapshots and vector-table reads (`trap`), and the linked sections (`layout`).
+  Images and HIL agents reach these through safe APIs and forbid unsafe code.
+  The image linker places strict code in SRAM from interrupt, exception and
+  panic analysis.
 - Each board implements `AdoptsBootstrapMapping` for its PSRAM.
 - The bootstrap places the packed stage two and the flash tuning reference in
   its own read-only flash sections.

@@ -36,12 +36,12 @@
 //! the fatal paths (`fatal`: the end of a hart and the chip's reset, which
 //! lend the chip HAL's fatal-path proof); the interrupt table's router writes
 //! the routes and the CLIC lines through the chip's controller.
-#[allow(unsafe_code, reason = "the CLIC threshold and mstatus.MIE")]
+#[allow(unsafe_code, reason = "the critical-section implementation contract")]
 mod critical;
 #[cfg(target_arch = "riscv32")]
 #[allow(
     unsafe_code,
-    reason = "exported default trap handlers and the abort loop"
+    reason = "the default trap handlers export linker-visible symbols"
 )]
 mod default_handlers;
 pub mod diagnostics;
@@ -72,7 +72,7 @@ pub mod placement;
     reason = "per-hart interrupt stacks and the trap entries switching onto them"
 )]
 pub mod stacks;
-#[allow(unsafe_code, reason = "trap entry and machine CSRs")]
+#[allow(unsafe_code, reason = "volatile reads of the installed vector table")]
 pub mod trap;
 
 #[doc(hidden)]
@@ -153,10 +153,10 @@ impl Handoff {
         unsafe extern "C" {
             safe static _stack_end: [u8; 0];
         }
-        // SAFETY: interrupts are disabled and trigger 0 is the runtime's;
+        // Interrupts are disabled and trigger 0 is the runtime's;
         // `_stack_end` is the word-aligned bottom of the CPU0 task stack the
         // runtime linker script places.
-        unsafe { stacks::watch_task_stack(core::ptr::addr_of!(_stack_end) as usize) };
+        stacks::watch_task_stack(core::ptr::addr_of!(_stack_end) as usize);
         (mapping, Adopted { router })
     }
 }
@@ -187,17 +187,12 @@ impl<C: oer_interrupt_table::Controller> Adopted<C> {
     /// a route or line disagrees with the image's table: the typed boot
     /// failure `oer_interrupt_table::Error`.
     #[cfg(target_arch = "riscv32")]
-    #[allow(unsafe_code, reason = "sets mstatus.MIE")]
     pub fn enable_interrupts(self) -> oer_interrupt_table::Router<C> {
         stacks::verify_current_hart_vectors();
         if let Err(error) = self.router.verify() {
             panic!("the hart's routes and lines disagree with the image's table: {error:?}");
         }
-        // SAFETY: as above, no source is routed but by its binding; setting
-        // MIE touches no memory and leaves the stack unchanged.
-        unsafe {
-            core::arch::asm!("csrsi mstatus, {mie}", mie = const oer_riscv::machine::status::MIE, options(nomem, nostack))
-        };
+        oer_riscv::enable_interrupts();
         self.router
     }
 }
@@ -205,12 +200,9 @@ impl<C: oer_interrupt_table::Controller> Adopted<C> {
 /// Wait for interrupts forever: the rest of an image that has nothing left
 /// to do on this hart.
 #[cfg(target_arch = "riscv32")]
-#[allow(unsafe_code, reason = "the wfi instruction")]
 pub fn idle() -> ! {
     loop {
-        // SAFETY: `wfi` touches no memory and only parks the hart until an
-        // interrupt; with interrupts disabled it parks it for good.
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)) };
+        oer_riscv::wait_for_interrupt();
     }
 }
 
@@ -218,13 +210,8 @@ pub fn idle() -> ! {
 /// of a fatal path. It takes no lock and touches no other hart, which keeps
 /// running.
 #[cfg(target_arch = "riscv32")]
-#[allow(unsafe_code, reason = "the clear of mstatus.MIE")]
 pub fn halt() -> ! {
-    // SAFETY: clearing MIE touches no memory and leaves the stack unchanged;
-    // afterwards no handler runs on this hart.
-    unsafe {
-        core::arch::asm!("csrci mstatus, {mie}", mie = const oer_riscv::machine::status::MIE, options(nomem, nostack))
-    };
+    oer_riscv::disable_interrupts();
     idle()
 }
 

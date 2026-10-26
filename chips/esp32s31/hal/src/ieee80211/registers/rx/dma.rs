@@ -147,13 +147,13 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
             return false;
         }
         self.set_walker_enabled(true);
-        oer_mmio::fence();
+        oer_riscv::fence();
         self.mac_rx_walker_enabled()
     }
 
     pub fn try_disable_mac_rx_walker(&mut self) -> bool {
         self.set_walker_enabled(false);
-        oer_mmio::fence();
+        oer_riscv::fence();
         !self.mac_rx_walker_enabled()
     }
 

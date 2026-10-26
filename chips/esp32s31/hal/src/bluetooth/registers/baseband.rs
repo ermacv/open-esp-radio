@@ -101,7 +101,7 @@ impl<P: BtbbPlacements> BluetoothBasebandV2TransitionPort for BtbbV2Registers<'_
     }
 
     fn order_device_accesses(&mut self) {
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 }
 

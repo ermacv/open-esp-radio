@@ -248,7 +248,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
 
     /// Order descriptor memory and MMIO at a hardware ownership boundary.
     pub(crate) fn order_device_accesses(&mut self) {
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 }
 
@@ -320,7 +320,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// The runtime events, published and fenced.
     pub(crate) fn publish_runtime_events(&mut self) {
         self.enable_runtime_events();
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Mask every MAC event at the end of a session, fenced: the MAC raises
@@ -328,7 +328,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// A latched event stays in `EVENT_STATUS` for the handler.
     pub fn mask_events(&mut self) {
         self.mask_all_events();
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 }
 
@@ -398,7 +398,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptTransitionPort
     }
 
     fn order_device_accesses(&mut self) {
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     fn sample_events(&mut self) -> Self::EventSnapshot {

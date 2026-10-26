@@ -92,6 +92,6 @@ mod rom {
 /// clock restored, then the ROM's system reset.
 pub fn software_reset(_fatal: Fatal<'_>) -> ! {
     prepare_reset(&mut capture());
-    oer_mmio::fence();
+    oer_riscv::fence();
     rom::system_reset()
 }

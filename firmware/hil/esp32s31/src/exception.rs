@@ -7,7 +7,7 @@ use oer_espressif_staged_runtime::trap::{self, TrapFrame};
 /// the stack's bottom word. HAL reserves watchpoint zero for stack monitoring
 /// and respects debugger ownership.
 pub fn report_stack_guard() {
-    let (control, address) = trap::stack_watchpoint();
+    let (control, address) = oer_riscv::selected_trigger_data();
     let hart = trap::TrapRegisters::read().hart;
     crate::usb::early(&Note::stack_guard(
         hart as u32,

@@ -298,7 +298,7 @@ fn validate_runtime_layout() {
     let [dma_data_start, dma_data_end] = bounds(&sections.dma_data);
     let [dma_bss_start, dma_bss_end] = bounds(&sections.dma_bss);
     let [stack_bottom, stack_top] = bounds(&sections.task_stack);
-    let stack = word(oer_espressif_staged_runtime::trap::stack_pointer());
+    let stack = word(oer_riscv::stack_pointer());
 
     let interrupt_stacks_valid = {
         let [cpu0_bottom, cpu0_top] = bounds(&sections.irq_stacks[0]);

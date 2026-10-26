@@ -393,7 +393,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// Order descriptor memory and MMIO at a hardware ownership boundary.
     pub fn order_device_accesses(&mut self) {
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 }
 
@@ -427,7 +427,7 @@ impl WifiRxDmaRegisters {
 impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     /// Order descriptor memory and MMIO at a hardware ownership boundary.
     pub fn order_device_accesses(&mut self) {
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 }
 

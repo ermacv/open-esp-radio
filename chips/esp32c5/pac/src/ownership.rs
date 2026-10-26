@@ -151,7 +151,7 @@ impl RadioPartitions {
 
 #[inline]
 pub(crate) fn device_fence() {
-    oer_mmio::fence();
+    oer_riscv::fence();
 }
 
 /// Ordinary task-side owner of the IEEE 802.15.4 MAC partition.

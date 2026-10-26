@@ -14,7 +14,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_core_enable_control(|w| {
                 w.set_bits_4_7_opaque(Bits4_7Opaque::Disabled);
             });
-        oer_mmio::fence();
+        oer_riscv::fence();
         // Initialize the cold runtime image while the core is held, then
         // retain its no-power-save stop through BASE and walker publication.
         self.open_mac_control_cold();
@@ -47,7 +47,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_core_enable_control(|w| {
                 w.set_bits_4_7_opaque(Bits4_7Opaque::Enabled);
             });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Whether every common MAC disable gate is still asserted.

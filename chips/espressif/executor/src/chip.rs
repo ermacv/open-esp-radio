@@ -42,18 +42,7 @@ pub(crate) fn current_core() -> usize {
 /// through a CLIC.
 #[inline(always)]
 pub(crate) fn interrupt_level() -> u8 {
-    let status: usize;
-    #[allow(unsafe_code, reason = "a CSR read is an instruction")]
-    // SAFETY: `csrr` of `mintstatus`, a read-only CSR, writes only the output
-    // register; it touches no memory and no other state.
-    unsafe {
-        core::arch::asm!(
-            "csrr {status}, {mintstatus}",
-            status = out(reg) status,
-            mintstatus = const oer_riscv::clic::MINTSTATUS,
-            options(nomem, nostack, preserves_flags),
-        );
-    }
+    let status = oer_riscv::read_mintstatus();
     // `mil` is the top byte: the truncation keeps exactly the field.
     (status >> oer_riscv::clic::MINTSTATUS_MIL_SHIFT) as u8
 }

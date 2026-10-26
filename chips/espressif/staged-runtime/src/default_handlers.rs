@@ -16,6 +16,5 @@ pub extern "C" fn oer_unhandled_interrupt() -> ! {
 pub extern "C" fn oer_default_exception() -> ! {
     // An endless jump to itself, without sleeping, resetting or changing
     // the CSRs, so a debugger finds the trap's state.
-    // SAFETY: this loop touches neither memory nor the stack and never returns.
-    unsafe { core::arch::asm!("2: j 2b", options(noreturn, nomem, nostack)) }
+    oer_riscv::spin_forever()
 }

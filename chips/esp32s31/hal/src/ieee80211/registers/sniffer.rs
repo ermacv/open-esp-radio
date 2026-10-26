@@ -44,7 +44,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         filter.modify_misc_packet_policy(|w| {
             w.set_open_misc_packet_classes(0xff);
         });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 }
 

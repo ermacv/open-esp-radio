@@ -1690,7 +1690,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             queue < ORDINARY_QUEUE_COUNT,
             "ordinary TX queue is out of range"
         );
-        oer_mmio::fence();
+        oer_riscv::fence();
         // SOURCE: publication prefix of `libpp[hal_mac_tx.o]::hal_mac_txq_enable` offsets 0x00..0x1e, before libpp[lmac.o]::GetAccess. It reads the
         // already prepared CONTROL word and ORs only ENABLE|VALID before
         // writing it back. In particular, it does not reconstruct PLCP0 from
@@ -1699,7 +1699,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // The remaining vendor body updates access/HE bookkeeping and
         // statistics; equivalence of this prefix does not cover that body.
         queue::publish_queue(&mut self.mac.wifi_mac_tx_queue_control, queue);
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     pub fn take_mac_tx_completion(&mut self, queue: u8) -> Option<MacTxCompletionObservation> {
@@ -1760,7 +1760,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let common = &mut self.mac.wifi_mac_tx_common;
         let trigger_flow = queue::queue_in_trigger_flow(common, queue);
         queue::acknowledge_completion(common, queue);
-        oer_mmio::fence();
+        oer_riscv::fence();
         Some(MacTxCompletionObservation {
             status,
             detail,
@@ -1810,7 +1810,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             return false;
         }
         let _ = queue::set_cca_force(common, 3);
-        oer_mmio::fence();
+        oer_riscv::fence();
         true
     }
 
@@ -1840,7 +1840,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 // SOURCE: complete `libpp[lmac.o]::lmacProcessCollisions`
                 // reaches disable before clearing the collision edge.
                 queue::disable_queue(queue_control, queue);
-                oer_mmio::fence();
+                oer_riscv::fence();
                 queue::acknowledge_collision(common, queue);
             }
             MacTxDetachReason::Timeout => {
@@ -1862,7 +1862,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 queue::disable_queue(queue_control, queue);
             }
         }
-        oer_mmio::fence();
+        oer_riscv::fence();
         if queue::queue_enabled(queue_control, queue) || queue::queue_valid(queue_control, queue) {
             return MacTxDetachOutcome::Failed;
         }

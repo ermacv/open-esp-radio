@@ -216,21 +216,9 @@ pub fn take_previous() -> Option<PanicRecord> {
 /// Record `info` in the retained slot without formatting.
 #[cfg(target_arch = "riscv32")]
 fn record<'a>(info: &'a core::panic::PanicInfo<'_>) -> PanicDetails<'a> {
-    let hart: usize;
-    let sp: usize;
-    let mepc: usize;
-    // SAFETY: CSR and register reads only.
-    unsafe {
-        core::arch::asm!(
-            "csrr {hart}, mhartid",
-            "mv {sp}, sp",
-            "csrr {mepc}, mepc",
-            hart = out(reg) hart,
-            sp = out(reg) sp,
-            mepc = out(reg) mepc,
-            options(nomem, nostack),
-        )
-    };
+    let hart = oer_riscv::hart_id();
+    let sp = oer_riscv::stack_pointer();
+    let mepc = oer_riscv::read_mepc();
     let in_interrupt = crate::stacks::on_interrupt_stack(hart, sp);
     // SAFETY: the other hart may hold any lock while this one panics, so the
     // slot is written without one; the image stops after this write.
