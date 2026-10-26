@@ -73,10 +73,9 @@ Typed register blocks are generated without `unsafe`: `cargo registers
 generate --chip <chip>` renders every MMIO block type of the chip's register
 model, with the owners of its policy's parts, into the chip PAC's
 `generated.rs`. The unsafe code under a typed block is `oer-mmio`
-(`portable/mmio`) alone, and the PAC root's one claim. `oer-mmio`
-holds only volatile register words and this access-authority primitive; DMA
-addresses and volatile DMA-memory cells live in `oer-memory`:
-
+(`portable/mmio`) alone, and the PAC root's one claim; `oer-mmio` holds
+only volatile register words and their access authority (DMA addresses and
+volatile DMA-memory cells live in `oer-memory`):
 
 - `oer_mmio::assume_owned` promises exclusive ownership of the declared
   words, rather than every word of an overlapping address range. The chip's
@@ -118,10 +117,7 @@ addresses and volatile DMA-memory cells live in `oer-memory`:
 layouts; both the cell and the layouts derive `Zeroable`. `DmaWindow`,
 `DmaLayout`, `DmaWindowAddress` and `DmaRef` live beside `DmaBytes` in
 `oer-memory`. Their two unsafe constructors preserve the placed-storage
-and retention contracts. Relocating these existing contracts may increase
-`oer-memory`'s unsafe count only by the relocated sites while the sum over
-all affected crates strictly decreases and no caller's count increases.
-Runtime panic counts never increase.
+and retention contracts.
 
 `oer-riscv` (`portable/riscv`) is the only crate with `asm!` for architectural
 operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
