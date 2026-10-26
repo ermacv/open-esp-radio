@@ -1,0 +1,34 @@
+# Short PAC-only hardware facts; no radio or lifecycle qualification.
+schema = 1
+
+[[sources]]
+id = "HW9_S31_BTLC_START_20261027"
+description = "SOURCE: s31-b rev0 run hw9-20261027-btlc-03, lease #829, btlc-prerequisite.json tags 0x9040-0x90e0: with sourced digital clocks/reset and completed seed capture, CONFIG_24=0/CLOCK_SHIFT=3 alone retained 0x10000; CONTROL0=1 then yielded captures 65538 and 65754 (delta 216 across 4096 cycles). After separate LP start captures 65776 and 65993 advanced 217. No RF, scheduler RUN or DMA publication. Grouped prerequisites are not a minimal clock set or a frequency equation. Report: /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; raw logs in target/hw-hw9/<run>/."
+
+[[sources]]
+id = "HW9_S31_MAC_CAUSES_20261027"
+description = "SOURCE: s31-b rev0 run hw9-20261027-mac-04, lease #830, mac-mapping.json: CC0 target crossing produced primary bank 1=0x10, CC1=0x20; a verified seed/capture first-word crossing0xfffffc01 to2 produced bank 1=2 with source1 enabled. Each raised matrix 124 (bank3=0x10000000); bank 0, NRT snapshots and matrix 133 (bank4 bit5) stayed zero. These positively attribute three local primary causes, not every NRT or bank 0 producer. Report: /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; raw logs in target/hw-hw9/<run>/."
+
+[[sources]]
+id = "HW9_S31_MAC_MASK_ACK_20261027"
+description = "SOURCE: s31-b rev0 run hw9-20261027-mac-05, lease #831, mac-masks.json tags 0x9200-0x92b4: on isolated CC0/CC1/wrap pending, masking its enable lowered primary status and124; restoring it redelivered without a new event. NRT snapshots remained zero, including while primary status was positive. A positive primary snapshot retained across mask cleared the cause while disabled; unmask stayed quiet. Separately, crossing with its enable masked was hidden, then revealed on enable. mac-arrivals.json tags 0x9500-0x9564: savedCC0=0x10 acknowledged after newCC1 arrived (0x30) left0x20/124. Same-bit target crossing while already pending left one indication, then old-image ack cleared it; this does not independently count the second compare or establish coincident priority. Report: /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; raw logs in target/hw-hw9/<run>/."
+
+[[sources]]
+id = "HW9_S31_MAC_RELEASE_20261027"
+description = "SOURCE: s31-b rev0 run hw9-20261027-mac-05, lease #831, mac-controls.json and mac-groups.json: with positively pending seeded overflow and ENA1[1]=1, CONTROL1=1, CONTROL2=1 and1then2 each retained primary bank 1=2/matrix 124 high. Reopening CONTROL0 did not clear it. Each individual production baseline bank 0/bank1 and dynamic bank 0/bank1 enable/removal preserved the unrelated source1 cause. Production dynamic-mask/clear, CONTROL1/2, baseline 0x8000/0x1300 removal retained it too. NRT snapshots/133 remained zero. This refutes universal pending-safe primary output-low for that inherited enable, without qualifying exception or scheduler producer identities. Report: /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; raw logs in target/hw-hw9/<run>/."
+
+[[sources]]
+id = "HW9_S31_LP_CLEAR34_20261027"
+description = "SOURCE: s31-b rev0 run hw9-20261027-lp-06, lease #835, lp-clear.json tags 0x9600/0x9608: one real wrap plus software pending gave bytes+0x24/+0x2c=1/1,status 0x40002,matrix 127 high. Whole-word 0xffffffff at+0x34 cleared both bytes,status and output with the counter stopped. Tags0x9640/0x9650 separately confirm fresh software-only pending clears. This image does not prove per-bit W1C, all-source coverage or a read-safe RAW word. Report: /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; raw logs in target/hw-hw9/<run>/."
+
+[[sources]]
+id = "HW9_S31_LP_SLEEP16_20261027"
+description = "SOURCE: s31-b rev0 run hw9-20261027-lp-06, lease #835, lp-sleep16.json tags 0x9700-0x97e3: for mode58 controls 0/4 images0,1,0x10,0x11, a low24 target at+0x64 was programmed 512 ticks ahead; +0x44/+0x40 image 0x10000 disable/enable and a positively witnessed crossing set+0x1c low byte from0 to1. +0x44 image 0x10000 retained that byte; whole-word zero +0x1c cleared it. Status+0x38 and matrix 127/129 remained zero. Initialization had disabled the +0x14 delivery bank, so this does not establish absence of sleep routing or unknown delivery-enable requirements. Bit 2 of mode58 was never positive, leaving its conditional bit1 branch unexercised. Report: /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; raw logs in target/hw-hw9/<run>/."
+
+[[sources]]
+id = "HW9_S31_SHUTDOWN_ORDER_20261027"
+description = "SOURCE: s31-b rev0 run hw9-20261027-lp-06, lease #835, shutdown-soft.json and shutdown-wrap.json: isolated LP software/rollover pending plus primary seeded overflow produced matrix 124+127. Primary release commands/masks retained124. The exact #685 LP sequence all-ones+0x14,STOP+0x4,fence,sample,zero +0x24/+0x2c,fence lowered127 at disable, stopped the counter and cleared the bytes. Primary124 persisted through BT MAC assert/release and went low by BT MAC APB reset completion. At the no-MMIO reunion-equivalent boundary and after all digital Bluetooth clocks were released/restored without START/rearm, matrix 124/127/133 stayed low and the LP counter stayed fixed across 4096-cycle windows. These are the reproduced PAC register boundaries, not execution of HAL typestate or a product lifecycle qualification; task enable17 was zero on the measured ROM path. Report: /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; raw logs in target/hw-hw9/<run>/."
+
+[[sources]]
+id = "HW9_S31_LP_MASKED_ZERO_20261027"
+description = "SOURCE: s31-b rev0 run hw9-20261027-lp-08, lease #838; lp-masked-clear.json tags 0x9600-0x9633. One real LP wrap plus software pending produced bytes 1/1, status 0x40002 and matrix 127 high. All-ones disable at+0x14 lowered status/output and retained both bytes. Whole-word zero +0x24 while disabled followed by bit18 enable left byte 0/status 0/output0 while rollover byte remained 1. A separate all-disable, zero +0x2c and bit1 enable left both bytes/status/output zero. This positively verifies disabled zero-clear of each tested lane, not collision priority or unknown sources. Report /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; target/hw-hw9/hw9-20261027-lp-08/."

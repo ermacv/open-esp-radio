@@ -20195,7 +20195,7 @@ pub mod bt_mac {
 
     /// The `IRQ_CONTROL_0` register.
     ///
-    /// BTDM interrupt setup and the complete reset leaf write the finite complete image 1. Inner action remains unknown.
+    /// BTDM interrupt setup and the complete reset leaf write the finite complete image 1. Inner action remains unknown. In the bounded digital setup, complete image 1 began autonomous BTLC capture progression after completed but stationary captures. No minimal-clock or universal output-gate meaning follows. SOURCE: HW9_S31_BTLC_START_20261027.
     pub mod irq_control_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -20260,7 +20260,7 @@ pub mod bt_mac {
 
     /// The `IRQ_CONTROL_1` register.
     ///
-    /// BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown.
+    /// BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027.
     pub mod irq_control_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -20325,7 +20325,7 @@ pub mod bt_mac {
 
     /// The `IRQ_CONTROL_2` register.
     ///
-    /// BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown.
+    /// BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027.
     pub mod irq_control_2 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21267,7 +21267,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_1` register.
     ///
-    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is 0x00001300 and does not arm source 1 until B1 identifies its event and handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper).
+    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is0x00001300 and does not newly arm source 1; a seeded first-word BTLC wrap is now a measured primary producer, while normal handling and arming policy remain separate obligations. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper).
     pub mod irq_enable_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21380,7 +21380,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
+            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. The HAL baseline 0x1300 does not newly arm it and preserves an inherited enable; that enabled pending cause survived the measured release sequence. SOURCE: HW9_S31_MAC_RELEASE_20261027. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
             #[inline]
             pub const fn source_1(self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -21469,7 +21469,7 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
+            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. The HAL baseline 0x1300 does not newly arm it and preserves an inherited enable; that enabled pending cause survived the measured release sequence. SOURCE: HW9_S31_MAC_RELEASE_20261027. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
             #[inline]
             pub const fn source_1(&self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -21655,7 +21655,7 @@ pub mod bt_mac {
 
     /// The `IRQ_CLEAR_1` register.
     ///
-    /// Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words.
+    /// Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027.
     pub mod irq_clear_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21910,7 +21910,7 @@ pub mod bt_mac {
 
     /// The `IRQ_STATUS_1` register.
     ///
-    /// Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement.
+    /// Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027.
     pub mod irq_status_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -22611,7 +22611,7 @@ pub mod bt_mac {
 
     /// The `BTLC_TIMER_CONTROL` register.
     ///
-    /// BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026.
+    /// BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027.
     pub mod btlc_timer_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -23045,7 +23045,7 @@ pub mod bt_mac {
 
     /// The `BTLC_TIMER_CAPTURE_0` register.
     ///
-    /// First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026.
+    /// First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. After CONTROL0=1, subsequent completed captures advanced; a verified near-max seed crossed the first-word 32-bit boundary and produced primary bank1 bit 1/source 124 with that enable set. Neither the physical unit nor every overflow/output relationship is established. SOURCE: HW9_S31_BTLC_START_20261027; HW9_S31_MAC_CAUSES_20261027.
     pub mod btlc_timer_capture_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -27229,7 +27229,7 @@ pub mod bt_mac {
 
     /// The `IRQ_STATUS_SNAPSHOT_1` register.
     ///
-    /// Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2).
+    /// Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2). For the three positively generated local primary causes (compare0/1 and seeded first-word wrap), this view stayed zero even while primary status and124 were asserted. It is not an enable-independent RAW alias of those primary causes. Other NRT producers and the133 output equation remain unknown. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027.
     pub mod irq_status_snapshot_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127605,7 +127605,7 @@ pub mod modem_pwr {
 
     /// The `WORD_001C_OPAQUE` register.
     ///
-    /// One complete runtime function reads the complete word and writes the finite zero image. Inner state encoding remains unknown.
+    /// One complete runtime function reads the complete word and writes the finite zero image. Inner state encoding remains unknown. In a sourced sleep16 setup, a positively witnessed+0x64 target crossing set the low byte to1 under each tested mode58 control0/4 combination. +0x44 image 0x10000 retained the byte; whole-word zero cleared it. No127/129 route is established with the delivery bank disabled. SOURCE: HW9_S31_LP_SLEEP16_20261027.
     pub mod word_001c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127705,7 +127705,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026.
+    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027.
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127800,7 +127800,7 @@ pub mod modem_pwr {
 
     /// The `WORD_002C_OPAQUE` register.
     ///
-    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
+    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027.
     pub mod word_002c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127882,7 +127882,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0034_OPAQUE` register.
     ///
-    /// Complete initialization writes the finite image 0xFFFFFFFF.
+    /// Complete initialization writes the finite image 0xFFFFFFFF. With both measured LP causes positively pending and enabled, this complete all-ones image cleared their bytes(+0x24/+0x2c), status and source 127; a fresh software-only case also cleared. Per-bit semantics, untested sources and readback remain unknown. SOURCE: HW9_S31_LP_CLEAR34_20261027.
     pub mod word_0034_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127914,7 +127914,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0038_OPAQUE` register.
     ///
-    /// A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
+    /// A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix 127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
     pub mod word_0038_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;

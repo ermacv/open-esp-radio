@@ -77,6 +77,12 @@ fn wrap(s: &Session<'_>, tag: u32) -> bool {
     false
 }
 pub(in crate::image) fn lp_clear(s: &mut Session<'_>) {
+    lp_clear_run(s, true);
+}
+pub(in crate::image) fn lp_masked(s: &mut Session<'_>) {
+    lp_clear_run(s, false);
+}
+fn lp_clear_run(s: &mut Session<'_>, initial_clear: bool) {
     ble::init_lp(s);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     if !wrap(s, 0x96ff) {
@@ -89,9 +95,11 @@ pub(in crate::image) fn lp_clear(s: &mut Session<'_>) {
         .publish_bluetooth_modem_lp_timer_software_pending();
     enable18(s);
     state(s, 0x9600);
-    s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
-    oer_riscv::fence();
-    state(s, 0x9608);
+    if initial_clear {
+        s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
+        oer_riscv::fence();
+        state(s, 0x9608);
+    }
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     state(s, 0x9610);
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();

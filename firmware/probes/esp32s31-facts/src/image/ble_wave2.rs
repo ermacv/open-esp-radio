@@ -4,7 +4,7 @@ use oer_mmio::Bits;
 
 mod lp;
 mod mac;
-pub(super) use lp::{lp_clear, shutdown_soft, shutdown_wrap, sleep_other, sleep16};
+pub(super) use lp::{lp_clear, lp_masked, shutdown_soft, shutdown_wrap, sleep_other, sleep16};
 pub(super) use mac::{arrivals, controls, groups, mapping, masks};
 
 const LIMIT: u32 = 200_000;
