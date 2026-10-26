@@ -631,9 +631,9 @@ by `cargo fw probe` from commit
 and raw outputs. The measured ELF is **not** the final rebased image.
 The differences after capture are explicit:
 
-- Rebase onto `6000f22f68284ceb4841065be54a13641fe887f5` incorporates
-  upstream BLE/local/generic/opaque probes (#683/#686/#689/#691/#692/#697/#699/#701/#703),
-  PAC ownership/model/generator updates and watchdog support. These add linked
+- Rebase onto `a29a0eb3cf55e95b13ef107e15ade12e565a0cab` incorporates
+  upstream BLE/local/generic/opaque probes (#683/#686/#689/#691/#692/#697/#699/#701/#702/#703/#682),
+  PAC ownership/model/generator updates and watchdog/LP-lane/RX-chain support. These add linked
   code, registry entries, root storage and a generic-IRQ dispatch check;
   the in-progress completion marker and retained LP-reset boot dispatch also
   differ. Image layout and timing are not assumed identical to the capture.

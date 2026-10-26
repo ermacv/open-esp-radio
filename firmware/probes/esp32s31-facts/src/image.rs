@@ -249,23 +249,23 @@ const PROBES: &[Probe] = &[
     },
     Probe {
         id: 113,
-        run: lp_lanes::sleep17,
+        run: Action::Thread(lp_lanes::sleep17),
     },
     Probe {
         id: 114,
-        run: lp_lanes::compare_mode,
+        run: Action::Thread(lp_lanes::compare_mode),
     },
     Probe {
         id: 110,
-        run: lp_lanes::sleep16,
+        run: Action::Thread(lp_lanes::sleep16),
     },
     Probe {
         id: 111,
-        run: lp_lanes::delivery,
+        run: Action::Thread(lp_lanes::delivery),
     },
     Probe {
         id: 112,
-        run: lp_lanes::sleep_other,
+        run: Action::Thread(lp_lanes::sleep_other),
     },
     Probe {
         id: 105,
