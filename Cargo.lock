@@ -2172,9 +2172,11 @@ version = "0.1.0"
 name = "oer-espressif-staged-bootstrap"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "oer-esp32s31-hal",
  "oer-espressif-boot",
  "oer-espressif-staged-layout",
+ "oer-memory",
  "oer-riscv",
 ]
 

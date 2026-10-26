@@ -29,7 +29,7 @@ use crate::{
     bluetooth::{BluetoothControllerParts, BluetoothModemLpTimerParts, BluetoothPartition},
     boot::{
         ActivePower, Brownout, CacheRegisters, ClockRegisters, FLASH_MMU_WINDOW, FlashRegisters,
-        MmuWindow, PSRAM_MMU_WINDOW, PsramRegisters, Soc,
+        MmuWindow, PsramRegisters, Soc,
     },
     cores,
     domain::{
@@ -140,7 +140,6 @@ impl Root {
             psram: PsramRegisters::new(memspi2_psram, memspi3_psram, iomux_mspi_psram_pins),
             cache: CacheRegisters::new(cache_boot),
             flash: FlashRegisters::new(spi0_flash, spi1_flash),
-            psram_window: PSRAM_MMU_WINDOW,
             flash_window: FLASH_MMU_WINDOW,
         })
     }
@@ -285,8 +284,6 @@ pub struct Bootstrap {
     pub cache: CacheRegisters,
     /// The flash command port, timing and MMU.
     pub flash: FlashRegisters,
-    /// The PSRAM MMU's window.
-    pub psram_window: MmuWindow,
     /// The flash MMU's window.
     pub flash_window: MmuWindow,
 }

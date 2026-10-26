@@ -1,12 +1,20 @@
 #![no_main]
 #![no_std]
 #![deny(clippy::undocumented_unsafe_blocks)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+)]
 
 //! S31 cold boot: one reset root, bounded boot sequences, then stage two.
 use core::mem::size_of;
 use oer_esp32s31_hal::{self as hal, boot};
 use oer_esp32s31_layout::LAYOUT;
-use oer_espressif_boot::{BootFailure, cache, clock, flash, mmu, psram, watchdog::BootWatchdogs};
+use oer_espressif_boot::{BootFailure, cache, clock, flash, mmu, watchdog::BootWatchdogs};
 use oer_espressif_staged_bootstrap::{self as staged, fail, print};
 use static_cell::ConstStaticCell;
 
@@ -74,31 +82,41 @@ extern "C" fn bootstrap_main() -> ! {
         &deadline,
     ));
     print("OER_BOOT bootstrap=INIT\r\n");
-    let memory = checked(psram::bring_up(
-        psram::PsramOwners {
-            clock: &mut hardware.clock,
-            active: &mut hardware.active_power,
-            psram: &mut hardware.psram,
-            cache: &mut hardware.cache,
-        },
-        boot::octal_psram(LAYOUT.psram.length()),
-        hardware.psram_window,
-        boot::CACHE_GEOMETRY,
-        boot::PSRAM_WAITS,
+    let memory = checked(hardware.psram.into_region(
+        &mut hardware.clock,
+        &mut hardware.active_power,
+        &mut hardware.cache,
+        LAYOUT.psram.length(),
         &deadline,
     ));
-
-    // SAFETY: successful bring_up mapped and initialized this complete PSRAM
-    // window; the reset root owns it exclusively and retains every owner
-    // until the nonreturning jump. stage checks it against LAYOUT.
-    let image = unsafe {
-        staged::stage(
-            &LAYOUT,
-            &RUNTIME_PAYLOAD,
-            memory.mapped.virtual_start as *mut u8,
-            memory.mapped.len as usize,
-        )
-    };
+    if memory.as_ptr() as usize != LAYOUT.psram.origin() as usize {
+        fail("OER_BOOT bootstrap=FAIL reason=psram-init\r\n");
+    }
+    let image = staged::stage(
+        &LAYOUT,
+        &RUNTIME_PAYLOAD,
+        memory,
+        |progress| match progress {
+            staged::StageProgress::Psram => {
+                print("OER_BOOT bootstrap=PSRAM\r\n");
+                let source_address = RUNTIME_PAYLOAD.as_ptr() as usize;
+                let source_end = source_address
+                    .checked_add(RUNTIME_PAYLOAD.len())
+                    .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=source-overflow\r\n"));
+                let xip = LAYOUT.flash_xip;
+                if !(xip.origin() as usize..xip.end() as usize).contains(&source_address)
+                    || source_end > xip.end() as usize
+                {
+                    fail("OER_BOOT bootstrap=FAIL reason=source-not-xip\r\n");
+                }
+            }
+            staged::StageProgress::SourceCrc => print("OER_BOOT bootstrap=SOURCE_CRC\r\n"),
+            staged::StageProgress::DestinationCrc => {
+                print("OER_BOOT bootstrap=DESTINATION_CRC\r\n")
+            }
+        },
+    )
+    .unwrap_or_else(|error| staged::fail_stage(error));
     let tuning_virtual = FLASH_TUNING_REFERENCE.as_ptr() as u32;
     let tuning_physical = checked(mmu::physical_address(
         &mut hardware.flash,

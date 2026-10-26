@@ -41,6 +41,50 @@ impl PsramRegisters {
             pins,
         }
     }
+
+    /// Bring up PSRAM and consume its unique controller/MMU owner to lend
+    /// the mapped bytes once. No owner capable of remapping them escapes.
+    ///
+    /// # Errors
+    ///
+    /// Returns the cold bring-up failure without exposing a memory loan.
+    #[cfg(target_arch = "riscv32")]
+    pub fn into_region<C: oer_time::Clock + ?Sized>(
+        mut self,
+        clock: &mut super::ClockRegisters,
+        active: &mut super::ActivePower,
+        cache: &mut super::CacheRegisters,
+        size: u32,
+        deadline: &super::BootDeadline<'_, C>,
+    ) -> Result<&'static mut [u8], oer_espressif_boot::BootFailure> {
+        let ready = oer_espressif_boot::psram::bring_up(
+            oer_espressif_boot::psram::PsramOwners {
+                clock,
+                active,
+                psram: &mut self,
+                cache,
+            },
+            super::octal_psram(size),
+            super::PSRAM_MMU_WINDOW,
+            super::CACHE_GEOMETRY,
+            super::PSRAM_WAITS,
+            deadline,
+        )?;
+        let mapped = ready.mapped();
+        #[allow(
+            unsafe_code,
+            reason = "the consumed HAL partition owns this PSRAM mapping"
+        )]
+        // SAFETY: the reset root issues these fixed controller/MMU parts
+        // once. Successful bring-up checked the fitted density, mapped the
+        // complete powered byte region and invalidated its data cache.
+        // Consuming self permanently retires the only owner that can remap
+        // it; no PSRAM reference has been issued before this one. Every u8
+        // bit pattern is valid, and the mapping remains live through handoff.
+        Ok(unsafe {
+            core::slice::from_raw_parts_mut(mapped.virtual_start as *mut u8, mapped.len as usize)
+        })
+    }
 }
 
 /// The pads' drive strength.
