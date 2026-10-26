@@ -279,6 +279,48 @@ pub fn print(message: &'static str) {
     early_text(message.as_bytes());
 }
 
+/// Report the typed cold-boot failure, retaining its observed density, and halt.
+#[cfg(target_arch = "riscv32")]
+pub fn fail_boot(error: oer_espressif_boot::BootFailure) -> ! {
+    use core::fmt::Write;
+
+    struct EarlyWriter;
+    impl core::fmt::Write for EarlyWriter {
+        fn write_str(&mut self, text: &str) -> core::fmt::Result {
+            early_text(text.as_bytes());
+            Ok(())
+        }
+    }
+
+    let _ = write!(EarlyWriter, "{}", BootFailureRecord(error));
+    halt()
+}
+
+#[cfg(any(test, target_arch = "riscv32"))]
+struct BootFailureRecord(oer_espressif_boot::BootFailure);
+
+#[cfg(any(test, target_arch = "riscv32"))]
+impl core::fmt::Display for BootFailureRecord {
+    fn fmt(&self, output: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use oer_espressif_boot::{BootFailure, psram::PsramFailure};
+
+        write!(output, "OER_BOOT bootstrap=FAIL reason={}", self.0.reason())?;
+        match self.0 {
+            BootFailure::Psram(PsramFailure::DensityMismatch { found }) => {
+                write!(output, " found={found}")?;
+            }
+            BootFailure::Psram(PsramFailure::UnsupportedDensity(code)) => {
+                write!(output, " code={code}")?;
+            }
+            _ => {}
+        }
+        if let Some(wait) = self.0.wait() {
+            write!(output, " wait={wait}")?;
+        }
+        output.write_str("\r\n")
+    }
+}
+
 /// Report a typed staging failure and halt the bootstrap.
 #[cfg(target_arch = "riscv32")]
 pub fn fail_stage(error: StageError) -> ! {

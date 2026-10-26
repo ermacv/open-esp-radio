@@ -157,15 +157,7 @@ extern "C" fn bootstrap_main() -> ! {
 }
 
 fn checked<T>(result: Result<T, BootFailure>) -> T {
-    result.unwrap_or_else(|error| {
-        print("OER_BOOT bootstrap=FAIL reason=");
-        print(error.reason());
-        if let Some(wait) = error.wait() {
-            print(" wait=");
-            print(wait);
-        }
-        fail("\r\n")
-    })
+    result.unwrap_or_else(|error| staged::fail_boot(error))
 }
 
 const fn flash_tuning_reference() -> [u32; FLASH_TUNING_REFERENCE_WORDS] {
