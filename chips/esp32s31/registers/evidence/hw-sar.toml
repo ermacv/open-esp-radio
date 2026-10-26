@@ -1,0 +1,10 @@
+# Short isolated PAC-only SAR observations, not a calibrated RF specification.
+schema = 1
+
+[[sources]]
+id = "HW17_S31_SAR_HOLD_20261027"
+description = "SOURCE: s31-a rev0 run hw17-20261027-sar-isolated-03, lease #896, selections 141..144; ermacv/oer-notes research/hw-sar-hold.md. At 40 MHz, P2, background PWDET disabled, manual arm/trigger and no other PHY client: the FE +0x81c upper thirteen-bit lane retained a nonzero sample across repeated reads through observed ready+100 us and delayed-first-read controls, with and without clearing tone arm immediately after ready. Ready read 7 before and after every result read. This is a bounded 100 us contract in the tested configuration, not indefinite retention, every SAR mode, a completion timestamp or an electrical calibration claim."
+
+[[sources]]
+id = "HW17_S31_SAR_EDGE_20261027"
+description = "SOURCE: s31-a rev0 run hw17-20261027-sar-isolated-03, lease #896, selections 140/145/146; ermacv/oer-notes research/hw-sar-hold.md. In the isolated P2 reference epoch, immediate reference 0/0x5555 publication preserved the previous sample and ready 7; arm also preserved observed ready 7. A manual trigger produced observed non-7 status, then 7 near 20 us, with distinct final reference samples. Old sample data persisted at early non-ready reads, then changed at a later non-ready read before final ready data: the word is not guaranteed valid or frozen while busy. No physical minimum/maximum latency, read at exactly 2 us, reference settling guarantee or voltage/power units is established."
