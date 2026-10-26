@@ -156957,15 +156957,56 @@ pub mod rtc_wdt {
         /// Positioned bits of `WDT_WKEY`.
         pub const WDT_WKEY_MASK: u32 = 0xffffffff;
 
+        /// The declared values of the `WDT_WKEY` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum WdtWkey {
+            Unlock = 0x50d83aa1,
+            Lock = 0x0,
+        }
+
+        impl WdtWkey {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 0
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x50d83aa1 => Some(Self::Unlock),
+                    0x0 => Some(Self::Lock),
+                    _ => None,
+                }
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Write key; 0x50D83AA1 unlocks.
+            /// Write key; 0x50D83AA1 unlocks and zero locks. SOURCE: ESP_IDF_4D59230D_S31_RTC_WDT, rwdt_ll.h:25-27,275-278.
             #[inline]
             pub const fn wdt_wkey(self) -> u32 {
                 self.0
+            }
+
+            /// The `WDT_WKEY` field as its declared value, if it is one.
+            #[inline]
+            pub const fn wdt_wkey_variant(self) -> Option<WdtWkey> {
+                WdtWkey::from_bits(self.0)
             }
         }
 
@@ -156973,10 +157014,16 @@ pub mod rtc_wdt {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Write key; 0x50D83AA1 unlocks.
+            /// Write key; 0x50D83AA1 unlocks and zero locks. SOURCE: ESP_IDF_4D59230D_S31_RTC_WDT, rwdt_ll.h:25-27,275-278.
             #[inline]
             pub const fn wdt_wkey(&self) -> u32 {
                 self.0
+            }
+
+            /// The `WDT_WKEY` field as its declared value, if it is one.
+            #[inline]
+            pub const fn wdt_wkey_variant(&self) -> Option<WdtWkey> {
+                WdtWkey::from_bits(self.0)
             }
 
             /// Set `WDT_WKEY`.
@@ -157150,15 +157197,56 @@ pub mod rtc_wdt {
         /// Positioned bits of `SWD_WKEY`.
         pub const SWD_WKEY_MASK: u32 = 0xffffffff;
 
+        /// The declared values of the `SWD_WKEY` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum SwdWkey {
+            Unlock = 0x50d83aa1,
+            Lock = 0x0,
+        }
+
+        impl SwdWkey {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 0
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x50d83aa1 => Some(Self::Unlock),
+                    0x0 => Some(Self::Lock),
+                    _ => None,
+                }
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Write key; 0x50D83AA1 unlocks.
+            /// Write key; 0x50D83AA1 unlocks and zero locks. SOURCE: ESP_IDF_4D59230D_S31_RTC_WDT, rwdt_ll.h:25-27,275-278.
             #[inline]
             pub const fn swd_wkey(self) -> u32 {
                 self.0
+            }
+
+            /// The `SWD_WKEY` field as its declared value, if it is one.
+            #[inline]
+            pub const fn swd_wkey_variant(self) -> Option<SwdWkey> {
+                SwdWkey::from_bits(self.0)
             }
         }
 
@@ -157166,10 +157254,16 @@ pub mod rtc_wdt {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Write key; 0x50D83AA1 unlocks.
+            /// Write key; 0x50D83AA1 unlocks and zero locks. SOURCE: ESP_IDF_4D59230D_S31_RTC_WDT, rwdt_ll.h:25-27,275-278.
             #[inline]
             pub const fn swd_wkey(&self) -> u32 {
                 self.0
+            }
+
+            /// The `SWD_WKEY` field as its declared value, if it is one.
+            #[inline]
+            pub const fn swd_wkey_variant(&self) -> Option<SwdWkey> {
+                SwdWkey::from_bits(self.0)
             }
 
             /// Set `SWD_WKEY`.

@@ -179,6 +179,18 @@ const PROBES: &[Probe] = &[
         run: ble::inherited,
     },
     Probe {
+        id: 29,
+        run: ble::software_pending,
+    },
+    Probe {
+        id: 28,
+        run: ble::counter_controls,
+    },
+    Probe {
+        id: 27,
+        run: ble::bit_one,
+    },
+    Probe {
         id: 21,
         run: ble::nrt_controls,
     },
@@ -250,6 +262,9 @@ extern "C" fn facts_main() -> ! {
             clocks: p.radio_phy.modem_syscon_radio,
             lp_clock: p.radio_phy.modem_lpcon_shared_clock,
             gates: p.chip_clocks.modem_lpcon_chip_clocks,
+            upstream: p.radio_phy.hp_sys_clkrst_radio,
+            pmu: p.radio_phy.pmu_radio,
+            watchdog: p.watchdog.lp_wdt,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();
