@@ -228,7 +228,8 @@ reset = { value = 0x0 }
 name = "WDT_WKEY"
 bits = "31:0"
 class = "plain"
-description = "Write key; 0x50D83AA1 unlocks."
+description = "Write key; 0x50D83AA1 unlocks and zero locks. SOURCE: ESP_IDF_4D59230D_S31_RTC_WDT, rwdt_ll.h:25-27,275-278."
+values = [{ name = "UNLOCK", value = 0x50d83aa1 }, { name = "LOCK", value = 0 }]
 
 [[registers]]
 name = "SWD_CONFIG"

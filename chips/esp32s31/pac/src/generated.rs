@@ -21380,7 +21380,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established.
+            /// The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
             #[inline]
             pub const fn source_1(self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -21469,7 +21469,7 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established.
+            /// The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
             #[inline]
             pub const fn source_1(&self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -124245,7 +124245,7 @@ pub mod modem_lpcon {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Twelve-bit low-power timer divider image.
+            /// Twelve-bit low-power timer divider image. In the tested XTAL setup image 1 advanced the LP counter, while image 0 left it unchanged across bounded windows; do not infer a divide-by-one interpretation for zero. No universal frequency equation is established by that observation. SOURCE: HW2_S31_LP_DIVIDER_20261026.
             #[inline]
             pub const fn clk_lp_timer_div_num(self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 4)
@@ -124280,7 +124280,7 @@ pub mod modem_lpcon {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Twelve-bit low-power timer divider image.
+            /// Twelve-bit low-power timer divider image. In the tested XTAL setup image 1 advanced the LP counter, while image 0 left it unchanged across bounded windows; do not infer a divide-by-one interpretation for zero. No universal frequency equation is established by that observation. SOURCE: HW2_S31_LP_DIVIDER_20261026.
             #[inline]
             pub const fn clk_lp_timer_div_num(&self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 4)
@@ -127080,7 +127080,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0004_OPAQUE` register.
     ///
-    /// Complete runtime functions write the finite image 1.
+    /// Complete runtime functions write finite image 1. On the tested live counter it froze the low counter and START resumed the retained phase, while already-pending status and output 127 remained asserted. It is not an all-cause interrupt stop. SOURCE: HW2_S31_LP_STOP_WRAP_20261026.
     pub mod word_0004_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127144,7 +127144,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0010_OPAQUE` register.
     ///
-    /// Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. Bit 1 is not a proven rollover enable. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7).
+    /// Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026.
     pub mod word_0010_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00040002;
@@ -127190,7 +127190,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0014_OPAQUE` register.
     ///
-    /// Complete runtime functions write the independently observed finite images 0xFFFFFFFF and 0x00040000.
+    /// Complete runtime functions write finite images 0xFFFFFFFF and 0x00040000. In the tested two-cause state, all-ones lowered status/output while retaining both pending bytes for independent redelivery; bit 18 alone suppressed only the compare/software lane. Other causes remain unqualified. SOURCE: HW2_S31_LP_GATES_20261026.
     pub mod word_0014_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127350,7 +127350,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings and output effects remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7).
+    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026.
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127445,7 +127445,7 @@ pub mod modem_pwr {
 
     /// The `WORD_002C_OPAQUE` register.
     ///
-    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state independently raised source 127. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26.
+    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Multiple-wrap capacity and concurrent set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026.
     pub mod word_002c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127527,7 +127527,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0038_OPAQUE` register.
     ///
-    /// A nonzero complete word selects the common timer handler. Measured isolated rollover, compare/software and combined status images are named; other causes, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26.
+    /// A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026.
     pub mod word_0038_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -156957,15 +156957,56 @@ pub mod rtc_wdt {
         /// Positioned bits of `WDT_WKEY`.
         pub const WDT_WKEY_MASK: u32 = 0xffffffff;
 
+        /// The declared values of the `WDT_WKEY` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum WdtWkey {
+            Unlock = 0x50d83aa1,
+            Lock = 0x0,
+        }
+
+        impl WdtWkey {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 0
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x50d83aa1 => Some(Self::Unlock),
+                    0x0 => Some(Self::Lock),
+                    _ => None,
+                }
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Write key; 0x50D83AA1 unlocks.
+            /// Write key; 0x50D83AA1 unlocks and zero locks. SOURCE: ESP_IDF_4D59230D_S31_RTC_WDT, rwdt_ll.h:25-27,275-278.
             #[inline]
             pub const fn wdt_wkey(self) -> u32 {
                 self.0
+            }
+
+            /// The `WDT_WKEY` field as its declared value, if it is one.
+            #[inline]
+            pub const fn wdt_wkey_variant(self) -> Option<WdtWkey> {
+                WdtWkey::from_bits(self.0)
             }
         }
 
@@ -156973,10 +157014,16 @@ pub mod rtc_wdt {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Write key; 0x50D83AA1 unlocks.
+            /// Write key; 0x50D83AA1 unlocks and zero locks. SOURCE: ESP_IDF_4D59230D_S31_RTC_WDT, rwdt_ll.h:25-27,275-278.
             #[inline]
             pub const fn wdt_wkey(&self) -> u32 {
                 self.0
+            }
+
+            /// The `WDT_WKEY` field as its declared value, if it is one.
+            #[inline]
+            pub const fn wdt_wkey_variant(&self) -> Option<WdtWkey> {
+                WdtWkey::from_bits(self.0)
             }
 
             /// Set `WDT_WKEY`.

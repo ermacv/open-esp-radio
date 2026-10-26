@@ -1,0 +1,22 @@
+# Bounded PAC-only observations; no product lifecycle qualification.
+schema = 1
+
+[[sources]]
+id = "HW2_S31_BLE_INHERITED_20261026"
+description = "SOURCE: s31-b rev0 run hw2-20261026-ble-07, lease #786; /home/ermacv/dev/oer-notes/research/hw-ble-nrt-lp.md; target/hw-hw2/hw2-20261026-ble-07/inherited.json. ROM USB download and MEM_END entered the one-take PAC-only image. Before BLE-domain reset or baseline, IRQ_ENABLE_1.SOURCE_1 read zero, also after clock/ICG setup. Applying and removing baseline 0x1300 changed sources 8/9/12 but left source 1 zero; source-15 bank-zero readback validated bank writes. This is not an untouched POR or production-startup snapshot and does not identify source 1's producer or acknowledgement."
+
+[[sources]]
+id = "HW2_S31_LP_PENDING_20261026"
+description = "SOURCE: s31-b rev0 runs hw2-20261026-ble-05, lease #782, software-pending.json, and hw2-20261026-ble-07, lease #786, lp-causes.json; /home/ermacv/dev/oer-notes/research/hw-ble-nrt-lp.md; raw files under target/hw-hw2/<run>/. A software-pending whole-word 1 at +0x24 with +0x10 image 0x40000 produced +0x38=0x40000 and matrix source 127. +0x14 image 0x40000 lowered status/output while retaining pending byte 1; reissuing the enable image redelivered it, and a whole-word zero at +0x24 lowered it while enabled. These facts cover this cause, not all sources."
+
+[[sources]]
+id = "HW2_S31_LP_STOP_WRAP_20261026"
+description = "SOURCE: s31-b rev0 run hw2-20261026-ble-07, lease #786; /home/ermacv/dev/oer-notes/research/hw-ble-nrt-lp.md; target/hw-hw2/hw2-20261026-ble-07/lp-stop.json and lp-wrap.json. With XTAL/divider 1 and a pending compare, +0x4 image 1 froze counter +0x48 at 6437 across 4096 cycles; pending byte +0x24=1, status 0x40000 and source 127 persisted. START resumed at 6442 then 8505, rather than resetting the phase. A single natural wrap with compare disabled set byte +0x2c=1, status +0x38=2 and source 127; bit-18 disable did not lower this cause, while whole-word zero at +0x2c did. The wrap took 33554368 probe cycles. Multiple-wrap capacity and concurrent set/clear priority are untested."
+
+[[sources]]
+id = "HW2_S31_LP_DIVIDER_20261026"
+description = "SOURCE: s31-b rev0 run hw2-20261026-ble-05, lease #782; /home/ermacv/dev/oer-notes/research/hw-ble-nrt-lp.md; target/hw-hw2/hw2-20261026-ble-05/counter-controls.json. Under exclusive XTAL selection, divider image 1 advanced the LP counter; changing to image 0 left it at 4092 across both 4096-cycle windows. No universal frequency equation or POR value is established; image 399 also showed no advance in its short setup window."
+
+[[sources]]
+id = "HW2_S31_LP_GATES_20261026"
+description = "SOURCE: s31-b rev0 run hw2-20261026-ble-08, lease #787; /home/ermacv/dev/oer-notes/research/hw-ble-nrt-lp.md; target/hw-hw2/hw2-20261026-ble-08/rollover-gates.json. After one natural wrap with compare disabled, +0x2c=1/status=2/output127=1. Adding software pending plus bit-18 command produced status 0x40002. Bit-18 disable left status 2 and both pending bytes one. +0x4 image 1 left that pending/output asserted. +0x14 all-ones lowered status/output while retaining both bytes. +0x10 image 2 redelivered only rollover/status2; zero +0x2c lowered it. +0x10 image0x40000 then redelivered software/status0x40000; zero +0x24 lowered it. These establish two tested delivery lanes, not an exhaustive all-cause gate, wrap counting or concurrent set/clear priority. MAC primary/raw banks and source133 stayed zero at the recorded LP states."
