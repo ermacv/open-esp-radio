@@ -106926,7 +106926,7 @@ pub mod ieee802154 {
 
     /// The `EVENT_ENABLE` register.
     ///
-    /// Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions.
+    /// Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions. For tested local timer bits 8/9, clearing the enable hides EVENT_STATUS and lowers output132 while retaining pending for unmask; EVENT_STATUS readback is not the raw pending state. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026.
     pub mod event_enable {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00003fff;
@@ -107318,7 +107318,7 @@ pub mod ieee802154 {
 
     /// The `EVENT_STATUS` register.
     ///
-    /// Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model.
+    /// Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model. For tested local timer bits 8/9, reads are masked by EVENT_ENABLE: masked expiry/pending reads zero and output132 is low, but enabling reveals retained pending and raises output even with a parked route. A zero snapshot taken while masked does not clear hidden pending. A positive snapshot retained across masking does acknowledge its event while masked; selective enabled W1C preserves the other timer bit. This does not qualify other event lanes. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026.
     pub mod event_status {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00003fff;
@@ -127350,7 +127350,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
+    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026.
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127445,7 +127445,7 @@ pub mod modem_pwr {
 
     /// The `WORD_002C_OPAQUE` register.
     ///
-    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Multiple-wrap capacity and concurrent set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
+    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
     pub mod word_002c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -132284,7 +132284,7 @@ pub mod modem_pwr {
 
     /// The `RAW` register.
     ///
-    /// WDEVPWR_RAW diagnostic snapshot with the same event geometry as ENABLE, STATUS and CLEAR.
+    /// WDEVPWR_RAW diagnostic snapshot with the same event geometry as ENABLE, STATUS and CLEAR. Tested local TSF timer0/1 causes latch with ENABLE zero and persist when their enables are cleared, while STATUS/output122 are low. SOURCE: HW8_S31_WIFI_TSF_MASK_20261026.
     pub mod raw {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -132472,7 +132472,7 @@ pub mod modem_pwr {
 
     /// The `POWER_INTERRUPT_STATUS` register.
     ///
-    /// Masked WDEVPWR event image returned by complete hal_pwr_interrupt_get_event, with TSF timer causes identified by the guarded timer leaves.
+    /// Masked WDEVPWR event image returned by complete hal_pwr_interrupt_get_event, with TSF timer causes identified by the guarded timer leaves. Local TSF timer0/1 expiries yielded STATUS 0x80/0x40 and output122 only with the corresponding enables; masking lowered STATUS/output without clearing RAW. Other lanes and collision priority are not qualified by these observations. SOURCE: HW8_S31_WIFI_TSF_MASK_20261026.
     pub mod power_interrupt_status {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -132660,7 +132660,7 @@ pub mod modem_pwr {
 
     /// The `CLEAR` register.
     ///
-    /// Write-one-to-clear event bank used by complete hal_pwr_interrupt_clr_event. Complete guarded TSF-timer leaves independently identify bits 7 through 4.
+    /// Write-one-to-clear event bank used by complete hal_pwr_interrupt_clr_event. Complete guarded TSF-timer leaves independently identify bits 7 through 4. For positive local TSF timer causes, sampled acknowledgement cleared while enabled (timer1) and after masking a retained positive sample (timer0); the production mask/all-ones clear also removed a fresh masked timer0 RAW cause. SOURCE: HW8_S31_WIFI_TSF_MASK_20261026.
     pub mod clear {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;

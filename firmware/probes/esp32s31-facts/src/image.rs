@@ -298,6 +298,11 @@ extern "C" fn facts_main() -> ! {
         uart0_clock: p.uart0_clock,
         reset_cause: p.reset_cause,
         radio: radio_local::Radio {
+            tick: p.radio_phy.modem_lpcon_phy_tick,
+            system_clock: p.soc.hp_sys_clkrst_systimer,
+            system_counter: p.system_timer.systimer_counter,
+            local_time: p.mac_local_time.wifi_mac_local_time,
+            status: p.wifi_mac.wifi_mac_tsf_status,
             zb: p.ieee802154,
             power: p.wifi_interrupts.wifi_mac_power_interrupt,
             timer: p.wifi_mac.wifi_mac_tsf_timer,
