@@ -176,3 +176,16 @@ fn boot_failure_records_retain_the_typed_density_in_bytes() {
         "OER_BOOT bootstrap=FAIL reason=psram-density-unknown code=2\r\n"
     );
 }
+
+#[test]
+fn boot_failure_records_preserve_the_named_wait() {
+    use oer_espressif_boot::{BootFailure, WaitFailure};
+
+    assert_eq!(
+        std::format!(
+            "{}",
+            super::BootFailureRecord(BootFailure::Wait(WaitFailure::TimedOut("spi-command")))
+        ),
+        "OER_BOOT bootstrap=FAIL reason=boot-wait-timeout wait=spi-command\r\n"
+    );
+}

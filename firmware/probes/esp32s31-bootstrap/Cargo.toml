@@ -1,0 +1,19 @@
+[package]
+name = "oer-firmware-probes-esp32s31-bootstrap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "One staged bootstrap observation, with no radio or executor"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31"] }
+oer-riscv = { path = "../../../portable/riscv" }
+
+[build-dependencies]
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
