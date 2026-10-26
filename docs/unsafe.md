@@ -482,8 +482,10 @@ needs:
   panic analysis.
   `entry!` mints `StageTwoHandoff` directly and passes it to the safe
   `Handoff::from_proof` wrapper. One extern block in `layout` declares the
-  linker and vector address markers. The panic record uses `retained_static!`;
-  its claim stays held through the image's hook until reset. Nested panic
+  linker and vector address markers. The panic handler raises its hart's CLIC
+  threshold to the maximum, clears MIE and executes a compiler fence before
+  claiming or writing its `retained_static!` slot. Its claim stays held
+  through the image's hook until reset. Nested panic
   entry skips metadata, the record and the hook, then resets, preserving
   the first record.
 - Each board implements `AdoptsBootstrapMapping` for its PSRAM.

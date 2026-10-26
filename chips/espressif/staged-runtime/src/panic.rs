@@ -1,6 +1,8 @@
 //! The image's one panic entry.
 //!
-//! The handler records the panic in `.rtc_fast.persistent`, RTC fast memory no
+//! The handler first masks its hart (maximum CLIC threshold, then MIE off)
+//! and orders the mask before claiming or writing the retained slot. It
+//! records the panic in `.rtc_fast.persistent`, RTC fast memory no
 //! reset entry initializes, without formatting: the location's file bytes (the
 //! last [`FILE_BYTES`]), line and column, the message when it is a static
 //! string (its first [`MESSAGE_BYTES`]; a formatted message is only marked),
@@ -294,7 +296,14 @@ unsafe extern "Rust" {
 #[cfg(target_arch = "riscv32")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
-    let Some((_slot, details)) = record(info) else {
+    let recorded = with_panic_mask(
+        || {
+            let _ = oer_riscv::swap_interrupt_threshold(u8::MAX);
+        },
+        oer_riscv::disable_interrupts,
+        || record(info),
+    );
+    let Some((_slot, details)) = recorded else {
         crate::fatal::reset()
     };
     #[cfg(feature = "panic-hook")]
@@ -304,6 +313,20 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
         let _ = details;
         crate::fatal::reset()
     }
+}
+
+/// Prevent interrupt reentry from resetting a partially written first
+/// record. The callbacks let a host hart model inject a pending interrupt
+/// during the write; the production callbacks use the architectural APIs.
+fn with_panic_mask<T>(
+    mask_threshold: impl FnOnce(),
+    disable_interrupts: impl FnOnce(),
+    record: impl FnOnce() -> T,
+) -> T {
+    mask_threshold();
+    disable_interrupts();
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    record()
 }
 
 /// The last [`FILE_BYTES`] of `file`, zero-padded, and how many there are.
@@ -383,6 +406,84 @@ mod tests {
         assert!(record_in(storage.try_borrow_mut().ok(), 1, true, 0x5678, nested).is_none());
         assert!(!nested_metadata_read.get());
         let record = first.take().expect("nested entry left the record intact");
+        assert_eq!(record.message(), Some("first panic"));
+        assert_eq!((record.hart, record.line), (0, 17));
+    }
+
+    #[test]
+    fn an_interrupt_during_a_partial_write_stays_pending_and_retains_the_first_panic() {
+        use core::cell::RefMut;
+        use core::ops::Deref;
+
+        struct InterruptingWrite<'a> {
+            slot: RefMut<'a, Slot>,
+            threshold: &'a Cell<u8>,
+            mie: &'a Cell<bool>,
+            pending: &'a Cell<bool>,
+        }
+
+        impl Deref for InterruptingWrite<'_> {
+            type Target = Slot;
+
+            fn deref(&self) -> &Slot {
+                &self.slot
+            }
+        }
+
+        impl DerefMut for InterruptingWrite<'_> {
+            fn deref_mut(&mut self) -> &mut Slot {
+                if self.slot.file_length != 0 && self.slot.magic == 0 {
+                    // The first record has a file but no valid checksum yet.
+                    // An admitted interrupt would panic, be refused the held
+                    // slot and reset before the first record can complete.
+                    self.pending.set(true);
+                    assert!(
+                        !self.mie.get() || self.threshold.get() == u8::MAX,
+                        "a nested interrupt panic would reset the incomplete first record"
+                    );
+                }
+                &mut self.slot
+            }
+        }
+
+        let storage = RefCell::new(Slot::EMPTY);
+        let threshold = Cell::new(0_u8);
+        let mie = Cell::new(true);
+        let pending = Cell::new(false);
+        let steps = RefCell::new(std::vec::Vec::new());
+        let (first, _) = with_panic_mask(
+            || {
+                threshold.set(u8::MAX);
+                steps.borrow_mut().push("threshold");
+            },
+            || {
+                mie.set(false);
+                steps.borrow_mut().push("MIE off");
+            },
+            || {
+                steps.borrow_mut().push("claim");
+                let slot = storage.try_borrow_mut().ok().map(|slot| InterruptingWrite {
+                    slot,
+                    threshold: &threshold,
+                    mie: &mie,
+                    pending: &pending,
+                });
+                record_in(slot, 0, false, 0, details)
+            },
+        )
+        .expect("the masked hart completes the first record");
+        assert_eq!(*steps.borrow(), ["threshold", "MIE off", "claim"]);
+        assert!(
+            pending.get(),
+            "an interrupt arrived during the partial write"
+        );
+        assert_eq!((threshold.get(), mie.get()), (u8::MAX, false));
+        assert!(storage.try_borrow_mut().is_err());
+        let next_boot = RefCell::new(*first);
+        let record = next_boot
+            .borrow_mut()
+            .take()
+            .expect("complete retained record");
         assert_eq!(record.message(), Some("first panic"));
         assert_eq!((record.hart, record.line), (0, 17));
     }
