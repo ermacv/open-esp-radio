@@ -19,6 +19,7 @@ mod opaque_wave2;
 mod ble;
 mod ble_wave2;
 mod generic;
+mod lp_lanes;
 mod lp_softreset;
 mod radio_local;
 
@@ -179,6 +180,7 @@ struct Session<'a> {
     core_control: pac::ownership::CoreControlPeripherals,
     uart0_clock: pac::ownership::Uart0ClockPeripherals,
     reset_cause: pac::ownership::ResetCausePeripherals,
+    wake_status: pac::pmu::PmuWakeStatus,
     ble: ble::Ble,
     radio: radio_local::Radio,
     generic: generic::Hardware,
@@ -210,6 +212,26 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 13,
         run: opaque::temperature,
+    },
+    Probe {
+        id: 113,
+        run: lp_lanes::sleep17,
+    },
+    Probe {
+        id: 114,
+        run: lp_lanes::compare_mode,
+    },
+    Probe {
+        id: 110,
+        run: lp_lanes::sleep16,
+    },
+    Probe {
+        id: 111,
+        run: lp_lanes::delivery,
+    },
+    Probe {
+        id: 112,
+        run: lp_lanes::sleep_other,
     },
     Probe {
         id: 105,
@@ -434,6 +456,7 @@ extern "C" fn facts_main() -> ! {
         core_control: p.core_control,
         uart0_clock: p.uart0_clock,
         reset_cause: p.reset_cause,
+        wake_status: p.pmu_wake.pmu_wake_status,
         radio: radio_local::Radio {
             tick: p.radio_phy.modem_lpcon_phy_tick,
             local_time: p.mac_local_time.wifi_mac_local_time,

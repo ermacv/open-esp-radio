@@ -422,3 +422,91 @@ and power/clock (POWER_UP, POWER_UP_FORCE, LP clock, LP reset). Named LP clock,
 forced power and divider15 are fixed; the saved power/clock/divider/sample
 fields are restored afterwards. Changing OUT with READY always zero does not
 identify individual conversion/readout gates or establish a READY handshake.
+
+## LP sleep and delivery lanes
+
+Selections 110–114 observe MODEM_PWR sleep state and the known source-127
+bank, initially enabling both modeled delivery commands (bits 1/18); the
+individual leaves then apply their documented mask/enable phases. No unobserved
+bit0/16/17 command at +0x10 is invented from the sleep-command positions.
+The absence of such a sourced enable prevents an exhaustive cause-map claim.
+
+| Selection | Bounded experiment |
+| --- | --- |
+| 110 | Sleep16/+64 crossing under each control0/4 image; persistence, +44 disable, +40 re-enable, +34 all-clear and fresh software delivery without a new enable |
+| 111 | One real rollover plus software pending with the counter stopped; all four control0/4 images and each sleep0/16/17 command; delivery mask, separate enable commands, enabled +34 clear and fresh pending |
+| 112 | Advancing completed BTLC prerequisite; +68 target before sleep0/17 commands and ETM companions, alone and with a positive sleep16 companion |
+| 113 | Sleep0-only +68 crossing, independent sleep17 crossing, +44 retention, +34/zero clear, disabled crossing/late enable and fresh-target control |
+| 114 | Near+6c compare under all four control0/4 images, control1 trigger, pending persistence and separate +34 clear |
+
+Each state is four records: counter/cause/matrix bank3; bytes1c/20/24;
+byte2c/compact mode58 controls0/2/4/matrix bank4; PMU HP RAW/LP RAW/wake cause. PMU RAW
+records contain the modeled fields, read without acknowledgement. Context records add reject and
+LP-CPU wake causes, compact wake/reject/LP-wake STATUS and their enables.
+Only SOC_WAKEUP and SOC_SLEEP_REJECT (2 of the 5 HP enable fields), and
+LP_CPU_WAKEUP (1 of the 12 LP enable fields) are sampled; other enables
+are unobserved.
+The separate read-only `PmuWakeStatus` capability reads these words; the
+radio clock/power owner has no PMU wake enable or acknowledgement access. A change of a
+local sleep flag alone does not establish a PMU sleep/wake transition.
+
+Cause/target waits stop after 200,000 cycles. Selection 111 requests exactly
+one natural wrap, bounded by 40,000,000 cycles. Persistence windows are
+4096 cycles. Selection 110 emits at most 124 records in the 128-record buffer.
+CPU interrupts remain masked; no CPU handler delivery is measured. Hart1
+stays held. The SRAM loader and debugger capture must run inside an s31-c
+stand lease; only command/result SRAM is accessed by the debugger.
+
+CONTROL_1 is a write trigger. All callers use its generated fresh-read
+trigger; diagnostic mode encoding omits that write-only lane. Archived
+pre-correction captures explicitly include its observed zero readback.
+
+Sleep17/+68 observations use advancing completed BTLC captures, live digital
+and ETM clocks, ETM channels6/7 enabled and the ETM bit11 command issued.
+None of those prerequisites is independently varied; their necessity and
+sufficiency remain unknown. R1/R2 capture only low bytes of +1c/+20 and
+mode58 controls0/1/2/4 (controls0/2/4 after the trigger-class correction).
+Upper +1c/+20 bits31:8 and mode58 bit3/bits31:5 are not recorded; no claim
+that only mode58[2] changes across the complete word follows.
+
+### LP record tags
+
+A state at `t` is four records at `t+0..3`, in the field order above.
+Each `pmu_context(p)` is two records: `p` contains reject cause, LP-CPU wake
+cause, and compact STATUS (HP wake=1, HP reject=2, LP CPU wake=4); `p+1`
+contains the three individually sampled enable booleans in that same order.
+Context bases are 0xcff0 (110), 0xdff2 (111), 0xeff0/0xeff2 (112),
+0xaff0/0xaff2 (113), and 0x9ff0 (114).
+
+For loop index `i=0..3`, the control0/4 configurations are 0/1/0x10/0x11;
+`i` itself is result metadata, not a register image. Leaf tag maps:
+
+| Selection | State bases and phases |
+| --- | --- |
+| 110 | `b=0xc000+i*0x100`; offsets 0x00 before command, 0x10 after crossing, 0x20 after persistence window, 0x30 after +44 disable16, 0x40 after +40 enable16, 0x50 after +34/window, 0x60 after fresh software pending/window |
+| 111 | 0xd000 positive stopped-counter pair; 0xd010/20/30/40 control0/4 indices0/1/2/3; 0xd050/60/70 enable sleep0/16/17; 0xd080/90/a0 disable sleep0/16/17; 0xd0b0 all-delivery mask; 0xd0c0 enable1; 0xd0d0 enable18; 0xd0e0 +34/window; 0xd0f0 fresh software pending/window; 0xd100 zero24/window |
+| 112 | `b=0xe000/0xe100` without/with sleep16 companion; offsets 0x00 before commands, 0x10 after crossing, 0x20 after window, 0x30 after sleep0/17/16 disable |
+| 113 | 0xa000/0xa010 sleep0-only crossing/disable; 0xa100/110/120/130/140 independent sleep17 crossing, disable17, +34/window, zero20, late enable17/window; 0xa200/210 disabled crossing/late enable17; 0xa300 fresh enabled-target positive control |
+| 114 | `b=0x9000+i*0x100`; offsets 0x00 after compare crossing, 0x10 after CONTROL_1 trigger, 0x20 after window, 0x30 after +34 clear |
+
+Selections112/113 prepend the digital BTLC prerequisite's 0x9000–0x90e0
+records, followed by LP initialization tags0x2f00/0x2f01. Selection114's
+0x9000 bases belong to its own leaf and are not prerequisite records.
+
+`b+0xf0` records `(origin_counter, programmed_target, metadata)`:
+metadata is the control0/4 loop index for110/114, the companion16 boolean
+for112, and zero for113's 0xa000/0xa100/0xa200/0xa300 target phases.
+For112 the target is +68 at origin+1024 and the +64 companion is origin+512;
+other target phases use origin+512. Arithmetic wraps in the modeled low
+counter width.
+
+`b+0xf1` records `(crossing_budget_passed, sampled_counter, elapsed_cycles)`.
+The finite poll watches counter distance >=1024 (110/113/114) or >=2048
+(112), under the 200,000-cycle bound. Passing proves counter progress past
+the programmed target, not a positive pending flag or IRQ. Those require
+the subsequent state records. On timeout the leaf cleans up and returns;
+completion alone does not qualify a cause.
+
+Selection111's 0xdff0 instead records `(wrapped, sampled_counter,
+elapsed_cycles)` for its one natural-wrap poll under 40,000,000 cycles.
+The later positive byte2c check remains an independent precondition.

@@ -542,9 +542,7 @@ where
     }
 
     fn publish_control_1(&mut self) {
-        self.runtime_control.modify_word_0058_opaque(|w| {
-            w.set_control_1(true);
-        });
+        self.runtime_control.trigger_word_0058_opaque_control_1();
     }
 
     fn fence(&mut self) {
@@ -651,9 +649,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerInterruptTransaction
     }
 
     fn set_control_0058_bit_1_from_fresh_read(&mut self) {
-        self.registers.modify_word_0058_opaque(|w| {
-            w.set_control_1(true);
-        });
+        self.registers.trigger_word_0058_opaque_control_1();
     }
 
     fn fence(&mut self) {
