@@ -8,7 +8,7 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(b),
-        b.timer.read_word_0038_opaque().bits_0_31_opaque(),
+        b.timer_status.read_word_0038_opaque().bits_0_31_opaque(),
         pending(s),
     );
     emit(
