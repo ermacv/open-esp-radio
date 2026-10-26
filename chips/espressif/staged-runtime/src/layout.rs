@@ -5,30 +5,30 @@ use core::ops::Range;
 use core::ptr::addr_of;
 
 #[allow(unsafe_code, reason = "the linker script symbols")]
-// SAFETY: the runtime linker script defines these symbols; only their
-// addresses are used, with no memory-safety precondition on the caller.
+// SAFETY: the runtime linker script defines these address markers. Zero-sized
+// byte arrays permit safe access without reading memory at their addresses.
 unsafe extern "C" {
-    safe static __runtime_image_start: u8;
-    safe static __runtime_payload_end: u8;
-    safe static __runtime_bss_start: u8;
-    safe static __runtime_bss_end: u8;
-    safe static __runtime_data_load_start: u8;
-    safe static __runtime_data_start: u8;
-    safe static __runtime_data_end: u8;
-    safe static __runtime_data_bss_start: u8;
-    safe static __runtime_data_bss_end: u8;
-    safe static __runtime_isr_start: u8;
-    safe static __runtime_isr_end: u8;
-    safe static __runtime_dma_data_start: u8;
-    safe static __runtime_dma_data_end: u8;
-    safe static __runtime_dma_bss_start: u8;
-    safe static __runtime_dma_bss_end: u8;
-    safe static __runtime_cpu0_irq_stack_bottom: u8;
-    safe static __runtime_cpu0_irq_stack_top: u8;
-    safe static __runtime_cpu1_irq_stack_bottom: u8;
-    safe static __runtime_cpu1_irq_stack_top: u8;
-    safe static _stack_end: u8;
-    safe static _stack_start: u8;
+    safe static __runtime_image_start: [u8; 0];
+    safe static __runtime_payload_end: [u8; 0];
+    safe static __runtime_bss_start: [u8; 0];
+    safe static __runtime_bss_end: [u8; 0];
+    safe static __runtime_data_load_start: [u8; 0];
+    safe static __runtime_data_start: [u8; 0];
+    safe static __runtime_data_end: [u8; 0];
+    safe static __runtime_data_bss_start: [u8; 0];
+    safe static __runtime_data_bss_end: [u8; 0];
+    safe static __runtime_isr_start: [u8; 0];
+    safe static __runtime_isr_end: [u8; 0];
+    safe static __runtime_dma_data_start: [u8; 0];
+    safe static __runtime_dma_data_end: [u8; 0];
+    safe static __runtime_dma_bss_start: [u8; 0];
+    safe static __runtime_dma_bss_end: [u8; 0];
+    safe static __runtime_cpu0_irq_stack_bottom: [u8; 0];
+    safe static __runtime_cpu0_irq_stack_top: [u8; 0];
+    safe static __runtime_cpu1_irq_stack_bottom: [u8; 0];
+    safe static __runtime_cpu1_irq_stack_top: [u8; 0];
+    safe static _stack_end: [u8; 0];
+    safe static _stack_start: [u8; 0];
 }
 
 /// The linked image's sections and stacks, as address ranges.
@@ -52,7 +52,7 @@ pub struct Sections {
     pub task_stack: Range<usize>,
 }
 
-fn range(start: *const u8, end: *const u8) -> Range<usize> {
+fn range(start: *const [u8; 0], end: *const [u8; 0]) -> Range<usize> {
     start as usize..end as usize
 }
 

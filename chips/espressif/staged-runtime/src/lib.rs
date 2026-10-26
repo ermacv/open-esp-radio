@@ -147,10 +147,11 @@ impl Handoff {
                 panic!("the hart's routes and lines disagree with the image's table: {error:?}")
             }
         };
-        // SAFETY: the runtime linker script defines this stack boundary;
-        // taking its address has no memory-safety precondition.
+        // SAFETY: the runtime linker script defines this stack boundary.
+        // The zero-sized byte array permits safe access without reading
+        // stack memory.
         unsafe extern "C" {
-            safe static _stack_end: u8;
+            safe static _stack_end: [u8; 0];
         }
         // SAFETY: interrupts are disabled and trigger 0 is the runtime's;
         // `_stack_end` is the word-aligned bottom of the CPU0 task stack the

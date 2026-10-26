@@ -40,9 +40,14 @@ prerequisites hold. A forwarding call inside an `unsafe fn` names the
 above an attribute that spans several lines.
 
 An extern declaration without a memory-safety precondition is declared
-`safe fn` or `safe static`. Use `#[derive(Zeroable)]` when it expresses the
-zero-initialization contract; an `unsafe impl Zeroable` is reserved for types
-the derive cannot express.
+`safe fn` or `safe static`. A `safe static` requires the bytes at its address
+to be a valid, immutable value of its declared type. A linker symbol used
+only as an address is declared `safe static X: [u8; 0]`: reading this
+zero-sized value touches no memory. Take its address with `&raw const X` or
+`core::ptr::addr_of!(X)` without `unsafe`.
+
+Use `#[derive(Zeroable)]` when it expresses the zero-initialization contract;
+an `unsafe impl Zeroable` is reserved for types the derive cannot express.
 
 `cargo clippy --all-targets` (the default members) applies these lints on the
 host. Generated PAC code has no crate-root unsafe attribute.
@@ -102,9 +107,9 @@ model, with the owners of its policy's parts, into the chip PAC's
   are whole-word stores that read nothing back, so every execution context
   reaches its one owner through `&self`.
 - `oer_mmio::fence`, the device-access ordering instruction.
-- `VolatileCell`, the volatile word of the generated memory layouts, and
-  its `Zeroable` implementation, from which the layouts derive theirs; and
-  the `unsafe` constructors of `DmaWindowAddress` and `DmaRef`.
+- `VolatileCell`, the volatile word of the generated memory layouts; both
+  the cell and the layouts derive `Zeroable`. The constructors of
+  `DmaWindowAddress` and `DmaRef` are `unsafe`.
 
 A generated register writer takes typed field values only: `bool`, a value
 enum, an exact-width integer or `oer_mmio::Bits<WIDTH>`; a reader returns
@@ -196,9 +201,9 @@ abandonment and endpoint reunion; a paired UI case rejects repeated retirement.
 The adjacent `engine::owner::tests` cover exact-allocation retry, completion,
 stop, reset, stale epochs and both terminal failure paths; paired UI cases
 cover moved inputs, private custody and stale leases. Its range metadata
-holds no reference that could alias the retained owner. The RX byte storage's
-`Zeroable` implementation only permits zero initialization of transparent
-volatile byte cells; it grants no concurrent access.
+holds no reference that could alias the retained owner. The RX byte storage
+and its transparent volatile byte cells derive `Zeroable`; this permits
+zero initialization and grants no concurrent access.
 An `unsafe` contract there states only the memory the hardware reaches: the
 Controller's lifecycle order, power and PHY membership are correctness,
 which the driver's typestate holds, and the driver forbids unsafe code. The

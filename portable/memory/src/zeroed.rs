@@ -246,6 +246,19 @@ mod tests {
         use std::rc::Rc;
         let shared = Rc::new(());
         {
+            let cell = ZeroedOnce::new();
+            cell.get_or_init(|| Rc::clone(&shared));
+            assert_eq!(Rc::strong_count(&shared), 2);
+        }
+        assert_eq!(Rc::strong_count(&shared), 1);
+    }
+
+    #[test]
+    fn dropping_a_zeroed_written_once_cell_drops_its_value() {
+        extern crate std;
+        use std::rc::Rc;
+        let shared = Rc::new(());
+        {
             let cell: ZeroedOnce<Rc<()>> = zeroed();
             cell.get_or_init(|| Rc::clone(&shared));
             assert_eq!(Rc::strong_count(&shared), 2);
