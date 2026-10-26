@@ -102,9 +102,19 @@ pub enum BluetoothModemLpTimerStoppedInterruptObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BluetoothModemLpTimerStoppedInterruptFault {
     /// Software dispatch is pending after the task drained; bytes remain intact.
-    SoftwarePending(BluetoothModemLpTimerPendingObservation),
+    SoftwarePending {
+        /// Complete cause word sampled with the pending bytes.
+        status: u32,
+        /// Both pending bytes before any acknowledgement.
+        pending: BluetoothModemLpTimerPendingObservation,
+    },
     /// A nonzero status other than the measured rollover-only image; no ack ran.
-    UnexpectedStatus(u32),
+    UnexpectedStatus {
+        /// Complete unrecognized cause word.
+        status: u32,
+        /// Both pending bytes sampled before any acknowledgement.
+        pending: BluetoothModemLpTimerPendingObservation,
+    },
 }
 
 /// Source-owned high byte paired with the modem LP timer's positional counter.
@@ -246,13 +256,15 @@ fn execute_modem_lp_timer_stopped_interrupt(
     let status = transaction.read_status();
     let pending = transaction.sample_pending();
     if pending.state_0024() != 0 {
-        return Err(BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending(
-            pending,
-        ));
+        return Err(
+            BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending { status, pending },
+        );
     }
     if status != Bits0_31Opaque::Inactive.bits() && status != Bits0_31Opaque::RolloverPending.bits()
     {
-        return Err(BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(status));
+        return Err(
+            BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus { status, pending },
+        );
     }
     if pending.state_002c() != 0 {
         transaction.clear_rollover();
@@ -468,6 +480,7 @@ fn execute_modem_lp_timer_start(transaction: &mut impl ModemLpTimerStartTransact
 
 struct HardwareModemLpTimerTransaction<'registers, B: oer_mmio::Placement> {
     registers: &'registers mut oer_esp32s31_pac::modem_pwr::BtdmRuntimeControl<B>,
+    status: oer_esp32s31_pac::modem_pwr::BtdmLpTimerStatus<B>,
 }
 
 struct HardwareModemLpTimerLowPowerInitTransaction<'registers, E, T>
@@ -608,7 +621,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerStopTransaction
         ModemLpTimerTransaction::sample_pending(self)
     }
     fn read_status(&mut self) -> u32 {
-        self.registers.read_word_0038_opaque().bits_0_31_opaque()
+        self.status.read_word_0038_opaque().bits_0_31_opaque()
     }
     fn clear_rollover(&mut self) {
         self.registers.clear_bluetooth_modem_lp_timer_state_002c();
@@ -626,7 +639,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerInterruptTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
     fn read_status_0038(&mut self) -> u32 {
-        self.registers.read_word_0038_opaque().bits_0_31_opaque()
+        self.status.read_word_0038_opaque().bits_0_31_opaque()
     }
 
     fn read_value_006c(&mut self) -> u32 {
@@ -734,6 +747,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     pub fn prepare_registers(&mut self) -> BluetoothModemLpTimerPendingObservation {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         };
         execute_modem_lp_timer_prepare(&mut transaction)
     }
@@ -747,6 +761,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     pub fn stop_for_shutdown(&mut self) -> BluetoothModemLpTimerPendingObservation {
         execute_modem_lp_timer_stop(&mut HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         })
     }
 
@@ -762,6 +777,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
         execute_modem_lp_timer_stopped_interrupt(
             &mut HardwareModemLpTimerTransaction {
                 registers: &mut self.runtime_control,
+                status: self.status,
             },
             epoch,
         )
@@ -796,6 +812,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     pub fn start_runtime_counter(&mut self) {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         };
         execute_modem_lp_timer_start(&mut transaction);
     }
@@ -808,6 +825,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     pub fn classify_interrupt(&mut self) -> Option<BluetoothModemLpTimerInterruptObservation> {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         };
         match execute_modem_lp_timer_interrupt(&mut transaction) {
             ModemLpTimerInterruptDisposition::Spurious => None,
@@ -831,6 +849,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     ) -> Option<BluetoothModemLpTimerHandlerRegisterObservation> {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         };
         match execute_modem_lp_timer_handler_registers(&mut transaction) {
             ModemLpTimerHandlerRegisterDisposition::Rearmed => None,
@@ -908,6 +927,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     ) -> BluetoothModemLpTimerCounterObservation {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         };
         execute_modem_lp_timer_counter_sample(&mut transaction, epoch)
     }
@@ -916,6 +936,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     pub fn disable_compare(&mut self) {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         };
         execute_modem_lp_timer_compare_disable(&mut transaction);
     }
@@ -933,6 +954,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     ) -> BluetoothModemLpTimerCompareDisposition {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         };
         execute_modem_lp_timer_compare_program(&mut transaction, deadline, epoch)
     }
@@ -941,6 +963,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     pub fn sample_final_state(&mut self) {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
+            status: self.status,
         };
         transaction.sample_final_state_0024();
     }

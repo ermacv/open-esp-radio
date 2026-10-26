@@ -394,6 +394,7 @@ pub struct BluetoothInterruptRegisters<P: BluetoothPlacements = Chip> {
 #[must_use = "the modem LP-timer owner must remain paired with the Bluetooth lifecycle"]
 pub struct BluetoothModemLpTimerRegisters<P: BluetoothPlacements = Chip> {
     pub(crate) runtime_control: modem_pwr::BtdmRuntimeControl<P::ModemPwr>,
+    pub(crate) status: modem_pwr::BtdmLpTimerStatus<P::ModemPwr>,
     /// Modem ETM channels four through seven, programmed by the low-power
     /// component.
     pub(crate) etm: ModemEtmBluetooth<P::Etm>,
@@ -415,11 +416,13 @@ impl BluetoothModemLpTimerRegisters {
             timer:
                 BluetoothModemLpTimerPeripherals {
                     btdm_runtime_control,
+                    btdm_lp_timer_status,
                 },
             etm,
         } = parts;
         Self {
             runtime_control: btdm_runtime_control,
+            status: btdm_lp_timer_status,
             etm,
         }
     }
@@ -429,6 +432,7 @@ impl BluetoothModemLpTimerRegisters {
         BluetoothModemLpTimerParts {
             timer: BluetoothModemLpTimerPeripherals {
                 btdm_runtime_control: self.runtime_control,
+                btdm_lp_timer_status: self.status,
             },
             etm: self.etm,
         }

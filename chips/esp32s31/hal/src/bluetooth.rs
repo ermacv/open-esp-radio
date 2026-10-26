@@ -134,7 +134,24 @@ pub struct ColdOwner {
     partition: Partition,
 }
 
+/// Read-only LP cause capability held permanently by the interrupt handler.
+/// Copies read the side-effect-free status; none can acknowledge or arm it.
+#[derive(Clone, Copy)]
+pub struct ModemLpTimerStatus(oer_esp32s31_pac::modem_pwr::BtdmLpTimerStatus);
+
+impl ModemLpTimerStatus {
+    /// The complete LP cause word, without acknowledgement or timer mutation.
+    pub fn read(&self) -> u32 {
+        self.0.read_word_0038_opaque().bits_0_31_opaque()
+    }
+}
+
 impl ColdOwner {
+    /// Retain observation authority independently of the timer's lifecycle.
+    pub fn timer_status(&self) -> ModemLpTimerStatus {
+        ModemLpTimerStatus(self.partition.modem_lp_timer.status)
+    }
+
     /// Take the partition of a concurrent split. This performs no MMIO.
     pub fn from_partition(partition: BluetoothPartition) -> Self {
         let BluetoothPartition {
@@ -1231,6 +1248,11 @@ impl InterruptRegistersOwner {
             return None;
         }
         Some(self.registers.prepare_scheduler_run_interrupts())
+    }
+
+    /// Diagnostic NRT causes before any acknowledgement, without release authority.
+    pub fn nrt_status(&self) -> [u32; 2] {
+        self.registers.nrt_status()
     }
 
     /// Capture and acknowledge one complete opaque NRT source-133 epoch;

@@ -39,6 +39,9 @@ system these rules serve.
   contract and `// SAFETY:` proof. Compile-time checks and test assertions are allowed.
   Context-local mutable payloads use `oer-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
+  An impossible state returns a named fault retaining its source observations;
+  its owners stay quarantined, then the image calls safe `fatal::reset_recording`
+  to retain the reason for the next boot to print. A watchdog is not this mechanism.
   Remove existing runtime panics from image crates, including probes and
   HIL; image panic budgets only shrink to 0. `const` panics evaluated at
   compile time are allowed. Air, peer, host and API input return a handled

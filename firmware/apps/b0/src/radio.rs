@@ -161,6 +161,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Ok(adopted) => adopted,
         Err(error) => crate::fail(error.name()),
     };
+    crate::gate_fault::report_previous();
     if previous.is_some() {
         usb::early_text(b"OER-B0-BRINGUP: previous panic\r\n");
     }
@@ -179,6 +180,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         mac_extension: factory.mac_extension(),
     };
     let (domain, parts) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let cold = ColdOwner::from_partition(parts.bluetooth);
     let (Some((end, _)), Some((inbox, cell)), Some(lp)) = (
         oer_esp32s31_radio_client::claim(),
         bluetooth::claim(),
@@ -207,7 +209,13 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     oer_espressif_executor::bind::<0, _, _>(adopted.router(), tokens.app_alarm, timer.alarm1);
     let software = runtime.software_interrupts;
-    let Ok(bound) = irq::bind(adopted.router(), tokens.bt, software.line3, software.irq3) else {
+    let Ok(bound) = irq::bind(
+        adopted.router(),
+        tokens.bt,
+        software.line3,
+        software.irq3,
+        cold.timer_status(),
+    ) else {
         crate::fail("bluetooth-interrupts")
     };
     let Some(bell) = SCHEDULER.try_init(bound.bell) else {
@@ -224,7 +232,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(boot) = BOOT.try_init(Boot {
         actor: Some(actor),
         inbox: Some(inbox),
-        cold: Some(ColdOwner::from_partition(parts.bluetooth)),
+        cold: Some(cold),
         coex: Some(parts.bluetooth_coex),
         cell: Some(cell),
         bell,

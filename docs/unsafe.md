@@ -653,9 +653,20 @@ its ending epoch projection. The handler steps the timer before taking a
 stop request, so a dispatch in that entry is retained and refuses stop.
 Pending observations cross retirement, Controller reset and reunion into the
 returned result. B0 sends both bytes through its H4 shutdown event; the physical
-B0 procedure logs them and includes them in its run report. Invalid stopped
-state uses the gate's existing fault flag and retains the first typed fault
-observation with its pending bytes or raw status.
+B0 procedure logs them and includes them in its run report.
+The handler permanently retains a copyable, read-only `BtdmLpTimerStatus`
+capability for the side-effect-free LP cause word, independent of the timer's
+runtime-control owner. A vacant timer with nonzero LP status is an invariant
+failure. `GateFault` retains the full entry LP cause, both NRT cause words
+when the bank is present (explicitly unavailable otherwise), the timer phase,
+and the stopped-timer fault's pending bytes and raw unexpected status.
+The first fault is published once; subsequent service returns it without
+hardware access, queue service or owner release. B0 calls safe
+`fatal::reset_recording` directly from the handler without unwinding or dropping
+any gate or interrupted task owner. Its 44-byte versioned, checksummed retained
+record keeps the exact reason and observation. The next boot consumes and prints
+it through the early console. No watchdog expiry drives this transition.
+The port lifecycle's fault flag is separate and carries no gate fault.
 
 ## Active-owner lifetime
 

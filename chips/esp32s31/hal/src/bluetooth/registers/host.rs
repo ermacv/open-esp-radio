@@ -17,7 +17,7 @@ use oer_esp32s31_pac::{
     btdm::BtdmSchedulerTable,
     instances,
     modem_etm::{self, BleHwPositionalWord891c},
-    modem_pwr::BtdmRuntimeControl,
+    modem_pwr::{BtdmLpTimerStatus, BtdmRuntimeControl},
 };
 use oer_mmio::Host;
 
@@ -55,6 +55,7 @@ pub(crate) struct HostMemory {
     pub(crate) phy_init: Vec<u32>,
     pub(crate) etm: Vec<u32>,
     pub(crate) timer: Vec<u32>,
+    pub(crate) timer_status: Vec<u32>,
     pub(crate) interrupt_bank: Vec<u32>,
     pub(crate) scheduler_runtime: Vec<u32>,
 }
@@ -88,6 +89,7 @@ impl HostMemory {
             phy_init: bt_mac(),
             etm: words(instances::modem_etm::SIZE, fill),
             timer: words(instances::modem_pwr::SIZE, fill),
+            timer_status: words(instances::modem_pwr::SIZE, fill),
             interrupt_bank: bt_mac(),
             scheduler_runtime: bt_mac(),
         }
@@ -142,6 +144,7 @@ impl HostMemory {
         };
         let timer = BluetoothModemLpTimerRegisters {
             runtime_control: host(&mut self.timer, BtdmRuntimeControl::host),
+            status: host(&mut self.timer_status, BtdmLpTimerStatus::host),
             etm: timer_etm,
         };
         (task, interrupts, timer)

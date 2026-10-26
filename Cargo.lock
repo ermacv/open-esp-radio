@@ -2227,6 +2227,7 @@ dependencies = [
 name = "oer-firmware-apps-b0"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "embassy-futures",
  "embedded-io-async",
  "oer-bluetooth-hci",

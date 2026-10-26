@@ -1,7 +1,7 @@
 use super::*;
 use core::{
     pin::pin,
-    sync::atomic::AtomicUsize,
+    sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Waker},
 };
 use oer_interrupt_table::signal::host::{self, Deferred};
@@ -48,6 +48,8 @@ struct Model {
     nrt: VecDeque<bool>,
     channel: VecDeque<bool>,
     timer: VecDeque<Step>,
+    lp_status: u32,
+    nrt_status: [u32; 2],
 }
 
 type Shared = Arc<Mutex<Model>>;
@@ -76,6 +78,14 @@ struct Compare;
 
 impl GateHardware for Fake {
     type Doorbell = ();
+    type Status = Shared;
+    fn lp_status(status: &Shared) -> u32 {
+        status.lock().unwrap().lp_status
+    }
+    fn nrt_status(bank: &FakeBank) -> [u32; 2] {
+        bank.model.lock().unwrap().nrt_status
+    }
+
     type Setup = Setup;
     type Bank = FakeBank;
     type Released = Released;
@@ -181,8 +191,14 @@ impl GateHardware for Fake {
         match model.timer.pop_front().unwrap_or(Step::Spurious) {
             Step::Spurious | Step::Rearmed => Ok(Ack::Quiet),
             Step::Rollover => Ok(Ack::RolloverAcknowledged(Default::default())),
-            Step::Pending => Err(Fault::SoftwarePending(Default::default())),
-            Step::Unknown => Err(Fault::UnexpectedStatus(u32::MAX)),
+            Step::Pending => Err(Fault::SoftwarePending {
+                status: model.lp_status,
+                pending: Default::default(),
+            }),
+            Step::Unknown => Err(Fault::UnexpectedStatus {
+                status: u32::MAX,
+                pending: Default::default(),
+            }),
         }
     }
 
@@ -224,7 +240,7 @@ struct Harness {
     port: ModemLpTimerPort<Fake, Ring>,
     part: BluetoothInterruptsOf<Fake, Deferred, Line>,
     cells: &'static ControllerEventCells<Deferred>,
-    fault: &'static AtomicBool,
+    fault: &'static OnceValue<GateFault>,
     clock: VirtualClock,
 }
 
@@ -237,15 +253,15 @@ impl Harness {
             host::deferred_signal(),
             host::deferred_signal(),
         )));
-        let fault = Box::leak(Box::new(AtomicBool::new(false)));
+        let fault = Box::leak(Box::new(OnceValue::new()));
         let (ends, part) = storage.split(
             (),
+            model.clone(),
             Line(model.clone()),
             BluetoothInterruptSignals {
                 reply: host::deferred_signal(),
                 cells,
                 fault,
-                stopped_timer_fault: Box::leak(Box::new(OnceValue::new())),
             },
         );
         let (gate, port) = ends.with_ring(Ring(rings.clone()));
@@ -263,7 +279,7 @@ impl Harness {
 
     /// One entry of the line.
     fn enter(&mut self) {
-        self.part.service(&self.clock);
+        let _ = self.part.service(&self.clock);
     }
 
     /// The handler's operations since the last call.
@@ -292,7 +308,7 @@ impl Harness {
             exchange.as_mut().poll(&mut cx).is_pending(),
             "the reply waits for the handler"
         );
-        self.part.service(&self.clock);
+        let _ = self.part.service(&self.clock);
         match exchange.as_mut().poll(&mut cx) {
             Poll::Ready(reply) => reply,
             Poll::Pending => panic!("the handler replied"),
@@ -432,7 +448,7 @@ fn the_timer_hands_its_software_work_to_the_task_and_comes_back() {
     let ops = harness.ops();
     assert!(ops.contains(&Op::ApplyPlan));
     assert_eq!(&ops[..3], &[Op::Acknowledge, Op::ApplyPlan, Op::TimerStep]);
-    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(!harness.fault.get().is_some());
 }
 
 #[test]
@@ -521,20 +537,21 @@ fn stopped_timer_work_is_retained_as_a_fault() {
     ));
     harness.script(|model| model.timer.push_back(Step::Pending));
     harness.enter();
-    assert!(harness.fault.load(Ordering::Acquire));
+    assert!(harness.fault.get().is_some());
     assert!(harness.port.take_work().is_none());
     assert_eq!(
-        harness.part.stopped_timer_fault(),
-        Some(
-            bluetooth::BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending(
-                Default::default()
-            )
-        )
+        harness.fault.get().map(|fault| fault.reason),
+        Some(GateFaultReason::StoppedTimer(
+            bluetooth::BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending {
+                status: 0,
+                pending: Default::default()
+            }
+        ))
     );
-    assert!(matches!(
-        harness.exchange(Request::TakeTimer),
-        Ok(Reply::Refused(GateError::TimerNotStopped))
-    ));
+    let first = harness.fault.get().unwrap();
+    harness.ops();
+    assert_eq!(harness.part.service(&harness.clock), Err(first));
+    assert!(harness.ops().is_empty());
 }
 
 #[test]
@@ -543,7 +560,7 @@ fn a_plan_without_outstanding_work_is_retained_as_a_fault() {
     harness.open();
     assert!(harness.port.submit_plan(Plan).is_ok());
     harness.enter();
-    assert!(harness.fault.load(Ordering::Acquire));
+    assert!(harness.fault.get().is_some());
 }
 
 #[test]
@@ -572,12 +589,12 @@ fn a_foreign_executor_cannot_await_a_reply() {
     )));
     let (ends, _part) = storage.split(
         (),
+        model.clone(),
         Line(model),
         BluetoothInterruptSignals {
             reply: host::foreign_signal(),
             cells,
-            fault: Box::leak(Box::new(AtomicBool::new(false))),
-            stopped_timer_fault: Box::leak(Box::new(OnceValue::new())),
+            fault: Box::leak(Box::new(OnceValue::new())),
         },
     );
     let (mut gate, _port) = ends.with_ring(Ring(Arc::new(AtomicUsize::new(0))));
@@ -615,7 +632,7 @@ fn an_event_between_plan_and_application_waits_for_the_retained_owner() {
     assert_eq!(ops[1], Op::ApplyPlan);
     assert!(harness.port.take_work().is_some());
     assert_eq!(is_pending(harness.cells), (false, true));
-    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(!harness.fault.get().is_some());
 }
 
 #[test]
@@ -632,7 +649,7 @@ fn stopped_rollover_is_acknowledged_and_the_owner_can_reunite() {
         .unwrap();
     harness.script(|m| m.timer.push_back(Step::Rollover));
     harness.enter();
-    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(!harness.fault.get().is_some());
     assert!(harness.port.take_work().is_none());
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
@@ -658,7 +675,7 @@ fn stop_accepts_rollover_only_planning_after_the_task_drained() {
     ));
     // Retirement discards only the late rollover snapshot/epoch projection.
     let _rollover = harness.port.take_work().unwrap();
-    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(!harness.fault.get().is_some());
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
         Ok(Reply::Timer(_))
@@ -700,21 +717,31 @@ fn stopped_unknown_status_uses_the_existing_fault_path() {
     ));
     harness.script(|m| m.timer.push_back(Step::Unknown));
     harness.enter();
-    assert!(harness.fault.load(Ordering::Acquire));
+    assert!(harness.fault.get().is_some());
     assert!(harness.part.retained.stopped.is_some());
     assert_eq!(
-        harness.part.stopped_timer_fault(),
-        Some(bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(u32::MAX))
+        harness.fault.get().map(|fault| fault.reason),
+        Some(GateFaultReason::StoppedTimer(
+            bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus {
+                status: u32::MAX,
+                pending: Default::default()
+            }
+        ))
     );
     harness.enter();
     assert_eq!(
-        harness.part.stopped_timer_fault(),
-        Some(bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(u32::MAX))
+        harness.fault.get().map(|fault| fault.reason),
+        Some(GateFaultReason::StoppedTimer(
+            bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus {
+                status: u32::MAX,
+                pending: Default::default()
+            }
+        ))
     );
-    assert!(matches!(
-        harness.exchange(Request::TakeTimer),
-        Ok(Reply::Refused(GateError::TimerNotStopped))
-    ));
+    let first = harness.fault.get().unwrap();
+    harness.ops();
+    assert_eq!(harness.part.service(&harness.clock), Err(first));
+    assert!(harness.ops().is_empty());
 }
 
 #[test]
@@ -746,7 +773,7 @@ fn retirement_discards_a_same_entry_rollover_snapshot_only_after_stop() {
         harness.port.take_work().is_none(),
         "retire drained the late rollover projection"
     );
-    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(!harness.fault.get().is_some());
 }
 
 #[test]
@@ -771,5 +798,91 @@ fn retirement_refuses_a_same_entry_dispatch_without_draining_its_work() {
         "dispatch remains available to its worker"
     );
     assert!(!harness.ops().contains(&Op::StopTimer));
-    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(!harness.fault.get().is_some());
+}
+
+#[test]
+fn vacant_timer_with_lp_cause_faults_without_acknowledging_or_returning_owners() {
+    let mut harness = Harness::new();
+    harness.script(|model| model.lp_status = 0x38);
+    let expected = GateFault {
+        reason: GateFaultReason::VacantTimer,
+        observation: GateObservation {
+            lp_status: 0x38,
+            nrt_status: None,
+            timer: GateTimerState::Vacant,
+        },
+    };
+    assert_eq!(harness.part.service(&harness.clock), Err(expected));
+    assert_eq!(harness.ops(), [Op::Acknowledge]);
+    harness.script(|model| model.lp_status = 0);
+    assert_eq!(harness.part.service(&harness.clock), Err(expected));
+    assert!(harness.ops().is_empty());
+}
+
+#[test]
+fn fault_preserves_raw_lp_and_both_nrt_causes_and_the_timer_phase() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.ops();
+    harness.script(|model| {
+        model.lp_status = 0x40002;
+        model.nrt_status = [0x80001234, 0xfedcba98];
+    });
+    assert!(harness.port.submit_plan(Plan).is_ok());
+    let fault = harness.part.service(&harness.clock).unwrap_err();
+    assert_eq!(fault.reason, GateFaultReason::PlanWithoutPendingTimer);
+    assert_eq!(
+        fault.observation,
+        GateObservation {
+            lp_status: 0x40002,
+            nrt_status: Some([0x80001234, 0xfedcba98]),
+            timer: GateTimerState::Ready,
+        }
+    );
+    assert!(matches!(harness.part.timer, super::Timer::Ready(_)));
+    assert!(harness.part.is_open());
+    assert!(harness.part.retained.plan.is_some());
+    assert_eq!(harness.ops(), [Op::Acknowledge]);
+}
+
+#[test]
+fn a_full_work_slot_retains_its_work_and_timer_without_publishing_or_servicing_the_bank() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.ops();
+    assert!(harness.part.pending.try_send(Work).is_ok());
+    harness.script(|model| model.timer.push_back(Step::Pending));
+    let fault = harness.part.service(&harness.clock).unwrap_err();
+    assert_eq!(fault.reason, GateFaultReason::WorkOccupied);
+    assert!(harness.part.retained.work.is_some());
+    assert!(matches!(harness.part.timer, super::Timer::AwaitingPlan(_)));
+    assert_eq!(harness.ops(), [Op::Acknowledge, Op::TimerStep]);
+    assert_eq!(is_pending(harness.cells), (false, false));
+}
+
+#[test]
+fn a_full_reply_slot_retains_its_reply_and_stopped_timer() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.ops();
+    assert!(
+        harness
+            .part
+            .replies
+            .try_send(Reply::Refused(GateError::NotOpen))
+            .is_ok()
+    );
+    assert!(harness.gate.requests.try_send(Request::StopTimer).is_ok());
+    let fault = harness.part.service(&harness.clock).unwrap_err();
+    assert_eq!(fault.reason, GateFaultReason::ReplyOccupied);
+    assert!(matches!(
+        harness.part.retained.reply,
+        Some(Reply::TimerStopped(_))
+    ));
+    assert!(matches!(harness.part.timer, super::Timer::Stopped(_)));
+    assert_eq!(
+        harness.ops(),
+        [Op::Acknowledge, Op::TimerStep, Op::StopTimer]
+    );
 }
