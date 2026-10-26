@@ -1291,12 +1291,12 @@ class = "write-only"
 [[registers]]
 name = "WORD_004C_OPAQUE"
 offset = 0x4c
-description = "Opaque word loaded by bb_intr_handl. Neither field meanings nor read-to-clear behavior nor a relation to interrupt source 123 is established."
+description = "Opaque word loaded by bb_intr_handl and observed as zero in the quiet HW11 session. Only those reads are established; write behavior and read side effects, including read-to-clear, are unknown. No side-effect-free read-only or source-123 acknowledgement contract is established. The unknown class deliberately exposes no PAC access until these semantics are resolved."
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
 bits = "31:0"
-class = "read-only"
+class = "unknown"
 
 [[registers]]
 name = "WORD_0050_OPAQUE"

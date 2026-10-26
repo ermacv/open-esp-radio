@@ -250762,7 +250762,7 @@ pub mod wifi_bb {
 
     /// The `WORD_004C_OPAQUE` register.
     ///
-    /// Opaque word loaded by bb_intr_handl. Neither field meanings nor read-to-clear behavior nor a relation to interrupt source 123 is established.
+    /// Opaque word loaded by bb_intr_handl and observed as zero in the quiet HW11 session. Only those reads are established; write behavior and read side effects, including read-to-clear, are unknown. No side-effect-free read-only or source-123 acknowledgement contract is established. The unknown class deliberately exposes no PAC access until these semantics are resolved.
     pub mod word_004c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -250778,18 +250778,6 @@ pub mod wifi_bb {
         pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
         /// Positioned bits of `BITS_0_31_OPAQUE`.
         pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// The `BITS_0_31_OPAQUE` field.
-            #[inline]
-            pub const fn bits_0_31_opaque(self) -> u32 {
-                self.0
-            }
-        }
     }
 
     /// The `WORD_0050_OPAQUE` register.
@@ -257706,12 +257694,6 @@ pub mod wifi_bb {
             self.0.write::<0x18>(value.0);
         }
 
-        /// Read `WORD_004C_OPAQUE`.
-        #[inline]
-        pub fn read_word_004c_opaque(&self) -> word_004c_opaque::R {
-            word_004c_opaque::R(self.0.read::<0x4c>())
-        }
-
         /// Read `WORD_0400_OPAQUE`.
         #[inline]
         pub fn read_word_0400_opaque(&self) -> word_0400_opaque::R {
@@ -258182,10 +258164,10 @@ pub mod wifi_bb {
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
         /// image, ascending.
-        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 30] = [
-            0x18, 0x4c, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c,
-            0x478, 0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30,
-            0xc3c, 0xc40, 0xc44, 0xc50, 0xca8, 0xcd0,
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 29] = [
+            0x18, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c, 0x478,
+            0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30, 0xc3c,
+            0xc40, 0xc44, 0xc50, 0xca8, 0xcd0,
         ];
 
         /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
@@ -258197,35 +258179,34 @@ pub mod wifi_bb {
         pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
             match index {
                 0 => Some(self.0.read::<0x18>()),
-                1 => Some(self.0.read::<0x4c>()),
-                2 => Some(self.0.read::<0x400>()),
-                3 => Some(self.0.read::<0x428>()),
-                4 => Some(self.0.read::<0x43c>()),
-                5 => Some(self.0.read::<0x440>()),
-                6 => Some(self.0.read::<0x454>()),
-                7 => Some(self.0.read::<0x458>()),
-                8 => Some(self.0.read::<0x45c>()),
-                9 => Some(self.0.read::<0x460>()),
-                10 => Some(self.0.read::<0x468>()),
-                11 => Some(self.0.read::<0x46c>()),
-                12 => Some(self.0.read::<0x478>()),
-                13 => Some(self.0.read::<0x47c>()),
-                14 => Some(self.0.read::<0x808>()),
-                15 => Some(self.0.read::<0x890>()),
-                16 => Some(self.0.read::<0x8dc>()),
-                17 => Some(self.0.read::<0x8e4>()),
-                18 => Some(self.0.read::<0x90c>()),
-                19 => Some(self.0.read::<0x980>()),
-                20 => Some(self.0.read::<0xa28>()),
-                21 => Some(self.0.read::<0xc00>()),
-                22 => Some(self.0.read::<0xc08>()),
-                23 => Some(self.0.read::<0xc30>()),
-                24 => Some(self.0.read::<0xc3c>()),
-                25 => Some(self.0.read::<0xc40>()),
-                26 => Some(self.0.read::<0xc44>()),
-                27 => Some(self.0.read::<0xc50>()),
-                28 => Some(self.0.read::<0xca8>()),
-                29 => Some(self.0.read::<0xcd0>()),
+                1 => Some(self.0.read::<0x400>()),
+                2 => Some(self.0.read::<0x428>()),
+                3 => Some(self.0.read::<0x43c>()),
+                4 => Some(self.0.read::<0x440>()),
+                5 => Some(self.0.read::<0x454>()),
+                6 => Some(self.0.read::<0x458>()),
+                7 => Some(self.0.read::<0x45c>()),
+                8 => Some(self.0.read::<0x460>()),
+                9 => Some(self.0.read::<0x468>()),
+                10 => Some(self.0.read::<0x46c>()),
+                11 => Some(self.0.read::<0x478>()),
+                12 => Some(self.0.read::<0x47c>()),
+                13 => Some(self.0.read::<0x808>()),
+                14 => Some(self.0.read::<0x890>()),
+                15 => Some(self.0.read::<0x8dc>()),
+                16 => Some(self.0.read::<0x8e4>()),
+                17 => Some(self.0.read::<0x90c>()),
+                18 => Some(self.0.read::<0x980>()),
+                19 => Some(self.0.read::<0xa28>()),
+                20 => Some(self.0.read::<0xc00>()),
+                21 => Some(self.0.read::<0xc08>()),
+                22 => Some(self.0.read::<0xc30>()),
+                23 => Some(self.0.read::<0xc3c>()),
+                24 => Some(self.0.read::<0xc40>()),
+                25 => Some(self.0.read::<0xc44>()),
+                26 => Some(self.0.read::<0xc50>()),
+                27 => Some(self.0.read::<0xca8>()),
+                28 => Some(self.0.read::<0xcd0>()),
                 _ => None,
             }
         }
@@ -264510,7 +264491,7 @@ pub mod wifi_mac {
 
     /// The `RX_BLOCK_ACK_ENTRY%s_CONTROL` register.
     ///
-    /// Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i.
+    /// Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant.
     pub mod rx_block_ack_entry_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -283190,7 +283171,7 @@ pub mod wifi_mac {
 
     /// The `EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL` register.
     ///
-    /// Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead.
+    /// Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant.
     pub mod extra_softap_rx_block_ack_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -283422,7 +283403,7 @@ pub mod wifi_mac {
 
     /// The `EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY` register.
     ///
-    /// Shared extra-SoftAP staging word carrying peer MAC bytes four and five, interface and reorder-window size.
+    /// Shared extra-SoftAP staging word carrying peer MAC bytes four and five, interface and reorder-window size. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant.
     pub mod extra_softap_rx_block_ack_peer_tail_and_policy {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;

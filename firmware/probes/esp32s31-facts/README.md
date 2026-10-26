@@ -279,10 +279,13 @@ peer/policy/head, sequence and bitmap: initial ordinary/extra; ordinary first,
 second and post-update; extra first, second and latched. Full modeled words
 are reconstructed from typed getters and generated field geometry.
 
-BB groups `d0,d3,d6,d9,dc,df,e2` contain status/handler word/control,
-enables/MAC RAW/ST, matrix bank3/MAC disable/ordinary peer marker. The same
-group tag plus `100` records status/matrix after the handler-word read. `e5`
-records the candidate's observed status. All tags are hexadecimal. A zero
+BB groups `d0,d3,d6,d9,dc,df,e2` contain status/control/enables,
+MAC RAW/ST/matrix bank3, then MAC disable/ordinary peer marker/zero. `+4c`
+has unknown access semantics and no PAC accessor; the current leaf never
+reads it and emits no group-plus-`100` post-read observation. Archived HW11
+captures used the earlier status/handler/control layout and included those
+post-read records; they do not prove a side-effect-free read or read-to-ack.
+`e5` records the candidate's observed status. All tags are hexadecimal. A zero
 producer result does not authorize a reset-scope claim, read-to-ack semantics,
 clear effectiveness or a universal source123 silence claim.
 

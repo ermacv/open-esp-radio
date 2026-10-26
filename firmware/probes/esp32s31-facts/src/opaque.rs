@@ -272,6 +272,8 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
         });
 }
 
+// WORD_004C_OPAQUE has unknown read side effects and no PAC accessor.
+// This snapshot deliberately makes no handler-word/read-to-ack observation.
 fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
     let b = &s.radio.phy_baseband_config_oracle_wifi_bb;
     let status = b.read_baseband_watchdog_status().status();
@@ -285,18 +287,12 @@ fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
     emit(
         tag,
         status,
-        b.read_word_004c_opaque().bits_0_31_opaque(),
         bb_control(b.read_baseband_watchdog_control()),
-    );
-    emit(
-        tag + 1,
         bb_enable(b.read_baseband_watchdog_enable()),
-        raw,
-        st,
     );
+    emit(tag + 1, raw, st, matrix);
     emit(
         tag + 2,
-        matrix,
         s.mac
             .wifi_mac_core_enable
             .read_core_enable_control()
@@ -306,15 +302,6 @@ fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
             .wifi_mac_block_ack
             .read_rx_block_ack_entry_peer_head(Index::constant::<7>())
             .peer_address_head(),
-    );
-    emit(
-        tag + 0x100,
-        b.read_baseband_watchdog_status().status(),
-        matrix3(
-            s.interrupt_matrix
-                .interrupt_core0_status
-                .read_int_status_reg_3(),
-        ),
         0,
     );
     status

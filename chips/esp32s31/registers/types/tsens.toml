@@ -87,14 +87,14 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A
 [review.entity."CLK_CONF.BIT_9_OPAQUE"]
 sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018", "HW11_S31_TSENS_20261027"]
 provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
+accuracy = "positional"
+completeness = "partial"
 
 [review.entity."CLK_CONF.BIT_23_OPAQUE"]
 sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018", "HW11_S31_TSENS_20261027"]
 provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
+accuracy = "positional"
+completeness = "partial"
 
 [[registers]]
 name = "CTRL"
