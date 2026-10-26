@@ -1332,12 +1332,14 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     }
 
     /// The DMA address of descriptor 0 in this arena's space.
+    #[cfg(any(test, feature = "test-support"))]
     fn descriptor_base_address(&self) -> Result<u32, RxDmaStorageError> {
         S::address(self, self.descriptors.ring().as_ptr()).ok_or(RxDmaStorageError::AddressWidth)
     }
 
     /// The DMA address of `buffer`, one of this arena's buffers, as an
     /// integer for comparisons.
+    #[cfg(any(test, feature = "test-support"))]
     fn buffer_dma_address(
         &self,
         buffer: &RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,

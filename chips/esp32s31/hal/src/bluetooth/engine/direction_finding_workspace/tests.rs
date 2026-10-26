@@ -56,7 +56,7 @@ fn workspace_binding_refuses_another_allocations_placement() {
         crate::bluetooth::engine::HostDma<0x2f00_1000>,
     >::take(crate::dma_static::Placed::host(storage()));
     assert!(matches!(
-        super::DirectionFindingWorkspaceBinding::new(storage(), &placement),
+        super::DirectionFindingWorkspaceBinding::new(storage(), placement.projection()),
         Err(crate::dma_address::ProjectionError::OutsideAllocation)
     ));
 }

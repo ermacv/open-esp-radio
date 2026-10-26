@@ -102,18 +102,29 @@ fn projections_refuse_foreign_fields_empty_extents_and_noncontiguous_tables() {
 
 #[test]
 fn projections_refuse_misaligned_dma_addresses_and_width_overflow() {
-    let placed = crate::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new(
-        WifiTxDmaDescriptor::zeroed(),
-    )));
-    let unaligned = placed.projection(BASE + 1);
-    let overflow = placed.projection(u32::MAX - 3);
-    let storage = placed.into_inner();
-    assert_eq!(
-        unaligned.link(storage),
-        Err(super::ProjectionError::Misaligned)
+    for (base, error) in [
+        (BASE + 1, super::ProjectionError::Misaligned),
+        (u32::MAX - 3, super::ProjectionError::AddressWidth),
+    ] {
+        let placed = crate::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new(
+            WifiTxDmaDescriptor::zeroed(),
+        )));
+        let (storage, projection) = super::PlacementProjection::for_test(placed, base);
+        assert_eq!(projection.link(storage), Err(error));
+    }
+}
+
+#[test]
+fn refusing_a_projection_returns_the_exact_unchanged_placement() {
+    let storage = std::boxed::Box::leak(std::boxed::Box::new([7u32; 4]));
+    let original = core::ptr::from_ref(storage).addr();
+    let placed = crate::dma_static::Placed::host(storage);
+    let result = super::PlacementProjection::try_with::<crate::ieee80211::dma::space::HostDma, _, _>(
+        placed,
+        |_, projection| projection.region(&[0; 128]),
     );
-    assert_eq!(
-        overflow.link(storage),
-        Err(super::ProjectionError::AddressWidth)
-    );
+    let (error, returned) = result.err().expect("foreign region is refused");
+    assert_eq!(error, super::ProjectionError::OutsideAllocation);
+    assert_eq!(core::ptr::from_ref(returned.as_ref()).addr(), original);
+    assert_eq!(*returned.into_inner(), [7; 4]);
 }

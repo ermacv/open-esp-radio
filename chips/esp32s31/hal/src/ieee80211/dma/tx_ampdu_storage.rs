@@ -196,7 +196,6 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
                 buffers,
                 buffer_capacity,
                 buffer_range,
-                external_region: crate::dma_address::PlacedDmaSpace::of::<S>(),
             },
         })
     }
@@ -217,9 +216,6 @@ pub struct AmpduDmaBinding {
     buffers: Option<PlacedSlots>,
     buffer_capacity: u32,
     buffer_range: Option<StableDmaRange<'static>>,
-    /// The space this arena was bound in, applied to the external regions
-    /// its retained leases publish.
-    external_region: crate::dma_address::PlacedDmaSpace,
 }
 
 impl AmpduDmaBinding {
@@ -575,7 +571,7 @@ struct RetainedDmaBackingIdentity {
     len: usize,
     /// The region's DMA addresses, `None` when it has none in the arena's
     /// space.
-    dma_region: Option<PlacedRegion>,
+    dma_region: PlacedRegion,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -899,8 +895,8 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             "retained append owns its next vacant backing slot"
         );
         let descriptor_head = self.descriptor_head();
-        let external_region = self.dma().binding.external_region;
         let generation = self.next_lease_generation()?;
+        let region = backing.dma_region();
         self.retention_mut().backings[index] = Some(ManuallyDrop::new(backing));
         // Count the lease before borrowing its region. If a backing's unsafe
         // implementation panics while producing the region, Drop still owns
@@ -908,21 +904,35 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         // exact slice returned by the single stability call can also be
         // returned to the encoder without sampling the backing twice.
         self.held += 1;
+        let dma_region = match region {
+            Ok(region) => region,
+            Err(_) => {
+                self.held = index;
+                let retention = self.retention_mut();
+                let rejected = retention.backings[index]
+                    .take()
+                    .map(ManuallyDrop::into_inner);
+                retention.backing_identities[index] = None;
+                retention.backing_descriptors[index] = None;
+                drop(rejected);
+                return Err(AmpduDmaStorageError::Address);
+            }
+        };
         let retention = self
             .retention
             .as_deref_mut()
             .expect("retained aggregate owner contains its lease arena");
         let (backings, identities) = (&mut retention.backings, &mut retention.backing_identities);
-        let (bytes, dma_region) = backings[index]
+        let bytes = backings[index]
             .as_mut()
             .expect("retained backing was inserted")
-            .dma_region(external_region)
-            .map_err(|_| AmpduDmaStorageError::Address)?;
+            .stable_dma_region()
+            .into_mut_slice();
         let identity = RetainedDmaBackingIdentity {
             generation,
             address: bytes.as_ptr().addr(),
             len: bytes.len(),
-            dma_region: Some(dma_region),
+            dma_region,
         };
         identities[index] = Some(identity);
         Ok((
@@ -1280,10 +1290,10 @@ fn external_dma_address(
     identity: RetainedDmaBackingIdentity,
     offset: usize,
 ) -> Result<DmaWindowAddress, AmpduDmaStorageError> {
+    let offset = u32::try_from(offset).map_err(|_| AmpduDmaStorageError::Address)?;
     identity
         .dma_region
-        .zip(u32::try_from(offset).ok())
-        .and_then(|(region, offset)| region.at(offset))
+        .at(offset)
         .ok_or(AmpduDmaStorageError::Address)
 }
 

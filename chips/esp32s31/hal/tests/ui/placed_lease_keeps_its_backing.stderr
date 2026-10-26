@@ -1,0 +1,7 @@
+error[E0594]: cannot assign to data in dereference of `PlacedTxLease<PinnedDmaTxRadioLease<'_, 64, 0, 0>>`
+  --> tests/ui/placed_lease_keeps_its_backing.rs:13:5
+   |
+13 |     **placed = foreign; // ui-error: E0594
+   |     ^^^^^^^^ cannot assign
+   |
+   = help: trait `DerefMut` is required to modify through a dereference, but it is not implemented for `PlacedTxLease<PinnedDmaTxRadioLease<'_, 64, 0, 0>>`

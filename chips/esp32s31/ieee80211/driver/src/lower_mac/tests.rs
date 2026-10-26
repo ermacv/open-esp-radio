@@ -2982,14 +2982,15 @@ impl AmpduBackingSource for Backings {
         let index = self.free.0.borrow_mut().pop()?;
         self.pool.claim_network(index).publish(BACKING, |_| ());
         Some(ReturningStableDmaBacking::new(
-            self.pool.claim_radio(index),
+            self.pool.claim_radio(index).expect("ready placed slot"),
             self.free,
         ))
     }
 }
 
 fn backings() -> &'static Backings {
-    let pool = PlacedTxPool::pin(Placed::host(Box::leak(Box::new(PinnedDmaTxPool::new()))));
+    let pool = PlacedTxPool::pin(Placed::host(Box::leak(Box::new(PinnedDmaTxPool::new()))))
+        .unwrap_or_else(|_| panic!("placed pool geometry"));
     let free: &'static FreeBackings = Box::leak(Box::default());
     free.0.borrow_mut().extend((0..BACKINGS as u8).rev());
     Box::leak(Box::new(Backings { pool, free }))

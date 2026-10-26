@@ -56,35 +56,6 @@ pub(crate) fn model_reference<L: DmaLayout>(address: u32) -> DmaRef<L> {
     unsafe { placed_link(address) }.expect("a model layout has a nonzero CPU address")
 }
 
-/// The sealed address mapping selected when a placed DMA owner is bound.
-#[derive(Clone, Copy)]
-pub struct PlacedDmaSpace {
-    address: fn(&[u8]) -> Option<u32>,
-}
-
-impl PlacedDmaSpace {
-    pub(crate) fn of<S: crate::ieee80211::dma::space::DmaSpace>() -> Self {
-        Self {
-            address: |bytes| S::address(bytes, bytes.as_ptr()),
-        }
-    }
-
-    pub(crate) fn address(self, bytes: &[u8]) -> Option<u32> {
-        (self.address)(bytes)
-    }
-}
-
-pub(crate) fn backing_region<B: crate::dma_static::PlacedBacking + ?Sized>(
-    backing: &mut B,
-    space: PlacedDmaSpace,
-) -> Result<(&mut [u8], PlacedRegion), ProjectionError> {
-    let bytes = backing.stable_dma_region().into_mut_slice();
-    let base = space.address(bytes).ok_or(ProjectionError::AddressWidth)?;
-    let projection = PlacementProjection::from_storage(bytes, base);
-    let region = projection.region(bytes)?;
-    Ok((bytes, region))
-}
-
 /// Refusal to project a field from a retained placed allocation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProjectionError {
@@ -104,16 +75,89 @@ pub(crate) struct PlacementProjection {
 }
 
 impl PlacementProjection {
-    pub(super) fn from_placed<T>(placed: &crate::dma_static::Placed<T>, base: u32) -> Self {
-        Self::from_storage(placed.as_ref(), base)
+    /// Consume the only placement authority; callers cannot supply an address.
+    pub(crate) fn take<S: crate::ieee80211::dma::space::DmaSpace, T>(
+        placed: crate::dma_static::Placed<T>,
+    ) -> Result<(&'static mut T, Self), (ProjectionError, crate::dma_static::Placed<T>)> {
+        let Some(base) = S::address(placed.as_ref(), core::ptr::from_ref(placed.as_ref())) else {
+            return Err((ProjectionError::AddressWidth, placed));
+        };
+        let storage = placed.into_inner();
+        let geometry = Self::from_storage(storage, base);
+        Ok((storage, geometry))
     }
 
-    fn from_storage<T: ?Sized>(storage: &T, base: u32) -> Self {
+    fn from_storage<T>(storage: &T, base: u32) -> Self {
         Self {
             root: core::ptr::from_ref(storage).addr(),
-            bytes: size_of_val(storage),
+            bytes: size_of::<T>(),
             base,
         }
+    }
+
+    pub(crate) fn try_with<S: crate::ieee80211::dma::space::DmaSpace, T, R>(
+        placed: crate::dma_static::Placed<T>,
+        project: impl FnOnce(&T, &Self) -> Result<R, ProjectionError>,
+    ) -> Result<(&'static mut T, R), (ProjectionError, crate::dma_static::Placed<T>)> {
+        let Some(base) = S::address(placed.as_ref(), core::ptr::from_ref(placed.as_ref())) else {
+            return Err((ProjectionError::AddressWidth, placed));
+        };
+        let geometry = Self::from_storage(placed.as_ref(), base);
+        match project(placed.as_ref(), &geometry) {
+            Ok(value) => Ok((placed.into_inner(), value)),
+            Err(error) => Err((error, placed)),
+        }
+    }
+
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn take_controller<S: crate::bluetooth::engine::ControllerDmaSpace, T>(
+        placed: crate::dma_static::Placed<T>,
+    ) -> (&'static mut T, Self) {
+        let geometry = Self::controller_geometry::<S, T>(&placed);
+        (placed.into_inner(), geometry)
+    }
+
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn try_with_controller<S: crate::bluetooth::engine::ControllerDmaSpace, T, R>(
+        placed: crate::dma_static::Placed<T>,
+        project: impl FnOnce(&T, &Self) -> Result<R, ProjectionError>,
+    ) -> Result<(&'static mut T, Self, R), (ProjectionError, crate::dma_static::Placed<T>)> {
+        let geometry = Self::controller_geometry::<S, T>(&placed);
+        match project(placed.as_ref(), &geometry) {
+            Ok(value) => Ok((placed.into_inner(), geometry, value)),
+            Err(error) => Err((error, placed)),
+        }
+    }
+
+    #[cfg(feature = "bluetooth-engine")]
+    fn controller_geometry<S: crate::bluetooth::engine::ControllerDmaSpace, T>(
+        placed: &crate::dma_static::Placed<T>,
+    ) -> Self {
+        #[cfg(target_arch = "riscv32")]
+        const {
+            assert!(size_of::<usize>() == size_of::<u32>());
+        }
+        const {
+            if let Some(base) = S::HOST_BASE {
+                let window = crate::layouts::DMA_WINDOW;
+                assert!(base > window.start && base < window.end);
+                assert!(base.is_multiple_of(align_of::<T>() as u32));
+                assert!(size_of::<T>() <= (window.end - base) as usize);
+            }
+        }
+        let storage = placed.as_ref();
+        let base = S::HOST_BASE.unwrap_or_else(|| core::ptr::from_ref(storage).addr() as u32);
+        Self::from_storage(storage, base)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test<T>(
+        placed: crate::dma_static::Placed<T>,
+        base: u32,
+    ) -> (&'static mut T, Self) {
+        let storage = placed.into_inner();
+        let geometry = Self::from_storage(storage, base);
+        (storage, geometry)
     }
 
     fn checked(&self, cpu: usize, bytes: usize, alignment: usize) -> Result<u32, ProjectionError> {
@@ -141,19 +185,69 @@ impl PlacementProjection {
         Ok(address)
     }
 
-    #[allow(unsafe_code, reason = "the checked subrange of the consumed Placed")]
     pub(crate) fn address<T: ?Sized>(
         &self,
         field: &T,
     ) -> Result<DmaWindowAddress, ProjectionError> {
-        let address = self.checked(
+        self.checked_region(
             core::ptr::from_ref(field).addr(),
             size_of_val(field),
             align_of_val(field),
-        )?;
-        // SAFETY: the extent and alignment belong to the consumed allocation.
-        // Its owner retains or quarantines the static storage for every DMA epoch.
-        Ok(unsafe { placed(address) })
+        )
+        .map(|region| region.start())
+    }
+
+    #[allow(unsafe_code, reason = "the checked subrange of the consumed Placed")]
+    fn checked_region(
+        &self,
+        cpu: usize,
+        bytes: usize,
+        alignment: usize,
+    ) -> Result<PlacedRegion, ProjectionError> {
+        let address = self.checked(cpu, bytes, alignment)?;
+        // SAFETY: only consuming constructors over sealed address spaces mint
+        // this geometry. The complete subrange lies in that placed allocation;
+        // the owner retains or quarantines it for every hardware epoch.
+        let start = unsafe { placed(address) };
+        Ok(PlacedRegion {
+            start,
+            len: bytes as u32,
+        })
+    }
+
+    pub(crate) fn pool_regions<const F: usize, const H: usize, const T: usize, const N: usize>(
+        placed: crate::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N>>,
+    ) -> Result<
+        (
+            &'static mut oer_memory::PinnedDmaTxPool<F, H, T, N>,
+            [PlacedRegion; N],
+        ),
+        (
+            ProjectionError,
+            crate::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N>>,
+        ),
+    > {
+        const {
+            assert!(F + H + T > 0 && F + H + T <= u32::MAX as usize);
+        }
+        #[cfg(target_arch = "riscv32")]
+        type Space = crate::ieee80211::dma::space::ChipDma;
+        #[cfg(not(target_arch = "riscv32"))]
+        type Space = crate::ieee80211::dma::space::HostDma;
+        Self::try_with::<Space, _, _>(placed, |storage, projection| {
+            let whole = projection.checked_region(
+                projection.root,
+                projection.bytes,
+                align_of_val(storage),
+            )?;
+            let mut regions = [whole; N];
+            for (region, (pointer, bytes)) in
+                regions.iter_mut().zip(storage.dma_storage_locations())
+            {
+                *region = projection.checked_region(pointer.addr(), bytes, 1)?;
+            }
+            Ok(regions)
+        })
     }
 
     #[cfg(feature = "bluetooth-engine")]
@@ -242,9 +336,7 @@ impl PlacementProjection {
     }
 
     pub(crate) fn region(&self, bytes: &[u8]) -> Result<PlacedRegion, ProjectionError> {
-        let start = self.address(bytes)?;
-        let len = u32::try_from(bytes.len()).map_err(|_| ProjectionError::AddressWidth)?;
-        PlacedRegion::new(start, len).ok_or(ProjectionError::AddressWidth)
+        self.checked_region(bytes.as_ptr().addr(), bytes.len(), 1)
     }
 
     /// A reviewed generated volatile layout inside a workspace field.
@@ -269,6 +361,20 @@ impl PlacementProjection {
         }
         self.link_at(cpu)
     }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn model_region(len: usize) -> Result<PlacedRegion, ProjectionError> {
+    let len = u32::try_from(len).map_err(|_| ProjectionError::AddressWidth)?;
+    let base = crate::ieee80211::dma::space::HOST_ARENA_BASE;
+    base.checked_add(len).ok_or(ProjectionError::AddressWidth)?;
+    #[allow(
+        unsafe_code,
+        reason = "synthetic host identities are never dereferenced"
+    )]
+    // SAFETY: the model compares this address only; no DMA actor exists.
+    let start = unsafe { placed(base) };
+    Ok(PlacedRegion { start, len })
 }
 
 /// The DMA addresses of `len` `L`s laid out back to back in placed storage:

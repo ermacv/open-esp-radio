@@ -281,6 +281,17 @@ impl<
         }
     }
 
+    /// Locations of the initialized byte regions, before permanent pinning.
+    /// These observations grant no access or DMA lifetime authority.
+    pub fn dma_storage_locations(&self) -> [(*const u8, usize); QUEUE_DEPTH] {
+        self.slots.each_ref().map(|slot| {
+            (
+                slot.bytes.get().cast::<u8>().cast_const(),
+                slot.storage_capacity(),
+            )
+        })
+    }
+
     /// Consume permanent storage into its sole, non-cloneable claim handle.
     /// Dropping or forgetting the handle never frees or unpins the storage.
     pub fn pin_static(

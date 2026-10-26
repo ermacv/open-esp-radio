@@ -268,20 +268,20 @@ impl<
         let Some(installation) = EngineEpoch::allocate(&EPOCHS) else {
             return Err((ArenaError::EpochExhausted, clocked, placed));
         };
-        let (storage, placement) = Placement::<D>::take(placed);
-        let df_binding = match direction_finding_workspace::DirectionFindingWorkspaceBinding::new(
-            &storage.0.1.0,
-            &placement,
-        ) {
-            Ok(binding) => binding,
-            Err(error) => {
-                return Err((
-                    ArenaError::Placement(error),
-                    clocked,
-                    Placed::returned(storage),
-                ));
-            }
+        let projected = crate::dma_address::PlacementProjection::try_with_controller::<D, _, _>(
+            placed,
+            |storage, projection| {
+                direction_finding_workspace::DirectionFindingWorkspaceBinding::new(
+                    &storage.0.1.0,
+                    projection,
+                )
+            },
+        );
+        let (storage, projection, df_binding) = match projected {
+            Ok(parts) => parts,
+            Err((error, placed)) => return Err((ArenaError::Placement(error), clocked, placed)),
         };
+        let placement = Placement::<D>::from_projection(projection);
         let (registers, interrupts) = clocked.separate_interrupt_owner();
         let epoch = installation.0;
         let root = core::ptr::NonNull::from(storage);
@@ -402,12 +402,11 @@ impl<
         // in place before releasing its pin contract, then initialize a new
         // zeroed value in the same allocation. Every arena field is Zeroable.
         // The original placement proof still covers the reunited tuple.
-        let storage = unsafe {
+        unsafe {
             core::ptr::drop_in_place(root.as_ptr());
             core::ptr::write_bytes(root.as_ptr(), 0, 1);
-            &mut *root.as_ptr()
-        };
-        Placed::returned(storage)
+            Placed::from_retained(&mut *root.as_ptr())
+        }
     }
 }
 impl<

@@ -124,11 +124,11 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         start: Ieee802154Permit,
         interfaces: Option<Ieee802154Interfaces>,
     ) -> Result<Self, PlacementRefusal<Ll>> {
-        // Native models retain the low CPU identity, as the model's memory
-        // port does. On the chip CPU and DMA addresses are identical.
-        let projection = buffers.projection(buffers.cpu_address() as u32);
-        let addresses = (|| {
-            let storage = buffers.as_ref();
+        let projected = crate::dma_address::PlacementProjection::try_with::<
+            crate::ieee80211::dma::space::NativeDma,
+            _,
+            _,
+        >(buffers, |storage, projection| {
             let tx = projection.address(storage.tx_frame())?;
             let enhanced_ack = projection.address(storage.enhanced_ack_frame())?;
             let mut rx = [tx; oer_espressif_ieee802154_engine::engine::RX_BUFFER_COUNT + 1];
@@ -140,10 +140,10 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
                 tx,
                 enhanced_ack,
             })
-        })();
-        let addresses = match addresses {
-            Ok(addresses) => addresses,
-            Err(error) => {
+        });
+        let (buffers, addresses) = match projected {
+            Ok(parts) => parts,
+            Err((error, buffers)) => {
                 return Err(PlacementRefusal {
                     error,
                     mac,
@@ -151,7 +151,6 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
                 });
             }
         };
-        let buffers = buffers.into_inner();
         let engine = match interfaces {
             Some(interfaces) => {
                 SharedEngine::new_multipan(buffers, addresses, levels, defaults, interfaces, start)

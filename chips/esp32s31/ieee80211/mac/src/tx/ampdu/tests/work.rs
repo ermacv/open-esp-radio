@@ -20,7 +20,7 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
     owner
         .commit_ht(
             cookie,
-            pool.claim_radio(index),
+            pool.claim_radio(index).expect("ready placed slot"),
             ht_frame_request(0, 32, 8, 0, rate),
         )
         .unwrap();

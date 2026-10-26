@@ -35,7 +35,7 @@ fn exchange_byte_limit_stops_existing_builder_without_consuming_the_next_owner()
         owner
             .commit_ht(
                 cookie,
-                pool.claim_radio(index),
+                pool.claim_radio(index).expect("ready placed slot"),
                 ht_frame_request(0, 32, 8, 0, rate),
             )
             .unwrap();

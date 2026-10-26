@@ -272,18 +272,30 @@ Each chip's HAL has one module that makes typed DMA addresses,
 `dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
 `DmaRef` constructors of `oer-memory`, which the PAC's generated `layouts`
 bind to the chip's DMA window (clippy `disallowed-methods` refuses them
-elsewhere). A single HAL placement projection accompanies the consumed
-`Placed` allocation and its `StableDmaRange`, recording CPU and DMA geometry
-without borrowing the retained owner. Its safe `link`, `table`, `slots` and
-`region` methods check full extents and alignment before calling
-`placed`/`placed_link`; private table/slot/region constructors take typed
-starting addresses. Fixed type geometry is checked in const blocks; dynamic refusal is `ProjectionError`. Wi-Fi address spaces are sealed
-so callers cannot substitute an unrelated address mapping. `PlacedBacking`'s
-sealed `dma_region` samples its stable slice once and projects the whole
-region while the A-MPDU owner retains the lease. The BLE placement adapter
-uses the same projection; its DF workspace overlays check type geometry in
-const blocks, derive member positions from generated accessors and return
-typed errors before arena mutation.
+elsewhere). Consuming constructors select the base exclusively through sealed
+Wi-Fi/native or controller address spaces. Only a `cfg(test)` constructor
+accepts a synthetic base argument. A single HAL placement projection retains
+CPU and DMA geometry without borrowing the retained owner. Its safe `link`,
+`table`, `slots` and `region` methods check full extents and alignment before
+calling `placed`/`placed_link`; private table/slot/region constructors take
+typed starting addresses. Fixed type geometry is checked in const blocks;
+dynamic refusal is `ProjectionError`.
+
+`PlacedTxPool` validates each byte region before pinning the pool. The memory
+crate exposes only the slots' location observations, without access or
+lifetime authority. Each `PlacedTxLease` carries its checked immutable DMA
+region, and permits mutation of bytes through the stable-region loan without
+allowing replacement of its backing. `PlacedBacking::dma_region` only returns
+that cached proof without width, emptiness or containment admission.
+A rejected A-MPDU backing insertion returns the last slot and clears its
+metadata before reporting refusal; an empty region follows the same LIFO
+release path. The BLE adapter uses the same projection; DF workspace overlays
+check type geometry in const blocks, derive positions from generated member
+accessors and return typed errors before arena mutation. DF preflight returns
+the original `Placed` on refusal. After verified reset, the arena's existing
+unsafe reclaim block calls `Placed::from_retained`: its contract requires the
+exact original placed allocation, with field borrows and hardware use ended.
+No safe constructor can restore placement from an arbitrary static reference.
 
 Its `dma_static` module holds the placement constructor:
 `DmaStatic::placed`, `unsafe` and called only by the `dma_static!` macro,

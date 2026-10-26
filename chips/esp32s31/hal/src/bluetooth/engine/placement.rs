@@ -49,22 +49,24 @@ pub(crate) struct Placement<S> {
 
 impl<S: ControllerDmaSpace> Placement<S> {
     pub(crate) fn take<T>(placed: Placed<T>) -> (&'static mut T, Self) {
-        const {
-            if let Some(base) = S::HOST_BASE {
-                let window = crate::layouts::DMA_WINDOW;
-                assert!(base > window.start && base < window.end);
-                assert!(base.is_multiple_of(align_of::<u32>() as u32));
-                assert!(size_of::<T>() <= (window.end - base) as usize);
-            }
-        }
-        let base = S::HOST_BASE.unwrap_or_else(|| placed.cpu_address() as u32);
-        let projection = placed.projection(base);
-        let storage = placed.into_inner();
+        let (storage, projection) =
+            crate::dma_address::PlacementProjection::take_controller::<S, _>(placed);
         let geometry = Self {
             projection,
             space: PhantomData,
         };
         (storage, geometry)
+    }
+
+    pub(super) fn from_projection(projection: crate::dma_address::PlacementProjection) -> Self {
+        Self {
+            projection,
+            space: PhantomData,
+        }
+    }
+
+    pub(super) fn projection(&self) -> &crate::dma_address::PlacementProjection {
+        &self.projection
     }
 
     pub(crate) fn address<T>(&self, field: &T) -> DmaWindowAddress {
