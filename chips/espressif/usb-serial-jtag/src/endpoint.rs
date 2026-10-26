@@ -12,6 +12,7 @@
 use core::future::poll_fn;
 use core::task::Poll;
 
+use oer_interrupt_table::EventAuthority;
 use oer_interrupt_table::signal::{IrqSignal, SignalExecutor};
 
 use crate::{EndpointRegisters, IN_EMPTY, OUT_RECEIVED, PACKET};
@@ -50,9 +51,14 @@ pub struct Endpoint<E: SignalExecutor, R> {
 
 impl<E: SignalExecutor, R: EndpointRegisters> Endpoint<E, R> {
     /// The endpoint over `registers`, which the interrupt that raises
-    /// `signal` wakes: it enables both console interrupts.
-    pub fn new(mut registers: R, signal: &'static IrqSignal<E>) -> Self {
-        registers.enable_events();
+    /// `signal` wakes: it enables both console interrupts with the part's
+    /// binding or silence proof.
+    pub fn new(
+        mut registers: R,
+        signal: &'static IrqSignal<E>,
+        authority: &impl EventAuthority<R::Interrupt>,
+    ) -> Self {
+        registers.enable_events(authority);
         Self {
             registers,
             signal,

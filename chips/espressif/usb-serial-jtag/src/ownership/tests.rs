@@ -60,6 +60,8 @@ impl Occupancy {
 }
 
 impl EndpointRegisters for Counting<'_> {
+    type Interrupt = crate::fake::Irq;
+
     fn has_room(&self) -> bool {
         true
     }
@@ -85,7 +87,11 @@ impl EndpointRegisters for Counting<'_> {
         0
     }
 
-    fn enable_events(&mut self) {}
+    fn enable_events(
+        &mut self,
+        _authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+    ) {
+    }
 }
 
 fn installed(block: &Shared) -> Ownership<Parts<Task>> {

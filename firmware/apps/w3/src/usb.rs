@@ -52,8 +52,8 @@ pub(crate) fn open<C: Controller>(
     token: crate::ConsoleUsb,
 ) -> Result<(Console, UsbPads), &'static str> {
     let (endpoint, interrupt, pads) = retire_early_writer().map_err(|_| "console")?;
-    let _bound = router
+    let bound = router
         .bind(token, interrupt)
         .map_err(|_| "console interrupt")?;
-    Ok((Endpoint::new(endpoint, INTERRUPT.signal()), pads))
+    Ok((Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads))
 }

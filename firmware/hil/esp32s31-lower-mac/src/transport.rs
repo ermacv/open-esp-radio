@@ -68,6 +68,9 @@ pub fn open_usb<C: oer_interrupt_table::Controller>(
     token: crate::ConsoleUsb,
 ) -> Result<(Usb, UsbPads), &'static str> {
     let (endpoint, interrupt, pads) = retire_early_writer().map_err(|_| "console-retire")?;
-    let _bound = router.bind(token, interrupt).map_err(|_| "console-route")?;
-    Ok((Endpoint::new(endpoint, USB_INTERRUPT.signal()), pads))
+    let bound = router.bind(token, interrupt).map_err(|_| "console-route")?;
+    Ok((
+        Endpoint::new(endpoint, USB_INTERRUPT.signal(), &bound),
+        pads,
+    ))
 }

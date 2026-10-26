@@ -72,8 +72,8 @@ pub(crate) fn open<C: Controller>(
 ) -> Result<(Console, UsbPads), OpenError> {
     let (endpoint, interrupt, pads) =
         retire_early_writer().map_err(|_held: RetireError| OpenError::Retire)?;
-    let _bound = router
+    let bound = router
         .bind(token, interrupt)
         .map_err(|_refused| OpenError::Bind)?;
-    Ok((Endpoint::new(endpoint, INTERRUPT.signal()), pads))
+    Ok((Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads))
 }
