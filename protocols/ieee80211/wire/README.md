@@ -27,9 +27,9 @@ invariants. Shared `test-support` library builds retain the production policy.
   is not parsed, and the Listen Interval is read and dropped (see the AP
   crate's known defects).
 
-Channel constructors admit and retain the regulatory span and primary/center
-frequencies; their accessors and `RadioChannel::span` are total. PHY rate
-constructors retain their exact rates and symbol fractions. PPDU duration
+Channels hold a one-byte index into a const table of admitted geometries;
+frequency accessors and `RadioChannel::span` are total table reads. PHY rates
+hold only their parameters; exhaustive const maps supply rates and N_DBPS. PPDU duration
 calculation returns `None` when microseconds do not fit in `u32`; aggregate
 admission refuses that candidate. Owned byte prefixes retain a `PrefixLength`
 proof, and width-proved field setters do not revalidate encoder values.

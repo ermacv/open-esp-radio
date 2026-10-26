@@ -115,9 +115,27 @@ impl Case {
 /// Distinct complete tables for fixture input; records are in ACI order.
 pub const fn parameters(role: VifRole, updated: bool) -> EdcaParameterSet {
     let (aifsn, minimum, maximum, txop, lifetime) = match (role, updated) {
-        (VifRole::Station, _) => (3, 4, 6, 94, 500),
-        (VifRole::AccessPoint, false) => (7, 2, 3, 47, 200),
-        (VifRole::AccessPoint, true) => (5, 1, 2, 350, 100),
+        (VifRole::Station, _) => (
+            oer_wire::U8::constant::<3>(),
+            oer_wire::U8::constant::<4>(),
+            oer_wire::U8::constant::<6>(),
+            94,
+            500,
+        ),
+        (VifRole::AccessPoint, false) => (
+            oer_wire::U8::constant::<7>(),
+            oer_wire::U8::constant::<2>(),
+            oer_wire::U8::constant::<3>(),
+            47,
+            200,
+        ),
+        (VifRole::AccessPoint, true) => (
+            oer_wire::U8::constant::<5>(),
+            oer_wire::U8::constant::<1>(),
+            oer_wire::U8::constant::<2>(),
+            350,
+            100,
+        ),
     };
     EdcaParameterSet::from_tu(
         WmmParameterSet::new(
@@ -224,9 +242,14 @@ pub fn verify<D: AsRef<[Draw]>>(case: Case, trace: Trace<D>) -> Result<(), Viola
             return Err(Violation::VifParameters);
         }
         let exponent = if retry && index == 1 {
-            record.wmm.ecw_min.saturating_add(1).min(record.wmm.ecw_max)
+            record
+                .wmm
+                .ecw_min
+                .get()
+                .saturating_add(1)
+                .min(record.wmm.ecw_max.get())
         } else {
-            record.wmm.ecw_min
+            record.wmm.ecw_min.get()
         };
         let window = (1_u16 << exponent).saturating_sub(1);
         if draw.window_slots != window || draw.backoff_slots != window {

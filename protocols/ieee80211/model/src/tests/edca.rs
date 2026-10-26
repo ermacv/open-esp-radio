@@ -191,16 +191,12 @@ fn supported_edca_refuses_whole_records_without_clamping() {
         let baseline = wmm.access_category(ac);
         for invalid in [
             WmmAcParameters {
-                aifsn: 16,
+                ecw_min: oer_wire::U8::constant::<11>(),
+                ecw_max: oer_wire::U8::constant::<10>(),
                 ..baseline
             },
             WmmAcParameters {
-                ecw_min: 11,
-                ecw_max: 10,
-                ..baseline
-            },
-            WmmAcParameters {
-                ecw_max: 11,
+                ecw_max: oer_wire::U8::constant::<11>(),
                 ..baseline
             },
             WmmAcParameters {

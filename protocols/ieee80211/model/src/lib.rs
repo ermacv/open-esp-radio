@@ -1686,7 +1686,7 @@ impl ModelEdca {
     fn draw(&mut self, role: VifRole, access_category: WmmAccessCategory) {
         let parameters = self.parameters(role).access_category(access_category);
         let queue = access_category.select_mut(&mut self.queues);
-        queue.reconfigure(parameters.wmm.ecw_min, parameters.wmm.ecw_max);
+        queue.reconfigure(parameters.wmm.ecw_min.get(), parameters.wmm.ecw_max.get());
         let head = access_category.select_mut(&mut self.heads);
         if *head != Some(role) {
             queue.reset();

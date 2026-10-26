@@ -143,7 +143,12 @@ impl GroupKeyId {
 
     /// The identifier, as a CCMP header names it.
     pub const fn key_id(self) -> CcmpKeyId {
-        CcmpKeyId(oer_wire::U8::from_low_bits(self.get()))
+        CcmpKeyId(match self.0 {
+            GroupIndex::Zero => oer_wire::U8::constant::<0>(),
+            GroupIndex::One => oer_wire::U8::constant::<1>(),
+            GroupIndex::Two => oer_wire::U8::constant::<2>(),
+            GroupIndex::Three => oer_wire::U8::constant::<3>(),
+        })
     }
 
     /// Select the record for this wire ID, independently of hardware slots.

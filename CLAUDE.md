@@ -9,7 +9,7 @@ system these rules serve.
 ## Code
 
 - **Ask, never fall back.** When a choice changes a shared crate, drops data,
-  adds a fallback, leaves work unfinished, changes on-hardware
+  adds a fallback, leaves work unfinished, changes memory use or on-hardware
   behavior, or departs from a contract shape already accepted, explain it,
   recommend an option and ask before writing code. Decide small, local,
   reversible details (a name, a variant, a test shape) yourself and state
@@ -144,8 +144,7 @@ system these rules serve.
   never through a pipe (redirect to a file and print `exit=$?`).
 - **Sizes.** CI reports memory growth (code, `.rodata`, SRAM and PSRAM
   sections, a type, future or frame, an allocated task or interrupt stack);
-  growth is reported and requires no approval. A limit the owner sets for an
-  image is its own gate.
+  growth is not a stop. A limit the owner sets for an image is its own gate.
 - **Stand.** Runs only when they answer a real question. Hardware runs hold
   the board's lock; never kill another holder, wait. The owner's limits on
   secrets, eFuse writes, protected boards and hub ports apply. A claim about

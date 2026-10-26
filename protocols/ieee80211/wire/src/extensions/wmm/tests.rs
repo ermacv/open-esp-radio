@@ -15,9 +15,9 @@ fn the_standard_default_is_the_records_of_table_9_155() {
     let advertised = parse_wmm_parameter_element(&STANDARD_PARAMETER_ELEMENT).unwrap();
     let contention = |record: super::WmmAcParameters| {
         (
-            record.aifsn,
-            record.ecw_min,
-            record.ecw_max,
+            record.aifsn.get(),
+            record.ecw_min.get(),
+            record.ecw_max.get(),
             record.txop_limit_units_32_us,
         )
     };
@@ -40,15 +40,15 @@ fn parses_all_four_access_categories_and_complete_txop() {
     assert!(parameters.uapsd);
 
     let best_effort = parameters.access_category(WmmAccessCategory::BestEffort);
-    assert_eq!(best_effort.aifsn, 3);
-    assert_eq!(best_effort.ecw_min, 4);
-    assert_eq!(best_effort.ecw_max, 10);
+    assert_eq!(best_effort.aifsn.get(), 3);
+    assert_eq!(best_effort.ecw_min.get(), 4);
+    assert_eq!(best_effort.ecw_max.get(), 10);
     assert_eq!(best_effort.txop_limit_units_32_us, 0);
 
     let video = parameters.access_category(WmmAccessCategory::Video);
-    assert_eq!(video.aifsn, 2);
-    assert_eq!(video.ecw_min, 3);
-    assert_eq!(video.ecw_max, 4);
+    assert_eq!(video.aifsn.get(), 2);
+    assert_eq!(video.ecw_min.get(), 3);
+    assert_eq!(video.ecw_max.get(), 4);
     assert_eq!(video.txop_limit_units_32_us, 94);
 
     let voice = parameters.access_category(WmmAccessCategory::Voice);

@@ -9,7 +9,7 @@ explicit `, view` suffix. A view never permits overlaps between other ordinary
 fields.
 
 Parenthesized integer fields (for example `(u16)`) take a `U16<WIDTH>` proof
-and insert it infallibly; raw integer fields continue to admit input with
+and insert it infallibly; raw integer fields admit input with
 `Result`. `constant::<VALUE>()` checks a fixed value at compile time. Numeric
 proofs and `PrefixLength<N>` retain admission instead of asserting it during
 encoding or owned-buffer access. Prefix borrowing trims the unused array tail

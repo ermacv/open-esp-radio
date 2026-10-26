@@ -1980,6 +1980,7 @@ dependencies = [
  "oer-time",
  "oer-time-virtual",
  "oer-trace",
+ "oer-wire",
  "tempfile",
 ]
 
@@ -2150,6 +2151,7 @@ dependencies = [
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-wire",
 ]
 
 [[package]]
@@ -2882,6 +2884,7 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-time",
+ "oer-wire",
 ]
 
 [[package]]
@@ -2935,6 +2938,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
+ "oer-wire",
 ]
 
 [[package]]
@@ -2949,6 +2953,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
+ "oer-wire",
 ]
 
 [[package]]

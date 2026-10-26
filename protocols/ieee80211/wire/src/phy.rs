@@ -118,47 +118,17 @@ pub struct HtRate {
     mcs: HtMcs,
     bandwidth: PpduBandwidth,
     short_gi: bool,
-    long_kbps: u32,
-    short_kbps: u32,
 }
 
 impl HtRate {
     /// An HT rate; `None` for a bandwidth HT does not have (80 or 160 MHz).
     pub const fn new(mcs: HtMcs, bandwidth: PpduBandwidth, short_gi: bool) -> Option<Self> {
         match bandwidth {
-            PpduBandwidth::Mhz20 | PpduBandwidth::Mhz40 => {
-                let (long, short) = match (bandwidth, mcs.index() % 8) {
-                    (PpduBandwidth::Mhz40, 0) => (13_500_u32, 15_000_u32),
-                    (PpduBandwidth::Mhz40, 1) => (27_000, 30_000),
-                    (PpduBandwidth::Mhz40, 2) => (40_500, 45_000),
-                    (PpduBandwidth::Mhz40, 3) => (54_000, 60_000),
-                    (PpduBandwidth::Mhz40, 4) => (81_000, 90_000),
-                    (PpduBandwidth::Mhz40, 5) => (108_000, 120_000),
-                    (PpduBandwidth::Mhz40, 6) => (121_500, 135_000),
-                    (PpduBandwidth::Mhz40, _) => (135_000, 150_000),
-                    (_, 0) => (6_500, 7_200),
-                    (_, 1) => (13_000, 14_400),
-                    (_, 2) => (19_500, 21_700),
-                    (_, 3) => (26_000, 28_900),
-                    (_, 4) => (39_000, 43_300),
-                    (_, 5) => (52_000, 57_800),
-                    (_, 6) => (58_500, 65_000),
-                    (_, _) => (65_000, 72_200),
-                };
-                let Some(long_kbps) = long.checked_mul(mcs.spatial_streams() as u32) else {
-                    return None;
-                };
-                let Some(short_kbps) = short.checked_mul(mcs.spatial_streams() as u32) else {
-                    return None;
-                };
-                Some(Self {
-                    mcs,
-                    bandwidth,
-                    short_gi,
-                    long_kbps,
-                    short_kbps,
-                })
-            }
+            PpduBandwidth::Mhz20 | PpduBandwidth::Mhz40 => Some(Self {
+                mcs,
+                bandwidth,
+                short_gi,
+            }),
             PpduBandwidth::Mhz80 | PpduBandwidth::Mhz160 => None,
         }
     }
@@ -180,10 +150,88 @@ impl HtRate {
     /// Tables 19-27 and 19-28, rounded to 100 kb/s as the tables print it,
     /// times the spatial streams.
     pub const fn nominal_kbps(self) -> u32 {
-        if self.short_gi {
-            self.short_kbps
-        } else {
-            self.long_kbps
+        let (long, short, _) = self.parameters();
+        if self.short_gi { short } else { long }
+    }
+
+    /// Tables 19-27/19-28: long/short GI rates and exact N_DBPS.
+    const fn parameters(self) -> (u32, u32, u64) {
+        macro_rules! rate {
+            ($long:literal, $short:literal, $streams:literal) => {
+                const {
+                    (
+                        $long * $streams,
+                        $short * $streams,
+                        $long * $streams * 4 / 1_000,
+                    )
+                }
+            };
+        }
+        match (self.bandwidth, self.mcs.index()) {
+            (PpduBandwidth::Mhz40, 0) => rate!(13_500, 15_000, 1),
+            (PpduBandwidth::Mhz40, 1) => rate!(27_000, 30_000, 1),
+            (PpduBandwidth::Mhz40, 2) => rate!(40_500, 45_000, 1),
+            (PpduBandwidth::Mhz40, 3) => rate!(54_000, 60_000, 1),
+            (PpduBandwidth::Mhz40, 4) => rate!(81_000, 90_000, 1),
+            (PpduBandwidth::Mhz40, 5) => rate!(108_000, 120_000, 1),
+            (PpduBandwidth::Mhz40, 6) => rate!(121_500, 135_000, 1),
+            (PpduBandwidth::Mhz40, 7) => rate!(135_000, 150_000, 1),
+            (PpduBandwidth::Mhz40, 8) => rate!(13_500, 15_000, 2),
+            (PpduBandwidth::Mhz40, 9) => rate!(27_000, 30_000, 2),
+            (PpduBandwidth::Mhz40, 10) => rate!(40_500, 45_000, 2),
+            (PpduBandwidth::Mhz40, 11) => rate!(54_000, 60_000, 2),
+            (PpduBandwidth::Mhz40, 12) => rate!(81_000, 90_000, 2),
+            (PpduBandwidth::Mhz40, 13) => rate!(108_000, 120_000, 2),
+            (PpduBandwidth::Mhz40, 14) => rate!(121_500, 135_000, 2),
+            (PpduBandwidth::Mhz40, 15) => rate!(135_000, 150_000, 2),
+            (PpduBandwidth::Mhz40, 16) => rate!(13_500, 15_000, 3),
+            (PpduBandwidth::Mhz40, 17) => rate!(27_000, 30_000, 3),
+            (PpduBandwidth::Mhz40, 18) => rate!(40_500, 45_000, 3),
+            (PpduBandwidth::Mhz40, 19) => rate!(54_000, 60_000, 3),
+            (PpduBandwidth::Mhz40, 20) => rate!(81_000, 90_000, 3),
+            (PpduBandwidth::Mhz40, 21) => rate!(108_000, 120_000, 3),
+            (PpduBandwidth::Mhz40, 22) => rate!(121_500, 135_000, 3),
+            (PpduBandwidth::Mhz40, 23) => rate!(135_000, 150_000, 3),
+            (PpduBandwidth::Mhz40, 24) => rate!(13_500, 15_000, 4),
+            (PpduBandwidth::Mhz40, 25) => rate!(27_000, 30_000, 4),
+            (PpduBandwidth::Mhz40, 26) => rate!(40_500, 45_000, 4),
+            (PpduBandwidth::Mhz40, 27) => rate!(54_000, 60_000, 4),
+            (PpduBandwidth::Mhz40, 28) => rate!(81_000, 90_000, 4),
+            (PpduBandwidth::Mhz40, 29) => rate!(108_000, 120_000, 4),
+            (PpduBandwidth::Mhz40, 30) => rate!(121_500, 135_000, 4),
+            (PpduBandwidth::Mhz40, _) => rate!(135_000, 150_000, 4),
+            (_, 0) => rate!(6_500, 7_200, 1),
+            (_, 1) => rate!(13_000, 14_400, 1),
+            (_, 2) => rate!(19_500, 21_700, 1),
+            (_, 3) => rate!(26_000, 28_900, 1),
+            (_, 4) => rate!(39_000, 43_300, 1),
+            (_, 5) => rate!(52_000, 57_800, 1),
+            (_, 6) => rate!(58_500, 65_000, 1),
+            (_, 7) => rate!(65_000, 72_200, 1),
+            (_, 8) => rate!(6_500, 7_200, 2),
+            (_, 9) => rate!(13_000, 14_400, 2),
+            (_, 10) => rate!(19_500, 21_700, 2),
+            (_, 11) => rate!(26_000, 28_900, 2),
+            (_, 12) => rate!(39_000, 43_300, 2),
+            (_, 13) => rate!(52_000, 57_800, 2),
+            (_, 14) => rate!(58_500, 65_000, 2),
+            (_, 15) => rate!(65_000, 72_200, 2),
+            (_, 16) => rate!(6_500, 7_200, 3),
+            (_, 17) => rate!(13_000, 14_400, 3),
+            (_, 18) => rate!(19_500, 21_700, 3),
+            (_, 19) => rate!(26_000, 28_900, 3),
+            (_, 20) => rate!(39_000, 43_300, 3),
+            (_, 21) => rate!(52_000, 57_800, 3),
+            (_, 22) => rate!(58_500, 65_000, 3),
+            (_, 23) => rate!(65_000, 72_200, 3),
+            (_, 24) => rate!(6_500, 7_200, 4),
+            (_, 25) => rate!(13_000, 14_400, 4),
+            (_, 26) => rate!(19_500, 21_700, 4),
+            (_, 27) => rate!(26_000, 28_900, 4),
+            (_, 28) => rate!(39_000, 43_300, 4),
+            (_, 29) => rate!(52_000, 57_800, 4),
+            (_, 30) => rate!(58_500, 65_000, 4),
+            (_, _) => rate!(65_000, 72_200, 4),
         }
     }
 }
@@ -262,9 +310,59 @@ pub struct HeRate {
     gi_ltf: HeGiLtf,
     fec: FecCoding,
     dcm: bool,
-    data_numerator: u32,
-    data_denominator: u8,
-    nominal_kbps: u32,
+}
+
+// Full-bandwidth N_SD and modulation/coding of IEEE Std 802.11ax-2021
+// 27.5.1. Each leaf is evaluated at compilation, not on received parameters.
+macro_rules! he_rate_parameters {
+    ($rate:expr, $value:ident) => {{
+        macro_rules! streams {
+            ($numerator:expr, $denominator:literal) => {
+                match ($rate.spatial_streams.0, $rate.dcm) {
+                    (1, false) => $value!($numerator * 1_u64, $denominator * 1_u64),
+                    (1, true) => $value!($numerator * 1_u64, $denominator * 2_u64),
+                    (2, false) => $value!($numerator * 2_u64, $denominator * 1_u64),
+                    (2, true) => $value!($numerator * 2_u64, $denominator * 2_u64),
+                    (3, false) => $value!($numerator * 3_u64, $denominator * 1_u64),
+                    (3, true) => $value!($numerator * 3_u64, $denominator * 2_u64),
+                    (4, false) => $value!($numerator * 4_u64, $denominator * 1_u64),
+                    (4, true) => $value!($numerator * 4_u64, $denominator * 2_u64),
+                    (5, false) => $value!($numerator * 5_u64, $denominator * 1_u64),
+                    (5, true) => $value!($numerator * 5_u64, $denominator * 2_u64),
+                    (6, false) => $value!($numerator * 6_u64, $denominator * 1_u64),
+                    (6, true) => $value!($numerator * 6_u64, $denominator * 2_u64),
+                    (7, false) => $value!($numerator * 7_u64, $denominator * 1_u64),
+                    (7, true) => $value!($numerator * 7_u64, $denominator * 2_u64),
+                    (_, false) => $value!($numerator * 8_u64, $denominator * 1_u64),
+                    (_, true) => $value!($numerator * 8_u64, $denominator * 2_u64),
+                }
+            };
+        }
+        macro_rules! modulation {
+            ($subcarriers:literal) => {
+                match $rate.mcs.0 {
+                    0 => streams!($subcarriers * 1_u64 * 1_u64, 2),
+                    1 => streams!($subcarriers * 2_u64 * 1_u64, 2),
+                    2 => streams!($subcarriers * 2_u64 * 3_u64, 4),
+                    3 => streams!($subcarriers * 4_u64 * 1_u64, 2),
+                    4 => streams!($subcarriers * 4_u64 * 3_u64, 4),
+                    5 => streams!($subcarriers * 6_u64 * 2_u64, 3),
+                    6 => streams!($subcarriers * 6_u64 * 3_u64, 4),
+                    7 => streams!($subcarriers * 6_u64 * 5_u64, 6),
+                    8 => streams!($subcarriers * 8_u64 * 3_u64, 4),
+                    9 => streams!($subcarriers * 8_u64 * 5_u64, 6),
+                    10 => streams!($subcarriers * 10_u64 * 3_u64, 4),
+                    _ => streams!($subcarriers * 10_u64 * 5_u64, 6),
+                }
+            };
+        }
+        match $rate.bandwidth {
+            PpduBandwidth::Mhz20 => modulation!(234_u64),
+            PpduBandwidth::Mhz40 => modulation!(468_u64),
+            PpduBandwidth::Mhz80 => modulation!(980_u64),
+            PpduBandwidth::Mhz160 => modulation!(1_960_u64),
+        }
+    }};
 }
 
 impl HeRate {
@@ -281,47 +379,6 @@ impl HeRate {
         if dcm && (!matches!(mcs.0, 0 | 1 | 3 | 4) || spatial_streams.0 > 2) {
             return None;
         }
-        macro_rules! checked {
-            ($value:expr) => {
-                match $value {
-                    Some(value) => value,
-                    None => return None,
-                }
-            };
-        }
-        let subcarriers: u32 = match bandwidth {
-            PpduBandwidth::Mhz20 => 234,
-            PpduBandwidth::Mhz40 => 468,
-            PpduBandwidth::Mhz80 => 980,
-            PpduBandwidth::Mhz160 => 1_960,
-        };
-        let (bits, numerator, denominator) = match mcs.0 {
-            0 => (1, 1, 2_u8),
-            1 => (2, 1, 2),
-            2 => (2, 3, 4),
-            3 => (4, 1, 2),
-            4 => (4, 3, 4),
-            5 => (6, 2, 3),
-            6 => (6, 3, 4),
-            7 => (6, 5, 6),
-            8 => (8, 3, 4),
-            9 => (8, 5, 6),
-            10 => (10, 3, 4),
-            11 => (10, 5, 6),
-            _ => return None,
-        };
-        let data_numerator = checked!(
-            checked!(checked!(subcarriers.checked_mul(bits)).checked_mul(numerator))
-                .checked_mul(spatial_streams.0 as u32)
-        );
-        let data_denominator = checked!(denominator.checked_mul(if dcm { 2 } else { 1 }));
-        let symbol_ns = checked!(12_800_u64.checked_add(gi_ltf.guard_interval_ns() as u64));
-        let divisor = checked!((data_denominator as u64).checked_mul(symbol_ns));
-        let nominal =
-            checked!(checked!((data_numerator as u64).checked_mul(1_000_000)).checked_div(divisor));
-        if nominal > u32::MAX as u64 {
-            return None;
-        }
         Some(Self {
             mcs,
             spatial_streams,
@@ -329,9 +386,6 @@ impl HeRate {
             gi_ltf,
             fec,
             dcm,
-            data_numerator,
-            data_denominator,
-            nominal_kbps: nominal as u32,
         })
     }
 
@@ -365,12 +419,32 @@ impl HeRate {
     /// 27.5.1), for the full-bandwidth resource unit; DCM halves the data
     /// subcarriers.
     pub const fn nominal_kbps(self) -> u32 {
-        self.nominal_kbps
+        macro_rules! kbps {
+            ($numerator:expr, $denominator:expr) => {
+                match self.gi_ltf {
+                    HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => {
+                        const { ($numerator * 1_000_000 / ($denominator * 13_600)) as u32 }
+                    }
+                    HeGiLtf::Ltf2xGi1600Ns => {
+                        const { ($numerator * 1_000_000 / ($denominator * 14_400)) as u32 }
+                    }
+                    HeGiLtf::Ltf4xGi3200Ns => {
+                        const { ($numerator * 1_000_000 / ($denominator * 16_000)) as u32 }
+                    }
+                }
+            };
+        }
+        he_rate_parameters!(self, kbps)
     }
 
-    /// The exact N_DBPS fraction admitted by the constructor.
+    /// Exact N_DBPS (IEEE Std 802.11ax-2021 27.5.1), including DCM.
     const fn data_bits_per_symbol(self) -> (u64, u64) {
-        (self.data_numerator as u64, self.data_denominator as u64)
+        macro_rules! fraction {
+            ($numerator:expr, $denominator:expr) => {
+                const { ($numerator, $denominator) }
+            };
+        }
+        he_rate_parameters!(self, fraction)
     }
 }
 
@@ -428,7 +502,7 @@ impl PhyRate {
         let (bits, divisor, symbol_ns) = match self {
             Self::Legacy(_) => return None,
             Self::Ht(rate) => (
-                checked!((rate.long_kbps as u64).checked_mul(4)) / 1_000,
+                rate.parameters().2,
                 1_u64,
                 if rate.short_gi { 3_600 } else { 4_000 },
             ),
@@ -485,6 +559,7 @@ impl PhyRate {
                 ))))
             }
             Self::Legacy(rate) => {
+                // N_DBPS: the rate times the 4 us symbol (17.4.3).
                 let bits_per_symbol = checked!((rate.kbps() as u64).checked_mul(4)) / 1_000;
                 let symbols = checked!(ceil_div(
                     checked!(checked!(16_u64.checked_add(psdu_bits)).checked_add(6)),
@@ -496,8 +571,11 @@ impl PhyRate {
                 )
             }
             Self::Ht(rate) => {
-                let bits_per_symbol = checked!((rate.long_kbps as u64).checked_mul(4)) / 1_000;
+                // N_DBPS uses long GI; short GI changes symbol time, not bits
+                // (IEEE Std 802.11-2020 19.4.3, Tables 19-27/19-28).
+                let bits_per_symbol = rate.parameters().2;
                 let streams = rate.mcs.spatial_streams() as u64;
+                // One BCC encoder per 300 Mb/s (19.4.3).
                 let encoders = checked!(ceil_div(rate.nominal_kbps() as u64, 300_000));
                 let symbols = checked!(ceil_div(
                     checked!(
@@ -506,6 +584,7 @@ impl PhyRate {
                     ),
                     bits_per_symbol
                 ));
+                // 3.6 us symbols, the PPDU rounded up to 4 us (19.4.3).
                 let data = if rate.short_gi {
                     checked!(
                         4_u64.checked_mul(checked!(ceil_div(checked!(symbols.checked_mul(9)), 10)))
@@ -513,6 +592,7 @@ impl PhyRate {
                 } else {
                     checked!(4_u64.checked_mul(symbols))
                 };
+                // L-STF, L-LTF, L-SIG, HT-SIG, HT-STF and HT-LTFs (19.4.3).
                 let ltfs = if streams > 2 { 4 } else { streams };
                 checked!(
                     checked!(
@@ -527,11 +607,14 @@ impl PhyRate {
             Self::He(rate) => {
                 let (numerator, denominator) = rate.data_bits_per_symbol();
                 let streams = rate.spatial_streams.0 as u64;
+                // BCC tail bound: one encoder per 600 Mb/s (802.11ax-2021 27.4.3).
                 let encoders = checked!(ceil_div(rate.nominal_kbps() as u64, 600_000));
                 let bits = checked!(
                     checked!(16_u64.checked_add(psdu_bits))
                         .checked_add(checked!(6_u64.checked_mul(encoders)))
                 );
+                // Symbols: SERVICE, PSDU and BCC tails over exact N_DBPS,
+                // rounded up (27.4.3).
                 let symbols =
                     checked!(ceil_div(checked!(bits.checked_mul(denominator)), numerator));
                 let guard_ns = rate.gi_ltf.guard_interval_ns() as u64;
@@ -541,6 +624,8 @@ impl PhyRate {
                     HeGiLtf::Ltf4xGi3200Ns => 12_800,
                 };
                 let ltf_ns = checked!(ltf.checked_add(guard_ns));
+                // L-STF, L-LTF, L-SIG, RL-SIG, HE-SIG-A, HE-STF, then
+                // HE-LTFs and data symbols (27.4.3).
                 let ns = checked!(
                     checked!(36_000_u64.checked_add(checked!(
                         (if streams > 2 { 4 } else { streams }).checked_mul(ltf_ns)

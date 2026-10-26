@@ -182,3 +182,105 @@ fn unrepresentable_airtime_is_an_error_instead_of_a_truncated_duration() {
     assert!(rate.max_ppdu_duration_micros(last).is_some());
     assert_eq!(rate.max_ppdu_duration_micros(last + 1), None);
 }
+
+#[test]
+fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
+    // Independent arithmetic oracle for Tables 19-27/19-28, including the
+    // tables' single-stream SGI rounding before multiplication by N_SS.
+    let ht_rows = [
+        (
+            PpduBandwidth::Mhz20,
+            [
+                6_500, 13_000, 19_500, 26_000, 39_000, 52_000, 58_500, 65_000,
+            ],
+            [
+                7_200, 14_400, 21_700, 28_900, 43_300, 57_800, 65_000, 72_200,
+            ],
+        ),
+        (
+            PpduBandwidth::Mhz40,
+            [
+                13_500, 27_000, 40_500, 54_000, 81_000, 108_000, 121_500, 135_000,
+            ],
+            [
+                15_000, 30_000, 45_000, 60_000, 90_000, 120_000, 135_000, 150_000,
+            ],
+        ),
+    ];
+    for (bandwidth, long, short) in ht_rows {
+        for index in 0..32 {
+            for short_gi in [false, true] {
+                let rate = HtRate::new(HtMcs::new(index).unwrap(), bandwidth, short_gi).unwrap();
+                let streams = u32::from(index / 8 + 1);
+                let row = if short_gi { short } else { long };
+                assert_eq!(rate.nominal_kbps(), row[usize::from(index % 8)] * streams);
+                assert_eq!(
+                    rate.parameters().2,
+                    u64::from(long[usize::from(index % 8)] * streams * 4 / 1_000)
+                );
+            }
+        }
+    }
+
+    // N_SD, N_BPSCS and coding fractions of 802.11ax-2021 27.5.1.
+    let modulation = [
+        (1, 1, 2),
+        (2, 1, 2),
+        (2, 3, 4),
+        (4, 1, 2),
+        (4, 3, 4),
+        (6, 2, 3),
+        (6, 3, 4),
+        (6, 5, 6),
+        (8, 3, 4),
+        (8, 5, 6),
+        (10, 3, 4),
+        (10, 5, 6),
+    ];
+    for (bandwidth, subcarriers) in [
+        (PpduBandwidth::Mhz20, 234_u64),
+        (PpduBandwidth::Mhz40, 468),
+        (PpduBandwidth::Mhz80, 980),
+        (PpduBandwidth::Mhz160, 1_960),
+    ] {
+        for index in 0..12 {
+            for streams in 1..=8 {
+                for gi in [
+                    HeGiLtf::Ltf1xGi800Ns,
+                    HeGiLtf::Ltf2xGi800Ns,
+                    HeGiLtf::Ltf2xGi1600Ns,
+                    HeGiLtf::Ltf4xGi3200Ns,
+                ] {
+                    for dcm in [false, true] {
+                        for fec in [FecCoding::Bcc, FecCoding::Ldpc] {
+                            let rate = HeRate::new(
+                                HeMcs::new(index).unwrap(),
+                                SpatialStreams::new(streams).unwrap(),
+                                bandwidth,
+                                gi,
+                                fec,
+                                dcm,
+                            );
+                            if dcm && (!matches!(index, 0 | 1 | 3 | 4) || streams > 2) {
+                                assert!(rate.is_none());
+                                continue;
+                            }
+                            let rate = rate.unwrap();
+                            let (bits, coding_numerator, coding_denominator) =
+                                modulation[usize::from(index)];
+                            let numerator =
+                                subcarriers * bits * coding_numerator * u64::from(streams);
+                            let denominator = coding_denominator * if dcm { 2 } else { 1 };
+                            assert_eq!(rate.data_bits_per_symbol(), (numerator, denominator));
+                            assert_eq!(
+                                u64::from(rate.nominal_kbps()),
+                                numerator * 1_000_000
+                                    / (denominator * (12_800 + u64::from(gi.guard_interval_ns())))
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

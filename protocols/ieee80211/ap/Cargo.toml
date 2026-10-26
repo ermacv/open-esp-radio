@@ -14,5 +14,8 @@ oer-ieee80211-wire = { path = "../wire" }
 oer-ieee80211-rsn = { path = "../rsn" }
 oer-time = { path = "../../../portable/time" }
 
+[dev-dependencies]
+oer-wire = { path = "../../../portable/wire" }
+
 [lints]
 workspace = true

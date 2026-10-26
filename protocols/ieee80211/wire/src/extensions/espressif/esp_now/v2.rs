@@ -162,6 +162,11 @@ impl<'payload> Iterator for EspNowV2Elements<'payload> {
 impl ExactSizeIterator for EspNowV2Elements<'_> {}
 impl core::iter::FusedIterator for EspNowV2Elements<'_> {}
 
+// The admitted wire maximum proves both retained lengths fit in u16.
+const _: () = {
+    assert!(ESP_NOW_V2_MAX_MPDU_LEN <= u16::MAX as usize);
+};
+
 /// Strictly validated ESP-NOW v2 vendor Action body.
 ///
 /// A newly constructed value borrows one contiguous application payload. A
@@ -174,8 +179,8 @@ pub struct EspNowV2Action<'payload> {
     content: EspNowV2ActionContent<'payload>,
     payload_length: usize,
     element_count: usize,
-    encoded_length: usize,
-    frame_length: usize,
+    encoded_length: u16,
+    frame_length: u16,
 }
 
 impl<'payload> EspNowV2Action<'payload> {
@@ -214,8 +219,8 @@ impl<'payload> EspNowV2Action<'payload> {
             content: EspNowV2ActionContent::Contiguous(payload),
             payload_length: payload.len(),
             element_count,
-            encoded_length,
-            frame_length,
+            encoded_length: encoded_length as u16,
+            frame_length: frame_length as u16,
         })
     }
 
@@ -236,7 +241,7 @@ impl<'payload> EspNowV2Action<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        self.encoded_length
+        self.encoded_length as usize
     }
 
     pub const fn elements(self) -> EspNowV2Elements<'payload> {
@@ -473,17 +478,17 @@ impl<'payload> EspNowV2Action<'payload> {
             content: EspNowV2ActionContent::EncodedElements(elements),
             payload_length,
             element_count,
-            encoded_length: ESP_NOW_V2_ACTION_PREFIX_LEN
+            encoded_length: (ESP_NOW_V2_ACTION_PREFIX_LEN
                 .checked_add(elements.len())
                 .ok_or(EspNowV2WireError::PayloadTooLong {
                     length: payload_length,
-                })?,
-            frame_length: ESP_NOW_V2_ACTION_PREFIX_LEN
+                })?) as u16,
+            frame_length: (ESP_NOW_V2_ACTION_PREFIX_LEN
                 .checked_add(elements.len())
                 .and_then(|length| ESP_NOW_MANAGEMENT_HEADER_LEN.checked_add(length))
                 .ok_or(EspNowV2WireError::PayloadTooLong {
                     length: payload_length,
-                })?,
+                })?) as u16,
         })
     }
 }
@@ -548,7 +553,7 @@ impl<'payload> EspNowV2Frame<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        self.action.frame_length
+        self.action.frame_length as usize
     }
 
     /// Encode an Action MPDU with broadcast BSSID and no FCS.

@@ -323,13 +323,21 @@ impl<'payload> EspNowV1Payload<'payload> {
     }
 }
 
+// The admitted wire maximum proves both retained lengths fit in u16.
+const _: () = {
+    assert!(
+        ESP_NOW_MANAGEMENT_HEADER_LEN + ESP_NOW_V1_ACTION_OVERHEAD + ESP_NOW_V1_MAX_PAYLOAD_LEN
+            <= u16::MAX as usize
+    );
+};
+
 /// Strictly validated ESP-NOW v1 vendor Action body.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EspNowV1Action<'payload> {
     random_value: EspNowRandomValue,
     payload: EspNowV1Payload<'payload>,
-    encoded_length: usize,
-    frame_length: usize,
+    encoded_length: u16,
+    frame_length: u16,
 }
 
 impl<'payload> EspNowV1Action<'payload> {
@@ -354,8 +362,8 @@ impl<'payload> EspNowV1Action<'payload> {
         Ok(Self {
             random_value,
             payload,
-            encoded_length,
-            frame_length,
+            encoded_length: encoded_length as u16,
+            frame_length: frame_length as u16,
         })
     }
 
@@ -368,7 +376,7 @@ impl<'payload> EspNowV1Action<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        self.encoded_length
+        self.encoded_length as usize
     }
 
     /// Encode category, action OUI, random value and exactly one v1 vendor IE.
@@ -534,7 +542,7 @@ impl<'payload> EspNowV1Frame<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        self.action.frame_length
+        self.action.frame_length as usize
     }
 
     /// Encode an Action MPDU with broadcast BSSID and no FCS.

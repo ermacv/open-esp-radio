@@ -68,12 +68,22 @@ pub enum StationFrameError {
     TooManySupportedRates,
     NoAmsduFrames,
     EthernetFrameTooShort,
-    AmsduTooLong { length: usize, maximum: usize },
+    /// An external length or offset cannot be represented.
+    LengthOverflow,
+    AmsduTooLong {
+        length: usize,
+        maximum: usize,
+    },
     UserPriorityOutOfRange,
     HeControlRequiresQos,
     AmsduRequiresQos,
-    EthernetHeadroomTooSmall { required: usize, available: usize },
-    OutputTooSmall { required: usize },
+    EthernetHeadroomTooSmall {
+        required: usize,
+        available: usize,
+    },
+    OutputTooSmall {
+        required: usize,
+    },
 }
 
 pub mod association;

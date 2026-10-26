@@ -1025,6 +1025,18 @@ fn in_place_station_encoders_reject_hostile_ranges_before_writing() {
         );
         assert_eq!(storage, [0xa5; 64]);
     }
+    for (offset, length) in [(usize::MAX, 14), (1, usize::MAX)] {
+        let mut storage = [0xa5; 64];
+        assert_eq!(
+            frame.encode_in_place(&mut storage, offset, length, DataHeControl::Disabled),
+            Err(StationFrameError::LengthOverflow)
+        );
+        assert_eq!(
+            frame.encode_amsdu_pair_in_place(&mut storage, offset, length, &[0; 14]),
+            Err(StationFrameError::LengthOverflow)
+        );
+        assert_eq!(storage, [0xa5; 64]);
+    }
     let mut storage = [0xa5; 64];
     assert!(
         frame
