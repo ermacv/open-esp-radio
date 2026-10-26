@@ -17,9 +17,9 @@
 //!   cores' owner, or its own hart's path it interrupted) does not wait
 //!   for them.
 //!
-//! A fatal path is the only one that gets a [`Fatal`]: the staged runtime's
-//! fatal entries make it after masking the hart's interrupts, and the path
-//! never returns to the code it interrupted ([`fatal`]). With it,
+//! A fatal path is the only one that gets a [`Fatal`]: [`fatal`] masks the
+//! hart's interrupts before lending it, then halts if the path returns.
+//! The path never returns to the code it interrupted. With it,
 //! [`stop_the_world`] takes the words, stops the other hart and confirms it:
 //! the hardware's stall status, or core 1 held in reset with its clock
 //! gated. A stall the hardware does not confirm within [`STALL_POLLS`] is a
@@ -361,8 +361,8 @@ pub enum Hart1 {
     Released,
 }
 
-/// Proof that this hart runs a fatal path: its interrupts masked, it never
-/// returns to the code it interrupted, and it stays on this hart (not
+/// Proof that this hart runs a fatal path: interrupts were masked at entry,
+/// it never returns to the code it interrupted, and it stays on this hart (not
 /// `Send`). Only [`fatal`] makes one, and the proof does not leave the
 /// closure it is lent to.
 pub struct Fatal<'a> {
@@ -378,20 +378,56 @@ impl Fatal<'_> {
     }
 }
 
-/// Lend `fatal_path` the proof that this hart runs a fatal path.
-///
-/// # Safety
-/// Call only from a fatal path of the current hart that masked the hart's
-/// interrupts (the CLIC threshold at its maximum, then `mstatus.MIE` clear)
-/// and that, after `fatal_path` returns, halts the hart or resets the chip
-/// without unmasking them or returning to the code it interrupted.
-#[allow(unsafe_code, reason = "the fatal-path contract of the token")]
-pub unsafe fn fatal<T>(fatal_path: impl for<'a> FnOnce(Fatal<'a>) -> T) -> T {
+/// Mask this hart (the CLIC threshold at its maximum, then `mstatus.MIE`
+/// clear), lend `fatal_path` its proof, then halt if it returns. The path
+/// keeps interrupts masked while preparing its record and reset. This is
+/// a correctness requirement; the proof grants no peripheral takeover.
+pub fn fatal(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
+    fatal_with(
+        || {
+            #[cfg(target_arch = "riscv32")]
+            let _ = oer_riscv::swap_interrupt_threshold(u8::MAX);
+        },
+        || {
+            #[cfg(target_arch = "riscv32")]
+            oer_riscv::disable_interrupts();
+        },
+        fatal_path,
+        || {
+            #[cfg(target_arch = "riscv32")]
+            oer_riscv::disable_interrupts();
+            loop {
+                #[cfg(target_arch = "riscv32")]
+                oer_riscv::wait_for_interrupt();
+                #[cfg(not(target_arch = "riscv32"))]
+                #[allow(
+                    clippy::disallowed_methods,
+                    reason = "the host has no WFI; this fatal path is terminal"
+                )]
+                core::hint::spin_loop();
+            }
+        },
+    )
+}
+
+/// Keep the mask, record/reset and terminal wait in order; host tests supply
+/// a local hart model and a terminal observer.
+fn fatal_with(
+    mask_threshold: impl FnOnce(),
+    disable_interrupts: impl FnOnce(),
+    fatal_path: impl for<'a> FnOnce(Fatal<'a>),
+    halt: impl FnOnce() -> core::convert::Infallible,
+) -> ! {
+    mask_threshold();
+    disable_interrupts();
+    // No access of the fatal path moves before the mask.
+    core::sync::atomic::compiler_fence(Ordering::SeqCst);
     fatal_path(Fatal {
         hart: current_hart(),
         _path: PhantomData,
         _hart: PhantomData,
-    })
+    });
+    match halt() {}
 }
 
 /// Why a fatal path did not stop the world.

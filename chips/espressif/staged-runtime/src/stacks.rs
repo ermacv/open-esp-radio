@@ -81,21 +81,12 @@ const IRQ_STACK_GUARD_TRIGGER: usize = 2;
 const TASK_STACK_GUARD_TRIGGER: usize = 0;
 
 #[cfg(target_arch = "riscv32")]
-// SAFETY: the runtime linker script and generated vectors define these
-// address markers. Zero-sized byte arrays read no code, stack memory or
-// memory at an absolute symbol's value.
-unsafe extern "C" {
-    safe static _runtime_mtvt: [u8; 0];
-    safe static _start_trap: [u8; 0];
-    safe static __runtime_cpu0_irq_stack_bottom: [u8; 0];
-    safe static __runtime_cpu0_irq_stack_top: [u8; 0];
-    safe static __runtime_cpu0_irq_stack_guard_bytes: [u8; 0];
-    safe static __runtime_cpu1_irq_stack_bottom: [u8; 0];
-    safe static __runtime_cpu1_irq_stack_top: [u8; 0];
-    safe static __runtime_cpu1_irq_stack_guard_bytes: [u8; 0];
-    safe static __runtime_cpu0_task_stack_bottom: [u8; 0];
-    safe static __runtime_cpu0_task_stack_top: [u8; 0];
-}
+use crate::layout::{
+    __runtime_cpu0_irq_stack_bottom, __runtime_cpu0_irq_stack_guard_bytes,
+    __runtime_cpu0_irq_stack_top, __runtime_cpu0_task_stack_bottom, __runtime_cpu0_task_stack_top,
+    __runtime_cpu1_irq_stack_bottom, __runtime_cpu1_irq_stack_guard_bytes,
+    __runtime_cpu1_irq_stack_top, _runtime_mtvt, _start_trap,
+};
 
 /// `hart`'s interrupt stack as `bottom..top`; `None` for a hart without one.
 #[cfg(target_arch = "riscv32")]

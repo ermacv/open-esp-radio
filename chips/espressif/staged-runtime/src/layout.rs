@@ -5,8 +5,9 @@ use core::ops::Range;
 use core::ptr::addr_of;
 
 #[allow(unsafe_code, reason = "the linker script symbols")]
-// SAFETY: the runtime linker script defines these address markers. Zero-sized
-// byte arrays permit safe access without reading memory at their addresses.
+// SAFETY: the runtime linker script and generated vectors define these address
+// markers. Zero-sized byte arrays read no code, stack memory or memory at an
+// absolute symbol's value.
 unsafe extern "C" {
     safe static __runtime_image_start: [u8; 0];
     safe static __runtime_payload_end: [u8; 0];
@@ -23,12 +24,18 @@ unsafe extern "C" {
     safe static __runtime_dma_data_end: [u8; 0];
     safe static __runtime_dma_bss_start: [u8; 0];
     safe static __runtime_dma_bss_end: [u8; 0];
-    safe static __runtime_cpu0_irq_stack_bottom: [u8; 0];
-    safe static __runtime_cpu0_irq_stack_top: [u8; 0];
-    safe static __runtime_cpu1_irq_stack_bottom: [u8; 0];
-    safe static __runtime_cpu1_irq_stack_top: [u8; 0];
-    safe static _stack_end: [u8; 0];
+    pub(crate) safe static __runtime_cpu0_irq_stack_bottom: [u8; 0];
+    pub(crate) safe static __runtime_cpu0_irq_stack_top: [u8; 0];
+    pub(crate) safe static __runtime_cpu1_irq_stack_bottom: [u8; 0];
+    pub(crate) safe static __runtime_cpu1_irq_stack_top: [u8; 0];
+    pub(crate) safe static _stack_end: [u8; 0];
     safe static _stack_start: [u8; 0];
+    pub(crate) safe static _runtime_mtvt: [u8; 0];
+    pub(crate) safe static _start_trap: [u8; 0];
+    pub(crate) safe static __runtime_cpu0_irq_stack_guard_bytes: [u8; 0];
+    pub(crate) safe static __runtime_cpu1_irq_stack_guard_bytes: [u8; 0];
+    pub(crate) safe static __runtime_cpu0_task_stack_bottom: [u8; 0];
+    pub(crate) safe static __runtime_cpu0_task_stack_top: [u8; 0];
 }
 
 /// The linked image's sections and stacks, as address ranges.

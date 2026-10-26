@@ -2188,6 +2188,7 @@ version = "0.1.0"
 name = "oer-espressif-staged-runtime"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "critical-section",
  "oer-diagnostics",
  "oer-esp32s31-hal",

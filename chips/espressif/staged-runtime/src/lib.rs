@@ -86,6 +86,9 @@ pub use oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping;
 #[doc(hidden)]
 pub use oer_memory as __memory;
 
+#[doc(hidden)]
+pub use oer_espressif_staged_layout::handoff::StageTwoHandoff as __StageTwoHandoff;
+
 /// A refused stage-two interrupt installation or enable. The image reports
 /// this through its existing boot-failure path, with interrupts disabled.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -140,15 +143,9 @@ pub struct Handoff {
 
 impl Handoff {
     #[doc(hidden)]
-    /// # Safety
-    /// Only [`entry!`]'s `runtime_main` calls it, once, before anything else.
-    #[allow(unsafe_code, reason = "forwards the stage-two handoff proof")]
-    pub const unsafe fn __new() -> Self {
-        Self {
-            // SAFETY: forwarded unchanged from this function's contract,
-            // which is the proof's.
-            proof: unsafe { oer_espressif_staged_layout::handoff::StageTwoHandoff::new() },
-        }
+    /// Wrap the proof minted by [`entry!`].
+    pub const fn from_proof(proof: oer_espressif_staged_layout::handoff::StageTwoHandoff) -> Self {
+        Self { proof }
     }
 
     /// Adopt the bootstrap's PSRAM mapping through `board` and install the
@@ -187,16 +184,10 @@ impl Handoff {
         // running hart, which has not admitted one.
         unsafe { stacks::install_current_hart_interrupt_stack() }?;
         let router = oer_interrupt_table::Router::install(controller, interrupt_table)?;
-        // SAFETY: the runtime linker script defines this stack boundary.
-        // The zero-sized byte array permits safe access without reading
-        // stack memory.
-        unsafe extern "C" {
-            safe static _stack_end: [u8; 0];
-        }
         // Interrupts are disabled and trigger 0 is the runtime's;
         // `_stack_end` is the word-aligned bottom of the CPU0 task stack the
         // runtime linker script places.
-        stacks::watch_task_stack(core::ptr::addr_of!(_stack_end) as usize)?;
+        stacks::watch_task_stack(core::ptr::addr_of!(layout::_stack_end) as usize)?;
         Ok((mapping, Adopted { router }))
     }
 }
@@ -262,12 +253,15 @@ pub fn halt() -> ! {
 #[macro_export]
 macro_rules! entry {
     ($main:path) => {
+        // SAFETY: `_runtime_start` calls this one image entry with the C ABI;
+        // defining a second `runtime_main` fails the link.
         #[unsafe(no_mangle)]
         extern "C" fn runtime_main() -> ! {
             // SAFETY: `_runtime_start` calls `runtime_main` once on CPU0,
             // after initializing the SRAM sections, with interrupts disabled
             // and the bootstrap's mapping intact; this is its first statement.
-            let handoff = unsafe { $crate::Handoff::__new() };
+            let proof = unsafe { $crate::__StageTwoHandoff::new() };
+            let handoff = $crate::Handoff::from_proof(proof);
             $main(handoff)
         }
     };

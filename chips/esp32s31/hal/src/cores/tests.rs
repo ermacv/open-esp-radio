@@ -17,6 +17,41 @@ use super::{
 
 type HostRegisters<'a> = CoreControlRegisters<Host<'a>, Host<'a>, Host<'a>, Host<'a>, Host<'a>>;
 
+#[test]
+fn fatal_masks_before_lending_its_hart_and_halts_after_the_path() {
+    use core::cell::{Cell, RefCell};
+    use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+
+    let threshold = Cell::new(0_u8);
+    let mie = Cell::new(true);
+    let steps = RefCell::new(Vec::new());
+    let terminal = catch_unwind(AssertUnwindSafe(|| {
+        super::fatal_with(
+            || {
+                threshold.set(u8::MAX);
+                steps.borrow_mut().push("threshold");
+            },
+            || {
+                assert_eq!(threshold.get(), u8::MAX);
+                mie.set(false);
+                steps.borrow_mut().push("disable");
+            },
+            |fatal| {
+                assert_eq!((threshold.get(), mie.get()), (u8::MAX, false));
+                assert_eq!(fatal.hart(), HpCore::Core0);
+                steps.borrow_mut().push("path");
+            },
+            || {
+                assert_eq!((threshold.get(), mie.get()), (u8::MAX, false));
+                steps.borrow_mut().push("halt");
+                resume_unwind(std::boxed::Box::new(()))
+            },
+        )
+    }));
+    assert!(terminal.is_err(), "the terminal observer was reached");
+    assert_eq!(*steps.borrow(), ["threshold", "disable", "path", "halt"]);
+}
+
 /// Host memory of the five blocks; the stall status reads `status_fill`.
 struct Memory([Vec<u32>; 5]);
 
