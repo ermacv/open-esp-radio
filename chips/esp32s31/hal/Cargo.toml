@@ -29,7 +29,6 @@ oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-riscv = { path = "../../../portable/riscv" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 pin-project = "1.1.13"
-vcell = "0.1.3"
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-memory = { path = "../../../portable/memory" }

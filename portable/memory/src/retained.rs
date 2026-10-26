@@ -29,14 +29,8 @@ impl<T: AnyBitPattern> RetainedStorage<T> {
     /// Storage with an all-zero initializer, which a NOLOAD section never
     /// loads: the record keeps what the previous boot left.
     #[allow(clippy::new_without_default)]
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "AnyBitPattern proves all-zero bytes valid for retained storage"
-    )]
     pub const fn new() -> Self {
-        // SAFETY: an `AnyBitPattern` type is `Zeroable`: all zero bytes are
-        // one of its values.
-        Self(UnsafeCell::new(unsafe { core::mem::zeroed() }))
+        Self(UnsafeCell::new(bytemuck::zeroed()))
     }
 }
 

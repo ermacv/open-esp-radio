@@ -51,17 +51,11 @@ fn frame_mut<const HEADROOM: usize>(storage: &mut [u8], length: usize) -> &mut [
 }
 
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 struct PinnedTxBytes<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> {
     headroom: [u8; HEADROOM],
     ethernet: [u8; FRAME_CAPACITY],
     trailer: [u8; TRAILER],
-}
-
-#[allow(unsafe_code, reason = "byte arrays are zero-valid")]
-// SAFETY: three `u8` arrays.
-unsafe impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
-    bytemuck::Zeroable for PinnedTxBytes<FRAME_CAPACITY, HEADROOM, TRAILER>
-{
 }
 
 impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
@@ -77,6 +71,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
 }
 
 #[repr(C, align(16))]
+#[derive(bytemuck::Zeroable)]
 struct PinnedTxSlot<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> {
     bytes: UnsafeCell<PinnedTxBytes<FRAME_CAPACITY, HEADROOM, TRAILER>>,
     // Hardware only owns `bytes`. Keep a checked boundary before CPU-only
@@ -85,14 +80,6 @@ struct PinnedTxSlot<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TR
     dma_overrun_guard: UnsafeCell<[u8; DMA_OVERRUN_GUARD_SIZE]>,
     length: AtomicUsize,
     state: AtomicU8,
-}
-
-#[allow(unsafe_code, reason = "a free slot is zero bytes")]
-// SAFETY: zero-valid cells of byte arrays, a zero length and state 0,
-// `SLOT_FREE`; the guard is installed by `pin_static`.
-unsafe impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
-    bytemuck::Zeroable for PinnedTxSlot<FRAME_CAPACITY, HEADROOM, TRAILER>
-{
 }
 
 impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
@@ -264,7 +251,10 @@ pub struct PinnedDmaTxPool<
 
 fn coherent_dma_read(_: &mut [u8]) {}
 
-#[allow(unsafe_code, reason = "the free pool is zero bytes")]
+#[allow(
+    unsafe_code,
+    reason = "Zeroable derive cannot express the higher-ranked optional prepare hook"
+)]
 // SAFETY: free slots, a `None` prepare hook (the null niche of
 // `Option<fn>`, coherent memory) and a zero-sized pin marker.
 unsafe impl<

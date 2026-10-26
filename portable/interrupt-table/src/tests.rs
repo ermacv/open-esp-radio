@@ -91,8 +91,9 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
 // The only test that takes the tokens and binds: both are once per image.
 #[test]
 fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
+    // SAFETY: the test table defines this safe C ABI handler.
     unsafe extern "C" {
-        fn __oer_interrupt_h0_l16();
+        safe fn __oer_interrupt_h0_l16();
     }
     let tokens = Interrupts::take().unwrap();
     assert!(Interrupts::take().is_none());
@@ -114,9 +115,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
 
     // Before its binding the timer's handler finds no part and runs nothing.
     assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
-    // SAFETY: the table's handler of line 16 takes no arguments and only
-    // borrows the timer's cell.
-    unsafe { __oer_interrupt_h0_l16() };
+    __oer_interrupt_h0_l16();
 
     let _bound: crate::Bound<TimerIrq> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
     assert_eq!(crate::Bound::<TimerIrq>::SOURCE, 3);
@@ -138,11 +137,8 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         <TimerToken as Entry>::cell().with(|part| part.handled),
         Some(0)
     );
-    // SAFETY: as above; the cell now lends the part to `on_timer`.
-    unsafe {
-        __oer_interrupt_h0_l16();
-        __oer_interrupt_h0_l16();
-    }
+    __oer_interrupt_h0_l16();
+    __oer_interrupt_h0_l16();
     // Each call of the line's symbol ran the entry's handler on the bound
     // part once.
     assert_eq!(
@@ -152,8 +148,9 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
 
     // The pair's entry writes its line once, then routes both sources to
     // it; its line's symbol runs its handler on the bound part.
+    // SAFETY: the test table defines this safe C ABI handler.
     unsafe extern "C" {
-        fn __oer_interrupt_h0_l18();
+        safe fn __oer_interrupt_h0_l18();
     }
     let before = zero.controller.writes.len();
     let _bound: crate::Bound<PairIrq> = zero.bind(tokens.pair, PairIrq::default()).unwrap();
@@ -175,9 +172,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         ]
     );
     zero.verify().unwrap();
-    // SAFETY: the table's handler of line 18 takes no arguments and only
-    // borrows the pair's cell.
-    unsafe { __oer_interrupt_h0_l18() };
+    __oer_interrupt_h0_l18();
     assert_eq!(
         <PairToken as Entry>::cell().with(|part| part.handled),
         Some(1)

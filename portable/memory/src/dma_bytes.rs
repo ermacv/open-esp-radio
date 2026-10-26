@@ -12,6 +12,7 @@ use core::cell::UnsafeCell;
 /// and writes `&mut self`: the only concurrent writer is the hardware, which
 /// is outside the program's memory model.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub struct DmaBytes<const N: usize>(UnsafeCell<[u8; N]>);
 
 impl<const N: usize> DmaBytes<N> {
@@ -77,9 +78,6 @@ impl<const N: usize> Default for DmaBytes<N> {
 // SAFETY: a shared reference only reads, with volatile copies; writing takes
 // `&mut self`, so no two CPU contexts race.
 unsafe impl<const N: usize> Sync for DmaBytes<N> {}
-
-// SAFETY: a cell of bytes; all zero is the value `new` builds.
-unsafe impl<const N: usize> bytemuck::Zeroable for DmaBytes<N> {}
 
 #[cfg(test)]
 mod tests {

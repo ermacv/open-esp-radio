@@ -171,3 +171,41 @@ fn timed_records_each_poll_and_returns_the_output() {
     assert_eq!(snapshot.percentile(34), Some(43));
     assert_eq!(snapshot.count_over(39).exact(), Some(2));
 }
+
+#[test]
+fn timed_keeps_a_non_unpin_future_at_its_first_poll_address() {
+    struct PinnedFuture {
+        first_address: Cell<*const Self>,
+        _pin: core::marker::PhantomPinned,
+    }
+
+    impl Future for PinnedFuture {
+        type Output = ();
+
+        fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<()> {
+            let this = self.as_ref().get_ref();
+            let address = core::ptr::from_ref(this);
+            if this.first_address.get().is_null() {
+                this.first_address.set(address);
+                Poll::Pending
+            } else {
+                assert_eq!(this.first_address.get(), address);
+                Poll::Ready(())
+            }
+        }
+    }
+
+    static POLLS: CycleHistogram = CycleHistogram::new();
+    let mut timed = pin!(Timed::new(
+        PinnedFuture {
+            first_address: Cell::new(core::ptr::null()),
+            _pin: core::marker::PhantomPinned,
+        },
+        &POLLS,
+        FakeCycles(Cell::new(0)),
+    ));
+    let mut context = Context::from_waker(Waker::noop());
+    assert_eq!(timed.as_mut().poll(&mut context), Poll::Pending);
+    assert_eq!(timed.as_mut().poll(&mut context), Poll::Ready(()));
+    assert_eq!(POLLS.snapshot().count(), 2);
+}

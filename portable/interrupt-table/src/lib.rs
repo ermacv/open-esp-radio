@@ -116,7 +116,7 @@ pub struct Binding {
     pub hart: u8,
     /// The function the line's vector calls; `None` (a zero word) for an
     /// entry a `cfg` leaves out of the image.
-    pub handler: Option<unsafe extern "C" fn()>,
+    pub handler: Option<extern "C" fn()>,
 }
 
 const _: () = {
@@ -456,11 +456,13 @@ macro_rules! interrupt_table {
                     handler: {
                         #[cfg(all($($cfg),*))]
                         let handler = ::core::option::Option::Some({
+                            // SAFETY: `__interrupt_handler!` defines this exact C ABI
+                            // symbol without a memory-safety precondition on the caller.
                             unsafe extern "C" {
                                 #[link_name = concat!("__oer_interrupt_h", $hart, "_l", $line)]
-                                fn handler();
+                                safe fn handler();
                             }
-                            handler as unsafe extern "C" fn()
+                            handler as extern "C" fn()
                         });
                         #[cfg(not(all($($cfg),*)))]
                         let handler = ::core::option::Option::None;
