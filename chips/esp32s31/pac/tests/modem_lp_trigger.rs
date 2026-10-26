@@ -9,12 +9,13 @@ use oer_esp32s31_pac::{
 fn mode_trigger_preserves_every_other_bit_of_the_fresh_read() {
     let mut memory = vec![0; instances::modem_pwr::SIZE / size_of::<u32>()];
     let slot = mode::OFFSET / size_of::<u32>();
-    // Include opaque and read-only lanes; the trigger may not manufacture
-    // another image for them. Start with its own trigger lane clear.
-    let inherited = 0xa5a5_5a5a & !mode::CONTROL_1_MASK;
+    // Include an asserted read-only CONTROL_2, as observed on silicon, and
+    // opaque lanes. Start with the trigger lane clear; preserve all others.
+    let inherited = (0xa5a5_5a5a | mode::CONTROL_2_MASK) & !mode::CONTROL_1_MASK;
     memory[slot] = inherited;
     {
         let mut owner = BtdmRuntimeControl::host(&mut memory).expect("owned host aperture");
+        assert!(owner.read_word_0058_opaque().control_2());
         owner.trigger_word_0058_opaque_control_1();
     }
     assert_eq!(memory[slot], inherited | mode::CONTROL_1_MASK);
