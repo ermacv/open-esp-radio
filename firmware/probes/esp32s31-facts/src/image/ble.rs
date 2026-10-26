@@ -13,6 +13,7 @@ pub(super) struct Ble {
     pub upstream: pac::hp_sys_clkrst::HpSysClkrstRadio,
     pub pmu: pac::pmu::PmuRadio,
     pub watchdog: pac::rtc_wdt::LpWdt,
+    pub positional: pac::bt_mac::BleHwPositionalWord1ff0,
 }
 const COUNTER_MAX: u32 = pac::modem_pwr::word_0048_opaque::COUNTER_LOW_MAX;
 const HALF: u32 = (COUNTER_MAX / 2) + 1;
@@ -567,4 +568,109 @@ pub(super) fn software_pending(s: &mut Session<'_>) {
     lp_state(s, 0x290c);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
+}
+
+/// One natural wrap, followed by independent tests of the two live causes.
+pub(super) fn rollover_gates(s: &mut Session<'_>) {
+    init_lp(s);
+    s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
+    let start = oer_riscv::cycle32();
+    let mut prior = counter(&s.ble);
+    let mut wrapped = false;
+    while oer_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {
+        let now = counter(&s.ble);
+        if now < prior {
+            wrapped = true;
+            break;
+        }
+        prior = now;
+    }
+    emit(
+        0x30ff,
+        u32::from(wrapped),
+        oer_riscv::cycle32().wrapping_sub(start),
+        0,
+    );
+    lp_state(s, 0x3000);
+    if !wrapped {
+        return;
+    }
+    target(&mut s.ble, HALF);
+    s.ble
+        .timer
+        .publish_bluetooth_modem_lp_timer_software_pending();
+    command18(&mut s.ble);
+    lp_state(s, 0x3001);
+    s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
+    lp_state(s, 0x3002);
+    s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
+    oer_riscv::fence();
+    lp_state(s, 0x3003);
+    s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
+    lp_state(s, 0x3004);
+    s.ble.timer.write_word_0010_opaque(|w| {
+        w.set_bit_1_opaque(true);
+    });
+    lp_state(s, 0x3005);
+    s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
+    lp_state(s, 0x3006);
+    command18(&mut s.ble);
+    lp_state(s, 0x3007);
+    s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
+    lp_state(s, 0x3008);
+    s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
+}
+
+/// Minimal sourced controller prefix for the otherwise inactive BTLC candidate.
+/// No descriptor, SRAM pointer, scheduler RUN, PHY route or RF publication.
+pub(super) fn btlc_prefix(s: &mut Session<'_>) {
+    contain(s);
+    clocks(&mut s.ble);
+    let b = &mut s.ble;
+    b.clocks.modify_modem_rst_conf(|w| {
+        w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
+    });
+    b.clocks.modify_modem_rst_conf(|w| {
+        w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
+    });
+    // SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS and the HAL controller-init
+    // latch prefix. These observed images do not imply a cause identity.
+    b.positional.write_value(|w| {
+        w.set_bit_0_opaque(false).set_bit_3_opaque(false);
+    });
+    b.positional.write_value(|w| {
+        w.set_bit_0_opaque(true).set_bit_3_opaque(false);
+    });
+    b.core.modify_hal_init_latch(|w| {
+        w.set_config_6(true).set_enable_31(false);
+    });
+    b.core.write_hal_init_low_20(|w| {
+        w.set_config_low_20(Bits::constant::<
+            { pac::bt_mac::hal_init_low_20::CONFIG_LOW_20_MAX },
+        >());
+    });
+    b.core.modify_hal_init_latch(|w| {
+        w.set_enable_31(true);
+    });
+    baseline(b, true);
+    b.bank.modify_irq_enable_1(|w| {
+        w.set_source_1(true);
+    });
+    b.bank.modify_irq_enable_0(|w| {
+        w.set_source_0(true).set_source_1(true);
+    });
+    b.bank.write_irq_control_0(|w| {
+        w.set_command(pac::bt_mac::irq_control_0::Command::Command1.bits());
+    });
+    timer_stimulus(b, false);
+    nrt_state(s, 0x3100);
+    clear(&mut s.ble);
+    nrt_state(s, 0x3101);
+    s.ble.bank.modify_irq_enable_1(|w| {
+        w.set_source_1(false);
+    });
+    s.ble.bank.modify_irq_enable_0(|w| {
+        w.set_source_0(false).set_source_1(false);
+    });
+    baseline(&mut s.ble, false);
 }

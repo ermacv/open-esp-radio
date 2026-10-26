@@ -179,6 +179,14 @@ const PROBES: &[Probe] = &[
         run: ble::inherited,
     },
     Probe {
+        id: 31,
+        run: ble::btlc_prefix,
+    },
+    Probe {
+        id: 30,
+        run: ble::rollover_gates,
+    },
+    Probe {
         id: 29,
         run: ble::software_pending,
     },
@@ -265,6 +273,7 @@ extern "C" fn facts_main() -> ! {
             upstream: p.radio_phy.hp_sys_clkrst_radio,
             pmu: p.radio_phy.pmu_radio,
             watchdog: p.watchdog.lp_wdt,
+            positional: p.bluetooth.ble_hw_positional_word1ff0,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();
@@ -282,6 +291,9 @@ extern "C" fn facts_main() -> ! {
         if request == u32::MAX {
             FACTS_OUTPUT[0].store(0xfac70000, Ordering::Release);
         } else {
+            // A slow/incomplete leaf must not retain the previous command's
+            // completion marker while a bounded debugger capture observes it.
+            FACTS_OUTPUT[0].store(0xfac70002, Ordering::Release);
             let mut ran = false;
             for probe in PROBES {
                 if request == probe.id || (request == 0 && probe.id < 7) {

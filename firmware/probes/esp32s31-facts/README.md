@@ -45,7 +45,7 @@ ROM-loader entry after software reset, without another reset. Selections:
 | 9 | Raise-to-ceiling race for FACTS_THRESHOLD_K (0–24): eight NOP/readback variants, three repeats each |
 
 `FACTS_OUTPUT` has 514 little-endian words: completion marker, record count,
-then four-word records `(tag, a, b, c)`. Marker `0xfac70001` means completed;
+then four-word records `(tag, a, b, c)`. Marker `0xfac70002` means running, `0xfac70001` means completed;
 `0xfac70007` precedes system reset; `0xbad00001..5` denotes an interrupt storm,
 exception, panic, unknown selection or result-buffer exhaustion. Completion
 means the leaf finished, not that its hardware claim passed. SRAM output after
@@ -87,3 +87,41 @@ Reading ATTR_MODE=3 does not establish that writes are ignored: the current
 read-only PAC field has no setter. Likewise, a zero LP wakeup flag before and
 after reset cannot prove preservation of a pending event. These limitations
 must remain explicit in a report even when the other leaves complete.
+
+## BLE interrupt facts
+
+BLE commands use disjoint PAC owners from the same root claim. They contain
+hart 1, keep CPU interrupts masked, observe both MAC banks and matrix status,
+and never publish a scheduler descriptor, start scheduler RUN or change a CPU
+route. They do not run a radio protocol or require a peer. Production baseline
+and arming policy are unaffected.
+
+| Selection | Bounded experiment |
+| --- | --- |
+| 20 | Bank-one source-1 enable before clock setup, before baseline, and after applying/removing baseline; records clock and enable readbacks |
+| 21 | Candidate BTLC cause, baseline masking/re-enable, separate controls 1/2 and their combination |
+| 22 | Candidate arrivals between bank snapshots and before sampled acknowledgement |
+| 23 | Near compare, software pending, bit-18 disable, retained-pending re-enable and zero acknowledgement |
+| 24 | Pending compare, counter progression, `+0x04` image 1, then START and phase observation |
+| 25 | One natural counter wrap without compare, bit-18 disable and rollover-byte zero |
+| 26 | Half-range compare, all-ones disable, independent bit-1 command, positional modes and a past target |
+| 27 | Bank-one source 1 enabled only in the probe for the local BTLC candidates; restores the inherited enable |
+| 28 | Counter movement across XTAL divider images 399/1/0 and positional mode writes |
+| 29 | Software-pending delivery across mode writes, disable/re-enable, zero, all-ones disable, bit-1 command and `+0x04` |
+| 30 | One natural wrap plus software pending; independent suppression, retained-pending redelivery and acknowledgement of the two causes |
+| 31 | Minimal sourced MAC/latch prefix and the BTLC candidate, without any DMA or RF publication |
+
+These commands are explicit selections, excluded from selection 0. An inactive
+BTLC candidate does not establish an output equation or a set/clear race result:
+the records must show a real pending cause before interpreting masking or ack.
+The LP counter experiments use divider image 1, which advances the counter in
+the tested setup; image 0 did not advance it. They establish no production-clock
+frequency equation. Counter/cause polls end after 40,000,000 cycles, and the
+wrap leaves stop after one wrap. Multiple-wrap capacity and collision priority
+are outside those observations.
+
+BLE leaves feed the existing ROM RTC watchdog through their typed PAC owner
+before each experiment; they do not disable it. The named write-protect images
+are in the register model. Debugger command dwell is not part of a measured
+operation. A reset, zeroed output buffer or untriggered cause is not a passing
+hardware claim even if the debugger command itself exits successfully.

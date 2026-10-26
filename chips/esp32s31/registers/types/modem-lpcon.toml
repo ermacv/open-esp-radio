@@ -31,7 +31,7 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
 
 [review.entity."LP_TIMER_CONF.CLK_LP_TIMER_DIV_NUM"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD", "HW2_S31_LP_DIVIDER_20261026"]
 
 [review.entity."COEX_LP_CLK_CONF"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
@@ -160,7 +160,7 @@ description = "Select the 32 kHz crystal clock."
 name = "CLK_LP_TIMER_DIV_NUM"
 bits = "15:4"
 class = "plain"
-description = "Twelve-bit low-power timer divider image."
+description = "Twelve-bit low-power timer divider image. In the tested XTAL setup image 1 advanced the LP counter, while image 0 left it unchanged across bounded windows; do not infer a divide-by-one interpretation for zero. No universal frequency equation is established by that observation. SOURCE: HW2_S31_LP_DIVIDER_20261026."
 value-range = { min = 0x0, max = 0xfff, sources = ["S31_MODEM_LPCON_STRUCT"] }
 
 [[registers]]
