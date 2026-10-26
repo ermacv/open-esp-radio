@@ -129,6 +129,12 @@ transaction asserts its masks against the register's declared fields in a
 `whole-word`: the vendor's store of a whole word, with its evidence
 sources, which also writes the bits the model leaves undeclared.
 
+Generated SRAM-layout builders check a narrow constant field value through
+`with_<field>_constant::<VALUE>()` at monomorphization, including calls from
+runtime code. The setter preserves every other bit. A dynamic field value
+uses the checked `with_<field>(value)` returning `Option`; declaring its
+caller `const fn` does not turn that admission into a compile-time proof.
+
 `esp32s31/pac/` is the generated PAC (`src/generated.rs`) and its root
 (`src/lib.rs`, the one claim); it has no handwritten module
 ([PAC](../chips/esp32s31/pac/README.md)).
@@ -375,7 +381,11 @@ still holds (`FREE`, `SEALED` or held).
 trait `AdoptsBootstrapMapping`, a board's promise that its adoption of the
 bootstrap's PSRAM mapping neither resets nor remaps PSRAM, and the
 `StageTwoHandoff` proof only the staged runtime's entry mints. It holds no
-other unsafe code.
+other unsafe code. Its memory regions keep their geometry private: const
+admission rejects address overflow and out-of-bounds subregions. Generated
+maps and chip linker bindings check fixed geometry in const initializers;
+the bootstrap handles refusal of a dynamic runtime PSRAM window as an
+invalid header.
 
 ## The host's operating-system bindings
 

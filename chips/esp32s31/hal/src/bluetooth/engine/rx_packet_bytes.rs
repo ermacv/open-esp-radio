@@ -11,12 +11,10 @@ const REARMED_RESULT: BleRxPacketPrefixResult = BleRxPacketPrefixResult::from_bi
     .with_bit_2_opaque(true)
     .with_bit_3_opaque(true)
     .with_bit_4_opaque(true)
-    .with_bits_5_8_opaque(0xf)
-    .expect("sentinel fits")
+    .with_bits_5_8_opaque_constant::<0xf>()
     .with_bit_9_opaque(true)
     .with_bit_10_opaque(true)
-    .with_bits_11_23_opaque(0x1fff)
-    .expect("sentinel fits");
+    .with_bits_11_23_opaque_constant::<0x1fff>();
 
 /// SOURCE: pinned `memMgmt_3.o` receive allocator's opaque capacity image.
 const RX_CAPACITY: BleRxPacketPrefixByte0004Opaque = BleRxPacketPrefixByte0004Opaque::from_bits(0)

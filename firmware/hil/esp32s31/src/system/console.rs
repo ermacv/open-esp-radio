@@ -152,7 +152,7 @@ async fn test_watchdog(mut service: DeadlineWatchdog) {
     loop {
         let (request, mode) = TESTS.receive().await;
         let budget = DeadlineBudget::from_micros(
-            core::num::NonZeroU32::new(1_000_000).expect("one second is nonzero"),
+            const { core::num::NonZeroU32::new(1_000_000).expect("one second is nonzero") },
         );
         let lease = match service.arm(budget) {
             Ok(lease) => lease,

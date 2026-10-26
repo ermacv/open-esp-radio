@@ -280,7 +280,7 @@ async fn bridge(
                     payload,
                 }) {
                     tx.ready().await.send(TxMsdu {
-                        priority: WmmUserPriority::new(0).expect("best effort priority"),
+                        priority: WmmUserPriority::UP0,
                         frame,
                     });
                     observations.borrow_mut().observe(

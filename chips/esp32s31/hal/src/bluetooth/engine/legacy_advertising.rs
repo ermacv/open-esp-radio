@@ -46,14 +46,10 @@ pub const BLUETOOTH_LEGACY_ADVERTISING_TX_PACKET_BYTES: usize =
 const ITEMS: usize = BLUETOOTH_LEGACY_ADVERTISING_SCHEDULER_ITEM_CAPACITY;
 /// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, allocation/reset profile (bt-lib pin 10c50778).
 const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
-    BleLinkStateSequencePolicy::ZERO
-        .with_bits_9_12_opaque(0xf)
-        .expect("reviewed field image fits");
+    BleLinkStateSequencePolicy::ZERO.with_bits_9_12_opaque_constant::<0xf>();
 /// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, scheduler allocation (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
-    BleSchedulerItemHardwareNext::ZERO
-        .with_bits_20_21_opaque(0x1)
-        .expect("reviewed field image fits");
+    BleSchedulerItemHardwareNext::ZERO.with_bits_20_21_opaque_constant::<0x1>();
 
 type AdvertisingTxPacketAddress = LeTxPacketAddress<BLUETOOTH_LEGACY_ADVERTISING_TX_PACKET_BYTES>;
 type AdvertisingTxPacketLength =
@@ -196,8 +192,7 @@ impl ItemStorage {
             BleSchedulerItemLinkState::ZERO
                 .with_address(Some(link_state.reference()))
                 .expect("a bound link is encodable")
-                .with_kind(crate::layouts::BleSchedulerItemLinkState::KIND_LEGACY_ADVERTISING)
-                .expect("reviewed role prefix fits"),
+                .with_kind_constant::<{ crate::layouts::BleSchedulerItemLinkState::KIND_LEGACY_ADVERTISING }>(),
         );
         self.layout
             .allocation_number()

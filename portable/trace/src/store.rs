@@ -122,13 +122,25 @@ pub struct Retained<const ENTRIES: usize, const SLOTS: usize, const WORDS: usize
 }
 
 impl<const ENTRIES: usize, const SLOTS: usize, const WORDS: usize> Retained<ENTRIES, SLOTS, WORDS> {
-    /// Fails to compile in a static when a geometry cannot be ordered back
+    /// Fails to compile when a geometry cannot be ordered back
     /// by sequence tags (more than half the tag period) or recorded in a
     /// slot length.
+    ///
+    /// Invalid geometry is rejected even outside a static initializer.
+    ///
+    /// ```compile_fail,E0080
+    /// let _ = oer_trace::Retained::<0, 1, 1>::new();
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// let _ = oer_trace::Retained::<1, 32768, 1>::new();
+    /// ```
     pub const fn new() -> Self {
-        assert!(ENTRIES > 0 && ENTRIES <= (TAG_PERIOD / 2) as usize);
-        assert!(SLOTS <= (TAG_PERIOD / 2) as usize);
-        assert!(WORDS < TRUNCATED as usize);
+        const {
+            assert!(ENTRIES > 0 && ENTRIES <= (TAG_PERIOD / 2) as usize);
+            assert!(SLOTS <= (TAG_PERIOD / 2) as usize);
+            assert!(WORDS < TRUNCATED as usize);
+        }
         Self {
             header: Header {
                 magic: AtomicU32::new(0),

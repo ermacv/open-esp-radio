@@ -103,8 +103,7 @@ const TX_HEADER: BufferHeaderImage = BufferHeaderImage {
 const EMPTY_TX_CURSOR: BufferHeaderImage = BufferHeaderImage {
     completion: BleBufferHeaderCompletion::ZERO.with_done(true),
     allocation: BleBufferHeaderAllocation::ZERO
-        .with_llid(crate::layouts::BleBufferHeaderAllocation::LLID_DATA_CONTINUATION)
-        .expect("reviewed LLID fits"),
+        .with_llid_constant::<{ crate::layouts::BleBufferHeaderAllocation::LLID_DATA_CONTINUATION }>(),
     ..BufferHeaderImage::ZERO
 };
 /// SOURCE: pinned `memMgmt_3.o` common TX packet allocation class and initial state.

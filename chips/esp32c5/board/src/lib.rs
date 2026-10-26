@@ -17,8 +17,8 @@ use esp_hal::{
     psram::{FlashFreq, Psram, PsramConfig, PsramOrigin, PsramSize, SpiRamFreq},
 };
 
-pub const PSRAM_BASE_ADDRESS: usize = LAYOUT.psram.origin as usize;
-pub const PSRAM_SIZE_BYTES: usize = LAYOUT.psram.length as usize;
+pub const PSRAM_BASE_ADDRESS: usize = LAYOUT.psram.origin() as usize;
+pub const PSRAM_SIZE_BYTES: usize = LAYOUT.psram.length() as usize;
 pub const FLASH_MMU_PAGE_SIZE_BYTES: u32 = 64 * 1024;
 
 /// The module's PSRAM: quad, 8 MiB, at the layout's fixed address, at the

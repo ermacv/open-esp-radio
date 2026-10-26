@@ -5,16 +5,34 @@
 //! fitted memories and the staged-boot contract, not universal chip
 //! capabilities.
 
-/// A contiguous address range.
+/// A contiguous address range whose exclusive end fits in a `u32`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Region {
-    pub origin: u32,
-    pub length: u32,
+    origin: u32,
+    length: u32,
 }
 
 impl Region {
-    pub const fn new(origin: u32, length: u32) -> Self {
-        Self { origin, length }
+    /// Admit a range without address wraparound. Empty ranges are valid.
+    /// Fixed maps check admission in a const initializer.
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_espressif_staged_layout::Region;
+    /// const INVALID: Region = Region::new(u32::MAX, 1).expect("region fits");
+    /// ```
+    pub const fn new(origin: u32, length: u32) -> Option<Self> {
+        match origin.checked_add(length) {
+            Some(_) => Some(Self { origin, length }),
+            None => None,
+        }
+    }
+
+    pub const fn origin(self) -> u32 {
+        self.origin
+    }
+
+    pub const fn length(self) -> u32 {
+        self.length
     }
 
     /// First address past the region.
@@ -23,15 +41,39 @@ impl Region {
     }
 
     /// The remainder of this region after its first `offset` bytes.
-    pub const fn after(self, offset: u32) -> Self {
-        assert!(offset <= self.length);
-        Self::new(self.origin + offset, self.length - offset)
+    /// Returns `None` when `offset` lies beyond the region.
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_espressif_staged_layout::Region;
+    /// const REGION: Region = Region::new(0x100, 0x100).expect("region fits");
+    /// const INVALID: Region = REGION.after(0x101).expect("subregion fits");
+    /// ```
+    pub const fn after(self, offset: u32) -> Option<Self> {
+        if offset > self.length {
+            return None;
+        }
+        Some(Self {
+            origin: self.origin + offset,
+            length: self.length - offset,
+        })
     }
 
     /// The first `length` bytes of this region.
-    pub const fn first(self, length: u32) -> Self {
-        assert!(length <= self.length);
-        Self::new(self.origin, length)
+    /// Returns `None` when `length` exceeds this region's length.
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_espressif_staged_layout::Region;
+    /// const REGION: Region = Region::new(0x100, 0x100).expect("region fits");
+    /// const INVALID: Region = REGION.first(0x101).expect("subregion fits");
+    /// ```
+    pub const fn first(self, length: u32) -> Option<Self> {
+        if length > self.length {
+            return None;
+        }
+        Some(Self {
+            origin: self.origin,
+            length,
+        })
     }
 
     /// Whether `start..end` is a (possibly empty) range inside this region.
@@ -96,12 +138,12 @@ pub struct Layout {
 
 impl Layout {
     /// The bootstrap's Flash-mapped text, after the ESP image segment header.
-    pub const fn bootstrap_flash_text(&self) -> Region {
+    pub const fn bootstrap_flash_text(&self) -> Option<Region> {
         self.flash_xip.after(self.image_segment_header_bytes)
     }
 
     /// Stage two relocated to PSRAM, following the bootstrap's probe page.
-    pub const fn runtime_psram(&self) -> Region {
+    pub const fn runtime_psram(&self) -> Option<Region> {
         self.psram.after(self.bootstrap_psram_bytes)
     }
 
@@ -111,9 +153,8 @@ impl Layout {
     /// and the pages are pages. A chip's generated layout calls this in a
     /// `const` item.
     pub const fn check(&self) {
-        assert!(self.flash_xip.contains(self.bootstrap_flash_text()));
-        assert!(self.psram.contains(self.runtime_psram()));
-        assert!(self.runtime_psram().origin >= self.psram.origin + self.bootstrap_psram_bytes);
+        assert!(self.bootstrap_flash_text().is_some());
+        assert!(self.runtime_psram().is_some());
         assert!(self.mmu_page_bytes.is_power_of_two());
         assert!(
             self.bootstrap_psram_bytes
@@ -141,11 +182,34 @@ mod tests {
 
     #[test]
     fn range_containment_rejects_inverted_and_overhanging_ranges() {
-        let region = Region::new(0x100, 0x100);
+        const REGION: Region = Region::new(0x100, 0x100).expect("region fits");
+        let region = REGION;
         assert!(region.contains_range(0x100, 0x100));
         assert!(region.contains_range(0x100, 0x200));
         assert!(!region.contains_range(0x180, 0x170));
         assert!(!region.contains_range(0x180, 0x201));
         assert!(!region.contains_range(0xff, 0x100));
+    }
+
+    #[test]
+    fn checked_geometry_preserves_bounds_and_admits_empty_edges() {
+        const REGION: Region = Region::new(u32::MAX - 16, 16).expect("region fits");
+        const FIRST: Region = REGION.first(8).expect("prefix fits");
+        const AFTER: Region = REGION.after(8).expect("suffix fits");
+        assert_eq!(
+            (REGION.origin(), REGION.length(), REGION.end()),
+            (u32::MAX - 16, 16, u32::MAX)
+        );
+        assert_eq!(FIRST.end(), AFTER.origin());
+        assert!(REGION.contains(FIRST) && REGION.contains(AFTER));
+        assert_eq!(REGION.first(17), None);
+        assert_eq!(REGION.after(17), None);
+        assert_eq!(Region::new(u32::MAX, 1), None);
+        assert_eq!(Region::new(1, u32::MAX), None);
+        assert_eq!(
+            REGION.first(0).expect("empty prefix").end(),
+            REGION.origin()
+        );
+        assert_eq!(REGION.after(16), Region::new(u32::MAX, 0));
     }
 }

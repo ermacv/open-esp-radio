@@ -26,6 +26,8 @@ system these rules serve.
   Only these owned partitions grant register access. C5 stays outside the
   workspace.
 - **Compile time first.** Every check that can run at compile time runs there.
+  A `const fn` alone does not enforce this: fixed values use const items or
+  blocks, and generic geometry uses inline const checks at monomorphization.
 - **Panics and unsafe.** A change introduces no new runtime panic sites or
   `unsafe` code. Compile-time checks and test assertions are allowed.
   Remove existing runtime panics from image crates, including probes and

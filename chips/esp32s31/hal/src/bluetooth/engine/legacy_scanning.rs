@@ -49,9 +49,7 @@ const SCAN_REQUEST_TX_PACKET_BYTES: usize =
     BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + SCAN_REQUEST_PAYLOAD_BYTES;
 /// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, scheduler allocation (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_PREFIX: BleSchedulerItemHardwareNext =
-    BleSchedulerItemHardwareNext::ZERO
-        .with_bits_20_21_opaque(0x3)
-        .expect("reviewed field image fits");
+    BleSchedulerItemHardwareNext::ZERO.with_bits_20_21_opaque_constant::<0x3>();
 /// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
     BleSchedulerItemWord001cOpaque::from_bits(0xfdfffff);

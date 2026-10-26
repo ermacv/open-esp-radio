@@ -23,8 +23,8 @@ use core::ops::Range;
 
 use oer_esp32s31_layout::LAYOUT;
 
-pub const PSRAM_BASE_ADDRESS: usize = LAYOUT.psram.origin as usize;
-pub const PSRAM_SIZE_BYTES: usize = LAYOUT.psram.length as usize;
+pub const PSRAM_BASE_ADDRESS: usize = LAYOUT.psram.origin() as usize;
+pub const PSRAM_SIZE_BYTES: usize = LAYOUT.psram.length() as usize;
 pub const FLASH_MMU_PAGE_SIZE_BYTES: u32 = 64 * 1024;
 
 /// Antenna gain used by this board profile, in mBm.

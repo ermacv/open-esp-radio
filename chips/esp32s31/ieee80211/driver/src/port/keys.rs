@@ -250,7 +250,7 @@ macro_rules! role {
                     role: Self::ROLE,
                     slot: slot.index(),
                     serial,
-                    key_id: GroupKeyId::new(0).expect("wire KeyID zero"),
+                    key_id: const { GroupKeyId::new(0).expect("wire KeyID zero") },
                     activity: &activity[if Self::ROLE == VifRole::Station {
                         0
                     } else {

@@ -180,8 +180,7 @@ impl<'item> SchedulerItemHeader<'item> {
                 .control()
                 .read()
                 .with_bit_16_opaque(false)
-                .with_bits_17_23_opaque(0)
-                .expect("zero fits")
+                .with_bits_17_23_opaque_constant::<0>()
                 .with_bit_24_opaque(false)
                 .with_deleted(false)
                 .with_preempted(false),

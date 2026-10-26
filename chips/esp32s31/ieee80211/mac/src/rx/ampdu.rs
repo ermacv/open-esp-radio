@@ -307,15 +307,28 @@ pub struct RxBlockAckSessions<const PEER_CAPACITY: usize = 1> {
 }
 
 impl<const PEER_CAPACITY: usize> RxBlockAckSessions<PEER_CAPACITY> {
+    /// An empty peer table with geometry checked at compile time.
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_esp32s31_ieee80211_mac::rx::ampdu::RxBlockAckSessions;
+    /// let _ = RxBlockAckSessions::<0>::new();
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_esp32s31_ieee80211_mac::rx::ampdu::RxBlockAckSessions;
+    /// let _ = RxBlockAckSessions::<256>::new();
+    /// ```
     pub const fn new() -> Self {
-        assert!(
-            PEER_CAPACITY != 0,
-            "RX BlockAck peer table must not be empty"
-        );
-        assert!(
-            PEER_CAPACITY <= u8::MAX as usize,
-            "RX BlockAck peer index must fit its compact owner"
-        );
+        const {
+            assert!(
+                PEER_CAPACITY != 0,
+                "RX BlockAck peer table must not be empty"
+            );
+            assert!(
+                PEER_CAPACITY <= u8::MAX as usize,
+                "RX BlockAck peer index must fit its compact owner"
+            );
+        }
         Self {
             peers: [None; PEER_CAPACITY],
             pending: [PendingRxBlockAck::EMPTY; RX_BLOCK_ACK_BANK_COUNT],

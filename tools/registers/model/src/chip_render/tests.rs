@@ -1311,3 +1311,33 @@ fn a_mixed_trigger_requires_safe_replay_of_every_other_lane() {
         assert!(!rust.contains("pub fn trigger_mixed_start("), "{lane}");
     }
 }
+
+#[test]
+fn layout_constant_values_are_checked_even_in_runtime_builders() {
+    let rendered = rendered_with(&[(
+        "layouts/rx-descriptor.toml",
+        "bits = \"31\"",
+        "bits = \"30:28\"",
+    )]);
+    let output = run(
+        &rendered,
+        r#"fn main() {
+            let image = layouts::RxDescriptorControl::from_bits(0x8abc_def0)
+                .with_owner_constant::<7>();
+            assert_eq!(image.owner(), 7);
+            assert_eq!(image.bits(), 0xfabc_def0);
+        }"#,
+    );
+    assert!(output.is_empty());
+    let errors = refused(
+        &rendered,
+        r#"fn main() {
+            let _ = layouts::RxDescriptorControl::ZERO.with_owner_constant::<8>();
+        }"#,
+    );
+    assert!(errors.contains("E0080"), "{errors}");
+    assert!(
+        errors.contains("the constant fits the layout field"),
+        "{errors}"
+    );
+}

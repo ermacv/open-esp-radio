@@ -37,7 +37,9 @@ pub struct RxDmaBuffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
 
 impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE> {
     const fn new() -> Self {
-        assert!(STORAGE_SIZE >= BUFFER_SIZE + 4);
+        const {
+            assert!(BUFFER_SIZE <= usize::MAX - 4 && STORAGE_SIZE >= BUFFER_SIZE + 4);
+        }
         Self(UnsafeCell::new([0; STORAGE_SIZE]), ExternalRxReturn::new())
     }
 
@@ -635,6 +637,13 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
     RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
+    /// Empty storage with room for every payload and its recycle guard.
+    /// The geometry is checked even when construction runs at runtime.
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
+    /// let _ = RxDmaStorage::<1, 16, 19>::new();
+    /// ```
     pub const fn new() -> Self {
         Self {
             descriptors: RxDescriptorTable::new(),

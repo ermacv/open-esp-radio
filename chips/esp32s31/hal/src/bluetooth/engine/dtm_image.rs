@@ -102,8 +102,7 @@ impl DtmLinkStateProfileWord {
     const fn select_direct_test_mode(self) -> Self {
         Self(
             self.0
-                .with_bits_26_27_opaque(DTM_RESET.profile_word_14.0.bits_26_27_opaque())
-                .expect("reviewed DTM profile fits"),
+                .with_bits_26_27_opaque_constant::<{ DTM_RESET.profile_word_14.0.bits_26_27_opaque() }>(),
         )
     }
 
@@ -190,8 +189,7 @@ impl DtmLinkStateReviewedWords {
         self.word_30 = self
             .word_30
             .with_bits_0_7_opaque(0)
-            .with_bits_9_12_opaque(15)
-            .expect("reviewed sequence fits")
+            .with_bits_9_12_opaque_constant::<15>()
             .with_bit_13_opaque(false);
         self.word_60 = self.word_60.with_power_index(default_tx_power.index());
         if clear_event_span {
@@ -309,8 +307,7 @@ impl DtmSchedulerItemReviewedWords {
             word_04: self.word_04.with_event_ready(true),
             word_08: self
                 .word_08
-                .with_kind(crate::layouts::BleSchedulerItemLinkState::KIND_DIRECT_TEST)
-                .expect("zero fits"),
+                .with_kind_constant::<{ crate::layouts::BleSchedulerItemLinkState::KIND_DIRECT_TEST }>(),
             word_0c: self.word_0c,
             word_14: self
                 .word_14
@@ -452,17 +449,13 @@ const DTM_RESET: DtmLinkStateReviewedWords = DtmLinkStateReviewedWords {
         .with_valid(true),
     word_08: BleLinkStateRxPath::ZERO.with_unconsumed_limit(0xff),
     word_30: BleLinkStateSequencePolicy::ZERO
-        .with_bits_9_12_opaque(0xf)
-        .expect("reviewed field image fits"),
+        .with_bits_9_12_opaque_constant::<0xf>(),
     word_34: BleLinkStateEventSpan::ZERO,
     word_50: BleLinkStateDirectionFinding::ZERO,
     word_60: BleLinkStateEvent::ZERO,
     profile_word_14: DtmLinkStateProfileWord(
         BleLinkStatePacketPolicy::ZERO
-            .with_bits_26_27_opaque(
-                crate::layouts::BleLinkStatePacketPolicy::BITS_26_27_OPAQUE_DIRECT_TEST,
-            )
-            .expect("reviewed field image fits"),
+            .with_bits_26_27_opaque_constant::<{ crate::layouts::BleLinkStatePacketPolicy::BITS_26_27_OPAQUE_DIRECT_TEST }>(),
     ),
     crc_init: LeCrcInit::LE_PRESET,
     access_address: LeAccessAddress::DIRECT_TEST_MODE,
@@ -525,6 +518,13 @@ pub struct DtmReceiveWait {
     extension: u8,
 }
 impl DtmReceiveWait {
+    /// A receiver timing image with a five-bit extension.
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_esp32s31_hal::bluetooth::engine::DtmReceiveWait;
+    /// const WAIT: DtmReceiveWait =
+    ///     DtmReceiveWait::new(1, 32).expect("reviewed timing fits");
+    /// ```
     pub const fn new(value: u16, extension: u8) -> Option<Self> {
         if extension > 31 {
             return None;

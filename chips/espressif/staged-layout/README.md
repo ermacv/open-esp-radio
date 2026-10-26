@@ -8,6 +8,15 @@ input sections the boot zeroes, and the linker binding. It is a `no_std`
 library without hardware access, shared by the bootstrap, the stage-two
 runtime, the chip layouts and the build scripts of every staged image.
 
+`Region` keeps its geometry private. Its const constructor refuses an
+exclusive end beyond `u32::MAX`; its const `first` and `after` operations
+refuse subregions outside that geometry. These operations return `Option`,
+including the derived Flash text and runtime PSRAM windows on `Layout`.
+Generated maps admit each region in a const initializer and validate the
+whole layout in a const item. Chip linker bindings pass const-checked
+subregions to the shared build helpers; the bootstrap rejects an invalid
+runtime PSRAM window through its header failure path.
+
 | Module | Owns |
 | --- | --- |
 | `memory` | `Region` and `Layout`: SRAM, Flash XIP, PSRAM and retained regions, the second-stage loader bound, the bootstrap PSRAM probe page, the MMU page, the image headers before the bootstrap's text, the handoff SRAM margin, the stage-two PSRAM window, stack sizes, hart count and the chip's ROM script |

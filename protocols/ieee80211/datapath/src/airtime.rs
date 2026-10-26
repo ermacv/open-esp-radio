@@ -182,8 +182,23 @@ struct State<K, const PEERS: usize, const RESERVATIONS: usize> {
 impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
     AirtimeStorage<K, PEERS, RESERVATIONS>
 {
+    /// Empty metadata with nonzero peer and reservation capacities.
+    ///
+    /// ```compile_fail,E0080
+    /// use core::num::NonZeroU32;
+    /// use oer_ieee80211_datapath::airtime::AirtimeStorage;
+    /// let _ = AirtimeStorage::<u8, 0>::new(NonZeroU32::MIN);
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// use core::num::NonZeroU32;
+    /// use oer_ieee80211_datapath::airtime::AirtimeStorage;
+    /// let _ = AirtimeStorage::<u8, 1, 0>::new(NonZeroU32::MIN);
+    /// ```
     pub const fn new(quantum_micros: NonZeroU32) -> Self {
-        assert!(PEERS > 0 && RESERVATIONS > 0);
+        const {
+            assert!(PEERS > 0 && RESERVATIONS > 0);
+        }
         Self {
             identity: 0,
             observer: None,

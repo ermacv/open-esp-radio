@@ -105,8 +105,8 @@ pub unsafe fn stage(
     psram_base: *mut u8,
     psram_size: usize,
 ) -> Staged {
-    if psram_base as usize != layout.psram.origin as usize
-        || psram_size != layout.psram.length as usize
+    if psram_base as usize != layout.psram.origin() as usize
+        || psram_size != layout.psram.length() as usize
     {
         fail("OER_BOOT bootstrap=FAIL reason=psram-init\r\n");
     }
@@ -121,7 +121,7 @@ pub unsafe fn stage(
     let source_end = source_address
         .checked_add(payload.len())
         .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=source-overflow\r\n"));
-    if !(xip.origin as usize..xip.end() as usize).contains(&source_address)
+    if !(xip.origin() as usize..xip.end() as usize).contains(&source_address)
         || source_end > xip.end() as usize
     {
         fail("OER_BOOT bootstrap=FAIL reason=source-not-xip\r\n");
@@ -229,7 +229,9 @@ fn validate_header(
         .checked_add(psram_size)
         .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=psram-range\r\n"));
     if !header.is_compatible()
-        || load_address != layout.runtime_psram().origin as usize
+        || !layout
+            .runtime_psram()
+            .is_some_and(|region| load_address == region.origin() as usize)
         || payload_end <= load_address
         || text_start < load_address + size_of::<RuntimeHeader>()
         || text_end <= text_start

@@ -1458,6 +1458,16 @@ fn render_field(
              }}\n",
             field.name, field.width
         );
+        let _ = writeln!(
+            output,
+            "    /// This value with `{}` set to `VALUE`, checked at compile time.\n\
+             pub const fn with_{name}_constant<const VALUE: {field_type}>(self) -> Self {{\n\
+             const {{ assert!(VALUE <= 0x{mask:x}, \"the constant fits the layout field\") }};\n\
+             let value = VALUE;\n\
+             Self((self.0 & 0x{keep:x}) | {placed})\n\
+             }}\n",
+            field.name
+        );
     }
 }
 

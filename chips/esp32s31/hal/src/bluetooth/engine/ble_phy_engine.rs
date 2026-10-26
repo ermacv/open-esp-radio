@@ -861,15 +861,6 @@ impl BlePhyEngineStorage {
     }
 
     /// Claim the linker-proven allocation and initialize its retained hardware objects.
-    ///
-    /// Raw static storage does not provide placement proof:
-    ///
-    /// ```compile_fail,E0308
-    /// use oer_esp32s31_hal::bluetooth::engine::{BlePhyEngineStorage, ControllerDmaSpace};
-    /// fn from_raw<S: ControllerDmaSpace>(storage: &'static mut BlePhyEngineStorage) {
-    ///     BlePhyEngineStorage::place::<S>(storage);
-    /// }
-    /// ```
     pub(crate) fn place<S: ControllerDmaSpace>(placed: Placed<Self>) -> BlePhyEngineCpuOwned {
         let (storage, placement) = Placement::<S>::take(placed);
         Self::from_parts::<S>(storage, &placement)

@@ -9,7 +9,7 @@
 
 extern crate std;
 
-use crate::{Layout, stage_two};
+use crate::{Layout, Region, stage_two};
 use std::{path::Path, println};
 
 /// The shared linker scripts, in this crate.
@@ -21,7 +21,14 @@ fn defsym(bin: &str, name: &str, value: u32) {
     println!("cargo:rustc-link-arg-bin={bin}=--defsym={name}={value}");
 }
 
-fn link(bin: &str, layout: &Layout, chip_linker_dir: &Path, scripts: &[&str], entry: &str) {
+fn link(
+    bin: &str,
+    layout: &Layout,
+    runtime_psram: Region,
+    chip_linker_dir: &Path,
+    scripts: &[&str],
+    entry: &str,
+) {
     let shared = shared_linker_dir();
     let rom = chip_linker_dir.join(layout.rom_script);
     assert!(
@@ -58,20 +65,27 @@ fn link(bin: &str, layout: &Layout, chip_linker_dir: &Path, scripts: &[&str], en
     for (name, region) in [
         ("SRAM", layout.sram),
         ("PSRAM", layout.psram),
-        ("RUNTIME_PSRAM", layout.runtime_psram()),
+        ("RUNTIME_PSRAM", runtime_psram),
         ("RETAINED", layout.retained),
     ] {
-        defsym(bin, &std::format!("{name}_ORIGIN"), region.origin);
-        defsym(bin, &std::format!("{name}_LENGTH"), region.length);
+        defsym(bin, &std::format!("{name}_ORIGIN"), region.origin());
+        defsym(bin, &std::format!("{name}_LENGTH"), region.length());
     }
 }
 
 /// Links binary `bin` as a stage-two runtime of `layout`: code, data and task
 /// stacks in PSRAM, interrupt entries, stacks and DMA state in internal SRAM.
-pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
+/// The chip binding evaluates `layout.runtime_psram()` in a const initializer
+/// and passes that admitted subregion as `runtime_psram`.
+pub fn configure_runtime(
+    bin: &str,
+    layout: &Layout,
+    runtime_psram: Region,
+    chip_linker_dir: &Path,
+) {
     println!("cargo:rerun-if-env-changed=OPEN_RADIO_CPU0_TASK_STACK_BYTES");
     let task_stack_bytes = match std::env::var("OPEN_RADIO_CPU0_TASK_STACK_BYTES") {
-        Ok(value) => image_task_stack_bytes(&value, layout.psram.length)
+        Ok(value) => image_task_stack_bytes(&value, layout.psram.length())
             .expect("valid image task stack allocation"),
         Err(std::env::VarError::NotPresent) => layout.cpu0_task_stack_bytes,
         Err(std::env::VarError::NotUnicode(_)) => panic!("task stack allocation is not Unicode"),
@@ -91,6 +105,7 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
     link(
         bin,
         layout,
+        runtime_psram,
         chip_linker_dir,
         &["runtime/link.x", "runtime/memory.x", "runtime/sections.x"],
         "-Truntime/link.x",
@@ -209,10 +224,19 @@ pub fn shuffle_arguments(seed: Option<u32>) -> std::vec::Vec<std::string::String
 }
 
 /// Links binary `bin` as the Flash-resident bootstrap of `layout`.
-pub fn configure_bootstrap(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
+/// The chip binding passes the const-checked runtime PSRAM and bootstrap
+/// Flash text subregions of `layout`.
+pub fn configure_bootstrap(
+    bin: &str,
+    layout: &Layout,
+    runtime_psram: Region,
+    flash_text: Region,
+    chip_linker_dir: &Path,
+) {
     link(
         bin,
         layout,
+        runtime_psram,
         chip_linker_dir,
         &[
             "bootstrap/link.x",
@@ -222,9 +246,8 @@ pub fn configure_bootstrap(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
         ],
         "-Tbootstrap/link.x",
     );
-    let text = layout.bootstrap_flash_text();
-    defsym(bin, "BOOTSTRAP_FLASH_TEXT_ORIGIN", text.origin);
-    defsym(bin, "BOOTSTRAP_FLASH_TEXT_LENGTH", text.length);
+    defsym(bin, "BOOTSTRAP_FLASH_TEXT_ORIGIN", flash_text.origin());
+    defsym(bin, "BOOTSTRAP_FLASH_TEXT_LENGTH", flash_text.length());
     defsym(
         bin,
         "IMAGE_SEGMENT_HEADER_BYTES",

@@ -251,16 +251,27 @@ pub enum ExternalCoexLevel {
 
 impl ExternalCoexLevel {
     /// The priority `ic_set_extern_coex` publishes for this level.
-    const fn priority(self) -> u8 {
+    const fn priority(self) -> crate::modem::ExternalCoexPriority {
         match self {
-            Self::Mid => 0x8,
-            Self::High => 0xc,
+            Self::Mid => {
+                const {
+                    crate::modem::ExternalCoexPriority::new(0x8)
+                        .expect("the reviewed priority fits four bits")
+                }
+            }
+            Self::High => {
+                const {
+                    crate::modem::ExternalCoexPriority::new(0xc)
+                        .expect("the reviewed priority fits four bits")
+                }
+            }
         }
     }
 }
 
 /// The priority `ic_set_extern_coex` publishes first, whatever the levels.
-const EXTERNAL_COEX_BASE_PRIORITY: u8 = 0x3;
+const EXTERNAL_COEX_BASE_PRIORITY: crate::modem::ExternalCoexPriority =
+    crate::modem::ExternalCoexPriority::new(0x3).expect("the reviewed priority fits four bits");
 
 /// External coexistence, as ESP-IDF's `esp_enable_extern_coex_gpio_pin`
 /// configures it after routing the signals.
@@ -296,14 +307,10 @@ impl ExternalCoexConfig {
     }
 
     pub(crate) fn priorities(self) -> [crate::modem::ExternalCoexPriority; 3] {
-        let priority = |value| {
-            crate::modem::ExternalCoexPriority::new(value)
-                .unwrap_or_else(|| unreachable!("the reviewed priorities fit four bits"))
-        };
         [
-            priority(EXTERNAL_COEX_BASE_PRIORITY),
-            priority(self.levels[0].priority()),
-            priority(self.levels[1].priority()),
+            EXTERNAL_COEX_BASE_PRIORITY,
+            self.levels[0].priority(),
+            self.levels[1].priority(),
         ]
     }
 }

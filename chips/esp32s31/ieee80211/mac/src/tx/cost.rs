@@ -26,7 +26,7 @@ impl HtRate {
             10,
             TxResponse::BlockAck {
                 timing: block_ack_timing,
-                psdu_bytes: NonZeroU16::new(32).expect("compressed BlockAck includes FCS"),
+                psdu_bytes: const { NonZeroU16::new(32).expect("compressed BlockAck includes FCS") },
             },
             TxProtection::None,
         )?;

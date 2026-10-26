@@ -96,12 +96,15 @@ mod usb;
 mod wifi_station;
 
 const DATA_SENTINEL: u32 = 0x5353_31d2;
-const INTERNAL_SRAM_START: u32 = oer_esp32s31_layout::LAYOUT.sram.origin;
+const INTERNAL_SRAM_START: u32 = oer_esp32s31_layout::LAYOUT.sram.origin();
 const INTERNAL_SRAM_END: u32 = oer_esp32s31_layout::LAYOUT.sram.end();
 
-const PROFILE_CODE_START: u32 = oer_esp32s31_layout::LAYOUT.runtime_psram().origin;
+const PROFILE_CODE_START: u32 = oer_esp32s31_layout::LAYOUT
+    .runtime_psram()
+    .expect("runtime PSRAM fits")
+    .origin();
 const PROFILE_CODE_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
-const PROFILE_DATA_START: u32 = oer_esp32s31_layout::LAYOUT.psram.origin;
+const PROFILE_DATA_START: u32 = oer_esp32s31_layout::LAYOUT.psram.origin();
 const PROFILE_DATA_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
 const PROFILE_NAME: &str = "psram-code-psram-data-psram-stack";
 

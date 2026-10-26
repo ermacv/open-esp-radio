@@ -81,7 +81,7 @@ pub(super) fn own_address_from_pdu(
 }
 impl LegacyAdvertisingPrimaryChannelPlan {
     pub fn image(self, start: u32, duration: u32, sequence_lead: u32) -> AdvertisingEventImage {
-        let priority = SchedulerEventPriority::new(1).expect("reviewed priority fits");
+        let priority = const { SchedulerEventPriority::new(1).expect("reviewed priority fits") };
         let first = AdvertisingItemImage {
             channel: self.channels[0],
             flexible_start: false,

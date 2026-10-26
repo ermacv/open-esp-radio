@@ -107,7 +107,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         }
         super::ops::set_wifi_low_power_clock_divider(
             registers,
-            ModemLowPowerClockDivider::new(0).expect("zero is a valid low-power divider"),
+            const { ModemLowPowerClockDivider::new(0).expect("zero is a valid low-power divider") },
         );
     }
 
