@@ -229,23 +229,23 @@ enum Action {
 const PROBES: &[Probe] = &[
     Probe {
         id: 14,
-        run: opaque_wave2::i2c,
+        run: Action::Thread(opaque_wave2::i2c),
     },
     Probe {
         id: 10,
-        run: opaque::pll,
+        run: Action::Thread(opaque::pll),
     },
     Probe {
         id: 11,
-        run: opaque::block_ack,
+        run: Action::Thread(opaque::block_ack),
     },
     Probe {
         id: 12,
-        run: opaque::watchdog,
+        run: Action::Thread(opaque::watchdog),
     },
     Probe {
         id: 13,
-        run: opaque::temperature,
+        run: Action::Thread(opaque::temperature),
     },
     Probe {
         id: 113,
@@ -269,23 +269,23 @@ const PROBES: &[Probe] = &[
     },
     Probe {
         id: 105,
-        run: lp_softreset::compare,
+        run: Action::Thread(lp_softreset::compare),
     },
     Probe {
         id: 106,
-        run: lp_softreset::rollover,
+        run: Action::Thread(lp_softreset::rollover),
     },
     Probe {
         id: 107,
-        run: lp_softreset::both,
+        run: Action::Thread(lp_softreset::both),
     },
     Probe {
         id: 108,
-        run: lp_softreset::control,
+        run: Action::Thread(lp_softreset::control),
     },
     Probe {
         id: 109,
-        run: lp_softreset::observe,
+        run: Action::Thread(lp_softreset::observe),
     },
     Probe {
         id: 102,
@@ -561,14 +561,9 @@ extern "C" fn facts_main() -> ! {
             task_irq: p.bluetooth.btmac_ble_phy_init,
         },
         opaque: opaque::Hardware {
-            wifi_bb: p.radio_phy.phy_baseband_config_oracle_wifi_bb,
             block_ack: p.wifi_mac.wifi_mac_block_ack,
             core_enable: p.wifi_mac.wifi_mac_core_enable,
             mac_interrupt: p.wifi_interrupts.wifi_mac_interrupt,
-            tsens: p.radio_phy.lp_tsens,
-            periclkrst: p.radio_phy.lp_periclkrst,
-            analog_master: p.analog_bus.i2c_ana_mst,
-            pll160: p.chip_clocks.hp_sys_clkrst_pll160,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();

@@ -583,7 +583,7 @@ The same ledger is SOURCE `HW17_S31_SAR_PREPARATION_20261027` in the model.
 
 | ID | Difference from production | Reason / consequence |
 |---|---|---|
-| D1 | ROM RAM-loader state, SRAM stacks and adopted integer-MHz CPU rate; no staged bootstrap/PSRAM, MPLL reference or platform reference counts | PAC-only image has exclusive words, not the production platform lifecycle. Parent PLL/bootstrap state is inherited and recorded where observable. No production clock/load equivalence is claimed. |
+| D1 | ROM RAM-loader state, SRAM stacks and adopted integer-MHz CPU rate; no staged bootstrap/PSRAM, MPLL reference, platform reference counts or Wi-Fi client cold baseline/LP-clock selection/combined BB+MAC reset entry | No Wi-Fi client epoch is opened; a standalone MAC pulse would not reproduce that parent lifecycle. PAC-only image has exclusive words, not the production platform lifecycle. Parent PLL/bootstrap state is inherited and recorded where observable. No production clock/load equivalence is claimed. |
 | D2 | SDM checks the same `0x5b` predicate with a 100 µs `mcycle` deadline instead of 9999 MAC-local counter ticks; byte/PBus operations have 20 µs experimental bounds; SAR has a 100 µs bound | Required short stand scope. The ordinary production timer/40 µs policy and vendor unbounded wait are not copied. Named settles preserve ≥100/10/1/2 µs; no executor timing equivalence. |
 | D3 | The production background-enable bit after TSENS is deliberately kept 0 before manual reference/tone selection | Prevent autonomous triggers during HOLD/EDGE; retention with background tracking remains untested. |
 | D4 | RC settings/calibration, filter DCAP and parameter reads, analog init1, RFPLL charge-pump search, command RAM publication, later conditional SAR2 initial-code write, FE update, crystal-duty and channel initialization are omitted | They belong to the full RF calibration suffix and depend on retained/calibrated parameters. No synthetic substitutes are used. In particular `0x578` is no longer moved before the test conversions. |
@@ -631,16 +631,19 @@ by `cargo fw probe` from commit
 and raw outputs. The measured ELF is **not** the final rebased image.
 The differences after capture are explicit:
 
-- Rebase onto `b92ff8f26acddcd5bf237e36e696c15b058f8bb4` incorporates
-  upstream BLE/local/generic-interrupt probes (#683/#686/#689/#691/#692/#699),
+- Rebase onto `6000f22f68284ceb4841065be54a13641fe887f5` incorporates
+  upstream BLE/local/generic/opaque probes (#683/#686/#689/#691/#692/#697/#699/#701/#703),
   PAC ownership/model/generator updates and watchdog support. These add linked
   code, registry entries, root storage and a generic-IRQ dispatch check;
-  image layout and timing are not assumed identical to the capture.
+  the in-progress completion marker and retained LP-reset boot dispatch also
+  differ. Image layout and timing are not assumed identical to the capture.
 - Shared PHY, chip-clock and boot PAC groups remain owned once in `Session.sar`.
-  BLE/local probe helpers borrow those existing owners rather than claiming
+  BLE/local/opaque probe helpers borrow those existing owners rather than claiming
   duplicate handles. All registrations use the same `Action` registry.
-  `sar.rs` and `sar_prepare.rs` remain byte-identical to the captured sources;
-  the SAR preparation/measurement transactions are unchanged.
+  `sar_prepare.rs` remains byte-identical to capture. In `sar.rs`, the
+  removed broad host-map setter is replaced by the production named-lane
+  setters from #703. Model-based comparison preserves the same `0x3fa0`
+  field image and preservation mask; no other SAR operation changes.
 - This README, SAR evidence/field descriptions and generated PAC documentation
   annotate the capture. No measurement is relabelled as a final-head run.
 

@@ -208,8 +208,20 @@ impl Sar {
         if busy {
             return None;
         }
+        // SOURCE: production master.rs::configure_host_map / ROM_REV0_PHY_I2C_HOST_LANES.
+        // Named lanes preserve the former 0x3fa0 field image and untouched bits.
         m.modify_ana_conf2(|w| {
-            w.set_phy_host_map(Bits::constant::<0x3fa0>());
+            w.set_bbtop_mst0_select(false)
+                .set_txrf_mst0_select(false)
+                .set_sdm_mst0_select(false)
+                .set_rfpll_mst0_select(false)
+                .set_bias_mst0_select(false)
+                .set_bbpll_mst0_select(true)
+                .set_ulp_bod_mst0_select(false)
+                .set_bits_11_12_opaque(Bits::constant::<3>())
+                .set_saradc_mst0_select(true)
+                .set_bits_14_16_opaque(Bits::constant::<7>())
+                .set_dig_reg_mst0_select(true);
         });
         if write.is_none() {
             m.publish_phy_i2c_read_mask(Bits::truncate(route.complemented_read_select()));
