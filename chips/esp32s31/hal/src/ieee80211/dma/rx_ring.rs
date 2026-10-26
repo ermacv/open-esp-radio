@@ -2799,7 +2799,7 @@ fn ring_topology_snapshot<const COUNT: usize>(
             if capacity == 0
                 || u32::from(word0.length()) != capacity
                 || !word0.owner()
-                || word0.sosf()
+                || word0.bit_29_opaque()
                 || word0.rx_done()
             {
                 return snapshot;

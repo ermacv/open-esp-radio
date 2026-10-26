@@ -215,20 +215,6 @@ impl<Path: PoolPath> TxAdmission<'_, Path> {
         }
     }
 
-    // SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS. Installed keys here are CCMP;
-    // their descriptor class is two, independently of the key slot number.
-    pub(super) const fn descriptor_flags(
-        &self,
-    ) -> oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags {
-        match self {
-            Self::Open(_) => oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
-            Self::Protected(_) => {
-                oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0)
-                    .with_bits_6_7_opaque_constant::<2>()
-            }
-        }
-    }
-
     pub(super) const fn hardware(&self) -> (u8, usize) {
         match self {
             Self::Open(_) => (0, 0),

@@ -40,7 +40,8 @@ writer = "hardware"
 description = "Set by the hardware on a receive unit's terminal descriptor when the unit completes; a walk is delimited by it through the saved LAST. Software clears it on rearm."
 
 [[layout.words.fields]]
-name = "SOSF"
+name = "BIT_29_OPAQUE"
+opaque = true
 bits = "29"
 writer = "cpu"
 description = "Vendor sosf bit, cleared on rearm. The acronym and its hardware effects are not established."
@@ -121,9 +122,9 @@ completeness = "complete"
 naming = "descriptive"
 
 [[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.SOSF"
-sources = ["VENDOR_WIFI_RX_IDENTITIES"]
+entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.BIT_29_OPAQUE"
+sources = ["VENDOR_WIFI_RX_IDENTITIES", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18"]
 provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "vendor"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

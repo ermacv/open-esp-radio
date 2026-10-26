@@ -14,7 +14,6 @@ use oer_esp32s31_ieee80211_mac::tx::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AmpduTxRoleAdapter {
     pub interface: MacInterface,
-    pub descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
 }
 
@@ -122,7 +121,6 @@ pub fn ht_ampdu_publication_config(
     config.scheduler_priority = inputs.scheduler_priority;
     config.pti = inputs.packet_priority;
     config.pti_count = 1;
-    config.descriptor_flags = role.descriptor_flags;
     config.hardware_key_selector = role.hardware_key_selector;
     Some(config)
 }

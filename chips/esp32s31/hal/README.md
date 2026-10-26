@@ -55,9 +55,9 @@ open `0x15 → 0x1d`, close `0x2d → 0x25`. Platform source-clock readback
 requires the open PLL image with the XTAL gate clear
 (`ESP_IDF_4D59230D_S31_MODEM_PLL_GATE`).
 
-Ordinary Wi-Fi TX programs carry vendor descriptor flags independently of
-the key-entry index. Queue CONTROL bit 22 follows flags `[7:6] == 2` for
-legacy, HT and HE publications (`VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS`).
-CCMP key admission selects class two; open admission selects class zero.
+Ordinary legacy, HT and HE queue preparation sets CONTROL bit 22. The
+reserved-TXOP-slot adjustment is a known vendor difference, documented in
+[the driver](../ieee80211/driver/README.md#tx-control-bit-22)
+(`VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS`).
 FE `+0x8d0[21:20]` remains opaque: its nonzero sample contributes diagnostic
 and RX-saturation observations, while estimator completion uses READY.

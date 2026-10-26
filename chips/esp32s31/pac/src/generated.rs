@@ -266909,7 +266909,7 @@ pub mod wifi_mac {
                 RateIndex::from_bits((self.0 >> 16) & 0x3f)
             }
 
-            /// Vendor sig_mode: zero for six legacy response entries and two for four HE response entries.
+            /// Project-assigned name. Immediate-response PHY signal mode identified by the libpp sig_mode diagnostic: zero for six legacy response entries and two for four HE response entries.
             #[inline]
             pub const fn sig_mode(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
@@ -266962,7 +266962,7 @@ pub mod wifi_mac {
                 RateIndex::from_bits((self.0 >> 16) & 0x3f)
             }
 
-            /// Vendor sig_mode: zero for six legacy response entries and two for four HE response entries.
+            /// Project-assigned name. Immediate-response PHY signal mode identified by the libpp sig_mode diagnostic: zero for six legacy response entries and two for four HE response entries.
             #[inline]
             pub const fn sig_mode(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
@@ -278875,7 +278875,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 20)
             }
 
-            /// Complete pp.o ppTxFragmentProc reaches its common legacy setup at offsets 0x8e..0xa8 from the CCMP selector-three branch at 0x22a and sets descriptor bit seven. Complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_txop_q offsets 0x86..0xaa then sets this queue-control bit exactly when descriptor flag bits 7:6 equal binary 10 and clears it otherwise. Thus the bounded ordinary individual/group CCMP path sets this bit after libpp[hal_mac_tx.o]::mac_tx_set_plcp0. A 2026-07-29 open HIL A/B clearing the bit increased raw ACK timeouts from the prior roughly 28 percent to 1395/2325 attempts (60 percent), so the exact set mapping is retained while the electrical meaning remains unknown.
+            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The open legacy/HT/HE formatter sets bit 22 unconditionally; its missing reserved-slot adjustment is a known vendor difference. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS.
             #[inline]
             pub const fn bit_22_opaque(self) -> bool {
                 (self.0 & 0x00400000) != 0
@@ -278934,7 +278934,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 20)
             }
 
-            /// Complete pp.o ppTxFragmentProc reaches its common legacy setup at offsets 0x8e..0xa8 from the CCMP selector-three branch at 0x22a and sets descriptor bit seven. Complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_txop_q offsets 0x86..0xaa then sets this queue-control bit exactly when descriptor flag bits 7:6 equal binary 10 and clears it otherwise. Thus the bounded ordinary individual/group CCMP path sets this bit after libpp[hal_mac_tx.o]::mac_tx_set_plcp0. A 2026-07-29 open HIL A/B clearing the bit increased raw ACK timeouts from the prior roughly 28 percent to 1395/2325 attempts (60 percent), so the exact set mapping is retained while the electrical meaning remains unknown.
+            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The open legacy/HT/HE formatter sets bit 22 unconditionally; its missing reserved-slot adjustment is a known vendor difference. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS.
             #[inline]
             pub const fn bit_22_opaque(&self) -> bool {
                 (self.0 & 0x00400000) != 0
@@ -304562,35 +304562,6 @@ pub mod layouts {
             }
         }
 
-        /// Width of `BITS_6_7_OPAQUE` in bits.
-        pub const BITS_6_7_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_6_7_OPAQUE`.
-        pub const BITS_6_7_OPAQUE_MAX: u32 = 0x3;
-        /// Opaque: meaning not established. Vendor TXOP class predicate: CONTROL bit 22 is set only for value two. The ordinary CCMP fragmentation path uses two; physical meaning of the class remains unqualified.
-        ///
-        /// `BITS_6_7_OPAQUE`, bits 7:6; written by the CPU.
-        /// SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS.
-        pub const fn bits_6_7_opaque(self) -> u8 {
-            ((self.0 >> 6) & 0x3) as u8
-        }
-
-        /// This value with `BITS_6_7_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 2 bits.
-        pub const fn with_bits_6_7_opaque(self, value: u8) -> Option<Self> {
-            if value > 0x3 {
-                None
-            } else {
-                Some(Self((self.0 & 0xffffff3f) | (value as u32) << 6))
-            }
-        }
-
-        /// This value with `BITS_6_7_OPAQUE` set to `VALUE`, checked at compile time.
-        pub const fn with_bits_6_7_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
-            let value = VALUE;
-            Self((self.0 & 0xffffff3f) | (value as u32) << 6)
-        }
-
         /// Width of `HE` in bits.
         pub const HE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `HE`.
@@ -305810,20 +305781,20 @@ pub mod layouts {
             Self((self.0 & 0xf0003fff) | (value as u32) << 14)
         }
 
-        /// Width of `SOSF` in bits.
-        pub const SOSF_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `SOSF`.
-        pub const SOSF_MAX: u32 = 0x1;
-        /// Vendor sosf bit, cleared on rearm. The acronym and its hardware effects are not established.
+        /// Width of `BIT_29_OPAQUE` in bits.
+        pub const BIT_29_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_29_OPAQUE`.
+        pub const BIT_29_OPAQUE_MAX: u32 = 0x1;
+        /// Opaque: meaning not established. Vendor sosf bit, cleared on rearm. The acronym and its hardware effects are not established.
         ///
-        /// `SOSF`, bit 29; written by the CPU.
-        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES.
-        pub const fn sosf(self) -> bool {
+        /// `BIT_29_OPAQUE`, bit 29; written by the CPU.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
+        pub const fn bit_29_opaque(self) -> bool {
             self.0 & 0x20000000 != 0
         }
 
-        /// This value with `SOSF` set to `value`.
-        pub const fn with_sosf(self, value: bool) -> Self {
+        /// This value with `BIT_29_OPAQUE` set to `value`.
+        pub const fn with_bit_29_opaque(self, value: bool) -> Self {
             if value {
                 Self(self.0 | 0x20000000)
             } else {

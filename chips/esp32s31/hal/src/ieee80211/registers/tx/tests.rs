@@ -51,7 +51,6 @@ fn legacy_program(dma: &ModelDma) -> MacLegacyTxProgram {
             contention_window: 0x0f,
             interface: MacInterface::Station,
             response: MacLegacyTxResponse::Ack,
-            descriptor_flags: crate::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 0x11,
         },
     )
@@ -64,44 +63,6 @@ fn a_legacy_program_refuses_values_beyond_its_fields() {
     let mut parameters = legacy_program(&dma).parameters;
     parameters.timeout = 0x1000;
     assert!(MacLegacyTxProgram::new(&dma, parameters).is_none());
-}
-
-#[test]
-fn txop_bit_follows_all_four_descriptor_classes_independently_of_key_slot() {
-    // SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS. CCMP uses class two.
-    let dma = dma();
-    for key in [0, 3, 0x11] {
-        for class in [0, 1, 2, 3, 2, 0] {
-            let mut parameters = legacy_program(&dma).parameters;
-            parameters.hardware_key_selector = key;
-            parameters.descriptor_flags =
-                crate::layouts::WifiTxDescriptorPrefixFlags::from_bits(u32::MAX)
-                    .with_bits_6_7_opaque(class)
-                    .expect("two-bit class");
-            let program = MacLegacyTxProgram::new(&dma, parameters).expect("bounded program");
-            let mut memory = HostWords::filled(0);
-            // Begin with the opposite bit to exercise both setting and clearing.
-            memory
-                .owners()
-                .registers
-                .mac
-                .wifi_mac_tx_queue_control
-                .modify_control_n(queue::bank(0), |w| {
-                    w.set_bit_22_opaque(class != 2);
-                });
-            memory
-                .owners()
-                .registers
-                .program_legacy_mac_tx_ppdu(0, program);
-            let owners = memory.owners();
-            let control = owners
-                .registers
-                .mac
-                .wifi_mac_tx_queue_control
-                .read_control_n(queue::bank(0));
-            assert_eq!(control.bit_22_opaque(), class == 2);
-        }
-    }
 }
 
 #[test]
@@ -135,7 +96,7 @@ fn a_legacy_preparation_publishes_six_words_of_the_reversed_bank() {
     let control = queue_control.read_control_n(bank);
     assert_eq!(control.descriptor_address_low().get(), HEAD & 0xf_ffff);
     assert_eq!(control.bits_20_21_opaque().get(), 2);
-    assert!(!control.bit_22_opaque());
+    assert!(control.bit_22_opaque());
     assert_eq!(control.plcp_format().get(), 1);
     assert!(!control.valid() && !control.enable());
     let config = queue_control.read_config(bank);

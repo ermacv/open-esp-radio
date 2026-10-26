@@ -212,8 +212,6 @@ pub struct MacLegacyTxParameters {
     pub contention_window: u16,
     pub interface: MacInterface,
     pub response: MacLegacyTxResponse,
-    /// Vendor software-descriptor flags, including the TXOP class predicate.
-    pub descriptor_flags: crate::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
 }
 
@@ -444,8 +442,6 @@ pub struct MacHtTxParameters {
     pub aifsn: u8,
     pub contention_window: u16,
     pub interface: MacInterface,
-    /// Vendor software-descriptor flags, including the TXOP class predicate.
-    pub descriptor_flags: crate::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
     pub txop: bool,
 }
@@ -605,8 +601,6 @@ pub struct MacHeTxParameters {
     pub aifsn: u8,
     pub contention_window: u16,
     pub interface: MacInterface,
-    /// Vendor software-descriptor flags, including the TXOP class predicate.
-    pub descriptor_flags: crate::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
 }
 
@@ -1091,25 +1085,23 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// The prepared CONTROL%s image of `mac_tx_set_plcp0`, stored from zero:
     /// the descriptor head's low address bits, the vendor's constant two
-    /// and class-dependent bit 22, and the PLCP format; ENABLE, VALID and
-    /// the other opaque lanes zero. The software RTS request is then cleared through
+    /// and set bit 22, and the PLCP format; ENABLE, VALID and the other
+    /// opaque lanes zero. The software RTS request is then cleared through
     /// one fresh-read protection update.
     ///
-    /// SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS: `mac_tx_set_plcp0` followed
-    /// by the `mac_tx_set_txop_q` class adjustment, even with no successor.
+    /// SOURCE: complete `libpp[hal_mac_tx.o]::mac_tx_set_plcp0`.
     fn publish_prepared_control(
         &mut self,
         queue: u8,
         descriptor_head: DmaRef<WifiTxDmaDescriptor>,
         plcp_format: u8,
-        descriptor_flags: crate::layouts::WifiTxDescriptorPrefixFlags,
     ) {
         self.mac
             .wifi_mac_tx_queue_control
             .modify_control_n(queue::bank(queue), |w| {
                 w.set_descriptor_address_low(descriptor_head)
                     .set_bits_20_21_opaque(bits(2))
-                    .set_bit_22_opaque(descriptor_flags.bits_6_7_opaque() == 2)
+                    .set_bit_22_opaque(true)
                     .set_bit_23_opaque(false)
                     .set_plcp_format(bits(u32::from(plcp_format)))
                     .set_bits_27_29_opaque(bits(0))
@@ -1266,7 +1258,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             queue,
             program.descriptor_head,
             parameters.response.plcp_format(),
-            parameters.descriptor_flags,
         );
         self.publish_plcp1(
             queue,
@@ -1392,7 +1383,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtAmpdu.bits() as u8
                 }
             },
-            parameters.descriptor_flags,
         );
         self.publish_plcp1(
             queue,
@@ -1590,7 +1580,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeAmpdu.bits() as u8
                 }
             },
-            parameters.descriptor_flags,
         );
         self.publish_plcp1(
             queue,

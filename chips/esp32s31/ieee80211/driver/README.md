@@ -58,6 +58,31 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   with the model. It returns diagnostic evidence without a reusable radio
   owner; the image must reset before another case.
 
+## TX CONTROL bit 22
+
+The HAL's legacy, HT and HE formatter sets queue CONTROL bit 22 on every
+prepared publication. This is a known difference from the vendor's
+reserved-TXOP-slot adjustment; the bit's physical meaning and effect on air
+remain unqualified.
+
+SOURCE: `VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS` in
+[`vendor-opaque-identities.toml`](../../registers/evidence/vendor-opaque-identities.toml),
+from pinned `esp32-wifi-lib@af55a0ca258ce9d791d1661d7c2bbb65f08c0c21`.
+`hal_mac_tx.o::mac_tx_set_plcp0` sets bit 22. The subsequent
+`mac_tx_set_txop_q` first tests queue-context byte `+0x1d`: initialized or
+released index 3 preserves the bit; reserved slot 0/1/2 sets it only when
+the head software-descriptor flags `[7:6]` equal 2 and clears it for 0/1/3.
+`lmacSetTxFrame` can reserve a slot for unfragmented traffic, so a frame
+class or cipher alone does not determine the final bit.
+
+All inspected vendor unfragmented construction paths retain flags `[7:6]`
+zero: plaintext data, probe/authentication/association management, pre-key
+EAPOL, encrypted and unencrypted ESP-NOW, CCMP/GCMP/TKIP/WEP data and BIP
+group management. Successful software-fragment chains use 2 before the
+last fragment and 3 on the last fragment. Cipher/key selectors occupy the
+separate descriptor word `+0x10`; CCMP does not imply flags class 2.
+These are bounded source observations; they establish no air equivalence.
+
 ## Radio interrupt part
 
 One entry of the image's interrupt table binds `WifiIrqPart` once, at start:

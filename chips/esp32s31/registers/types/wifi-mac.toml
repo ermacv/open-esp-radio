@@ -1022,7 +1022,6 @@ sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
 provenance = "observed"
 accuracy = "exact"
 
-
 [review.entity."STA_BEACON_FILTER_CONTROL.BITS_3_31_OPAQUE"]
 sources = ["S31_MMIO_USE_201042B4", "S31_MMIO_DECLARED_201042B4"]
 accuracy = "exact"
@@ -1262,7 +1261,6 @@ sources = ["VENDOR_WIFI_MAC_IDENTITIES"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
-naming = "vendor"
 
 [review.entity."IMMEDIATE_RESPONSE%s.BITS_0_7_OPAQUE"]
 sources = ["S31_MMIO_USE_20104408", "S31_MMIO_DECLARED_20104408"]
@@ -3439,7 +3437,7 @@ completeness = "complete"
 sources = ["S31_MMIO_DECLARED_20104D40"]
 
 [review.entity."CONTROL%s.BIT_22_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX", "S31_MMIO_DECLARED_20104D40"]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "S31_MMIO_DECLARED_20104D40", "VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -7628,7 +7626,6 @@ bits = "2"
 class = "plain"
 description = "Unicast wakeup enable."
 
-
 [[registers.fields]]
 name = "BITS_3_31_OPAQUE"
 bits = "31:3"
@@ -8219,7 +8216,7 @@ name = "SIG_MODE"
 values = [{ name = "FORMAT_0", value = 0 }, { name = "FORMAT_2", value = 2 }]
 bits = "23:22"
 class = "plain"
-description = "Vendor sig_mode: zero for six legacy response entries and two for four HE response entries."
+description = "Project-assigned name. Immediate-response PHY signal mode identified by the libpp sig_mode diagnostic: zero for six legacy response entries and two for four HE response entries."
 write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
@@ -10999,7 +10996,7 @@ write-range = { min = 0x0, max = 0x3 }
 name = "BIT_22_OPAQUE"
 bits = "22"
 class = "plain"
-description = "Complete pp.o ppTxFragmentProc reaches its common legacy setup at offsets 0x8e..0xa8 from the CCMP selector-three branch at 0x22a and sets descriptor bit seven. Complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_txop_q offsets 0x86..0xaa then sets this queue-control bit exactly when descriptor flag bits 7:6 equal binary 10 and clears it otherwise. Thus the bounded ordinary individual/group CCMP path sets this bit after libpp[hal_mac_tx.o]::mac_tx_set_plcp0. A 2026-07-29 open HIL A/B clearing the bit increased raw ACK timeouts from the prior roughly 28 percent to 1395/2325 attempts (60 percent), so the exact set mapping is retained while the electrical meaning remains unknown."
+description = "PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The open legacy/HT/HE formatter sets bit 22 unconditionally; its missing reserved-slot adjustment is a known vendor difference. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS."
 
 [[registers.fields]]
 name = "BIT_23_OPAQUE"
