@@ -1098,7 +1098,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 name = "SLEEP16_FLAG_DISABLE"
 bits = "16"
 class = "write-only"
-description = "Paired disable command for the +0x64/+0x1c flag producer. A positive low-byte +0x1c flag survives this command; it is not an acknowledgement or a mask of the known compare/rollover IRQ lanes. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS."
+description = "Observed bit16 command paired with the +0x40 sleep16 command. A positive low-byte +0x1c flag survives this command; suppression of a later +0x64 crossing not tested. It is not an acknowledgement of the tested flag or a mask of the known compare/rollover IRQ lanes. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS."
 
 [[registers.fields]]
 name = "SLEEP17_FLAG_DISABLE"
