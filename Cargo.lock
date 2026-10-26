@@ -2547,16 +2547,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-bootstrap"
-version = "0.1.0"
-dependencies = [
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-espressif-staged-runtime",
- "oer-riscv",
-]
-
-[[package]]
 name = "oer-firmware-probes-esp32s31-radio"
 version = "0.1.0"
 dependencies = [

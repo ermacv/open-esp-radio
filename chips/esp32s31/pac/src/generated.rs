@@ -199740,7 +199740,7 @@ pub mod spi1_mem_s {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// For SPI1,  cache  read flash with 4 bytes address, 1: enable, 0:disable. This field is only for internal debugging purposes. Do not use it in applications.
+            /// Select four-byte user-command addresses. The command port needs this bit for a 32-bit PSRAM mode-register address, in addition to USER1.USR_ADDR_BITLEN; it is not restricted to cache reads.
             #[inline]
             pub const fn cache_usr_addr_4byte(self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -199780,6 +199780,60 @@ pub mod spi1_mem_s {
             #[inline]
             pub const fn faddr_quad(self) -> bool {
                 (self.0 & 0x00000100) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Select four-byte user-command addresses. The command port needs this bit for a 32-bit PSRAM mode-register address, in addition to USER1.USR_ADDR_BITLEN; it is not restricted to cache reads.
+            #[inline]
+            pub const fn cache_usr_addr_4byte(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// For SPI1, din phase apply 2 signals. 1: enable 0: disable. The bit is the same with SPI1_MEM_S_fread_dio. This field is only for internal debugging purposes. Do not use it in applications.
+            #[inline]
+            pub const fn fdin_dual(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// For SPI1, dout phase apply 2 signals. 1: enable 0: disable. The bit is the same with SPI1_MEM_S_fread_dio. This field is only for internal debugging purposes. Do not use it in applications.
+            #[inline]
+            pub const fn fdout_dual(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// For SPI1, address phase apply 2 signals. 1: enable 0: disable.  The bit is the same with SPI1_MEM_S_fread_dio. This field is only for internal debugging purposes. Do not use it in applications.
+            #[inline]
+            pub const fn faddr_dual(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// For SPI1, din phase apply 4 signals. 1: enable 0: disable.  The bit is the same with SPI1_MEM_S_fread_qio. This field is only for internal debugging purposes. Do not use it in applications.
+            #[inline]
+            pub const fn fdin_quad(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// For SPI1, dout phase apply 4 signals. 1: enable 0: disable.  The bit is the same with SPI1_MEM_S_fread_qio. This field is only for internal debugging purposes. Do not use it in applications.
+            #[inline]
+            pub const fn fdout_quad(&self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// For SPI1, address phase apply 4 signals. 1: enable 0: disable.  The bit is the same with SPI1_MEM_S_fread_qio. This field is only for internal debugging purposes. Do not use it in applications.
+            #[inline]
+            pub const fn faddr_quad(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Set `CACHE_USR_ADDR_4BYTE`.
+            #[inline]
+            pub fn set_cache_usr_addr_4byte(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
             }
         }
     }
@@ -201692,15 +201746,15 @@ pub mod spi1_mem_s {
     impl oer_mmio::Registers for Memspi3PsramWords {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
-            0x0, 0x4, 0x8, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x34, 0x58, 0x5c, 0x60, 0x64, 0x68,
-            0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0xd4,
+            0x0, 0x4, 0x8, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x34, 0x3c, 0x58, 0x5c, 0x60, 0x64,
+            0x68, 0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0xd4,
         ];
     }
 
     impl oer_mmio::Words for Memspi3PsramWords {
         const OWNED: &'static [usize] = &[
-            0x0, 0x4, 0x8, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x34, 0x58, 0x5c, 0x60, 0x64, 0x68,
-            0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0xd4,
+            0x0, 0x4, 0x8, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x34, 0x3c, 0x58, 0x5c, 0x60, 0x64,
+            0x68, 0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0xd4,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -201887,6 +201941,21 @@ pub mod spi1_mem_s {
             let mut value = misc::W(self.0.read::<0x34>());
             change(&mut value);
             self.0.write::<0x34>(value.0);
+        }
+
+        /// Read `CACHE_FCTRL`.
+        #[inline]
+        pub fn read_cache_fctrl(&self) -> cache_fctrl::R {
+            cache_fctrl::R(self.0.read::<0x3c>())
+        }
+
+        /// Read `CACHE_FCTRL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_cache_fctrl(&mut self, change: impl FnOnce(&mut cache_fctrl::W)) {
+            let mut value = cache_fctrl::W(self.0.read::<0x3c>());
+            change(&mut value);
+            self.0.write::<0x3c>(value.0);
         }
 
         /// Read `W%s`.

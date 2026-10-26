@@ -491,6 +491,45 @@ const PSRAM_WAITS: PsramWaits = PsramWaits {
 };
 
 #[test]
+fn a_mode_register_read_selects_four_byte_addresses_even_at_address_zero() {
+    let mut clock = ClockMemory::new(0);
+    let mut psram = PsramMemory::new();
+    let mut cache_words = memory(instances::cache::SIZE, 0);
+    let mut active_words = memory(instances::pmu::SIZE, 0);
+    let virtual_clock = VirtualClock::new();
+    let ticking = Ticking(&virtual_clock);
+    let deadline = BootDeadline::start(&ticking, budget());
+    let mut clock_owner = clock.owner();
+    let mut psram_owner = psram.owner();
+    let mut cache_owner = CacheRegisters::host(&mut cache_words).expect("host memory holds it");
+    let mut active = ActivePower::host(&mut active_words).expect("host memory holds it");
+    assert_eq!(
+        psram::bring_up(
+            PsramOwners {
+                clock: &mut clock_owner,
+                active: &mut active,
+                psram: &mut psram_owner,
+                cache: &mut cache_owner,
+            },
+            PSRAM_PROFILE,
+            PSRAM_WINDOW,
+            GEOMETRY,
+            PSRAM_WAITS,
+            &deadline,
+        ),
+        Err(BootFailure::Wait(WaitFailure::TimedOut("psram-command")))
+    );
+    drop(psram_owner);
+    let command = Memspi3::host(&mut psram.memspi3).expect("host memory holds it");
+    assert!(command.read_cmd().usr(), "the first MR read was submitted");
+    assert_eq!(command.read_addr().usr_addr_value(), 0);
+    assert!(
+        command.read_cache_fctrl().cache_usr_addr_4byte(),
+        "a 32-bit address also needs the user-command four-byte selector"
+    );
+}
+
+#[test]
 fn a_cold_psram_is_powered_and_clocked_and_its_first_mode_register_read_never_ending_maps_nothing()
 {
     let mut clock = ClockMemory::new(0);

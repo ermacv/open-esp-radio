@@ -1,0 +1,7 @@
+# SOURCE: short bootstrap-only observations; no radio or qualification run.
+schema = 1
+
+[[sources]]
+id = "HW5_PSRAM_USER_ADDRESS_20261026"
+kind = "unattested-hil-observation"
+description = "s31-c, hw5-20261026-density-04, lease 793: public psram::bring_up with a forwarding owner recorded reads at MR addresses 0, 4, 8, 2 as 0x8d3b, 0x8d38, 0x8d78, 0x8d3b. Each read followed the preceding write to MR0 instead of selecting the requested address. Pinned esp32s31 rev0 ROM (esp-rom-elfs 20260528), Blobray esp_rom_spi_cmd_config @0x2f811516-0x2f811524 sets controller+0x3c bit 1 for a 32-bit address; the HAL omitted it. With the selector supplied by the same public command setup, hw5-20261026-density-05 (lease 794) read MR2/MR3 as 0xa0dd: density code 5, 16 MiB, and bring-up succeeded. The uninstrumented production into_region path also succeeded in hw5-20261026-density-11-park (lease 800), then the image halted before staging. Report: /home/ermacv/dev/oer-notes/research/hw-psram-density.md."
