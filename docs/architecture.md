@@ -302,7 +302,15 @@ its model and conformance case.
   instead of dropping the link. Controller memory is generated layouts with a
   HAL handover engine; no controller address reaches the driver. How much of
   an interval a connection event may take is policy of the portable link
-  layer, from timing allowances the backend reports.
+  layer, from timing allowances the backend reports. The permanently bound
+  Bluetooth handler retains the modem LP timer's register owner and positional
+  epoch while P2 processes the software queue. A value-only time snapshot goes
+  to P2; an unarmed deadline plan returns through a single-slot queue. Only the
+  handler performs rollover acknowledgement and the sourced compare-disable,
+  counter/rollover sample, target or software-pending publication and bit-18
+  command. During planning the handler acknowledges new pending/rollover facts
+  and retains their software work until the in-flight plan returns. P2 shares
+  no register writer or lock with the handler.
 - **IEEE 802.15.4** (`protocols/ieee802154`). The port boundary follows the
   OpenThread radio platform: the backend executes acknowledgement, CSMA-CA
   and the cipher as advertised capabilities; retries, the pending-table

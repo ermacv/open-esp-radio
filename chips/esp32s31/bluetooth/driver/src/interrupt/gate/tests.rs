@@ -23,6 +23,8 @@ enum Op {
     Primary,
     Nrt,
     TimerStep,
+    ApplyPlan,
+    ObserveTimer,
     StopTimer,
     CloseBank,
 }
@@ -63,7 +65,9 @@ struct ReleaseProof;
 struct Scheduler;
 struct TimerInitialized(Shared);
 struct Timer(Shared);
-struct TimerPending(Shared);
+struct TimerPending(Shared, bool);
+struct Work;
+struct Plan;
 struct Compare;
 
 impl GateHardware for Fake {
@@ -76,6 +80,8 @@ impl GateHardware for Fake {
     type TimerInitialized = TimerInitialized;
     type Timer = Timer;
     type TimerPending = TimerPending;
+    type TimerWork = Work;
+    type TimerPlan = Plan;
     type CompareDisabled = Compare;
 
     fn open_bank(setup: Setup) -> FakeBank {
@@ -109,7 +115,7 @@ impl GateHardware for Fake {
         model.nrt.pop_front().unwrap_or(false)
     }
 
-    fn step_timer(timer: Timer) -> TimerEntry<Timer, TimerPending> {
+    fn step_timer(timer: Timer) -> TimerEntry<Timer, TimerPending, Work> {
         let step = {
             let mut model = timer.0.lock().expect("one test thread");
             model.ops.push(Op::TimerStep);
@@ -118,7 +124,24 @@ impl GateHardware for Fake {
         match step {
             Step::Spurious => TimerEntry::Spurious(timer),
             Step::Rearmed => TimerEntry::Rearmed(timer),
-            Step::Pending => TimerEntry::SoftwarePending(TimerPending(timer.0)),
+            Step::Pending => TimerEntry::SoftwarePending(TimerPending(timer.0, false), Work),
+        }
+    }
+
+    fn apply_timer_plan(timer: TimerPending, _: Plan) -> TimerEntry<Timer, TimerPending, Work> {
+        record(&timer.0, Op::ApplyPlan);
+        if timer.1 {
+            TimerEntry::SoftwarePending(TimerPending(timer.0, false), Work)
+        } else {
+            TimerEntry::Rearmed(Timer(timer.0))
+        }
+    }
+
+    fn observe_timer(timer: &mut TimerPending) {
+        let mut model = timer.0.lock().unwrap();
+        model.ops.push(Op::ObserveTimer);
+        if matches!(model.timer.pop_front(), Some(Step::Pending)) {
+            timer.1 = true;
         }
     }
 
@@ -353,18 +376,23 @@ fn the_timer_hands_its_software_work_to_the_task_and_comes_back() {
     harness.script(|model| model.timer.push_back(Step::Pending));
     harness.enter();
     assert_eq!(is_pending(harness.cells), (false, true));
-    let pending = harness
-        .port
-        .take_pending()
-        .expect("the handler handed it on");
-    // While the task holds the owner, the handler never steps the timer.
+    let _work = harness.port.take_work().expect("the handler handed it on");
+    // The handler retains the register owner while the task holds only Work.
+    assert!(
+        matches!(&harness.part.timer, super::Timer::AwaitingPlan(owner) if Arc::ptr_eq(&owner.0, &harness.model))
+    );
     harness.ops();
     harness.enter();
-    assert!(!harness.ops().contains(&Op::TimerStep));
-    assert!(harness.port.restore_ready(Timer(pending.0)).is_ok());
+    let ops = harness.ops();
+    assert!(!ops.contains(&Op::TimerStep));
+    assert!(ops.contains(&Op::ObserveTimer));
+    assert!(harness.port.submit_plan(Plan).is_ok());
     assert_eq!(harness.rings.load(Ordering::Relaxed), 2);
+    assert!(!harness.ops().contains(&Op::ApplyPlan));
     harness.enter();
-    assert_eq!(harness.ops().last(), Some(&Op::TimerStep));
+    let ops = harness.ops();
+    assert!(ops.contains(&Op::ApplyPlan));
+    assert_eq!(ops.last(), Some(&Op::TimerStep));
     assert!(!harness.fault.load(Ordering::Acquire));
 }
 
@@ -374,7 +402,7 @@ fn a_rearmed_timer_stays_with_its_handler() {
     harness.open();
     harness.script(|model| model.timer.push_back(Step::Rearmed));
     harness.enter();
-    assert!(harness.port.take_pending().is_none());
+    assert!(harness.port.take_work().is_none());
     assert_eq!(is_pending(harness.cells), (false, false));
 }
 
@@ -416,16 +444,13 @@ fn the_timer_leaves_only_stopped_and_on_request() {
     ));
     harness.script(|model| model.timer.push_back(Step::Pending));
     harness.enter();
-    let pending = harness
-        .port
-        .take_pending()
-        .expect("the handler handed it on");
-    // Its software work runs in the task: there is nothing to stop.
+    let _work = harness.port.take_work().expect("the handler handed it on");
+    // The handler retains the owner but cannot stop until the plan arrives.
     assert!(matches!(
         harness.exchange(Request::StopTimer),
         Ok(Reply::Refused(GateError::TimerNotReady))
     ));
-    assert!(harness.port.restore_ready(Timer(pending.0)).is_ok());
+    assert!(harness.port.submit_plan(Plan).is_ok());
     harness.ops();
     assert!(matches!(
         harness.exchange(Request::StopTimer),
@@ -455,7 +480,7 @@ fn stopped_timer_work_is_retained_as_a_fault() {
     harness.script(|model| model.timer.push_back(Step::Pending));
     harness.enter();
     assert!(harness.fault.load(Ordering::Acquire));
-    assert!(harness.port.take_pending().is_none());
+    assert!(harness.port.take_work().is_none());
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
         Ok(Reply::Refused(GateError::TimerNotStopped))
@@ -463,15 +488,10 @@ fn stopped_timer_work_is_retained_as_a_fault() {
 }
 
 #[test]
-fn a_second_ready_timer_is_retained_as_a_fault() {
+fn a_plan_without_outstanding_work_is_retained_as_a_fault() {
     let mut harness = Harness::new();
     harness.open();
-    assert!(
-        harness
-            .port
-            .restore_ready(Timer(harness.model.clone()))
-            .is_ok()
-    );
+    assert!(harness.port.submit_plan(Plan).is_ok());
     harness.enter();
     assert!(harness.fault.load(Ordering::Acquire));
 }
@@ -516,4 +536,33 @@ fn a_foreign_executor_cannot_await_a_reply() {
         exchange.as_mut().poll(&mut cx),
         Poll::Ready(Err(GateError::ForeignContext))
     ));
+}
+
+#[test]
+fn an_event_between_plan_and_application_waits_for_the_retained_owner() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.script(|model| model.timer.push_back(Step::Pending));
+    harness.enter();
+    let _work = harness.port.take_work().unwrap();
+    harness.cells.timer_wake().take().unwrap();
+    harness.ops();
+    // The handler acknowledges an arrival after the snapshot and retains its work.
+    harness
+        .clock
+        .advance(oer_time::Duration::from_micros(10))
+        .unwrap();
+    harness.script(|model| model.timer.push_back(Step::Pending));
+    harness.enter();
+    let ops = harness.ops();
+    assert!(!ops.contains(&Op::TimerStep));
+    assert!(ops.contains(&Op::ObserveTimer));
+    assert!(harness.port.submit_plan(Plan).is_ok());
+    assert!(!harness.ops().contains(&Op::ApplyPlan));
+    harness.enter();
+    let ops = harness.ops();
+    assert_eq!(ops[1], Op::ApplyPlan);
+    assert!(harness.port.take_work().is_some());
+    assert_eq!(is_pending(harness.cells), (false, true));
+    assert!(!harness.fault.load(Ordering::Acquire));
 }

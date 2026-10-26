@@ -25,7 +25,7 @@ limitations.
 | `port` | One-credit affine LE command/terminal queues, lifecycle supervision and the P2 physical DTM runner |
 | `radio` | Controller lifecycle parked in the shared radio backend; matching-installation runtime handover and retirement |
 | `interrupt` | Chip interrupt state and hardware handling |
-| `modem_timer` | Controller modem low-power timer task over the published timer owner |
+| `modem_timer` | Controller modem low-power timer task over snapshots and unarmed plans |
 | `scheduler` | The scheduler core over controller time and the finished-list worker; the physical list protocol and publications belong to the HAL Bluetooth engine |
 | `timed_preparation` | Controller-time preparation shared by timed scheduler admissions |
 | `resources` | Task and inactive interrupt owners split from the clocked client |
@@ -79,8 +79,8 @@ One interrupt table entry binds `interrupt::BluetoothInterrupts` once, at
 start: the controller bank's primary (124) and NRT (133) sources, the modem
 low-power timer (127) and the shared radio doorbell (`FROM_CPU` line 3), all
 on one line at level three on core 0. Its handler,
-`BluetoothInterrupts::service`, lowers the doorbell, takes the timer owner the
-task rearmed and one gate request, serves one request of the scheduler
+`BluetoothInterrupts::service`, lowers the doorbell, applies the task's unarmed
+timer plan and takes one gate request, serves one request of the scheduler
 channel, samples and acknowledges the primary status and the NRT snapshots,
 then steps the timer; a clear status writes nothing. The part holds a gate
 for the bank and one for the timer, and touches a register owner only while
@@ -92,8 +92,13 @@ once the router's `Bound` proof of the part made the doorbell's ringing half
 (`BluetoothInterruptEnds::attach`). Opening an epoch hands the handler the
 unprepared bank, the HAL's channel endpoint and the initialized timer: the handler prepares the
 controller output, then starts the runtime timer, so no source is armed while
-the task holds its owner. The timer's software work crosses through
-`interrupt::ModemLpTimerPort`. The route is never removed and nothing is
+the task holds its owner. The timer register owner and authoritative epoch
+stay in the handler while value-only snapshots and unarmed plans cross through
+`interrupt::ModemLpTimerPort`. P2 only mutates the queue and publishes
+expirations. The handler applies the sourced disable/sample/program/command
+transaction. Repeated entries during planning acknowledge and retain new
+pending/rollover facts; their software work is published after the in-flight
+plan returns. The route is never removed and nothing is
 masked at the interrupt controller: the task and the handler share no lock,
 only one-slot queues, the doorbell and the static reply signal.
 

@@ -2,7 +2,7 @@
 //!
 //! This replaces the reference Controller's callback timer list with fixed
 //! Rust-owned state. Queue mutation is serialized by the unique software-work
-//! owner; expiration delivery crosses an atomic one-event backpressure cell.
+//! snapshot; expiration delivery crosses an atomic one-event backpressure cell.
 //! No operation allocates, polls hardware in a loop or depends on an RTOS.
 
 use core::{
@@ -13,9 +13,9 @@ use core::{
 use oer_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 
 use oer_esp32s31_hal::bluetooth::{
-    BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerEpoch,
-    BluetoothModemLpTimerInstant, ModemLpTimerHandlerRegisterStep, ModemLpTimerInterruptReadyOwner,
-    ModemLpTimerInterruptStep, ModemLpTimerSoftwarePendingOwner,
+    BluetoothModemLpTimerEpoch, BluetoothModemLpTimerInstant, ModemLpTimerHandlerRegisterStep,
+    ModemLpTimerInterruptReadyOwner, ModemLpTimerInterruptStep, ModemLpTimerPlan,
+    ModemLpTimerSoftwarePendingOwner, ModemLpTimerWork,
 };
 
 const EVENT_EMPTY: u8 = 0;
@@ -40,7 +40,7 @@ const WORKER_PENDING: u32 = 1;
 
 /// Durable, coalescing source-127 ISR-to-task readiness cell.
 ///
-/// Stable platform storage retains the affine software-pending timer owner;
+/// The handler retains the register owner and publishes a software snapshot;
 /// this cell independently retains the fact that task context must acquire it.
 /// A worker can therefore register after the interrupt without losing work.
 /// The fact travels in the image's static [`IrqSignal`] of the worker's
@@ -99,7 +99,7 @@ pub enum ModemLpTimerStableInterruptStep {
     Rearmed,
     /// A preceding entry already left task-owned work in stable storage.
     AwaitingSoftware,
-    /// This entry moved the owner into stable software-pending state.
+    /// This entry published a value-only software-work snapshot.
     SoftwarePending,
 }
 
@@ -329,7 +329,7 @@ pub enum ModemLpTimerEventPublication {
 /// Allocation-free one-event handoff with explicit producer backpressure.
 ///
 /// A full cell never overwrites an older expiration. The source-127 software
-/// owner remains trapped in its publication-required state until the receiver
+/// work remains trapped in its publication-required state until the receiver
 /// frees the slot, so final hardware rearm cannot race ahead of event delivery.
 pub struct ModemLpTimerEventCell {
     state: AtomicU8,
@@ -416,14 +416,19 @@ pub enum ModemLpTimerInterruptRuntimeStep<'queue, const CAPACITY: usize> {
     /// The register-only path completed and the affine owner is ready again.
     Ready(ModemLpTimerInterruptReadyOwner),
     /// Acknowledged state requires bounded source-owned queue work.
-    Software(ModemLpTimerSoftwareWork<'queue, CAPACITY>),
+    Software {
+        /// Register authority that stays in the handler.
+        owner: ModemLpTimerSoftwarePendingOwner,
+        /// Value-only queue work for P2.
+        work: ModemLpTimerSoftwareWork<'queue, CAPACITY>,
+    },
 }
 
 /// Execute the source-127 PAC/HAL prefix and enter source-owned software work.
 ///
 /// This composes both finite HAL register phases. The function either returns
-/// the ISR-ready owner immediately or advances the positional epoch and traps
-/// ownership in [`ModemLpTimerSoftwareWork`]. It never dispatches a
+/// the ISR-ready owner immediately or separates the retained register owner
+/// from value-only [`ModemLpTimerSoftwareWork`]. It never dispatches a
 /// callback or loops over the queue in hard-interrupt context.
 pub fn step_modem_lp_timer_interrupt<'queue, const CAPACITY: usize>(
     ready: ModemLpTimerInterruptReadyOwner,
@@ -438,17 +443,18 @@ pub fn step_modem_lp_timer_interrupt<'queue, const CAPACITY: usize>(
             ModemLpTimerHandlerRegisterStep::Rearmed(ready) => {
                 ModemLpTimerInterruptRuntimeStep::Ready(ready)
             }
-            ModemLpTimerHandlerRegisterStep::SoftwarePending(pending) => {
-                ModemLpTimerInterruptRuntimeStep::Software(ModemLpTimerSoftwareWork::begin(
-                    queue, epoch, pending,
-                ))
+            ModemLpTimerHandlerRegisterStep::SoftwarePending { owner, work } => {
+                ModemLpTimerInterruptRuntimeStep::Software {
+                    owner,
+                    work: ModemLpTimerSoftwareWork::begin(queue, epoch, work),
+                }
             }
         },
     }
 }
 
-/// Source-127 software work retaining the unique HAL owner and queue borrow.
-#[must_use = "software work must publish every expiration and rearm the interrupt owner"]
+/// Source-127 software work retaining only a snapshot and queue borrow.
+#[must_use = "software work must publish every expiration and return an unarmed plan"]
 pub struct ModemLpTimerSoftwareWork<'queue, const CAPACITY: usize> {
     queue: &'queue mut ModemLpTimerQueue<CAPACITY>,
     epoch: &'queue mut BluetoothModemLpTimerEpoch,
@@ -459,17 +465,15 @@ pub struct ModemLpTimerSoftwareWork<'queue, const CAPACITY: usize> {
 ///
 /// Queue and epoch storage are deliberately supplied only for one finite
 /// operation. This lets an executor borrow readiness without moving the affine
-/// HAL owner into a future or constructing a self-referential task value.
+/// snapshot into a future or constructing a self-referential task value.
 pub(crate) struct ModemLpTimerSoftwareState {
-    owner: ModemLpTimerSoftwarePendingOwner,
-    dispatch_requested: bool,
+    work: ModemLpTimerWork,
 }
 
 /// One finite step of non-borrowing source-127 software state.
 pub(crate) enum ModemLpTimerSoftwareStateStep {
     Expiration(ModemLpTimerExpirationState),
-    Recheck(ModemLpTimerSoftwareState),
-    Rearmed(ModemLpTimerInterruptReadyOwner),
+    Planned(ModemLpTimerPlan),
 }
 
 /// Non-borrowing expiration publication gate for the final task endpoint.
@@ -500,25 +504,17 @@ impl ModemLpTimerExpirationState {
 }
 
 impl ModemLpTimerSoftwareState {
-    pub(crate) fn begin(
-        owner: ModemLpTimerSoftwarePendingOwner,
-        epoch: &mut BluetoothModemLpTimerEpoch,
-    ) -> Self {
-        let registers = owner.register_observation();
-        epoch.advance_for_handler_registers(registers);
-        Self {
-            owner,
-            dispatch_requested: registers.state_0024_low_byte_was_nonzero(),
-        }
+    pub(crate) fn begin(work: ModemLpTimerWork, epoch: &mut BluetoothModemLpTimerEpoch) -> Self {
+        *epoch = work.epoch();
+        Self { work }
     }
 
     pub(crate) fn step<const CAPACITY: usize>(
-        mut self,
+        self,
         queue: &mut ModemLpTimerQueue<CAPACITY>,
-        epoch: &mut BluetoothModemLpTimerEpoch,
     ) -> ModemLpTimerSoftwareStateStep {
-        let now = self.owner.sample_counter(epoch).instant();
-        if self.dispatch_requested
+        let now = self.work.instant();
+        if self.work.dispatch_requested()
             && let Some(event) = queue.pop_due(now)
         {
             return ModemLpTimerSoftwareStateStep::Expiration(ModemLpTimerExpirationState {
@@ -526,20 +522,7 @@ impl ModemLpTimerSoftwareState {
                 event,
             });
         }
-
-        let disposition = match queue.next_deadline(now) {
-            Some(deadline) => self.owner.program_compare(deadline, *epoch),
-            None => {
-                self.owner.disable_compare();
-                return ModemLpTimerSoftwareStateStep::Rearmed(self.owner.complete_software());
-            }
-        };
-        if disposition == BluetoothModemLpTimerCompareDisposition::Immediate {
-            self.dispatch_requested = true;
-            ModemLpTimerSoftwareStateStep::Recheck(self)
-        } else {
-            ModemLpTimerSoftwareStateStep::Rearmed(self.owner.complete_software())
-        }
+        ModemLpTimerSoftwareStateStep::Planned(self.work.plan(queue.next_deadline(now)))
     }
 }
 
@@ -548,9 +531,9 @@ impl<'queue, const CAPACITY: usize> ModemLpTimerSoftwareWork<'queue, CAPACITY> {
     pub fn begin(
         queue: &'queue mut ModemLpTimerQueue<CAPACITY>,
         epoch: &'queue mut BluetoothModemLpTimerEpoch,
-        owner: ModemLpTimerSoftwarePendingOwner,
+        work: ModemLpTimerWork,
     ) -> Self {
-        let state = ModemLpTimerSoftwareState::begin(owner, epoch);
+        let state = ModemLpTimerSoftwareState::begin(work, epoch);
         Self {
             queue,
             epoch,
@@ -561,15 +544,15 @@ impl<'queue, const CAPACITY: usize> ModemLpTimerSoftwareWork<'queue, CAPACITY> {
     /// Execute one bounded software step.
     ///
     /// At most one due timer is removed. If no expiration is due, the method
-    /// performs exactly one compare disposition and the final fresh read only
-    /// after every removed expiration has crossed the publication gate.
+    /// returns an unarmed deadline plan after every removed expiration has
+    /// crossed the publication gate. No timer register can be accessed here.
     pub fn step(self) -> ModemLpTimerSoftwareStep<'queue, CAPACITY> {
         let Self {
             queue,
             epoch,
             state,
         } = self;
-        match state.step(queue, epoch) {
+        match state.step(queue) {
             ModemLpTimerSoftwareStateStep::Expiration(pending) => {
                 let event = pending.event;
                 ModemLpTimerSoftwareStep::Expiration(ModemLpTimerExpirationPending {
@@ -581,16 +564,7 @@ impl<'queue, const CAPACITY: usize> ModemLpTimerSoftwareWork<'queue, CAPACITY> {
                     event,
                 })
             }
-            ModemLpTimerSoftwareStateStep::Recheck(state) => {
-                ModemLpTimerSoftwareStep::Recheck(Self {
-                    queue,
-                    epoch,
-                    state,
-                })
-            }
-            ModemLpTimerSoftwareStateStep::Rearmed(owner) => {
-                ModemLpTimerSoftwareStep::Rearmed(owner)
-            }
+            ModemLpTimerSoftwareStateStep::Planned(plan) => ModemLpTimerSoftwareStep::Planned(plan),
         }
     }
 }
@@ -631,15 +605,12 @@ impl<'queue, const CAPACITY: usize> ModemLpTimerExpirationPending<'queue, CAPACI
 }
 
 /// Result of one bounded source-127 software queue step.
-#[must_use = "retain recheck/work ownership or the rearmed interrupt owner"]
+#[must_use = "retain software work or submit the unarmed plan"]
 pub enum ModemLpTimerSoftwareStep<'queue, const CAPACITY: usize> {
     /// One due expiration must cross the durable event handoff.
     Expiration(ModemLpTimerExpirationPending<'queue, CAPACITY>),
-    /// Compare programming detected an immediate deadline; yield before one
-    /// fresh counter/queue recheck.
-    Recheck(ModemLpTimerSoftwareWork<'queue, CAPACITY>),
-    /// The queue is armed or empty and the final fresh read has completed.
-    Rearmed(ModemLpTimerInterruptReadyOwner),
+    /// Queue processing completed; the handler must apply this unarmed plan.
+    Planned(ModemLpTimerPlan),
 }
 
 #[cfg(test)]

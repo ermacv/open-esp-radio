@@ -1,7 +1,7 @@
 //! Source-127 timer ownership, readiness and finite task transitions.
 //!
 //! Boot supplies the timer runtime once. This module retains the queue and HAL
-//! phase across task waits and exchanges owners with the timer's gate in the
+//! snapshot across task waits and exchanges plans with the timer's gate in the
 //! Bluetooth interrupt handler ([`crate::interrupt::ModemLpTimerPort`]); it
 //! does not own Controller scheduling or HCI command dispatch.
 
@@ -12,62 +12,54 @@ use crate::{
     },
     runtime_resources::ControllerModemTimerRuntime,
 };
-use oer_esp32s31_hal::bluetooth::{
-    ModemLpTimerInterruptReadyOwner, ModemLpTimerSoftwarePendingOwner,
-};
+use oer_esp32s31_hal::bluetooth::{ModemLpTimerPlan, ModemLpTimerWork};
 use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
-/// Stable-storage boundary for source-127 task ownership.
+/// Value-only snapshot/plan boundary for the source-127 task.
 ///
 /// The timer's gate implements it ([`crate::interrupt::ModemLpTimerPort`]).
-/// Taking an owner leaves the gate empty, so repeated interrupt entry cannot
-/// touch MMIO while task work owns the timer. Only a fully rearmed owner may
-/// be restored.
-pub trait ModemLpTimerSoftwareOwnerStorage {
+/// Register authority stays in the handler throughout queue processing.
+/// Submitting a plan does no MMIO; the handler alone applies and arms it.
+pub trait ModemLpTimerPlanStorage {
     /// Exact reason task context could not acquire pending work.
     type TakeError;
-    /// Exact reason the fully rearmed owner could not return to ISR storage.
-    type RestoreError;
+    /// Exact reason the unarmed plan could not return to ISR storage.
+    type SubmitError;
 
-    /// Move software-pending ownership out of stable ISR storage.
-    fn take_modem_lp_timer_software_pending(
-        &self,
-    ) -> Result<ModemLpTimerSoftwarePendingOwner, Self::TakeError>;
+    /// Take the value-only work snapshot published by the handler.
+    fn take_modem_lp_timer_work(&self) -> Result<ModemLpTimerWork, Self::TakeError>;
 
-    /// Restore only a fully rearmed owner, retaining it on rejection.
-    fn restore_modem_lp_timer_ready(
+    /// Submit the unarmed plan, retaining it on rejection.
+    fn submit_modem_lp_timer_plan(
         &self,
-        owner: ModemLpTimerInterruptReadyOwner,
-    ) -> Result<(), (Self::RestoreError, ModemLpTimerInterruptReadyOwner)>;
+        owner: ModemLpTimerPlan,
+    ) -> Result<(), (Self::SubmitError, ModemLpTimerPlan)>;
 }
 
 /// Why the timer's gate refused a software exchange.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModemLpTimerPortError {
-    /// The handler handed on no pending owner.
-    NoPendingOwner,
-    /// The handler has not taken the previous rearmed owner.
+    /// The handler handed on no work snapshot.
+    NoPendingWork,
+    /// The handler has not taken the previous plan.
     Occupied,
 }
 
-impl<R: crate::interrupt::RadioDoorbell> ModemLpTimerSoftwareOwnerStorage
+impl<R: crate::interrupt::RadioDoorbell> ModemLpTimerPlanStorage
     for crate::interrupt::ModemLpTimerPort<crate::interrupt::ChipGate, R>
 {
     type TakeError = ModemLpTimerPortError;
-    type RestoreError = ModemLpTimerPortError;
+    type SubmitError = ModemLpTimerPortError;
 
-    fn take_modem_lp_timer_software_pending(
-        &self,
-    ) -> Result<ModemLpTimerSoftwarePendingOwner, ModemLpTimerPortError> {
-        self.take_pending()
-            .ok_or(ModemLpTimerPortError::NoPendingOwner)
+    fn take_modem_lp_timer_work(&self) -> Result<ModemLpTimerWork, ModemLpTimerPortError> {
+        self.take_work().ok_or(ModemLpTimerPortError::NoPendingWork)
     }
 
-    fn restore_modem_lp_timer_ready(
+    fn submit_modem_lp_timer_plan(
         &self,
-        owner: ModemLpTimerInterruptReadyOwner,
-    ) -> Result<(), (ModemLpTimerPortError, ModemLpTimerInterruptReadyOwner)> {
-        self.restore_ready(owner)
+        owner: ModemLpTimerPlan,
+    ) -> Result<(), (ModemLpTimerPortError, ModemLpTimerPlan)> {
+        self.submit_plan(owner)
             .map_err(|owner| (ModemLpTimerPortError::Occupied, owner))
     }
 }
@@ -77,13 +69,13 @@ enum ControllerModemTimerTaskPhase {
     Idle,
     Work(ModemLpTimerSoftwareState),
     Expiration(ModemLpTimerExpirationState),
-    Rearm(ModemLpTimerInterruptReadyOwner),
+    Plan(ModemLpTimerPlan),
 }
 
 /// Borrowed readiness class for the source-127 task endpoint.
 ///
 /// The value carries no timer owner and may be held by an executor wait future.
-/// The affine queue, epoch and HAL phase remain inside
+/// The queue and snapshot epoch remain inside
 /// [`ControllerModemTimerTask`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerModemTimerReadinessClass {
@@ -93,8 +85,8 @@ pub enum ControllerModemTimerReadinessClass {
     Step,
     /// Expiration publication is waiting for the one-event cell to become empty.
     EventCapacity,
-    /// A fully rearmed owner is ready for stable-storage restoration.
-    Rearm,
+    /// An unarmed plan is ready for submission to the handler.
+    Plan,
 }
 
 /// Owner-free borrowed readiness observation for source 127.
@@ -125,23 +117,24 @@ impl<X: SignalExecutor> ControllerModemTimerReadiness<'_, X> {
     pub fn is_ready(&self) -> Result<bool, ForeignContext> {
         Ok(match self.class {
             ControllerModemTimerReadinessClass::Interrupt => self.worker_wake.is_pending()?,
-            ControllerModemTimerReadinessClass::Step
-            | ControllerModemTimerReadinessClass::Rearm => true,
+            ControllerModemTimerReadinessClass::Step | ControllerModemTimerReadinessClass::Plan => {
+                true
+            }
             ControllerModemTimerReadinessClass::EventCapacity => !self.events.is_pending(),
         })
     }
 }
 
-/// Result of acquiring one durable source-127 software-pending owner.
+/// Result of acquiring one durable source-127 software-work snapshot.
 #[must_use = "a begin result must be handled without losing stable readiness"]
 pub enum ControllerModemTimerBegin<E> {
     /// No durable interrupt publication currently requests task work.
     NotReady,
-    /// The owner entered the endpoint and one finite software step is ready.
+    /// The snapshot entered the endpoint and one finite software step is ready.
     Started,
     /// Stable storage rejected acquisition; the endpoint remains idle.
     StorageRejected(E),
-    /// A software or rearm phase is already retained by this endpoint.
+    /// A software or plan phase is already retained by this endpoint.
     AlreadyActive,
     /// The task runs outside its worker wake's executor; nothing changed.
     ForeignExecutor,
@@ -151,7 +144,7 @@ pub enum ControllerModemTimerBegin<E> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[must_use = "the next source-127 readiness class must be observed"]
 pub enum ControllerModemTimerStep {
-    /// No software owner has been acquired.
+    /// No software snapshot has been acquired.
     Idle,
     /// One expiration now owns the durable publication edge.
     ExpirationPending(ModemLpTimerExpiration),
@@ -159,34 +152,32 @@ pub enum ControllerModemTimerStep {
     Published(ModemLpTimerEventPublication),
     /// The expiration cell is occupied and the unchanged publication remains retained.
     Backpressured(ModemLpTimerExpiration),
-    /// Immediate compare disposition requires a later fresh finite recheck.
-    Recheck,
-    /// Queue processing produced a fully rearmed owner retained inside the endpoint.
-    RearmPending,
+    /// Queue processing produced an unarmed plan retained inside the endpoint.
+    PlanPending,
 }
 
-/// Result of restoring the fully rearmed owner to stable ISR storage.
-#[must_use = "a rejected rearm remains retained by the timer task"]
-pub enum ControllerModemTimerRearm<E> {
-    /// The ready owner is back in stable interrupt storage.
-    Rearmed,
-    /// Stable storage rejected restoration; the exact ready owner remains private.
+/// Result of submitting an unarmed plan to the handler.
+#[must_use = "a rejected plan remains retained by the timer task"]
+pub enum ControllerModemTimerPlanSubmission<E> {
+    /// The unarmed plan is queued for application by the handler.
+    Submitted,
+    /// Stable storage rejected submission; the exact unarmed plan remains private.
     StorageRejected(E),
-    /// No fully rearmed owner is currently retained.
+    /// No unarmed plan is currently retained.
     NotReady,
-    /// The task runs outside its worker wake's executor; the owner stays
+    /// The task runs outside its worker wake's executor; the plan stays
     /// retained.
     ForeignExecutor,
 }
 
 /// Disjoint task-context source-127 owner for one final Controller runtime.
 ///
-/// This endpoint exclusively owns the mutable timer queue and positional epoch.
+/// This endpoint owns the mutable queue and a copy of the handler's snapshot epoch.
 /// Stable storage is shared only as the platform exchange boundary with the
-/// interrupt service. All affine HAL states remain private across borrowed
-/// readiness and finite `begin`, `step`, and `rearm` calls, so an executor
+/// interrupt service. Value-only work remains private across borrowed
+/// readiness and finite `begin`, `step`, and `submit_plan` calls, so an executor
 /// future never needs to own them.
-#[must_use = "the modem timer task retains source-127 queue and hardware ownership"]
+#[must_use = "the modem timer task retains source-127 queue and unarmed plans"]
 pub struct ControllerModemTimerTask<'runtime, S, const CAPACITY: usize, X: SignalExecutor> {
     storage: &'runtime S,
     runtime: ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
@@ -196,7 +187,7 @@ pub struct ControllerModemTimerTask<'runtime, S, const CAPACITY: usize, X: Signa
 impl<'runtime, S, const CAPACITY: usize, X: SignalExecutor>
     ControllerModemTimerTask<'runtime, S, CAPACITY, X>
 where
-    S: ModemLpTimerSoftwareOwnerStorage,
+    S: ModemLpTimerPlanStorage,
 {
     pub fn new(
         storage: &'runtime S,
@@ -217,7 +208,7 @@ where
             ControllerModemTimerTaskPhase::Expiration(_) => {
                 ControllerModemTimerReadinessClass::EventCapacity
             }
-            ControllerModemTimerTaskPhase::Rearm(_) => ControllerModemTimerReadinessClass::Rearm,
+            ControllerModemTimerTaskPhase::Plan(_) => ControllerModemTimerReadinessClass::Plan,
         };
         ControllerModemTimerReadiness {
             class,
@@ -226,7 +217,7 @@ where
         }
     }
 
-    /// Acquire exactly one software-pending owner after borrowed readiness.
+    /// Acquire exactly one software-work snapshot after borrowed readiness.
     pub fn begin(&mut self) -> ControllerModemTimerBegin<S::TakeError> {
         if !matches!(self.phase, ControllerModemTimerTaskPhase::Idle) {
             return ControllerModemTimerBegin::AlreadyActive;
@@ -236,7 +227,7 @@ where
             Ok(false) => return ControllerModemTimerBegin::NotReady,
             Err(ForeignContext) => return ControllerModemTimerBegin::ForeignExecutor,
         }
-        match self.storage.take_modem_lp_timer_software_pending() {
+        match self.storage.take_modem_lp_timer_work() {
             Ok(owner) => {
                 // The check above ran in this same executor context.
                 let _taken = self.runtime.worker_wake.take();
@@ -250,28 +241,22 @@ where
         }
     }
 
-    /// Advance exactly one queue, publication or compare transition.
+    /// Advance exactly one value-only queue, publication or plan transition.
     pub fn step(&mut self) -> ControllerModemTimerStep {
         let phase = core::mem::replace(&mut self.phase, ControllerModemTimerTaskPhase::Idle);
         match phase {
             ControllerModemTimerTaskPhase::Idle => ControllerModemTimerStep::Idle,
-            ControllerModemTimerTaskPhase::Work(work) => {
-                match work.step(&mut self.runtime.queue, &mut self.runtime.epoch) {
-                    ModemLpTimerSoftwareStateStep::Expiration(pending) => {
-                        let event = pending.event();
-                        self.phase = ControllerModemTimerTaskPhase::Expiration(pending);
-                        ControllerModemTimerStep::ExpirationPending(event)
-                    }
-                    ModemLpTimerSoftwareStateStep::Recheck(work) => {
-                        self.phase = ControllerModemTimerTaskPhase::Work(work);
-                        ControllerModemTimerStep::Recheck
-                    }
-                    ModemLpTimerSoftwareStateStep::Rearmed(owner) => {
-                        self.phase = ControllerModemTimerTaskPhase::Rearm(owner);
-                        ControllerModemTimerStep::RearmPending
-                    }
+            ControllerModemTimerTaskPhase::Work(work) => match work.step(&mut self.runtime.queue) {
+                ModemLpTimerSoftwareStateStep::Expiration(pending) => {
+                    let event = pending.event();
+                    self.phase = ControllerModemTimerTaskPhase::Expiration(pending);
+                    ControllerModemTimerStep::ExpirationPending(event)
                 }
-            }
+                ModemLpTimerSoftwareStateStep::Planned(owner) => {
+                    self.phase = ControllerModemTimerTaskPhase::Plan(owner);
+                    ControllerModemTimerStep::PlanPending
+                }
+            },
             ControllerModemTimerTaskPhase::Expiration(pending) => {
                 let event = pending.event();
                 match pending.publish(self.runtime.events()) {
@@ -285,29 +270,29 @@ where
                     }
                 }
             }
-            ControllerModemTimerTaskPhase::Rearm(owner) => {
-                self.phase = ControllerModemTimerTaskPhase::Rearm(owner);
-                ControllerModemTimerStep::RearmPending
+            ControllerModemTimerTaskPhase::Plan(owner) => {
+                self.phase = ControllerModemTimerTaskPhase::Plan(owner);
+                ControllerModemTimerStep::PlanPending
             }
         }
     }
 
-    /// Restore one fully rearmed owner to stable source-127 interrupt storage.
-    pub fn rearm(&mut self) -> ControllerModemTimerRearm<S::RestoreError> {
+    /// Submit one unarmed plan to the handler; hardware is armed there later.
+    pub fn submit_plan(&mut self) -> ControllerModemTimerPlanSubmission<S::SubmitError> {
         let phase = core::mem::replace(&mut self.phase, ControllerModemTimerTaskPhase::Idle);
-        let ControllerModemTimerTaskPhase::Rearm(owner) = phase else {
+        let ControllerModemTimerTaskPhase::Plan(owner) = phase else {
             self.phase = phase;
-            return ControllerModemTimerRearm::NotReady;
+            return ControllerModemTimerPlanSubmission::NotReady;
         };
         if let Err(ForeignContext) = self.runtime.worker_wake.take() {
-            self.phase = ControllerModemTimerTaskPhase::Rearm(owner);
-            return ControllerModemTimerRearm::ForeignExecutor;
+            self.phase = ControllerModemTimerTaskPhase::Plan(owner);
+            return ControllerModemTimerPlanSubmission::ForeignExecutor;
         }
-        match self.storage.restore_modem_lp_timer_ready(owner) {
-            Ok(()) => ControllerModemTimerRearm::Rearmed,
+        match self.storage.submit_modem_lp_timer_plan(owner) {
+            Ok(()) => ControllerModemTimerPlanSubmission::Submitted,
             Err((error, owner)) => {
-                self.phase = ControllerModemTimerTaskPhase::Rearm(owner);
-                ControllerModemTimerRearm::StorageRejected(error)
+                self.phase = ControllerModemTimerTaskPhase::Plan(owner);
+                ControllerModemTimerPlanSubmission::StorageRejected(error)
             }
         }
     }
@@ -347,7 +332,7 @@ impl<'runtime, S, const CAPACITY: usize, X: SignalExecutor>
     }
 }
 
-impl<'runtime, S: ModemLpTimerSoftwareOwnerStorage, const CAPACITY: usize, X: SignalExecutor>
+impl<'runtime, S: ModemLpTimerPlanStorage, const CAPACITY: usize, X: SignalExecutor>
     ControllerModemTimerTask<'runtime, S, CAPACITY, X>
 {
     /// Observe whether task work has drained before stopping the timer.
@@ -404,7 +389,7 @@ impl<'runtime, S: ModemLpTimerSoftwareOwnerStorage, const CAPACITY: usize, X: Si
     }
 }
 
-impl<'runtime, S: ModemLpTimerSoftwareOwnerStorage, const CAPACITY: usize, X: SignalExecutor>
+impl<'runtime, S: ModemLpTimerPlanStorage, const CAPACITY: usize, X: SignalExecutor>
     ControllerModemTimerRetired<'runtime, S, CAPACITY, X>
 {
     /// Resume the same software epoch; its owner never left the handler.

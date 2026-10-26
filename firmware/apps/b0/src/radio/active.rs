@@ -77,8 +77,9 @@ pub(super) fn timer_step(
             _ => Ok(()),
         },
         ControllerModemTimerReadinessClass::EventCapacity => Err(Fault::TimerStep),
-        ControllerModemTimerReadinessClass::Rearm => match task.rearm() {
-            ControllerModemTimerRearm::Rearmed | ControllerModemTimerRearm::NotReady => Ok(()),
+        ControllerModemTimerReadinessClass::Plan => match task.submit_plan() {
+            ControllerModemTimerPlanSubmission::Submitted
+            | ControllerModemTimerPlanSubmission::NotReady => Ok(()),
             _ => Err(Fault::TimerRearm),
         },
     }
