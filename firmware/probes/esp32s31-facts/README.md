@@ -593,17 +593,55 @@ The same ledger is SOURCE `HW17_S31_SAR_PREPARATION_20261027` in the model.
 
 ### Complete SAR record arguments
 
-All entries are `(tag, a, b, c)`; tag and status/error codes are hexadecimal,
-while clocks/cycles and reference data are unsigned integers. For `1400`,
-`a=SOC_CLK_SEL`, `b=CPU divider code`, `c=CPLL feedback divider`. For `1401`,
-`a=adopted Hz`, `b=CPLL reference divider`, `c=CPU fractional numerator`.
-For `1450`, `a=published reference` (0 or 21845), `b=sample immediately
-before publication`, `c=sample immediately after publication`; these are
-not result/ready pairs. `1408` is `(checkpoint, observed boolean, expected
-boolean)`; checkpoints 1–8 are reset release, active ICG, register bus,
-modem maps, shared maps, PLL source/XTAL-off, PHY clocks and I2C source.
-`1409` is `(stage, observation, elapsed cycles)`: stage 1 records the accepted
-SDM byte and time from power-up sampling; stage 2 records prefix completion.
+All records are four `u32` words `(tag, a, b, c)`. Tags below are
+hexadecimal; booleans are 0/1, unused arguments are explicitly zero.
+Absolute cycle stamps wrap at 32 bits. Elapsed cycles use wrapping
+subtraction at the adopted CPU frequency; divide by `hz / 1_000_000` for
+microseconds. The actual trigger-setting store is between its before/after
+stamps. Poll elapsed times start at the after stamp. The HOLD ready anchor
+is the stamp immediately before the first status load returning 7; it is not
+a timestamp of the hardware ready edge.
+
+| Tag | `a` | `b` | `c` |
+|---|---|---|---|
+| `1400` | `SOC_CLK_SEL` root code | CPU integer divider code | CPLL feedback divider |
+| `1401` | Adopted CPU frequency `hz` | CPLL reference divider | CPU fractional numerator |
+| `1402` / `1410` | Absolute cycle stamp before the trigger-setting PAC RMW | Absolute cycle stamp after that RMW | Adopted CPU frequency `hz` |
+| `1403` / `1411` | Elapsed cycles from the after-trigger stamp to completion of this status read | Raw three-bit `SAR_READY` code | 0 |
+| `1404` | Preflight reference (0 or `0x5555`) | Upper-lane sample if ready was accepted; otherwise 0 without a result read | Whether `begin()` accepted ready=7 (not whether the sample is nonzero) |
+| `1405` | `usable`: both preflight samples are nonzero | `distinct`: usable and the two samples differ; this is only an inequality gate | Current three-bit `SAR_READY` code |
+| `1406` | Saved `POWER_DETECTOR_CONTROL.BIT_16_OPAQUE` background-enable bit | Current three-bit `SAR_READY` code | Saved `POWER_DETECTOR_CONTROL.BITS_20_22_OPAQUE` field |
+| `1407` | Current background-enable bit | Current `POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_12_13_OPAQUE` field | Current `RTC_SAR2_PWDET_CCT` field |
+| `1408` | Common-power checkpoint number 1–8 | Observed boolean | Expected boolean (1) |
+| `1409`, stage 1 | 1 (SDM predicate accepted) | Accepted SDM byte (`0x5b`) | Elapsed cycles since the SDM polling loop began after power/reset completion |
+| `1409`, stage 2 | 2 (cold prefix through I2C master setup completed) | 1 (success) | 0 (not a duration) |
+| `1412` | Delayed-first-result-read flag | Tone-arm-clear-after-ready flag | Absolute HOLD ready-anchor cycle stamp |
+| `1413` | Nominal delay from the ready anchor, in µs (0/1/10/100) | Start elapsed cycles from that anchor | End elapsed cycles from that anchor, after ready/result/ready reads |
+| `1414` | Ready immediately before the result read | Upper-lane sample | Ready immediately after the result read |
+| `1450` | Published reference (0 or `0x5555`) | Sample immediately before reference publication | Sample immediately after publication, without a new trigger |
+| `1451` | Absolute cycle stamp before the trigger-setting PAC RMW | Absolute cycle stamp after that RMW | Defer first post-trigger result read until nominal +100 µs flag |
+| `1452` | Nominal delay from the after-trigger stamp, in µs (0/1/2/3/5/10/20/100) | Start elapsed cycles from that stamp | End elapsed cycles after status and, when enabled, result reads |
+| `1453` | Three-bit ready code at this EDGE observation | Upper-lane sample, or `u32::MAX` when deliberately unread | 0 |
+| `1454` | Ready before reference publication | Ready after reference publication | Ready after arm and its ≥1 µs settle, before triggering |
+| `1490`, powered | Current ready after both tone paths stop and DAC scale is restored | Current upper-lane sample at that point | 0 |
+| `1490`, unpowered | `u32::MAX` (unavailable) | `u32::MAX` (unavailable) | 0; this branch performs no cleanup MMIO |
+| `14ee` | Refusal/failure reason | Reason-specific detail (table below) | Reason-specific observation (table below) |
+| `14f0` | Selected SAR probe ID | Raw `mintstatus` at handler dispatch | Raw `mcause` at handler dispatch |
+
+`1406` is recorded after the common-power/cold prefix and before explicit
+background isolation and PWDET table initialization. `1407` is recorded at
+the end of configuration, after selecting calibration circuit mode and the
+tone image. The `1490` powered observation precedes TSENS/SAR-I2C release and
+calibration-clock clear; it does not measure retention after full cleanup.
+The `1408` checkpoints are, in order: reset release, active ICG, register
+bus, modem maps, shared maps, PLL source/XTAL-off, PHY clocks and I2C source.
+Each `1413` is followed by its `1414`; each `1452` by its `1453`.
+
+Common image diagnostics applicable to SAR commands are also four-word
+records: `ed` for an unknown selection is `(requested ID, 0, 0)`; `ee` for
+excess unexpected IRQ entries is `(raw mcause, prior IRQ count, absolute
+handler-entry cycle stamp)`; `ef` for an exception is `(raw mcause, mepc,
+mtval)`. These are failures, not SAR samples.
 
 `14ee` is `(reason, detail, observation)` and always means failure/refusal,
 even with an ordinary completion marker:
