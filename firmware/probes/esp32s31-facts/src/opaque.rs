@@ -3,6 +3,17 @@
 //! irq-blobray-wifi.md (P0, P-BA, BB-L, P-TSENS).
 use super::{Bits, Index, Session, contain, emit, pac};
 
+/// The opaque leaves' own PAC parts. The radio clock, reset and PMU parts are
+/// shared with the BLE leaves through `Session::ble`.
+pub(super) struct Hardware {
+    pub wifi_bb: pac::wifi_bb::PhyBasebandConfigOracleWifiBb,
+    pub block_ack: pac::wifi_mac::WifiMacBlockAck,
+    pub core_enable: pac::wifi_mac::WifiMacCoreEnable,
+    pub mac_interrupt: pac::wifi_mac::WifiMacInterrupt,
+    pub tsens: pac::tsens::LpTsens,
+    pub periclkrst: pac::lp_peri_clkrst::LpPericlkrst,
+}
+
 /// Named observation bound from BB-L; independent of modem clock progress.
 fn wait_cycles(cycles: u32) {
     let start = oer_riscv::cycle32();
@@ -29,27 +40,27 @@ fn xtal_cpu(s: &Session<'_>) -> bool {
 fn prepare(s: &mut Session<'_>) {
     contain(s);
     oer_riscv::disable_interrupts();
-    let p = &mut s.radio;
-    p.hp_sys_clkrst_radio.modify_modem_ctrl0(|w| {
+    let p = &mut s.ble;
+    p.upstream.modify_modem_ctrl0(|w| {
         w.set_reg_modem_clk_en(pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled);
     });
-    p.pmu_radio.select_hp_active_modem_icg();
-    p.modem_syscon_radio.modify_clk_conf_power_st(|w| {
+    p.pmu.select_hp_active_modem_icg();
+    p.clocks.modify_clk_conf_power_st(|w| {
         w.set_clk_modem_apb_st_map(Bits::constant::<6>())
             .set_clk_modem_peri_st_map(Bits::constant::<4>())
             .set_clk_wifi_st_map(Bits::constant::<6>())
             .set_clk_bt_st_map(Bits::constant::<4>());
     });
-    p.modem_lpcon_shared_clock.modify_clk_conf_power_st(|w| {
+    p.lp_clock.modify_clk_conf_power_st(|w| {
         w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
         w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
         w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
         w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
     });
-    p.pmu_radio.trigger_imm_modem_icg_update_dig_icg_modem_en();
-    p.pmu_radio.trigger_imm_sleep_sysclk_update_dig_icg_switch();
-    p.hp_sys_clkrst_radio.close_modem_pll_source_gate();
-    p.modem_syscon_radio.modify_clk_conf1(|w| {
+    p.pmu.trigger_imm_modem_icg_update_dig_icg_modem_en();
+    p.pmu.trigger_imm_sleep_sysclk_update_dig_icg_switch();
+    p.upstream.close_modem_pll_source_gate();
+    p.clocks.modify_clk_conf1(|w| {
         use pac::modem_syscon::clk_conf1::*;
         w.set_clk_wifi_apb_en(ClkWifiApbEn::Enabled)
             .set_clk_wifimac_en(ClkWifimacEn::Enabled)
@@ -57,28 +68,28 @@ fn prepare(s: &mut Session<'_>) {
             .set_clk_btmac_en(ClkBtmacEn::Enabled)
             .set_clk_fe_apb_en(true);
     });
-    s.mac.wifi_mac_core_enable.modify_core_enable_control(|w| {
+    s.opaque.core_enable.modify_core_enable_control(|w| {
         w.set_bits_4_7_opaque(pac::wifi_mac::core_enable_control::Bits4_7Opaque::Disabled);
     });
     oer_riscv::fence();
 }
 
 fn clock_snapshot(s: &Session<'_>, tag: u32) {
-    let p = &s.radio;
+    let p = &s.ble;
     emit(
         tag,
-        modem_conf(p.hp_sys_clkrst_radio.read_modem_conf()),
-        p.pmu_radio
+        modem_conf(p.upstream.read_modem_conf()),
+        p.pmu
             .read_hp_active_icg_modem()
             .hp_active_dig_icg_modem_code()
             .get(),
-        syscon_map(p.modem_syscon_radio.read_clk_conf_power_st()),
+        syscon_map(p.clocks.read_clk_conf_power_st()),
     );
     emit(
         tag + 1,
-        lpcon_map(p.modem_lpcon_shared_clock.read_clk_conf_power_st()),
-        syscon_clocks(p.modem_syscon_radio.read_clk_conf1()),
-        syscon_reset(p.modem_syscon_radio.read_modem_rst_conf()),
+        lpcon_map(p.lp_clock.read_clk_conf_power_st()),
+        syscon_clocks(p.clocks.read_clk_conf1()),
+        syscon_reset(p.clocks.read_modem_rst_conf()),
     );
 }
 
@@ -92,9 +103,9 @@ pub(super) fn pll(s: &mut Session<'_>) {
     // changes. Do not read a modem-domain timer on an unestablished PLL.
     emit(
         0xa1,
-        modem_conf(s.radio.hp_sys_clkrst_radio.read_modem_conf()),
-        s.radio
-            .pmu_radio
+        modem_conf(s.ble.upstream.read_modem_conf()),
+        s.ble
+            .pmu
             .read_hp_active_icg_modem()
             .hp_active_dig_icg_modem_code()
             .get(),
@@ -110,7 +121,7 @@ pub(super) fn pll(s: &mut Session<'_>) {
         (4, false, true, true),
         (5, false, false, true),
     ] {
-        s.radio.hp_sys_clkrst_radio.modify_modem_conf(|w| {
+        s.ble.upstream.modify_modem_conf(|w| {
             w.set_modem_apb_clk_en(true)
                 .set_modem_rst_en(false)
                 .set_modem_clk_en(true)
@@ -121,20 +132,20 @@ pub(super) fn pll(s: &mut Session<'_>) {
         oer_riscv::fence();
         emit(
             0xa4 + step * 4,
-            modem_conf(s.radio.hp_sys_clkrst_radio.read_modem_conf()),
-            s.radio
-                .pmu_radio
+            modem_conf(s.ble.upstream.read_modem_conf()),
+            s.ble
+                .pmu
                 .read_hp_active_icg_modem()
                 .hp_active_dig_icg_modem_code()
                 .get(),
             oer_riscv::cycle32(),
         );
     }
-    s.radio.hp_sys_clkrst_radio.close_modem_pll_source_gate();
+    s.ble.upstream.close_modem_pll_source_gate();
 }
 
 fn ordinary_snapshot(s: &Session<'_>, tag: u32) {
-    let b = &s.mac.wifi_mac_block_ack;
+    let b = &s.opaque.block_ack;
     let i = Index::constant::<7>(); // vendor hardware index 0, reverse-addressed
     emit(
         tag,
@@ -152,7 +163,7 @@ fn ordinary_snapshot(s: &Session<'_>, tag: u32) {
     );
 }
 fn extra_snapshot(s: &Session<'_>, tag: u32) {
-    let b = &s.mac.wifi_mac_block_ack;
+    let b = &s.opaque.block_ack;
     emit(
         tag,
         extra_control(b.read_extra_softap_rx_block_ack_control()),
@@ -175,7 +186,7 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
     clock_snapshot(s, 0xb0);
     ordinary_snapshot(s, 0xc0);
     extra_snapshot(s, 0xc2);
-    let b = &mut s.mac.wifi_mac_block_ack;
+    let b = &mut s.opaque.block_ack;
     let i = Index::constant::<7>();
     b.modify_rx_block_ack_entry_peer_head(i, |w| {
         w.set_peer_address_head(0x03020102);
@@ -213,15 +224,15 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
     });
     ordinary_snapshot(s, 0xc4);
     ordinary_snapshot(s, 0xc6);
-    s.mac
-        .wifi_mac_block_ack
+    s.opaque
+        .block_ack
         .modify_rx_block_ack_agreement_update(|w| {
             w.set_ordinary_entry_update(w.ordinary_entry_update() | 1);
         });
     oer_riscv::fence();
     wait_cycles(4096);
     ordinary_snapshot(s, 0xc8);
-    let b = &mut s.mac.wifi_mac_block_ack;
+    let b = &mut s.opaque.block_ack;
     b.modify_extra_softap_rx_block_ack_control(|w| {
         w.set_index(Bits::constant::<3>());
     });
@@ -253,7 +264,7 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
     });
     extra_snapshot(s, 0xca);
     extra_snapshot(s, 0xcc);
-    let b = &mut s.mac.wifi_mac_block_ack;
+    let b = &mut s.opaque.block_ack;
     b.modify_rx_block_ack_agreement_update(|w| {
         w.set_extra_softap_commit(true);
     });
@@ -265,8 +276,8 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
     });
     oer_riscv::fence();
     extra_snapshot(s, 0xce);
-    s.mac
-        .wifi_mac_block_ack
+    s.opaque
+        .block_ack
         .modify_rx_block_ack_agreement_update(|w| {
             w.set_extra_softap_readback_latch(false);
         });
@@ -275,10 +286,10 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
 // WORD_004C_OPAQUE has unknown read side effects and no PAC accessor.
 // This snapshot deliberately makes no handler-word/read-to-ack observation.
 fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
-    let b = &s.radio.phy_baseband_config_oracle_wifi_bb;
+    let b = &s.opaque.wifi_bb;
     let status = b.read_baseband_watchdog_status().status();
-    let raw = s.interrupts.wifi_mac_interrupt.read_raw().events();
-    let st = mac_status(s.interrupts.wifi_mac_interrupt.read_status());
+    let raw = mac_raw(s.opaque.mac_interrupt.read_raw());
+    let st = mac_status(s.opaque.mac_interrupt.read_status());
     let matrix = matrix3(
         s.interrupt_matrix
             .interrupt_core0_status
@@ -293,13 +304,13 @@ fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
     emit(tag + 1, raw, st, matrix);
     emit(
         tag + 2,
-        s.mac
-            .wifi_mac_core_enable
+        s.opaque
+            .core_enable
             .read_core_enable_control()
             .bits_4_7_opaque()
             .get(),
-        s.mac
-            .wifi_mac_block_ack
+        s.opaque
+            .block_ack
             .read_rx_block_ack_entry_peer_head(Index::constant::<7>())
             .peer_address_head(),
         0,
@@ -307,26 +318,24 @@ fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
     status
 }
 fn set_bb(s: &mut Session<'_>, irq: bool, clear: bool, reset: bool) {
-    s.radio
-        .phy_baseband_config_oracle_wifi_bb
-        .modify_baseband_watchdog_enable(|w| {
-            w.set_watchdog_enable(reset)
-                .set_watchdog_interrupt_enable(irq)
-                .set_watchdog_timeout_clear(clear);
-        });
+    s.opaque.wifi_bb.modify_baseband_watchdog_enable(|w| {
+        w.set_watchdog_reset_enable(reset)
+            .set_watchdog_interrupt_enable(irq)
+            .set_watchdog_timeout_clear_request(clear);
+    });
     oer_riscv::fence();
 }
 fn enable_baseband(s: &mut Session<'_>) {
     // SOURCE: HAL modem clock-device BB reset-before-enable sequence and
     // ROM phy_mac_enable_bb's digital interface / Wi-Fi-enable transition.
-    s.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
+    s.ble.clocks.modify_modem_rst_conf(|w| {
         w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted);
     });
-    s.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
+    s.ble.clocks.modify_modem_rst_conf(|w| {
         w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Released);
     });
     // SOURCE: ROM open_fe_bb clocks; enable digital BB clocks only, RF stays off.
-    s.radio.modem_syscon_radio.modify_clk_conf1(|w| {
+    s.ble.clocks.modify_clk_conf1(|w| {
         use pac::modem_syscon::clk_conf1::*;
         w.set_clk_wifibb_22m_en(ClkWifibb22mEn::Enabled)
             .set_clk_wifibb_40m_en(ClkWifibb40mEn::Enabled)
@@ -338,11 +347,11 @@ fn enable_baseband(s: &mut Session<'_>) {
             .set_clk_wifibb_80x1_en(ClkWifibb80x1En::Enabled)
             .set_clk_wifibb_160x1_en(ClkWifibb160x1En::Enabled);
     });
-    s.radio.modem_syscon_radio.modify_wifi_bb_cfg(|w| {
+    s.ble.clocks.modify_wifi_bb_cfg(|w| {
         w.set_bit_28_opaque(pac::modem_syscon::wifi_bb_cfg::Bit28Opaque::Enabled)
             .set_wifi_enable(pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled);
     });
-    s.radio.modem_syscon_radio.modify_wifi_bb_cfg(|w| {
+    s.ble.clocks.modify_wifi_bb_cfg(|w| {
         w.set_wifi_enable(pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled);
     });
 }
@@ -350,32 +359,28 @@ fn enable_baseband(s: &mut Session<'_>) {
 pub(super) fn watchdog(s: &mut Session<'_>) {
     prepare(s);
     enable_baseband(s);
-    let b = &mut s.radio.phy_baseband_config_oracle_wifi_bb;
+    let b = &mut s.opaque.wifi_bb;
     let old_control = b.read_baseband_watchdog_control();
     let old_enable = b.read_baseband_watchdog_enable();
     set_bb(s, false, false, false);
     bb_snapshot(s, 0xd0);
-    s.radio
-        .phy_baseband_config_oracle_wifi_bb
-        .modify_baseband_watchdog_control(|w| {
-            w.set_bits_0_15_opaque(1)
-                .set_bits_16_29_opaque(Bits::constant::<1>())
-                .set_bit_30_opaque(true)
-                .set_bit_31_opaque(true);
-        });
+    s.opaque.wifi_bb.modify_baseband_watchdog_control(|w| {
+        w.set_bits_0_15_opaque(1)
+            .set_bits_16_29_opaque(Bits::constant::<1>())
+            .set_bit_30_opaque(true)
+            .set_bit_31_opaque(true);
+    });
     set_bb(s, true, true, false);
     bb_snapshot(s, 0xd3);
     set_bb(s, true, false, false);
     wait_cycles(4096);
     let positive = bb_snapshot(s, 0xd6);
-    s.radio
-        .phy_baseband_config_oracle_wifi_bb
-        .modify_baseband_watchdog_control(|w| {
-            w.set_bits_0_15_opaque(old_control.bits_0_15_opaque())
-                .set_bits_16_29_opaque(old_control.bits_16_29_opaque())
-                .set_bit_30_opaque(old_control.bit_30_opaque())
-                .set_bit_31_opaque(old_control.bit_31_opaque());
-        });
+    s.opaque.wifi_bb.modify_baseband_watchdog_control(|w| {
+        w.set_bits_0_15_opaque(old_control.bits_0_15_opaque())
+            .set_bits_16_29_opaque(old_control.bits_16_29_opaque())
+            .set_bit_30_opaque(old_control.bit_30_opaque())
+            .set_bit_31_opaque(old_control.bit_31_opaque());
+    });
     set_bb(s, false, false, false);
     bb_snapshot(s, 0xd9);
     set_bb(s, true, false, false);
@@ -388,8 +393,8 @@ pub(super) fn watchdog(s: &mut Session<'_>) {
     set_bb(
         s,
         old_enable.watchdog_interrupt_enable(),
-        old_enable.watchdog_timeout_clear(),
-        old_enable.watchdog_enable(),
+        old_enable.watchdog_timeout_clear_request(),
+        old_enable.watchdog_reset_enable(),
     );
     emit(0xe5, positive, 0, 0); // zero leaves reset scope untested, never invent a producer
 }
@@ -399,19 +404,19 @@ pub(super) fn temperature(s: &mut Session<'_>) {
         emit(0xaf, 13, 0, 0);
         return;
     }
-    let p = &mut s.radio;
-    let old_clk = p.lp_tsens.read_clk_conf();
-    let old_ctrl = p.lp_tsens.read_ctrl();
-    let old_peri = p.lp_periclkrst.read_tsens_ctrl();
-    let old_power = p.pmu_radio.read_ana_peri_pwr_ctrl();
-    p.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
+    let p = &mut s.ble;
+    let old_clk = s.opaque.tsens.read_clk_conf();
+    let old_ctrl = s.opaque.tsens.read_ctrl();
+    let old_peri = s.opaque.periclkrst.read_tsens_ctrl();
+    let old_power = p.pmu.read_ana_peri_pwr_ctrl();
+    p.pmu.modify_ana_peri_pwr_ctrl(|w| {
         w.set_rstb_perif_i2c(false);
     });
     wait_cycles(40); // sourced 1 us SAR-I2C reset settle
-    p.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
+    p.pmu.modify_ana_peri_pwr_ctrl(|w| {
         w.set_xpd_perif_i2c(true).set_rstb_perif_i2c(true);
     });
-    p.lp_periclkrst.modify_tsens_ctrl(|w| {
+    s.opaque.periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled)
             .set_lp_tsens_rst_en(false);
     });
@@ -421,19 +426,19 @@ pub(super) fn temperature(s: &mut Session<'_>) {
         (2, true, false),
         (3, false, false),
     ] {
-        p.lp_tsens.modify_clk_conf(|w| {
+        s.opaque.tsens.modify_clk_conf(|w| {
             w.set_clk_en(true)
                 .set_bit_9_opaque(bit9)
                 .set_bit_23_opaque(bit23);
         });
-        p.lp_tsens.modify_ctrl(|w| {
+        s.opaque.tsens.modify_ctrl(|w| {
             w.set_power_up(pac::tsens::ctrl::PowerUp::Enabled)
                 .set_power_up_force(true)
                 .set_clk_div(15);
         });
-        let configured = p.lp_tsens.read_clk_conf();
-        let control = p.lp_tsens.read_ctrl();
-        let peripheral = p.lp_periclkrst.read_tsens_ctrl();
+        let configured = s.opaque.tsens.read_clk_conf();
+        let control = s.opaque.tsens.read_ctrl();
+        let peripheral = s.opaque.periclkrst.read_tsens_ctrl();
         emit(
             0x110 + case,
             u32::from(configured.bit_9_opaque())
@@ -446,12 +451,12 @@ pub(super) fn temperature(s: &mut Session<'_>) {
                 | (u32::from(peripheral.lp_tsens_rst_en()) << 3),
         );
         for repeat in 0..2 {
-            p.lp_tsens.modify_ctrl(|w| {
+            s.opaque.tsens.modify_ctrl(|w| {
                 w.set_sample_en(false);
             });
             wait_cycles(400);
-            let before = p.lp_tsens.read_ctrl();
-            p.lp_tsens.modify_ctrl(|w| {
+            let before = s.opaque.tsens.read_ctrl();
+            s.opaque.tsens.modify_ctrl(|w| {
                 w.set_sample_en(true);
             });
             let mut ready_count = 0u32;
@@ -466,7 +471,7 @@ pub(super) fn temperature(s: &mut Session<'_>) {
                 if oer_riscv::cycle32().wrapping_sub(start) >= 40_000 {
                     break;
                 }
-                last = p.lp_tsens.read_ctrl();
+                last = s.opaque.tsens.read_ctrl();
                 ready_count += u32::from(last.ready());
                 changes += u32::from(last.out() != prior);
                 prior = last.out();
@@ -484,12 +489,12 @@ pub(super) fn temperature(s: &mut Session<'_>) {
                 changes,
             );
         }
-        p.lp_tsens.modify_clk_conf(|w| {
+        s.opaque.tsens.modify_clk_conf(|w| {
             w.set_bit_9_opaque(old_clk.bit_9_opaque())
                 .set_bit_23_opaque(old_clk.bit_23_opaque());
         });
     }
-    p.lp_tsens.modify_ctrl(|w| {
+    s.opaque.tsens.modify_ctrl(|w| {
         w.set_sample_en(old_ctrl.sample_en())
             .set_power_up(pac::tsens::ctrl::PowerUp::from_field(u32::from(
                 old_ctrl.power_up(),
@@ -497,18 +502,18 @@ pub(super) fn temperature(s: &mut Session<'_>) {
             .set_power_up_force(old_ctrl.power_up_force())
             .set_clk_div(old_ctrl.clk_div());
     });
-    p.lp_tsens.modify_clk_conf(|w| {
+    s.opaque.tsens.modify_clk_conf(|w| {
         w.set_clk_en(old_clk.clk_en())
             .set_bit_9_opaque(old_clk.bit_9_opaque())
             .set_bit_23_opaque(old_clk.bit_23_opaque());
     });
-    p.lp_periclkrst.modify_tsens_ctrl(|w| {
+    s.opaque.periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::from_field(
             u32::from(old_peri.lp_tsens_clk_en()),
         ))
         .set_lp_tsens_rst_en(old_peri.lp_tsens_rst_en());
     });
-    p.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
+    p.pmu.modify_ana_peri_pwr_ctrl(|w| {
         w.set_xpd_perif_i2c(old_power.xpd_perif_i2c())
             .set_rstb_perif_i2c(old_power.rstb_perif_i2c());
     });
@@ -723,17 +728,25 @@ fn bb_control(r: pac::wifi_bb::baseband_watchdog_control::R) -> u32 {
 }
 
 fn bb_enable(r: pac::wifi_bb::baseband_watchdog_enable::R) -> u32 {
-    (u32::from(r.watchdog_timeout_clear())
-        << pac::wifi_bb::baseband_watchdog_enable::WATCHDOG_TIMEOUT_CLEAR_MASK.trailing_zeros())
+    (u32::from(r.watchdog_timeout_clear_request())
+        << pac::wifi_bb::baseband_watchdog_enable::WATCHDOG_TIMEOUT_CLEAR_REQUEST_MASK
+            .trailing_zeros())
         | (u32::from(r.watchdog_interrupt_enable())
             << pac::wifi_bb::baseband_watchdog_enable::WATCHDOG_INTERRUPT_ENABLE_MASK
                 .trailing_zeros())
-        | (u32::from(r.watchdog_enable())
-            << pac::wifi_bb::baseband_watchdog_enable::WATCHDOG_ENABLE_MASK.trailing_zeros())
+        | (u32::from(r.watchdog_reset_enable())
+            << pac::wifi_bb::baseband_watchdog_enable::WATCHDOG_RESET_ENABLE_MASK.trailing_zeros())
         | (r.bits_0_28_opaque().get()
             << pac::wifi_bb::baseband_watchdog_enable::BITS_0_28_OPAQUE_MASK.trailing_zeros())
 }
 
+fn mac_raw(r: pac::wifi_mac::raw::R) -> u32 {
+    (r.bits_0_20_opaque().get() << pac::wifi_mac::raw::BITS_0_20_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(r.fatal_assertion())
+            << pac::wifi_mac::raw::FATAL_ASSERTION_MASK.trailing_zeros())
+        | (r.bits_22_31_opaque().get()
+            << pac::wifi_mac::raw::BITS_22_31_OPAQUE_MASK.trailing_zeros())
+}
 fn mac_status(r: pac::wifi_mac::status::R) -> u32 {
     (r.bits_0_4_opaque().get() << pac::wifi_mac::status::BITS_0_4_OPAQUE_MASK.trailing_zeros())
         | (u32::from(r.rx_associated_auxiliary_5())
@@ -757,8 +770,8 @@ fn mac_status(r: pac::wifi_mac::status::R) -> u32 {
         | (u32::from(r.tx_timeout()) << pac::wifi_mac::status::TX_TIMEOUT_MASK.trailing_zeros())
         | (u32::from(r.bit_20_opaque())
             << pac::wifi_mac::status::BIT_20_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(r.bit_21_opaque())
-            << pac::wifi_mac::status::BIT_21_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(r.fatal_assertion())
+            << pac::wifi_mac::status::FATAL_ASSERTION_MASK.trailing_zeros())
         | (u32::from(r.bit_22_opaque())
             << pac::wifi_mac::status::BIT_22_OPAQUE_MASK.trailing_zeros())
         | (u32::from(r.bit_23_opaque())
@@ -767,10 +780,8 @@ fn mac_status(r: pac::wifi_mac::status::R) -> u32 {
             << pac::wifi_mac::status::RX_ASSOCIATED_AUXILIARY_24_MASK.trailing_zeros())
         | (r.bits_25_26_opaque().get()
             << pac::wifi_mac::status::BITS_25_26_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(r.bit_27_opaque())
-            << pac::wifi_mac::status::BIT_27_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(r.bit_28_opaque())
-            << pac::wifi_mac::status::BIT_28_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(r.wdev_timer_0()) << pac::wifi_mac::status::WDEV_TIMER_0_MASK.trailing_zeros())
+        | (u32::from(r.wdev_timer_1()) << pac::wifi_mac::status::WDEV_TIMER_1_MASK.trailing_zeros())
         | (r.bits_29_31_opaque().get()
             << pac::wifi_mac::status::BITS_29_31_OPAQUE_MASK.trailing_zeros())
 }

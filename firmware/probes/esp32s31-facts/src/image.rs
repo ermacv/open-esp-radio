@@ -447,6 +447,8 @@ extern "C" fn facts_main() -> ! {
             block_ack: p.wifi_mac.wifi_mac_block_ack,
             core_enable: p.wifi_mac.wifi_mac_core_enable,
             mac_interrupt: p.wifi_interrupts.wifi_mac_interrupt,
+            tsens: p.radio_phy.lp_tsens,
+            periclkrst: p.radio_phy.lp_periclkrst,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();
