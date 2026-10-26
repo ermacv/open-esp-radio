@@ -38,7 +38,13 @@ pub fn sta_protected_amsdu_frame_length(
     let length = body
         .length()
         .map_err(|length| amsdu_error(crate::encoding::AmsduError::TooLong(length)))?;
-    Ok(crate::data::IEEE80211_QOS_DATA_HEADER_LEN + CCMP_HEADER_LEN + length)
+    crate::data::IEEE80211_QOS_DATA_HEADER_LEN
+        .checked_add(CCMP_HEADER_LEN)
+        .and_then(|prefix| prefix.checked_add(length))
+        .ok_or(StationFrameError::AmsduTooLong {
+            length: usize::MAX,
+            maximum: HT_AMSDU_BASELINE_MAX_LEN,
+        })
 }
 
 /// Encoded protected-MPDU length for exactly two Ethernet MSDUs.
@@ -66,7 +72,14 @@ pub fn sta_protected_amsdu_pair_frame_length(
             length: usize::MAX,
             maximum: HT_AMSDU_BASELINE_MAX_LEN,
         })?;
-    let first_padding = (4 - (first_subframe & 3)) & 3;
+    let first_padding =
+        4_usize
+            .checked_sub(first_subframe & 3)
+            .ok_or(StationFrameError::AmsduTooLong {
+                length: usize::MAX,
+                maximum: HT_AMSDU_BASELINE_MAX_LEN,
+            })?
+            & 3;
     let amsdu_length = first_subframe
         .checked_add(first_padding)
         .and_then(|length| length.checked_add(second_subframe))
@@ -158,7 +171,13 @@ impl<'a> StaProtectedAmsduFrame<'a> {
         let body_length = body
             .length()
             .map_err(|length| amsdu_error(crate::encoding::AmsduError::TooLong(length)))?;
-        let required = header.len() + CCMP_HEADER_LEN + body_length;
+        let required = header
+            .len()
+            .checked_add(CCMP_HEADER_LEN)
+            .and_then(|length| length.checked_add(body_length))
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: usize::MAX,
+            })?;
         if output.len() < required {
             return Err(StationFrameError::OutputTooSmall { required });
         }

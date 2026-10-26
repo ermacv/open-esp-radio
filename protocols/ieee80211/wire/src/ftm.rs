@@ -172,12 +172,12 @@ impl FtmFormatAndBandwidth {
 /// Parameters carried by an initial FTM Request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FtmRequestParameters {
-    number_of_bursts_exponent: u8,
+    number_of_bursts_exponent: oer_wire::U8<4>,
     burst_duration: FtmBurstDuration,
     min_delta_ftm_100us: u8,
     partial_tsf_timer: Option<u16>,
     asap: bool,
-    ftms_per_burst: u8,
+    ftms_per_burst: oer_wire::U8<5>,
     format_and_bandwidth: FtmFormatAndBandwidth,
     burst_period_100ms: u16,
 }
@@ -197,15 +197,20 @@ impl FtmRequestParameters {
         format_and_bandwidth: FtmFormatAndBandwidth,
         burst_period_100ms: u16,
     ) -> Result<Self, FtmParameterError> {
-        if number_of_bursts_exponent > 15 || ftms_per_burst > 31 {
-            return Err(FtmParameterError::ValueOutOfRange);
-        }
+        let number_of_bursts_exponent = match oer_wire::U8::new(number_of_bursts_exponent) {
+            Some(value) => value,
+            None => return Err(FtmParameterError::ValueOutOfRange),
+        };
+        let ftms_per_burst = match oer_wire::U8::new(ftms_per_burst) {
+            Some(value) => value,
+            None => return Err(FtmParameterError::ValueOutOfRange),
+        };
         if let Some(partial_tsf_timer) = partial_tsf_timer
             && partial_tsf_timer > MAX_UNAMBIGUOUS_PARTIAL_TSF
         {
             return Err(FtmParameterError::PartialTsfOutOfRange);
         }
-        if number_of_bursts_exponent == 0 && burst_period_100ms != 0 {
+        if number_of_bursts_exponent.get() == 0 && burst_period_100ms != 0 {
             return Err(FtmParameterError::BurstPeriodReserved);
         }
         Ok(Self {
@@ -221,7 +226,7 @@ impl FtmRequestParameters {
     }
 
     pub const fn number_of_bursts_exponent(self) -> u8 {
-        self.number_of_bursts_exponent
+        self.number_of_bursts_exponent.get()
     }
 
     pub const fn burst_duration(self) -> FtmBurstDuration {
@@ -242,7 +247,7 @@ impl FtmRequestParameters {
 
     /// Zero is the wire value for no preference.
     pub const fn ftms_per_burst(self) -> u8 {
-        self.ftms_per_burst
+        self.ftms_per_burst.get()
     }
 
     pub const fn format_and_bandwidth(self) -> FtmFormatAndBandwidth {
@@ -258,8 +263,8 @@ impl FtmRequestParameters {
         element[0] = FTM_PARAMETERS_ELEMENT_ID;
         element[1] = FTM_PARAMETERS_FIELD_LEN as u8;
         let mut fields = FtmParameterFields::from_bytes([0; 9]);
-        fields = crate::encoding::validated(fields.with_bursts(self.number_of_bursts_exponent));
-        fields = crate::encoding::validated(fields.with_duration(self.burst_duration.wire()));
+        fields = fields.with_bursts(self.number_of_bursts_exponent);
+        fields = fields.with_duration(oer_wire::U8::from_low_bits(self.burst_duration.wire()));
         element[3] = fields.to_bytes()[1];
         element[4] = self.min_delta_ftm_100us;
         let partial_tsf = self.partial_tsf_timer.unwrap_or(0).to_le_bytes();
@@ -267,10 +272,11 @@ impl FtmRequestParameters {
         fields = fields
             .with_no_partial_tsf(self.partial_tsf_timer.is_none())
             .with_asap(self.asap);
-        fields = crate::encoding::validated(fields.with_ftms(self.ftms_per_burst));
+        fields = fields.with_ftms(self.ftms_per_burst);
         element[7] = fields.to_bytes()[5];
-        fields =
-            crate::encoding::validated(fields.with_bandwidth(self.format_and_bandwidth.wire()));
+        fields = fields.with_bandwidth(oer_wire::U8::from_low_bits(
+            self.format_and_bandwidth.wire(),
+        ));
         element[8] = fields.to_bytes()[6];
         element[9..11].copy_from_slice(&self.burst_period_100ms.to_le_bytes());
         element
@@ -376,16 +382,10 @@ impl FtmResponseParameters {
     }
 
     pub fn encode_element(self) -> Result<[u8; FTM_PARAMETERS_ELEMENT_LEN], FtmParameterError> {
-        if self.number_of_bursts_exponent > 15 || self.ftms_per_burst > 31 {
-            return Err(FtmParameterError::ValueOutOfRange);
-        }
-        if let FtmResponseStatus::Failed {
-            retry_after_seconds,
-        } = self.status
-            && retry_after_seconds > 31
-        {
-            return Err(FtmParameterError::ValueOutOfRange);
-        }
+        let bursts = oer_wire::U8::new(self.number_of_bursts_exponent)
+            .ok_or(FtmParameterError::ValueOutOfRange)?;
+        let ftms =
+            oer_wire::U8::new(self.ftms_per_burst).ok_or(FtmParameterError::ValueOutOfRange)?;
         let mut element = [0_u8; FTM_PARAMETERS_ELEMENT_LEN];
         element[0] = FTM_PARAMETERS_ELEMENT_ID;
         element[1] = FTM_PARAMETERS_FIELD_LEN as u8;
@@ -394,25 +394,25 @@ impl FtmResponseParameters {
             FtmResponseStatus::Incapable => 2,
             FtmResponseStatus::Failed {
                 retry_after_seconds,
-            } => crate::encoding::validated(
-                FtmParameterFields::from_bytes([3, 0, 0, 0, 0, 0, 0, 0, 0])
-                    .with_retry(retry_after_seconds),
-            )
-            .to_bytes()[0],
+            } => FtmParameterFields::from_bytes([3, 0, 0, 0, 0, 0, 0, 0, 0])
+                .with_retry(retry_after_seconds)
+                .map_err(|_| FtmParameterError::ValueOutOfRange)?
+                .to_bytes()[0],
         };
         let mut fields = FtmParameterFields::from_bytes([0; 9]);
-        fields = crate::encoding::validated(fields.with_bursts(self.number_of_bursts_exponent));
-        fields = crate::encoding::validated(fields.with_duration(self.burst_duration.wire()));
+        fields = fields.with_bursts(bursts);
+        fields = fields.with_duration(oer_wire::U8::from_low_bits(self.burst_duration.wire()));
         element[3] = fields.to_bytes()[1];
         element[4] = self.min_delta_ftm_100us;
         element[5..7].copy_from_slice(&self.partial_tsf_timer.to_le_bytes());
         fields = fields
             .with_asap_capable(self.asap_capable)
             .with_asap(self.asap);
-        fields = crate::encoding::validated(fields.with_ftms(self.ftms_per_burst));
+        fields = fields.with_ftms(ftms);
         element[7] = fields.to_bytes()[5];
-        fields =
-            crate::encoding::validated(fields.with_bandwidth(self.format_and_bandwidth.wire()));
+        fields = fields.with_bandwidth(oer_wire::U8::from_low_bits(
+            self.format_and_bandwidth.wire(),
+        ));
         element[8] = fields.to_bytes()[6];
         element[9..11].copy_from_slice(&self.burst_period_100ms.to_le_bytes());
         Self::decode_element(&element)?;
@@ -672,12 +672,11 @@ pub fn encode_measurement(
         .ok_or(FtmWireError::OutputTooShort)?;
     let [d0, d1, d2, d3, d4, d5] = fields.tod.encode();
     let [a0, a1, a2, a3, a4, a5] = fields.toa.encode();
-    let [e0, e1] = crate::encoding::validated(
-        FtmTimestampErrorFields::from_bytes([0; 2])
-            .with_not_continuous(fields.tod_error.not_continuous)
-            .with_exponent(fields.tod_error.max_error_exponent),
-    )
-    .to_bytes();
+    let [e0, e1] = FtmTimestampErrorFields::from_bytes([0; 2])
+        .with_not_continuous(fields.tod_error.not_continuous)
+        .with_exponent(fields.tod_error.max_error_exponent)
+        .map_err(|_| FtmWireError::ReservedTimestampErrorBits)?
+        .to_bytes();
     let [g0, g1] = u16::from(fields.toa_error.max_error_exponent).to_le_bytes();
     *prefix = [
         PUBLIC_ACTION_CATEGORY,
@@ -702,7 +701,9 @@ pub fn encode_measurement(
         g1,
     ];
     elements.copy_from_slice(information_elements);
-    Ok(FTM_MEASUREMENT_PREFIX_LEN.saturating_add(information_elements.len()))
+    FTM_MEASUREMENT_PREFIX_LEN
+        .checked_add(information_elements.len())
+        .ok_or(FtmWireError::OutputTooShort)
 }
 
 /// Split the fixed `N`-byte prefix off `body` after checking its Public Action
@@ -762,14 +763,14 @@ oer_wire::bitfield! {
         pub status, with_status: u8 = 0..2;
         pub retry, with_retry: u8 = 2..7;
         pub status_reserved, with_status_reserved: bool = 7..8;
-        pub bursts, with_bursts: u8 = 8..12;
-        pub duration, with_duration: u8 = 12..16;
+        pub bursts, with_bursts: (u8) = 8..12;
+        pub duration, with_duration: (u8) = 12..16;
         pub no_partial_tsf, with_no_partial_tsf: bool = 40..41;
         pub asap_capable, with_asap_capable: bool = 41..42;
         pub asap, with_asap: bool = 42..43;
-        pub ftms, with_ftms: u8 = 43..48;
+        pub ftms, with_ftms: (u8) = 43..48;
         pub bandwidth_reserved, with_bandwidth_reserved: u8 = 48..50;
-        pub bandwidth, with_bandwidth: u8 = 50..56;
+        pub bandwidth, with_bandwidth: (u8) = 50..56;
     }
 }
 oer_wire::bitfield! {

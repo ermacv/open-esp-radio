@@ -328,6 +328,8 @@ impl<'payload> EspNowV1Payload<'payload> {
 pub struct EspNowV1Action<'payload> {
     random_value: EspNowRandomValue,
     payload: EspNowV1Payload<'payload>,
+    encoded_length: usize,
+    frame_length: usize,
 }
 
 impl<'payload> EspNowV1Action<'payload> {
@@ -339,9 +341,21 @@ impl<'payload> EspNowV1Action<'payload> {
             Ok(payload) => payload,
             Err(error) => return Err(error),
         };
+        let Some(encoded_length) = ESP_NOW_V1_ACTION_OVERHEAD.checked_add(payload.len()) else {
+            return Err(EspNowV1WireError::PayloadTooLong {
+                length: payload.len(),
+            });
+        };
+        let Some(frame_length) = ESP_NOW_MANAGEMENT_HEADER_LEN.checked_add(encoded_length) else {
+            return Err(EspNowV1WireError::PayloadTooLong {
+                length: payload.len(),
+            });
+        };
         Ok(Self {
             random_value,
             payload,
+            encoded_length,
+            frame_length,
         })
     }
 
@@ -354,7 +368,7 @@ impl<'payload> EspNowV1Action<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        ESP_NOW_V1_ACTION_OVERHEAD + self.payload.len()
+        self.encoded_length
     }
 
     /// Encode category, action OUI, random value and exactly one v1 vendor IE.
@@ -370,7 +384,16 @@ impl<'payload> EspNowV1Action<'payload> {
             &self.random_value.bytes(),
             &[
                 ESP_NOW_VENDOR_ELEMENT_ID,
-                (VENDOR_ELEMENT_FIXED_BODY_LEN + self.payload.len()) as u8,
+                u8::try_from(
+                    VENDOR_ELEMENT_FIXED_BODY_LEN
+                        .checked_add(self.payload.len())
+                        .ok_or(EspNowV1WireError::PayloadTooLong {
+                            length: self.payload.len(),
+                        })?,
+                )
+                .map_err(|_| EspNowV1WireError::PayloadTooLong {
+                    length: self.payload.len(),
+                })?,
             ],
             &ESP_NOW_ORGANIZATION_IDENTIFIER,
             &[ESP_NOW_VENDOR_ELEMENT_TYPE, ESP_NOW_V1_VERSION],
@@ -455,10 +478,7 @@ impl<'payload> EspNowV1Action<'payload> {
             ));
         }
 
-        Ok(Self {
-            random_value: EspNowRandomValue::new([r0, r1, r2, r3]),
-            payload: EspNowV1Payload(payload),
-        })
+        Self::new(EspNowRandomValue::new([r0, r1, r2, r3]), payload)
     }
 }
 
@@ -514,7 +534,7 @@ impl<'payload> EspNowV1Frame<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        ESP_NOW_MANAGEMENT_HEADER_LEN + self.action.encoded_len()
+        self.action.frame_length
     }
 
     /// Encode an Action MPDU with broadcast BSSID and no FCS.

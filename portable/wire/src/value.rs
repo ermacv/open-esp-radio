@@ -1,0 +1,116 @@
+//! Unsigned values whose width is admitted once, before field insertion.
+
+macro_rules! unsigned {
+    ($name:ident, $raw:ty) => {
+        /// A value of exactly `WIDTH` bits, with no invalid public constructor.
+        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        #[repr(transparent)]
+        pub struct $name<const WIDTH: usize>($raw);
+
+        impl<const WIDTH: usize> Default for $name<WIDTH> {
+            fn default() -> Self {
+                Self::ZERO
+            }
+        }
+
+        impl<const WIDTH: usize> $name<WIDTH> {
+            pub const ZERO: Self = Self::constant::<0>();
+
+            /// Admit a dynamic value without discarding any bit.
+            pub const fn new(value: $raw) -> Option<Self> {
+                const {
+                    assert!(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize);
+                }
+                if value <= const { <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH) } {
+                    Some(Self(value))
+                } else {
+                    None
+                }
+            }
+
+            /// Admit a literal at compile time, including in runtime callers.
+            pub const fn constant<const VALUE: $raw>() -> Self {
+                const {
+                    assert!(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize);
+                    assert!(VALUE <= <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH));
+                }
+                Self(VALUE)
+            }
+
+            /// Extract the low `WIDTH` bits. Callers choose this only when the
+            /// wire format defines truncation, or the source is a decoded field.
+            pub const fn from_low_bits(value: $raw) -> Self {
+                const {
+                    assert!(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize);
+                }
+                Self(value & const { <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH) })
+            }
+
+            pub const fn get(self) -> $raw {
+                self.0
+            }
+
+            /// Widen a proof without validating the same value again.
+            pub const fn widen<const NEW_WIDTH: usize>(self) -> $name<NEW_WIDTH> {
+                const {
+                    assert!(NEW_WIDTH >= WIDTH && NEW_WIDTH <= <$raw>::BITS as usize);
+                }
+                $name(self.0)
+            }
+        }
+    };
+}
+
+unsigned!(U8, u8);
+unsigned!(U16, u16);
+unsigned!(U32, u32);
+unsigned!(U64, u64);
+
+/// The admitted length of a prefix in an array of `N` octets.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub struct PrefixLength<const N: usize>(usize);
+
+impl<const N: usize> PrefixLength<N> {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn new(length: usize) -> Option<Self> {
+        if length <= N {
+            Some(Self(length))
+        } else {
+            None
+        }
+    }
+
+    pub const fn constant<const LENGTH: usize>() -> Self {
+        const {
+            assert!(LENGTH <= N);
+        }
+        Self(LENGTH)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
+
+    /// The constructor is the bounds proof. Trimming an iterator's unused
+    /// tail forms the exact slice without a panicking split or re-admission.
+    pub fn borrow(self, bytes: &[u8; N]) -> &[u8] {
+        let mut prefix = bytes.iter();
+        let mut unused = self.0..N;
+        if unused.next().is_some() {
+            prefix.nth_back(unused.len());
+        }
+        prefix.as_slice()
+    }
+
+    /// The same admitted prefix, exclusively borrowed for writing.
+    pub fn borrow_mut(self, bytes: &mut [u8; N]) -> &mut [u8] {
+        let mut prefix = bytes.iter_mut();
+        let mut unused = self.0..N;
+        if unused.next().is_some() {
+            prefix.nth_back(unused.len());
+        }
+        prefix.into_slice()
+    }
+}

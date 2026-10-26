@@ -13,3 +13,13 @@ fn validates_binary_ssids_once_for_every_role() {
         })
     );
 }
+
+#[test]
+fn every_admitted_binary_length_keeps_its_exact_prefix() {
+    let bytes = [0xff; MAX_SSID_LEN];
+    for length in 1..=MAX_SSID_LEN {
+        let ssid = WifiSsid::new(&bytes[..length]).unwrap();
+        assert_eq!(ssid.len(), length);
+        assert_eq!(ssid.as_bytes(), &bytes[..length]);
+    }
+}

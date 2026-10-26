@@ -8,8 +8,19 @@ is a compile-time error unless at least one field in that pair carries the
 explicit `, view` suffix. A view never permits overlaps between other ordinary
 fields.
 
+Parenthesized integer fields (for example `(u16)`) take a `U16<WIDTH>` proof
+and insert it infallibly; raw integer fields continue to admit input with
+`Result`. `constant::<VALUE>()` checks a fixed value at compile time. Numeric
+proofs and `PrefixLength<N>` retain admission instead of asserting it during
+encoding or owned-buffer access. Prefix borrowing trims the unused array tail
+through a slice iterator without a panicking split.
+
 `Reader` borrows complete fields; `Writer` admits each write before modifying its
 destination. Both return `Result` on short buffers without advancing. A frame
 builder admits the whole frame before writing its optional fields and elements.
 The crate has no dependencies, allocation, unsafe code or protocol knowledge.
 See the crate documentation for declaration syntax.
+
+The crate denies unwrap, expect, panic, unreachable, todo, unimplemented,
+indexing/slicing and arithmetic-side-effect Clippy lints. Fixed array geometry
+is checked in const blocks; dynamic cursor lengths use checked arithmetic.

@@ -84,7 +84,7 @@ pub enum ScanRecordError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScanRecord {
     ssid: [u8; 32],
-    ssid_len: u8,
+    ssid_len: oer_wire::PrefixLength<32>,
     /// Individual infrastructure BSS address, validated while parsing.
     pub bssid: Bssid,
     pub channel: u8,
@@ -105,24 +105,24 @@ pub struct ScanRecord {
     pub received_at: Option<Instant>,
     pub beacon_interval_tu: u16,
     supported_rates: [u8; 8],
-    supported_rates_len: u8,
+    supported_rates_len: oer_wire::PrefixLength<8>,
     extended_supported_rates: [u8; EXTENDED_RATES_CAPACITY],
-    extended_supported_rates_len: u8,
+    extended_supported_rates_len: oer_wire::PrefixLength<EXTENDED_RATES_CAPACITY>,
     /// One-byte ERP Information payload.  In particular, bit one is the
     /// infrastructure BSS Use Protection policy.
     pub erp_information: Option<u8>,
     ht_capability_ie: Option<[u8; HT_CAPABILITY_IE_LEN]>,
     ht_operation_ie: Option<[u8; HT_OPERATION_IE_LEN]>,
     he_capability_ie: [u8; HE_CAPABILITY_IE_CAPACITY],
-    he_capability_ie_len: u8,
+    he_capability_ie_len: oer_wire::PrefixLength<HE_CAPABILITY_IE_CAPACITY>,
     he_operation_ie: [u8; HE_OPERATION_IE_CAPACITY],
-    he_operation_ie_len: u8,
+    he_operation_ie_len: oer_wire::PrefixLength<HE_OPERATION_IE_CAPACITY>,
     wmm_ie: [u8; WMM_IE_CAPACITY],
-    wmm_ie_len: u8,
+    wmm_ie_len: oer_wire::PrefixLength<WMM_IE_CAPACITY>,
     rsn_ie: [u8; RSN_IE_CAPACITY],
-    rsn_ie_len: u8,
+    rsn_ie_len: oer_wire::PrefixLength<RSN_IE_CAPACITY>,
     rsnxe: [u8; RSNXE_CAPACITY],
-    rsnxe_len: u8,
+    rsnxe_len: oer_wire::PrefixLength<RSNXE_CAPACITY>,
 }
 
 impl ScanRecord {
@@ -131,7 +131,7 @@ impl ScanRecord {
     pub const fn new(bssid: Bssid, channel: u8, rssi: i8) -> Self {
         Self {
             ssid: [0; 32],
-            ssid_len: 0,
+            ssid_len: oer_wire::PrefixLength::ZERO,
             bssid,
             channel,
             rssi,
@@ -145,22 +145,22 @@ impl ScanRecord {
             received_at: None,
             beacon_interval_tu: 0,
             supported_rates: [0; 8],
-            supported_rates_len: 0,
+            supported_rates_len: oer_wire::PrefixLength::ZERO,
             extended_supported_rates: [0; EXTENDED_RATES_CAPACITY],
-            extended_supported_rates_len: 0,
+            extended_supported_rates_len: oer_wire::PrefixLength::ZERO,
             erp_information: None,
             ht_capability_ie: None,
             ht_operation_ie: None,
             he_capability_ie: [0; HE_CAPABILITY_IE_CAPACITY],
-            he_capability_ie_len: 0,
+            he_capability_ie_len: oer_wire::PrefixLength::ZERO,
             he_operation_ie: [0; HE_OPERATION_IE_CAPACITY],
-            he_operation_ie_len: 0,
+            he_operation_ie_len: oer_wire::PrefixLength::ZERO,
             wmm_ie: [0; WMM_IE_CAPACITY],
-            wmm_ie_len: 0,
+            wmm_ie_len: oer_wire::PrefixLength::ZERO,
             rsn_ie: [0; RSN_IE_CAPACITY],
-            rsn_ie_len: 0,
+            rsn_ie_len: oer_wire::PrefixLength::ZERO,
             rsnxe: [0; RSNXE_CAPACITY],
-            rsnxe_len: 0,
+            rsnxe_len: oer_wire::PrefixLength::ZERO,
         }
     }
 
@@ -188,7 +188,7 @@ impl ScanRecord {
                     && !self.rsn
                     && self.rsn_ie_count == 0
                     && !self.legacy_wpa
-                    && self.rsn_ie_len == 0
+                    && self.rsn_ie_len.get() == 0
             }
             LinkProtection::Ccmp => {
                 !self.information_elements_truncated
@@ -196,7 +196,7 @@ impl ScanRecord {
                     && self.rsn
                     && self.rsn_ie_count == 1
                     && !self.legacy_wpa
-                    && self.rsn_ie_len != 0
+                    && self.rsn_ie_len.get() != 0
             }
         }
     }
@@ -443,8 +443,7 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
                     .zip(value)
                     .map(|(stored, rate)| *stored = *rate)
                     .count();
-                // `copied` is at most EXTENDED_RATES_CAPACITY, which fits a u8.
-                record.extended_supported_rates_len = copied as u8;
+                record.extended_supported_rates_len = oer_wire::PrefixLength::new(copied)?;
                 record.information_elements_truncated |= copied != value.len();
             }
             (61, _) => {
@@ -485,41 +484,36 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
 }
 
 /// The first `length` bytes of a record buffer: the bytes it holds.
-#[expect(
-    clippy::indexing_slicing,
-    reason = "only the parser and the checked setters set the length, never past the buffer"
-)]
-fn front<const N: usize>(buffer: &[u8; N], length: u8) -> &[u8] {
-    &buffer.as_slice()[..usize::from(length)]
+fn front<const N: usize>(buffer: &[u8; N], length: oer_wire::PrefixLength<N>) -> &[u8] {
+    length.borrow(buffer)
 }
 
 /// Replace the bytes a record buffer holds by `value` and zero the rest, or
 /// refuse a value longer than the buffer and change nothing.
 fn replace<const N: usize>(
     buffer: &mut [u8; N],
-    length: &mut u8,
+    length: &mut oer_wire::PrefixLength<N>,
     value: &[u8],
 ) -> Result<(), ScanRecordError> {
     let too_long = ScanRecordError::TooLong {
         length: value.len(),
         capacity: N,
     };
-    // Every record buffer is shorter than 256 bytes, so a value that fits
-    // its buffer has a `u8` length.
-    let (front, rest) = buffer.split_at_mut_checked(value.len()).ok_or(too_long)?;
-    let value_length = u8::try_from(value.len()).map_err(|_| too_long)?;
-    front.copy_from_slice(value);
-    rest.fill(0);
+    let value_length = oer_wire::PrefixLength::new(value.len()).ok_or(too_long)?;
+    buffer.fill(0);
+    value_length.borrow_mut(buffer).copy_from_slice(value);
     *length = value_length;
     Ok(())
 }
 
 /// Copy an element's value to the front of `buffer`: its length, or `None`
 /// when it does not fit and `buffer` is unchanged.
-fn store_value<const N: usize>(buffer: &mut [u8; N], value: &[u8]) -> Option<u8> {
-    let length = u8::try_from(value.len()).ok()?;
-    let (front, _) = buffer.split_at_mut_checked(value.len())?;
-    front.copy_from_slice(value);
+fn store_value<const N: usize>(
+    buffer: &mut [u8; N],
+    value: &[u8],
+) -> Option<oer_wire::PrefixLength<N>> {
+    let length = oer_wire::PrefixLength::new(value.len())?;
+    length.borrow_mut(buffer).copy_from_slice(value);
     Some(length)
 }
 
@@ -529,10 +523,9 @@ fn store_element<const N: usize>(
     buffer: &mut [u8; N],
     header: [u8; 2],
     value: &[u8],
-) -> Option<u8> {
-    let length = u8::try_from(value.len().checked_add(2)?).ok()?;
-    let (stored_header, rest) = buffer.split_first_chunk_mut::<2>()?;
-    let (stored_value, _) = rest.split_at_mut_checked(value.len())?;
+) -> Option<oer_wire::PrefixLength<N>> {
+    let length = oer_wire::PrefixLength::new(value.len().checked_add(2)?)?;
+    let (stored_header, stored_value) = length.borrow_mut(buffer).split_first_chunk_mut::<2>()?;
     *stored_header = header;
     stored_value.copy_from_slice(value);
     Some(length)

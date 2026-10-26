@@ -283,9 +283,13 @@ pub fn ap_amsdu_frame_length(
     let length = body
         .length()
         .map_err(|length| amsdu_error(crate::encoding::AmsduError::TooLong(length)))?;
-    Ok(crate::data::IEEE80211_QOS_DATA_HEADER_LEN
-        + if protected { CCMP_HEADER_LEN } else { 0 }
-        + length)
+    crate::data::IEEE80211_QOS_DATA_HEADER_LEN
+        .checked_add(if protected { CCMP_HEADER_LEN } else { 0 })
+        .and_then(|prefix| prefix.checked_add(length))
+        .ok_or(ApDataFrameError::AmsduTooLong {
+            length: usize::MAX,
+            maximum: AP_AMSDU_BASELINE_MAX_LEN,
+        })
 }
 
 fn amsdu_error(error: crate::encoding::AmsduError) -> ApDataFrameError {
@@ -425,13 +429,30 @@ impl ApProtectedDataFrame<'_> {
             plan.set_more_data(true);
         }
         let header_len = usize::from(plan.header_len);
-        let prefix_len = header_len + CCMP_HEADER_LEN + plan.llc_snap.len();
-        let headroom = prefix_len - ETHERNET_HEADER_LEN;
+        let prefix_len = header_len
+            .checked_add(CCMP_HEADER_LEN)
+            .and_then(|length| length.checked_add(plan.llc_snap.len()))
+            .ok_or(ApDataFrameError::OutputTooSmall {
+                required: usize::MAX,
+            })?;
+        let headroom = prefix_len
+            .checked_sub(ETHERNET_HEADER_LEN)
+            .ok_or(ApDataFrameError::EthernetFrameTooShort)?;
         let frame_offset = ethernet_offset
             .checked_sub(headroom)
             .ok_or(ApDataFrameError::OutputTooSmall { required: headroom })?;
-        let frame_length = ethernet_length + headroom;
-        let prefix_end = frame_offset + prefix_len;
+        let frame_length =
+            ethernet_length
+                .checked_add(headroom)
+                .ok_or(ApDataFrameError::OutputTooSmall {
+                    required: usize::MAX,
+                })?;
+        let prefix_end =
+            frame_offset
+                .checked_add(prefix_len)
+                .ok_or(ApDataFrameError::OutputTooSmall {
+                    required: usize::MAX,
+                })?;
         let frame =
             storage
                 .get_mut(frame_offset..prefix_end)
@@ -995,7 +1016,11 @@ pub fn write_ht_association_response_frame_for_security(
                 .to_le_bytes(),
         );
     }
-    Ok(MANAGEMENT_HEADER_LEN + body_len)
+    MANAGEMENT_HEADER_LEN
+        .checked_add(body_len)
+        .ok_or(ApAssociationResponseError::OutputTooSmall {
+            required: usize::MAX,
+        })
 }
 
 /// Encode one AP-originated peer teardown frame.
@@ -1052,11 +1077,9 @@ pub fn write_ht_association_response(
 
     let encoded_association_id = if status == 0 {
         u16::from_le_bytes(
-            crate::encoding::validated(
-                crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
-                    .with_marker(3),
-            )
-            .to_bytes(),
+            crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
+                .with_marker(oer_wire::U8::constant::<3>())
+                .to_bytes(),
         )
     } else {
         0

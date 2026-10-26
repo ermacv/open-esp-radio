@@ -166,9 +166,8 @@ pub fn encode_block_ack_request(
     frame[4..10].copy_from_slice(&receiver);
     frame[10..16].copy_from_slice(&transmitter);
     let tid = QosControl::from_bytes([tid, 0]).tid();
-    let control = crate::encoding::validated(
-        crate::trigger::BarControlFields::from_bytes([4, 0]).with_tid(tid),
-    );
+    let control = crate::trigger::BarControlFields::from_bytes([4, 0])
+        .with_tid(oer_wire::U8::from_low_bits(tid));
     frame[16..18].copy_from_slice(&control.to_bytes());
     frame[18..20].copy_from_slice(&starting_sequence.sequence_control().to_le_bytes());
     frame

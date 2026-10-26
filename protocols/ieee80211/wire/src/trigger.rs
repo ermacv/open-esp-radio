@@ -42,6 +42,7 @@ pub const HE_CONTROL_INFO_LEN: usize = 4;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TriggerParseError {
+    ValueOutOfRange,
     Truncated { required: usize },
     NotTriggerFrame,
     UnsupportedUserLayout { trigger_type: TriggerType },
@@ -424,19 +425,19 @@ pub enum TriggerTargetRssi {
 }
 
 impl TriggerTargetRssi {
-    const fn from_user_encoding(value: u8) -> Self {
+    fn from_user_encoding(value: u8) -> Result<Self, TriggerParseError> {
         if value == 0x7f {
-            Self::Reserved
+            Ok(Self::Reserved)
         } else {
-            Self::Dbm((value as i8).wrapping_sub(110))
+            Ok(Self::Dbm(signed_dbm(value, 110, 1)?))
         }
     }
 
-    const fn from_trs_encoding(value: u8) -> Self {
+    fn from_trs_encoding(value: u8) -> Result<Self, TriggerParseError> {
         if value == 0x1f {
-            Self::Reserved
+            Ok(Self::Reserved)
         } else {
-            Self::Dbm((value as i8).wrapping_sub(45).wrapping_mul(2))
+            Ok(Self::Dbm(signed_dbm(value, 45, 2)?))
         }
     }
 }
@@ -448,15 +449,15 @@ pub enum TriggerApTxPower {
 }
 
 impl TriggerApTxPower {
-    const fn from_common_encoding(value: u8) -> Self {
-        Self::Dbm((value as i8).wrapping_sub(20))
+    fn from_common_encoding(value: u8) -> Result<Self, TriggerParseError> {
+        Ok(Self::Dbm(signed_dbm(value, 20, 1)?))
     }
 
-    const fn from_trs_encoding(value: u8) -> Self {
+    fn from_trs_encoding(value: u8) -> Result<Self, TriggerParseError> {
         if value == 0x1f {
-            Self::Reserved
+            Ok(Self::Reserved)
         } else {
-            Self::Dbm((value as i8).wrapping_sub(10).wrapping_mul(2))
+            Ok(Self::Dbm(signed_dbm(value, 10, 2)?))
         }
     }
 }
@@ -688,7 +689,7 @@ pub fn parse_trigger_common_info(bytes: &[u8]) -> Result<TriggerCommonInfo, Trig
         uplink_stbc: fields.uplink_stbc(),
         ldpc_extra_symbol_segment: fields.ldpc_extra_symbol_segment(),
         ap_tx_power_encoding,
-        ap_tx_power: TriggerApTxPower::from_common_encoding(ap_tx_power_encoding),
+        ap_tx_power: TriggerApTxPower::from_common_encoding(ap_tx_power_encoding)?,
         pre_fec_padding_factor_encoding,
         pre_fec_padding_factor: if pre_fec_padding_factor_encoding == 0 {
             4
@@ -735,7 +736,7 @@ pub fn parse_trigger_user_ru(bytes: &[u8]) -> Result<TriggerUserRuInfo, TriggerP
         number_of_ra_ru: fields.number_of_ra_ru(),
         more_ra_ru: fields.more_ra_ru(),
         target_rssi_encoding,
-        target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding),
+        target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding)?,
         reserved: fields.reserved(),
     })
 }
@@ -782,7 +783,7 @@ pub fn parse_trigger_user_spatial_stream(
         spatial_stream_count_encoding,
         spatial_stream_count: spatial_stream_count_encoding.saturating_add(1),
         target_rssi_encoding,
-        target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding),
+        target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding)?,
         reserved: fields.reserved(),
     })
 }
@@ -901,8 +902,8 @@ pub fn parse_trigger_response_scheduling_control(
         uplink_target_rssi_encoding: fields.uplink_target_rssi_encoding(),
         mcs: fields.mcs(),
         trailing_reserved: fields.trailing_reserved(),
-        ap_tx_power: TriggerApTxPower::from_trs_encoding(ap_tx_power_encoding),
-        uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(uplink_target_rssi_encoding),
+        ap_tx_power: TriggerApTxPower::from_trs_encoding(ap_tx_power_encoding)?,
+        uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(uplink_target_rssi_encoding)?,
     })
 }
 
@@ -1056,7 +1057,7 @@ oer_wire::bitfield! {
     pub struct BarControlFields[2] (little) {
         pub ack_policy, with_ack_policy: bool = 0..1;
         pub bar_type, with_bar_type: u8 = 1..5;
-        pub tid, with_tid: u8 = 12..16;
+        pub tid, with_tid: (u8) = 12..16;
     }
 }
 
@@ -1074,3 +1075,11 @@ const fn trigger_user_prefix(bytes: &[u8; 5]) -> TriggerUserPrefix {
 
 #[cfg(test)]
 mod tests;
+
+fn signed_dbm(value: u8, offset: i16, scale: i16) -> Result<i8, TriggerParseError> {
+    let value = i16::from(value)
+        .checked_sub(offset)
+        .and_then(|value| value.checked_mul(scale))
+        .ok_or(TriggerParseError::ValueOutOfRange)?;
+    i8::try_from(value).map_err(|_| TriggerParseError::ValueOutOfRange)
+}

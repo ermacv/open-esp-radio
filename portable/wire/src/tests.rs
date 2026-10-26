@@ -171,3 +171,60 @@ fn explicit_views_alias_fields_before_and_after_them() {
         assert_eq!(Views::from_bytes(written.to_bytes()), fields);
     }
 }
+
+crate::bitfield! {
+    struct Proved[2] (little) {
+        fragment, with_fragment: (u8) = 0..4;
+        sequence, with_sequence: (u16) = 4..16;
+    }
+}
+crate::bitfield! {
+    struct BigSpan[9] (big) { value, with_value: u64 = 7..71; }
+}
+
+#[test]
+fn proved_fields_refuse_bad_input_before_infallible_insertion() {
+    assert!(crate::U8::<4>::new(16).is_none());
+    assert!(crate::U16::<12>::new(4096).is_none());
+    for sequence in 0..4096 {
+        let value = Proved::from_bytes([0xa5, 0x5a])
+            .with_sequence(crate::U16::new(sequence).unwrap())
+            .with_fragment(crate::U8::constant::<13>());
+        assert_eq!(value.sequence(), sequence);
+        assert_eq!(value.fragment(), 13);
+        assert_eq!(value.to_bytes(), ((sequence << 4) | 13).to_le_bytes());
+    }
+}
+
+#[test]
+fn owned_prefix_lengths_refuse_overlong_input_and_borrow_exactly() {
+    let bytes = [0, 1, 2, 3, 4];
+    for length in 0..=bytes.len() {
+        let admitted = crate::PrefixLength::new(length).unwrap();
+        assert_eq!(admitted.borrow(&bytes), &bytes[..length]);
+        assert_eq!(admitted.get(), length);
+        let mut destination = [0xa5; 5];
+        admitted
+            .borrow_mut(&mut destination)
+            .copy_from_slice(&bytes[..length]);
+        assert_eq!(&destination[..length], &bytes[..length]);
+        assert_eq!(&destination[length..], &[0xa5; 5][length..]);
+    }
+    assert!(crate::PrefixLength::<5>::new(6).is_none());
+    assert!(crate::PrefixLength::<5>::new(usize::MAX).is_none());
+    assert_eq!(crate::PrefixLength::<0>::ZERO.borrow(&[]), &[]);
+}
+
+#[test]
+fn unaligned_big_endian_fields_retain_reserved_end_bits() {
+    for value in [0, 1, 0x0123_4567_89ab_cdef, u64::MAX] {
+        let original = BigSpan::from_bytes([0xa5; 9]);
+        let changed = original.with_value(value).unwrap();
+        assert_eq!(changed.value(), value);
+        let mut little = changed.to_bytes();
+        little.reverse();
+        assert_eq!(Reader::new(&little).bits::<64>(7), Ok(value));
+        assert_eq!(changed.to_bytes()[0] & 0x80, 0x80);
+        assert_eq!(changed.to_bytes()[8] & 0x7f, 0x25);
+    }
+}

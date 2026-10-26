@@ -163,15 +163,21 @@ pub struct HeMuMimoSpatialConfiguration {
     user_count: u8,
     encoding: u8,
     nsts: &'static [u8; 8],
+    total_nsts: u8,
 }
 
 impl HeMuMimoSpatialConfiguration {
     pub fn try_new(user_count: u8, encoding: u8) -> Option<Self> {
         let nsts = configuration_record(user_count, encoding)?;
+        let total_nsts = nsts
+            .iter()
+            .take(usize::from(user_count))
+            .try_fold(0_u8, |total, value| total.checked_add(*value))?;
         Some(Self {
             user_count,
             encoding,
             nsts,
+            total_nsts,
         })
     }
 
@@ -207,11 +213,7 @@ impl HeMuMimoSpatialConfiguration {
         clippy::arithmetic_side_effects
     )]
     pub fn total_nsts(self) -> u8 {
-        self.nsts
-            .iter()
-            .take(usize::from(self.user_count))
-            .copied()
-            .fold(0, u8::saturating_add)
+        self.total_nsts
     }
 }
 
@@ -307,24 +309,58 @@ pub struct He20MuSigBRuAllocation {
 }
 
 impl He20MuSigBRuAllocation {
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "the 0..=15 arm bounds the index of the 16-entry table"
-    )]
     pub const fn try_new(encoding: u8) -> Result<Self, He20MuSigBRuAllocationError> {
+        macro_rules! count {
+            ($value:expr) => {
+                match $value {
+                    Some(value) => value,
+                    None => return Err(He20MuSigBRuAllocationError::ReservedEncoding),
+                }
+            };
+        }
         let user_count = match encoding {
-            0..=15 => HE_MU_SIG_B_COMMON_RU_USER_COUNTS[encoding as usize],
-            16..=39 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 3,
-            40..=47 | 64..=79 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 6,
-            48..=63 | 80..=95 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 5,
-            96..=111 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 4,
+            0..=15 => *count!(const_get(
+                &HE_MU_SIG_B_COMMON_RU_USER_COUNTS,
+                encoding as usize
+            )),
+            16..=39 => count!(
+                SingleGroupRuAllocationCode::from_bytes([encoding])
+                    .low3()
+                    .checked_add(3)
+            ),
+            40..=47 | 64..=79 => count!(
+                SingleGroupRuAllocationCode::from_bytes([encoding])
+                    .low3()
+                    .checked_add(6)
+            ),
+            48..=63 | 80..=95 => count!(
+                SingleGroupRuAllocationCode::from_bytes([encoding])
+                    .low3()
+                    .checked_add(5)
+            ),
+            96..=111 => count!(
+                SingleGroupRuAllocationCode::from_bytes([encoding])
+                    .low3()
+                    .checked_add(4)
+            ),
             112 => 4,
             128..=191 => {
-                TwoGroupRuAllocationCode::from_bytes([encoding]).first_group()
-                    + TwoGroupRuAllocationCode::from_bytes([encoding]).second_group()
-                    + 2
+                count!(
+                    count!(
+                        TwoGroupRuAllocationCode::from_bytes([encoding])
+                            .first_group()
+                            .checked_add(
+                                TwoGroupRuAllocationCode::from_bytes([encoding]).second_group()
+                            )
+                    )
+                    .checked_add(2)
+                )
             }
-            192..=199 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 1,
+            192..=199 => count!(
+                SingleGroupRuAllocationCode::from_bytes([encoding])
+                    .low3()
+                    .checked_add(1)
+            ),
             200..=216 => return Err(He20MuSigBRuAllocationError::UnsupportedRuType),
             _ => return Err(He20MuSigBRuAllocationError::ReservedEncoding),
         };
@@ -342,10 +378,6 @@ impl He20MuSigBRuAllocation {
         self.user_count
     }
 
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "the 0..=15 arm bounds the row of the 16-row table; the position is below the user count of at most nine"
-    )]
     pub const fn user(self, zero_based_position: u8) -> Option<He20MuSigBRuUser> {
         if zero_based_position >= self.user_count {
             return None;
@@ -353,9 +385,14 @@ impl He20MuSigBRuAllocation {
 
         let resource_unit = match self.encoding {
             0..=15 => {
-                match HE_MU_SIG_B_COMMON_RU_TONES[self.encoding as usize]
-                    [zero_based_position as usize]
-                {
+                let Some(row) = const_get(&HE_MU_SIG_B_COMMON_RU_TONES, self.encoding as usize)
+                else {
+                    return None;
+                };
+                let Some(tones) = const_get(row, zero_based_position as usize) else {
+                    return None;
+                };
+                match *tones {
                     26 => HeResourceUnit::Ru26,
                     52 => HeResourceUnit::Ru52,
                     _ => return None,
@@ -433,12 +470,22 @@ impl He20MuSigBRuAllocation {
             0..=15 | 112 => 0,
             16..=111 | 192..=199 => SingleGroupRuAllocationCode::from_bytes([self.encoding]).low3(),
             128..=191 => {
-                let first_group_users =
-                    TwoGroupRuAllocationCode::from_bytes([self.encoding]).first_group() + 1;
+                let Some(first_group_users) = TwoGroupRuAllocationCode::from_bytes([self.encoding])
+                    .first_group()
+                    .checked_add(1)
+                else {
+                    return None;
+                };
                 let users_in_group = if zero_based_position < first_group_users {
                     first_group_users
                 } else {
-                    TwoGroupRuAllocationCode::from_bytes([self.encoding]).second_group() + 1
+                    let Some(users) = TwoGroupRuAllocationCode::from_bytes([self.encoding])
+                        .second_group()
+                        .checked_add(1)
+                    else {
+                        return None;
+                    };
+                    users
                 };
                 if users_in_group >= 2 { 1 } else { 0 }
             }
@@ -659,7 +706,7 @@ impl Iterator for He20MuSigBNonMimoUsers<'_> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = usize::from(self.user_count - self.next_user);
+        let remaining = (self.next_user..self.user_count).len();
         (remaining, Some(remaining))
     }
 }
@@ -802,7 +849,7 @@ impl Iterator for He20MuSigBMimoUsers<'_> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = usize::from(self.user_count - self.next_user);
+        let remaining = (self.next_user..self.user_count).len();
         (remaining, Some(remaining))
     }
 }
@@ -1276,3 +1323,15 @@ oer_wire::bitfield! {
 
 #[cfg(test)]
 mod tests;
+
+// `slice::get` is not const-stable in the pinned toolchain. Checked splitting
+// retains the same refused-index semantics without indexing or a panic.
+const fn const_get<T>(values: &[T], index: usize) -> Option<&T> {
+    match values.split_at_checked(index) {
+        Some((_, tail)) => match tail.split_first() {
+            Some((value, _)) => Some(value),
+            None => None,
+        },
+        None => None,
+    }
+}

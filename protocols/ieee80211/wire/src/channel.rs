@@ -64,6 +64,7 @@ pub struct Channel {
     band: Band,
     number: u8,
     width: ChannelWidth,
+    frequencies: Frequencies,
 }
 
 impl Channel {
@@ -93,10 +94,18 @@ impl Channel {
                     ChannelWidth::Mhz40Below => !lower_of_pair,
                 };
                 if valid {
+                    let Some(frequencies) = Frequencies::new(band, number, width) else {
+                        return Err(ChannelError::InvalidWidth {
+                            band,
+                            number,
+                            width,
+                        });
+                    };
                     Ok(Self {
                         band,
                         number,
                         width,
+                        frequencies,
                     })
                 } else {
                     Err(ChannelError::InvalidWidth {
@@ -125,6 +134,7 @@ impl Channel {
             band: Band::Ghz2_4,
             number: channel.primary(),
             width: channel.width(),
+            frequencies: channel.frequencies,
         }
     }
 
@@ -157,46 +167,69 @@ impl Channel {
     }
 
     pub const fn primary_frequency_mhz(self) -> u16 {
-        match self.band {
-            Band::Ghz2_4 if self.number == 14 => 2_484,
-            Band::Ghz2_4 => 2_407 + self.number as u16 * 5,
-            Band::Ghz5 => 5_000 + self.number as u16 * 5,
-        }
+        self.frequencies.primary_mhz
     }
 
     pub const fn center_frequency_mhz(self) -> u16 {
-        match self.width {
-            ChannelWidth::Mhz20 => self.primary_frequency_mhz(),
-            ChannelWidth::Mhz40Above => self.primary_frequency_mhz() + 10,
-            ChannelWidth::Mhz40Below => self.primary_frequency_mhz() - 10,
-        }
+        self.frequencies.center_mhz
     }
 }
 
-/// The span `bandwidth_mhz` wide around `center_mhz`.
-#[expect(
-    clippy::unreachable,
-    reason = "only validated Channel center frequencies and nonzero 20/40 MHz widths reach this private function"
-)]
-fn centered_span(center_mhz: u16, bandwidth_mhz: u16) -> oer_radio_regulatory::FrequencySpan {
-    let half_khz = u32::from(bandwidth_mhz) * 500;
-    let center_khz = u32::from(center_mhz) * 1000;
-    oer_radio_regulatory::FrequencySpan::new(
-        center_khz.saturating_sub(half_khz),
-        center_khz.saturating_add(half_khz),
-    )
-    .unwrap_or_else(|| unreachable!("a channel has a width"))
+/// Validated once, together with the channel's band/number/width geometry.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct Frequencies {
+    span: oer_radio_regulatory::FrequencySpan,
+    primary_mhz: u16,
+    center_mhz: u16,
+}
+
+impl Frequencies {
+    const fn new(band: Band, number: u8, width: ChannelWidth) -> Option<Self> {
+        macro_rules! checked {
+            ($value:expr) => {
+                match $value {
+                    Some(value) => value,
+                    None => return None,
+                }
+            };
+        }
+        let base = match band {
+            Band::Ghz2_4 => 2_407_u16,
+            Band::Ghz5 => 5_000_u16,
+        };
+        let primary_mhz = if matches!(band, Band::Ghz2_4) && number == 14 {
+            2_484
+        } else {
+            checked!(base.checked_add(checked!((number as u16).checked_mul(5))))
+        };
+        let center_mhz = match width {
+            ChannelWidth::Mhz20 => primary_mhz,
+            ChannelWidth::Mhz40Above => checked!(primary_mhz.checked_add(10)),
+            ChannelWidth::Mhz40Below => checked!(primary_mhz.checked_sub(10)),
+        };
+        let half_khz = checked!((width.bandwidth_mhz() as u32).checked_mul(500));
+        let center_khz = checked!((center_mhz as u32).checked_mul(1_000));
+        let span = checked!(oer_radio_regulatory::FrequencySpan::new(
+            checked!(center_khz.checked_sub(half_khz)),
+            checked!(center_khz.checked_add(half_khz)),
+        ));
+        Some(Self {
+            span,
+            primary_mhz,
+            center_mhz,
+        })
+    }
 }
 
 impl oer_radio_regulatory::RadioChannel for Channel {
     fn span(&self) -> oer_radio_regulatory::FrequencySpan {
-        centered_span(self.center_frequency_mhz(), self.bandwidth_mhz())
+        self.frequencies.span
     }
 }
 
 impl oer_radio_regulatory::RadioChannel for WifiChannel {
     fn span(&self) -> oer_radio_regulatory::FrequencySpan {
-        centered_span(self.center_frequency_mhz(), self.bandwidth_mhz())
+        self.frequencies.span
     }
 }
 
@@ -228,7 +261,9 @@ const fn ghz5_pair_position(number: u8) -> Option<bool> {
         149..=177 => 149,
         _ => return None,
     };
-    let offset = number - base;
+    let Some(offset) = number.checked_sub(base) else {
+        return None;
+    };
     if !offset.is_multiple_of(4) {
         return None;
     }
@@ -273,6 +308,7 @@ impl core::error::Error for ChannelError {}
 pub struct WifiChannel {
     primary: u8,
     width: WifiChannelWidth,
+    frequencies: Frequencies,
 }
 
 impl WifiChannel {
@@ -295,7 +331,14 @@ impl WifiChannel {
         if !secondary_valid {
             return Err(WifiChannelError::InvalidSecondary { primary, width });
         }
-        Ok(Self { primary, width })
+        let Some(frequencies) = Frequencies::new(Band::Ghz2_4, primary, width) else {
+            return Err(WifiChannelError::InvalidSecondary { primary, width });
+        };
+        Ok(Self {
+            primary,
+            width,
+            frequencies,
+        })
     }
 
     pub const fn mhz20(primary: u8) -> Result<Self, WifiChannelError> {
@@ -318,19 +361,11 @@ impl WifiChannel {
     }
 
     pub const fn primary_frequency_mhz(self) -> u16 {
-        if self.primary == 14 {
-            2_484
-        } else {
-            2_407 + self.primary as u16 * 5
-        }
+        self.frequencies.primary_mhz
     }
 
     pub const fn center_frequency_mhz(self) -> u16 {
-        match self.width {
-            WifiChannelWidth::Mhz20 => self.primary_frequency_mhz(),
-            WifiChannelWidth::Mhz40Above => self.primary_frequency_mhz() + 10,
-            WifiChannelWidth::Mhz40Below => self.primary_frequency_mhz() - 10,
-        }
+        self.frequencies.center_mhz
     }
 }
 

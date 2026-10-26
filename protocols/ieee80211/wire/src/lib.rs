@@ -7,7 +7,8 @@
         clippy::expect_used,
         clippy::panic,
         clippy::unreachable,
-        clippy::indexing_slicing
+        clippy::indexing_slicing,
+        clippy::arithmetic_side_effects
     )
 )]
 #![deny(clippy::todo, clippy::unimplemented)]

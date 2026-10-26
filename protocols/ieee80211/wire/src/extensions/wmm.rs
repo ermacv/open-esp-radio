@@ -110,11 +110,17 @@ pub(crate) const fn encode_wmm_parameter_element(
 ) -> [u8; WMM_PARAMETER_ELEMENT_LEN] {
     const fn record(category: WmmAccessCategory, parameters: WmmAcParameters) -> [u8; 4] {
         let fields = AcRecord::from_bytes([0; 4]).with_acm(parameters.admission_control_mandatory);
-        let fields = crate::encoding::validated(fields.with_aifsn(parameters.aifsn));
-        let fields = crate::encoding::validated(fields.with_aci(category as u8));
-        let fields = crate::encoding::validated(fields.with_ecw_min(parameters.ecw_min));
-        let fields = crate::encoding::validated(fields.with_ecw_max(parameters.ecw_max));
-        crate::encoding::validated(fields.with_txop(parameters.txop_limit_units_32_us)).to_bytes()
+        // Advertisement validation admits each four-bit parameter. ACI is the
+        // finite access-category enum; TXOP occupies its complete u16.
+        fields
+            .with_aifsn(oer_wire::U8::from_low_bits(parameters.aifsn))
+            .with_aci(oer_wire::U8::from_low_bits(category as u8))
+            .with_ecw_min(oer_wire::U8::from_low_bits(parameters.ecw_min))
+            .with_ecw_max(oer_wire::U8::from_low_bits(parameters.ecw_max))
+            .with_txop(oer_wire::U16::from_low_bits(
+                parameters.txop_limit_units_32_us,
+            ))
+            .to_bytes()
     }
     let [be, bk, vi, vo] = categories;
     let [be0, be1, be2, be3] = record(WmmAccessCategory::BestEffort, be);
@@ -228,12 +234,12 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
     pub struct AcRecord[4] (little) {
-        pub aifsn, with_aifsn: u8 = 0..4;
+        pub aifsn, with_aifsn: (u8) = 0..4;
         pub acm, with_acm: bool = 4..5;
-        pub aci, with_aci: u8 = 5..7;
-        pub ecw_min, with_ecw_min: u8 = 8..12;
-        pub ecw_max, with_ecw_max: u8 = 12..16;
-        pub txop, with_txop: u16 = 16..32;
+        pub aci, with_aci: (u8) = 5..7;
+        pub ecw_min, with_ecw_min: (u8) = 8..12;
+        pub ecw_max, with_ecw_max: (u8) = 12..16;
+        pub txop, with_txop: (u16) = 16..32;
     }
 }
 oer_wire::bitfield! {

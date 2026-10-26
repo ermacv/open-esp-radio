@@ -70,22 +70,26 @@ pub enum CcmpReceiveSequenceError {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CcmpKeyId(u8);
+pub struct CcmpKeyId(oer_wire::U8<2>);
 
 impl CcmpKeyId {
-    pub const PAIRWISE: Self = Self(0);
+    pub const PAIRWISE: Self = Self(oer_wire::U8::ZERO);
 
     pub const fn new(value: u8) -> Option<Self> {
-        if value <= 3 { Some(Self(value)) } else { None }
+        match oer_wire::U8::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
     }
 
     pub const fn value(self) -> u8 {
-        self.0
+        self.0.get()
     }
 
     pub const fn header_bits(self) -> u8 {
-        crate::encoding::validated(CcmpKeyControl::from_bytes([0]).with_key_id(self.0)).to_bytes()
-            [0]
+        CcmpKeyControl::from_bytes([0])
+            .with_key_id(self.0)
+            .to_bytes()[0]
     }
 }
 
@@ -139,7 +143,7 @@ impl GroupKeyId {
 
     /// The identifier, as a CCMP header names it.
     pub const fn key_id(self) -> CcmpKeyId {
-        CcmpKeyId(self.get())
+        CcmpKeyId(oer_wire::U8::from_low_bits(self.get()))
     }
 
     /// Select the record for this wire ID, independently of hardware slots.
@@ -191,17 +195,17 @@ impl CcmpHeader {
         }
         Ok(Self {
             packet_number: CcmpPacketNumber::from_header_bytes(bytes),
-            key_id: CcmpKeyId(CcmpKeyControl::from_bytes([bytes[3]]).key_id()),
+            key_id: CcmpKeyId(oer_wire::U8::from_low_bits(
+                CcmpKeyControl::from_bytes([bytes[3]]).key_id(),
+            )),
         })
     }
 
     pub const fn encode(self) -> [u8; CCMP_HEADER_LEN] {
         let [p0, p1, p2, p3, p4, p5, _, _] = self.packet_number.value().to_le_bytes();
-        let control = crate::encoding::validated(
-            CcmpKeyControl::from_bytes([0])
-                .with_extended_iv(true)
-                .with_key_id(self.key_id.value()),
-        );
+        let control = CcmpKeyControl::from_bytes([0])
+            .with_extended_iv(true)
+            .with_key_id(self.key_id.0);
         [p0, p1, 0, control.to_bytes()[0], p2, p3, p4, p5]
     }
 
@@ -271,7 +275,7 @@ oer_wire::bitfield! {
     pub struct CcmpKeyControl[1] (little) {
         pub reserved, with_reserved: u8 = 0..5;
         pub extended_iv, with_extended_iv: bool = 5..6;
-        pub key_id, with_key_id: u8 = 6..8;
+        pub key_id, with_key_id: (u8) = 6..8;
     }
 }
 

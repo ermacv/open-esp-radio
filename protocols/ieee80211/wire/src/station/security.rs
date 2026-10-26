@@ -32,27 +32,21 @@ pub enum StaSecurityError {
 /// negotiate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SelectedRsn {
-    length: u8,
+    length: oer_wire::PrefixLength<SELECTED_SECURITY_IES_CAPACITY>,
     bytes: [u8; SELECTED_SECURITY_IES_CAPACITY],
     security: AssociationSecurity,
 }
 
 impl SelectedRsn {
     const OPEN: Self = Self {
-        length: 0,
+        length: oer_wire::PrefixLength::ZERO,
         bytes: [0; SELECTED_SECURITY_IES_CAPACITY],
         security: AssociationSecurity::Open,
     };
 
     /// The security elements of the association request.
-    #[expect(
-        clippy::expect_used,
-        reason = "only the private selection constructors set length, within the fixed security-IE capacity"
-    )]
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes
-            .get(..usize::from(self.length))
-            .expect("selected security elements fit their storage")
+        self.length.borrow(&self.bytes)
     }
 
     /// The security the association negotiates.
@@ -80,7 +74,7 @@ impl SelectedRsn {
         let mut reader = oer_wire::Reader::new(self.as_bytes());
         reader.array::<SELECTED_RSN_IE_LEN>().ok()?;
         let rsnxe = reader.remaining();
-        resumed.bytes[1] += PMKID_LIST_LEN as u8;
+        resumed.bytes[1] = resumed.bytes[1].checked_add(PMKID_LIST_LEN as u8)?;
         resumed.bytes[SELECTED_RSN_IE_LEN..SELECTED_RSN_IE_LEN + 2]
             .copy_from_slice(&1_u16.to_le_bytes());
         resumed.bytes[SELECTED_RSN_IE_LEN + 2..SELECTED_RSN_IE_LEN + PMKID_LIST_LEN]
@@ -89,7 +83,7 @@ impl SelectedRsn {
         oer_wire::Writer::new(resumed.bytes.get_mut(rsnxe_start..)?)
             .write(rsnxe)
             .ok()?;
-        resumed.length = (rsnxe_start + rsnxe.len()) as u8;
+        resumed.length = oer_wire::PrefixLength::new(rsnxe_start.checked_add(rsnxe.len())?)?;
         Some(resumed)
     }
 }
@@ -232,14 +226,14 @@ fn select_personal_rsn(
         station_capabilities as u8,
         station_capabilities.to_le_bytes()[1],
     ]);
-    selected.length = SELECTED_RSN_IE_LEN as u8;
+    selected.length = oer_wire::PrefixLength::constant::<SELECTED_RSN_IE_LEN>();
     if matches!(akm, AssociationAkm::Sae(_)) {
         selected.bytes[SELECTED_RSN_IE_LEN..SELECTED_RSN_IE_LEN + 3].copy_from_slice(&[
             RSNXE_ELEMENT_ID,
             1,
             RSNXE_SAE_H2E,
         ]);
-        selected.length = SELECTED_RSN_IE_LEN as u8 + 3;
+        selected.length = oer_wire::PrefixLength::constant::<{ SELECTED_RSN_IE_LEN + 3 }>();
     }
     Ok(selected)
 }

@@ -37,7 +37,10 @@ pub const fn length_after_append(
         let Some(empty_bytes) = delimiters.checked_mul(4) else {
             return None;
         };
-        let Some(padded) = next.checked_add((4 - (previous_bytes & 3)) & 3) else {
+        let Some(padding) = 4_u32.checked_sub(previous_bytes & 3) else {
+            return None;
+        };
+        let Some(padded) = next.checked_add(padding & 3) else {
             return None;
         };
         let Some(spaced) = padded.checked_add(empty_bytes) else {

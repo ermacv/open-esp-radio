@@ -112,32 +112,36 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     // ERP-OFDM: 20 us preamble, 4 us symbols of 24 bits at 6 Mb/s, and the
     // signal extension. A 32-octet BlockAck: (16 + 256 + 6) / 24 -> 12.
     assert_eq!(
-        PhyRate::Legacy(LegacyRate::Ofdm6M).max_ppdu_duration_micros(32),
+        PhyRate::Legacy(LegacyRate::Ofdm6M)
+            .max_ppdu_duration_micros(32)
+            .unwrap(),
         20 + 48 + 6
     );
     // DSSS 1 Mb/s with the long preamble: 192 us and 8 us an octet.
     assert_eq!(
-        PhyRate::Legacy(LegacyRate::Dsss1M).max_ppdu_duration_micros(14),
+        PhyRate::Legacy(LegacyRate::Dsss1M)
+            .max_ppdu_duration_micros(14)
+            .unwrap(),
         192 + 112
     );
     // HT20 MCS 7, long GI, 1500 octets: 260 bits a symbol,
     // (16 + 12000 + 6) / 260 -> 47 symbols after the 36 us preamble.
     let ht = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap();
     assert_eq!(
-        PhyRate::Ht(ht).max_ppdu_duration_micros(1_500),
+        PhyRate::Ht(ht).max_ppdu_duration_micros(1_500).unwrap(),
         36 + 47 * 4 + 6
     );
     // The short GI keeps the symbols and shortens them to 3.6 us.
     let short = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, true).unwrap();
     assert_eq!(
-        PhyRate::Ht(short).max_ppdu_duration_micros(1_500),
+        PhyRate::Ht(short).max_ppdu_duration_micros(1_500).unwrap(),
         36 + 4 * 43 + 6
     );
     // HT40 doubles the bits a symbol.
     let ht40 = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, false).unwrap();
     assert!(
-        PhyRate::Ht(ht40).max_ppdu_duration_micros(1_500)
-            < PhyRate::Ht(ht).max_ppdu_duration_micros(1_500)
+        PhyRate::Ht(ht40).max_ppdu_duration_micros(1_500).unwrap()
+            < PhyRate::Ht(ht).max_ppdu_duration_micros(1_500).unwrap()
     );
     // HE20 MCS 7, one stream, 2x LTF and 0.8 us GI: 234 * 6 * 5/6 = 1170
     // bits a 13.6 us symbol, (16 + 12000 + 6) / 1170 -> 11 symbols.
@@ -151,7 +155,7 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     )
     .unwrap();
     assert_eq!(
-        PhyRate::He(he).max_ppdu_duration_micros(1_500),
+        PhyRate::He(he).max_ppdu_duration_micros(1_500).unwrap(),
         (36_000_u32 + 7_200 + 11 * 13_600).div_ceil(1_000) + 16 + 6
     );
     // Longer PSDUs never take less time.
@@ -160,6 +164,21 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
         PhyRate::He(he),
         PhyRate::Legacy(LegacyRate::Ofdm54M),
     ] {
-        assert!(rate.max_ppdu_duration_micros(3_000) >= rate.max_ppdu_duration_micros(1_500));
+        assert!(
+            rate.max_ppdu_duration_micros(3_000).unwrap()
+                >= rate.max_ppdu_duration_micros(1_500).unwrap()
+        );
     }
+}
+
+#[test]
+fn unrepresentable_airtime_is_an_error_instead_of_a_truncated_duration() {
+    assert_eq!(
+        PhyRate::Legacy(LegacyRate::Dsss1M).max_ppdu_duration_micros(u32::MAX),
+        None
+    );
+    let rate = PhyRate::Legacy(LegacyRate::Dsss1M);
+    let last = (u32::MAX - 192) / 8;
+    assert!(rate.max_ppdu_duration_micros(last).is_some());
+    assert_eq!(rate.max_ppdu_duration_micros(last + 1), None);
 }

@@ -30,16 +30,16 @@ impl HeUlMuPowerCapability {
     ) -> Result<Self, HeUlMuPowerCapabilityError> {
         let base = i16::from(rate_16_through_25[0]);
         let mut relative_to_rate_16 = [0_u8; 9];
-        for (offset, (relative, power)) in relative_to_rate_16
-            .iter_mut()
-            .zip(rate_16_through_25[1..].iter().copied())
-            .enumerate()
-        {
-            let difference = base - i16::from(power);
+        for (rate, (relative, power)) in (17_u8..=25).zip(
+            relative_to_rate_16
+                .iter_mut()
+                .zip(rate_16_through_25[1..].iter().copied()),
+        ) {
+            let difference = base
+                .checked_sub(i16::from(power))
+                .ok_or(HeUlMuPowerCapabilityError::HigherPowerThanRate16 { rate })?;
             if !(0..=i16::from(u8::MAX)).contains(&difference) {
-                return Err(HeUlMuPowerCapabilityError::HigherPowerThanRate16 {
-                    rate: 17 + offset as u8,
-                });
+                return Err(HeUlMuPowerCapabilityError::HigherPowerThanRate16 { rate });
             }
             *relative = difference as u8;
         }
@@ -175,8 +175,16 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             ));
         }
 
-        let rates_len = self.access_point.supported_rates_bytes().len()
-            + self.access_point.extended_supported_rates_bytes().len();
+        let rates_len = self
+            .access_point
+            .supported_rates_bytes()
+            .len()
+            .checked_add(self.access_point.extended_supported_rates_bytes().len())
+            .ok_or(AssociationRequestError::Frame(
+                StationFrameError::OutputTooSmall {
+                    required: usize::MAX,
+                },
+            ))?;
         if rates_len == 0 {
             return Err(AssociationRequestError::Frame(
                 StationFrameError::NoSupportedRates,
@@ -188,7 +196,14 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             ));
         }
         let first_rates_len = rates_len.min(SUPPORTED_RATES_ELEMENT_CAPACITY);
-        let extended_rates_len = rates_len - first_rates_len;
+        let extended_rates_len =
+            rates_len
+                .checked_sub(first_rates_len)
+                .ok_or(AssociationRequestError::Frame(
+                    StationFrameError::OutputTooSmall {
+                        required: usize::MAX,
+                    },
+                ))?;
         let selected_rsn = self.security;
         let AssociationElements {
             ht_capability,

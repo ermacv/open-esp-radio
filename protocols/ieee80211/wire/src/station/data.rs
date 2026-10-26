@@ -224,8 +224,15 @@ impl StaProtectedEthernetFrame {
 
         let header_len = usize::from(plan.header_len);
         let dma_header_len = plan.dma_header_len();
-        let prefix_len = dma_header_len + CCMP_HEADER_LEN + plan.llc_snap.len();
-        let headroom = prefix_len - ETHERNET_HEADER_LEN;
+        let prefix_len = dma_header_len
+            .checked_add(CCMP_HEADER_LEN)
+            .and_then(|length| length.checked_add(plan.llc_snap.len()))
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: usize::MAX,
+            })?;
+        let headroom = prefix_len
+            .checked_sub(ETHERNET_HEADER_LEN)
+            .ok_or(StationFrameError::EthernetFrameTooShort)?;
         let frame_offset = ethernet_offset.checked_sub(headroom).ok_or(
             StationFrameError::EthernetHeadroomTooSmall {
                 required: headroom,
@@ -235,7 +242,9 @@ impl StaProtectedEthernetFrame {
         // The prefix borrow ends at the original payload boundary. Encoding
         // cannot reach payload bytes, and the returned frame keeps the input
         // Ethernet end instead of reconstructing it from a second length.
-        let payload_start = ethernet_offset + ETHERNET_HEADER_LEN;
+        let payload_start = ethernet_offset
+            .checked_add(ETHERNET_HEADER_LEN)
+            .ok_or(StationFrameError::EthernetFrameTooShort)?;
         let (before_payload, _) = storage.split_at_mut(payload_start);
         let prefix =
             before_payload
@@ -257,7 +266,9 @@ impl StaProtectedEthernetFrame {
         .map_err(|required| StationFrameError::OutputTooSmall { required })?;
         Ok(EncodedStaFrame {
             offset: frame_offset,
-            length: ethernet_end - frame_offset,
+            length: ethernet_end
+                .checked_sub(frame_offset)
+                .ok_or(StationFrameError::EthernetFrameTooShort)?,
         })
     }
 
@@ -347,12 +358,26 @@ impl StaProtectedEthernetFrame {
         // A station A-MSDU always owns the complete fixed-size QoS header.
         let mut header = plan.header;
         header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let first_prefix_length =
-            header.len() + CCMP_HEADER_LEN + AMSDU_SUBFRAME_HEADER_LEN + LLC_SNAP_HEADER_LEN;
-        let first_payload_length = ethernet_length - ETHERNET_HEADER_LEN;
+        let first_prefix_length = header
+            .len()
+            .checked_add(CCMP_HEADER_LEN)
+            .and_then(|length| length.checked_add(AMSDU_SUBFRAME_HEADER_LEN))
+            .and_then(|length| length.checked_add(LLC_SNAP_HEADER_LEN))
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: usize::MAX,
+            })?;
+        let first_payload_length = ethernet_length
+            .checked_sub(ETHERNET_HEADER_LEN)
+            .ok_or(StationFrameError::EthernetFrameTooShort)?;
         storage.copy_within(
-            ethernet_offset + ETHERNET_HEADER_LEN..ethernet_end,
-            frame_offset + first_prefix_length,
+            ethernet_offset
+                .checked_add(ETHERNET_HEADER_LEN)
+                .ok_or(StationFrameError::EthernetFrameTooShort)?..ethernet_end,
+            frame_offset.checked_add(first_prefix_length).ok_or(
+                StationFrameError::OutputTooSmall {
+                    required: usize::MAX,
+                },
+            )?,
         );
 
         // Disjoint slices retain the moved first payload while the two
@@ -365,7 +390,11 @@ impl StaProtectedEthernetFrame {
                 })?;
         let (first_prefix, body) = frame.split_at_mut(first_prefix_length);
         let (_, following) = body.split_at_mut(first_payload_length);
-        let first_msdu_length = LLC_SNAP_HEADER_LEN + first_payload_length;
+        let first_msdu_length = LLC_SNAP_HEADER_LEN
+            .checked_add(first_payload_length)
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: usize::MAX,
+            })?;
         let first_written = crate::encoding::FrameParts([
             header.as_slice(),
             &self.ccmp_header,
@@ -376,9 +405,17 @@ impl StaProtectedEthernetFrame {
         ])
         .write(first_prefix)
         .map_err(|required| StationFrameError::OutputTooSmall { required })?;
-        let first_subframe_length = AMSDU_SUBFRAME_HEADER_LEN + first_msdu_length;
+        let first_subframe_length = AMSDU_SUBFRAME_HEADER_LEN
+            .checked_add(first_msdu_length)
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: usize::MAX,
+            })?;
         let padding = [0; 3];
-        let first_padding = (4 - (first_subframe_length & 3)) & 3;
+        let first_padding = 4_usize.checked_sub(first_subframe_length & 3).ok_or(
+            StationFrameError::OutputTooSmall {
+                required: usize::MAX,
+            },
+        )? & 3;
         let mut reader = oer_wire::Reader::new(second_ethernet);
         let second_addresses = reader
             .array::<12>()
@@ -387,7 +424,11 @@ impl StaProtectedEthernetFrame {
             .array::<2>()
             .map_err(|_| StationFrameError::EthernetFrameTooShort)?;
         let second_payload = reader.remaining();
-        let second_msdu_length = LLC_SNAP_HEADER_LEN + second_payload.len();
+        let second_msdu_length = LLC_SNAP_HEADER_LEN
+            .checked_add(second_payload.len())
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: usize::MAX,
+            })?;
         let following_written = crate::encoding::FrameParts([
             oer_wire::Reader::new(&padding)
                 .take(first_padding)
@@ -404,7 +445,12 @@ impl StaProtectedEthernetFrame {
         .map_err(|required| StationFrameError::OutputTooSmall { required })?;
         Ok(EncodedStaFrame {
             offset: frame_offset,
-            length: first_written + first_payload_length + following_written,
+            length: first_written
+                .checked_add(first_payload_length)
+                .and_then(|length| length.checked_add(following_written))
+                .ok_or(StationFrameError::OutputTooSmall {
+                    required: usize::MAX,
+                })?,
         })
     }
 }

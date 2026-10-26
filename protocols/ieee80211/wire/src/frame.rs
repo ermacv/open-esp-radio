@@ -226,9 +226,9 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
     pub struct QosControl[2] (little) {
-        pub tid, with_tid: u8 = 0..4;
+        pub tid, with_tid: (u8) = 0..4;
         pub eosp, with_eosp: bool = 4..5;
-        pub ack_policy, with_ack_policy: u8 = 5..7;
+        pub ack_policy, with_ack_policy: (u8) = 5..7;
         pub amsdu, with_amsdu: bool = 7..8;
         pub upper, with_upper: u8 = 8..16;
     }

@@ -116,7 +116,7 @@ oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.8 (AID field).
     pub struct AssociationId[2] (little) {
         pub aid, with_aid: u16 = 0..14;
-        pub marker, with_marker: u8 = 14..16;
+        pub marker, with_marker: (u8) = 14..16;
     }
 }
 

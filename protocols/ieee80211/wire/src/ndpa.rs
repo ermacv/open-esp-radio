@@ -193,35 +193,38 @@ pub struct HeNdpaStationEncoding {
 
 impl HeNdpaStationEncoding {
     pub const fn encode(self) -> Result<u32, HeNdpaEncodingError> {
-        if self.association_id > AID11_MASK as u16 {
-            return Err(HeNdpaEncodingError::AssociationIdOutOfRange);
+        let mut fields = NdpaStationFields::from_bytes([0; 4]);
+        macro_rules! field {
+            ($result:expr, $error:ident) => {
+                match $result {
+                    Ok(value) => value,
+                    Err(_) => return Err(HeNdpaEncodingError::$error),
+                }
+            };
         }
-        if self.resource_unit_start_index > 0x7f || self.resource_unit_end_index > 0x7f {
-            return Err(HeNdpaEncodingError::ResourceUnitIndexOutOfRange);
-        }
+        fields = field!(
+            fields.with_association_id(self.association_id),
+            AssociationIdOutOfRange
+        );
+        fields = field!(
+            fields.with_resource_unit_start_index(self.resource_unit_start_index),
+            ResourceUnitIndexOutOfRange
+        );
+        fields = field!(
+            fields.with_resource_unit_end_index(self.resource_unit_end_index),
+            ResourceUnitIndexOutOfRange
+        );
         if self.resource_unit_start_index > self.resource_unit_end_index {
             return Err(HeNdpaEncodingError::ReversedResourceUnitRange);
         }
-        if self.feedback_type_and_ng_encoding > 0x03 {
-            return Err(HeNdpaEncodingError::FeedbackTypeAndNgOutOfRange);
-        }
-        if self.nc_encoding > 0x07 {
-            return Err(HeNdpaEncodingError::NcOutOfRange);
-        }
-        let mut fields = NdpaStationFields::from_bytes([0; 4]);
-        fields = crate::encoding::validated(fields.with_association_id(self.association_id));
-        fields = crate::encoding::validated(
-            fields.with_resource_unit_start_index(self.resource_unit_start_index),
-        );
-        fields = crate::encoding::validated(
-            fields.with_resource_unit_end_index(self.resource_unit_end_index),
-        );
-        fields = crate::encoding::validated(
+        fields = field!(
             fields.with_feedback_type_and_ng_encoding(self.feedback_type_and_ng_encoding),
+            FeedbackTypeAndNgOutOfRange
         );
-        fields = fields.with_disambiguation(self.disambiguation);
-        fields = fields.with_codebook_size(self.codebook_size);
-        fields = crate::encoding::validated(fields.with_nc_encoding(self.nc_encoding));
+        fields = fields
+            .with_disambiguation(self.disambiguation)
+            .with_codebook_size(self.codebook_size);
+        fields = field!(fields.with_nc_encoding(self.nc_encoding), NcOutOfRange);
         Ok(u32::from_le_bytes(fields.to_bytes()))
     }
 }
@@ -261,12 +264,11 @@ impl HeNdpaEncoding<'_> {
             &self.duration.to_le_bytes(),
             &self.receiver_address,
             &self.transmitter_address,
-            &[crate::encoding::validated(
-                NdpaToken::from_bytes([0])
-                    .with_he(true)
-                    .with_token(self.dialog_token),
-            )
-            .to_bytes()[0]],
+            &[NdpaToken::from_bytes([0])
+                .with_he(true)
+                .with_token(self.dialog_token)
+                .map_err(|_| HeNdpaEncodingError::DialogTokenOutOfRange)?
+                .to_bytes()[0]],
         ];
         for (out, byte) in head.iter_mut().zip(header.into_iter().flatten()) {
             *out = *byte;

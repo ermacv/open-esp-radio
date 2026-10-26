@@ -99,3 +99,33 @@ fn channels_span_their_width_around_the_center() {
     let fourteen = Channel::ghz2_4(14, ChannelWidth::Mhz20).unwrap().span();
     assert_eq!(fourteen.high_khz(), 2_494_000);
 }
+
+#[test]
+fn all_external_channel_codes_either_refuse_or_retain_the_exact_span() {
+    use oer_radio_regulatory::RadioChannel as _;
+    for band in [Band::Ghz2_4, Band::Ghz5] {
+        for number in 0..=u8::MAX {
+            for width in [
+                ChannelWidth::Mhz20,
+                ChannelWidth::Mhz40Above,
+                ChannelWidth::Mhz40Below,
+            ] {
+                let Ok(channel) = Channel::new(band, number, width) else {
+                    continue;
+                };
+                let span = channel.span();
+                let center = u32::from(channel.center_frequency_mhz()) * 1000;
+                let half = u32::from(width.bandwidth_mhz()) * 500;
+                assert_eq!(
+                    (span.low_khz(), span.high_khz()),
+                    (center - half, center + half)
+                );
+                if let Some(wifi) = channel.wifi_channel() {
+                    assert_eq!(wifi.span(), span);
+                }
+            }
+        }
+    }
+    assert!(Channel::ghz5(255, ChannelWidth::Mhz40Above).is_err());
+    assert!(WifiChannel::mhz20(0).is_err());
+}

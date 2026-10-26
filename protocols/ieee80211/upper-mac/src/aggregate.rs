@@ -18,8 +18,12 @@ use crate::ampdu::MAX_AMPDU_SUBFRAMES;
 /// The SIFS and the compressed BlockAck that answers an aggregate, at the
 /// lowest mandatory ERP-OFDM rate (6 Mb/s): the response a TXOP holds after
 /// the aggregate.
-pub const BLOCK_ACK_RESPONSE_MICROS: u32 =
-    10 + PhyRate::Legacy(LegacyRate::Ofdm6M).max_ppdu_duration_micros(32);
+pub const BLOCK_ACK_RESPONSE_MICROS: u32 = const {
+    10 + match PhyRate::Legacy(LegacyRate::Ofdm6M).max_ppdu_duration_micros(32) {
+        Some(duration) => duration,
+        None => panic!("fixed BlockAck duration fits u32"),
+    }
+};
 
 /// The A-MPDU subframe of an Ethernet-II frame of `ethernet_len` octets at
 /// most: delimiter, QoS data header, CCMP header, LLC/SNAP, the payload, MIC
@@ -138,7 +142,7 @@ impl AmpduRun {
                 self.limits
                     .rate
                     .max_ppdu_duration_micros(length)
-                    .checked_add(BLOCK_ACK_RESPONSE_MICROS)
+                    .and_then(|duration| duration.checked_add(BLOCK_ACK_RESPONSE_MICROS))
                     .is_none_or(|duration| duration > txop)
             })
         {
@@ -220,7 +224,7 @@ mod tests {
         let rate = ht_mcs7();
         let one = subframe_bound(1_514).unwrap();
         // Room for two subframes and the BlockAck, not three.
-        let txop = rate.max_ppdu_duration_micros(2 * one) + BLOCK_ACK_RESPONSE_MICROS;
+        let txop = rate.max_ppdu_duration_micros(2 * one).unwrap() + BLOCK_ACK_RESPONSE_MICROS;
         let limits = AmpduLimits {
             txop_limit_micros: Some(txop),
             ..limits()
@@ -347,16 +351,21 @@ mod tests {
                 limits.port.max_length -= 1;
                 assert_eq!(limits.run([60; 3]), 1, "{rate:?} {encoding}");
                 limits.port.max_length = 65_535;
-                let txop = rate.max_ppdu_duration_micros(encoded_two) + BLOCK_ACK_RESPONSE_MICROS;
+                let txop =
+                    rate.max_ppdu_duration_micros(encoded_two).unwrap() + BLOCK_ACK_RESPONSE_MICROS;
                 limits.txop_limit_micros = Some(txop);
-                let three_duration = rate.max_ppdu_duration_micros(encoded_two + interval)
+                let three_duration = rate
+                    .max_ppdu_duration_micros(encoded_two + interval)
+                    .unwrap()
                     + BLOCK_ACK_RESPONSE_MICROS;
                 let expected = if three_duration <= txop { 3 } else { 2 };
                 assert_eq!(limits.run([60; 3]), expected, "{rate:?} {encoding}");
                 limits.txop_limit_micros = Some(txop - 1);
                 // One and two very short HE MPDUs can occupy the same
                 // symbol; that boundary then excludes even the first.
-                let one_fits = rate.max_ppdu_duration_micros(subframe_bound(60).unwrap())
+                let one_fits = rate
+                    .max_ppdu_duration_micros(subframe_bound(60).unwrap())
+                    .unwrap()
                     + BLOCK_ACK_RESPONSE_MICROS
                     < txop;
                 assert_eq!(
