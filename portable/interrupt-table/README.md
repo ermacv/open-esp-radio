@@ -10,14 +10,13 @@ to one CPU line at a level on a hart:
 
 ```text
 contexts { app_wake: 1; radio_executor: 2; radio: 3; }
-priority: low_to_high;
 field: Token = Part => handler, line LINE, context radio, hart HART, CLASS;
 ```
 
 Contexts name levels once per image. Every entry selects a declared context;
 an unknown name fails to compile. The level check enforces the chip facts'
-range for every declared context, including unused ones. `priority: low_to_high` declares the textual order of
-entries at each level on each hart. The macro checks that order against the
+range for every declared context, including unused ones. Entries at each
+level on each hart appear from lowest to highest arbitration priority. The macro checks that order against the
 facts' tie-break: on S31 a later, higher-priority peer must have a higher line
 ID. Peers at one level never preempt each other.
 
@@ -113,12 +112,20 @@ software interrupt source, all participating contexts share a hart, and an
 interrupt-mode executor's entry has class `Executor`. A thread-mode executor's
 wake entry represents its tasks at level zero. Nested pairs declare several
 raisers of one signal; the signal's layout and atomic publication are unchanged.
+The composition must keep `raise` calls within those declared contexts;
+`raise` itself does not check the caller.
 
 `Doorbell::new`, Wi-Fi request activation and BLE gate exchange assert the
 same request-direction predicate: the handler must be above the requesting
 executor on the same hart. Wi-Fi and BLE also check that the doorbell names
 the bound handler. There is no separate three-level or same-level proof.
-Every scheduling assertion is evaluated in a const item or inline const block.
+The typed `Doorbell<SWI, HandlerEntry, ExecutorEntry>` retains both entries
+and checks the requester's `Executor` class; image wrappers derive their
+metadata from that type. Static signal initializers are checked by
+`cargo check`. The generic runtime constructors and driver calls evaluate
+their inline const checks at monomorphization, covered by paired codegen
+tests in the executor and driver crates. Stable Rust cannot use these
+associated scheduling constants in generic const expressions in a signature.
 
 ```console
 cargo test -p oer-interrupt-table

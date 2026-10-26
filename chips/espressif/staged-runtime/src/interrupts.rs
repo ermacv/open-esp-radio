@@ -14,7 +14,6 @@ pub const LINES: oer_interrupt_table::Lines = crate::vectors::LINES;
 /// ```ignore
 /// oer_espressif_staged_runtime::interrupt_table! {
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     /// The IEEE 802.15.4 MAC's events.
 ///     ieee802154: Ieee802154Token = Ieee802154MacIrq => crate::radio::on_event,
 ///         line 20, context radio, hart 0, Hardware;

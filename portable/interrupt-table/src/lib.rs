@@ -221,7 +221,7 @@ pub struct Lines {
 ///
 /// A chip's platform wraps it with its [`Lines`]; each entry reads
 /// `field: Token = Part => handler, line LINE, context NAME, hart HART, CLASS;`
-/// after `contexts { NAME: LEVEL; ... }` and `priority: low_to_high;`.
+/// after `contexts { NAME: LEVEL; ... }`.
 /// The levels are declared once; same-level entries on a hart are written
 /// from lowest to highest arbitration priority and checked against `Lines::tie_break`. `Part` implements [`InterruptSources`] (each
 /// [`InterruptSource`] does), `handler`
@@ -250,7 +250,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
-///     priority: low_to_high;
 ///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
 ///     // A hardware handler would wait for the executor's whole poll.
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Hardware;
@@ -265,7 +264,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
-///     priority: low_to_high;
 ///     // One executor per level and hart.
 ///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Executor;
@@ -279,7 +277,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
-///     priority: low_to_high;
 ///     // Nothing to exempt: no executor shares the level.
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "no executor here");
 /// }
@@ -293,7 +290,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
-///     priority: low_to_high;
 ///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
 ///     // A waker exemption does not exempt the executor's level too.
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Exempt(WakerCall, "its driver");
@@ -308,7 +304,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     // One line, one source: a line's vector calls one handler.
 ///     radio: RadioToken = RadioIrq => on_radio, line 16, context radio, hart 0, Hardware;
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio, hart 0, Hardware;
@@ -323,7 +318,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     // One source, one binding: the same part type binds once.
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio, hart 0, Hardware;
 ///     again: AgainToken = TimerIrq => on_again, line 17, context radio, hart 0, Hardware;
@@ -346,7 +340,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     // The pair's handler serves source 7 already.
 ///     pair: PairToken = PairIrq => on_pair, line 16, context radio, hart 0, Hardware;
 ///     seven: SevenToken = SevenIrq => on_seven, line 17, context radio, hart 0, Hardware;
@@ -364,7 +357,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     // One part lists source 4 twice.
 ///     twice: TwiceToken = TwiceIrq => on_twice, line 16, context radio, hart 0, Hardware;
 /// }
@@ -377,7 +369,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     // Lines below the first external one are the core's own.
 ///     timer: TimerToken = TimerIrq => on_timer, line 7, context radio, hart 0, Hardware;
 /// }
@@ -390,7 +381,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; unused: 9; }
-///     priority: low_to_high;
 ///     // Even an unused context must fit the facts' eight levels.
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio, hart 0, Hardware;
 /// }
@@ -403,7 +393,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     // The fake has two harts.
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio, hart 2, Hardware;
 /// }
@@ -416,7 +405,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     // A handler gets exactly its entry's part.
 ///     timer: TimerToken = TimerIrq => on_radio, line 16, context radio, hart 0, Hardware;
 /// }
@@ -435,7 +423,6 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; radio: 3; }
-///     priority: low_to_high;
 ///     radio: RadioToken = RadioIrq => on_radio, line 16, context radio_executor, hart 0, Executor;
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 1, Hardware;
 ///     pair: PairToken = PairIrq => on_pair, line 17, context radio, hart 1, Hardware;
@@ -448,7 +435,6 @@ macro_rules! interrupt_table {
         lines: $lines:expr,
         handler_attributes: $handler_attributes:tt;
         contexts { $($context_name:ident: $context_level:literal;)* }
-        priority: low_to_high;
         $(
             $(#[cfg($cfg:meta)])*
             $(#[doc = $doc:literal])*
@@ -1063,8 +1049,7 @@ macro_rules! __fake_table {
         $crate::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
-    contexts { app_wake: 1; radio_executor: 2; }
-    priority: low_to_high;
+            contexts { app_wake: 1; radio_executor: 2; }
             timer: TimerToken = TimerIrq => on_timer, line 16, context app_wake, hart 0, Hardware;
             radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 1, Executor;
             pair: PairToken = PairIrq => on_pair, line 18, context app_wake, hart 0, Hardware;

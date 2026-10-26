@@ -45,6 +45,9 @@ oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 [target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
 oer-esp32s31-ieee80211-mac = { path = "../mac", features = ["test-support"] }
 
+[target.'cfg(not(target_os = "none"))'.dev-dependencies]
+tempfile = "=3.27.0"
+
 [lints]
 workspace = true
 

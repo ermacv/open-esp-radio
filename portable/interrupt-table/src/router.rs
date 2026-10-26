@@ -294,7 +294,6 @@ impl<C: Controller> Router<C> {
     ///     lines: WIDE,
     ///     handler_attributes: [];
     ///     contexts { radio: 3; }
-    ///     priority: low_to_high;
     ///     timer: TimerToken = TimerIrq => on_timer, line 60, context radio, hart 0, Hardware;
     /// }
     /// fn bind(router: &mut oer_interrupt_table::Router<FakeController>) {
@@ -317,7 +316,6 @@ impl<C: Controller> Router<C> {
     ///     lines: FAKE_LINES,
     ///     handler_attributes: [];
     ///     contexts { radio: 3; }
-    ///     priority: low_to_high;
     ///     far: FarToken = FarIrq => on_far, line 20, context radio, hart 0, Hardware;
     /// }
     /// fn bind(router: &mut oer_interrupt_table::Router<FakeController>) {

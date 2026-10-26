@@ -45,7 +45,6 @@ use static_cell::StaticCell;
 // receives it.
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
-    priority: low_to_high;
     /// The application executor's wake (thread mode).
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The radio executor (P2), polled in its handler.

@@ -101,7 +101,14 @@ moves; ownership, orchestration and wiring are rebuilt.
   the request handler is above the requesting executor on the same hart;
   the driver also checks the doorbell against the bound handler. These are
   const checks over the table's entries, with no separate level-order proof
-  and no runtime metadata in the signal or binding proof.
+  and no runtime metadata in the signal or binding proof. `Doorbell<SWI, E, X>`
+  retains both entries in its type and requires requester `X` to have class
+  `Executor`; image wrappers derive their metadata from that type. Signal
+  construction in static initializers is checked by `cargo check`. Generic
+  runtime constructors and driver calls evaluate their inline const checks at
+  monomorphization; paired codegen tests cover their rejection. A signal's
+  `raise` call does not check its caller; the composition must keep calls in
+  the contexts declared at construction.
 - USB Serial/JTAG event enablement and endpoint construction require the
   sealed `EventAuthority` of the endpoint registers' associated interrupt
   part: its `Bound` or `Silent` proof. Missing authority and another part's
@@ -110,8 +117,8 @@ moves; ownership, orchestration and wiring are rebuilt.
   (eight levels, no priority bits). At equal level the highest line ID wins
   arbitration; equal-level handlers do not preempt one another. Image line
   assignments therefore define an explicit order within each level. The
-  image declares its named contexts once, declares `priority: low_to_high`,
-  and selects a context per entry. Entries at one level on one hart appear in
+  image declares its named contexts once and selects a context per entry.
+  Entries at one level on one hart appear in
   increasing arbitration priority. The table checks their line IDs against
   the facts' highest-line tie-break. Inputs
   below the facts' first source line are reserved for core-local use. The HAL

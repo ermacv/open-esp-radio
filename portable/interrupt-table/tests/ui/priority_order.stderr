@@ -5,12 +5,12 @@ error[E0080]: evaluation panicked: declared low-to-high priority contradicts the
  9 | |             lines: FAKE_LINES,
 10 | |             handler_attributes: [];
 11 | |             contexts { radio: 3; }
-...  |
-14 | |             second: Second = RadioIrq => radio, line $second, context radio, hart 0, Hardware;
-15 | |         }
+12 | |             first: First = TimerIrq => timer, line 17, context radio, hart 0, Hardware;
+13 | |             second: Second = RadioIrq => radio, line $second, context radio, hart 0, Hardware;
+14 | |         }
    | |_________^ evaluation of `_` failed inside this call
 ...
-19 |   table!(16);
+18 |   table!(16);
    |   ---------- in this macro invocation
    |
 note: inside `oer_interrupt_table::__private::check`

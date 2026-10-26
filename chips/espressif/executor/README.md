@@ -99,13 +99,15 @@ Equal CLIC levels on one hart cannot preempt each other.
 The radio executor never writes the registers a P3 handler owns. It records
 a request in memory both sides see and rings the `Doorbell`, a software
 interrupt (`FROM_CPU` line 3) that is one source of the radio handler's part:
-`ring` fences and raises the line. `Doorbell::split` consumes the software
+`ring` fences and raises the line. `DoorbellLine::split` consumes the software
 interrupt, so no executor can use the line, and hands out the
 `DoorbellAcknowledger` for that part and the unbound `DoorbellLine`; only
-`Doorbell::new::<Member, HandlerEntry, ExecutorEntry>(line, &bound)` makes the
+`Doorbell::<SWI, HandlerEntry, ExecutorEntry>::new::<Member>(line, &bound)` makes the
 ringing half, once the router bound a part whose sources hold the line's
 (`Member::SOURCE` in `HandlerEntry::Part::SOURCES`, checked when the image compiles).
-The same constructor checks that the handler preempts the requesting executor.
+The same constructor checks that the handler preempts the requesting executor
+and that the requester has class `Executor`. Both entries remain in the
+doorbell type; wrappers derive their metadata from it.
 A part of the line alone is the acknowledger itself, which names the line's
 source. The handler first lowers the interrupt through the acknowledger,
 then takes the requests, so a ring after the take is not lost. The request

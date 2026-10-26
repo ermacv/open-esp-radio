@@ -31,6 +31,7 @@ oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 
 # Host tests need the std implementation; chip doctests build without it.
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
+tempfile = "=3.27.0"
 oer-interrupt-table = { path = "../../../../portable/interrupt-table", features = ["host-signal"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 

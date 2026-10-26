@@ -4,15 +4,18 @@
 //! epoch; the task opens and closes each epoch through the gate.
 use super::*;
 use core::sync::atomic::AtomicBool;
-use oer_esp32s31_bluetooth_driver::runtime_resources::ControllerEventCells;
 use oer_esp32s31_bluetooth_driver::interrupt::{
     BluetoothInterruptGate, BluetoothInterruptSignals, BluetoothInterruptStorage,
     BluetoothInterrupts, ChipGate, DoorbellLine, ModemLpTimerPort, RadioDoorbell,
 };
+use oer_esp32s31_bluetooth_driver::runtime_resources::ControllerEventCells;
 use oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerInterruptChannel;
 use oer_esp32s31_hal::platform::{FromCpu3, FromCpu3Irq};
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger};
-use oer_interrupt_table::{Controller, Router, signal::{FromHandler, IrqSignal}};
+use oer_interrupt_table::{
+    Controller, Router,
+    signal::{FromHandler, IrqSignal},
+};
 
 /// The doorbell's lowering half, which the handler's part holds.
 pub struct Ack(DoorbellAcknowledger<3>);
@@ -28,23 +31,26 @@ impl DoorbellLine for Ack {
 pub type Interrupts = BluetoothInterrupts<X, Ack>;
 
 /// The doorbell's ringing half, which the task's ends share.
-#[derive(Clone, Copy)]
-pub struct Bell(&'static Doorbell<3>);
+pub struct Bell<
+    E: oer_interrupt_table::Entry = crate::BtToken,
+    R: oer_interrupt_table::Entry = crate::RadioToken,
+>(Doorbell<3, E, R>);
 
-impl RadioDoorbell for Bell {
-    const HANDLER: oer_interrupt_table::Context = <crate::BtToken as oer_interrupt_table::Entry>::CONTEXT;
-    const EXECUTOR: oer_interrupt_table::Context = <crate::RadioToken as oer_interrupt_table::Entry>::CONTEXT;
+impl<E: oer_interrupt_table::Entry, R: oer_interrupt_table::Entry> RadioDoorbell for &Bell<E, R> {
+    const HANDLER: oer_interrupt_table::Context = Doorbell::<3, E, R>::HANDLER;
+    const EXECUTOR: oer_interrupt_table::Context = Doorbell::<3, E, R>::EXECUTOR;
     fn ring(&self) {
         self.0.ring();
     }
 }
 
 /// The task's end of the gate.
-pub type Gate = BluetoothInterruptGate<ChipGate, X, Bell>;
+pub type Gate = BluetoothInterruptGate<ChipGate, X, &'static Bell>;
 /// The task's end of the timer's software work.
-pub type TimerPort = ModemLpTimerPort<ChipGate, Bell>;
+pub type TimerPort = ModemLpTimerPort<ChipGate, &'static Bell>;
 /// The scheduler channel's doorbell the task rings.
-pub type SchedulerBell = oer_esp32s31_bluetooth_driver::interrupt::SchedulerDoorbell<X, Bell>;
+pub type SchedulerBell =
+    oer_esp32s31_bluetooth_driver::interrupt::SchedulerDoorbell<X, &'static Bell>;
 
 oer_espressif_staged_runtime::placed_static! {
     static STORAGE: StaticCell<BluetoothInterruptStorage<ChipGate>> = StaticCell::new(), in critical_data "b0";
@@ -55,7 +61,7 @@ oer_espressif_staged_runtime::placed_static! {
     pub static CHANNEL: SchedulerInterruptChannel = SchedulerInterruptChannel::new(), in critical_data "b0";
     pub static CELLS: ControllerEventCells<X> = ControllerEventCells::new(&SCHEDULER_SIGNAL, &TIMER_SIGNAL), in critical_data "b0";
 }
-static BELL: StaticCell<Doorbell<3>> = StaticCell::new();
+static BELL: StaticCell<Bell> = StaticCell::new();
 static PORT: StaticCell<TimerPort> = StaticCell::new();
 
 /// The line's handler: it serves the part its entry holds.
@@ -87,7 +93,7 @@ pub fn bind<C: Controller>(
     line: FromCpu3,
     irq: FromCpu3Irq,
 ) -> Result<Bound, BindError> {
-    let (line, ack) = Doorbell::<3>::split(line);
+    let (line, ack) = oer_espressif_executor::DoorbellLine::<3>::split(line);
     let storage = STORAGE
         .try_init(BluetoothInterruptStorage::new())
         .ok_or(BindError::Storage)?;
@@ -102,9 +108,9 @@ pub fn bind<C: Controller>(
     );
     let bound = router.bind(token, part).map_err(|_| BindError::Route)?;
     let doorbell = BELL
-        .try_init(Doorbell::new::<FromCpu3Irq, _, super::RadioToken>(line, &bound))
+        .try_init(Bell(Doorbell::new::<FromCpu3Irq>(line, &bound)))
         .ok_or(BindError::Storage)?;
-    let ring = Bell(doorbell);
+    let ring: &Bell = doorbell;
     let (gate, port) = ends.attach(&bound, ring);
     let port = PORT.try_init(port).ok_or(BindError::Storage)?;
     Ok(Bound {

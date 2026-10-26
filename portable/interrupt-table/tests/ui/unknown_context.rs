@@ -7,7 +7,6 @@ macro_rules! table {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { radio: 3; }
-            priority: low_to_high;
             irq: Irq = TimerIrq => timer, line 17, context $context, hart 0, Hardware;
         }
     };

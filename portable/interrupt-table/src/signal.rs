@@ -159,8 +159,10 @@ impl<E: SignalExecutor> IrqSignal<E> {
         Self::empty()
     }
 
-    /// Raise `facts` from a declared context; `true` when one is new and the
-    /// executor was pended. Inlined into the interrupt handler's placement.
+    /// Raise `facts`; `true` when one is new and the executor was pended.
+    /// The composition must call this only from the raisers declared at
+    /// construction; this method does not check the caller's context.
+    /// Inlined into the interrupt handler's placement.
     #[inline(always)]
     pub fn raise(&'static self, facts: u32) -> bool {
         match self.raise_deferred(facts).pend {

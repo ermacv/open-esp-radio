@@ -102,7 +102,6 @@ pub trait DoorbellAcknowledge {
 ///     lines: LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 20, context radio, hart 0, Hardware;
 /// }
 /// fn start(
@@ -131,7 +130,6 @@ pub trait DoorbellAcknowledge {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
 /// #     contexts { radio: 3; }
-/// #     priority: low_to_high;
 /// #     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 20, context radio, hart 0, Hardware;
 /// # }
 /// fn start(

@@ -77,13 +77,16 @@ pub fn on_wifi(part: &mut WifiIrqPart<Lower>) {
 }
 
 /// The radio doorbell's ringing half.
-pub struct ImageDoorbell(pub Doorbell<3>);
+pub struct ImageDoorbell<
+    E: oer_interrupt_table::Entry = crate::WifiToken,
+    X: oer_interrupt_table::Entry = crate::RadioToken,
+>(pub Doorbell<3, E, X>);
 
-impl RadioDoorbell for ImageDoorbell {
-    const HANDLER: oer_interrupt_table::Context =
-        <crate::WifiToken as oer_interrupt_table::Entry>::CONTEXT;
-    const EXECUTOR: oer_interrupt_table::Context =
-        <crate::RadioToken as oer_interrupt_table::Entry>::CONTEXT;
+impl<E: oer_interrupt_table::Entry, X: oer_interrupt_table::Entry> RadioDoorbell
+    for ImageDoorbell<E, X>
+{
+    const HANDLER: oer_interrupt_table::Context = Doorbell::<3, E, X>::HANDLER;
+    const EXECUTOR: oer_interrupt_table::Context = Doorbell::<3, E, X>::EXECUTOR;
     fn ring(&self) {
         self.0.ring();
     }

@@ -105,7 +105,6 @@ include!(concat!(env!("OUT_DIR"), "/w1_config.rs"));
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
-    priority: low_to_high;
     /// The application executor's wake (thread mode).
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The radio executor (P2), polled in its handler, which times each run.
@@ -297,17 +296,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // The radio handler's part holds both banks and the doorbell's lowering
     // half from the start; the doorbell rings once the part is bound.
     let software = runtime.software_interrupts;
-    let (bell, acknowledger) = Doorbell::<3>::split(software.line3);
+    let (bell, acknowledger) = oer_espressif_executor::DoorbellLine::<3>::split(software.line3);
     let Ok(wifi_bound) = adopted.router().bind(
         interrupts.wifi,
         WifiPart::new(runtime.wifi_interrupts, software.irq3, Lower(acknowledger)),
     ) else {
         fail("wifi-interrupt")
     };
-    let doorbell = ImageDoorbell(Doorbell::new::<FromCpu3Irq, _, RadioToken>(
-        bell,
-        &wifi_bound,
-    ));
+    let doorbell = ImageDoorbell(Doorbell::new::<FromCpu3Irq>(bell, &wifi_bound));
     let (timer_sender, timer_lines) = TIMER_LINES.take().split();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
         adopted.router(),

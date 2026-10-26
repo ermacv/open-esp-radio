@@ -21,7 +21,6 @@ use oer_espressif_staged_runtime::panic;
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; }
-    priority: low_to_high;
     /// The executor's wake (thread mode).
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The executor's timer alarm; it only acknowledges and pends.

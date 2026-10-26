@@ -428,7 +428,6 @@ oer_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];
     contexts { radio: 3; }
-    priority: low_to_high;
     wake: WakeToken = WakeIrq => on_wake, line 20, context radio, hart 0, Hardware;
 }
 

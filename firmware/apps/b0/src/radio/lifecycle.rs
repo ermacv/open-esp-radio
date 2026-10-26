@@ -23,7 +23,7 @@ impl<'p, 'e> ControllerFactory<Memory<'p, 'e>> for Factory<'p, 'e> {
     }
 }
 pub type Life<'p, 'e> =
-    ControllerLifecycle<Factory<'p, 'e>, FactoryError, X, Memory<'p, 'e>, irq::Bell, 1>;
+    ControllerLifecycle<Factory<'p, 'e>, FactoryError, X, Memory<'p, 'e>, &'static irq::Bell, 1>;
 pub fn new<'p, 'e>(
     arena: Placed<Arena>,
     pool: PoolScope<'p>,

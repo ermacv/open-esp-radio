@@ -138,16 +138,14 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let software = runtime.software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
-    let (line, lower) = Doorbell::<3>::split(software.line3);
+    let (line, lower) = oer_espressif_executor::DoorbellLine::<3>::split(software.line3);
     let Ok(bound) = adopted.router().bind(
         interrupts.wifi,
         WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(lower)),
     ) else {
         crate::fail(crate::fatal::Failure::InterruptTable);
     };
-    let bell = irq::ImageDoorbell(Doorbell::new::<FromCpu3Irq, _, crate::RadioToken>(
-        line, &bound,
-    ));
+    let bell = irq::ImageDoorbell(Doorbell::new::<FromCpu3Irq>(line, &bound));
     let radio = InterruptExecutor::<2>::new(software.line2).start(
         adopted.router(),
         interrupts.radio,

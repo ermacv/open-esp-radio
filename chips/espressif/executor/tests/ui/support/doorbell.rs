@@ -25,5 +25,5 @@ mod chip {
     pub fn own_line_2(_: platform::FromCpu2) -> Line { Line }
     pub fn own_line_3(_: platform::FromCpu3) -> Line { Line }
 }
-#[path = "../../../../../chips/espressif/executor/src/doorbell.rs"]
+#[path = "../../../src/doorbell.rs"]
 mod doorbell;

@@ -111,7 +111,6 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 ///     lines: LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
-///     priority: low_to_high;
 ///     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// }
 /// fn start(
@@ -142,7 +141,6 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
 /// #     contexts { radio: 3; }
-/// #     priority: low_to_high;
 /// #     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// # }
 /// fn start(

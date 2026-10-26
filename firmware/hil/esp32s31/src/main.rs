@@ -47,7 +47,6 @@ use oer_espressif_executor::Executor;
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
-    priority: low_to_high;
     /// Wakes the core-0 executor.
     wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     #[cfg(not(feature = "wifi-station"))]
