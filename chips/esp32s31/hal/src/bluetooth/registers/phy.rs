@@ -2,9 +2,9 @@
 //!
 //! The recovered vendor lifecycle performs this transaction only after common
 //! PHY, Bluetooth baseband, coexistence and controller software initialization
-//! have completed. Possessing [`BluetoothTaskRegisters`] alone proves none of
-//! those prerequisites, so the operation remains unsafe and is reached by the
-//! affine controller lifecycle through the HAL.
+//! have completed. The affine controller lifecycle orders that activation;
+//! exclusive register loans serialize the writes, and typed DMA references
+//! name the retained volatile SRAM objects.
 
 #![deny(unsafe_code)]
 
@@ -56,17 +56,9 @@ where
         });
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the composed transaction retains the exact PHY leaf prerequisites"
-    )]
     fn initialize_ble_phy_registers(&mut self) {
-        // SAFETY: the enclosing composed transaction carries the same
-        // lifecycle and pointed-storage prerequisites as the exact PHY leaf.
-        unsafe {
-            self.registers
-                .initialize_ble_phy_registers(self.baseband, self.inputs);
-        }
+        self.registers
+            .initialize_ble_phy_registers(self.baseband, self.inputs);
     }
 }
 
@@ -106,9 +98,9 @@ impl BluetoothPhyRegisterInitInputs {
     ///
     /// The returned value contains the complete positional policy recovered for
     /// ordinary production use. Callers supply only typed addresses; the HAL
-    /// retains all register-facing profile choices. This value does not itself
-    /// prove allocation, contents, lifetime, or exclusive ownership of either
-    /// object.
+    /// retains all register-facing profile choices. The typed references carry
+    /// the placed-storage memory contract; the engine owns initialization and
+    /// lifecycle of both volatile objects.
     pub const fn normal_controller_profile(
         environment: DmaRef<BlePhyEnvironment>,
         resolving_list: DmaRef<BleResolvingList>,
@@ -173,21 +165,12 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// treat failure after its first write as fail-stop until a complete
     /// controller teardown is independently recovered and verified.
     ///
-    /// # Safety
-    ///
-    /// The caller must prove the complete pre-task-enable lifecycle: common
-    /// PHY and Bluetooth baseband are initialized, an exclusive standalone or
-    /// shared-radio coexistence policy is retained, source-owned Controller,
-    /// HCI and scheduler state exists, the IRQ owner remains inactive, and
-    /// both pointed-to SRAM objects remain correctly initialized, exclusively
-    /// serialized and live for every hardware consumer. This method does not
-    /// establish or verify any of those facts.
-    #[allow(
-        unsafe_code,
-        dead_code,
-        reason = "the unsafe signature retains unmodeled lifecycle and pointed-storage prerequisites"
-    )]
-    pub unsafe fn enable_ble_base_stack_hardware<B: Placement>(
+    /// The driver's activation typestate follows common PHY, BTBB and controller
+    /// initialization and retains the inactive interrupt owner. Typed DMA inputs
+    /// name the engine's retained volatile storage. Exclusive register loans
+    /// serialize the complete transaction.
+    #[allow(dead_code, reason = "the controller-memory engine owns PHY activation")]
+    pub fn enable_ble_base_stack_hardware<B: Placement>(
         &mut self,
         baseband: &mut BtV32Baseband<B>,
         inputs: BluetoothPhyRegisterInitInputs,
@@ -206,20 +189,11 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// not perform the preceding base-stack access-address correlation update;
     /// [`Self::enable_ble_base_stack_hardware`] owns that composition.
     ///
-    /// # Safety
-    ///
-    /// The caller must prove completed common PHY and Bluetooth baseband
-    /// initialization, the registered external-baseband table used by this
-    /// body, inactive IRQ ownership, and live exclusive ownership of both
-    /// pointed-to SRAM objects for every hardware consumer. After the first
-    /// MMIO write, failure must be treated as fail-stop until a complete
-    /// controller teardown is independently recovered and verified.
-    #[allow(
-        unsafe_code,
-        dead_code,
-        reason = "the unsafe signature retains the exact PHY leaf lifecycle and storage prerequisites"
-    )]
-    pub unsafe fn initialize_ble_phy_registers<B: Placement>(
+    /// The base-stack transaction owns this leaf's order after common PHY and
+    /// BTBB initialization. Typed DMA inputs name the engine's retained volatile
+    /// storage, and exclusive register loans serialize the writes.
+    #[allow(dead_code, reason = "the composed PHY transaction owns this leaf")]
+    pub fn initialize_ble_phy_registers<B: Placement>(
         &mut self,
         baseband: &mut BtV32Baseband<B>,
         inputs: BluetoothPhyRegisterInitInputs,

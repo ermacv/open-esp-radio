@@ -29,11 +29,12 @@ system these rules serve.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.
 - **Panics and unsafe.** A change introduces no new runtime panic sites or
-  `unsafe` code. Moving existing unsafe sites into their narrow home
-  (`oer-riscv` for architectural instructions, `oer-memory` for cells,
-  placement and DMA proofs) may increase the home's count only by the moved
-  sites, when the touched crates' total decreases and no calling crate's
-  count increases; each site retains its narrow
+  `unsafe` code. Unsafe contracts cover memory safety; operation order and
+  lifecycle are enforced by `&mut` ownership and typestate. Moving existing
+  unsafe sites into their narrow home (`oer-riscv` for architectural
+  instructions, `oer-memory` for cells, placement and DMA proofs) may increase
+  the home's count only by the moved sites, when the touched crates' total
+  decreases and no calling crate's count increases; each site retains its narrow
   contract and `// SAFETY:` proof. Compile-time checks and test assertions are allowed.
   Remove existing runtime panics from image crates, including probes and
   HIL; image panic budgets only shrink to 0. `const` panics evaluated at

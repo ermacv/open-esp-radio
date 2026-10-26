@@ -476,34 +476,17 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// `r_sym_bt_4KfpZh0Hu5NprlqcNu0D` and same-chip named
     /// `r_btdm_sched_set_hw_list_header`.
     ///
-    /// # Safety
-    ///
-    /// The caller must own the scheduler insertion epoch, must have completed
-    /// every CPU write to the addressed descriptor graph, must keep that graph
-    /// alive until a later verified completion/removal transaction, and must
-    /// serialize this publication with the scheduler interrupt owner. This
-    /// method orders prior SRAM writes before the MMIO head update; it does not
-    /// validate descriptor contents or establish completion ownership.
+    /// `head` carries the placed-storage memory contract. The engine's
+    /// scheduler transaction completes descriptor writes before publication and
+    /// retains the submitted graph until completion or removal. The exclusive
+    /// register loan serializes this update; the trailing fence orders SRAM
+    /// writes before the hardware follows the head.
     ///
     /// A hardware-observed head is an outside identity, not a reference that
     /// may be published before the memory owner resolves it against its arena:
-    ///
-    /// ```compile_fail
-    /// use oer_esp32s31_hal::bluetooth::{BluetoothTaskRegisters, BluetoothSchedulerHardwareListHead,
-    ///     BluetoothSchedulerHardwareListIndex};
-    /// fn republish(registers: &mut BluetoothTaskRegisters, observed: BluetoothSchedulerHardwareListHead) {
-    ///     unsafe {
-    ///         registers.publish_scheduler_hardware_list_head(
-    ///             BluetoothSchedulerHardwareListIndex::ZERO, observed.address());
-    ///     }
-    /// }
-    /// ```
+    /// `head` is a `DmaRef`, which no observed address can become.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains descriptor lifetime and scheduler-epoch prerequisites"
-    )]
-    pub unsafe fn publish_scheduler_hardware_list_head(
+    pub fn publish_scheduler_hardware_list_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
         head: Option<DmaRef<BleSchedulerItem>>,
@@ -513,16 +496,10 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
 
     /// Clear START in the positional command selected by insertion-end.
     ///
-    /// # Safety
-    ///
-    /// The caller must have obtained the matching insertion-begin result and
-    /// must serialize the RMW with every command producer and interrupt owner.
+    /// The scheduler transaction selects the command from its retained insertion
+    /// state. The exclusive register loan serializes the command update.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains the insertion result and command serialization"
-    )]
-    pub unsafe fn clear_scheduler_insertion_command_start(
+    pub fn clear_scheduler_insertion_command_start(
         &mut self,
         command: BluetoothSchedulerInsertionCommand,
     ) -> BluetoothSchedulerInsertionCommandStartCleared {

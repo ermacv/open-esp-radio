@@ -9,6 +9,7 @@
 
 use crate::layouts::{BleDeviceTable, DmaRef};
 
+use crate::bluetooth::DeviceTablePublication;
 use crate::bluetooth::registers::{BluetoothPlacements, BluetoothTaskRegisters, device_fence};
 
 /// Affine proof that one device-table count and first-entry address were
@@ -55,27 +56,19 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Publish the device table: its entry count, then the address of its
     /// first entry. Table writes are ordered before the first register write.
     ///
-    /// # Safety
-    ///
-    /// The caller must own a powered controller epoch and `count` initialized
-    /// entries starting at `first_entry` that stay pinned while hardware may
-    /// walk them, and must serialize this publication with every scanner,
-    /// advertiser and initiator that filters against the table.
+    /// `table` binds the typed DMA reference and entry count to retained
+    /// volatile storage. The engine serializes role updates through its
+    /// exclusive register loan.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the signature retains the table lifetime and serialization prerequisites"
-    )]
-    pub unsafe fn publish_device_table(
+    pub(crate) fn publish_device_table(
         &mut self,
-        first_entry: DmaRef<BleDeviceTable>,
-        count: u8,
+        table: &DeviceTablePublication,
     ) -> BluetoothDeviceTablePublished {
         device_fence();
         let mut transaction = HardwareDeviceTableTransaction {
             registers: &mut self.bluetooth.btmac_ble_phy_init,
         };
-        execute_device_table_publication(&mut transaction, first_entry, count);
+        execute_device_table_publication(&mut transaction, table.first_entry(), table.count());
         device_fence();
         BluetoothDeviceTablePublished { _private: () }
     }

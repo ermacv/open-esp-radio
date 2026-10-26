@@ -650,18 +650,10 @@ impl TaskOwner {
         storage: &BlePhyHardwareObjects,
     ) {
         self.reunitable = false;
-        #[allow(
-            unsafe_code,
-            reason = "the BLE PHY transaction points the hardware at the storage"
-        )]
-        // SAFETY: `storage` binds both pointed objects to `'static`,
-        // volatile-only controller SRAM of the BLE PHY engine; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
-        unsafe {
-            self.registers.enable_ble_base_stack_hardware(
-                &mut radio.registers_mut().shared_radio.bt_v32_baseband,
-                storage.inputs,
-            );
-        }
+        self.registers.enable_ble_base_stack_hardware(
+            &mut radio.registers_mut().shared_radio.bt_v32_baseband,
+            storage.inputs,
+        );
     }
 
     /// Execute the complete reviewed 49-operation controller HAL-init body
@@ -1666,50 +1658,25 @@ impl RxMemoryListInitialPublication for PacBluetoothRxMemoryListInitialPublicati
         }
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the transaction retains the serialized RX-list lifecycle"
-    )]
     fn reset_initial_control(&mut self) {
-        // SAFETY: the enclosing operation retains the same pinned graph and
-        // exclusive list lifecycle through pointer publication and this reset.
-        unsafe {
-            self.registers
-                .reset_memory_list_initial_control(self.selector)
-        };
+        self.registers
+            .reset_memory_list_initial_control(self.selector);
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the enclosing HAL operation retains list lifetime and controller-lifecycle prerequisites"
-    )]
     fn publish_current_head(&mut self) {
-        // SAFETY: this transaction exists only inside the two unsafe RX-list
-        // initial-publication operations, whose callers retain the pinned
-        // list at `head` and the serialized controller lifecycle.
-        unsafe {
-            self.registers.program_memory_list_pointer(
-                self.selector,
-                BluetoothMemoryListSlot::CurrentRx,
-                BluetoothMemoryListPointerImage::Address(self.head),
-            );
-        }
+        self.registers.program_memory_list_pointer(
+            self.selector,
+            BluetoothMemoryListSlot::CurrentRx,
+            BluetoothMemoryListPointerImage::Address(self.head),
+        );
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the enclosing HAL operation retains list lifetime and controller-lifecycle prerequisites"
-    )]
     fn clear_next_head(&mut self) {
-        // SAFETY: as for `publish_current_head`; a zero next pointer
-        // references no storage.
-        unsafe {
-            self.registers.program_memory_list_pointer(
-                self.selector,
-                BluetoothMemoryListSlot::NextRx,
-                BluetoothMemoryListPointerImage::Zero,
-            );
-        }
+        self.registers.program_memory_list_pointer(
+            self.selector,
+            BluetoothMemoryListSlot::NextRx,
+            BluetoothMemoryListPointerImage::Zero,
+        );
     }
 }
 
@@ -1749,16 +1716,9 @@ impl ControllerHal<'_> {
         &mut self,
         descriptor: &DirectionFindingDescriptor,
     ) -> DirectionFindingDisabledBaselineOwner {
-        #[allow(
-            unsafe_code,
-            reason = "the register transaction points the hardware at the descriptor"
-        )]
-        // SAFETY: `descriptor` binds it to the `'static`, volatile-only
-        // direction-finding workspace in controller SRAM; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
-        let prepared = unsafe {
-            self.registers
-                .prepare_direction_finding_disabled_baseline(descriptor.address)
-        };
+        let prepared = self
+            .registers
+            .prepare_direction_finding_disabled_baseline(descriptor.address);
         DirectionFindingDisabledBaselineOwner {
             _prepared: prepared,
         }
@@ -1842,13 +1802,9 @@ impl ControllerHal<'_> {
 
     /// Publish one complete reviewed scanner command transaction.
     ///
-    /// # Safety
-    ///
-    /// The scanner writes received PDUs through the scanning RX list, so
-    /// the start takes that list's publication of this Controller epoch: a
-    /// reset head would point the hardware at `0x2f000000`. The caller runs
-    /// it with the initialized scanner graph in the powered epoch, orders of
-    /// the Controller's lifecycle.
+    /// The engine starts only with the scanning list publication of the same
+    /// Controller epoch. Its retained arena holds the scanner graph, and the
+    /// exclusive register loan serializes these backoff writes.
     ///
     /// # Errors
     ///
@@ -1865,14 +1821,7 @@ impl ControllerHal<'_> {
         if scanning.epoch != self.epoch {
             return Err(ScanStartError::StaleList);
         }
-        #[allow(
-            unsafe_code,
-            reason = "the scanner start relies on the published RX list"
-        )]
-        // SAFETY: the scanning RX list of this epoch is published from a
-        // memory-crate chain in `'static`, volatile-only controller SRAM
-        // (`RxChainHead`); the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
-        Ok(unsafe { self.registers.publish_scan_start() })
+        Ok(self.registers.publish_scan_start())
     }
 
     /// Publish the device table hardware filters advertising against: its
@@ -1886,16 +1835,7 @@ impl ControllerHal<'_> {
         &mut self,
         table: &DeviceTablePublication,
     ) -> BluetoothDeviceTablePublished {
-        #[allow(
-            unsafe_code,
-            reason = "the register transaction points the hardware at the table"
-        )]
-        // SAFETY: `table` binds `count` entries from `first_entry` to the
-        // `'static`, volatile-only device table in controller SRAM; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
-        unsafe {
-            self.registers
-                .publish_device_table(table.first_entry, table.count)
-        }
+        self.registers.publish_device_table(table)
     }
 
     /// Disable the BLE PHY ETM route for one Direct Test Mode event without
@@ -1943,68 +1883,42 @@ impl ControllerHal<'_> {
     /// Order prior descriptor writes and publish one scheduler hardware-list
     /// head through the register owner.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the scheduler insertion epoch, completed
-    /// descriptor initialization, graph lifetime and task/interrupt
-    /// serialization required by the underlying register transaction. It
-    /// orders those prior SRAM writes before the MMIO head update.
+    /// `head` carries the placed-storage memory contract. The engine's
+    /// scheduler transaction completes descriptor writes before publication and
+    /// retains the submitted graph until completion or removal. The exclusive
+    /// register loan serializes this update; the trailing fence orders SRAM
+    /// writes before the hardware follows the head.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains descriptor lifetime and scheduler-epoch prerequisites"
-    )]
-    pub(crate) unsafe fn publish_scheduler_hardware_list_head(
+    pub(crate) fn publish_scheduler_hardware_list_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
         head: Option<crate::layouts::DmaRef<crate::layouts::BleSchedulerItem>>,
     ) -> BluetoothSchedulerHardwareListHeadPublished {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the register transaction's prerequisites.
-        unsafe {
-            self.registers
-                .publish_scheduler_hardware_list_head(index, head)
-        }
+        self.registers
+            .publish_scheduler_hardware_list_head(index, head)
     }
 
     /// Clear START in the insertion command selected by the Controller.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the matching insertion-begin result and must
-    /// serialize the command RMW with every producer and interrupt owner.
+    /// The scheduler transaction selects the command from its retained insertion
+    /// state. The exclusive register loan serializes the command update.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains the insertion result and command serialization"
-    )]
-    pub(crate) unsafe fn clear_scheduler_insertion_command_start(
+    pub(crate) fn clear_scheduler_insertion_command_start(
         &mut self,
         command: BluetoothSchedulerInsertionCommand,
     ) -> BluetoothSchedulerInsertionCommandStartCleared {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the register transaction's prerequisites.
-        unsafe {
-            self.registers
-                .clear_scheduler_insertion_command_start(command)
-        }
+        self.registers
+            .clear_scheduler_insertion_command_start(command)
     }
 
     /// Admit one execution lock of the merge-selected item. Nothing is
     /// written until its first step.
     ///
-    /// # Safety
-    ///
-    /// The request must identify the exact merge-selected initialized item.
-    /// The caller must retain that pinned item and exclusive list ownership
-    /// through the complete insertion transaction and clear command-zero
-    /// START through [`Self::clear_scheduler_execution_lock_start`].
+    /// The request carries a typed reference to the merge-selected item in
+    /// retained pool storage. The engine's scheduler transaction retains this
+    /// execution-lock state through its observation and command-zero START clear.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains merge-selected item lifetime and list serialization"
-    )]
-    pub(crate) unsafe fn admit_scheduler_execution_lock(
+    pub(crate) fn admit_scheduler_execution_lock(
         &mut self,
         request: BluetoothSchedulerExecutionLockRequest,
     ) -> BluetoothSchedulerExecutionLock {
@@ -2041,17 +1955,10 @@ impl ControllerHal<'_> {
     /// Admit one execution modify of `index`, in list-deletion mode when
     /// `list_deletion`. Nothing is written until its first step.
     ///
-    /// # Safety
-    ///
-    /// The caller must own insertion reconciliation or the deletion of
-    /// `index` and exclusive list ownership until it clears command-one
-    /// START through [`Self::clear_scheduler_execution_modify_start`].
+    /// The engine's reconciliation or deletion state selects `index` and retains
+    /// this execution-modify state through command-one START clear.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains insertion reconciliation or list deletion and list serialization"
-    )]
-    pub(crate) unsafe fn admit_scheduler_execution_modify(
+    pub(crate) fn admit_scheduler_execution_modify(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
         list_deletion: bool,
@@ -2085,36 +1992,23 @@ impl ControllerHal<'_> {
         mut modify: BluetoothSchedulerExecutionModify,
     ) {
         if modify.take_published().is_some() {
-            // SAFETY: the consumed request is the published command this
-            // clear ends, and the task runtime serializes the command word.
-            #[allow(unsafe_code, reason = "the consumed request proves the command")]
-            let _cleared = unsafe {
-                self.registers.clear_scheduler_insertion_command_start(
-                    BluetoothSchedulerInsertionCommand::One,
-                )
-            };
+            let _cleared = self
+                .registers
+                .clear_scheduler_insertion_command_start(BluetoothSchedulerInsertionCommand::One);
         }
     }
 
     /// Publish one scheduler skip request through the register owner.
     ///
-    /// # Safety
-    ///
-    /// The request must name an initialized item linked in that hardware
-    /// list. The caller must retain the pinned item and exclusive list
-    /// ownership until the request is observed and cleared.
+    /// The request carries a typed reference to the listed item in retained pool
+    /// storage. The scheduler transaction retains the returned publication until
+    /// observation and clear; the exclusive register loan serializes the writes.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains the listed item lifetime and list serialization"
-    )]
-    pub(crate) unsafe fn publish_scheduler_skip(
+    pub(crate) fn publish_scheduler_skip(
         &mut self,
         request: BluetoothSchedulerSkipRequest,
     ) -> BluetoothSchedulerSkipPublished {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the register transaction's prerequisites.
-        unsafe { self.registers.publish_scheduler_skip(request) }
+        self.registers.publish_scheduler_skip(request)
     }
 
     /// Perform one finite skip-request observation.
@@ -2136,23 +2030,15 @@ impl ControllerHal<'_> {
 
     /// Publish the scheduler cancellation hardware-list index.
     ///
-    /// # Safety
-    ///
-    /// The caller must have observed the lock/modify request idle and must
-    /// retain exclusive list ownership until the cancellation control is
-    /// released.
+    /// The scheduler transaction admits this step after lock/modify becomes
+    /// idle and retains its affine index token through acknowledgement and
+    /// request. The exclusive register loan serializes the operational word.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller serializes the shared operational word"
-    )]
-    pub(crate) unsafe fn index_scheduler_cancellation(
+    pub(crate) fn index_scheduler_cancellation(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerCancellationIndexed {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the register transaction's prerequisites.
-        unsafe { self.registers.index_scheduler_cancellation(index) }
+        self.registers.index_scheduler_cancellation(index)
     }
 
     /// Set the scheduler cancellation control after its index and source
@@ -2272,23 +2158,15 @@ impl ControllerHal<'_> {
     /// RMW edges, publishes the typed request and returns only after a device
     /// fence; it never polls or blocks an executor.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the initialized pinned scheduler item named by
-    /// `request` and exclusive scheduler task/interrupt serialization until
-    /// verified Controller ownership return.
+    /// The request carries a typed reference to the initialized item in retained
+    /// pool storage. The engine's scheduler state retains its publication until
+    /// ownership returns; the exclusive register loan serializes these writes.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains descriptor lifetime and scheduler serialization"
-    )]
-    pub(crate) unsafe fn publish_scheduler_lock_modify(
+    pub(crate) fn publish_scheduler_lock_modify(
         &mut self,
         request: BluetoothSchedulerLockModifyRequest,
     ) -> BluetoothSchedulerLockModifyPublished {
-        // SAFETY: this method forwards the identical descriptor-lifetime and
-        // serialization obligations to the register transaction.
-        unsafe { self.registers.publish_scheduler_lock_modify(request) }
+        self.registers.publish_scheduler_lock_modify(request)
     }
 
     /// Publish one controller-time latch request and return immediately.

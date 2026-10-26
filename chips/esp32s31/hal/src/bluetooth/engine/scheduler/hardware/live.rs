@@ -36,22 +36,16 @@ struct LiveSchedulerBackend<'call, 'registers, S> {
     interrupts: &'call mut SchedulerTaskHalf,
 }
 
-#[allow(
-    unsafe_code,
-    reason = "the powered task runtime resolved every address to 'static pool storage and serializes list zero"
-)]
 impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_, '_, S> {
     type Publications = HalPublications;
     type StartError = SchedulerInterruptError;
 
     fn publish_execution_lock(&mut self, at: SchedulerItemLink) -> BluetoothSchedulerExecutionLock {
-        // SAFETY: `at` names a submitted item in 'static pool storage, and
-        // the executor keeps it listed until the lock is released.
-        unsafe {
-            self.controller.admit_scheduler_execution_lock(
-                BluetoothSchedulerExecutionLockRequest::new(at.reference(), LIST),
-            )
-        }
+        self.controller
+            .admit_scheduler_execution_lock(BluetoothSchedulerExecutionLockRequest::new(
+                at.reference(),
+                LIST,
+            ))
     }
 
     fn release_execution_lock(&mut self, lock: BluetoothSchedulerExecutionLock) {
@@ -62,12 +56,8 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
         &mut self,
         list_deletion: bool,
     ) -> BluetoothSchedulerExecutionModify {
-        // SAFETY: the executor owns list zero's reconciliation or deletion
-        // until it releases execution modify.
-        unsafe {
-            self.controller
-                .admit_scheduler_execution_modify(LIST, list_deletion)
-        }
+        self.controller
+            .admit_scheduler_execution_modify(LIST, list_deletion)
     }
 
     fn release_execution_modify(&mut self, modify: BluetoothSchedulerExecutionModify) {
@@ -79,30 +69,21 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
         &mut self,
         at: SchedulerItemLink,
     ) -> BluetoothSchedulerLockModifyPublished {
-        // SAFETY: `at` names the newly linked item in 'static pool storage;
-        // the executor holds list zero until the request leaves START.
-        unsafe {
-            self.controller
-                .publish_scheduler_lock_modify(BluetoothSchedulerLockModifyRequest::new(
-                    at.reference(),
-                    LIST,
-                ))
-        }
+        self.controller
+            .publish_scheduler_lock_modify(BluetoothSchedulerLockModifyRequest::new(
+                at.reference(),
+                LIST,
+            ))
     }
 
     fn publish_head(&mut self, at: Option<SchedulerItemLink>) {
-        // SAFETY: the executor finished every descriptor write of the list it
-        // publishes; each item lives in 'static pool storage.
-        let _published = unsafe {
-            self.controller
-                .publish_scheduler_hardware_list_head(LIST, at.map(|at| at.reference()))
-        };
+        let _published = self
+            .controller
+            .publish_scheduler_hardware_list_head(LIST, at.map(|at| at.reference()));
     }
 
     fn index_cancellation(&mut self) -> BluetoothSchedulerCancellationIndexed {
-        // SAFETY: the executor observed the lock-modify request idle and holds
-        // list zero until it releases the cancellation.
-        unsafe { self.controller.index_scheduler_cancellation(LIST) }
+        self.controller.index_scheduler_cancellation(LIST)
     }
 
     async fn acknowledge_cancellation_source(
@@ -135,12 +116,8 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
     }
 
     fn publish_skip(&mut self, at: SchedulerItemLink) -> BluetoothSchedulerSkipPublished {
-        // SAFETY: `at` names a detached item that its pool keeps submitted in
-        // 'static storage until the cancellation releases it.
-        unsafe {
-            self.controller
-                .publish_scheduler_skip(BluetoothSchedulerSkipRequest::new(at.reference(), LIST))
-        }
+        self.controller
+            .publish_scheduler_skip(BluetoothSchedulerSkipRequest::new(at.reference(), LIST))
     }
 
     fn clear_skip(&mut self, skip: BluetoothSchedulerSkipPublished) {
@@ -210,12 +187,9 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
         BluetoothSchedulerHardwareRunCommandPublished,
         SchedulerStartError<SchedulerInterruptError>,
     > {
-        // SAFETY: the executor linked every listed item before returning the
-        // head; each lives in 'static pool storage, and the scheduler is idle.
-        let published = unsafe {
-            self.controller
-                .publish_scheduler_hardware_list_head(LIST, Some(at.reference()))
-        };
+        let published = self
+            .controller
+            .publish_scheduler_hardware_list_head(LIST, Some(at.reference()));
         let interrupts = self
             .interrupts
             .prepare_run(self.storage)

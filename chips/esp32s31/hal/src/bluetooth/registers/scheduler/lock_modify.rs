@@ -234,18 +234,11 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// all three writes: two independent fresh-read updates of the operational
     /// word followed by the typed request publication.
     ///
-    /// # Safety
-    ///
-    /// The request address must identify an initialized scheduler item that
-    /// remains pinned and inaccessible to the CPU until the Controller returns
-    /// ownership. The caller must also serialize the transaction with every
-    /// scheduler task and interrupt owner.
+    /// The request carries a typed reference to the initialized item in retained
+    /// pool storage. The engine's scheduler state retains its publication until
+    /// ownership returns; the exclusive register loan serializes these writes.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains descriptor lifetime and scheduler serialization"
-    )]
-    pub unsafe fn publish_scheduler_lock_modify(
+    pub fn publish_scheduler_lock_modify(
         &mut self,
         request: BluetoothSchedulerLockModifyRequest,
     ) -> BluetoothSchedulerLockModifyPublished {

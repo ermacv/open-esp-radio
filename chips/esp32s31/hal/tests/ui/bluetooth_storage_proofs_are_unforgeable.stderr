@@ -88,7 +88,7 @@ error[E0624]: method `publish_scheduler_hardware_list_head` is private
    |
   ::: src/bluetooth.rs
    |
-   | /     pub(crate) unsafe fn publish_scheduler_hardware_list_head(
+   | /     pub(crate) fn publish_scheduler_hardware_list_head(
    | |         &mut self,
    | |         index: BluetoothSchedulerHardwareListIndex,
    | |         head: Option<crate::layouts::DmaRef<crate::layouts::BleSchedulerItem>>,

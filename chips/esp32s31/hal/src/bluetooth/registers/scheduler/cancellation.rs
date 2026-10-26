@@ -335,17 +335,11 @@ fn execute_cancellation_release(
 impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Publish one skip request and return after its trailing device fence.
     ///
-    /// # Safety
-    ///
-    /// The request must name an initialized item linked in that hardware
-    /// list. The caller must retain the pinned item and exclusive list
-    /// serialization until the request is observed and cleared.
+    /// The request carries a typed reference to the listed item in retained pool
+    /// storage. The scheduler transaction retains the returned publication until
+    /// observation and clear; the exclusive register loan serializes the writes.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains the listed item lifetime and scheduler serialization"
-    )]
-    pub unsafe fn publish_scheduler_skip(
+    pub fn publish_scheduler_skip(
         &mut self,
         request: BluetoothSchedulerSkipRequest,
     ) -> BluetoothSchedulerSkipPublished {
@@ -382,17 +376,11 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Clear and then publish the cancellation hardware-list index through
     /// two fresh-read updates.
     ///
-    /// # Safety
-    ///
-    /// The caller must have observed the lock/modify request idle and must
-    /// serialize the operational word with every scheduler task owner until
-    /// the cancellation control is released.
+    /// The scheduler executor runs this step only after lock/modify becomes
+    /// idle, and the transaction retains its affine index token through
+    /// acknowledgement and request. The exclusive register loan serializes the operational word.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller serializes the shared operational word"
-    )]
-    pub unsafe fn index_scheduler_cancellation(
+    pub fn index_scheduler_cancellation(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerCancellationIndexed {

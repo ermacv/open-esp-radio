@@ -201,8 +201,10 @@ below the boundary remains safe.
 `oer_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
 One `Engine` owns the register token and the complete `Placed<BluetoothArena>`;
 its private components retain graph bindings. The codecs
-and scheduler lists encode the addresses the controller follows and hold the
-narrow unsafe publication boundary. Driver role builders select detached
+and scheduler lists encode the addresses the controller follows: `DmaRef`
+and the volatile arena carry the memory contract, while `&mut` register owners
+and typestate enforce publication order and lifecycle without `unsafe`.
+Driver role builders select detached
 values, never layout references; HAL checks their binding anchors before
 writing them. Pool and epoch brands bind each affine lease to its owner;
 logical item identities also carry an acquisition generation.

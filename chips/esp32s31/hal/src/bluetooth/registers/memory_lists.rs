@@ -61,15 +61,10 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// broader control/rotation meaning remains unassigned. Selector three
     /// has no corresponding operation in that reset body.
     ///
-    /// # Safety
-    /// The caller must retain the same powered, serialized list lifecycle and
-    /// pinned storage required by `program_memory_list_pointer`.
-    #[allow(unsafe_code, reason = "the caller owns the serialized RX-list reset")]
+    /// The engine's initial-list transaction performs this after publishing
+    /// current and next pointers through the same exclusive register loan.
     #[doc(hidden)]
-    pub unsafe fn reset_memory_list_initial_control(
-        &mut self,
-        selector: BluetoothMemoryListSelector,
-    ) {
+    pub fn reset_memory_list_initial_control(&mut self, selector: BluetoothMemoryListSelector) {
         let controller = &mut self.bluetooth.bluetooth_controller_core;
         match selector {
             BluetoothMemoryListSelector::One => {
@@ -108,18 +103,12 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// evidence for a private path; element layout and lifecycle are not register
     /// policy.
     ///
-    /// # Safety
-    ///
-    /// The caller must own a powered controller lifecycle state in which the
-    /// selected hardware list may be changed, and must ensure the pointed-to
-    /// storage remains correctly initialized, exclusively serialized, and
-    /// alive until a later verified transaction removes it from hardware.
-    #[allow(
-        unsafe_code,
-        reason = "the signature retains controller-lifecycle and pointed-storage prerequisites"
-    )]
+    /// An address image carries a typed DMA reference to retained volatile
+    /// header storage. The engine selects the list from its `RxChainHead` proof
+    /// and orders the initial current/next/reset sequence through one exclusive
+    /// register loan.
     #[doc(hidden)]
-    pub unsafe fn program_memory_list_pointer(
+    pub fn program_memory_list_pointer(
         &mut self,
         selector: BluetoothMemoryListSelector,
         slot: BluetoothMemoryListSlot,
