@@ -37,11 +37,11 @@ sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROL
 sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE", "HW2_S31_LP_STOP_WRAP_20261026"]
 
 [review.entity."WORD_0010_OPAQUE.BIT_1_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026"]
+sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_0010_OPAQUE.BIT_18_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW2_S31_LP_PENDING_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026"]
+sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW2_S31_LP_PENDING_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_0014_OPAQUE.BITS_0_17_OPAQUE"]
@@ -68,15 +68,15 @@ sources = ["S31_MMIO_AUDIT_2010D020", "S31_MMIO_DECLARED_2010D020"]
 completeness = "partial"
 
 [review.entity."WORD_0024_OPAQUE.LOW_BYTE"]
-sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW2_S31_LP_PENDING_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW8_S31_LP_PHASED_ACK_20261026", "HW9_S31_LP_MASKED_ZERO_20261027"]
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW2_S31_LP_PENDING_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW8_S31_LP_PHASED_ACK_20261026", "HW9_S31_LP_MASKED_ZERO_20261027", "HW13_S31_BLE_LP_HP_RESET_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_002C_OPAQUE.LOW_BYTE"]
-sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW8_S31_LP_TWO_WRAPS_20261026", "HW9_S31_LP_MASKED_ZERO_20261027"]
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW8_S31_LP_TWO_WRAPS_20261026", "HW9_S31_LP_MASKED_ZERO_20261027", "HW13_S31_BLE_LP_HP_RESET_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_0038_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026"]
+sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -105,7 +105,7 @@ sources = ["S31_MMIO_MANUAL_2010D044"]
 completeness = "partial"
 
 [review.entity."WORD_0048_OPAQUE.COUNTER_LOW"]
-sources = ["S31_MMIO_DECLARED_2010D048", "HW2_S31_LP_STOP_WRAP_20261026", "HW6_S31_LP_RESET_RETENTION_20261026"]
+sources = ["S31_MMIO_DECLARED_2010D048", "HW2_S31_LP_STOP_WRAP_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -935,7 +935,7 @@ class = "write-only"
 [[registers]]
 name = "WORD_0010_OPAQUE"
 offset = 0x10
-description = "Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. Both tested delivery lanes survived BLE-timer and full production controller resets; restoring LP clocks recovered delivery without rearming. This is behavioral enable retention, not command-register readback. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026."
+description = "Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. Both tested delivery lanes survived BLE-timer and full production controller resets; restoring LP clocks recovered delivery without rearming. This is behavioral enable retention, not command-register readback. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. Across the separately tested hart0 HP system reset and next ROM-loader entry, fresh software pending remained silent until another bit18 enable command. Bit1 retention is unqualified because its post-reset rollover stimulus lacked a positive pending-byte control. This is behavioral delivery evidence, not enable-register readback. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026."
 
 [[registers.fields]]
 name = "BIT_1_OPAQUE"
@@ -997,7 +997,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0024_OPAQUE"
 offset = 0x24
-description = "The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027."
+description = "The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the production-equivalent HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026."
 
 [[registers.fields]]
 name = "LOW_BYTE"
@@ -1008,7 +1008,7 @@ class = "plain"
 [[registers]]
 name = "WORD_002C_OPAQUE"
 offset = 0x2c
-description = "The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027."
+description = "The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. One positively pending natural rollover, alone and with compare, read zero at the next ROM-loader entry after the production-equivalent HP system reset and after clock-only access restoration, while the LP source selector/divider stayed zero. Internal retention behind that disabled source clock remains unqualified because pending was acknowledged before source-clock restoration. This is distinct from the earlier BLE-timer/controller reset retention; no immediate reset-edge or POR value is established. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026."
 
 [[registers.fields]]
 name = "LOW_BYTE"
@@ -1038,7 +1038,7 @@ class = "write-only"
 [[registers]]
 name = "WORD_0038_OPAQUE"
 offset = 0x38
-description = "A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix 127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026."
+description = "A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested BLE-timer/controller reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix 127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. After the separately tested production-equivalent hart0 HP system reset, real compare, natural rollover, both and quiet scenarios all read zero at the next ROM-loader entry before prepare, with matrix source127 low. Clock-only access restoration did not recover the old causes. A fresh software publication and bit18 enable gave 0x40000/source127 high. The LP source selector/divider remained zero during this access-gate restoration; retained internal rollover state after selector-only restoration is unmeasured. This establishes the next-entry view, not the instantaneous reset state or all production boot paths. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026."
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
@@ -1088,7 +1088,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0048_OPAQUE"
 offset = 0x48
-description = "Complete word read by multiple runtime functions. The low counter advanced across BLE-timer and production controller resets with LP clocks on, and after LP-clock restoration without START. Gated readback is not a counter-stop proof. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026."
+description = "Complete word read by multiple runtime functions. The low counter advanced across BLE-timer and production controller resets with LP clocks on, and after LP-clock restoration without START. Gated readback is not a counter-stop proof. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. After the production-equivalent hart0 HP system reset, a previously nonzero counter read zero at the next ROM-loader entry and remained zero across clock-only access restoration and a 4096-cycle observation; LP selector/divider were zero. This is the visible stopped/gated view, not proof of every hidden counter state or an immediate reset value. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026."
 
 [[registers.fields]]
 name = "COUNTER_LOW"
@@ -2401,3 +2401,18 @@ sources = ["HW9_S31_LP_CLEAR34_20261027"]
 
 [review.entity."WORD_0034_OPAQUE.BITS_0_31_OPAQUE"]
 sources = ["HW9_S31_LP_CLEAR34_20261027"]
+
+[review.entity."WORD_0010_OPAQUE"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026"]
+
+[review.entity."WORD_0024_OPAQUE"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026"]
+
+[review.entity."WORD_002C_OPAQUE"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026"]
+
+[review.entity."WORD_0038_OPAQUE"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026"]
+
+[review.entity."WORD_0048_OPAQUE"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026"]
