@@ -1,4 +1,4 @@
-//! T2/T4 own their state in the shared P1 driver; gain publication has its own poll.
+//! T2/T4 own their state in the shared P2 step driver; gain publication has its own poll.
 use super::{Failure, Io, Registers, Step};
 use crate::{
     analog::pbus::PhyForceTxRxAction,
