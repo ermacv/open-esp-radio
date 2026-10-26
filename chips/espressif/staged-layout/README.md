@@ -30,7 +30,11 @@ attribute on an entry is not transitive across calls. Explicit payload and
 tuning-reference input sections alone stay in flash. Every staged image build
 audits the final bootstrap's executable and ordinary constant sections before
 encoding it; this check also rejects a cached reused ELF during a diagnostic
-run. The report is `bootstrap-placement.txt`.
+run. The report is `bootstrap-placement.txt`. Every allocated flash section
+must have an exact allowlisted metadata/payload name and non-writable,
+non-executable flags; an ordinary or orphan constant is rejected regardless
+of its name. The [image checks](../../../tools/image/checks/README.md) own
+that allowlist.
 
 Both staged links omit `.debug_aranges`: the pinned LLVM's fat-LTO emitter
 can encode backward spans when CUs share an input section. Address lookup

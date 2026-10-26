@@ -21,7 +21,9 @@ pub const BOOTSTRAP_REPORT: &str = "bootstrap-placement.txt";
 /// complete executable image and ordinary constants must therefore be in
 /// internal SRAM, including out-of-line callees from other crates. Explicit
 /// flash payload/reference sections remain sources read outside suspension.
-pub fn bootstrap(sram: Region, path: &Path) -> Result<String> {
+/// Every allocated section overlapping flash must be a non-writable,
+/// non-executable section on the shared script's exact allowlist.
+pub fn bootstrap(sram: Region, flash: Region, path: &Path) -> Result<String> {
     let bytes = fs::read(path)?;
     let elf = oer_analysis_elf::Elf::executable(&bytes)?;
     let mut violations = Vec::new();
@@ -31,23 +33,35 @@ pub fn bootstrap(sram: Region, path: &Path) -> Result<String> {
         .sections()
         .filter(|section| section.allocated && section.size > 0)
     {
-        let constants = [".rodata", ".srodata", ".literal"].iter().any(|prefix| {
-            section.name == *prefix || section.name.starts_with(&format!("{prefix}."))
-        });
-        if !section.executable && !constants {
-            continue;
-        }
+        let end = section
+            .address
+            .checked_add(section.size)
+            .ok_or("bootstrap section range overflow")?;
+        let in_sram = sram.contains_range(section.address, end);
+        let overlaps_flash =
+            section.address < u64::from(flash.end()) && end > u64::from(flash.origin);
+        // Exact output-section names owned by the shared bootstrap script.
+        // Neither a new name nor a prefix of an allowed name grants access.
+        let allowed_flash = flash.contains_range(section.address, end)
+            && !section.executable
+            && !section.writable
+            && !section.nobits
+            && matches!(
+                section.name,
+                ".flash.appdesc" | ".flash.rodata" | ".eh_frame" | ".eh_frame_hdr" | ".metadata"
+            );
         if section.executable {
             code_bytes = code_bytes
                 .checked_add(section.size)
                 .ok_or("bootstrap code size overflow")?;
-        } else {
+        } else if in_sram && !section.writable && !section.nobits {
             constant_bytes = constant_bytes
                 .checked_add(section.size)
                 .ok_or("bootstrap constant size overflow")?;
         }
-        let end = section.address.checked_add(section.size);
-        if end.is_some_and(|end| sram.contains_range(section.address, end)) {
+        let sram_required =
+            section.executable || (!section.writable && !section.nobits && !allowed_flash);
+        if (!sram_required || in_sram) && (!overlaps_flash || allowed_flash) {
             continue;
         }
         let names = elf
@@ -57,7 +71,7 @@ pub fn bootstrap(sram: Region, path: &Path) -> Result<String> {
             .collect::<Vec<_>>()
             .join(", ");
         violations.push(format!(
-            "section `{}` ({:#010x}+{:#x}) is not in bootstrap SRAM; symbols: {names}",
+            "section `{}` ({:#010x}+{:#x}) violates bootstrap SRAM/flash placement; symbols: {names}",
             section.name, section.address, section.size,
         ));
     }

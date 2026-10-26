@@ -34,7 +34,7 @@ SECTIONS {
   /* Constants, vtables and compiler-generated tables may be read while
      instruction fetch is suspended, including from a failure path. */
   .rodata : ALIGN(4) {
-    *(.rodata .rodata.* .srodata .srodata.*);
+    *(.rodata .rodata.* .srodata .srodata.* .rodata_wlog_*.*);
     . = ALIGN(4);
   } > SRAM
 
@@ -76,13 +76,6 @@ SECTIONS {
 
 INCLUDE "bootstrap/flash-sections.x"
 SECTIONS {
-  .text ALIGN(MMU_PAGE_BYTES) + IMAGE_SEGMENT_HEADER_BYTES : {
-    __flash_text_start = ABSOLUTE(.);
-    *(.text .text.* .literal .literal.*);
-    . = ALIGN(4);
-    __flash_text_end = ABSOLUTE(.);
-  } > ROTEXT
-
   .eh_frame : ALIGN(4) { KEEP(*(.eh_frame .eh_frame.*)); } > RODATA
   .eh_frame_hdr : ALIGN(4) { *(.eh_frame_hdr); } > RODATA
   .metadata : { *(.esp.metadata .esp.metadata.*); } > RODATA
@@ -91,8 +84,6 @@ SECTIONS {
 
 ASSERT(SIZEOF(.psram.unsupported) == 0,
        "the bootstrap owns no PSRAM sections; stage two owns PSRAM");
-ASSERT(SIZEOF(.text) == 0,
-       "bootstrap code must remain in SRAM while instruction fetch is suspended");
 ASSERT(ADDR(.data.wifi) + SIZEOF(.data.wifi) <= SECOND_STAGE_LOADER_START,
        "a loaded bootstrap SRAM segment reaches the second-stage loader");
 ASSERT(_stack_start > _stack_end, "the bootstrap has no stack space");

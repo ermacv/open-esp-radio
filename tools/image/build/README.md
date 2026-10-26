@@ -29,13 +29,16 @@ Every staged build additionally requires the bootstrap's cache-off placement
 audit, independently of `Gates` and `Enforced`. All linked executable sections
 and ordinary constant sections must be in the chip's internal SRAM. The
 explicit flash payload and tuning-reference sections remain flash sources.
+Every allocated flash section must have an exact allowlisted metadata/payload
+name and non-writable, non-executable flags; unknown sections fail regardless
+of their names. See the [image checks](../checks/README.md).
 This audit runs on the actual bootstrap ELF, including a Cargo-cached ELF,
 before encoding any flash files; a diagnostic `run` cannot turn its failure
 into a warning. `bootstrap-placement.txt` records the result.
 
 | Caller | Enforcement | Required checks |
 | --- | --- | --- |
-| `cargo fw build`, including `--analysis` | `Only({Frames, Interrupts})` | Function frames in runtime/bootstrap and interrupt stacks |
+| `cargo fw build`, including `--analysis` | `Only({Frames, Interrupts, Panics})` | Function frames, interrupt stacks and panic budgets in runtime/bootstrap |
 | `cargo fw run` | `Reported` | None |
 | HIL image builds | `All` | Every requested check and audit |
 

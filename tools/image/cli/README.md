@@ -75,7 +75,7 @@ the runtime to the chip's `[placement]` contract (`placement.txt`).
 
 | Mode | Required checks | Reported checks |
 | --- | --- | --- |
-| `build`, including `--analysis` | Interrupt stacks (`Enforced::Only({Interrupts})`) | Task stacks, bootstrap stack and placement |
+| `build`, including `--analysis` | Frames, interrupt stacks and panic budgets (`Enforced::Only({Frames, Interrupts, Panics})`) | Task stacks, bootstrap stack and placement |
 | `run` | None (`Enforced::Reported`) | All requested checks |
 | `flash` | Uses the existing bundle without rerunning checks | Uses its recorded results |
 

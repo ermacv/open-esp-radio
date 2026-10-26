@@ -35,12 +35,7 @@ SECTIONS {
 
   } > RODATA
 
-  .rodata.wifi : ALIGN(4)
-  {
-    . = ALIGN(4);
-    *(.rodata_wlog_*.*)
-    . = ALIGN(4);
-  } > RODATA
+
 }
 
 ASSERT((__flash_tuning_reference_start & 0xfff) == 0 &&

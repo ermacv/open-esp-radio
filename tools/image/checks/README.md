@@ -3,12 +3,16 @@
 `oer-image-checks` owns the image pipeline's frame, interrupt, stack, placement and
 post-link input checks. The chip profile and stack policy supply their
 contracts; `cargo fw build`, including analysis builds, requires the
-`frames` and `interrupts` checks to pass.
+`frames`, `interrupts` and `panics` checks to pass.
 
 Every staged build also audits the final bootstrap ELF before encoding it.
 All executable sections and ordinary constants must lie wholly in the chip's
-internal SRAM. Explicit flash payload and tuning-reference sections remain
-in flash. This cache-off placement prerequisite also gates diagnostic
+internal SRAM. Every allocated flash section must be non-writable,
+non-executable and exactly one of `.flash.appdesc`, `.flash.rodata`,
+`.eh_frame`, `.eh_frame_hdr` or `.metadata`. An unrecognized name or an
+allowlisted name with another suffix fails; ELF flags identify ordinary
+constants without relying on their section names. Explicit flash payload
+and tuning-reference sections remain in flash. This cache-off placement prerequisite also gates diagnostic
 `run` and `probe` builds and reused ELF files; `bootstrap-placement.txt`
 records its result. The shared bootstrap linker script places out-of-line
 callees and their constants in SRAM without relying on caller attributes

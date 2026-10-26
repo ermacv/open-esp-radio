@@ -122,16 +122,33 @@ fn a_mangled_rust_symbol_is_found_by_its_demangled_name() {
     assert_eq!(by_demangled_name(&elf, "rust_begin_unwind"), None);
 }
 
-/// Two object files model an SRAM entry calling an out-of-line dependency.
-/// Its ordinary constant and the deliberately flash-resident staging inputs
-/// exercise the actual shared bootstrap linker script, without chip addresses.
-fn bootstrap_fixture(directory: &Path, shared: bool) -> std::path::PathBuf {
+const FLASH: Region = Region {
+    origin: 0x40000000,
+    length: 0x20000,
+};
+
+/// Two objects model an entry calling an out-of-line dependency. The old
+/// layout annotates only the entry; the shared script needs no annotation.
+/// Constants and explicit flash inputs exercise the actual shared script.
+fn bootstrap_fixture(
+    directory: &Path,
+    shared: bool,
+    extra: Option<(&str, object::SectionKind)>,
+) -> std::path::PathBuf {
     use object::write::Relocation;
     use object::{RelocationFlags, SectionKind};
 
     let make = || Writer::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
     let mut entry = make();
-    let code = entry.add_section(Vec::new(), b".rwtext.entry".to_vec(), SectionKind::Text);
+    let code = entry.add_section(
+        Vec::new(),
+        if shared {
+            b".text.entry".to_vec()
+        } else {
+            b".rwtext.entry".to_vec()
+        },
+        SectionKind::Text,
+    );
     // auipc ra, 0; jalr ra, 0(ra); ret
     for word in [0x00000097_u32, 0x000080e7, 0x00008067] {
         entry.append_section_data(code, &word.to_le_bytes(), 4);
@@ -188,6 +205,10 @@ fn bootstrap_fixture(directory: &Path, shared: bool) -> std::path::PathBuf {
             ..symbol(name, SymbolSection::Section(section), size as u64)
         });
     }
+    if let Some((name, kind)) = extra {
+        let section = dependency.add_section(Vec::new(), name.as_bytes().to_vec(), kind);
+        dependency.append_section_data(section, &[0x13, 0, 0, 0], 4);
+    }
     let other = directory.join("dependency.o");
     fs::write(&other, dependency.write().unwrap()).unwrap();
 
@@ -201,7 +222,10 @@ fn bootstrap_fixture(directory: &Path, shared: bool) -> std::path::PathBuf {
         "SECTIONS { .rwtext : { *(.rwtext*) } > SRAM\n .text : { *(.text*) } > ROTEXT\n .rodata : { *(.rodata*) } > RODATA\n .flash.rodata : { *(.psram.runtime.payload) *(.flash.tuning.reference) } > RODATA }"
     };
     let script = directory.join("fixture.x");
-    fs::write(&script, format!("{memory}{body}\n")).unwrap();
+    let extra_script = extra.map_or_else(String::new, |(name, _)| {
+        format!("SECTIONS {{ {name} : {{ *({name}) }} > RODATA }}")
+    });
+    fs::write(&script, format!("{memory}{body}\n{extra_script}\n")).unwrap();
     let output = directory.join("bootstrap.elf");
     let linker_scripts =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/espressif/staged-layout/linker");
@@ -237,8 +261,8 @@ fn bootstrap_fixture(directory: &Path, shared: bool) -> std::path::PathBuf {
 #[test]
 fn an_sram_entry_does_not_excuse_a_cached_callee_or_constant() {
     let temporary = tempfile::tempdir().unwrap();
-    let path = bootstrap_fixture(temporary.path(), false);
-    let error = bootstrap(SRAM, &path).unwrap_err().to_string();
+    let path = bootstrap_fixture(temporary.path(), false, None);
+    let error = bootstrap(SRAM, FLASH, &path).unwrap_err().to_string();
     assert!(error.contains("dependency_helper"), "{error}");
     assert!(error.contains("dependency_constant"), "{error}");
 }
@@ -246,11 +270,15 @@ fn an_sram_entry_does_not_excuse_a_cached_callee_or_constant() {
 #[test]
 fn the_bootstrap_script_places_out_of_line_code_and_constants_in_sram() {
     let temporary = tempfile::tempdir().unwrap();
-    let path = bootstrap_fixture(temporary.path(), true);
-    assert!(bootstrap(SRAM, &path).unwrap().contains("result=PASS"));
+    let path = bootstrap_fixture(temporary.path(), true, None);
+    assert!(
+        bootstrap(SRAM, FLASH, &path)
+            .unwrap()
+            .contains("result=PASS")
+    );
     let bytes = fs::read(path).unwrap();
     let elf = oer_analysis_elf::Elf::executable(&bytes).unwrap();
-    for name in ["dependency_helper", "dependency_constant"] {
+    for name in ["_start", "dependency_helper", "dependency_constant"] {
         let symbol = elf.symbol(name).unwrap();
         assert!(
             SRAM.contains_range(symbol.address, symbol.address + symbol.size),
@@ -265,5 +293,25 @@ fn the_bootstrap_script_places_out_of_line_code_and_constants_in_sram() {
             ),
             "{name}"
         );
+    }
+}
+
+#[test]
+fn flash_data_requires_an_exact_allowlisted_section_and_never_allows_code_or_writes() {
+    use object::SectionKind;
+    for (name, kind, allowed) in [
+        (".unrecognized_constant", SectionKind::ReadOnlyData, false),
+        (".flash.rodata.extra", SectionKind::ReadOnlyData, false),
+        (".metadata", SectionKind::ReadOnlyData, true),
+        (".metadata", SectionKind::Text, false),
+        (".metadata", SectionKind::Data, false),
+    ] {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = bootstrap_fixture(temporary.path(), true, Some((name, kind)));
+        let result = bootstrap(SRAM, FLASH, &path);
+        assert_eq!(result.is_ok(), allowed, "{name} {kind:?}: {result:?}");
+        if let Err(error) = result {
+            assert!(error.to_string().contains(name), "{error}");
+        }
     }
 }
