@@ -227,6 +227,22 @@ pub(crate) fn build(
         files::BOOTSTRAP_ELF,
     )?;
     drop(bootstrap_cache);
+    // Cache-off placement is a prerequisite for executing a bootstrap, not
+    // a reported-only product gate. Audit even a reused ELF and a run/probe.
+    let memory = profile
+        .facts
+        .memory
+        .as_ref()
+        .ok_or("a staged bootstrap needs its SRAM map")?;
+    let placement = oer_image_checks::placement::bootstrap(memory.sram, &bootstrap_elf)
+        .map_err(|error| log.failed("bootstrap cache-off placement", error))?;
+    std::fs::write(
+        output.join(oer_image_checks::placement::BOOTSTRAP_REPORT),
+        placement,
+    )?;
+    bundle
+        .reports
+        .push(oer_image_checks::placement::BOOTSTRAP_REPORT.into());
     match values.publish(&output) {
         Ok(()) => bundle
             .reports

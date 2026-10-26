@@ -25,6 +25,14 @@ observer placement), and which requested checks must pass (`Enforced`).
 `Gates::all` and `Gates::of` select `All`; a default `Gates` selects `Reported`
 and requests no checks.
 
+Every staged build additionally requires the bootstrap's cache-off placement
+audit, independently of `Gates` and `Enforced`. All linked executable sections
+and ordinary constant sections must be in the chip's internal SRAM. The
+explicit flash payload and tuning-reference sections remain flash sources.
+This audit runs on the actual bootstrap ELF, including a Cargo-cached ELF,
+before encoding any flash files; a diagnostic `run` cannot turn its failure
+into a warning. `bootstrap-placement.txt` records the result.
+
 | Caller | Enforcement | Required checks |
 | --- | --- | --- |
 | `cargo fw build`, including `--analysis` | `Only({Frames, Interrupts})` | Function frames in runtime/bootstrap and interrupt stacks |
@@ -79,6 +87,7 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `otadata.bin` | The OTA selection of the first slot (staged only) |
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
+| `bootstrap-placement.txt` | Mandatory cache-off bootstrap code/constant placement |
 | `runtime-frames.txt`, `bootstrap-frames.txt` | All recorded frames against the move limit, exceptions with ceilings and spare bytes, Diagnostic warnings |
 | `interrupt-placement.txt` | Interrupt code placement, paths to cached functions, static data references and objects, and free SRAM |
 | `image-linker.toml`, `strict-text.x`, `strict-placement.toml` | Runtime linker analysis inputs, generated strict-code fragment and the functions moved with their input sections |
@@ -103,7 +112,8 @@ in `strict-placement.toml` matches the final ELF, image linker, specification
 and analysis inputs, and its fragment matches the placement record. Only a
 mismatch invalidates the runtime package through Cargo and rebuilds it once;
 dependencies remain cached. A second mismatch fails the build. The bootstrap
-has no such invalidation or analysis. The existing interrupt check remains final.
+has no such invalidation or interrupt analysis; its cache-off placement audit
+always runs before encoding. The existing interrupt check remains final.
 Older schemas must be rebuilt; a missing purpose never defaults to `Flash`.
 `ImageBundle::load` verifies files for either purpose. The shared flash
 snapshot reader refuses `Analysis` before supplying bytes to any USB or

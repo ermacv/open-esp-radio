@@ -86,6 +86,11 @@ warning. A reported check that does not pass prints as a warning containing
 `reported only`. Stand `run` builds report every check; `flash` writes an
 already built bundle.
 
+The bootstrap's cache-off code/constant placement is mandatory in every staged
+build, including `run`: all code and ordinary constants must be in internal
+SRAM before the image can be encoded. It is never a reported-only failure.
+`bootstrap-placement.txt` records this audit of the actual linked ELF.
+
 ## Boards
 
 `boot-smoke` and `radio-root` send typed boot diagnostics, including the

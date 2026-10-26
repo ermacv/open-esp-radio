@@ -6,14 +6,9 @@ SECTIONS {
       KEEP(*(.flash.appdesc.*));
   } > RODATA
 
-  .rodata_merge : ALIGN(4) {
-    . = ALIGN(ALIGNOF(.rodata));
-  } > RODATA
-
-  .rodata : ALIGN(4)
+  .flash.rodata : ALIGN(4)
   {
     . = ALIGN(4);
-    _rodata_start = ABSOLUTE(.);
 
     /* The code-location benchmark emits one canonical instruction stream.
        It executes in place here and is copied byte-for-byte to IRAM and
@@ -38,10 +33,6 @@ SECTIONS {
     KEEP(*(.flash.tuning.reference));
     __flash_tuning_reference_end = ABSOLUTE(.);
 
-    *(.rodata .rodata.*)
-    *(.srodata .srodata.*)
-
-    _rodata_end = ABSOLUTE(.);
   } > RODATA
 
   .rodata.wifi : ALIGN(4)

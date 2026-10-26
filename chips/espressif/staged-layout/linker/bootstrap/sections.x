@@ -7,6 +7,9 @@ SECTIONS {
     _trap_section_origin = ABSOLUTE(.);
     KEEP(*(.trap .trap.*));
     *(.rwtext .rwtext.* .rwtext.literal .rwtext.literal.*);
+    /* Cache suspension and flash tuning call across crate boundaries.
+       A caller's section attribute does not place its out-of-line callees. */
+    *(.text .text.* .literal .literal.*);
     . = ALIGN(4);
     _rwtext_end = ABSOLUTE(.);
   } > SRAM
@@ -27,6 +30,13 @@ SECTIONS {
     _data_end = ABSOLUTE(.);
   } > SRAM
   _dram_data_start = _data_start;
+
+  /* Constants, vtables and compiler-generated tables may be read while
+     instruction fetch is suspended, including from a failure path. */
+  .rodata : ALIGN(4) {
+    *(.rodata .rodata.* .srodata .srodata.*);
+    . = ALIGN(4);
+  } > SRAM
 
   .data.wifi : ALIGN(4) {
     *(.data_wlog_*.*);
@@ -81,6 +91,8 @@ SECTIONS {
 
 ASSERT(SIZEOF(.psram.unsupported) == 0,
        "the bootstrap owns no PSRAM sections; stage two owns PSRAM");
+ASSERT(SIZEOF(.text) == 0,
+       "bootstrap code must remain in SRAM while instruction fetch is suspended");
 ASSERT(ADDR(.data.wifi) + SIZEOF(.data.wifi) <= SECOND_STAGE_LOADER_START,
        "a loaded bootstrap SRAM segment reaches the second-stage loader");
 ASSERT(_stack_start > _stack_end, "the bootstrap has no stack space");

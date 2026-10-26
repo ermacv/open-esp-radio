@@ -14,6 +14,65 @@ use std::{collections::BTreeMap, fs, path::Path};
 /// The region name of the mask ROM's code in an interrupt handler rule.
 pub const ROM: &str = "rom";
 
+/// Mandatory for every staged bootstrap, including a diagnostic build.
+pub const BOOTSTRAP_REPORT: &str = "bootstrap-placement.txt";
+
+/// The bootstrap may suspend instruction fetch while tuning flash. Its
+/// complete executable image and ordinary constants must therefore be in
+/// internal SRAM, including out-of-line callees from other crates. Explicit
+/// flash payload/reference sections remain sources read outside suspension.
+pub fn bootstrap(sram: Region, path: &Path) -> Result<String> {
+    let bytes = fs::read(path)?;
+    let elf = oer_analysis_elf::Elf::executable(&bytes)?;
+    let mut violations = Vec::new();
+    let mut code_bytes = 0_u64;
+    let mut constant_bytes = 0_u64;
+    for section in elf
+        .sections()
+        .filter(|section| section.allocated && section.size > 0)
+    {
+        let constants = [".rodata", ".srodata", ".literal"].iter().any(|prefix| {
+            section.name == *prefix || section.name.starts_with(&format!("{prefix}."))
+        });
+        if !section.executable && !constants {
+            continue;
+        }
+        if section.executable {
+            code_bytes = code_bytes
+                .checked_add(section.size)
+                .ok_or("bootstrap code size overflow")?;
+        } else {
+            constant_bytes = constant_bytes
+                .checked_add(section.size)
+                .ok_or("bootstrap constant size overflow")?;
+        }
+        let end = section.address.checked_add(section.size);
+        if end.is_some_and(|end| sram.contains_range(section.address, end)) {
+            continue;
+        }
+        let names = elf
+            .symbols()
+            .filter(|symbol| symbol.defined && symbol.section == Some(section.index))
+            .map(|symbol| symbol.demangled())
+            .collect::<Vec<_>>()
+            .join(", ");
+        violations.push(format!(
+            "section `{}` ({:#010x}+{:#x}) is not in bootstrap SRAM; symbols: {names}",
+            section.name, section.address, section.size,
+        ));
+    }
+    if !violations.is_empty() {
+        return Err(format!(
+            "bootstrap cache-off placement failed:\n  {}",
+            violations.join("\n  ")
+        )
+        .into());
+    }
+    Ok(format!(
+        "bootstrap cache-off placement: code={code_bytes} constants={constant_bytes} bytes in SRAM\nresult=PASS\n"
+    ))
+}
+
 /// What the placement check reads besides the image.
 pub struct Contract<'a> {
     pub memory: &'a Memory,

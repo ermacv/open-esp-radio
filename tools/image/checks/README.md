@@ -5,6 +5,15 @@ post-link input checks. The chip profile and stack policy supply their
 contracts; `cargo fw build`, including analysis builds, requires the
 `frames` and `interrupts` checks to pass.
 
+Every staged build also audits the final bootstrap ELF before encoding it.
+All executable sections and ordinary constants must lie wholly in the chip's
+internal SRAM. Explicit flash payload and tuning-reference sections remain
+in flash. This cache-off placement prerequisite also gates diagnostic
+`run` and `probe` builds and reused ELF files; `bootstrap-placement.txt`
+records its result. The shared bootstrap linker script places out-of-line
+callees and their constants in SRAM without relying on caller attributes
+or cross-crate inlining.
+
 The `frames` check bounds every compiler frame record in both the runtime
 and bootstrap ELF by the stack policy's `max_move_bytes` (currently 4096).
 It uses the existing `Image::stack_sizes`, including functions no root reaches.
