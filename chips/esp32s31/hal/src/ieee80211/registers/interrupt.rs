@@ -534,7 +534,8 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// Mask every MAC interrupt source without acknowledging one.
     ///
     /// Publishes the all-zero ENABLE image, then orders the write, without
-    /// acknowledging pending events. RX STATUS is hidden while masked;
+    /// acknowledging pending events. The tested RX_SUCCESS/combined-auxiliary
+    /// STATUS observation was hidden while masked;
     /// [`Self::unmask_rx_delivery_interrupts`] restores only the RX group.
     /// RAW retention and other causes are not qualified by the RX observation.
     ///
@@ -602,7 +603,7 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
 
     /// Restore the RX delivery group while preserving the current mask.
     ///
-    /// Pending RX_SUCCESS and a combined auxiliary cause reappeared in STATUS
+    /// Pending RX_SUCCESS and at least one auxiliary cause reappeared in STATUS
     /// after this write in the short producer-stopped observation. That run
     /// did not observe RAW, CPU delivery, or IRQ-to-DMA ordering.
     ///

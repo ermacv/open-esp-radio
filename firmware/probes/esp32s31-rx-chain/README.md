@@ -98,3 +98,17 @@ not established as membership in an accepted frame. Aborted/filtered reception
 with rollback is a hypothesis requiring counter/event correlation. The external
 report analyzes every dependent ring decision; this probe does not exercise the
 production take/admission path or demonstrate a production ownership violation.
+
+The version-3 repeat `hw18-20261027-rx-radio-02-s31b` (lease 899) uses pushed
+PR commit `85badedb`, directly based on main after #682. It records three
+matching beacons and 11 stationary-cursor write clusters with 11 nearby FCS
+increments (nine inside a cluster's scan range, one scan before and one after),
+without sampled RX-success/auxiliary STATUS at those error increments. This
+supports FCS-rejected reception as a candidate mechanism; internal rollback
+versus staging/discard is unproved. Some dirty future nodes later become the
+current head without rearm, so their non-sentinel value carries stale evidence.
+The repeat reads Disabled ENABLE for initial/masked/remask and an unclassified
+RX-only enable image during capture. Its per-scan STATUS acknowledgement makes
+final Q zeroes uninformative about pending replay. Full RAW and separate 5/24
+are still not exposed. Neither capture validates the sentinel predicate or
+executes the production admission/take path.

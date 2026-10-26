@@ -261979,7 +261979,7 @@ pub mod wifi_mac {
 
     /// The `RX_NEXT_DESCRIPTOR` register.
     ///
-    /// Complete hardware current/next descriptor word. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom[]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE.
+    /// Hardware current/next descriptor observation, not an exclusive live-write target: its sampled address can stay fixed while words in later buffers change without descriptor/cursor commit. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom[]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE.
     pub mod rx_next_descriptor {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -307345,7 +307345,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.CONTROL` word.
-    /// SOURCE: HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorControl(u32);
 
@@ -307528,7 +307528,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.BUFFER` word.
-    /// SOURCE: HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorBuffer(u32);
 
@@ -307553,7 +307553,7 @@ pub mod layouts {
         /// Project-assigned name. The buffer's address.
         ///
         /// `ADDRESS`, bits 31:0; written by the CPU. The address lies in [`DMA_WINDOW`].
-        /// SOURCE: HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+        /// SOURCE: HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
         pub const fn address(self) -> u32 {
             self.0
         }
@@ -307586,7 +307586,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.NEXT` word.
-    /// SOURCE: HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorNext(u32);
 
