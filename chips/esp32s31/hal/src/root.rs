@@ -217,6 +217,8 @@ impl Root {
             wifi_rx_dma,
             wifi_interrupts,
             mac_local_time,
+            // No production PMU wake observer is installed.
+            pmu_wake: _,
             radio_phy,
             coexistence,
             bluetooth,

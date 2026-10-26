@@ -687,6 +687,19 @@ description = "The read of the free-running MAC local-time counter: side-effect 
 sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE", "BLOB_LIBPP_MAC_LOCAL_TIME"]
 
 [[partitions]]
+name = "PmuWakePeripherals"
+member = "pmu_wake"
+description = "PMU wake and sleep observations, separate from radio clock/power control."
+
+[[partitions.parts]]
+name = "PmuWakeStatus"
+instance = "PMU"
+registers = ["SLP_WAKEUP_STATUS0", "SLP_WAKEUP_STATUS1", "INT_RAW", "HP_INT_ST", "HP_INT_ENA", "LP_INT_RAW", "LP_INT_ST", "LP_INT_ENA", "LPCPU_WAKEUP_CAUSE"]
+read-only = true
+description = "Side-effect-free PMU wake/status/raw/enable observations. This capability has no enable modification or pending acknowledgement; no write authority is claimed for the probe."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[[partitions]]
 name = "RadioPhyPeripherals"
 member = "radio_phy"
 description = "Role-neutral RF and PHY register views serialized by the shared radio lifecycle."
@@ -699,9 +712,7 @@ registers = ["MODEM_CTRL0", "MODEM_CONF"]
 [[partitions.parts]]
 name = "PmuRadio"
 instance = "PMU"
-registers = ["HP_ACTIVE_ICG_MODEM", "HP_ACTIVE_HP_CK_POWER", "IMM_HP_CK_POWER_0", "IMM_SLEEP_SYSCLK", "IMM_MODEM_ICG", "RF_PWC", "ANA_PERI_PWR_CTRL", "SLP_WAKEUP_STATUS0", "SLP_WAKEUP_STATUS1", "INT_RAW", "HP_INT_ST", "HP_INT_ENA", "LP_INT_RAW", "LP_INT_ST", "LP_INT_ENA", "LPCPU_WAKEUP_CAUSE"]
-# SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H.
-# PMU wake observations belong to the existing shared radio/power owner.
+registers = ["HP_ACTIVE_ICG_MODEM", "HP_ACTIVE_HP_CK_POWER", "IMM_HP_CK_POWER_0", "IMM_SLEEP_SYSCLK", "IMM_MODEM_ICG", "RF_PWC", "ANA_PERI_PWR_CTRL"]
 
 [[partitions.parts]]
 name = "ModemSysconRadio"

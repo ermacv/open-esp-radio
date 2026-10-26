@@ -43,12 +43,12 @@ fn state(s: &Session<'_>, tag: u32) {
     // observed, never changed to manufacture a sleep/wake transition.
     emit(
         tag + 3,
-        hp_raw(&s.ble.pmu),
-        lp_raw(&s.ble.pmu),
-        s.ble.pmu.read_slp_wakeup_status0().wakeup_cause(),
+        hp_raw(&s.wake_status),
+        lp_raw(&s.wake_status),
+        s.wake_status.read_slp_wakeup_status0().wakeup_cause(),
     );
 }
-fn hp_raw(p: &pac::pmu::PmuRadio) -> u32 {
+fn hp_raw(p: &pac::pmu::PmuWakeStatus) -> u32 {
     use pac::pmu::int_raw as f;
     let r = p.read_int_raw();
     (u32::from(r.lp_cpu_exc_int_raw()) * f::LP_CPU_EXC_INT_RAW_MASK)
@@ -57,7 +57,7 @@ fn hp_raw(p: &pac::pmu::PmuRadio) -> u32 {
         | (u32::from(r.soc_sleep_reject_int_raw()) * f::SOC_SLEEP_REJECT_INT_RAW_MASK)
         | (u32::from(r.soc_wakeup_int_raw()) * f::SOC_WAKEUP_INT_RAW_MASK)
 }
-fn lp_raw(p: &pac::pmu::PmuRadio) -> u32 {
+fn lp_raw(p: &pac::pmu::PmuWakeStatus) -> u32 {
     use pac::pmu::lp_int_raw as f;
     let r = p.read_lp_int_raw();
     (u32::from(r.lp_cpu_wakeup_int_raw()) * f::LP_CPU_WAKEUP_INT_RAW_MASK)
@@ -79,7 +79,7 @@ fn lp_raw(p: &pac::pmu::PmuRadio) -> u32 {
         | (u32::from(r.hp_sw_trigger_int_raw()) * f::HP_SW_TRIGGER_INT_RAW_MASK)
 }
 fn pmu_context(s: &Session<'_>, tag: u32) {
-    let p = &s.ble.pmu;
+    let p = &s.wake_status;
     emit(
         tag,
         p.read_slp_wakeup_status1().reject_cause(),

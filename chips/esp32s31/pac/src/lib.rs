@@ -53,6 +53,51 @@
 //!     bank.trigger_int_clr_timers_t1_int_clr();
 //! }
 //! ```
+//!
+//! PMU wake observations grant no enable writes or pending acknowledgement.
+//! The radio clock/power owner has no access to these wake words.
+//!
+//! ```
+//! fn observe(wake: &oer_esp32s31_pac::pmu::PmuWakeStatus) -> bool {
+//!     wake.read_hp_int_ena().soc_wakeup_int_ena()
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! fn change(wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus) {
+//!     wake.modify_hp_int_ena(|_| {});
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! fn change(wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus) {
+//!     wake.modify_lp_int_ena(|_| {});
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! fn acknowledge(
+//!     wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus,
+//!     sample: oer_esp32s31_pac::pmu::int_raw::Snapshot,
+//! ) {
+//!     wake.acknowledge_int_raw(sample);
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! fn acknowledge(
+//!     wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus,
+//!     sample: oer_esp32s31_pac::pmu::lp_int_raw::Snapshot,
+//! ) {
+//!     wake.acknowledge_lp_int_raw(sample);
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! fn observe(radio: &oer_esp32s31_pac::pmu::PmuRadio) {
+//!     let _ = radio.read_hp_int_ena();
+//! }
+//! ```
 
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]

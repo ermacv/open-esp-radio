@@ -92,16 +92,24 @@ completeness = "partial"
 sources = ["S31_MMIO_MANUAL_2010D040"]
 completeness = "partial"
 
-[review.entity."WORD_0040_OPAQUE.BITS_16_17_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D040"]
+[review.entity."WORD_0040_OPAQUE.SLEEP16_FLAG_ENABLE"]
+sources = ["S31_MMIO_MANUAL_2010D040", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS", "HW16_S31_LP_SLEEP_LANES_20261026"]
+completeness = "partial"
+
+[review.entity."WORD_0040_OPAQUE.SLEEP17_FLAG_ENABLE"]
+sources = ["S31_MMIO_MANUAL_2010D040", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS", "HW16_S31_LP_SLEEP_LANES_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_0044_OPAQUE.BIT_0_OPAQUE"]
 sources = ["S31_MMIO_MANUAL_2010D044"]
 completeness = "partial"
 
-[review.entity."WORD_0044_OPAQUE.BITS_16_17_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D044"]
+[review.entity."WORD_0044_OPAQUE.SLEEP16_FLAG_DISABLE"]
+sources = ["S31_MMIO_MANUAL_2010D044", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS", "HW16_S31_LP_SLEEP_LANES_20261026"]
+completeness = "partial"
+
+[review.entity."WORD_0044_OPAQUE.SLEEP17_FLAG_DISABLE"]
+sources = ["S31_MMIO_MANUAL_2010D044", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS", "HW16_S31_LP_SLEEP_LANES_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_0048_OPAQUE.COUNTER_LOW"]
@@ -936,7 +944,7 @@ class = "write-only"
 [[registers]]
 name = "WORD_0010_OPAQUE"
 offset = 0x10
-description = "Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. Both tested delivery lanes survived BLE-timer and full production controller resets; restoring LP clocks recovered delivery without rearming. This is behavioral enable retention, not command-register readback. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. Across the separately tested hart0 HP system reset and next ROM-loader entry, fresh software pending remained silent until another bit18 enable command. In the both-pending and quiet follow-up, after restoring source clocks, CONTROL_25 and START, a natural wrap without a new bit1 enable left pending/status/output zero; enabling bit1 followed by a fresh natural wrap produced pending1/status2/source127 high. Both delivery lanes therefore required a new enable in the tested post-HP-reset setup. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is behavioral delivery evidence, not enable-register readback. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. Image2 then image0x40000 independently add the tested delivery enables; the second does not replace the first. SOURCE: HW16_S31_LP_DELIVERY_20261026."
+description = "Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; the tested additive delivery behavior is qualified below. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. Both tested delivery lanes survived BLE-timer and full production controller resets; restoring LP clocks recovered delivery without rearming. This is behavioral enable retention, not command-register readback. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. Across the separately tested hart0 HP system reset and next ROM-loader entry, fresh software pending remained silent until another bit18 enable command. In the both-pending and quiet follow-up, after restoring source clocks, CONTROL_25 and START, a natural wrap without a new bit1 enable left pending/status/output zero; enabling bit1 followed by a fresh natural wrap produced pending1/status2/source127 high. Both delivery lanes therefore required a new enable in the tested post-HP-reset setup. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is behavioral delivery evidence, not enable-register readback. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. Image2 then image0x40000 independently add the tested delivery enables; the second does not replace the first. SOURCE: HW16_S31_LP_DELIVERY_20261026."
 
 [[registers.fields]]
 name = "BIT_1_OPAQUE"
@@ -948,7 +956,7 @@ description = "Image 2 redelivered the tested retained natural-rollover cause af
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "write-only"
-description = "Observed command lane; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7)."
+description = "Enable/redeliver the tested compare or software-pending byte at +0x24 as status0x40000/source127, without clearing the byte. This command adds the bit18 delivery enable without removing enabled rollover delivery; +0x14 bit18 suppresses it while retaining pending. The post-HP-reset setup requires a new enable. These are behavioral delivery observations, not command-register readback or an exhaustive output equation. SOURCE: HW2_S31_LP_PENDING_20261026; HW16_S31_LP_DELIVERY_20261026; HW13_S31_BLE_LP_HP_RESTORE_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT."
 
 [[registers]]
 name = "WORD_0014_OPAQUE"
@@ -976,7 +984,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_001C_OPAQUE"
 offset = 0x1c
-description = "One complete runtime function reads the complete word and writes the finite zero image. Inner state encoding remains unknown. In a sourced sleep16 setup, a positively witnessed+0x64 target crossing set the low byte to1 under each tested mode58 control0/4 combination. +0x44 image 0x10000 retained the byte; whole-word zero cleared it. No127/129 route is established with the delivery bank disabled. SOURCE: HW9_S31_LP_SLEEP16_20261027. With known delivery bits1/18 enabled, the positive sleep16 flag still leaves status/output127 low. Whole-word all-ones+34 clears it. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026."
+description = "One complete runtime function reads the complete word and writes the finite zero image. Inner state encoding remains unknown. In a sourced sleep16 setup, a positively witnessed+0x64 target crossing set the low byte to1 under each tested mode58 control0/4 combination. +0x44 image 0x10000 retained the byte; whole-word zero cleared it. No127/129 route is established with the delivery bank disabled. SOURCE: HW9_S31_LP_SLEEP16_20261027. With known delivery bits1/18 enabled, the positive sleep16 flag still leaves status/output127 low. Whole-word all-ones+34 clears it. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026. R1/R2 logged only bits7:0; bits31:8 were not captured and their effects are unqualified."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
@@ -987,7 +995,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0020_OPAQUE"
 offset = 0x20
-description = "Complete state word read by runtime functions and cleared by two complete paths. Future+68 crossing with sleep17 enabled and sleep0/16 disabled sets this byte to1. +44 bit17 retains it; whole-word all-ones+34 clears it. A crossing while sleep17 is disabled leaves no visible flag for late enable; a fresh enabled future target is positive. This qualifies a local comparator flag, not a completed PMU sleep/wake transition. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026."
+description = "Complete state word read by runtime functions and cleared by two complete paths. In the tested setup with advancing completed BTLC captures, digital/ETM clocks live, ETM channels6/7 enabled and the ETM bit11 command issued, a future+68 crossing with sleep17 enabled and sleep0/16 disabled sets the low byte to1. +44 bit17 retains it; whole-word all-ones+34 clears it. A crossing while sleep17 is disabled leaves no visible flag for late enable; a fresh enabled future target is positive. The BTLC/ETM prerequisites were not varied independently. This qualifies a local comparator flag, not a completed PMU sleep/wake transition. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026. R1/R2 logged only bits7:0; bits31:8 were not captured and their effects are unqualified."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
@@ -1055,7 +1063,7 @@ values = [
 [[registers]]
 name = "WORD_0040_OPAQUE"
 offset = 0x40
-description = "Complete runtime functions write finite images with independently observed bits 0, 16 and 17. Bit16/17 commands enable the tested +64/+68 future-target flag producers. Re-enabling bit16 preserves a positive byte1c. None of the tested sleep command images clears the known compare/rollover causes. No source127 enable meaning follows. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; HW16_S31_LP_DELIVERY_20261026."
+description = "Complete runtime functions write finite images with independently observed bits 0, 16 and 17. The independent bit16/17 commands enable the tested +64/+68 low-byte flag producers. The +68 observation uses advancing BTLC and the sourced digital/ETM setup with channels6/7 enabled and bit11 issued; no prerequisite was isolated. Re-enabling bit16 preserves a positive byte1c. None of the tested sleep command images clears the known compare/rollover causes. No source127 enable meaning follows. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; HW16_S31_LP_DELIVERY_20261026."
 
 [[registers.fields]]
 name = "BIT_0_OPAQUE"
@@ -1064,15 +1072,21 @@ class = "write-only"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "BITS_16_17_OPAQUE"
-bits = "17:16"
+name = "SLEEP16_FLAG_ENABLE"
+bits = "16"
 class = "write-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Enable the tested future+0x64 crossing producer of the low-byte +0x1c flag in the LP XTAL/divider-1 setup. This is not a source127 delivery enable. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS."
+
+[[registers.fields]]
+name = "SLEEP17_FLAG_ENABLE"
+bits = "17"
+class = "write-only"
+description = "Enable the tested future+0x68 crossing producer of the low-byte +0x20 flag, with advancing completed BTLC captures, digital/ETM clocks live, ETM channels6/7 enabled and the ETM bit11 command issued. These prerequisites were not varied independently; no source127 delivery-enable meaning is established. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS."
 
 [[registers]]
 name = "WORD_0044_OPAQUE"
 offset = 0x44
-description = "Complete runtime functions write finite images with independently observed bits 0, 16 and 17. Bit16/17 commands preserve the corresponding positive byte1c/20. Bit17 suppresses flag production at the tested future+68 crossing; late re-enable does not recover that crossing. None of the tested sleep command images masks the already-positive compare/rollover delivery lanes. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; HW16_S31_LP_DELIVERY_20261026."
+description = "Complete runtime functions write finite images with independently observed bits 0, 16 and 17. The independent bit16/17 commands preserve the corresponding positive low byte1c/20. The +68 crossing/disable observation uses advancing BTLC and the sourced digital/ETM setup with channels6/7 enabled and bit11 issued; no prerequisite was isolated. Bit17 suppresses flag production at the tested future+68 crossing; late re-enable does not recover that crossing. None of the tested sleep command images masks the already-positive compare/rollover delivery lanes. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; HW16_S31_LP_DELIVERY_20261026."
 
 [[registers.fields]]
 name = "BIT_0_OPAQUE"
@@ -1081,10 +1095,16 @@ class = "write-only"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "BITS_16_17_OPAQUE"
-bits = "17:16"
+name = "SLEEP16_FLAG_DISABLE"
+bits = "16"
 class = "write-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Paired disable command for the +0x64/+0x1c flag producer. A positive low-byte +0x1c flag survives this command; it is not an acknowledgement or a mask of the known compare/rollover IRQ lanes. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS."
+
+[[registers.fields]]
+name = "SLEEP17_FLAG_DISABLE"
+bits = "17"
+class = "write-only"
+description = "Disable the tested +0x68/+0x20 flag producer in the advancing-BTLC/digital-ETM setup with channels6/7 enabled and bit11 issued. A crossing while disabled leaves no visible low-byte flag for late enable; a positive existing flag survives. This is not an acknowledgement. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS."
 
 [[registers]]
 name = "WORD_0048_OPAQUE"
@@ -1114,7 +1134,7 @@ class = "write-only"
 [[registers]]
 name = "WORD_0058_OPAQUE"
 offset = 0x58
-description = "Runtime mode word: first-timer setup RMW-sets bits 0 and 4; the ISR samples bit 2 and freshly rereads the word before setting bit 1. Other controls retain their sourced positional names; the tested trigger/latch relation is qualified below. No source-mask meaning is established. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). Near+6c compare produces byte24/status0x40000/127 under every control0/4 combination. Control2 sets in the tested control0=1 cases and is cleared by the control1 trigger without acknowledging byte24 or lowering source127. No general IRQ-mask meaning follows. SOURCE: HW16_S31_LP_MODE58_20261026."
+description = "Runtime mode word: first-timer setup RMW-sets bits 0 and 4; the ISR samples bit 2 and freshly rereads the word before setting bit 1. Other controls retain their sourced positional names; the tested trigger/latch relation is qualified below. No source-mask meaning is established. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). Near+6c compare produces byte24/status0x40000/127 under every control0/4 combination. Control2 sets in the tested control0=1 cases and is cleared by the control1 trigger without acknowledging byte24 or lowering source127. No general IRQ-mask meaning follows. SOURCE: HW16_S31_LP_MODE58_20261026. R1/R2 logged only controls0/1/2/4. Bit3 and bits31:5 were not captured, so the trigger is not proven to change only control2 across the full word."
 
 [[registers.fields]]
 name = "CONTROL_0"
@@ -1166,7 +1186,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0068_OPAQUE"
 offset = 0x68
-description = "Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31. With sleep17 enabled, a verified future-target crossing sets byte20 even with sleep0/16 disabled. No readback, counter unit or PMU wake-route equation is established. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026."
+description = "Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31. In the tested setup with advancing completed BTLC captures, digital/ETM clocks live, ETM channels6/7 enabled and the ETM bit11 command issued, sleep17 enable plus a verified future-target crossing sets the low byte20 even with sleep0/16 disabled. The BTLC/ETM prerequisites were not varied independently. No readback, counter unit or PMU wake-route equation is established. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026."
 
 [[registers.fields]]
 name = "BITS_0_23_OPAQUE"
