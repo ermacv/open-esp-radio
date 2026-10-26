@@ -362,8 +362,10 @@ its model and conformance case.
 `trace` (what happened), `profile` (what it costs) and `debug-control`
 (knobs that force paths) are separate classes, each under its own cfg
 (`oer_trace`, `oer_profile`, `oer_debug_control`) that only `cargo fw` sets
-for an image declaring it. Probe images (`cargo fw probe`) are built over the
-production crates' public API alone; production has no item, module or
+for an image declaring it. Comparison probe images (`cargo fw probe`) are built over the
+production crates' public API alone. The separately admitted
+`firmware/probes/esp32s31-facts` image takes the PAC once for short hardware
+facts experiments, without HAL or production runtime dependencies; production has no item, module or
 `cfg(oer_probe)` only a probe uses.
 
 ## Tools

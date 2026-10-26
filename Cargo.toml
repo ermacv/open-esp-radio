@@ -4,6 +4,7 @@ members = [
     "chips/esp32s31/knowledge",
     "tools/vendor/phy-esp32s31",
     "firmware/probes/esp32s31-register",
+    "firmware/probes/esp32s31-facts",
     "firmware/probes/esp32s31-radio",
     "tools/vendor/scenarios-esp32s31-cli",
     "tools/vendor/cli",

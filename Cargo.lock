@@ -2547,6 +2547,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-firmware-probes-esp32s31-facts"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32s31-pac",
+ "oer-mmio",
+ "oer-riscv",
+ "toml",
+]
+
+[[package]]
 name = "oer-firmware-probes-esp32s31-radio"
 version = "0.1.0"
 dependencies = [

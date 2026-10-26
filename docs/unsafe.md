@@ -597,7 +597,11 @@ each unsafe attribute in them carries its `// SAFETY:` comment as well.
 ## PAC dependency authority
 
 Direct dependencies on the PAC are restricted independently of unsafe
-syntax. The only allowed consumer is the chip's `hal` under `esp32s31/`:
+syntax. The allowed consumers are the chip's `hal` under `esp32s31/` and the
+explicitly admitted PAC-only facts image `firmware/probes/esp32s31-facts`.
+Other `firmware/probes/*-facts` packages require a separate layer-test admission.
+The facts image takes the PAC once, uses typed accessors, and has no HAL or
+production runtime dependency; production never depends on it. All other
 drivers and adapters reach registers through HAL owners. Check the executable list when changing this boundary.
 
 Upper layers use opaque, finite capabilities rather than raw pointers,
