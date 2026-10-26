@@ -72,3 +72,31 @@ fn removal_keeps_the_members_packed_and_clear_empties_the_table() {
     assert_eq!(entry(&table, 0), DeviceEntryImage::ZERO);
     assert_eq!(table.publication().count(), 0);
 }
+
+#[test]
+fn publication_tracks_every_count_through_capacity_and_back_to_empty() {
+    let mut table = table();
+    let first_entry = table.publication().first_entry();
+    for index in 0..BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY {
+        let mut device = PUBLIC;
+        device.address[0] = index as u8;
+        table.add(device).unwrap();
+        let publication = table.publication();
+        assert_eq!(usize::from(publication.count()), index + 1);
+        assert_eq!(publication.first_entry(), first_entry);
+    }
+    assert_eq!(table.add(RANDOM_DEVICE), Err(LeDeviceTableError::Full));
+    assert_eq!(usize::from(table.publication().count()), table.len());
+
+    for index in 0..BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY {
+        let mut device = PUBLIC;
+        device.address[0] = index as u8;
+        table.remove(device).unwrap();
+        let publication = table.publication();
+        assert_eq!(usize::from(publication.count()), table.len());
+        assert_eq!(publication.first_entry(), first_entry);
+    }
+    assert!(table.is_empty());
+    assert_eq!(table.remove(PUBLIC), Err(LeDeviceTableError::NotFound));
+    assert_eq!(table.publication().count(), 0);
+}

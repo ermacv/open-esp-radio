@@ -1564,14 +1564,9 @@ pub(crate) struct BlePhyHardwareObjects {
 }
 
 impl BlePhyHardwareObjects {
-    /// # Safety
-    ///
-    /// The environment and the resolving list `inputs` names are `'static`
-    /// controller-SRAM storage of the BLE PHY engine that the CPU reaches
-    /// only through volatile accesses. The HAL engine's BLE PHY engine
-    /// binding is the one caller.
-    #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
-    pub(crate) const unsafe fn bind(inputs: BluetoothPhyRegisterInitInputs) -> Self {
+    /// Bind the PHY profile's typed references to retained volatile layouts.
+    /// Their `DmaRef`s carry the complete placement and alignment proof.
+    pub(crate) const fn bind(inputs: BluetoothPhyRegisterInitInputs) -> Self {
         Self { inputs }
     }
 }
@@ -1583,14 +1578,9 @@ pub(crate) struct DirectionFindingDescriptor {
 }
 
 impl DirectionFindingDescriptor {
-    /// # Safety
-    ///
-    /// `address` is the disabled-CTE descriptor of a `'static`
-    /// direction-finding workspace in controller SRAM that the CPU reaches
-    /// only through volatile accesses. The HAL engine's workspace binding is
-    /// the one caller.
-    #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
-    pub(crate) const unsafe fn bind(
+    /// Bind the workspace projection's typed descriptor reference, which
+    /// already proves its complete extent, alignment and retention.
+    pub(crate) const fn bind(
         address: crate::layouts::DmaRef<crate::layouts::BleDirectionFindingDescriptor>,
     ) -> Self {
         Self { address }
@@ -1605,16 +1595,18 @@ pub(crate) struct DeviceTablePublication {
 }
 
 impl DeviceTablePublication {
-    /// # Safety
-    ///
-    /// `count` entries from `first_entry` are a `'static` device table in
-    /// controller SRAM that the CPU reaches only through volatile accesses.
-    /// The HAL engine's device table is the one caller.
-    #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
-    pub(crate) const unsafe fn new(
+    pub(crate) const CAPACITY: usize =
+        crate::layouts::BleDeviceTable::SIZE / crate::layouts::BleDeviceTableEntry::SIZE;
+
+    /// Bind a complete retained table to a count admitted within its extent.
+    /// The full-table `DmaRef` proves placement and alignment; the bounded
+    /// count includes zero and the table's full capacity.
+    pub(crate) const fn new(
         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-        count: u8,
+        count: oer_mmio::Index<{ Self::CAPACITY + 1 }>,
     ) -> Self {
+        const { assert!(DeviceTablePublication::CAPACITY <= u8::MAX as usize) };
+        let count = count.get() as u8;
         Self { first_entry, count }
     }
 
@@ -1640,15 +1632,10 @@ pub(crate) struct RxChainHead {
 }
 
 impl RxChainHead {
-    /// # Safety
-    ///
-    /// `head` is the first header of a `'static` receive chain in controller
-    /// SRAM whose every link points into that chain's own storage, which the
-    /// CPU reaches only through volatile accesses; `selector` is the chain's
-    /// list and `scanning` whether it is the scanner's. The HAL engine's
-    /// receive chain is the one caller.
-    #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
-    pub(crate) const unsafe fn new(
+    /// Bind a retained volatile header to its receive-list selection.
+    /// The `DmaRef` proves placement and alignment; the receive-chain owner
+    /// initializes and retains the linked graph and chooses its list.
+    pub(crate) const fn new(
         selector: BluetoothMemoryListSelector,
         head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
         scanning: bool,

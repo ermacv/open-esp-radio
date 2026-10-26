@@ -218,18 +218,12 @@ impl BlePhyEngineCpuOwned {
     /// enable points the hardware at them under the normal Controller
     /// profile.
     pub(crate) fn hardware_objects(&self) -> crate::bluetooth::BlePhyHardwareObjects {
-        #[allow(unsafe_code, reason = "the owner of the storage vouches for it")]
-        // SAFETY: this owner holds the storage `Pin<&'static mut>` for as long
-        // as it lives, its binding names that storage's environment and
-        // resolving list, and both are `VolatileCell` arrays the CPU reaches
-        // only through volatile accesses.
-        unsafe {
-            let inputs = crate::bluetooth::registers::BluetoothPhyRegisterInitInputs::normal_controller_profile(
+        let inputs =
+            crate::bluetooth::registers::BluetoothPhyRegisterInitInputs::normal_controller_profile(
                 self.binding.environment_address(),
                 self.binding.resolving_list_address(),
             );
-            crate::bluetooth::BlePhyHardwareObjects::bind(inputs)
-        }
+        crate::bluetooth::BlePhyHardwareObjects::bind(inputs)
     }
 
     /// Borrow the initialized LE 1M packet-start calibration by value.
