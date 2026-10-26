@@ -111,7 +111,14 @@ fn an_adopted_network_slot_exposes_its_view_and_returns_on_release() {
         panic!("fresh handoff slot must accept one buffer");
     };
     let index = radio.republish(10, 30);
-    let adoption = pool.claim_network(index).into_adoption();
+    let network = pool.claim_network(index);
+    let view = network.adoption_view();
+    assert_eq!(pool.network_slots(), 1);
+    assert_eq!(allocation.ret.state(), ExternalRxReturnState::Detached);
+    assert_eq!(observer.calls(), 0);
+    assert_eq!(network.frame().len(), view.length);
+    let adoption = network.into_adoption();
+    assert_eq!(adoption, view);
     #[allow(unsafe_code, reason = "test compares the adopted address")]
     // SAFETY: offset 10 lies inside the 64-byte test allocation.
     let expected = unsafe { allocation.pointer.add(10) };
@@ -198,7 +205,12 @@ fn network_drop_returns_once_before_freeing_the_slot() {
         panic!("fresh handoff slot must accept one buffer");
     };
     let index = radio.republish(0, 64);
-    drop(pool.claim_network(index));
+    let network = pool.claim_network(index);
+    let view = network.adoption_view();
+    assert_eq!(view.length, 64);
+    assert_eq!(allocation.ret.state(), ExternalRxReturnState::Detached);
+    assert_eq!(observer.calls(), 0);
+    drop(network);
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Returned);
     assert_eq!(observer.calls(), 1);
     assert_eq!(pool.claimed_slots(), 0);

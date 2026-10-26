@@ -11,6 +11,7 @@ use oer_embassy_net::{
 use oer_memory::{
     ExternalRxHandoffPool, ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
 };
+use xarxa_driver::config::{PACKET_BUF_ALIGN, PACKET_BUF_SIZE};
 use xarxa_driver::{PacketBuf, PacketBufAllocator, PacketPool, PacketPoolStorage};
 
 const SLOTS: usize = 32;
@@ -21,6 +22,9 @@ const CAP: usize = SLOTS - RESERVE;
 const FRAME_LEN: usize = 60;
 /// A typical 802.11 QoS + CCMP + LLC prefix rewritten to Ethernet in place.
 const ETHERNET_OFFSET: usize = 34 - 14 + 8;
+/// Aligned Ethernet start with too little tail storage for a full packet.
+const SHORT_TAIL_OFFSET: usize =
+    (CAPACITY - PACKET_BUF_SIZE).next_multiple_of(PACKET_BUF_ALIGN) + PACKET_BUF_ALIGN;
 
 #[repr(C, align(4))]
 struct DmaBuffer([u8; CAPACITY]);
@@ -203,28 +207,99 @@ fn a_consumer_which_never_drains_stops_at_the_cap_and_management_still_flows() {
 }
 
 #[test]
-fn storage_without_a_full_packet_view_is_copied_and_released() {
+fn unfit_storage_is_copied_and_released_before_the_packet_drops() {
     let mut radio = radio!();
     let endpoint = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 4, 1>::new()));
     let (mut device, runner) = endpoint.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
     runner.link_controller().set_link_up(true);
     let publisher = runner.rx_publisher();
-    // 1700 - 187 < PACKET_BUF_SIZE: the Ethernet start is past the 186-byte
-    // limit, so the adopted view would overrun the DMA buffer.
-    let offset = CAPACITY - xarxa_driver::config::PACKET_BUF_SIZE + 1;
+    // More than SLOTS frames require a previously released slot to be reused.
+    for sequence in 0..=SLOTS {
+        assert_eq!(
+            radio.receive(&publisher, SHORT_TAIL_OFFSET, 7),
+            Staged::Published(Ok(()))
+        );
+        let counters = radio.origin.counters();
+        assert_eq!(
+            (counters.adopted, counters.copied_unfit, counters.held),
+            (0, (sequence + 1) as u32, 0)
+        );
+        assert_eq!(radio.pool.claimed_slots(), 0);
+        assert_eq!(radio.returned(), sequence + 1);
+        let packet = device.receive().unwrap();
+        assert!(!radio.origin.owns(&packet));
+        let mut expected = [7; FRAME_LEN];
+        expected[12..14].copy_from_slice(&[0x08, 0x00]);
+        assert_eq!(&packet[..], &expected);
+        drop(packet);
+        assert_eq!(radio.returned(), sequence + 1);
+        assert_eq!(radio.origin.counters().held, 0);
+    }
+}
+
+#[test]
+fn an_adopted_packet_returns_its_slot_and_credit_only_when_dropped() {
+    let mut radio = radio!();
+    let endpoint = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 1>::new()));
+    let (mut device, runner) = endpoint.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    runner.link_controller().set_link_up(true);
+    let publisher = runner.rx_publisher();
     assert_eq!(
-        radio.receive(&publisher, offset, 7),
+        radio.receive(&publisher, ETHERNET_OFFSET, 9),
         Staged::Published(Ok(()))
     );
-    let counters = radio.origin.counters();
+    let packet = device.receive().unwrap();
+    assert!(radio.origin.owns(&packet));
+    assert_eq!(radio.pool.network_slots(), 1);
+    assert_eq!(radio.origin.counters().held, 1);
+    assert_eq!(radio.returned(), 0);
+    drop(packet);
+    assert_eq!(radio.pool.claimed_slots(), 0);
+    assert_eq!(radio.origin.counters().held, 0);
+    assert_eq!(radio.returned(), 1);
+}
+
+#[test]
+fn an_unfit_frame_returns_its_slot_when_the_copy_pool_is_exhausted() {
+    let mut radio = radio!();
+    let endpoint = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 2, 1>::new()));
+    let (mut device, runner) = endpoint.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    runner.link_controller().set_link_up(true);
+    let publisher = runner.rx_publisher();
+    publisher.try_send(&[0; FRAME_LEN]).unwrap();
+    let retained_copy = device.receive().unwrap();
     assert_eq!(
-        (counters.adopted, counters.copied_unfit, counters.held),
-        (0, 1, 0)
+        radio.receive(&publisher, SHORT_TAIL_OFFSET, 7),
+        Staged::Published(Err(RxEnqueueError::PoolExhausted))
     );
     assert_eq!(radio.pool.claimed_slots(), 0);
-    let packet = device.receive().unwrap();
-    assert!(!radio.origin.owns(&packet));
-    assert_eq!(packet[0], 7);
+    assert_eq!(radio.origin.counters().held, 0);
+    assert_eq!(radio.origin.counters().copied_unfit, 1);
+    assert_eq!(radio.returned(), 1);
+    drop(retained_copy);
+    assert_eq!(radio.returned(), 1);
+}
+
+#[test]
+fn an_unfit_frame_returns_its_slot_when_the_link_goes_down_after_admission() {
+    let mut radio = radio!();
+    let endpoint = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 1>::new()));
+    let (_device, runner) = endpoint.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let link = runner.link_controller();
+    link.set_link_up(true);
+    let publisher = runner.rx_publisher();
+    let lease = radio.stage(SHORT_TAIL_OFFSET, 7).unwrap();
+    let admission = publisher.try_admit_external(radio.origin).unwrap();
+    let index = lease.republish(SHORT_TAIL_OFFSET, FRAME_LEN);
+    link.set_link_up(false);
+    assert_eq!(
+        publisher.publish_external(admission, index),
+        Err(RxEnqueueError::LinkDown)
+    );
+    assert_eq!(radio.pool.claimed_slots(), 0);
+    assert_eq!(radio.origin.counters().held, 0);
+    assert_eq!(radio.origin.counters().copied_unfit, 1);
+    assert_eq!(radio.returned(), 1);
 }
 
 #[test]

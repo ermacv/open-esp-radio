@@ -23,7 +23,7 @@ use xarxa_driver::config::{PACKET_BUF_ALIGN, PACKET_BUF_SIZE};
 use xarxa_driver::{ExternalPacketOrigin, PacketBuf};
 
 use super::OwnedRxPublisher;
-use crate::{ETHERNET_HEADER_LEN, FrameLengthError, RxEnqueueError};
+use crate::{ETHERNET_HEADER_LEN, RxEnqueueError};
 
 /// Network side of one handoff pool, shared by every endpoint it feeds.
 ///
@@ -31,7 +31,7 @@ use crate::{ETHERNET_HEADER_LEN, FrameLengthError, RxEnqueueError};
 /// The held count is physical: one DMA slot per adopted packet, whichever
 /// endpoint or socket retains it.
 pub struct ExternalRxOrigin<const FRAME_CAPACITY: usize, const SLOTS: usize> {
-    this: *const Self,
+    this: &'static Self,
     pool: &'static ExternalRxHandoffPool<FRAME_CAPACITY, SLOTS>,
     packets: ExternalPacketOrigin<SLOTS>,
     cap: usize,
@@ -41,14 +41,6 @@ pub struct ExternalRxOrigin<const FRAME_CAPACITY: usize, const SLOTS: usize> {
     copied_over_cap: AtomicU32,
     copied_unfit: AtomicU32,
     dropped: AtomicU32,
-}
-
-// SAFETY: `this` is only compared with `self` and passed to the release
-// callback, which is callable from any core. Every mutable field is atomic,
-// and the Xarxa origin and handoff pool are `Sync`.
-unsafe impl<const FRAME_CAPACITY: usize, const SLOTS: usize> Sync
-    for ExternalRxOrigin<FRAME_CAPACITY, SLOTS>
-{
 }
 
 /// Snapshot of one origin's zero-copy RX accounting.
@@ -132,7 +124,6 @@ impl<const FRAME_CAPACITY: usize, const SLOTS: usize> ExternalRxOrigin<FRAME_CAP
             reserve < SLOTS,
             "the zero-copy cap must leave at least one slot"
         );
-        let this: *const Self = this;
         Self {
             this,
             pool,
@@ -143,7 +134,7 @@ impl<const FRAME_CAPACITY: usize, const SLOTS: usize> ExternalRxOrigin<FRAME_CAP
             // slot, which `release_adopted` publishes last.
             packets: unsafe {
                 ExternalPacketOrigin::new(
-                    this.cast(),
+                    core::ptr::from_ref(this).cast(),
                     release_adopted_slot::<FRAME_CAPACITY, SLOTS>,
                 )
             },
@@ -210,20 +201,6 @@ impl<const FRAME_CAPACITY: usize, const SLOTS: usize> ExternalRxOrigin<FRAME_CAP
         let previous = self.held.fetch_sub(1, Ordering::AcqRel);
         debug_assert_ne!(previous, 0, "a zero-copy RX credit was returned twice");
     }
-
-    /// Return one adopted slot's storage to the pool, then its credit.
-    ///
-    /// # Safety
-    ///
-    /// `index` came from `into_adoption` on this origin's pool and nothing
-    /// accesses its bytes any more.
-    unsafe fn release_slot(&self, index: u8) {
-        // SAFETY: forwarded from this function's contract.
-        unsafe { self.pool.release_adopted(index) };
-        // The credit returns only after the DMA buffer did, so the network
-        // never appears to hold fewer slots than the pool has retained.
-        self.return_credit();
-    }
 }
 
 /// Xarxa packet return entry for an [`ExternalRxOrigin`].
@@ -242,7 +219,10 @@ unsafe fn release_adopted_slot<const FRAME_CAPACITY: usize, const SLOTS: usize>(
     let index = u8::try_from(slot).expect("adopted slot is a handoff index");
     // SAFETY: Xarxa calls this once per adoption after the packet stopped
     // accessing its storage; the slot came from `into_adoption`.
-    unsafe { origin.release_slot(index) };
+    unsafe { origin.pool.release_adopted(index) };
+    // The credit returns only after the DMA buffer did, so the network
+    // never appears to hold fewer slots than the pool has retained.
+    origin.return_credit();
 }
 
 /// Whether adopted storage satisfies Xarxa's packet layout.
@@ -301,18 +281,18 @@ impl<M: RawMutex, const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, M, RX_QUEUE_
             core::ptr::eq(origin.this, origin),
             "an external RX origin publishes only from its own static"
         );
-        // The admission's credit now belongs to the slot, returned by its
-        // release below or by the adopted packet's drop.
-        core::mem::forget(admission);
-        let adoption = origin.pool.claim_network(index).into_adoption();
-        if !fits_packet(&adoption) {
+        let lease = origin.pool.claim_network(index);
+        if !fits_packet(&lease.adoption_view()) {
             origin.copied_unfit.fetch_add(1, Ordering::Relaxed);
-            let result = self.copy_adopted(&adoption);
-            // SAFETY: the adoption came from this origin's pool and the copy
-            // above no longer borrows its bytes.
-            unsafe { origin.release_slot(adoption.index) };
+            let result = self.try_send(lease.frame());
+            // Return the DMA buffer before the admission returns its credit.
+            drop(lease);
             return result;
         }
+        let adoption = lease.into_adoption();
+        // The admission's credit now belongs to the adopted packet, whose
+        // drop returns the DMA buffer and then the credit.
+        core::mem::forget(admission);
         // SAFETY: `fits_packet` proved an aligned `PACKET_BUF_SIZE` view at
         // the Ethernet start inside the slot's stable, initialized allocation,
         // which the consumed network lease hands exclusively to this packet
@@ -337,15 +317,5 @@ impl<M: RawMutex, const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, M, RX_QUEUE_
                 Err(error)
             }
         }
-    }
-
-    fn copy_adopted(&self, adoption: &ExternalRxAdoption) -> Result<(), RxEnqueueError> {
-        if adoption.length > adoption.available {
-            return Err(RxEnqueueError::InvalidLength(FrameLengthError::TooLong));
-        }
-        // SAFETY: the adoption owns `available >= length` initialized bytes
-        // from `data` until its slot is released by the caller.
-        let frame = unsafe { core::slice::from_raw_parts(adoption.data.as_ptr(), adoption.length) };
-        self.try_send(frame)
     }
 }
