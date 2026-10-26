@@ -15,6 +15,15 @@ const ABI_ASSEMBLY: &[(&str, &[&str])] = &[
     ),
 ];
 
+// These source inputs are compiled by the host analysis tests, not linked
+// into firmware. Assembly inside string literals needs no exception.
+const HOST_COMPILER_FIXTURES: &[&str] = &[
+    "tools/analysis/cli/tests/fixtures/argument_summaries.rs",
+    "tools/analysis/cli/tests/fixtures/call_results.rs",
+    "tools/analysis/cli/tests/fixtures/read_uses.rs",
+    "tools/analysis/cli/tests/fixtures/unknown_stack.rs",
+];
+
 fn allowed(package: &str, file: &str, instruction: &str) -> bool {
     if instruction == "asm" {
         return package == "portable/riscv";
@@ -48,9 +57,7 @@ fn sources(directory: &Path, files: &mut Vec<PathBuf>) {
         let entry = entry.expect("source entry is readable");
         let path = entry.path();
         if path.is_dir() {
-            // Host compiler fixtures are inputs, rather than instruction owners.
-            if !["target", ".git", "tests"].contains(&entry.file_name().to_string_lossy().as_ref())
-            {
+            if !["target", ".git"].contains(&entry.file_name().to_string_lossy().as_ref()) {
                 sources(&path, files);
             }
         } else if path.extension().is_some_and(|extension| extension == "rs") {
@@ -64,6 +71,10 @@ fn violations(root: &Path) -> Vec<String> {
     sources(root, &mut files);
     let mut violations = Vec::new();
     for path in files {
+        let relative = path.strip_prefix(root).expect("source is below root");
+        if HOST_COMPILER_FIXTURES.contains(&relative.to_string_lossy().as_ref()) {
+            continue;
+        }
         let owner = path
             .ancestors()
             .skip(1)
@@ -124,6 +135,60 @@ fn a_new_crate_with_asm_is_rejected_even_below_the_unsafe_boundary() {
     )
     .expect("fixture source");
     assert_instruction_boundary(root.path());
+}
+
+#[test]
+fn inline_assembly_in_integration_tests_is_rejected() {
+    for package in [
+        "portable/unreviewed",
+        "firmware/probes/unreviewed",
+        "tools/analysis/cli",
+    ] {
+        let root = tempfile::tempdir().expect("temporary source tree");
+        let package = root.path().join(package);
+        std::fs::create_dir_all(package.join("tests")).expect("fixture directory");
+        std::fs::write(
+            package.join("Cargo.toml"),
+            "[package]\nname = 'unreviewed'\n",
+        )
+        .expect("fixture manifest");
+        let source = package.join("tests/instructions.rs");
+        std::fs::write(
+            &source,
+            "pub fn wait() { unsafe { core::arch::asm!(\"wfi\"); } }",
+        )
+        .expect("fixture source");
+        assert_eq!(
+            violations(root.path()),
+            [format!("{}: asm!", source.display())]
+        );
+    }
+}
+
+#[test]
+fn only_listed_host_compiler_fixtures_are_skipped() {
+    let root = tempfile::tempdir().expect("temporary source tree");
+    let package = root.path().join("tools/analysis/cli");
+    std::fs::create_dir_all(package.join("tests/fixtures")).expect("fixture directory");
+    std::fs::write(
+        package.join("Cargo.toml"),
+        "[package]\nname = 'unreviewed'\n",
+    )
+    .expect("fixture manifest");
+    for fixture in HOST_COMPILER_FIXTURES {
+        std::fs::write(
+            root.path().join(fixture),
+            "core::arch::global_asm!(\"ret\");",
+        )
+        .expect("fixture source");
+    }
+    assert_instruction_boundary(root.path());
+    let source = package.join("tests/fixtures/unreviewed.rs");
+    std::fs::write(&source, "core::arch::global_asm!(\"ret\");").expect("fixture source");
+    assert_eq!(
+        violations(root.path()),
+        [format!("{}: global_asm!", source.display())]
+    );
 }
 
 #[test]

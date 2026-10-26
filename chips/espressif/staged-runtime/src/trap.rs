@@ -1,6 +1,6 @@
 //! The hart's trap state as a fatal path records it: the trap frame the
 //! runtime's entries save, the trap CSRs, the vector table entry the hart
-//! last dispatched through and the stack watchpoint. Every read is inlined,
+//! last dispatched through. Every read is inlined,
 //! so a caller placed in SRAM stays there.
 
 /// The frame every trap entry saves on the hart's SRAM interrupt stack
@@ -111,19 +111,4 @@ pub fn current_hart_vector_slot(vector: usize) -> Option<u32> {
     // entries in SRAM, which the runtime installed; reading one entry calls
     // nothing.
     Some(unsafe { table.add(vector).read_volatile() })
-}
-
-/// The current trigger's control (`tdata1`) and address (`tdata2`): after
-/// the handoff, the task stack's watchpoint.
-#[cfg(target_arch = "riscv32")]
-#[inline(always)]
-pub fn stack_watchpoint() -> (usize, usize) {
-    oer_riscv::stack_watchpoint()
-}
-
-/// The current stack pointer.
-#[cfg(target_arch = "riscv32")]
-#[inline(always)]
-pub fn stack_pointer() -> usize {
-    oer_riscv::stack_pointer()
 }

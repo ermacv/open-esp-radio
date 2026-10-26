@@ -445,10 +445,11 @@ needs:
 - The staged runtime defines the image entry (`entry!`, the `Handoff` and
   `Adopted::enable_interrupts`), the sections the linker script maps
   (`placed_static!`, `retained_static!`), the panic hook and
-  exception handler symbols (`panic_hook!`, `exception_handler!`), the trap
-  CSRs (`trap`) and the linked sections (`layout`). Images and HIL agents
-  reach these through safe APIs and forbid unsafe code. The image linker
-  places strict code in SRAM from interrupt, exception and panic analysis.
+  exception handler symbols (`panic_hook!`, `exception_handler!`), trap
+  snapshots and vector-table reads (`trap`), and the linked sections (`layout`).
+  Images and HIL agents reach these through safe APIs and forbid unsafe code.
+  The image linker places strict code in SRAM from interrupt, exception and
+  panic analysis.
 - Each board implements `AdoptsBootstrapMapping` for its PSRAM.
 - The bootstrap places the packed stage two and the flash tuning reference in
   its own read-only flash sections.

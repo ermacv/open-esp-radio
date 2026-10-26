@@ -186,7 +186,7 @@ pub fn arm_store_trigger(select: usize, data2: usize) {
 
 /// Read the selected trigger's control and address without changing selection.
 #[inline(always)]
-pub fn stack_watchpoint() -> (usize, usize) {
+pub fn selected_trigger_data() -> (usize, usize) {
     let (control, address);
     // SAFETY: CSR reads only; the output registers carry no memory authority.
     unsafe {

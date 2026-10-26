@@ -41,7 +41,7 @@ mod critical;
 #[cfg(target_arch = "riscv32")]
 #[allow(
     unsafe_code,
-    reason = "exported default trap handlers and the abort loop"
+    reason = "the default trap handlers export linker-visible symbols"
 )]
 mod default_handlers;
 pub mod diagnostics;
@@ -72,7 +72,7 @@ pub mod placement;
     reason = "per-hart interrupt stacks and the trap entries switching onto them"
 )]
 pub mod stacks;
-#[allow(unsafe_code, reason = "trap entry and machine CSRs")]
+#[allow(unsafe_code, reason = "volatile reads of the installed vector table")]
 pub mod trap;
 
 #[doc(hidden)]

@@ -90,6 +90,7 @@ oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", feature
 oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn", optional = true }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "0c018c843303508300cbb15fb3be0ee7d58862ab", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
 oer-memory = { path = "../../../portable/memory" }
+oer-riscv = { path = "../../../portable/riscv" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 embassy-sync = { workspace = true, optional = true }
