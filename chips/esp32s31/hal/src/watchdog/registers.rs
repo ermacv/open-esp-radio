@@ -1,5 +1,5 @@
 //! The watchdog owners over the root's parts: the main watchdogs of both
-//! timer groups (MWDT0, MWDT1), timer group 1's clock and reset word, the
+//! timer groups (MWDT0, MWDT1), both groups' clock and reset words, the
 //! RTC watchdog (RWDT) and the super watchdog (SWD).
 //!
 //! Each owner implements the `oer-espressif-watchdog` ports with one
@@ -32,7 +32,7 @@ use oer_espressif_watchdog::{
 use oer_mmio::{Bits, Fixed, Placement};
 
 use oer_esp32s31_pac::{
-    hp_sys_clkrst::HpSysClkrstTimg1,
+    hp_sys_clkrst::{HpSysClkrstTimg0, HpSysClkrstTimg1},
     instances,
     rtc_wdt::{LpWdt, LpWdtSwd},
     timg::{Timg0Wdt, Timg1Wdt},
@@ -42,9 +42,26 @@ use oer_esp32s31_pac::{
 #[path = "register_tests.rs"]
 mod tests;
 
-/// Timer group 0's main watchdog.
+/// Timer group 0's main watchdog and its group's clock and reset word.
+/// The clock owner stays inside the stopped watchdog; no timer consumer
+/// can reset the group and restore the watchdog's flash-boot enable.
+///
+/// ```compile_fail,E0616
+/// # use oer_esp32s31_hal::watchdog::Mwdt0Registers;
+/// fn reset(mut watchdog: Mwdt0Registers) {
+///     watchdog.clock.modify_timergrp0_ctrl0(|w| {
+///         w.set_reg_timergrp0_rst_en(true);
+///     });
+/// }
+/// ```
 #[must_use = "dropping a register owner permanently loses its register authority"]
-pub struct Mwdt0Registers<P: Placement = Fixed<{ instances::timg0::BASE }>>(Timg0Wdt<P>);
+pub struct Mwdt0Registers<
+    P: Placement = Fixed<{ instances::timg0::BASE }>,
+    Q: Placement = Fixed<{ instances::hp_sys_clkrst::BASE }>,
+> {
+    wdt: Timg0Wdt<P>,
+    clock: HpSysClkrstTimg0<Q>,
+}
 
 /// Timer group 1's main watchdog and its group's clock and reset word.
 #[must_use = "dropping a register owner permanently loses its register authority"]
@@ -69,9 +86,24 @@ const XTAL_SOURCE: Bits<2> = Bits::constant::<0>();
 /// SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:219-222`: any store feeds, the LL writes one.
 const FEED: u32 = 1;
 
-impl<P: Placement> Mwdt0Registers<P> {
-    pub(super) fn new(wdt: Timg0Wdt<P>) -> Self {
-        Self(wdt)
+impl<P: Placement, Q: Placement> Mwdt0Registers<P, Q> {
+    pub(super) fn new(wdt: Timg0Wdt<P>, clock: HpSysClkrstTimg0<Q>) -> Self {
+        Self { wdt, clock }
+    }
+
+    /// Select XTAL and enable T0 at runtime startup without touching reset,
+    /// APB, T1 or watchdog clocks. The group word remains owned here.
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL in the register model.
+    pub(super) fn start_timer0_clock(&mut self) {
+        self.clock.modify_timergrp0_ctrl0(|w| {
+            w.set_reg_timergrp0_t0_src_sel(Bits::constant::<
+                {
+                    oer_esp32s31_pac::hp_sys_clkrst::timergrp0_ctrl0::RegTimergrp0T0SrcSel::Xtal
+                        .bits()
+                },
+            >())
+            .set_reg_timergrp0_t0_clk_en(true);
+        });
     }
 }
 
@@ -173,7 +205,7 @@ macro_rules! main_watchdog_enable {
     };
 }
 
-main_watchdog_enable!([P: Placement] Mwdt0Registers<P>, 0);
+main_watchdog_enable!([P: Placement, Q: Placement] Mwdt0Registers<P, Q>, wdt);
 main_watchdog_enable!([P: Placement, Q: Placement] Mwdt1Registers<P, Q>, wdt);
 
 impl<P: Placement, Q: Placement> MainWatchdogRegisters for Mwdt1Registers<P, Q> {
@@ -270,11 +302,14 @@ impl<P: Placement> SuperWatchdogRegisters for SwdRegisters<P> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> Mwdt0Registers<oer_mmio::Host<'a>> {
-    /// Timer group 0's watchdog words over host memory from the group's
-    /// base, of at least its instance's size.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-        Timg0Wdt::host(words).map(Self)
+impl<'a, 'b> Mwdt0Registers<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
+    /// Timer group 0's watchdog and clock words over host memory from each
+    /// instance's base.
+    pub fn host(wdt: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+        Ok(Self {
+            wdt: Timg0Wdt::host(wdt)?,
+            clock: HpSysClkrstTimg0::host(clock)?,
+        })
     }
 }
 

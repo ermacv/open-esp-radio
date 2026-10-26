@@ -4,8 +4,6 @@ use oer_mmio::{Bits, Index};
 
 pub(super) struct Radio {
     pub tick: pac::modem_lpcon::ModemLpconPhyTick,
-    pub system_clock: pac::hp_sys_clkrst::HpSysClkrstSystimer,
-    pub system_counter: pac::systimer::SystimerCounter,
     pub local_time: pac::modem_pwr::WifiMacLocalTime,
     pub status: pac::modem_pwr::WifiMacTsfStatus,
     pub zb: pac::ownership::Ieee802154Peripherals,
@@ -349,36 +347,42 @@ pub(super) fn wifi_timers(s: &mut Session<'_>) {
     prepare(s);
     // SOURCE: HAL platform::system_timer::open_clock. The ROM leaves these
     // bus/function gates closed; bootstrap normally opens them before MAC use.
-    s.radio.system_clock.modify_systimer_ctrl0(|w| {
+    s.generic.systimer_clock.modify_systimer_ctrl0(|w| {
         w.set_reg_systimer_apb_clk_en(true);
     });
-    s.radio.system_clock.modify_systimer_ctrl0(|w| {
+    s.generic.systimer_clock.modify_systimer_ctrl0(|w| {
         w.set_reg_systimer_rst_en(true);
     });
-    s.radio.system_clock.modify_systimer_ctrl0(|w| {
+    s.generic.systimer_clock.modify_systimer_ctrl0(|w| {
         w.set_reg_systimer_rst_en(false);
     });
-    s.radio.system_clock.modify_systimer_ctrl0(|w| {
+    s.generic.systimer_clock.modify_systimer_ctrl0(|w| {
         w.set_reg_systimer_clk_en(true);
     });
-    s.radio.system_counter.trigger_unit0_op_timer_unit0_update();
+    s.generic
+        .systimer
+        .systimer_counter
+        .trigger_unit0_op_timer_unit0_update();
     let start = oer_riscv::cycle32();
     while !s
-        .radio
-        .system_counter
+        .generic
+        .systimer
+        .systimer_counter
         .read_unit0_op()
         .timer_unit0_value_valid()
         && oer_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT
     {}
     emit(
         0x8300,
-        s.radio
-            .system_counter
+        s.generic
+            .systimer
+            .systimer_counter
             .read_unit0_value_lo()
             .timer_unit0_value_lo(),
         u32::from(
-            s.radio
-                .system_counter
+            s.generic
+                .systimer
+                .systimer_counter
                 .read_unit0_op()
                 .timer_unit0_value_valid(),
         ),

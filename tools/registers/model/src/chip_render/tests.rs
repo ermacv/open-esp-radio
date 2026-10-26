@@ -160,6 +160,44 @@ fn only_the_irreducible_policy_items_render() {
 }
 
 #[test]
+fn a_fixed_hardware_updated_configuration_preserves_undeclared_bits_and_pulses_its_trigger() {
+    let rust = rendered_with(&[
+        (
+            "policy.toml",
+            "chip = \"testchip\"",
+            "chip = \"testchip\"\n\n[[fixed-register-images]]\nname = \"configure_hw\"\nregister = \"RADIO0.RAD_HW\"\nvalue = 5\nsources = [\"SRC_DRIVER\"]",
+        ),
+        (
+            "types/radio.toml",
+            "[[registers]]\nname = \"RAD_DESC\"",
+            "[[registers.fields]]\nname = \"DIVIDER_RESET\"\nbits = \"2\"\nclass = \"write-trigger\"\n\n[[registers]]\nname = \"RAD_DESC\"",
+        ),
+    ]);
+    let result = run(
+        &rust,
+        r#"
+        fn main() {
+        for fill in [0, u32::MAX] {
+            let mut memory = [fill; 128];
+            {
+                let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+                task.configure_hw();
+                let value = task.read_hw();
+                assert!(value.cfg());
+                assert!(!value.stat());
+            }
+            // The synthetic trigger is asserted even from a zero image;
+            // hardware-updated STAT is replaced and other bits survive.
+            assert_eq!(memory[radio::hw::OFFSET / 4], (fill & !2) | 5);
+        }
+        println!("configured");
+        }
+    "#,
+    );
+    assert_eq!(result.trim(), "configured");
+}
+
+#[test]
 fn names_lose_the_block_prefix() {
     let (model, _) = load(&fixture());
     let radio = model.types().get("RADIO").expect("the RADIO type");

@@ -52,7 +52,7 @@ description = "The USB Serial/JTAG console: its data FIFO, interrupts and pads, 
 [[partitions.parts]]
 name = "UsbSerialJtagTask"
 instance = "USB_DEVICE"
-registers = ["EP1", "EP1_CONF", "INT_ST", "INT_ENA"]
+registers = ["EP1", "EP1_CONF", "INT_RAW", "INT_ST", "INT_ENA"]
 
 [[partitions.parts]]
 name = "UsbSerialJtagIrq"
@@ -145,7 +145,7 @@ registers = ["LP_AONCLKRST_HPCORE%s_RESET_CAUSE"]
 [[partitions]]
 name = "WatchdogPeripherals"
 member = "watchdog"
-description = "The main watchdogs of both timer groups, timer group 1's clock and reset, and the RTC and super watchdogs, owned by the watchdog owners."
+description = "The main watchdogs and clock/reset words of both timer groups, and the RTC and super watchdogs, owned by the watchdog owners. Group reset cannot escape the watchdog owner's lifetime."
 
 [[partitions.parts]]
 name = "Timg0Wdt"
@@ -156,6 +156,11 @@ registers = ["WDTCONFIG0", "WDTCONFIG1", "WDTCONFIG2", "WDTFEED", "WDTWPROTECT"]
 name = "Timg1Wdt"
 instance = "TIMG1"
 registers = ["WDTCONFIG0", "WDTCONFIG1", "WDTCONFIG2", "WDTFEED", "WDTWPROTECT"]
+
+[[partitions.parts]]
+name = "HpSysClkrstTimg0"
+instance = "HP_SYS_CLKRST"
+registers = ["TIMERGRP0_CTRL0"]
 
 [[partitions.parts]]
 name = "HpSysClkrstTimg1"
@@ -173,6 +178,26 @@ instance = "LP_WDT"
 registers = ["SWD_CONFIG", "SWD_WPROTECT"]
 
 [[partitions]]
+name = "TimerGroup0Peripherals"
+member = "timer_group0"
+description = "Timer group zero's T0 counter and alarm, and the group's interrupt bank for the PHY timer consumer. Each ENA/RAW/ST word has one bank owner; only T0's CLR strobe is claimed. WatchdogPeripherals retains the group clock/reset word."
+
+[[partitions.parts]]
+name = "Timg0Timer0"
+instance = "TIMG0"
+registers = ["T0CONFIG", "T0LO", "T0HI", "T0UPDATE", "T0ALARMLO", "T0ALARMHI", "T0LOADLO", "T0LOADHI", "T0LOAD"]
+
+[[partitions.parts]]
+name = "Timg0InterruptBank"
+instance = "TIMG0"
+registers = ["INT_ENA_TIMERS", "INT_RAW_TIMERS", "INT_ST_TIMERS"]
+triggers = [{ register = "INT_CLR_TIMERS", fields = ["T0_INT_CLR"] }]
+interrupt = "TIMERGRP0_T0"
+irq-side = true
+description = "The group's whole interrupt enable and status words and T0's acknowledgement strobe. T0 is the only interrupt consumer; the watchdog uses reset actions, and T1/WDT CLR strobes remain unclaimed."
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW7_S31_TIMG0_20261026"]
+
+[[partitions]]
 name = "SystemTimerPeripherals"
 member = "system_timer"
 description = "The system timer: the comparators the time driver programs and the shared counter latch every context reads."
@@ -180,7 +205,7 @@ description = "The system timer: the comparators the time driver programs and th
 [[partitions.parts]]
 name = "Systimer"
 instance = "SYSTIMER"
-registers = ["CONF", "TARGET%s_HI", "TARGET%s_LO", "TARGET%s_CONF", "COMP%s_LOAD", "INT_ENA"]
+registers = ["CONF", "TARGET%s_HI", "TARGET%s_LO", "TARGET%s_CONF", "COMP%s_LOAD", "INT_ENA", "INT_RAW", "INT_ST"]
 
 [[partitions.parts]]
 name = "SystimerCounter"
@@ -1252,17 +1277,18 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "USB_DEVICE"
-registers = ["INT_RAW", "TEST", "JFIFO_ST", "FRAM_NUM", "IN_EP0_ST", "IN_EP1_ST", "IN_EP2_ST", "IN_EP3_ST", "OUT_EP0_ST", "OUT_EP1_ST", "OUT_EP2_ST", "MISC_CONF", "MEM_CONF", "CHIP_RST", "SET_LINE_CODE_W0", "SET_LINE_CODE_W1", "GET_LINE_CODE_W0", "GET_LINE_CODE_W1", "CONFIG_UPDATE", "SER_AFIFO_CONFIG", "BUS_RESET_ST", "SERIAL_EP_TIMEOUT0", "SERIAL_EP_TIMEOUT1", "DATE"]
+registers = ["TEST", "JFIFO_ST", "FRAM_NUM", "IN_EP0_ST", "IN_EP1_ST", "IN_EP2_ST", "IN_EP3_ST", "OUT_EP0_ST", "OUT_EP1_ST", "OUT_EP2_ST", "MISC_CONF", "MEM_CONF", "CHIP_RST", "SET_LINE_CODE_W0", "SET_LINE_CODE_W1", "GET_LINE_CODE_W0", "GET_LINE_CODE_W1", "CONFIG_UPDATE", "SER_AFIFO_CONFIG", "BUS_RESET_ST", "SERIAL_EP_TIMEOUT0", "SERIAL_EP_TIMEOUT1", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "SYSTIMER"
-registers = ["UNIT1_OP", "UNIT0_LOAD_HI", "UNIT0_LOAD_LO", "UNIT1_LOAD_HI", "UNIT1_LOAD_LO", "UNIT1_VALUE_HI", "UNIT1_VALUE_LO", "UNIT0_LOAD", "UNIT1_LOAD", "INT_RAW", "INT_ST", "REAL_TARGET0_LO", "REAL_TARGET0_HI", "REAL_TARGET1_LO", "REAL_TARGET1_HI", "REAL_TARGET2_LO", "REAL_TARGET2_HI", "DATE"]
+registers = ["UNIT1_OP", "UNIT0_LOAD_HI", "UNIT0_LOAD_LO", "UNIT1_LOAD_HI", "UNIT1_LOAD_LO", "UNIT1_VALUE_HI", "UNIT1_VALUE_LO", "UNIT0_LOAD", "UNIT1_LOAD", "REAL_TARGET0_LO", "REAL_TARGET0_HI", "REAL_TARGET1_LO", "REAL_TARGET1_HI", "REAL_TARGET2_LO", "REAL_TARGET2_HI", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "TIMG0"
-registers = ["T0CONFIG", "T0LO", "T0HI", "T0UPDATE", "T0ALARMLO", "T0ALARMHI", "T0LOADLO", "T0LOADHI", "T0LOAD", "T1CONFIG", "T1LO", "T1HI", "T1UPDATE", "T1ALARMLO", "T1ALARMHI", "T1LOADLO", "T1LOADHI", "T1LOAD", "WDTCONFIG3", "WDTCONFIG4", "WDTCONFIG5", "RTCCALICFG", "RTCCALICFG1", "INT_ENA_TIMERS", "INT_RAW_TIMERS", "INT_ST_TIMERS", "INT_CLR_TIMERS", "RTCCALICFG2", "NTIMERS_DATE", "REGCLK"]
+registers = ["T1CONFIG", "T1LO", "T1HI", "T1UPDATE", "T1ALARMLO", "T1ALARMHI", "T1LOADLO", "T1LOADHI", "T1LOAD", "WDTCONFIG3", "WDTCONFIG4", "WDTCONFIG5", "RTCCALICFG", "RTCCALICFG1", "RTCCALICFG2", "NTIMERS_DATE", "REGCLK"]
+triggers = [{ register = "INT_CLR_TIMERS", fields = ["T1_INT_CLR", "WDT_INT_CLR"] }]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
@@ -1287,7 +1313,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "HP_SYS_CLKRST"
-registers = ["CPU_WFI_DELAY_CTRL0", "TRACE_CTRL0", "TCM_CTRL0", "TCMMON_CTRL0", "PSRAMMON_CTRL0", "ROM_CTRL0", "CACHE_CTRL0", "ICM_CTRL0", "MISC_CTRL0", "BUSMON_CTRL0", "REMOVE_TMP0", "PVT0_CTRL0", "PVT0_PERI_CTRL0", "CRYPTO_CTRL0", "KEY_MANAGER_CTRL0", "DPA_CTRL0", "GPSPI2_CTRL0", "GPSPI3_CTRL0", "GDMA_CTRL0", "AXI_PDMA_CTRL0", "AHB_PDMA_CTRL0", "REGDMA_CTRL0", "UHCI_CTRL0", "UART1_CTRL0", "UART2_CTRL0", "UART3_CTRL0", "PARLIO_CTRL0", "PARLIO_RX_CTRL0", "PARLIO_TX_CTRL0", "BITSRAMBLER_CTRL0", "ETM_CTRL0", "USB_OTGHS_CTRL0", "DMA2D_CTRL0", "PPA_CTRL0", "JPEG_CTRL0", "RMT_CTRL0", "SDIO_HOST_CTRL0", "SDIO_HOST_FUNC_CTRL0", "EMAC_CTRL0", "DSI_CTRL0", "DSI_PHY_CTRL0", "DSI_DPI_CTRL0", "MSPI_PAD_CTRL0", "I2C0_CTRL0", "I2C1_CTRL0", "I2S0_CTRL0", "I2S0_RX_CTRL0", "I2S0_RX_DIV_CTRL0", "I2S0_TX_CTRL0", "I2S0_TX_DIV_CTRL0", "I2S1_CTRL0", "I2S1_RX_CTRL0", "I2S1_RX_DIV_CTRL0", "I2S1_TX_CTRL0", "I2S1_TX_DIV_CTRL0", "TWAI0_CTRL0", "TWAI1_CTRL0", "TIMERGRP0_CTRL0", "TIMERGRP0_TGRT_CTRL0", "MCPWM0_CTRL0", "MCPWM1_CTRL0", "MCPWM2_CTRL0", "MCPWM3_CTRL0", "INTRMTX_CTRL0", "PCNT_CTRL0", "USB_DEVICE_CTRL0", "LEDC_CTRL0", "LCDCAM_CTRL0", "LCDCAM_LCD_CTRL0", "LCDCAM_LCDCAM_CTRL0", "LCDCAM_CAM_CTRL0", "IOMUX_CTRL0", "HPWDT_CORE0_RST_CTRL0", "HPWDT_CORE1_RST_CTRL0", "CPU_SRC_FREQ0", "CPU_CLK_STATUS0", "HPCORE_WDT_RESET_SOURCE0", "REF_240M_CTRL0", "REF_120M_CTRL0", "REF_80M_CTRL0", "REF_60M_CTRL0", "REF_20M_CTRL0", "TM_CLK_CTRL0", "DBG0_CLK_CTRL0", "DBG1_CLK_CTRL0", "DBG2_CLK_CTRL0", "LP_CLK_CTRL0", "AHB_ASRC_CTRL0", "CORDIC_CTRL0", "ZERO_DET_CTRL0", "CORDIC_CTRL1", "CLK_PWR_DECREASE", "CNNT_IOMUX_CTRL0", "HP_I2CMST_CTRL0", "AXI_PERF_MON_CTRL0", "CNNT_SYSREG_CTRL0", "HP_ALIVE_SYSREG_CTRL0", "CLK_EN0", "DATE"]
+registers = ["CPU_WFI_DELAY_CTRL0", "TRACE_CTRL0", "TCM_CTRL0", "TCMMON_CTRL0", "PSRAMMON_CTRL0", "ROM_CTRL0", "CACHE_CTRL0", "ICM_CTRL0", "MISC_CTRL0", "BUSMON_CTRL0", "REMOVE_TMP0", "PVT0_CTRL0", "PVT0_PERI_CTRL0", "CRYPTO_CTRL0", "KEY_MANAGER_CTRL0", "DPA_CTRL0", "GPSPI2_CTRL0", "GPSPI3_CTRL0", "GDMA_CTRL0", "AXI_PDMA_CTRL0", "AHB_PDMA_CTRL0", "REGDMA_CTRL0", "UHCI_CTRL0", "UART1_CTRL0", "UART2_CTRL0", "UART3_CTRL0", "PARLIO_CTRL0", "PARLIO_RX_CTRL0", "PARLIO_TX_CTRL0", "BITSRAMBLER_CTRL0", "ETM_CTRL0", "USB_OTGHS_CTRL0", "DMA2D_CTRL0", "PPA_CTRL0", "JPEG_CTRL0", "RMT_CTRL0", "SDIO_HOST_CTRL0", "SDIO_HOST_FUNC_CTRL0", "EMAC_CTRL0", "DSI_CTRL0", "DSI_PHY_CTRL0", "DSI_DPI_CTRL0", "MSPI_PAD_CTRL0", "I2C0_CTRL0", "I2C1_CTRL0", "I2S0_CTRL0", "I2S0_RX_CTRL0", "I2S0_RX_DIV_CTRL0", "I2S0_TX_CTRL0", "I2S0_TX_DIV_CTRL0", "I2S1_CTRL0", "I2S1_RX_CTRL0", "I2S1_RX_DIV_CTRL0", "I2S1_TX_CTRL0", "I2S1_TX_DIV_CTRL0", "TWAI0_CTRL0", "TWAI1_CTRL0", "TIMERGRP0_TGRT_CTRL0", "MCPWM0_CTRL0", "MCPWM1_CTRL0", "MCPWM2_CTRL0", "MCPWM3_CTRL0", "INTRMTX_CTRL0", "PCNT_CTRL0", "USB_DEVICE_CTRL0", "LEDC_CTRL0", "LCDCAM_CTRL0", "LCDCAM_LCD_CTRL0", "LCDCAM_LCDCAM_CTRL0", "LCDCAM_CAM_CTRL0", "IOMUX_CTRL0", "HPWDT_CORE0_RST_CTRL0", "HPWDT_CORE1_RST_CTRL0", "CPU_SRC_FREQ0", "CPU_CLK_STATUS0", "HPCORE_WDT_RESET_SOURCE0", "REF_240M_CTRL0", "REF_120M_CTRL0", "REF_80M_CTRL0", "REF_60M_CTRL0", "REF_20M_CTRL0", "TM_CLK_CTRL0", "DBG0_CLK_CTRL0", "DBG1_CLK_CTRL0", "DBG2_CLK_CTRL0", "LP_CLK_CTRL0", "AHB_ASRC_CTRL0", "CORDIC_CTRL0", "ZERO_DET_CTRL0", "CORDIC_CTRL1", "CLK_PWR_DECREASE", "CNNT_IOMUX_CTRL0", "HP_I2CMST_CTRL0", "AXI_PERF_MON_CTRL0", "CNNT_SYSREG_CTRL0", "HP_ALIVE_SYSREG_CTRL0", "CLK_EN0", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
@@ -2776,6 +2802,30 @@ sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
 name = "clear_mac_he_mpdu_length_link"
 register = "WIFI_MAC.HE_SCRATCH%s"
 sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
+
+[[fixed-register-images]]
+name = "configure_timg0_timer0_stopped"
+register = "TIMG0.T0CONFIG"
+value = 0x40051000
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[fixed-register-images]]
+name = "configure_timg0_timer0_counting"
+register = "TIMG0.T0CONFIG"
+value = 0xc0051000
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[fixed-register-images]]
+name = "configure_timg0_timer0_armed"
+register = "TIMG0.T0CONFIG"
+value = 0xc0051400
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[fixed-register-images]]
+name = "capture_timg0_timer0"
+register = "TIMG0.T0UPDATE"
+value = 0x80000000
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
 
 [[fixed-register-images]]
 name = "mac_interrupt_clear"

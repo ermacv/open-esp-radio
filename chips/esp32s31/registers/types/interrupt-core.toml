@@ -19,19 +19,19 @@ naming = "vendor"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
 
 [review.entity."INT_STATUS_REG_0.INT_STATUS_0"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX", "HW7_S31_MATRIX_20261026"]
 
 [review.entity."INT_STATUS_REG_1"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
 
 [review.entity."INT_STATUS_REG_1.INT_STATUS_1"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX", "HW7_S31_MATRIX_20261026"]
 
 [review.entity."INT_STATUS_REG_2"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
 
 [review.entity."INT_STATUS_REG_2.INT_STATUS_2"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX", "HW7_S31_MATRIX_20261026"]
 
 [review.entity."INT_STATUS_REG_3"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
@@ -64,22 +64,22 @@ name = "MAP"
 values = [{ name = "DISCONNECTED", value = 0 }]
 bits = "5:0"
 class = "plain"
-description = "Configures the interrupt source into one CPU interrupt."
+description = "Selects the source CPU line. With FROM_CPU2 on hart0, MAP=0 suppresses line16 and local IP0 pending/delivery while the matrix source status remains active; binding/unparking to line16 delivers the retained level. This observation does not qualify all sources or harts. SOURCE: HW7_S31_MATRIX_20261026."
 
 [[registers.fields]]
 name = "PASS_LEVEL"
 bits = "9:8"
 class = "plain"
-description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level. SOURCE: HW7_S31_MATRIX_20261026 observes selected source routes inheriting zero after ROM RAM loading. On hart0 FROM_CPU2 with NMBITS=0, writes 0/1/2/3 read back and each delivers to the machine-mode line. This does not qualify S-mode or other sources."
 
 [review.entity."ROUTE%s"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
 
 [review.entity."ROUTE%s.MAP"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX", "HW7_S31_MATRIX_20261026"]
 
 [review.entity."ROUTE%s.PASS_LEVEL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H", "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX", "HW7_S31_MATRIX_20261026"]
 
 [[registers]]
 name = "SIG_IDX_ASSERT_IN_SEC"
@@ -98,7 +98,7 @@ reset = { value = 0x0 }
 name = "INT_STATUS_0"
 bits = "31:0"
 class = "read-only"
-description = "Represents the status of the interrupt sources within interrupt-index-range 0 ~ 31. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered Bit k is set while source 0 + k raises its interrupt."
+description = "Source status for indices 0 through 31. Tested hart0 USB2 and TIMG0 T0/source25 status is active-high. FROM_CPU2 status remains high while its route is parked; status is not a CPU-delivery indication. Other lanes and hart1 are not qualified by this observation. SOURCE: HW7_S31_MATRIX_20261026."
 
 [[registers]]
 name = "INT_STATUS_REG_1"
@@ -110,7 +110,7 @@ reset = { value = 0x0 }
 name = "INT_STATUS_1"
 bits = "31:0"
 class = "read-only"
-description = "Represents the status of the interrupt sources within interrupt-index-range 32 ~ 63. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered Bit k is set while source 32 + k raises its interrupt."
+description = "Source status for indices 32 through 63. Tested hart0 SYSTIMER target0/1 sources33/34 status is active-high. FROM_CPU2 status remains high while its route is parked; status is not a CPU-delivery indication. Other lanes and hart1 are not qualified by this observation. SOURCE: HW7_S31_MATRIX_20261026."
 
 [[registers]]
 name = "INT_STATUS_REG_2"
@@ -122,7 +122,7 @@ reset = { value = 0x0 }
 name = "INT_STATUS_2"
 bits = "31:0"
 class = "read-only"
-description = "Represents the status of the interrupt sources within interrupt-index-range 64 ~ 95. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered Bit k is set while source 64 + k raises its interrupt."
+description = "Source status for indices 64 through 95. Tested hart0 FROM_CPU2/source67 status is active-high. FROM_CPU2 status remains high while its route is parked; status is not a CPU-delivery indication. Other lanes and hart1 are not qualified by this observation. SOURCE: HW7_S31_MATRIX_20261026."
 
 [[registers]]
 name = "INT_STATUS_REG_3"

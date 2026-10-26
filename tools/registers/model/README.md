@@ -745,6 +745,11 @@ What a transaction may reach follows the field class and the word:
 | read-modify-write | `plain` | reads without a side effect; no command register, data port, `write-only`, `write-one-to-clear`, `self-clearing`, `set-only` or `hardware-written` field |
 | fixed image or sequence step | sets bits of `plain`, `write-only`, `write-trigger`, `set-only`, `self-clearing`, `hardware-written`; with `whole-word` also undeclared bits and `read-only` fields | no FIFO or command register; at least one writable field even for zero or `whole-word`; W1C only by a paired image with a proof, never a sequence step |
 
+A non-whole-word fixed image of a readable hardware-updated register without a
+generic modify accessor renders a named configuration operation. It replaces
+the declared writable lanes and preserves undeclared and read-only bits. It
+does not grant arbitrary writes to hardware-updated fields.
+
 The shapes and inputs:
 
 - a `full-register-write` names its word's one 32-bit field and takes a

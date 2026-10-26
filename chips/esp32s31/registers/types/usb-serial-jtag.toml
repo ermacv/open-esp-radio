@@ -143,7 +143,7 @@ description = "The raw interrupt bit turns to high level when Serial Port OUT En
 name = "SERIAL_IN_EMPTY_INT_RAW"
 bits = "3"
 class = "write-one-to-clear"
-description = "The raw interrupt bit turns to high level when Serial Port IN Endpoint is empty."
+description = "Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026."
 
 [[registers.fields]]
 name = "PID_ERR_INT_RAW"
@@ -1168,3 +1168,6 @@ description = "register version."
 status = "INT_ST"
 clear = "INT_CLR"
 sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
+
+[review.entity."INT_RAW.SERIAL_IN_EMPTY_INT_RAW"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "HW7_S31_USB_20261026"]

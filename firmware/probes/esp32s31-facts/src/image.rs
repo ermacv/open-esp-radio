@@ -13,6 +13,7 @@ use oer_esp32s31_pac as pac;
 use oer_mmio::{Bits, Index};
 
 mod ble;
+mod generic;
 mod radio_local;
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
@@ -132,6 +133,10 @@ extern "C" fn facts_irq() {
     let cycle = oer_riscv::cycle32();
     IRQ_CYCLE.store(cycle, Ordering::Relaxed);
     IRQ_PC.store(oer_riscv::read_mepc() as u32, Ordering::Relaxed);
+    if generic::interrupt() {
+        IRQ_COUNT.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
     let source = SOURCE.load(Ordering::Acquire);
     if !source.is_null() {
         // SAFETY: published from main's live source_owner; this
@@ -168,6 +173,7 @@ struct Session<'a> {
     reset_cause: pac::ownership::ResetCausePeripherals,
     ble: ble::Ble,
     radio: radio_local::Radio,
+    generic: generic::Hardware,
 }
 struct Probe {
     id: u32,
@@ -191,6 +197,26 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 81,
         run: ble::two_wraps,
+    },
+    Probe {
+        id: 40,
+        run: generic::matrix,
+    },
+    Probe {
+        id: 41,
+        run: generic::usb,
+    },
+    Probe {
+        id: 42,
+        run: generic::systimer0,
+    },
+    Probe {
+        id: 43,
+        run: generic::systimer1,
+    },
+    Probe {
+        id: 44,
+        run: generic::timer0,
     },
     Probe {
         id: 32,
@@ -299,8 +325,6 @@ extern "C" fn facts_main() -> ! {
         reset_cause: p.reset_cause,
         radio: radio_local::Radio {
             tick: p.radio_phy.modem_lpcon_phy_tick,
-            system_clock: p.soc.hp_sys_clkrst_systimer,
-            system_counter: p.system_timer.systimer_counter,
             local_time: p.mac_local_time.wifi_mac_local_time,
             status: p.wifi_mac.wifi_mac_tsf_status,
             zb: p.ieee802154,
@@ -309,6 +333,15 @@ extern "C" fn facts_main() -> ! {
             load: p.wifi_mac.wifi_mac_tsf_load,
             rtc: p.wifi_mac.wifi_mac_rtc_timer_update,
             aux: p.wifi_mac.wifi_mac_aux_tsf_control,
+        },
+        generic: generic::Hardware {
+            usb: p.usb_serial_jtag.usb_serial_jtag_task,
+            usb_irq: p.usb_serial_jtag.usb_serial_jtag_irq,
+            systimer: p.system_timer,
+            systimer_clock: p.soc.hp_sys_clkrst_systimer,
+            timer: p.timer_group0,
+            watchdog: p.watchdog.timg0_wdt,
+            watchdog_clock: p.watchdog.hp_sys_clkrst_timg0,
         },
         ble: ble::Ble {
             bank: p.bluetooth_interrupts.bluetooth_interrupt_bank,

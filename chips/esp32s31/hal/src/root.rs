@@ -230,6 +230,7 @@ impl Root {
             analog_bus,
             debug,
             chip_clocks,
+            timer_group0: _,
         } = self.partitions;
         #[cfg(target_arch = "riscv32")]
         ClockRegisters::new(

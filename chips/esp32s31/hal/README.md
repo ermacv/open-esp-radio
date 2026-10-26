@@ -9,6 +9,13 @@ The reset root's `into_bootstrap` and `into_runtime` return `Result` with
 monotonic latch, or a refused stage-two core-control installation is a
 named boot failure. Image callers handle it without a panic or fallback.
 
+The watchdog owners retain both timer groups' clock/reset words. Runtime
+startup selects XTAL and enables TIMG0 T0 through a private watchdog operation
+that changes only `T0_SRC_SEL/T0_CLK_EN`; it preserves group reset, APB, T1 and
+watchdog clocks. MWDT0 keeps that authority inside `StoppedMainWatchdog`.
+The separate T0 counter and interrupt-bank parts have no group-reset access;
+the HAL exposes no T0 timer API.
+
 ## Platform clocks
 
 `power::ChipClocks` is the one owner of the platform clock words the radio
