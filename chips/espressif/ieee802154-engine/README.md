@@ -107,6 +107,22 @@ no new claim or address construction. The S31 HAL preserves its DMA placement
 proof through this transition. Silence the CPU route before detaching and use
 the existing IRQ deactivation/foundation return path before leaving PHY.
 
+Timer events are acknowledged before masking. Successful ACK reception,
+stopping an ACK wait and the hardware RX-ACK timeout stop timer0, sample and
+clear its pending event while enabled, then disable that event. Starting a
+new ACK wait enables timer0's event and clears old pending while the timer is
+stopped, before programming and starting the next deadline. This prevents a
+retained timeout from completing a later transmission with a false `NoAck`.
+The S31 HAL consumes a saved affine event snapshot for acknowledgement;
+copyable observations grant no write authority. Interrupt arming enables,
+samples, masks and acknowledges with no handler bound; deactivation stops
+the operation and both timers, samples, masks and acknowledges.
+SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`,
+[PR #689](https://github.com/ermacv/open-esp-radio/pull/689): masking hides
+timer0/timer1 status while retaining pending; a positive sample captured
+before masking still clears it under mask. These facts do not establish
+same-bit recurrence priority or the behavior of other event lanes.
+
 ## Enhanced ACK and transmit security
 
 The engine calls its environment for each received 2015 frame that requests

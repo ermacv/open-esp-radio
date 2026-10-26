@@ -1179,6 +1179,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                     | Ieee802154State::TxEnhAck
             ));
             self.timer_stop(&mut cx, Ieee802154Timer::Timer0);
+            cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
             cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
             self.rx_frame_info_update(&mut cx);
             self.transmit_done(&mut cx, true);
@@ -1666,19 +1667,20 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         E: Ieee802154Environment + ?Sized,
     {
         cx.ll.set_command(Ieee802154LlCommand::Stop);
-        let events = cx.ll.events();
         self.timer_stop(cx, Ieee802154Timer::Timer0);
+        let events = cx.ll.events();
+        cx.ll.clear_events(event_mask(&[
+            Ieee802154Event::Timer0Overflow,
+            Ieee802154Event::AckRxDone,
+            Ieee802154Event::RxSfdDone,
+            Ieee802154Event::TxAbort,
+        ]));
         cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
         if events.contains(Ieee802154Event::AckRxDone) {
             self.transmit_done(cx, true);
         } else {
             self.transmit_failed(cx, Ieee802154TxError::NoAck);
         }
-        cx.ll.clear_events(event_mask(&[
-            Ieee802154Event::AckRxDone,
-            Ieee802154Event::RxSfdDone,
-            Ieee802154Event::TxAbort,
-        ]));
     }
 
     // ---- interrupt handlers ---------------------------------------------
@@ -1703,6 +1705,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 self.set_state(Ieee802154State::RxAck);
                 // `receive_ack_timeout_timer_start`.
                 cx.ll.enable_event(Ieee802154Event::Timer0Overflow);
+                // TIMER0 is stopped by event_end_process: expose and clear
+                // only stale pending before publishing the next deadline.
+                // SOURCE: hw8-20261026-radio-local-05, PR #689.
+                cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
                 let now = cx.env.now_micros() as u32;
                 self.timer0 = Some(TimerAction::AckTimeout);
                 self.timer_fire_at(
@@ -1910,6 +1916,8 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             }
             Reason::RxAckTimeout => {
                 vendor_assert!(self.state == Ieee802154State::RxAck);
+                // event_end_process stopped TIMER0 before this sample.
+                cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
                 cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
                 self.transmit_failed(cx, Ieee802154TxError::NoAck);
                 self.needs_next_operation = true;

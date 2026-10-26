@@ -88,7 +88,12 @@ fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     assert!(!(tx.rx_ack_stop() || tx.tx_stop() || tx.rx_ack_crc_error()));
     assert_eq!(tx.tx_abort_en_25_30().get(), 0);
     // Arming acknowledged the stale sample it took.
-    assert!(interrupts.events().contains(Ieee802154Event::TxDone));
+    assert!(
+        interrupts
+            .events()
+            .observation()
+            .contains(Ieee802154Event::TxDone)
+    );
 
     // The session's end masks every event and keeps the aborts.
     task.mask_events();
@@ -111,16 +116,21 @@ fn clearing_events_acknowledges_only_the_sampled_events_the_mask_selects() {
     let mut interrupts = setup.arm(&mut task);
     // The stale acknowledgement left every event asserted, the two unnamed
     // ones included.
-    assert!(interrupts.events().classification().is_err());
+    assert!(interrupts.events().observation().classification().is_err());
 
     let selected = mask(&[Ieee802154Event::TxDone, Ieee802154Event::RxSfdDone]);
-    interrupts.clear_events(selected);
+    let snapshot = interrupts.events();
+    interrupts.clear_events(snapshot, selected);
     // Host memory keeps what the acknowledgement wrote: the two selected
     // events and no unnamed one.
-    assert_eq!(interrupts.events().classification(), Ok(selected));
+    assert_eq!(
+        interrupts.events().observation().classification(),
+        Ok(selected)
+    );
 
-    interrupts.clear_events(Ieee802154EventMask::NONE);
-    assert!(interrupts.events().is_clear());
+    let snapshot = interrupts.events();
+    interrupts.clear_events(snapshot, Ieee802154EventMask::NONE);
+    assert!(interrupts.events().observation().is_clear());
     let _setup = interrupts.deactivate(&mut task);
 }
 
@@ -428,4 +438,29 @@ fn the_recent_rssi_is_the_signed_low_byte_of_the_receive_information() {
     memory.baseband.fill(0xffff_ff9c);
     let (task, _setup) = memory.owners();
     assert_eq!(task.recent_rssi(), -100);
+}
+
+#[test]
+fn a_saved_timer_sample_is_acknowledged_after_masking_without_resampling() {
+    let mut memory = HostMemory::filled(u32::MAX);
+    let (mut task, setup) = memory.owners();
+    let mut interrupts = setup.arm(&mut task);
+    let saved = interrupts.events();
+    // Host memory stores the acknowledgement image. Make the current status
+    // zero to model the hidden read under mask, retaining the earlier sample.
+    let other = interrupts.events();
+    interrupts.clear_events(other, Ieee802154EventMask::NONE);
+    task.mask_events();
+    assert!(interrupts.events().observation().is_clear());
+
+    let timers = mask(&[
+        Ieee802154Event::Timer0Overflow,
+        Ieee802154Event::Timer1Overflow,
+    ]);
+    interrupts.clear_events(saved, timers);
+    assert_eq!(
+        interrupts.events().observation().classification(),
+        Ok(timers)
+    );
+    let _setup = interrupts.deactivate(&mut task);
 }
