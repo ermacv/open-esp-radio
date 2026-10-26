@@ -691,7 +691,8 @@ the handler's register owners through the runtime's never-returning shared
 writes a twelve-byte record through the existing safe retained-cell API, and
 reports it at the next boot. The `wifi-fault` feature selects the one record
 for staged Wi-Fi images; no image defines a second copy. Every epoch clear
-checks RAW under the delivery mask before clearing either bank. Magic and
+checks RAW under the delivery mask before clearing either bank and acknowledges
+only that nonfatal MAC sample, preserving a later fatal arrival in RAW. Magic and
 checksum validate ordinary stored values, without a power-fail atomicity
 promise. No owner is released, reconstructed or taken over. The quarantined
 epoch refuses activation.

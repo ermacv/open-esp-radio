@@ -12,15 +12,15 @@
 //! (RX success and the two RX-associated auxiliary sources) and every other
 //! source of the runtime mask (TX completion, TX timeout, BSS-color collision and the
 //! still-unidentified sources). The WDEVPWR model enables only the station
-//! TBTT, as epoch activation does. Clearing a bank, as the generated clear
-//! images do, masks it and drops every latched event.
+//! TBTT, as epoch activation does. Masked MAC closure acknowledges only its
+//! captured RAW events; WDEVPWR closure clears every latched event.
 
 use oer_esp32s31_hal::types::{
     MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
     MacPowerInterruptObservation,
 };
 
-use super::{BanksMasked, MacInterrupt, MacPowerInterrupt, sealed};
+use super::{BanksMasked, MacInterrupt, MacInterruptRawSample, MacPowerInterrupt, sealed};
 
 /// Operations a log keeps; later ones are counted in
 /// [`OperationLog::overflowed`].
@@ -30,12 +30,12 @@ pub const OPERATION_LOG_CAPACITY: usize = 32;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacInterruptOperation {
     Status,
-    FatalAssertionRaw,
+    Raw,
     MaskRxDelivery,
     UnmaskRxDelivery,
     MaskAll,
     Acknowledge(MacInterruptObservation),
-    ClearAll,
+    AcknowledgeRaw,
     Publish(MacInterruptMask),
 }
 
@@ -116,6 +116,19 @@ const fn events_without(
         events.rx_success() && !removed.rx_success(),
         events.tx_timeout() && !removed.tx_timeout(),
     )
+}
+
+/// An owned RAW snapshot of the MAC model, including masked pending events.
+pub struct MacRawSnapshot {
+    events: MacInterruptObservation,
+    fatal: Option<u32>,
+}
+
+impl sealed::Sealed for MacRawSnapshot {}
+impl MacInterruptRawSample for MacRawSnapshot {
+    fn fatal_assertion_raw(&self) -> Option<u32> {
+        self.fatal
+    }
 }
 
 /// The MAC interrupt bank of one active epoch.
@@ -229,16 +242,19 @@ impl Default for MacInterruptModel {
 impl sealed::Sealed for MacInterruptModel {}
 impl MacInterrupt for MacInterruptModel {
     type Snapshot = MacInterruptObservation;
+    type RawSnapshot = MacRawSnapshot;
 
     fn status(&mut self) -> Self::Snapshot {
         self.operations.push(MacInterruptOperation::Status);
         self.visible()
     }
 
-    fn fatal_assertion_raw(&mut self) -> Option<u32> {
-        self.operations
-            .push(MacInterruptOperation::FatalAssertionRaw);
-        self.fatal_assertion_raw
+    fn raw(&mut self) -> Self::RawSnapshot {
+        self.operations.push(MacInterruptOperation::Raw);
+        MacRawSnapshot {
+            events: self.latched,
+            fatal: self.fatal_assertion_raw,
+        }
     }
 
     fn mask_rx_delivery(&mut self) {
@@ -268,16 +284,16 @@ impl MacInterrupt for MacInterruptModel {
         );
     }
 
-    fn clear_all(&mut self, _masked: &BanksMasked) {
-        self.operations.push(MacInterruptOperation::ClearAll);
-        self.fatal_assertion_raw = None;
-        self.rx_delivery_enabled = false;
-        self.other_sources_enabled = false;
+    fn acknowledge_raw(&mut self, snapshot: Self::RawSnapshot, _masked: &BanksMasked) {
+        self.operations.push(MacInterruptOperation::AcknowledgeRaw);
         self.latched = MacInterruptObservation::from_semantic_events(
-            MacInterruptEvents::empty(),
-            false,
-            false,
+            events_without(self.latched.work_events(), snapshot.events.work_events()),
+            self.latched.has_auxiliary_event() && !snapshot.events.has_auxiliary_event(),
+            self.latched.has_unhandled_event() && !snapshot.events.has_unhandled_event(),
         );
+        if snapshot.fatal.is_some() {
+            self.fatal_assertion_raw = None;
+        }
     }
 
     fn publish(&mut self, mask: MacInterruptMask) {

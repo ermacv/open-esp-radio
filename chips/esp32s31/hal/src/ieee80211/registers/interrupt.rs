@@ -2,10 +2,11 @@
 //! holds for the image's life.
 //!
 //! The event-status words are acknowledged only through the generated
-//! sample and acknowledgement, and through the generated clear-every-event
-//! images that mask their bank first (`mac_interrupt_clear`,
-//! `clear_all_mac_power_interrupts`). Every enable word is written by the
-//! bank's owner alone: no task-side owner of either bank exists.
+//! sample and acknowledgement. Epoch closure samples unmasked MAC RAW and
+//! acknowledges that same sample; WDEVPWR uses the generated masked
+//! clear-every-event image (`clear_all_mac_power_interrupts`). Every enable
+//! word is written by the bank's owner alone: no task-side owner of either
+//! bank exists.
 
 use oer_esp32s31_pac::{
     modem_pwr, modem_pwr::WifiMacPowerInterrupt, wifi_mac, wifi_mac::WifiMacInterrupt,
@@ -183,6 +184,18 @@ impl core::fmt::Debug for MacInterruptSnapshot {
             .debug_tuple("MacInterruptSnapshot")
             .field(&self.observation())
             .finish()
+    }
+}
+
+/// One unmasked MAC RAW sample, acknowledged at most once. A fatal sample
+/// is retained as diagnostic data instead of being acknowledged.
+#[must_use = "inspect RAW for a fatal assertion before acknowledging the sample"]
+pub struct MacInterruptRawSnapshot(wifi_mac::MacInterruptRawSnapshot);
+
+impl MacInterruptRawSnapshot {
+    /// The complete diagnostic word if the named fatal assertion was sampled.
+    pub fn fatal_assertion_raw(&self) -> Option<u32> {
+        self.0.fatal_assertion().then_some(self.0.bits())
     }
 }
 
@@ -528,16 +541,6 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
         oer_riscv::fence();
     }
 
-    /// Acknowledge every latched MAC event: the generated image stores the
-    /// zero enable image and then the whole clear word, then the write is
-    /// ordered.
-    ///
-    /// SOURCE: `BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT`.
-    pub fn clear_all_mac_interrupts(&mut self) {
-        self.mac.mac_interrupt_clear();
-        oer_riscv::fence();
-    }
-
     /// Publish one reviewed MAC interrupt mask, then order the write.
     pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
         publish_mac_interrupt_mask(&mut self.mac, event_mask);
@@ -549,13 +552,19 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
         observe_mac_interrupt_enable(&self.mac)
     }
 
-    /// Observe a fatal assertion regardless of its delivery mask.
-    /// The complete RAW word is diagnostic data only; dispatch uses the named
-    /// PAC field. This sample is not acknowledged on the fatal path.
+    /// Sample RAW independently of the delivery mask. The epoch checks the
+    /// named fatal cause before acknowledging this same sample.
     /// SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026, BLOB_LIBPP_ISR_REGISTER_DUMP.
-    pub fn fatal_assertion_raw(&self) -> Option<u32> {
-        let raw = self.mac.sample_mac_interrupt_raw();
-        raw.fatal_assertion().then_some(raw.bits())
+    pub fn mac_interrupt_raw(&self) -> MacInterruptRawSnapshot {
+        MacInterruptRawSnapshot(self.mac.sample_mac_interrupt_raw())
+    }
+
+    /// Acknowledge only this RAW sample, then order the write. A distinct
+    /// cause arriving after the sample is not selected by the clear word.
+    /// The caller retains fatal samples instead of acknowledging them.
+    pub fn acknowledge_mac_interrupt_raw(&mut self, snapshot: MacInterruptRawSnapshot) {
+        self.mac.acknowledge_mac_interrupt_raw(snapshot.0);
+        oer_riscv::fence();
     }
 
     /// Sample the complete MAC interrupt status image.

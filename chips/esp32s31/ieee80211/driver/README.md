@@ -102,11 +102,14 @@ state machine rather than a lock.
 MAC source120 `FATAL_ASSERTION` (bit21) names the vendor's fatal assertion
 path, without identifying a physical producer. The handler checks unmasked RAW
 before acknowledging STATUS; every epoch clear checks RAW with both banks
-masked before clearing either bank. This includes activation, direct close,
-`MaskedBanks::clear_all` and a stray entry without an installed line. A fatal
-cause returns the MAC crate's `irq::Fault::FatalAssertion { raw }` and keeps
-both banks quarantined. Closing or activating a quarantined epoch returns the
-same fault without clearing it.
+masked before clearing either bank, acknowledging only that same nonfatal MAC
+RAW sample so a later fatal arrival remains pending. This includes activation,
+direct close, `MaskedBanks::clear_all` and a stray entry without an installed
+line. A fatal cause returns the MAC crate's `irq::Fault::FatalAssertion { raw }`
+and keeps both banks quarantined. Closing or activating a quarantined epoch returns the
+same fault without clearing it. While Masked (or Closed), a new fatal cause
+remains in RAW; detection waits for a later handler entry, which that masked
+cause alone does not guarantee.
 
 Staged Wi-Fi images select the runtime's `wifi-fault` feature and pass the RAW
 sample to `wifi_fault::reset`, retaining their interrupt and preempted DMA
@@ -133,9 +136,9 @@ after the lowering raises it again and requests before the take coalesce;
 the safest wins. `Close` masks and clears both banks (the epoch closes).
 `MaskAll` masks both and keeps their latched events, and posts the masked
 fact once. The activation (`WifiIrqRequests::activate`, which takes the
-router's `Bound` proof of the part) masks, clears every stale event, then
-publishes the station mask and the station TBTT. `UnmaskRx` restores the RX
-delivery group of an active epoch only; otherwise it is ignored and
+router's `Bound` proof of the part) masks, clears the nonfatal MAC RAW sample
+and WDEVPWR, then publishes the station mask and the station TBTT. `UnmaskRx`
+restores the RX delivery group of an active epoch only; otherwise it is ignored and
 counted. Clearing takes the masking proof (`MaskedBanks`). A closed epoch
 that still sees an enabled event (a reset restored an enable) closes it
 again. After each request the handler reads the MAC enable image and

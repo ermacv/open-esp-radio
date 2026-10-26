@@ -544,7 +544,7 @@ pub use he::{
 };
 pub use interrupt::{
     ConnectedStaWithoutPowerSavePrepared, MacInterruptEnableState, MacInterruptEvents,
-    MacInterruptObservation, MacInterruptRegisters, MacInterruptSnapshot,
+    MacInterruptObservation, MacInterruptRawSnapshot, MacInterruptRegisters, MacInterruptSnapshot,
     MacPowerInterruptObservation, MacPowerInterruptRegisters, MacPowerInterruptSnapshot,
 };
 pub use rx::{

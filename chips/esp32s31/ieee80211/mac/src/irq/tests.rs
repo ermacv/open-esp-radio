@@ -11,16 +11,25 @@ struct Interrupt {
     fatal_after_mask: Option<u32>,
     operations: std::vec::Vec<&'static str>,
 }
+struct Raw(Option<u32>);
+impl sealed::Sealed for Raw {}
+impl MacInterruptRawSample for Raw {
+    fn fatal_assertion_raw(&self) -> Option<u32> {
+        self.0
+    }
+}
+
 impl sealed::Sealed for Interrupt {}
 impl MacInterrupt for Interrupt {
     type Snapshot = MacInterruptObservation;
+    type RawSnapshot = Raw;
     fn status(&mut self) -> Self::Snapshot {
         self.operations.push("read");
         self.observation
     }
-    fn fatal_assertion_raw(&mut self) -> Option<u32> {
+    fn raw(&mut self) -> Self::RawSnapshot {
         self.operations.push("raw");
-        self.fatal_raw
+        Raw(self.fatal_raw)
     }
     fn mask_rx_delivery(&mut self) {
         self.operations.push("mask");
@@ -35,8 +44,11 @@ impl MacInterrupt for Interrupt {
     fn acknowledge(&mut self, _: Self::Snapshot) {
         self.operations.push("ack");
     }
-    fn clear_all(&mut self, _: &BanksMasked) {
-        self.operations.push("clear all");
+    fn acknowledge_raw(&mut self, snapshot: Self::RawSnapshot, _: &BanksMasked) {
+        self.operations.push("ack raw");
+        if snapshot.0.is_some() {
+            self.fatal_raw = None;
+        }
     }
     fn publish(&mut self, _: MacInterruptMask) {
         self.operations.push("publish");
@@ -222,8 +234,8 @@ fn activation_masks_clears_then_publishes_mac_before_power() {
     let (mac, power) = epoch.banks();
     assert!(mac.operations().matches(&[
         MacInterruptOperation::MaskAll,
-        MacInterruptOperation::FatalAssertionRaw,
-        MacInterruptOperation::ClearAll,
+        MacInterruptOperation::Raw,
+        MacInterruptOperation::AcknowledgeRaw,
         MacInterruptOperation::Publish(MacInterruptMask::STATION),
     ]));
     assert!(power.operations().matches(&[
@@ -254,8 +266,8 @@ fn closing_masks_then_clears_both_banks() {
     let (mac, power) = epoch.banks();
     assert!(mac.operations().matches(&[
         MacInterruptOperation::MaskAll,
-        MacInterruptOperation::FatalAssertionRaw,
-        MacInterruptOperation::ClearAll,
+        MacInterruptOperation::Raw,
+        MacInterruptOperation::AcknowledgeRaw,
     ]));
     assert!(power.operations().matches(&[
         PowerInterruptOperation::MaskAll,
@@ -277,10 +289,13 @@ fn a_closed_epoch_closes_its_banks_again_on_a_stray_interrupt() {
     assert!(!epoch.close_stray().expect("healthy epoch"));
     assert_eq!(epoch.service_mac(), Ok(None));
     assert_eq!(epoch.service_power(), None);
-    assert!(epoch.banks().0.operations().matches(&[
-        MacInterruptOperation::FatalAssertionRaw,
-        MacInterruptOperation::Status
-    ]));
+    assert!(
+        epoch
+            .banks()
+            .0
+            .operations()
+            .matches(&[MacInterruptOperation::Raw, MacInterruptOperation::Status])
+    );
 
     // An enable a reset restored, with an event latched under it.
     clear_logs(&mut epoch);
@@ -296,11 +311,11 @@ fn a_closed_epoch_closes_its_banks_again_on_a_stray_interrupt() {
     // Sampled, then closed; nothing acknowledged as work.
     assert!(mac.operations().matches(&[
         MacInterruptOperation::Publish(MacInterruptMask::STATION),
-        MacInterruptOperation::FatalAssertionRaw,
+        MacInterruptOperation::Raw,
         MacInterruptOperation::Status,
         MacInterruptOperation::MaskAll,
-        MacInterruptOperation::FatalAssertionRaw,
-        MacInterruptOperation::ClearAll,
+        MacInterruptOperation::Raw,
+        MacInterruptOperation::AcknowledgeRaw,
     ]));
     // An open epoch has nothing stray.
     epoch
@@ -422,7 +437,7 @@ fn fatal_assertion_keeps_the_complete_raw_sample_and_quarantines_both_banks() {
     assert_eq!(mac.latched_fatal_assertion_raw(), Some(raw));
     assert!(mac.operations().matches(&[
         MacInterruptOperation::Status,
-        MacInterruptOperation::FatalAssertionRaw,
+        MacInterruptOperation::Raw,
         MacInterruptOperation::MaskAll,
     ]));
     assert!(
@@ -472,7 +487,7 @@ fn masked_inherited_fatal_raw_survives_every_epoch_clear_entry() {
             assert!(!mac.line_asserted() && !power.line_asserted());
             assert!(!mac.operations().iter().any(|op| matches!(
                 op,
-                MacInterruptOperation::ClearAll | MacInterruptOperation::Acknowledge(_)
+                MacInterruptOperation::AcknowledgeRaw | MacInterruptOperation::Acknowledge(_)
             )));
             assert!(!power.operations().iter().any(|op| matches!(
                 op,
@@ -499,7 +514,7 @@ fn a_fatal_arrival_during_masking_is_checked_before_either_clear() {
         assert_eq!(result, Err(Fault::FatalAssertion { raw }));
         let (mac, power) = epoch.banks();
         assert_eq!(mac.fatal_raw, Some(raw));
-        assert!(!mac.operations.contains(&"clear all"));
+        assert!(!mac.operations.contains(&"ack raw"));
         assert!(
             !power
                 .operations()
@@ -535,4 +550,99 @@ fn masked_power_status_hides_raw_and_only_a_retained_positive_sample_clears_it()
         power.latched().is_empty(),
         "positive sample clears under mask"
     );
+}
+
+/// Host port hook: the producer latches a fatal cause after RAW was sampled,
+/// immediately before the sampled acknowledgement reaches the bank model.
+struct FatalBeforeClear {
+    bank: MacInterruptModel,
+    arrival: Option<u32>,
+}
+impl sealed::Sealed for FatalBeforeClear {}
+impl MacInterrupt for FatalBeforeClear {
+    type Snapshot = MacInterruptObservation;
+    type RawSnapshot = model::MacRawSnapshot;
+
+    fn status(&mut self) -> Self::Snapshot {
+        self.bank.status()
+    }
+    fn raw(&mut self) -> Self::RawSnapshot {
+        self.bank.raw()
+    }
+    fn mask_rx_delivery(&mut self) {
+        self.bank.mask_rx_delivery();
+    }
+    fn unmask_rx_delivery(&mut self) {
+        self.bank.unmask_rx_delivery();
+    }
+    fn mask_all(&mut self) {
+        self.bank.mask_all();
+    }
+    fn acknowledge(&mut self, sample: Self::Snapshot) {
+        self.bank.acknowledge(sample);
+    }
+    fn acknowledge_raw(&mut self, sample: Self::RawSnapshot, masked: &BanksMasked) {
+        if let Some(raw) = self.arrival.take() {
+            self.bank.latch_fatal_assertion(raw);
+        }
+        self.bank.acknowledge_raw(sample, masked);
+    }
+    fn publish(&mut self, mask: MacInterruptMask) {
+        self.bank.publish(mask);
+    }
+    fn enable_state(&self) -> MacInterruptEnableState {
+        self.bank.enable_state()
+    }
+}
+
+#[test]
+fn fatal_arriving_between_raw_sample_and_clear_remains_pending_until_captured() {
+    for entry in 0..3 {
+        let raw = 0x5678_abcd;
+        let mut bank = MacInterruptModel::masked();
+        bank.latch(rx_and_tx());
+        let mut epoch = InterruptEpoch::<Moderated, _, _>::new(
+            FatalBeforeClear {
+                bank,
+                arrival: Some(raw),
+            },
+            PowerInterruptModel::masked(),
+        );
+        match entry {
+            0 => epoch.activate(MacInterruptMask::STATION),
+            1 => epoch.close(),
+            _ => epoch.mask_all().clear_all(),
+        }
+        .expect("the captured RAW sample was nonfatal");
+        let bank = &epoch.banks().0.bank;
+        assert!(
+            bank.latched().is_empty(),
+            "the sampled stale work was cleared"
+        );
+        assert_eq!(bank.latched_fatal_assertion_raw(), Some(raw));
+        assert!(
+            bank.operations()
+                .iter()
+                .any(|op| op == MacInterruptOperation::AcknowledgeRaw)
+        );
+        let fault = Fault::FatalAssertion { raw };
+        if entry == 0 {
+            assert!(
+                bank.line_asserted(),
+                "activation enables the late pending cause"
+            );
+            assert_eq!(epoch.service_mac(), Err(fault));
+        } else {
+            assert!(
+                !bank.line_asserted(),
+                "closed banks cannot guarantee an entry"
+            );
+            assert_eq!(epoch.close_stray(), Err(fault));
+        }
+        assert_eq!(epoch.state(), EpochState::Quarantined(fault));
+        assert_eq!(
+            epoch.banks().0.bank.latched_fatal_assertion_raw(),
+            Some(raw)
+        );
+    }
 }

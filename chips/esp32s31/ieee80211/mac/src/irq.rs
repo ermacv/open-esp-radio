@@ -10,7 +10,8 @@ use oer_esp32s31_hal::{
     owner::{MacInterruptRegisters, MacPowerInterruptRegisters},
     types::{
         MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
-        MacInterruptSnapshot, MacPowerInterruptObservation, MacPowerInterruptSnapshot,
+        MacInterruptRawSnapshot, MacInterruptSnapshot, MacPowerInterruptObservation,
+        MacPowerInterruptSnapshot,
     },
 };
 
@@ -41,6 +42,19 @@ impl MacInterruptStatusSnapshot for MacInterruptObservation {
     }
 }
 
+/// One unmasked MAC RAW sample. A nonfatal sample can be consumed by the
+/// bank's acknowledgement; a fatal sample carries the complete diagnostic.
+pub trait MacInterruptRawSample: sealed::Sealed {
+    fn fatal_assertion_raw(&self) -> Option<u32>;
+}
+
+impl sealed::Sealed for MacInterruptRawSnapshot {}
+impl MacInterruptRawSample for MacInterruptRawSnapshot {
+    fn fatal_assertion_raw(&self) -> Option<u32> {
+        MacInterruptRawSnapshot::fatal_assertion_raw(self)
+    }
+}
+
 /// One sampled WDEVPWR image, seen through its semantic observation.
 pub trait MacPowerInterruptStatusSnapshot: sealed::Sealed {
     fn observation(&self) -> MacPowerInterruptObservation;
@@ -60,8 +74,8 @@ impl MacPowerInterruptStatusSnapshot for MacPowerInterruptObservation {
     }
 }
 
-/// The proof that both banks of an epoch were masked, which clearing every
-/// latched event takes ([`epoch::MaskedBanks::clear_all`]). Only this crate
+/// The proof that both banks of an epoch were masked, which closing their
+/// pending samples takes ([`epoch::MaskedBanks::clear_all`]). Only this crate
 /// makes one.
 #[derive(Debug)]
 pub struct BanksMasked {
@@ -81,11 +95,11 @@ impl BanksMasked {
 /// sealed: no other bank can enter an epoch.
 pub trait MacInterrupt: sealed::Sealed {
     type Snapshot: MacInterruptStatusSnapshot;
+    type RawSnapshot: MacInterruptRawSample;
 
     fn status(&mut self) -> Self::Snapshot;
-    /// The complete RAW sample if its named fatal assertion is pending,
-    /// including while delivery is masked. Never acknowledges the bank.
-    fn fatal_assertion_raw(&mut self) -> Option<u32>;
+    /// Sample RAW independently of delivery masks, without acknowledging it.
+    fn raw(&mut self) -> Self::RawSnapshot;
     /// Mask the RX delivery group and leave every other source as it is.
     fn mask_rx_delivery(&mut self);
     /// Enable the RX delivery group and leave every other source as it is.
@@ -93,8 +107,8 @@ pub trait MacInterrupt: sealed::Sealed {
     /// Mask every source; a latched event stays latched.
     fn mask_all(&mut self);
     fn acknowledge(&mut self, snapshot: Self::Snapshot);
-    /// Acknowledge every latched event of the masked bank.
-    fn clear_all(&mut self, masked: &BanksMasked);
+    /// Acknowledge only the captured RAW events of the masked bank.
+    fn acknowledge_raw(&mut self, snapshot: Self::RawSnapshot, masked: &BanksMasked);
     /// Publish one reviewed enable image.
     fn publish(&mut self, mask: MacInterruptMask);
     /// The published enable image, classified.
@@ -104,13 +118,14 @@ pub trait MacInterrupt: sealed::Sealed {
 impl sealed::Sealed for MacInterruptRegisters {}
 impl MacInterrupt for MacInterruptRegisters {
     type Snapshot = MacInterruptSnapshot;
+    type RawSnapshot = MacInterruptRawSnapshot;
 
     fn status(&mut self) -> Self::Snapshot {
         self.mac_interrupt_status()
     }
 
-    fn fatal_assertion_raw(&mut self) -> Option<u32> {
-        MacInterruptRegisters::fatal_assertion_raw(&*self)
+    fn raw(&mut self) -> Self::RawSnapshot {
+        self.mac_interrupt_raw()
     }
 
     fn mask_rx_delivery(&mut self) {
@@ -129,8 +144,8 @@ impl MacInterrupt for MacInterruptRegisters {
         self.acknowledge_mac_interrupts(snapshot);
     }
 
-    fn clear_all(&mut self, _masked: &BanksMasked) {
-        self.clear_all_mac_interrupts();
+    fn acknowledge_raw(&mut self, snapshot: Self::RawSnapshot, _masked: &BanksMasked) {
+        self.acknowledge_mac_interrupt_raw(snapshot);
     }
 
     fn publish(&mut self, mask: MacInterruptMask) {
@@ -307,7 +322,7 @@ pub fn handle_mac_irq<M: epoch::RxDelivery, I: MacInterrupt>(
 ) -> Result<(IrqDisposition, IrqSnapshot), Fault> {
     let status = interrupt.status();
     let observation = status.observation();
-    if let Some(raw) = interrupt.fatal_assertion_raw() {
+    if let Some(raw) = interrupt.raw().fatal_assertion_raw() {
         return Err(Fault::FatalAssertion { raw });
     }
     let work_events = observation.work_events();
