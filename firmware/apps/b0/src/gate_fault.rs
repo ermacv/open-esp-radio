@@ -1,0 +1,269 @@
+//! B0's retained Bluetooth gate diagnostic. Owners stay on the interrupted
+//! stacks and in the gate until the fatal path resets the chip.
+use core::fmt;
+use oer_esp32s31_bluetooth_driver::interrupt::gate::{GateFault, GateFaultReason, GateTimerState};
+use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerStoppedInterruptFault;
+
+const MAGIC: u32 = 0x4247_4601;
+
+/// All-bit-pattern retained representation, including a version and checksum.
+#[derive(Clone, Copy, bytemuck::AnyBitPattern)]
+#[repr(C)]
+struct Record {
+    magic: u32,
+    reason: u32,
+    timer: u32,
+    lp: u32,
+    nrt_present: u32,
+    nrt: [u32; 2],
+    stopped_status: u32,
+    pending_0024: u32,
+    pending_002c: u32,
+    checksum: u32,
+}
+
+impl Record {
+    fn new(fault: GateFault) -> Self {
+        let (reason, stopped_status, pending) = match fault.reason {
+            GateFaultReason::PlanWithoutPendingTimer => (1, 0, None),
+            GateFaultReason::ReplyOccupied => (2, 0, None),
+            GateFaultReason::WorkOccupied => (3, 0, None),
+            GateFaultReason::StoppedTimer(
+                BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending { status, pending },
+            ) => (4, status, Some(pending)),
+            GateFaultReason::StoppedTimer(
+                BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus { status, pending },
+            ) => (5, status, Some(pending)),
+            GateFaultReason::VacantTimer => (6, 0, None),
+        };
+        let mut record = Self {
+            magic: MAGIC,
+            reason,
+            timer: match fault.observation.timer {
+                GateTimerState::Vacant => 0,
+                GateTimerState::Ready => 1,
+                GateTimerState::AwaitingPlan => 2,
+                GateTimerState::Stopped => 3,
+            },
+            lp: fault.observation.lp_status,
+            nrt_present: u32::from(fault.observation.nrt_status.is_some()),
+            nrt: fault.observation.nrt_status.unwrap_or_default(),
+            stopped_status,
+            pending_0024: pending.map_or(0, |pending| u32::from(pending.state_0024())),
+            pending_002c: pending.map_or(0, |pending| u32::from(pending.state_002c())),
+            checksum: 0,
+        };
+        record.checksum = record.sum();
+        record
+    }
+
+    fn sum(&self) -> u32 {
+        let mut sum = 0x811c_9dc5_u32;
+        for word in [
+            self.magic,
+            self.reason,
+            self.timer,
+            self.lp,
+            self.nrt_present,
+            self.nrt[0],
+            self.nrt[1],
+            self.stopped_status,
+            self.pending_0024,
+            self.pending_002c,
+        ] {
+            sum = (sum ^ word).wrapping_mul(0x0100_0193);
+        }
+        sum
+    }
+
+    /// Consumes the record once, rejecting cold, partial or corrupt writes.
+    fn take(&mut self) -> Option<Self> {
+        let valid = self.magic == MAGIC
+            && self.checksum == self.sum()
+            && (1..=6).contains(&self.reason)
+            && self.timer <= 3
+            && self.nrt_present <= 1
+            && self.pending_0024 <= u32::from(u8::MAX)
+            && self.pending_002c <= u32::from(u8::MAX);
+        let record = valid.then_some(*self);
+        self.magic = 0;
+        record
+    }
+}
+
+impl fmt::Display for Record {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let reason = match self.reason {
+            1 => "plan-without-pending-timer",
+            2 => "reply-occupied",
+            3 => "work-occupied",
+            4 => "stopped-software-pending",
+            5 => "stopped-unexpected-status",
+            6 => "vacant-timer",
+            _ => return Err(fmt::Error),
+        };
+        let timer = match self.timer {
+            0 => "vacant",
+            1 => "ready",
+            2 => "awaiting-plan",
+            3 => "stopped",
+            _ => return Err(fmt::Error),
+        };
+        write!(
+            f,
+            "OER-B0-FAULT: bluetooth-gate reason={reason} timer={timer} lp={:#010x}",
+            self.lp
+        )?;
+        if self.nrt_present == 1 {
+            write!(f, " nrt={:#010x},{:#010x}", self.nrt[0], self.nrt[1])?;
+        } else {
+            f.write_str(" nrt=unavailable")?;
+        }
+        if self.reason == 4 || self.reason == 5 {
+            write!(
+                f,
+                " stopped-status={:#010x} pending0024={:#04x} pending002c={:#04x}",
+                self.stopped_status, self.pending_0024, self.pending_002c
+            )?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+oer_espressif_staged_runtime::retained_static! {
+    static RECORD: Record;
+}
+
+/// Never returns, so no live gate, task or DMA owner is dropped or reused.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn reset(fault: GateFault) -> ! {
+    oer_espressif_staged_runtime::fatal::reset_recording(|_stop| {
+        if let Some(mut slot) = RECORD.try_lock() {
+            *slot = Record::new(fault);
+            // Keep the first record claimed until reset, including a nested fault.
+            core::mem::forget(slot);
+        }
+    })
+}
+
+/// Print before the early console is retired to the application.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn report_previous() {
+    use core::fmt::Write;
+    struct Early;
+    impl Write for Early {
+        fn write_str(&mut self, text: &str) -> fmt::Result {
+            crate::usb::early_text(text.as_bytes());
+            Ok(())
+        }
+    }
+    let previous = RECORD.try_lock().and_then(|mut record| record.take());
+    if let Some(previous) = previous {
+        let _ = writeln!(Early, "{previous}\r");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_esp32s31_bluetooth_driver::interrupt::gate::GateObservation;
+
+    fn fault(reason: GateFaultReason) -> GateFault {
+        GateFault {
+            reason,
+            observation: GateObservation {
+                lp_status: 0x40002,
+                nrt_status: Some([0x12345678, 0xabcdef01]),
+                timer: GateTimerState::Stopped,
+            },
+        }
+    }
+
+    #[test]
+    fn retained_record_survives_boot_state_recreation_and_is_reported_once() {
+        let storage = std::cell::RefCell::new(Record::new(fault(GateFaultReason::VacantTimer)));
+        // The record outlives both boot-local owners, just as the NOLOAD slot does.
+        {
+            let previous_boot = storage.borrow();
+            assert_eq!(previous_boot.lp, 0x40002);
+        }
+        let record = storage.borrow_mut().take().expect("next boot's record");
+        assert_eq!(
+            record.to_string(),
+            "OER-B0-FAULT: bluetooth-gate reason=vacant-timer timer=stopped lp=0x00040002 nrt=0x12345678,0xabcdef01"
+        );
+        assert!(storage.borrow_mut().take().is_none());
+    }
+
+    #[test]
+    fn stopped_payload_bytes_and_unknown_status_survive_retention_and_reporting() {
+        let mut slot = Record::new(fault(GateFaultReason::StoppedTimer(
+            BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus {
+                status: 0xfedcba98,
+                pending: Default::default(),
+            },
+        )));
+        // Arbitrary retained bytes, including their high bits, are not booleans.
+        slot.pending_0024 = 0xa5;
+        slot.pending_002c = 0xe7;
+        slot.checksum = slot.sum();
+        let record = slot.take().unwrap();
+        assert_eq!(record.stopped_status, 0xfedcba98);
+        assert!(
+            record
+                .to_string()
+                .ends_with("stopped-status=0xfedcba98 pending0024=0xa5 pending002c=0xe7")
+        );
+    }
+
+    #[test]
+    fn software_pending_keeps_the_fault_sample_as_well_as_the_entry_sample() {
+        let mut slot = Record::new(fault(GateFaultReason::StoppedTimer(
+            BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending {
+                status: 0x40000,
+                pending: Default::default(),
+            },
+        )));
+        let record = slot.take().unwrap();
+        assert_eq!(record.lp, 0x40002);
+        assert_eq!(record.stopped_status, 0x40000);
+        assert!(record.to_string().contains("stopped-status=0x00040000"));
+    }
+
+    #[test]
+    fn cold_partial_or_corrupt_records_are_rejected() {
+        let mut cold: Record = bytemuck::zeroed();
+        assert!(cold.take().is_none());
+        let mut partial = Record::new(fault(GateFaultReason::ReplyOccupied));
+        partial.checksum = 0;
+        assert!(partial.take().is_none());
+        let mut corrupt = Record::new(fault(GateFaultReason::WorkOccupied));
+        corrupt.nrt[1] ^= 0x80000000;
+        assert!(corrupt.take().is_none());
+    }
+
+    #[test]
+    fn every_gate_reason_has_a_stable_retained_diagnostic() {
+        for reason in [
+            GateFaultReason::PlanWithoutPendingTimer,
+            GateFaultReason::ReplyOccupied,
+            GateFaultReason::WorkOccupied,
+            GateFaultReason::VacantTimer,
+            GateFaultReason::StoppedTimer(
+                BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending {
+                    status: 0x40000,
+                    pending: Default::default(),
+                },
+            ),
+        ] {
+            let mut slot = Record::new(fault(reason));
+            assert!(
+                slot.take()
+                    .unwrap()
+                    .to_string()
+                    .starts_with("OER-B0-FAULT: bluetooth-gate reason=")
+            );
+        }
+    }
+}

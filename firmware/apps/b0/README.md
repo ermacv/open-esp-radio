@@ -57,3 +57,13 @@ reviewed link-state policy before publication.
 
 The two-boot 1M RF/count gate is qualified on s31-a/c5-a. Hardware port
 conformance is unqualified.
+
+A Bluetooth gate invariant failure quarantines all gate and interrupted task
+owners without returning or dropping them. The handler records a `GateFault`
+through safe `fatal::reset_recording` and resets immediately. The 44-byte retained
+record includes the exact reason, entry LP cause, timer phase, NRT words when
+the bank is present, and stopped-timer pending bytes or unexpected status.
+A vacant timer with nonzero LP status follows the same path. The next boot
+prints one `OER-B0-FAULT: bluetooth-gate` line on the early console, before H4
+opens, then consumes the record. The application watchdog does not drive this
+fault transition.

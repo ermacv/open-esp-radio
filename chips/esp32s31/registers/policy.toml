@@ -950,7 +950,16 @@ description = "Bluetooth modem low-power timer registers transferred independent
 name = "BtdmRuntimeControl"
 instance = "MODEM_PWR"
 interrupt = "MODEM_LP_TIMER"
-registers = ["RUNTIME_TIMER_START_COMMAND", "WORD_0004_OPAQUE", "WORD_0008_OPAQUE", "WORD_0010_OPAQUE", "WORD_0014_OPAQUE", "WORD_001C_OPAQUE", "WORD_0020_OPAQUE", "WORD_0024_OPAQUE", "WORD_002C_OPAQUE", "WORD_0034_OPAQUE", "WORD_0038_OPAQUE", "WORD_0040_OPAQUE", "WORD_0044_OPAQUE", "WORD_0048_OPAQUE", "WORD_004C_OPAQUE", "WORD_0058_OPAQUE", "WORD_0064_OPAQUE", "WORD_0068_OPAQUE", "WORD_006C_OPAQUE", "WORD_0078_OPAQUE"]
+registers = ["RUNTIME_TIMER_START_COMMAND", "WORD_0004_OPAQUE", "WORD_0008_OPAQUE", "WORD_0010_OPAQUE", "WORD_0014_OPAQUE", "WORD_001C_OPAQUE", "WORD_0020_OPAQUE", "WORD_0024_OPAQUE", "WORD_002C_OPAQUE", "WORD_0034_OPAQUE", "WORD_0040_OPAQUE", "WORD_0044_OPAQUE", "WORD_0048_OPAQUE", "WORD_004C_OPAQUE", "WORD_0058_OPAQUE", "WORD_0064_OPAQUE", "WORD_0068_OPAQUE", "WORD_006C_OPAQUE", "WORD_0078_OPAQUE"]
+
+[[partitions.parts]]
+name = "BtdmLpTimerStatus"
+instance = "MODEM_PWR"
+registers = ["WORD_0038_OPAQUE"]
+read-only = true
+copy = true
+description = "Side-effect-free LP cause status, retained by the permanent Bluetooth handler even while the timer owner is absent. The timer reads the same status through a copy; only its runtime-control owner acknowledges pending."
+sources = ["BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26"]
 
 [[partitions]]
 name = "BluetoothInterruptPeripherals"

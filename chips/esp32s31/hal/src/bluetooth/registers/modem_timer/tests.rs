@@ -867,7 +867,7 @@ fn entries_during_p2_work_retain_dispatch_and_epoch_until_the_plan_returns() {
     };
     let plan = work.plan(Some(BluetoothModemLpTimerInstant::from_bits(0x0100_0010)));
     // Another source entry arrives while P2 is still processing the snapshot.
-    memory.timer[word_0038_opaque::OFFSET / 4] = 1;
+    memory.timer_status[word_0038_opaque::OFFSET / 4] = 1;
     memory.timer[word_0024_opaque::OFFSET / 4] = 1;
     memory.timer[word_002c_opaque::OFFSET / 4] = 1;
     memory.timer[word_0048_opaque::OFFSET / 4] = 3;
@@ -1105,13 +1105,41 @@ fn stopped_software_pending_and_unknown_status_fault_without_acknowledgement() {
         assert_eq!(
             error,
             if software != 0 {
-                super::BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending(pending)
+                super::BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending {
+                    status,
+                    pending,
+                }
             } else {
-                super::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(status)
+                super::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus {
+                    status,
+                    pending: recorder.pending,
+                }
             }
         );
         assert_eq!(recorder.pending, pending);
         assert_eq!(epoch.high_byte(), 0);
         assert_eq!(recorder.ops, [StopOp::ReadStatus, StopOp::SamplePending]);
     }
+}
+
+#[test]
+fn read_only_status_capability_remains_after_the_timer_owner_leaves() {
+    let mut memory = super::super::host::HostMemory::filled(0x89ab_cdef);
+    let before = memory.clone();
+    {
+        let status = {
+            let (_, _, timer) = memory.owners();
+            timer.status
+        };
+        let other_reader = status;
+        assert_eq!(
+            status.read_word_0038_opaque().bits_0_31_opaque(),
+            0x89ab_cdef
+        );
+        assert_eq!(
+            other_reader.read_word_0038_opaque().bits_0_31_opaque(),
+            0x89ab_cdef
+        );
+    }
+    assert_eq!(memory, before);
 }

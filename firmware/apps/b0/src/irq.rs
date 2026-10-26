@@ -55,7 +55,7 @@ pub type SchedulerBell =
 oer_espressif_staged_runtime::placed_static! {
     static STORAGE: StaticCell<BluetoothInterruptStorage<ChipGate>> = StaticCell::new(), in critical_data "b0";
     pub static FAULT: AtomicBool = AtomicBool::new(false), in critical_data "b0";
-    pub static TIMER_FAULT: oer_memory::OnceValue<oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerStoppedInterruptFault> = oer_memory::OnceValue::new(), in critical_data "b0";
+    pub static GATE_FAULT: oer_memory::OnceValue<oer_esp32s31_bluetooth_driver::interrupt::gate::GateFault> = oer_memory::OnceValue::new(), in critical_data "b0";
     pub static SCHEDULER_SIGNAL: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
     pub static REPLY: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
     pub static TIMER_SIGNAL: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
@@ -67,7 +67,9 @@ static PORT: StaticCell<TimerPort> = StaticCell::new();
 
 /// The line's handler: it serves the part its entry holds.
 pub fn bt(part: &mut Interrupts) {
-    part.service(&EmbassyClock);
+    if let Err(fault) = part.service(&EmbassyClock) {
+        crate::gate_fault::reset(fault);
+    }
 }
 
 /// What the boot gets from binding the handler's part.
@@ -93,6 +95,7 @@ pub fn bind<C: Controller>(
     token: BtToken,
     line: FromCpu3,
     irq: FromCpu3Irq,
+    status: oer_esp32s31_hal::bluetooth::ModemLpTimerStatus,
 ) -> Result<Bound, BindError> {
     let (line, ack) = oer_espressif_executor::DoorbellLine::<3>::split(line);
     let storage = STORAGE
@@ -100,12 +103,12 @@ pub fn bind<C: Controller>(
         .ok_or(BindError::Storage)?;
     let (ends, part) = storage.split(
         irq,
+        status,
         Ack(ack),
         BluetoothInterruptSignals {
             reply: &REPLY,
             cells: &CELLS,
-            fault: &FAULT,
-            stopped_timer_fault: &TIMER_FAULT,
+            fault: &GATE_FAULT,
         },
     );
     let bound = router.bind(token, part).map_err(|_| BindError::Route)?;

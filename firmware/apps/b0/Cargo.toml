@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 build = "build.rs"
 [dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-bluetooth-hci = { path = "../../../protocols/bluetooth/hci" }
 
 embassy-futures = "0.1.2"
@@ -34,6 +35,8 @@ oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", features = ["bluetooth"] }
 oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system", features = ["bluetooth"] }
 [dev-dependencies]
+oer-esp32s31-bluetooth-driver = { path = "../../../chips/esp32s31/bluetooth/driver" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", features = ["bluetooth-engine"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }

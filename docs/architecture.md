@@ -186,6 +186,10 @@ moves; ownership, orchestration and wiring are rebuilt.
   the bug it prevents.
 - DMA-reachable storage is permanent and is released only after a proof that
   DMA stopped; otherwise it is quarantined until reset.
+- An impossible state is a named fault retaining its source observations.
+  Its owners stay quarantined while safe `fatal::reset_recording` retains
+  the reason and resets; the next boot prints it. Watchdog expiry is not
+  the fault transition.
 - A fatal path never takes over a block another owner holds: it keeps its
   record and resets the chip, and the next boot reports it. Its stop of the
   other hart (`StopTheWorld`: its hart masked, the other hart confirmed

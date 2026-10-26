@@ -582,6 +582,15 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
         Some(epoch)
     }
 
+    /// Read both NRT cause words for a fatal diagnostic; acknowledge nothing.
+    pub fn nrt_status(&self) -> [u32; 2] {
+        let bank = &self.peripherals.bluetooth_interrupt_bank;
+        [
+            bank.read_irq_status_snapshot_0().pending_bits(),
+            bank.read_irq_status_snapshot_1().pending_bits(),
+        ]
+    }
+
     /// Capture and acknowledge one complete controller interrupt epoch.
     ///
     /// The order is the exact complete ESP32-S31 NRT ISR prefix:
@@ -591,8 +600,8 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     /// 3. write the first image to its write-one-to-clear bank;
     /// 4. write the second image to its write-one-to-clear bank.
     ///
-    /// Separate sample or acknowledgement methods are deliberately absent:
-    /// the reviewed vendor body does not authorize another ordering.
+    /// Only this transaction acknowledges. Diagnostic reads grant no
+    /// acknowledgement or release authority.
     ///
     /// The bank shares its handler's line with other sources, so an entry
     /// may find both snapshots clear: it then writes nothing and returns
