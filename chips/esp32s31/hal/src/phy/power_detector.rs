@@ -116,7 +116,9 @@ pub fn write_reference(registers: &mut impl SharedPhyAccess, value: u16) {
 ///
 /// Complete rev0 ROM `phy_get_tone_sar_dout_` at `0x2f82_66da`, size `0x40`,
 /// clears then sets the PAC `SAR_TRIGGER` bit through two fresh reads, with the
-/// one-microsecond delay remaining in the caller.
+/// two-microsecond post-trigger delay remaining in the caller.
+/// SOURCE: ermacv/oer-notes research/opaque-blobray-phy.md, SAR/PWDET;
+/// rev0 ROM phy_pwdet_tone_start+0x38 requests 2 µs after the trigger.
 #[cfg(target_arch = "riscv32")]
 pub fn trigger_sar(registers: &mut impl SharedPhyAccess) {
     ops::trigger_power_detector_sar(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
