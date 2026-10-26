@@ -3,11 +3,11 @@ schema = 3
 
 [type]
 name = "CLIC"
-description = "The core-local interrupt controller (CLIC) of the hart that accesses it.\n\nWords 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Invariant: every vectored line is level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte."
-sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+description = "The core-local interrupt controller (CLIC) of the hart that accesses it.\n\nWords 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Production-router invariant: its bound vectored lines are level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte. SOURCE: HW1_S31_CLIC_20261026 confirms one software-pending positive-edge vector on external line 16; this does not make concurrent whole-word edge updates safe. SOURCE: HW1_S31_THRESHOLD_20261026 observes no handler entry after raising CSR mintthresh to 0x3f for CTL 0x1f in a 600-trial propagation-boundary sweep, including zero post-write NOPs and no readback; this is distinct from the legacy MMIO threshold."
+sources = ["ESP_IDF_4D59230D_S31_CLIC", "HW1_S31_CLIC_20261026", "HW1_S31_THRESHOLD_20261026"]
 
 [review]
-sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+sources = ["ESP_IDF_4D59230D_S31_CLIC", "HW1_S31_CLIC_20261026", "HW1_S31_THRESHOLD_20261026"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -16,7 +16,7 @@ naming = "descriptive"
 [[registers]]
 name = "INT_CONFIG"
 offset = 0x0
-description = "The controller's configuration: how many bits of a line's control byte are its level. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 20-38: MNLBITS resets to zero; HAL must write its selected level bits."
+description = "The controller's configuration: how many bits of a line's control byte are its level. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 20-38: the header gives MNLBITS reset zero. SOURCE: HW1_S31_CLIC_20261026 observes MNLBITS=1 after the ROM download/MEM_END path, before probe CLIC writes. That is not a reset-isolated value; HAL must establish its selected level bits regardless of inherited configuration."
 reset = { value = 1, mask = 0x7f }
 
 [[registers.fields]]
@@ -40,7 +40,7 @@ description = "The number of privilege-mode bits of a line's attribute."
 [[registers]]
 name = "INT_INFO"
 offset = 0x4
-description = "Implemented CLIC geometry and version. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 40-59."
+description = "Implemented CLIC geometry and version. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 40-59; HW1_S31_CLIC_20261026 reads NUM_INT=48, CTLBITS=3, VERSION=0 on s31-a rev0."
 reset = { value = 0x00600030, mask = 0x01ffffff }
 
 [[registers.fields]]
@@ -77,14 +77,14 @@ description = "Legacy machine interrupt threshold."
 name = "CTRL%s"
 offset = 0x1000
 dim = { count = 48, stride = 0x4 }
-description = "Line %s: pending, enable, attribute and level control. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 70-116: CTL resets to 0x1f, ATTR_MODE to 0b11, other described fields to zero; unassigned bits have no claimed reset."
+description = "Line %s: pending, enable, attribute and level control. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 70-116: CTL resets to 0x1f, ATTR_MODE to 0b11, other described fields to zero; unassigned bits have no claimed reset. SOURCE: HW1_S31_CLIC_20261026 reads zero for the described fields in some core-local slots and ROM-modified external line state; this header image is not a universal post-ROM boot state."
 reset = { value = 0x1fc00000, mask = 0xffc70101 }
 
 [[registers.fields]]
 name = "IP"
 bits = "0"
 class = "plain"
-description = "The line's pending bit; for a level-triggered line it follows the source."
+description = "The line's pending bit; for a level-triggered line it follows the source. SOURCE: HW1_S31_CLIC_20261026: a software-set positive-edge IP on line 16 vectored once and read clear after entry in the isolated experiment."
 
 [[registers.fields]]
 name = "IE"
@@ -109,7 +109,7 @@ description = "Trigger: bit 0 clear is level, set is edge; bit 1 selects the neg
 name = "ATTR_MODE"
 bits = "23:22"
 class = "read-only"
-description = "Machine privilege mode, fixed at 0b11. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84."
+description = "Header machine privilege code 0b11; external inputs read 3 and some core-local slots read 0 (SOURCE: HW1_S31_CLIC_20261026). Ignored writes were not tested. Header access class SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84."
 
 [[registers.fields]]
 name = "CTL"

@@ -66,7 +66,9 @@ first-source-line = 16
 # SOURCE: the same S31 header, `INT_INFO.CTLBITS` default 3 (CLICINTCTLBITS).
 control-bits = 3
 # SOURCE: the same S31 header, `NLBITS` 3: HAL writes MNLBITS explicitly,
-# because INT_CONFIG.MNLBITS resets to 0. Levels derive as 1 << level-bits;
+# without assuming the ROM left reset configuration (SOURCE:
+# HW1_S31_CLIC_20261026 in esp32s31/registers/evidence/hw-interrupts.toml).
+# Levels derive as 1 << level-bits;
 # all implemented control bits are levels, leaving no priority bits.
 level-bits = 3
 # SOURCE: RISC-V CLIC specification 3f8ee744, "Specifying Interrupt Priority":

@@ -131,8 +131,9 @@ moves; ownership, orchestration and wiring are rebuilt.
   increasing arbitration priority. The table checks their line IDs against
   the facts' highest-line tie-break. Inputs
   below the facts' first source line are reserved for core-local use. The HAL
-  writes MNLBITS on partition split because its reset value is zero; the
-  router checks INT_INFO and MNLBITS against the facts at install and verify.
+  writes its selected MNLBITS on partition split without assuming the ROM
+  left the reset configuration; the router checks INT_INFO and MNLBITS against
+  the facts at install and verify.
   Stage-two adoption and interrupt enable return typed boot failures to the
   image's existing failure reporter when geometry, configuration, vectors,
   routes or lines disagree; they never enable interrupts on a mismatch.
@@ -362,9 +363,11 @@ its model and conformance case.
 `trace` (what happened), `profile` (what it costs) and `debug-control`
 (knobs that force paths) are separate classes, each under its own cfg
 (`oer_trace`, `oer_profile`, `oer_debug_control`) that only `cargo fw` sets
-for an image declaring it. Probe images (`cargo fw probe`) are built over the
-production crates' public API alone; production has no item, module or
-`cfg(oer_probe)` only a probe uses.
+for an image declaring it. Comparison probe images (`cargo fw probe`) are built
+over the production crates' public API alone. The separately admitted
+`firmware/probes/esp32s31-facts` image takes the PAC once for short hardware
+facts experiments, without HAL or production runtime dependencies. Production
+has no item, module or `cfg(oer_probe)` only a probe uses.
 
 ## Tools
 
