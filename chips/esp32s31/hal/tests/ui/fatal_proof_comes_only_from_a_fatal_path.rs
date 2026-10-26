@@ -1,15 +1,11 @@
 #![no_std]
 use oer_esp32s31_hal::cores::{self, Fatal, StopTheWorld};
 
-pub fn paths(slot: &mut Option<Fatal<'static>>) {
-    // SAFETY: the case only compiles; nothing calls it.
-    unsafe { cores::fatal(|path| drop(path)) };
-    #[cfg(ui_reject)]
-    cores::fatal(|path| drop(path)); // ui-error: E0133
-    #[cfg(ui_reject)]
-    // SAFETY: as above.
-    unsafe { cores::fatal(|path| *slot = Some(path)) }; // ui-error: E0521
-    let _ = slot;
+pub fn paths(_slot: &mut Option<Fatal<'static>>) -> ! {
+    cores::fatal(|_path| {
+        #[cfg(ui_reject)]
+        { *_slot = Some(_path); } // ui-error: E0521
+    })
 }
 
 pub fn stops(stop: Option<StopTheWorld<'_>>) -> Option<cores::Stopped> {

@@ -86,16 +86,6 @@ pub(crate) mod hart {
         }
     }
 
-    /// Mask every interrupt of the current hart for good, as a section
-    /// acquires (the threshold first, then MIE), for a fatal path that
-    /// never releases it.
-    #[inline(always)]
-    pub(crate) fn mask_for_good() {
-        let _ = super::acquire(&mut Csrs);
-        // No access of the fatal path moves before the mask.
-        compiler_fence(Ordering::SeqCst);
-    }
-
     struct Section;
     critical_section::set_impl!(Section);
 

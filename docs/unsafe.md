@@ -87,9 +87,12 @@ volatile DMA-memory cells live in `oer-memory`):
   PAC takes those words once; the HAL root splits them into domain owners.
   Only the root's owned partitions authorize register access.
   A probe may reclaim a block only after dropping its previous owner.
-  Generated const assertions exclude overlapping claims. Fatal paths mask
-  their hart permanently and use the HAL's `StopTheWorld` proof to prepare
-  reset; they do not revoke or take over another owner's peripheral.
+  Generated const assertions exclude overlapping claims. The HAL's safe
+  `cores::fatal` masks its hart before lending `Fatal` and halts if the path
+  returns. Keeping interrupts masked is a correctness requirement, not an
+  unsafe precondition: safe architectural APIs can enable them. Fatal paths
+  use `StopTheWorld` to prepare reset; they do not revoke or take over
+  another owner's peripheral.
 - The private `DeviceWord::{load, store}` pair implements volatile reads
   and writes for `Block`, `Part` and `Reader`. Every word
   offset, stride and element count is a const generic, checked against the
@@ -477,6 +480,14 @@ needs:
   Images and HIL agents reach these through safe APIs and forbid unsafe code.
   The image linker places strict code in SRAM from interrupt, exception and
   panic analysis.
+  `entry!` mints `StageTwoHandoff` directly and passes it to the safe
+  `Handoff::from_proof` wrapper. One extern block in `layout` declares the
+  linker and vector address markers. The panic handler raises its hart's CLIC
+  threshold to the maximum, clears MIE and executes a compiler fence before
+  claiming or writing its `retained_static!` slot. Its claim stays held
+  through the image's hook until reset. Nested panic
+  entry skips metadata, the record and the hook, then resets, preserving
+  the first record.
 - Each board implements `AdoptsBootstrapMapping` for its PSRAM.
 - The bootstrap places the packed stage two and the flash tuning reference in
   its own read-only flash sections.

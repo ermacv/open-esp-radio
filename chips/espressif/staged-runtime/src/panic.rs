@@ -1,6 +1,8 @@
 //! The image's one panic entry.
 //!
-//! The handler records the panic in `.rtc_fast.persistent`, RTC fast memory no
+//! The handler first masks its hart (maximum CLIC threshold, then MIE off)
+//! and orders the mask before claiming or writing the retained slot. It
+//! records the panic in `.rtc_fast.persistent`, RTC fast memory no
 //! reset entry initializes, without formatting: the location's file bytes (the
 //! last [`FILE_BYTES`]), line and column, the message when it is a static
 //! string (its first [`MESSAGE_BYTES`]; a formatted message is only marked),
@@ -16,7 +18,10 @@
 //! ([`fatal::reset`](crate::fatal::reset));
 //! the next boot takes the record with [`take_previous`] and reports it in
 //! thread context.
-use core::cell::UnsafeCell;
+use core::ops::DerefMut;
+
+#[cfg(target_arch = "riscv32")]
+use oer_memory::retained::RetainedGuard;
 
 /// Bytes of the location's file path kept: its end, which names the file.
 pub const FILE_BYTES: usize = 48;
@@ -123,6 +128,7 @@ impl core::fmt::Display for PanicRecord {
 }
 
 /// The retained words: a magic, the record and a checksum over both.
+#[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]
 struct Slot {
     magic: u32,
@@ -140,6 +146,7 @@ struct Slot {
 }
 
 impl Slot {
+    #[cfg(test)]
     const EMPTY: Self = Self {
         magic: 0,
         hart: 0,
@@ -176,71 +183,53 @@ impl Slot {
     }
 }
 
-struct Retained(UnsafeCell<Slot>);
-
-// SAFETY: the panic handler writes the slot on the panicking hart while the
-// image stops; `take_previous` runs once at boot, before any panic can.
-unsafe impl Sync for Retained {}
-
-// Every bit pattern is a `Slot`; the NOLOAD section never loads the initializer.
-#[unsafe(link_section = ".rtc_fast.persistent")]
-static SLOT: Retained = Retained(UnsafeCell::new(Slot::EMPTY));
-
-/// Take the record the previous boot's panic left, and clear it. Call once,
-/// early at boot and before anything can panic; `None` when the previous
-/// boot did not panic or the chip lost power.
-pub fn take_previous() -> Option<PanicRecord> {
-    // SAFETY: called once at boot, before any panic can write the slot.
-    let slot = unsafe { &mut *SLOT.0.get() };
-    let valid = slot.magic == MAGIC
-        && slot.checksum == slot.sum()
-        && slot.file_length as usize <= FILE_BYTES
-        && slot.message_length as usize <= MESSAGE_BYTES + 1;
-    let record = valid.then(|| PanicRecord {
-        hart: slot.hart as u8,
-        in_interrupt: slot.in_interrupt != 0,
-        interrupted_pc: (slot.in_interrupt != 0).then_some(slot.interrupted_pc),
-        line: slot.line,
-        column: slot.column,
-        file: slot.file,
-        file_length: slot.file_length as u8,
-        message: match slot.message_length {
-            0 => Message::Formatted,
-            length => Message::Static(slot.message, (length - 1) as u8),
-        },
-    });
-    slot.magic = 0;
-    record
+crate::retained_static! {
+    static SLOT: Slot;
 }
 
-/// Record `info` in the retained slot without formatting.
-#[cfg(target_arch = "riscv32")]
-fn record<'a>(info: &'a core::panic::PanicInfo<'_>) -> PanicDetails<'a> {
-    let hart = oer_riscv::hart_id();
-    let sp = oer_riscv::stack_pointer();
-    let mepc = oer_riscv::read_mepc();
-    let in_interrupt = crate::stacks::on_interrupt_stack(hart, sp);
-    // SAFETY: the other hart may hold any lock while this one panics, so the
-    // slot is written without one; the image stops after this write.
-    let slot = unsafe { &mut *SLOT.0.get() };
-    let details = if in_interrupt {
-        PanicDetails {
-            file: "",
-            line: 0,
-            column: 0,
-            message: None,
-        }
-    } else {
-        let (file, line, column) = info
-            .location()
-            .map_or(("", 0, 0), |l| (l.file(), l.line(), l.column()));
-        PanicDetails {
-            file,
-            line,
-            column,
-            message: info.message().as_str(),
-        }
-    };
+/// Take the record the previous boot's panic left, and clear it. Call once,
+/// early at boot; `None` when the previous boot did not panic, the chip lost
+/// power or the slot is held by a panic already being recorded.
+pub fn take_previous() -> Option<PanicRecord> {
+    SLOT.try_lock()?.take()
+}
+
+impl Slot {
+    fn take(&mut self) -> Option<PanicRecord> {
+        let valid = self.magic == MAGIC
+            && self.checksum == self.sum()
+            && self.file_length as usize <= FILE_BYTES
+            && self.message_length as usize <= MESSAGE_BYTES + 1;
+        let record = valid.then(|| PanicRecord {
+            hart: self.hart as u8,
+            in_interrupt: self.in_interrupt != 0,
+            interrupted_pc: (self.in_interrupt != 0).then_some(self.interrupted_pc),
+            line: self.line,
+            column: self.column,
+            file: self.file,
+            file_length: self.file_length as u8,
+            message: match self.message_length {
+                0 => Message::Formatted,
+                length => Message::Static(self.message, (length - 1) as u8),
+            },
+        });
+        self.magic = 0;
+        record
+    }
+}
+
+/// Keep the claim until reset, including while the image's hook runs. A
+/// nested panic refuses the claim before reading any textual metadata and
+/// resets without overwriting the first record or invoking the hook again.
+fn record_in<'a, G: DerefMut<Target = Slot>>(
+    slot: Option<G>,
+    hart: usize,
+    in_interrupt: bool,
+    mepc: usize,
+    details: impl FnOnce() -> PanicDetails<'a>,
+) -> Option<(G, PanicDetails<'a>)> {
+    let mut slot = slot?;
+    let details = details();
     (slot.file, slot.file_length) = file_tail(details.file);
     (slot.message, slot.message_length) = match details.message {
         Some(message) => {
@@ -256,7 +245,38 @@ fn record<'a>(info: &'a core::panic::PanicInfo<'_>) -> PanicDetails<'a> {
     slot.column = details.column;
     slot.magic = MAGIC;
     slot.checksum = slot.sum();
-    details
+    Some((slot, details))
+}
+
+/// Record `info` in the retained slot without formatting.
+#[cfg(target_arch = "riscv32")]
+fn record<'a>(
+    info: &'a core::panic::PanicInfo<'_>,
+) -> Option<(RetainedGuard<'static, Slot>, PanicDetails<'a>)> {
+    let hart = oer_riscv::hart_id();
+    let sp = oer_riscv::stack_pointer();
+    let mepc = oer_riscv::read_mepc();
+    let in_interrupt = crate::stacks::on_interrupt_stack(hart, sp);
+    record_in(SLOT.try_lock(), hart, in_interrupt, mepc, || {
+        if in_interrupt {
+            PanicDetails {
+                file: "",
+                line: 0,
+                column: 0,
+                message: None,
+            }
+        } else {
+            let (file, line, column) = info
+                .location()
+                .map_or(("", 0, 0), |l| (l.file(), l.line(), l.column()));
+            PanicDetails {
+                file,
+                line,
+                column,
+                message: info.message().as_str(),
+            }
+        }
+    })
 }
 
 #[cfg(all(target_arch = "riscv32", feature = "panic-hook"))]
@@ -276,7 +296,16 @@ unsafe extern "Rust" {
 #[cfg(target_arch = "riscv32")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
-    let details = record(info);
+    let recorded = with_panic_mask(
+        || {
+            let _ = oer_riscv::swap_interrupt_threshold(u8::MAX);
+        },
+        oer_riscv::disable_interrupts,
+        || record(info),
+    );
+    let Some((_slot, details)) = recorded else {
+        crate::fatal::reset()
+    };
     #[cfg(feature = "panic-hook")]
     crate::fatal::reset_recording(|stop| oer_platform_panic_hook(&details, stop));
     #[cfg(not(feature = "panic-hook"))]
@@ -284,6 +313,20 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
         let _ = details;
         crate::fatal::reset()
     }
+}
+
+/// Prevent interrupt reentry from resetting a partially written first
+/// record. The callbacks let a host hart model inject a pending interrupt
+/// during the write; the production callbacks use the architectural APIs.
+fn with_panic_mask<T>(
+    mask_threshold: impl FnOnce(),
+    disable_interrupts: impl FnOnce(),
+    record: impl FnOnce() -> T,
+) -> T {
+    mask_threshold();
+    disable_interrupts();
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    record()
 }
 
 /// The last [`FILE_BYTES`] of `file`, zero-padded, and how many there are.
@@ -318,7 +361,148 @@ fn message_head(message: &str) -> ([u8; MESSAGE_BYTES], u32) {
 
 #[cfg(test)]
 mod tests {
+    use core::cell::{Cell, RefCell};
+
     use super::*;
+
+    fn details() -> PanicDetails<'static> {
+        PanicDetails {
+            file: "src/first.rs",
+            line: 17,
+            column: 4,
+            message: Some("first panic"),
+        }
+    }
+
+    #[test]
+    fn the_first_panic_records_its_metadata_and_is_taken_once() {
+        let storage = RefCell::new(Slot::EMPTY);
+        let (mut slot, _) = record_in(storage.try_borrow_mut().ok(), 0, false, 0x1234, details)
+            .expect("the first panic claims the slot");
+        let record = slot.take().expect("the complete record validates");
+        assert_eq!(record.file(), "src/first.rs");
+        assert_eq!(record.message(), Some("first panic"));
+        assert_eq!((record.hart, record.line, record.column), (0, 17, 4));
+        assert!(!record.in_interrupt);
+        assert_eq!(record.interrupted_pc, None);
+        assert_eq!(slot.take(), None);
+    }
+
+    #[test]
+    fn nested_panics_during_recording_and_the_hook_preserve_the_first_record() {
+        let storage = RefCell::new(Slot::EMPTY);
+        let nested_metadata_read = Cell::new(false);
+        let nested = || {
+            nested_metadata_read.set(true);
+            details()
+        };
+        let (mut first, _) = record_in(storage.try_borrow_mut().ok(), 0, false, 0, || {
+            // Reentry while the first panic gathers its metadata.
+            assert!(record_in(storage.try_borrow_mut().ok(), 1, true, 0x5678, nested).is_none());
+            details()
+        })
+        .expect("the outer panic owns the claim");
+        // Reentry from the image hook after the complete record was written.
+        assert!(record_in(storage.try_borrow_mut().ok(), 1, true, 0x5678, nested).is_none());
+        assert!(!nested_metadata_read.get());
+        let record = first.take().expect("nested entry left the record intact");
+        assert_eq!(record.message(), Some("first panic"));
+        assert_eq!((record.hart, record.line), (0, 17));
+    }
+
+    #[test]
+    fn an_interrupt_during_a_partial_write_stays_pending_and_retains_the_first_panic() {
+        use core::cell::RefMut;
+        use core::ops::Deref;
+
+        struct InterruptingWrite<'a> {
+            slot: RefMut<'a, Slot>,
+            threshold: &'a Cell<u8>,
+            mie: &'a Cell<bool>,
+            pending: &'a Cell<bool>,
+        }
+
+        impl Deref for InterruptingWrite<'_> {
+            type Target = Slot;
+
+            fn deref(&self) -> &Slot {
+                &self.slot
+            }
+        }
+
+        impl DerefMut for InterruptingWrite<'_> {
+            fn deref_mut(&mut self) -> &mut Slot {
+                if self.slot.file_length != 0 && self.slot.magic == 0 {
+                    // The first record has a file but no valid checksum yet.
+                    // An admitted interrupt would panic, be refused the held
+                    // slot and reset before the first record can complete.
+                    self.pending.set(true);
+                    assert!(
+                        !self.mie.get() || self.threshold.get() == u8::MAX,
+                        "a nested interrupt panic would reset the incomplete first record"
+                    );
+                }
+                &mut self.slot
+            }
+        }
+
+        let storage = RefCell::new(Slot::EMPTY);
+        let threshold = Cell::new(0_u8);
+        let mie = Cell::new(true);
+        let pending = Cell::new(false);
+        let steps = RefCell::new(std::vec::Vec::new());
+        let (first, _) = with_panic_mask(
+            || {
+                threshold.set(u8::MAX);
+                steps.borrow_mut().push("threshold");
+            },
+            || {
+                mie.set(false);
+                steps.borrow_mut().push("MIE off");
+            },
+            || {
+                steps.borrow_mut().push("claim");
+                let slot = storage.try_borrow_mut().ok().map(|slot| InterruptingWrite {
+                    slot,
+                    threshold: &threshold,
+                    mie: &mie,
+                    pending: &pending,
+                });
+                record_in(slot, 0, false, 0, details)
+            },
+        )
+        .expect("the masked hart completes the first record");
+        assert_eq!(*steps.borrow(), ["threshold", "MIE off", "claim"]);
+        assert!(
+            pending.get(),
+            "an interrupt arrived during the partial write"
+        );
+        assert_eq!((threshold.get(), mie.get()), (u8::MAX, false));
+        assert!(storage.try_borrow_mut().is_err());
+        let next_boot = RefCell::new(*first);
+        let record = next_boot
+            .borrow_mut()
+            .take()
+            .expect("complete retained record");
+        assert_eq!(record.message(), Some("first panic"));
+        assert_eq!((record.hart, record.line), (0, 17));
+    }
+
+    #[test]
+    fn a_reset_retains_the_record_and_clears_the_claim_on_the_fake() {
+        let storage = RefCell::new(Slot::EMPTY);
+        let (first, _) = record_in(storage.try_borrow_mut().ok(), 0, true, 0x1234, details)
+            .expect("the first boot records its panic");
+        assert!(storage.try_borrow_mut().is_err());
+        // Reset preserves the RTC bytes, but constructs a fresh, unclaimed
+        // SRAM cell. The old boot's guard is still held when bytes are copied.
+        let next_boot = RefCell::new(*first);
+        let record = next_boot.borrow_mut().take().expect("retained record");
+        assert!(record.in_interrupt);
+        assert_eq!(record.interrupted_pc, Some(0x1234));
+        assert_eq!(record.message(), Some("first panic"));
+        assert_eq!(next_boot.borrow_mut().take(), None);
+    }
 
     fn record_with(file: &[u8]) -> PanicRecord {
         let mut stored = [0; FILE_BYTES];
