@@ -282,6 +282,12 @@ calling `placed`/`placed_link`; private table/slot/region constructors take
 typed starting addresses. Fixed type geometry is checked in const blocks;
 dynamic refusal is `ProjectionError`.
 
+`PinnedDmaTxPool` retains each slot's contiguous headroom, frame and trailer
+bytes beside its CPU ownership metadata. Affine leases and atomic state
+transitions govern publication and return. A radio lease exposes only those
+bytes to DMA; its owner must prove hardware quiescence before release.
+Counting claimed slots observes ownership state and grants no release authority.
+
 `PlacedTxPool` validates each byte region before pinning the pool. The memory
 crate exposes only the slots' location observations, without access or
 lifetime authority. Each `PlacedTxLease` carries its checked immutable DMA

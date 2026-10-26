@@ -3,9 +3,7 @@
 //! Pinning is a type boundary: only the affine [`PinnedDmaTxPoolHandle`]
 //! issues leases. Slot indices still follow the caller's free/ready queues:
 //! an out-of-range index or a claim in the wrong state panics, rather than
-//! lending aliased bytes. Guard damage is a fatal observation of an external
-//! DMA boundary violation; it is checked on claim, publish and release, with
-//! an explicit whole-pool diagnostic pass. It does not prove DMA has stopped.
+//! lending aliased bytes.
 //! Publication lengths must fit the frame capacity before the writer runs.
 
 use core::{
@@ -23,15 +21,6 @@ const SLOT_FREE: u8 = 0;
 const SLOT_NETWORK: u8 = 1;
 const SLOT_READY: u8 = 2;
 const SLOT_RADIO: u8 = 3;
-const DMA_OVERRUN_GUARD_SIZE: usize = 32;
-const DMA_OVERRUN_GUARD_BYTE: u8 = 0xa5;
-
-/// The first eight guard bytes as a diagnostic word.
-fn guard_prefix(guard: &[u8; DMA_OVERRUN_GUARD_SIZE]) -> u64 {
-    let [b0, b1, b2, b3, b4, b5, b6, b7, ..] = *guard;
-    u64::from_le_bytes([b0, b1, b2, b3, b4, b5, b6, b7])
-}
-
 /// The Ethernet frame of `length` bytes behind the headroom.
 #[expect(
     clippy::indexing_slicing,
@@ -74,10 +63,6 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
 #[derive(bytemuck::Zeroable)]
 struct PinnedTxSlot<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> {
     bytes: UnsafeCell<PinnedTxBytes<FRAME_CAPACITY, HEADROOM, TRAILER>>,
-    // Hardware only owns `bytes`. Keep a checked boundary before CPU-only
-    // ownership metadata so a late or overlong DMA write fails closed instead
-    // of silently turning a free slot into a forged state transition.
-    dma_overrun_guard: UnsafeCell<[u8; DMA_OVERRUN_GUARD_SIZE]>,
     length: AtomicUsize,
     state: AtomicU8,
 }
@@ -88,18 +73,12 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     const fn new() -> Self {
         Self {
             bytes: UnsafeCell::new(PinnedTxBytes::new()),
-            // DMA pools live in a region the boot zeroes, so the pool starts
-            // as zero bytes (`Zeroable`); `pin_static` installs the non-zero
-            // diagnostic marker before the allocation can be published to
-            // hardware.
-            dma_overrun_guard: UnsafeCell::new([0; DMA_OVERRUN_GUARD_SIZE]),
             length: AtomicUsize::new(0),
             state: AtomicU8::new(SLOT_FREE),
         }
     }
 
     fn claim(&self, index: u8, from: u8, to: u8, message: &str) {
-        self.assert_dma_boundary(index);
         let observed = self
             .state
             .compare_exchange(from, to, Ordering::AcqRel, Ordering::Acquire);
@@ -110,59 +89,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         );
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the guard observes whether a hardware actor crossed the DMA region boundary"
-    )]
-    #[expect(
-        clippy::panic,
-        reason = "fatal by contract: a DMA actor wrote outside its region, no recovery is sound"
-    )]
-    fn assert_dma_boundary(&self, index: u8) {
-        // SAFETY: CPU writers never mutate this guard after initialization.
-        // A differing byte is diagnostic evidence that the external DMA actor
-        // violated the region exposed by StableDmaBacking; no recovery follows.
-        let guard = unsafe { &*self.dma_overrun_guard.get() };
-        if let Some((offset, byte)) = guard
-            .iter()
-            .copied()
-            .enumerate()
-            .find(|(_, byte)| *byte != DMA_OVERRUN_GUARD_BYTE)
-        {
-            let prefix = guard_prefix(guard);
-            panic!(
-                "pinned TX DMA crossed its backing boundary; slot={index} offset={offset} value={byte} guard_prefix={prefix:#018x}"
-            );
-        }
-    }
-
-    #[allow(
-        unsafe_code,
-        reason = "the pool audit observes whether a hardware actor crossed a DMA region boundary"
-    )]
-    fn dma_boundary_damage(&self) -> Option<(usize, u8)> {
-        // SAFETY: see `assert_dma_boundary`; the guard is never a CPU write
-        // target after the pool has been pinned.
-        let guard = unsafe { &*self.dma_overrun_guard.get() };
-        guard
-            .iter()
-            .copied()
-            .enumerate()
-            .find(|(_, byte)| *byte != DMA_OVERRUN_GUARD_BYTE)
-    }
-
-    #[allow(
-        unsafe_code,
-        reason = "the diagnostic reads the same hardware-observable guard as dma_boundary_damage"
-    )]
-    fn dma_boundary_prefix(&self) -> u64 {
-        // SAFETY: see `assert_dma_boundary`; this is an observation-only read.
-        let guard = unsafe { &*self.dma_overrun_guard.get() };
-        guard_prefix(guard)
-    }
-
     fn publish_ready(&self, index: u8, length: usize) {
-        self.assert_dma_boundary(index);
         self.length.store(length, Ordering::Relaxed);
         let observed = self.state.compare_exchange(
             SLOT_NETWORK,
@@ -178,7 +105,6 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     }
 
     fn release_radio(&self, index: u8) {
-        self.assert_dma_boundary(index);
         self.length.store(0, Ordering::Relaxed);
         self.claim(
             index,
@@ -232,9 +158,8 @@ unsafe impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: u
 /// Permanently located TX allocations exposed to radio DMA.
 ///
 /// Its zero bytes are the free pool `new` builds: every slot free and empty,
-/// the guards not yet installed and no prepare hook (coherent memory). Use a
-/// pool only through [`Self::pin_static`], which installs the DMA overrun
-/// guards and consumes the permanent allocation into a
+/// with no prepare hook (coherent memory). Use a pool only through
+/// [`Self::pin_static`], which consumes the permanent allocation into a
 /// [`PinnedDmaTxPoolHandle`]. An unpinned pool has no claim operations.
 pub struct PinnedDmaTxPool<
     const FRAME_CAPACITY: usize,
@@ -306,9 +231,6 @@ impl<
         storage: &'static mut Self,
         prepare_for_dma_read: fn(&mut [u8]),
     ) -> PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH> {
-        for slot in &mut storage.slots {
-            *slot.dma_overrun_guard.get_mut() = [DMA_OVERRUN_GUARD_BYTE; DMA_OVERRUN_GUARD_SIZE];
-        }
         storage.prepare_for_dma_read = Some(prepare_for_dma_read);
         PinnedDmaTxPoolHandle {
             pool: Pin::static_mut(storage).into_ref(),
@@ -358,19 +280,11 @@ impl<
     /// Claim a free slot for a unique network writer.
     ///
     /// # Panics
-    /// The index must belong to this pool and name a free slot. A damaged
-    /// DMA guard is a fatal hardware-boundary violation, not a pinning check.
+    /// The index must belong to this pool and name a free slot.
     pub fn claim_network(
         &self,
         index: u8,
     ) -> PinnedDmaTxNetworkLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER> {
-        // The selected slot is checked by `claim` below, and a DMA-owned slot
-        // is checked again before RADIO -> FREE. Scanning every guard in the
-        // pool here made an unrelated O(QUEUE_DEPTH) diagnostic audit part of
-        // every network packet. In particular, the 66-slot Wi-Fi TX pool read
-        // 2,112 guard bytes before each Ethernet frame could be written.
-        // Keep the complete scan explicit for lifecycle/diagnostic use while
-        // retaining fail-closed checks at both real ownership boundaries.
         let slot = self.slot_of(index);
         slot.claim(
             index,
@@ -385,40 +299,10 @@ impl<
         }
     }
 
-    /// Validate every pool guard outside the per-packet ownership path.
-    ///
-    /// Normal reuse already validates the selected slot at network claim and
-    /// after DMA ownership ends. This whole-pool pass is intended for an
-    /// explicit lifecycle or diagnostic audit, including quarantined slots
-    /// which will deliberately never return to the free queue.
-    #[expect(
-        clippy::panic,
-        reason = "fatal by contract: a DMA actor wrote outside its region, no recovery is sound"
-    )]
-    fn assert_dma_boundaries(&self) {
-        if let Some((damaged_slot, damaged, (offset, byte))) = self
-            .pool
-            .slots
-            .iter()
-            .enumerate()
-            .find_map(|(slot, value)| {
-                value
-                    .dma_boundary_damage()
-                    .map(|damage| (slot, value, damage))
-            })
-        {
-            let prefix = damaged.dma_boundary_prefix();
-            panic!(
-                "pinned TX pool boundary changed; damaged_slot={damaged_slot} offset={offset} value={byte} guard_prefix={prefix:#018x}"
-            );
-        }
-    }
-
     /// Claim a slot whose network writer has published its complete frame.
     ///
     /// # Panics
-    /// The index must belong to this pool and name a ready slot. A damaged
-    /// DMA guard is a fatal hardware-boundary violation.
+    /// The index must belong to this pool and name a ready slot.
     pub fn claim_radio(
         &self,
         index: u8,
@@ -444,7 +328,6 @@ impl<
     /// radio slot. A platform reset path needs a separate ownership proof
     /// before such a transition can be added.
     pub fn claimed_slots(&self) -> usize {
-        self.assert_dma_boundaries();
         self.pool
             .slots
             .iter()
@@ -484,8 +367,8 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     ///
     /// # Panics
     /// `length` must fit `FRAME_CAPACITY`. The writer may itself panic; on
-    /// unwind the unpublished network lease returns its slot. Guard damage
-    /// or a corrupted ownership state is fatal.
+    /// unwind the unpublished network lease returns its slot. A corrupted
+    /// ownership state is fatal.
     pub fn publish<R>(mut self, length: usize, write: impl FnOnce(&mut [u8]) -> R) -> (u8, R) {
         assert!(length <= FRAME_CAPACITY, "TX frame exceeds slot capacity");
         // SAFETY: this non-Clone Network lease is the unique SLOT_NETWORK
@@ -510,8 +393,8 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     /// observed by a radio owner.
     ///
     /// # Panics
-    /// As with [`Self::publish`], an oversized length or damaged guard is
-    /// fatal. A callback's ordinary `Err` returns the live lease instead.
+    /// As with [`Self::publish`], an oversized length or corrupted ownership
+    /// state is fatal. A callback's ordinary `Err` returns the live lease.
     pub fn try_publish<R, E>(
         mut self,
         length: usize,
