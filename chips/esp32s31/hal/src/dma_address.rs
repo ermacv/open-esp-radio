@@ -209,10 +209,8 @@ impl PlacementProjection {
         // this geometry. The complete subrange lies in that placed allocation;
         // the owner retains or quarantines it for every hardware epoch.
         let start = unsafe { placed(address) };
-        Ok(PlacedRegion {
-            start,
-            len: bytes as u32,
-        })
+        let len = u32::try_from(bytes).map_err(|_| ProjectionError::AddressWidth)?;
+        PlacedRegion::new(start, len).ok_or(ProjectionError::AddressWidth)
     }
 
     pub(crate) fn pool_regions<const F: usize, const H: usize, const T: usize, const N: usize>(
@@ -374,7 +372,7 @@ pub(crate) fn model_region(len: usize) -> Result<PlacedRegion, ProjectionError> 
     )]
     // SAFETY: the model compares this address only; no DMA actor exists.
     let start = unsafe { placed(base) };
-    Ok(PlacedRegion { start, len })
+    PlacedRegion::new(start, len).ok_or(ProjectionError::AddressWidth)
 }
 
 /// The DMA addresses of `len` `L`s laid out back to back in placed storage:
