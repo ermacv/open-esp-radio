@@ -50,7 +50,10 @@ mod volatile;
 mod volatile_cell;
 pub mod zeroed;
 
-pub use request_slot::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
+pub use request_slot::{
+    Awaiting, ByValue, Doorbell, InPlace, InPlaceClient, InPlaceServer, Poster, RequestSlot,
+    Responder,
+};
 
 pub use affine_spsc::{
     AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, AffineSpscQueue,

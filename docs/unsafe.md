@@ -244,11 +244,12 @@ mutation. Unconfirmed stop and reset failure retain the whole graph with its
 register partitions in absorbing quarantine; Drop never returns a placement.
 The P2 engine holds only the task endpoint of `scheduler::interrupt`'s static
 request/reply channel. Its unique P3 endpoint stays beside the IRQ register
-owner. Release/Acquire state transitions transfer exclusive access to an
-`UnsafeCell` payload: P2 writes an empty slot, P3 consumes its request and
-publishes its reply, then P2 consumes that reply exactly once. Neither side
-accesses the other's phase, and no task waker enters P3. The static typed
-signal carries only reply readiness. Installation epochs and command numbers
+owner. The channel uses `oer-memory::RequestSlot` in `InPlace` mode, with no
+stored wakers. Release/Acquire state transitions transfer exclusive access:
+P2 posts the exchange, P3 borrows it in place and writes its reply, then P2
+validates and consumes the exchange exactly once. A rejected reply stays in
+place. Neither side accesses the other's phase, and no task waker enters P3.
+The static typed signal carries only reply readiness. Installation epochs and command numbers
 that never wrap or reset reject stale replies. Abandoning a pending future
 retains the request seat, quarantines graph publications and prevents
 retirement. Reusing the slot consumes both quiet endpoints after scheduler
@@ -364,10 +365,20 @@ and awaits nothing, so DMA leases stay reserved until reset.
 
 `RequestSlot` carries one request at a time from a client to a server and
 its answer back. Its state (`IDLE`, `POSTED`, `WORKING`, `ANSWERED`) admits
-exactly one accessor to each payload place, a Release store hands the place
-over and the other side's Acquire CAS takes it; the client posts only with
-the slot's one `Poster`, which the answer returns. The radio-system client
-uses it and has no unsafe code of its own.
+exactly one accessor to each payload place. In `ByValue` mode a Release store
+hands the place over and the other side's Acquire CAS takes it; the client
+posts only with the slot's one `Poster`, which the answer returns. The
+radio-system client uses this mode and has no unsafe code of its own.
+`InPlace` mode holds the whole exchange in its request place and stores no wakers. Its
+unique server endpoint lends `&mut Req` only in `WORKING` and publishes
+`ANSWERED` after that borrow ends. Its unique client observes `ANSWERED`
+with Acquire and validates the reply by shared borrow before consuming the
+exchange and publishing `IDLE`; a refused validation leaves the payload
+untouched. A dropped endpoint retains the
+seat and payload, including after the server answers. Reclaiming the seat
+consumes both matching idle endpoints. State tests cover phase ownership,
+borrow address stability, refusal, abandonment, reunion and repeated requests,
+including client/server races on separate host threads.
 
 `OnceValue` retains one value. The winning atomic claim owns the write;
 an Acquire reader can copy a Copy + Sync payload only after Release publishes
