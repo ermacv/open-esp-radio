@@ -16,6 +16,10 @@
 //! (`tools/vendor/ieee802154-esp32s31-cli`) runs a named catalog scenario per
 //! invocation.
 
+#[cfg(test)]
+#[path = "../build_sources.rs"]
+mod build_sources;
+
 pub mod catalog;
 pub mod compare;
 pub mod port;
