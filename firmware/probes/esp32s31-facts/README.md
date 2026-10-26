@@ -664,9 +664,18 @@ even with an ordinary completion marker:
 
 Run `hw17-20261027-sar-review-04` (s31-a, lease #898) loaded the ELF built
 by `cargo fw probe` from commit
-`17e5ad48e577d8fd80071f7adb0305147e94174c`. The run directory under
-`target/hw-hw17/` retains that ELF, all three probe Rust sources, the revision
-and raw outputs. The measured ELF is **not** the final rebased image.
+`17e5ad48e577d8fd80071f7adb0305147e94174c`, published as source tag
+[`evidence/hw17-sar-review-04`](https://github.com/ermacv/open-esp-radio/tree/evidence/hw17-sar-review-04).
+The measured ELF, exact probe sources, raw JSON/binary dumps and capture
+logs for R3/R4 are retained in the single archive
+[`hw17-sar-evidence-20261027.tar.gz`](/home/ermacv/.local/share/open-esp-radio/evidence/hw17/hw17-sar-evidence-20261027.tar.gz) in the
+[durable evidence directory](/home/ermacv/.local/share/open-esp-radio/evidence/hw17/)
+(`<XDG data>/open-esp-radio/evidence/hw17/`). Archive SHA-256:
+`671a39bdb8f985fe9cc1b01197b3dcbb3d5e7cf7f9db50887ca4ed8c1e952fa2`.
+The archive preserves each run under its run-ID directory and supporting
+logs/audits under `support/`. Its contents were compared byte-for-byte with
+the captured files before those ELF/JSON/binary scratch captures were moved.
+The measured ELF is **not** the final rebased image.
 The differences after capture are explicit:
 
 - Rebase onto `a29a0eb3cf55e95b13ef107e15ade12e565a0cab` incorporates
