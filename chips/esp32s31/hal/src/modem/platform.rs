@@ -351,7 +351,7 @@ mod tests {
         assert!(!modem_source_clocks_configured(&registers));
         registers.open_modem_pll_source_gate();
         assert!(modem_source_clocks_configured(&registers));
-        // The former open state left XTAL enabled as well as PLL.
+        // An open state with both XTAL and PLL enabled is rejected.
         registers.modify_modem_conf(|w| {
             w.set_modem_xtal_clk_en(true);
         });

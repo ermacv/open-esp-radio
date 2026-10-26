@@ -1139,7 +1139,7 @@ sources = ["S31_MMIO_USE_20101470"]
 sources = ["S31_MMIO_USE_20101470", "S31_MMIO_DECLARED_20101470"]
 
 [review.entity."WORD_0474_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_20101474"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_20101474", "VENDOR_BLE_CRC_DIAGNOSTIC_STATE"]
 completeness = "complete"
 
 [review.entity."WORD_047C_OPAQUE"]
@@ -1683,6 +1683,11 @@ completeness = "partial"
 sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
 provenance = "derived"
 completeness = "partial"
+
+[review.entity."WORD_0474_OPAQUE"]
+sources = ["VENDOR_BLE_CRC_DIAGNOSTIC_STATE"]
+provenance = "derived"
+accuracy = "positional"
 
 [[registers]]
 name = "SCHEDULER_CONTROL"
@@ -3686,12 +3691,13 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0474_OPAQUE"
 offset = 0x474
-description = "BLE PHY register initialization writes the complete zero image. Inner hardware semantics remain unknown."
+description = "Vendor ble_radio_crc_state reads this word after +0x470 and prints nonzero values; its return derives from +0x470. ble_radio_events_clear and PHY monitoring initialization store whole-word zero here. CRC diagnostic/event state is an inference from those accessor roles; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE."
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
 bits = "31:0"
 class = "plain"
+description = "Vendor ble_radio_crc_state reads this word after +0x470 and prints nonzero values; its return derives from +0x470. ble_radio_events_clear and PHY monitoring initialization store whole-word zero here. CRC diagnostic/event state is an inference from those accessor roles; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE."
 
 [[registers]]
 name = "WORD_047C_OPAQUE"

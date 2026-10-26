@@ -43,7 +43,7 @@ name = "BITS_2_13_OPAQUE"
 opaque = true
 bits = "13:2"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "The vendor set_connected_dev helper replaces bit 13 from its third argument while preserving the other byte-one bits. The connected-device helper association is direct; its physical filtering effect is inference. Bits 12:2 remain unidentified. The open accept-list owner constructs this range as zero and has no connected-device setter. SOURCE: VENDOR_BLE_DEVICE_CONNECTED_TAG."
 
 [[layout.words.fields]]
 name = "RANDOM"
@@ -81,3 +81,11 @@ sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.BITS_2_13_OPAQUE"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE", "VENDOR_BLE_DEVICE_CONNECTED_TAG"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "partial"
+naming = "opaque"

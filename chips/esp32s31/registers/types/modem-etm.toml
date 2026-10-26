@@ -4,8 +4,8 @@ schema = 3
 
 [type]
 name = "MODEM_ETM"
-description = "The modem event-task matrix at DR_REG_MODEM_ETM_BASE.\n\nWords 0x0-0x10: ESP32-S31 modem event-task matrix at MODEM_BASE + 0x8800, shared by the IEEE 802.15.4 and Bluetooth lifecycles. The public IEEE 802.15.4 driver names the channel-enable, set and clear words and the per-channel event/task pair at an eight-byte stride, and programs channels zero and one; the BTDM runtime programs channels four through seven through the same words. Channel bits and identifiers without a reviewed user remain absent and no reset values are claimed.\n\nWord 0x11c: Narrow owner for the otherwise isolated word at 0x2010891C. Complete ESP32-S31 BLE PHY initialization writes complete image 0x20 before initializing the BLE hardware accelerator and complete image 0x40 after the surrounding BTMAC and accelerator sequence. The register's physical block, hardware action and the meanings of the two images remain unproved, so no neighboring 0x201088xx words are absorbed.\n\nWord 0x144: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown."
-sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_MODEM_RADIO_CORE_LOW"]
+description = "The modem event-task matrix at DR_REG_MODEM_ETM_BASE.\n\nWords 0x0-0x10: ESP32-S31 modem event-task matrix at MODEM_BASE + 0x8800, shared by the IEEE 802.15.4 and Bluetooth lifecycles. The public IEEE 802.15.4 driver names the channel-enable, set and clear words and the per-channel event/task pair at an eight-byte stride, and programs channels zero and one; the BTDM runtime programs channels four through seven through the same words. Channel bits and identifiers without a reviewed user remain absent and no reset values are claimed.\n\nWord 0x11c: Narrow owner for the otherwise isolated word at 0x2010891C. Complete ESP32-S31 BLE PHY initialization writes complete image 0x20 before initializing the BLE hardware accelerator and complete image 0x40 after the surrounding BTMAC and accelerator sequence. Resource IDs 49/50 directly explain these separate one-hot writes through an indexed helper; a SET/CLEAR resource command family is inferred, while physical gate identities and readback behavior remain unknown. SOURCE: VENDOR_BLE_ETM_RESOURCE_COMMANDS.\n\nWord 0x144: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown."
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_MODEM_RADIO_CORE_LOW", "VENDOR_BLE_ETM_RESOURCE_COMMANDS"]
 
 [review]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
@@ -105,7 +105,7 @@ provenance = "imported"
 completeness = "partial"
 
 [review.entity."VALUE"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "VENDOR_BLE_ETM_RESOURCE_COMMANDS"]
 provenance = "observed"
 naming = "descriptive"
 
@@ -114,6 +114,11 @@ sources = ["S31_MMIO_USE_20108944"]
 
 [review.entity."WORD_0144_OPAQUE.BIT_3_OPAQUE"]
 sources = ["S31_MMIO_USE_20108944", "S31_MMIO_DECLARED_20108944"]
+
+[review.entity."VALUE.BITS_5_6_OPAQUE"]
+sources = ["VENDOR_BLE_ETM_RESOURCE_COMMANDS"]
+provenance = "derived"
+accuracy = "positional"
 
 [[registers]]
 name = "CHANNEL_ENABLE"
@@ -285,13 +290,13 @@ values = [{ name = "IEEE802154_ED_TRIG_TX", value = 84 }, { name = "IEEE802154_R
 [[registers]]
 name = "VALUE"
 offset = 0x11c
-description = "Complete ordered images 0x20 then 0x40 around BLE accelerator initialization; their hardware meaning remains unknown."
+description = "BLE resource helpers issue separate one-hot writes for resource IDs 49 and 50: images 0x20 and 0x40 at +0x11c. Their indexed address relation is 0x20108910 + 12*((id-12)>>5), bit (id-12)&31; paired helpers address the +0x120 family. This supports an inferred resource SET/CLEAR command family, not a replacing two-value configuration. Physical gate identities and readback/status behavior remain unknown. SOURCE: VENDOR_BLE_ETM_RESOURCE_COMMANDS."
 
 [[registers.fields]]
 name = "BITS_5_6_OPAQUE"
 bits = "6:5"
 class = "write-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "BLE resource helpers issue separate one-hot writes for resource IDs 49 and 50: images 0x20 and 0x40 at +0x11c. Their indexed address relation is 0x20108910 + 12*((id-12)>>5), bit (id-12)&31; paired helpers address the +0x120 family. This supports an inferred resource SET/CLEAR command family, not a replacing two-value configuration. Physical gate identities and readback/status behavior remain unknown. SOURCE: VENDOR_BLE_ETM_RESOURCE_COMMANDS."
 
 [[registers]]
 name = "WORD_0144_OPAQUE"
