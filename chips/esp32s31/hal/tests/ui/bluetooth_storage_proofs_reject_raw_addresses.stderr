@@ -1,0 +1,204 @@
+error[E0603]: struct `RxChainHead` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:13:42
+   |
+13 |     let _ = oer_esp32s31_hal::bluetooth::RxChainHead::new( // ui-error: E0603
+   |                                          ^^^^^^^^^^^ private struct
+   |
+note: the struct `RxChainHead` is defined here
+  --> src/bluetooth.rs
+   |
+   | pub(crate) struct RxChainHead {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: struct `DeviceTablePublication` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:15:42
+   |
+15 |     let _ = oer_esp32s31_hal::bluetooth::DeviceTablePublication::new( // ui-error: E0603
+   |                                          ^^^^^^^^^^^^^^^^^^^^^^ private struct
+   |
+note: the struct `DeviceTablePublication` is defined here
+  --> src/bluetooth.rs
+   |
+   | pub(crate) struct DeviceTablePublication {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: struct `DirectionFindingDescriptor` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:17:42
+   |
+17 |     let _ = oer_esp32s31_hal::bluetooth::DirectionFindingDescriptor::bind(address); // ui-error: E0603
+   |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^ private struct
+   |
+note: the struct `DirectionFindingDescriptor` is defined here
+  --> src/bluetooth.rs
+   |
+   | pub(crate) struct DirectionFindingDescriptor {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: struct `BlePhyHardwareObjects` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:19:42
+   |
+19 |     let _ = oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects::bind(address); // ui-error: E0603
+   |                                          ^^^^^^^^^^^^^^^^^^^^^ private struct
+   |
+note: the struct `BlePhyHardwareObjects` is defined here
+  --> src/bluetooth.rs
+   |
+   | pub(crate) struct BlePhyHardwareObjects {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: struct `DeviceTablePublication` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:25:42
+   |
+25 |     let _ = oer_esp32s31_hal::bluetooth::DeviceTablePublication::new( // ui-error: E0603
+   |                                          ^^^^^^^^^^^^^^^^^^^^^^ private struct
+   |
+note: the struct `DeviceTablePublication` is defined here
+  --> src/bluetooth.rs
+   |
+   | pub(crate) struct DeviceTablePublication {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0624]: associated function `new` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:13:55
+   |
+13 |       let _ = oer_esp32s31_hal::bluetooth::RxChainHead::new( // ui-error: E0603
+   |                                                         ^^^ private associated function
+   |
+  ::: src/bluetooth.rs
+   |
+   | /     pub(crate) const fn new(
+   | |         selector: BluetoothMemoryListSelector,
+   | |         head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
+   | |         scanning: bool,
+   | |     ) -> Self {
+   | |_____________- private associated function defined here
+
+error[E0308]: mismatched types
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:14:43
+   |
+13 |     let _ = oer_esp32s31_hal::bluetooth::RxChainHead::new( // ui-error: E0603
+   |             --------------------------------------------- arguments to this function are incorrect
+14 |         BluetoothMemoryListSelector::One, address, false); // ui-error: E0308
+   |                                           ^^^^^^^ expected `DmaRef<BleBufferHeader>`, found `u32`
+   |
+   = note: expected struct `DmaRef<BleBufferHeader>`
+                found type `u32`
+note: associated function defined here
+  --> src/bluetooth.rs
+   |
+   |     pub(crate) const fn new(
+   |                         ^^^
+
+error[E0624]: associated function `new` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:15:66
+   |
+15 |       let _ = oer_esp32s31_hal::bluetooth::DeviceTablePublication::new( // ui-error: E0603
+   |                                                                    ^^^ private associated function
+   |
+  ::: src/bluetooth.rs
+   |
+   | /     pub(crate) const fn new(
+   | |         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
+   | |         count: oer_mmio::Index<{ Self::CAPACITY + 1 }>,
+   | |     ) -> Self {
+   | |_____________- private associated function defined here
+
+error[E0308]: mismatched types
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:16:9
+   |
+15 |     let _ = oer_esp32s31_hal::bluetooth::DeviceTablePublication::new( // ui-error: E0603
+   |             -------------------------------------------------------- arguments to this function are incorrect
+16 |         address, oer_mmio::Index::constant::<0>()); // ui-error: E0308
+   |         ^^^^^^^ expected `DmaRef<BleDeviceTable>`, found `u32`
+   |
+   = note: expected struct `DmaRef<BleDeviceTable>`
+                found type `u32`
+note: associated function defined here
+  --> src/bluetooth.rs
+   |
+   |     pub(crate) const fn new(
+   |                         ^^^
+
+error[E0624]: associated function `bind` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:17:70
+   |
+17 |       let _ = oer_esp32s31_hal::bluetooth::DirectionFindingDescriptor::bind(address); // ui-error: E0603
+   |                                                                        ^^^^ private associated function
+   |
+  ::: src/bluetooth.rs
+   |
+   | /     pub(crate) const fn bind(
+   | |         address: crate::layouts::DmaRef<crate::layouts::BleDirectionFindingDescriptor>,
+   | |     ) -> Self {
+   | |_____________- private associated function defined here
+
+error[E0308]: mismatched types
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:17:75
+   |
+17 |     let _ = oer_esp32s31_hal::bluetooth::DirectionFindingDescriptor::bind(address); // ui-error: E0603
+   |             ------------------------------------------------------------- ^^^^^^^ expected `DmaRef<BleDirectionFindingDescriptor>`, found `u32`
+   |             |
+   |             arguments to this function are incorrect
+   |
+   = note: expected struct `DmaRef<BleDirectionFindingDescriptor>`
+                found type `u32`
+note: associated function defined here
+  --> src/bluetooth.rs
+   |
+   |     pub(crate) const fn bind(
+   |                         ^^^^
+
+error[E0624]: associated function `bind` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:19:65
+   |
+19 |     let _ = oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects::bind(address); // ui-error: E0603
+   |                                                                 ^^^^ private associated function
+   |
+  ::: src/bluetooth.rs
+   |
+   |     pub(crate) const fn bind(inputs: BluetoothPhyRegisterInitInputs) -> Self {
+   |     ------------------------------------------------------------------------ private associated function defined here
+
+error[E0308]: mismatched types
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:19:70
+   |
+19 |     let _ = oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects::bind(address); // ui-error: E0603
+   |             -------------------------------------------------------- ^^^^^^^ expected `BluetoothPhyRegisterInitInputs`, found `u32`
+   |             |
+   |             arguments to this function are incorrect
+   |
+note: associated function defined here
+  --> src/bluetooth.rs
+   |
+   |     pub(crate) const fn bind(inputs: BluetoothPhyRegisterInitInputs) -> Self {
+   |                         ^^^^
+
+error[E0624]: associated function `new` is private
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:25:66
+   |
+25 |       let _ = oer_esp32s31_hal::bluetooth::DeviceTablePublication::new( // ui-error: E0603
+   |                                                                    ^^^ private associated function
+   |
+  ::: src/bluetooth.rs
+   |
+   | /     pub(crate) const fn new(
+   | |         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
+   | |         count: oer_mmio::Index<{ Self::CAPACITY + 1 }>,
+   | |     ) -> Self {
+   | |_____________- private associated function defined here
+
+error[E0308]: mismatched types
+  --> tests/ui/bluetooth_storage_proofs_reject_raw_addresses.rs:26:16
+   |
+25 |     let _ = oer_esp32s31_hal::bluetooth::DeviceTablePublication::new( // ui-error: E0603
+   |             -------------------------------------------------------- arguments to this function are incorrect
+26 |         table, u8::MAX); // ui-error: E0308
+   |                ^^^^^^^ expected `Index<13>`, found `u8`
+   |
+   = note: expected struct `oer_mmio::Index<13>`
+                found type `u8`
+note: associated function defined here
+  --> src/bluetooth.rs
+   |
+   |     pub(crate) const fn new(
+   |                         ^^^

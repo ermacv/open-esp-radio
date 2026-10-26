@@ -121,16 +121,9 @@ impl DirectionFindingWorkspaceCpuOwned {
     /// The disabled-CTE descriptor of this workspace, as the
     /// direction-finding baseline points the hardware at it.
     pub(crate) fn disabled_cte_descriptor(&self) -> crate::bluetooth::DirectionFindingDescriptor {
-        #[allow(unsafe_code, reason = "the owner of the workspace vouches for it")]
-        // SAFETY: this owner holds the workspace `Pin<&'static mut>` for as
-        // long as it lives, its binding names that workspace's disabled-CTE
-        // descriptor, and the workspace words are `VolatileCell`s the CPU
-        // reaches only through volatile accesses.
-        unsafe {
-            crate::bluetooth::DirectionFindingDescriptor::bind(
-                self.binding.disabled_cte_descriptor_address(),
-            )
-        }
+        crate::bluetooth::DirectionFindingDescriptor::bind(
+            self.binding.disabled_cte_descriptor_address(),
+        )
     }
 
     /// Return the workspace to its allocation-time image after the Controller

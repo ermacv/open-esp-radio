@@ -231,8 +231,11 @@ each address to a submitted item of the `'static` scheduler pools, in the
 executor's order. The BLE PHY engine, the direction-finding workspace, the
 device table and the receive chain each mint, in one place, the HAL proof of
 the storage the hardware is pointed at (`BlePhyHardwareObjects`,
-`DirectionFindingDescriptor`, `DeviceTablePublication`, `RxChainHead`),
-whose constructor is unsafe; the HAL publications that take them are safe.
+`DirectionFindingDescriptor`, `DeviceTablePublication`, `RxChainHead`)
+through safe crate-private constructors. Their typed `DmaRef`s carry the
+complete retained layout's extent and alignment; the device-table count is
+an `Index<capacity + 1>` admitted before table mutation, with its register
+width checked at compile time. The HAL publications that take them are safe.
 The private placement adapter consumes `Placed`, projects fields within its
 allocation and calls the HAL's typed-address constructors. `engine::arena`
 retains the root pointer, then derives every field borrow from that pointer.

@@ -14,6 +14,7 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 use core::pin::Pin;
+use oer_mmio::Index;
 
 use crate::bluetooth::DeviceTablePublication;
 use crate::layouts::*;
@@ -23,8 +24,7 @@ use crate::dma_static::Placed;
 
 /// Filter accept list entries the Controller keeps, as the S31 build's LE
 /// Read Filter Accept List Size reports.
-pub const BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY: usize =
-    BleDeviceTable::SIZE / BleDeviceTableEntry::SIZE;
+pub const BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY: usize = DeviceTablePublication::CAPACITY;
 
 /// One filter accept list device: its address type and address.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,7 +82,7 @@ pub enum LeDeviceTableError {
 pub struct LeDeviceTable {
     storage: Pin<&'static mut LeDeviceTableStorage>,
     first_entry: DmaRef<BleDeviceTable>,
-    members: usize,
+    members: Index<{ BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY + 1 }>,
 }
 
 impl LeDeviceTable {
@@ -105,7 +105,7 @@ impl LeDeviceTable {
         let mut table = Self {
             storage: Pin::static_mut(storage),
             first_entry,
-            members: 0,
+            members: Index::constant::<0>(),
         };
         table.clear();
         table
@@ -114,25 +114,17 @@ impl LeDeviceTable {
     /// Hardware's view of the table after the last change: its first entry
     /// and the number of entries.
     pub(crate) fn publication(&self) -> DeviceTablePublication {
-        let count = u8::try_from(self.members).expect("the capacity fits the count field");
-        #[allow(unsafe_code, reason = "the table vouches for its storage")]
-        // SAFETY: the table holds its storage `Pin<&'static mut>` from `Placed`;
-        // the linker proves its physical placement, `members` never
-        // exceeds its capacity, and its words are `VolatileCell`s the CPU
-        // reaches only through volatile accesses.
-        unsafe {
-            DeviceTablePublication::new(self.first_entry, count)
-        }
+        DeviceTablePublication::new(self.first_entry, self.members)
     }
 
     /// Number of devices in the filter accept list.
     pub const fn len(&self) -> usize {
-        self.members
+        self.members.get()
     }
 
     /// Whether the filter accept list is empty.
     pub const fn is_empty(&self) -> bool {
-        self.members == 0
+        self.members.get() == 0
     }
 
     /// Add `device`. A device already in the list is accepted unchanged.
@@ -140,22 +132,25 @@ impl LeDeviceTable {
         if self.position(device).is_some() {
             return Ok(());
         }
-        if self.members == BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY {
-            return Err(LeDeviceTableError::Full);
-        }
-        self.write(self.members, device.image());
-        self.members += 1;
+        let next = Index::new(self.members.get() + 1).map_err(|_| LeDeviceTableError::Full)?;
+        self.write(self.members.get(), device.image());
+        self.members = next;
         Ok(())
     }
 
     /// Remove `device`; the last entry moves into its slot.
     pub fn remove(&mut self, device: LeFilterAcceptListDevice) -> Result<(), LeDeviceTableError> {
         let index = self.position(device).ok_or(LeDeviceTableError::NotFound)?;
-        let last = self.members - 1;
-        let moved = self.read(last);
+        let last = self
+            .members
+            .get()
+            .checked_sub(1)
+            .ok_or(LeDeviceTableError::NotFound)?;
+        let remaining = Index::new(last).map_err(|_| LeDeviceTableError::NotFound)?;
+        let moved = self.read(remaining.get());
         self.write(index, moved);
-        self.write(last, DeviceEntryImage::ZERO);
-        self.members = last;
+        self.write(remaining.get(), DeviceEntryImage::ZERO);
+        self.members = remaining;
         Ok(())
     }
 
@@ -164,12 +159,12 @@ impl LeDeviceTable {
         for index in 0..BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY {
             self.write(index, DeviceEntryImage::ZERO);
         }
-        self.members = 0;
+        self.members = Index::constant::<0>();
     }
 
     fn position(&self, device: LeFilterAcceptListDevice) -> Option<usize> {
         let words = device.image();
-        (0..self.members).find(|&index| self.read(index) == words)
+        (0..self.members.get()).find(|&index| self.read(index) == words)
     }
 
     fn read(&self, index: usize) -> DeviceEntryImage {

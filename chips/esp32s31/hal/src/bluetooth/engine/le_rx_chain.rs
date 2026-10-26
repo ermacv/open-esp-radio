@@ -565,18 +565,11 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
     /// The chain's initial header and list, as the RX-list publication
     /// points the hardware at them.
     pub(crate) fn publication_head(&self) -> crate::bluetooth::RxChainHead {
-        #[allow(unsafe_code, reason = "the chain vouches for its storage")]
-        // SAFETY: the chain holds its nodes `Pin<&'static mut>`, its ring
-        // encodes every header link into those nodes only, and the headers
-        // are volatile cells the CPU reaches only through volatile accesses;
-        // the selector and the scanning flag are this chain's class.
-        unsafe {
-            crate::bluetooth::RxChainHead::new(
-                self.class.selector(),
-                self.ring.cursor().reference(),
-                matches!(self.class, RxMemoryListClass::Scanning),
-            )
-        }
+        crate::bluetooth::RxChainHead::new(
+            self.class.selector(),
+            self.ring.cursor().reference(),
+            matches!(self.class, RxMemoryListClass::Scanning),
+        )
     }
 
     /// Take the oldest completed packet recorded for `source` and return its
