@@ -998,8 +998,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             }
         };
         let phy = state.registers.radio_phy_mut();
-        phy.prepare_modem_syscon_clock_map();
-        phy.prepare_shared_modem_clock_map();
         match execute_acquire(prepared, phy, &mut state.modem_platform_clocks, platform) {
             Ok((planner, lease)) => {
                 leases[index] = Some(lease);

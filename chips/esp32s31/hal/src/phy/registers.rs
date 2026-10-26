@@ -4,6 +4,9 @@
 use oer_esp32s31_pac::{fe, instances, wifi_bb, wifi_bb_brx, wifi_mac};
 use oer_mmio::{Fixed, Placement};
 
+#[cfg(test)]
+pub(crate) mod host;
+
 /// Placements of the physical blocks a PHY operation spans.
 pub trait PhyPlacement {
     type Fe: Placement;

@@ -359,10 +359,19 @@ impl<B: PlatformClockBackend> ModemPlatformClocks<B> {
 
 /// Modem clock gates driven by the radio PAC.
 pub(crate) trait ModemClockPort {
+    /// Publish the active modem state and its clock maps before any module
+    /// gate is opened, including the PHY's pre-client registration clocks.
+    fn prepare_power_state(&mut self);
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool);
 }
 
-impl ModemClockPort for RadioPhyRegisters {
+impl<P: crate::phy::registers::RadioPlacement> ModemClockPort for RadioPhyRegisters<P> {
+    fn prepare_power_state(&mut self) {
+        self.prepare_modem_syscon_clock_map();
+        self.prepare_shared_modem_clock_map();
+        self.publish_modem_power_state();
+    }
+
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool) {
         self.configure_modem_clock_device(device, enable);
     }
@@ -450,6 +459,7 @@ pub(crate) fn execute_acquire<B: PlatformClockBackend>(
     held: &mut ModemPlatformClocks<B>,
     platform: &impl PlatformClockProvider<Backend = B>,
 ) -> Result<(ModemClockPlanner, ModemClockLease), PoisonedModemClockAcquire> {
+    port.prepare_power_state();
     oer_espressif_modem_clock::execute_acquire(prepared, |dependency| {
         perform_acquire(dependency, port, held, platform)
     })

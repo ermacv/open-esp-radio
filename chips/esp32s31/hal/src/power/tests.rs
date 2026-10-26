@@ -57,18 +57,12 @@ impl FakeShared {
 }
 
 impl PowerSequenceBackend for FakeShared {
-    fn select_hp_active_modem_icg(&mut self) {
-        self.operations
-            .borrow_mut()
-            .push(Operation::SelectHpActiveIcg);
-    }
-
-    fn apply_modem_icg_selection(&mut self) {
-        self.operations.borrow_mut().push(Operation::ApplyModemIcg);
-    }
-
-    fn apply_sleep_icg_selection(&mut self) {
-        self.operations.borrow_mut().push(Operation::ApplySleepIcg);
+    fn publish_modem_power_state(&mut self) {
+        self.operations.borrow_mut().extend([
+            Operation::SelectHpActiveIcg,
+            Operation::ApplyModemIcg,
+            Operation::ApplySleepIcg,
+        ]);
     }
 
     fn enable_modem_register_bus_clock(&mut self) {
