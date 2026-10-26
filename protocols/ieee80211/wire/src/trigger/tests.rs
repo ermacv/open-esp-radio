@@ -488,3 +488,41 @@ fn every_prefix_of_a_trigger_frame_is_handled() {
         let _ = parse_uplink_power_headroom_control(bytes);
     }
 }
+
+#[test]
+fn every_bounded_power_encoding_has_its_exact_dbm_value() {
+    for code in 0..128 {
+        let actual = TriggerTargetRssi::from_user_encoding(oer_wire::U8::new(code).unwrap());
+        let expected = if code == 127 {
+            TriggerTargetRssi::Reserved
+        } else {
+            TriggerTargetRssi::Dbm((i16::from(code) - 110) as i8)
+        };
+        assert_eq!(actual, expected);
+    }
+    for code in 0..64 {
+        assert_eq!(
+            TriggerApTxPower::from_common_encoding(oer_wire::U8::new(code).unwrap()),
+            TriggerApTxPower::Dbm((i16::from(code) - 20) as i8)
+        );
+    }
+    for code in 0..32 {
+        let code_value = oer_wire::U8::new(code).unwrap();
+        assert_eq!(
+            TriggerTargetRssi::from_trs_encoding(code_value),
+            if code == 31 {
+                TriggerTargetRssi::Reserved
+            } else {
+                TriggerTargetRssi::Dbm(((i16::from(code) - 45) * 2) as i8)
+            }
+        );
+        assert_eq!(
+            TriggerApTxPower::from_trs_encoding(code_value),
+            if code == 31 {
+                TriggerApTxPower::Reserved
+            } else {
+                TriggerApTxPower::Dbm(((i16::from(code) - 10) * 2) as i8)
+            }
+        );
+    }
+}

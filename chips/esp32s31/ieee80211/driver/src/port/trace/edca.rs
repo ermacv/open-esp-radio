@@ -54,9 +54,9 @@ impl Event for EdcaRecord {
     fn encode(&self) -> [u32; 2] {
         let w = self.parameters.wmm;
         [
-            u32::from(w.aifsn)
-                | (u32::from(w.ecw_min) << 4)
-                | (u32::from(w.ecw_max) << 8)
+            u32::from(w.aifsn.get())
+                | (u32::from(w.ecw_min.get()) << 4)
+                | (u32::from(w.ecw_max.get()) << 8)
                 | (u32::from(w.txop_limit_units_32_us) << 12)
                 | (u32::from(w.admission_control_mandatory) << 28)
                 | ((self.role as u32) << 29)
@@ -72,9 +72,9 @@ impl Event for EdcaRecord {
             parameters: EdcaAcParameters {
                 wmm: WmmAcParameters {
                     admission_control_mandatory: w & (1 << 28) != 0,
-                    aifsn: (w & 15) as u8,
-                    ecw_min: ((w >> 4) & 15) as u8,
-                    ecw_max: ((w >> 8) & 15) as u8,
+                    aifsn: oer_wire::U8::from_low_bits((w & 15) as u8),
+                    ecw_min: oer_wire::U8::from_low_bits(((w >> 4) & 15) as u8),
+                    ecw_max: oer_wire::U8::from_low_bits(((w >> 8) & 15) as u8),
                     txop_limit_units_32_us: ((w >> 12) & 0xffff) as u16,
                 },
                 msdu_lifetime: oer_time::Duration::from_micros(u64::from(life)),
@@ -155,9 +155,9 @@ mod tests {
                         .access_category(category);
                     if updated {
                         parameters.wmm.admission_control_mandatory = true;
-                        parameters.wmm.aifsn = 15;
-                        parameters.wmm.ecw_min = 6;
-                        parameters.wmm.ecw_max = 10;
+                        parameters.wmm.aifsn = oer_wire::U8::constant::<15>();
+                        parameters.wmm.ecw_min = oer_wire::U8::constant::<6>();
+                        parameters.wmm.ecw_max = oer_wire::U8::constant::<10>();
                         parameters.wmm.txop_limit_units_32_us = 350;
                     }
                     let input = EdcaRecord {

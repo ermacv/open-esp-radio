@@ -133,7 +133,11 @@ impl EdcaContentionParameters {
     /// Convert a parsed WMM AC Parameter Record without retaining its
     /// independent admission-control or TXOP policy.
     pub const fn from_wmm(parameters: WmmAcParameters) -> Result<Self, EdcaParametersError> {
-        Self::new(parameters.aifsn, parameters.ecw_min, parameters.ecw_max)
+        Self::new(
+            parameters.aifsn.get(),
+            parameters.ecw_min.get(),
+            parameters.ecw_max.get(),
+        )
     }
 
     pub const fn aifsn(self) -> u8 {

@@ -1027,9 +1027,9 @@ fn each_queue_draw_uses_its_head_vif_and_retains_the_complete_record() {
                 false,
                 [WmmAcParameters {
                     admission_control_mandatory: false,
-                    aifsn,
-                    ecw_min: min,
-                    ecw_max: max,
+                    aifsn: oer_wire::U8::new(aifsn).unwrap(),
+                    ecw_min: oer_wire::U8::new(min).unwrap(),
+                    ecw_max: oer_wire::U8::new(max).unwrap(),
                     txop_limit_units_32_us: txop,
                 }; 4],
             ),

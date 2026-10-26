@@ -55,8 +55,8 @@ pub struct WmmParameters {
 }
 
 impl WmmParameters {
-    /// The parameters, when each field fits its four bits: `None`
-    /// otherwise. A `const` caller checks them at build.
+    /// The parameters, when the parameter-set count fits its four bits.
+    /// AC records retain their own field-width proofs.
     pub const fn new(
         parameter_set_count: u8,
         uapsd: bool,
@@ -64,16 +64,6 @@ impl WmmParameters {
     ) -> Option<Self> {
         if parameter_set_count > WMM_NIBBLE_MAX {
             return None;
-        }
-        let mut remaining = access_categories.as_slice();
-        while let Some((category, rest)) = remaining.split_first() {
-            if category.aifsn > WMM_NIBBLE_MAX
-                || category.ecw_min > WMM_NIBBLE_MAX
-                || category.ecw_max > WMM_NIBBLE_MAX
-            {
-                return None;
-            }
-            remaining = rest;
         }
         Some(Self {
             parameter_set_count,

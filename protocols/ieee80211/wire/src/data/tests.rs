@@ -521,3 +521,33 @@ fn a_malformed_later_amsdu_subframe_exposes_no_valid_prefix() {
         assert_eq!(delivered, 0, "malformed tail {corruption}");
     }
 }
+
+#[test]
+fn malformed_payload_offsets_and_lengths_return_errors_without_writing() {
+    let plan = plan_data_encapsulation(
+        DataInterfaceRole::AccessPoint,
+        BSSID,
+        BSSID,
+        ethernet(DESTINATION),
+        WmmUserPriority::UP0,
+        false,
+        false,
+    );
+    let mut mpdu = std::vec::Vec::from(&plan.header[..usize::from(plan.header_len)]);
+    mpdu.extend_from_slice(&plan.llc_snap);
+    mpdu.extend_from_slice(&[1, 2, 3]);
+    for (offset, length) in [(usize::MAX, 8), (24, usize::MAX), (0, 8), (24, 7)] {
+        let mut output = [0xa5; 64];
+        assert!(
+            decapsulate_data(
+                DataInterfaceRole::Station,
+                &mpdu,
+                offset,
+                length,
+                &mut output
+            )
+            .is_err()
+        );
+        assert_eq!(output, [0xa5; 64]);
+    }
+}

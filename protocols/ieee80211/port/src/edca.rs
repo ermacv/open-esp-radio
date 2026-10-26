@@ -135,7 +135,7 @@ impl EdcaContention {
 
     /// The window an AC Parameter Record advertises.
     pub const fn from_wmm(parameters: WmmAcParameters) -> Self {
-        Self::new(parameters.ecw_min, parameters.ecw_max)
+        Self::new(parameters.ecw_min.get(), parameters.ecw_max.get())
     }
 
     /// The exponent `n` of the current window `CW = 2^n - 1`.

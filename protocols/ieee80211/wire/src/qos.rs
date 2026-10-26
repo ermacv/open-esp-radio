@@ -182,24 +182,23 @@ impl WmmUserPriority {
 
 /// Valid six-bit IPv4/IPv6 Differentiated Services Code Point.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Dscp(u8);
+pub struct Dscp(oer_wire::U8<6>);
 
 impl Dscp {
     pub const fn new(value: u8) -> Option<Self> {
-        if value <= 0x3f {
-            Some(Self(value))
-        } else {
-            None
+        match oer_wire::U8::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
         }
     }
 
     pub const fn value(self) -> u8 {
-        self.0
+        self.0.get()
     }
 
     /// Widely deployed default mapping based on the three DSCP MSBs.
     pub const fn default_user_priority(self) -> WmmUserPriority {
-        let field = crate::encoding::validated(DsField::from_bytes([0]).with_dscp(self.0));
+        let field = DsField::from_bytes([0]).with_dscp(self.0);
         WmmUserPriority::from_code(field.class_selector())
     }
 
@@ -211,7 +210,7 @@ impl Dscp {
     /// network-control priority. RFC 8622's Lower Effort codepoint joins CS1
     /// in the background category.
     pub const fn station_user_priority(self) -> WmmUserPriority {
-        match self.0 {
+        match self.value() {
             // Lower Effort and CS1.
             1 | 8 => WmmUserPriority::UP1,
             // AF2x low-latency data.
@@ -348,7 +347,7 @@ oer_wire::bitfield! {
     pub struct DsField[1] (little) {
         /// SOURCE: RFC 3168, 5 (Explicit Congestion Notification in IP).
         pub ecn, with_ecn: u8 = 0..2;
-        pub dscp, with_dscp: u8 = 2..8;
+        pub dscp, with_dscp: (u8) = 2..8;
         /// Three DSCP MSBs used by the default priority mapping.
         /// SOURCE: RFC 2474, 4.2.2 (Class Selector Codepoints).
         pub class_selector, with_class_selector: u8 = 5..8, view;

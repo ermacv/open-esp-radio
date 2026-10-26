@@ -2668,9 +2668,9 @@ fn wmm_set_with_best_effort_txop(
     use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
     let category = |aifsn, txop| WmmAcParameters {
         admission_control_mandatory: false,
-        aifsn,
-        ecw_min: 4,
-        ecw_max: 10,
+        aifsn: oer_wire::U8::new(aifsn).unwrap(),
+        ecw_min: oer_wire::U8::constant::<4>(),
+        ecw_max: oer_wire::U8::constant::<10>(),
         txop_limit_units_32_us: txop,
     };
     oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
@@ -2867,9 +2867,9 @@ fn an_edca_set_outside_the_limits_leaves_the_installed_one() {
         // A best-effort ECWmax of 11 lies outside the hardware's exponents.
         let record = |aifsn, ecw_max| oer_ieee80211_wire::extensions::wmm::WmmAcParameters {
             admission_control_mandatory: false,
-            aifsn,
-            ecw_min: 4,
-            ecw_max,
+            aifsn: oer_wire::U8::new(aifsn).unwrap(),
+            ecw_min: oer_wire::U8::constant::<4>(),
+            ecw_max: oer_wire::U8::new(ecw_max).unwrap(),
             txop_limit_units_32_us: 47,
         };
         let outside = oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
@@ -2924,7 +2924,7 @@ fn each_interface_contends_with_its_own_edca_set() {
             false,
             [
                 oer_ieee80211_wire::extensions::wmm::WmmAcParameters {
-                    ecw_max: 11,
+                    ecw_max: oer_wire::U8::constant::<11>(),
                     ..refused.access_category(WmmAccessCategory::BestEffort)
                 },
                 refused.access_category(WmmAccessCategory::Background),
@@ -4329,9 +4329,9 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
                     false,
                     [WmmAcParameters {
                         admission_control_mandatory: false,
-                        aifsn,
-                        ecw_min: min,
-                        ecw_max: max,
+                        aifsn: oer_wire::U8::new(aifsn).unwrap(),
+                        ecw_min: oer_wire::U8::new(min).unwrap(),
+                        ecw_max: oer_wire::U8::new(max).unwrap(),
                         txop_limit_units_32_us: txop,
                     }; 4],
                 ),
@@ -4352,7 +4352,10 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
             .get()
             .access_category(WmmAccessCategory::BestEffort);
             let slots = core.draw_backoff(role, WmmAccessCategory::BestEffort);
-            assert_eq!(slots, (entropy() as u16) & ((1 << record.wmm.ecw_min) - 1));
+            assert_eq!(
+                slots,
+                (entropy() as u16) & ((1 << record.wmm.ecw_min.get()) - 1)
+            );
             let mut request = values(&data_frame(BSSID), false);
             request.role = role;
             request.backoff_slots = slots;
@@ -4364,7 +4367,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
                 .tx
                 .policy()
                 .access_policy(role, LegacyTxQueue::BestEffort);
-            assert_eq!(applied.contention().aifsn(), record.wmm.aifsn);
+            assert_eq!(applied.contention().aifsn(), record.wmm.aifsn.get());
             assert_eq!(
                 applied.txop_limit_units_32_us(),
                 record.wmm.txop_limit_units_32_us

@@ -162,6 +162,11 @@ impl<'payload> Iterator for EspNowV2Elements<'payload> {
 impl ExactSizeIterator for EspNowV2Elements<'_> {}
 impl core::iter::FusedIterator for EspNowV2Elements<'_> {}
 
+// The admitted wire maximum proves both retained lengths fit in u16.
+const _: () = {
+    assert!(ESP_NOW_V2_MAX_MPDU_LEN <= u16::MAX as usize);
+};
+
 /// Strictly validated ESP-NOW v2 vendor Action body.
 ///
 /// A newly constructed value borrows one contiguous application payload. A
@@ -174,7 +179,8 @@ pub struct EspNowV2Action<'payload> {
     content: EspNowV2ActionContent<'payload>,
     payload_length: usize,
     element_count: usize,
-    vendor_content_length: usize,
+    encoded_length: u16,
+    frame_length: u16,
 }
 
 impl<'payload> EspNowV2Action<'payload> {
@@ -187,12 +193,34 @@ impl<'payload> EspNowV2Action<'payload> {
             Err(error) => return Err(error),
         };
         let element_count = element_count_for_payload(payload.len());
+        let Some(overhead) = element_count.checked_mul(VENDOR_ELEMENT_ENCODED_OVERHEAD) else {
+            return Err(EspNowV2WireError::PayloadTooLong {
+                length: payload.len(),
+            });
+        };
+        let Some(vendor_content_length) = payload.len().checked_add(overhead) else {
+            return Err(EspNowV2WireError::PayloadTooLong {
+                length: payload.len(),
+            });
+        };
+        let Some(encoded_length) = ESP_NOW_V2_ACTION_PREFIX_LEN.checked_add(vendor_content_length)
+        else {
+            return Err(EspNowV2WireError::PayloadTooLong {
+                length: payload.len(),
+            });
+        };
+        let Some(frame_length) = ESP_NOW_MANAGEMENT_HEADER_LEN.checked_add(encoded_length) else {
+            return Err(EspNowV2WireError::PayloadTooLong {
+                length: payload.len(),
+            });
+        };
         Ok(Self {
             random_value,
             content: EspNowV2ActionContent::Contiguous(payload),
             payload_length: payload.len(),
             element_count,
-            vendor_content_length: payload.len() + element_count * VENDOR_ELEMENT_ENCODED_OVERHEAD,
+            encoded_length: encoded_length as u16,
+            frame_length: frame_length as u16,
         })
     }
 
@@ -213,7 +241,7 @@ impl<'payload> EspNowV2Action<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        ESP_NOW_V2_ACTION_PREFIX_LEN + self.vendor_content_length
+        self.encoded_length as usize
     }
 
     pub const fn elements(self) -> EspNowV2Elements<'payload> {
@@ -254,7 +282,7 @@ impl<'payload> EspNowV2Action<'payload> {
                 .ok_or(too_small)?;
             target.copy_from_slice(element.payload);
             rest = tail;
-            copied = copied.saturating_add(element.payload.len());
+            copied = copied.checked_add(element.payload.len()).ok_or(too_small)?;
         }
         Ok(copied)
     }
@@ -281,7 +309,16 @@ impl<'payload> EspNowV2Action<'payload> {
             writer
                 .write(&[
                     ESP_NOW_VENDOR_ELEMENT_ID,
-                    (VENDOR_ELEMENT_FIXED_BODY_LEN + payload.len()) as u8,
+                    u8::try_from(
+                        VENDOR_ELEMENT_FIXED_BODY_LEN
+                            .checked_add(payload.len())
+                            .ok_or(EspNowV2WireError::PayloadTooLong {
+                                length: payload.len(),
+                            })?,
+                    )
+                    .map_err(|_| EspNowV2WireError::PayloadTooLong {
+                        length: payload.len(),
+                    })?,
                 ])
                 .map_err(too_small)?;
             writer
@@ -422,13 +459,17 @@ impl<'payload> EspNowV2Action<'payload> {
                 });
             }
 
-            payload_length = payload_length.saturating_add(payload.len());
+            payload_length = payload_length
+                .checked_add(payload.len())
+                .ok_or(EspNowV2WireError::PayloadTooLong { length: usize::MAX })?;
             if payload_length > ESP_NOW_V2_MAX_PAYLOAD_LEN {
                 return Err(EspNowV2WireError::PayloadTooLong {
                     length: payload_length,
                 });
             }
-            element_count = element_count.saturating_add(1);
+            element_count = element_count
+                .checked_add(1)
+                .ok_or(EspNowV2WireError::PayloadTooLong { length: usize::MAX })?;
             rest = after;
         }
 
@@ -437,7 +478,17 @@ impl<'payload> EspNowV2Action<'payload> {
             content: EspNowV2ActionContent::EncodedElements(elements),
             payload_length,
             element_count,
-            vendor_content_length: elements.len(),
+            encoded_length: (ESP_NOW_V2_ACTION_PREFIX_LEN
+                .checked_add(elements.len())
+                .ok_or(EspNowV2WireError::PayloadTooLong {
+                    length: payload_length,
+                })?) as u16,
+            frame_length: (ESP_NOW_V2_ACTION_PREFIX_LEN
+                .checked_add(elements.len())
+                .and_then(|length| ESP_NOW_MANAGEMENT_HEADER_LEN.checked_add(length))
+                .ok_or(EspNowV2WireError::PayloadTooLong {
+                    length: payload_length,
+                })?) as u16,
         })
     }
 }
@@ -502,7 +553,7 @@ impl<'payload> EspNowV2Frame<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        ESP_NOW_MANAGEMENT_HEADER_LEN + self.action.encoded_len()
+        self.action.frame_length as usize
     }
 
     /// Encode an Action MPDU with broadcast BSSID and no FCS.

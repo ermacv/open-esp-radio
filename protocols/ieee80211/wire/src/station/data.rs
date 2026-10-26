@@ -186,11 +186,9 @@ impl StaProtectedEthernetFrame {
         if ethernet_length < ETHERNET_HEADER_LEN {
             return Err(StationFrameError::EthernetFrameTooShort);
         }
-        let ethernet_end = ethernet_offset.checked_add(ethernet_length).ok_or(
-            StationFrameError::OutputTooSmall {
-                required: usize::MAX,
-            },
-        )?;
+        let ethernet_end = ethernet_offset
+            .checked_add(ethernet_length)
+            .ok_or(StationFrameError::LengthOverflow)?;
         if storage.len() < ethernet_end {
             return Err(StationFrameError::OutputTooSmall {
                 required: ethernet_end,
@@ -222,42 +220,50 @@ impl StaProtectedEthernetFrame {
         .map_err(|_| StationFrameError::HeControlRequiresQos)?;
         plan.set_protected(true);
 
-        let header_len = usize::from(plan.header_len);
-        let dma_header_len = plan.dma_header_len();
-        let prefix_len = dma_header_len + CCMP_HEADER_LEN + plan.llc_snap.len();
-        let headroom = prefix_len - ETHERNET_HEADER_LEN;
+        // Only these two fixed MAC header geometries are admitted by the
+        // station plan; CCMP and LLC/SNAP have fixed lengths.
+        let headroom = if self.peer_qos {
+            const {
+                crate::data::IEEE80211_QOS_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN
+                    - ETHERNET_HEADER_LEN
+            }
+        } else {
+            const {
+                crate::data::IEEE80211_LEGACY_DATA_HEADER_LEN
+                    + CCMP_HEADER_LEN
+                    + LLC_SNAP_HEADER_LEN
+                    - ETHERNET_HEADER_LEN
+            }
+        };
         let frame_offset = ethernet_offset.checked_sub(headroom).ok_or(
             StationFrameError::EthernetHeadroomTooSmall {
                 required: headroom,
                 available: ethernet_offset,
             },
         )?;
-        // The prefix borrow ends at the original payload boundary. Encoding
-        // cannot reach payload bytes, and the returned frame keeps the input
-        // Ethernet end instead of reconstructing it from a second length.
-        let payload_start = ethernet_offset + ETHERNET_HEADER_LEN;
-        let (before_payload, _) = storage.split_at_mut(payload_start);
-        let prefix =
-            before_payload
-                .get_mut(frame_offset..)
-                .ok_or(StationFrameError::OutputTooSmall {
-                    required: payload_start,
-                })?;
+        // Retain the complete admitted frame borrow for its length and the
+        // prefix write. FrameParts writes only its own bytes, leaving the
+        // original Ethernet payload at the same boundary.
+        let frame = storage.get_mut(frame_offset..ethernet_end).ok_or(
+            StationFrameError::OutputTooSmall {
+                required: ethernet_end,
+            },
+        )?;
+        let length = frame.len();
         plan.header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        crate::encoding::FrameParts([
-            oer_wire::Reader::new(&plan.header)
-                .take(header_len)
-                .map_err(|_| StationFrameError::OutputTooSmall {
-                    required: header_len,
-                })?,
-            &self.ccmp_header,
-            &plan.llc_snap,
-        ])
-        .write(prefix)
-        .map_err(|required| StationFrameError::OutputTooSmall { required })?;
+        let header: &[u8] = if self.peer_qos {
+            &plan.header
+        } else {
+            plan.header
+                .split_at(const { crate::data::IEEE80211_LEGACY_DATA_HEADER_LEN })
+                .0
+        };
+        crate::encoding::FrameParts([header, &self.ccmp_header, &plan.llc_snap])
+            .write(frame)
+            .map_err(|required| StationFrameError::OutputTooSmall { required })?;
         Ok(EncodedStaFrame {
             offset: frame_offset,
-            length: ethernet_end - frame_offset,
+            length,
         })
     }
 
@@ -288,11 +294,9 @@ impl StaProtectedEthernetFrame {
         if !self.peer_qos {
             return Err(StationFrameError::AmsduRequiresQos);
         }
-        let ethernet_end = ethernet_offset.checked_add(ethernet_length).ok_or(
-            StationFrameError::OutputTooSmall {
-                required: usize::MAX,
-            },
-        )?;
+        let ethernet_end = ethernet_offset
+            .checked_add(ethernet_length)
+            .ok_or(StationFrameError::LengthOverflow)?;
         if ethernet_length < ETHERNET_HEADER_LEN || second_ethernet.len() < ETHERNET_HEADER_LEN {
             return Err(StationFrameError::EthernetFrameTooShort);
         }
@@ -302,15 +306,17 @@ impl StaProtectedEthernetFrame {
             });
         }
 
-        let Some(&first_header) = storage
+        let Some((first_header, first_payload)) = storage
             .get(ethernet_offset..ethernet_end)
             .ok_or(StationFrameError::OutputTooSmall {
                 required: ethernet_end,
             })?
-            .first_chunk::<ETHERNET_HEADER_LEN>()
+            .split_first_chunk::<ETHERNET_HEADER_LEN>()
         else {
             return Err(StationFrameError::EthernetFrameTooShort);
         };
+        let first_payload_length = first_payload.len();
+        let first_header = *first_header;
         let [_, _, _, _, _, _, source @ .., _, _] = first_header;
         let required =
             sta_protected_amsdu_pair_frame_length(ethernet_length, second_ethernet.len())?;
@@ -320,12 +326,9 @@ impl StaProtectedEthernetFrame {
                 required: STA_PROTECTED_QOS_ETHERNET_HEADROOM,
                 available: ethernet_offset,
             })?;
-        let frame_end =
-            frame_offset
-                .checked_add(required)
-                .ok_or(StationFrameError::OutputTooSmall {
-                    required: usize::MAX,
-                })?;
+        let frame_end = frame_offset
+            .checked_add(required)
+            .ok_or(StationFrameError::LengthOverflow)?;
         if storage.len() < frame_end {
             return Err(StationFrameError::OutputTooSmall {
                 required: frame_end,
@@ -347,12 +350,18 @@ impl StaProtectedEthernetFrame {
         // A station A-MSDU always owns the complete fixed-size QoS header.
         let mut header = plan.header;
         header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let first_prefix_length =
-            header.len() + CCMP_HEADER_LEN + AMSDU_SUBFRAME_HEADER_LEN + LLC_SNAP_HEADER_LEN;
-        let first_payload_length = ethernet_length - ETHERNET_HEADER_LEN;
+        const FIRST_PREFIX_LENGTH: usize = crate::data::IEEE80211_QOS_DATA_HEADER_LEN
+            + CCMP_HEADER_LEN
+            + AMSDU_SUBFRAME_HEADER_LEN
+            + LLC_SNAP_HEADER_LEN;
+        let first_prefix_length = FIRST_PREFIX_LENGTH;
         storage.copy_within(
-            ethernet_offset + ETHERNET_HEADER_LEN..ethernet_end,
-            frame_offset + first_prefix_length,
+            ethernet_offset
+                .checked_add(ETHERNET_HEADER_LEN)
+                .ok_or(StationFrameError::LengthOverflow)?..ethernet_end,
+            frame_offset
+                .checked_add(first_prefix_length)
+                .ok_or(StationFrameError::LengthOverflow)?,
         );
 
         // Disjoint slices retain the moved first payload while the two
@@ -365,8 +374,10 @@ impl StaProtectedEthernetFrame {
                 })?;
         let (first_prefix, body) = frame.split_at_mut(first_prefix_length);
         let (_, following) = body.split_at_mut(first_payload_length);
-        let first_msdu_length = LLC_SNAP_HEADER_LEN + first_payload_length;
-        let first_written = crate::encoding::FrameParts([
+        let first_msdu_length = LLC_SNAP_HEADER_LEN
+            .checked_add(first_payload_length)
+            .ok_or(StationFrameError::LengthOverflow)?;
+        crate::encoding::FrameParts([
             header.as_slice(),
             &self.ccmp_header,
             &first_header[..12],
@@ -376,9 +387,16 @@ impl StaProtectedEthernetFrame {
         ])
         .write(first_prefix)
         .map_err(|required| StationFrameError::OutputTooSmall { required })?;
-        let first_subframe_length = AMSDU_SUBFRAME_HEADER_LEN + first_msdu_length;
+        let first_subframe_length = AMSDU_SUBFRAME_HEADER_LEN
+            .checked_add(first_msdu_length)
+            .ok_or(StationFrameError::LengthOverflow)?;
         let padding = [0; 3];
-        let first_padding = (4 - (first_subframe_length & 3)) & 3;
+        let first_padding = match first_subframe_length % 4 {
+            0 => 0,
+            1 => 3,
+            2 => 2,
+            _ => 1,
+        };
         let mut reader = oer_wire::Reader::new(second_ethernet);
         let second_addresses = reader
             .array::<12>()
@@ -387,8 +405,10 @@ impl StaProtectedEthernetFrame {
             .array::<2>()
             .map_err(|_| StationFrameError::EthernetFrameTooShort)?;
         let second_payload = reader.remaining();
-        let second_msdu_length = LLC_SNAP_HEADER_LEN + second_payload.len();
-        let following_written = crate::encoding::FrameParts([
+        let second_msdu_length = LLC_SNAP_HEADER_LEN
+            .checked_add(second_payload.len())
+            .ok_or(StationFrameError::LengthOverflow)?;
+        crate::encoding::FrameParts([
             oer_wire::Reader::new(&padding)
                 .take(first_padding)
                 .map_err(|_| StationFrameError::OutputTooSmall {
@@ -404,7 +424,7 @@ impl StaProtectedEthernetFrame {
         .map_err(|required| StationFrameError::OutputTooSmall { required })?;
         Ok(EncodedStaFrame {
             offset: frame_offset,
-            length: first_written + first_payload_length + following_written,
+            length: required,
         })
     }
 }

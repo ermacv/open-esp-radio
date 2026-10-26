@@ -39,7 +39,7 @@ fn ht20_records_are_complete_and_bounded() {
         Some(HtPeerCapabilities {
             capability_info: 0x102c,
             ampdu_parameters: 0x03,
-            rx_mcs_0_to_7: 0xff,
+            rx_mcs_0_to_7: core::num::NonZeroU8::new(0xff).unwrap(),
             rx_ht_duplicate_mcs32: false,
         })
     );

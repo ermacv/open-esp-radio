@@ -26,3 +26,13 @@ invariants. Shared `test-support` library builds retain the production policy.
 - **AP side** (`ap.rs::parse_ap_management_request`): Reassociation Request
   is not parsed, and the Listen Interval is read and dropped (see the AP
   crate's known defects).
+
+Channels hold a one-byte index into a const table of admitted geometries;
+frequency accessors and `RadioChannel::span` are total table reads. PHY rates
+hold only their parameters; exhaustive const maps supply rates and N_DBPS. PPDU duration
+calculation returns `None` when microseconds do not fit in `u32`; aggregate
+admission refuses that candidate. Owned byte prefixes retain a `PrefixLength`
+proof, and width-proved field setters do not revalidate encoder values.
+
+Production code denies unwrap, expect, panic, unreachable, todo, unimplemented,
+indexing/slicing and arithmetic-side-effect Clippy lints without local exceptions.

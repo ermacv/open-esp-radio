@@ -7,10 +7,6 @@
 //!
 //! Other crates' tests reach it through the `test-support` feature, so it is
 //! no `cfg(test)` module and its test-input indexing is linted.
-#![expect(
-    clippy::indexing_slicing,
-    reason = "a test-input generator: each index is drawn below the buffer's length"
-)]
 
 use std::vec::Vec;
 
@@ -47,7 +43,10 @@ impl XorShift {
         if bound == 0 {
             0
         } else {
-            (self.next() % bound as u64) as usize
+            match self.next().checked_rem(bound as u64) {
+                Some(value) => value as usize,
+                None => 0,
+            }
         }
     }
 
@@ -67,7 +66,9 @@ pub fn inputs(seeds: &[&[u8]], count: usize, max_len: usize, mut each: impl FnMu
             let len = rng.below(max_len.saturating_add(1));
             buffer.extend((0..len).map(|_| rng.byte()));
         } else {
-            buffer.extend_from_slice(seeds[rng.below(seeds.len())]);
+            if let Some(seed) = seeds.get(rng.below(seeds.len())) {
+                buffer.extend_from_slice(seed);
+            }
             for _ in 0..=rng.below(4) {
                 mutate(&mut rng, &mut buffer);
             }
@@ -80,14 +81,19 @@ fn mutate(rng: &mut XorShift, buffer: &mut Vec<u8>) {
     match rng.below(6) {
         0 if !buffer.is_empty() => {
             let at = rng.below(buffer.len());
-            buffer[at] ^= 1 << rng.below(8);
+            if let Some(byte) = buffer.get_mut(at) {
+                *byte ^= 1 << rng.below(8);
+            }
         }
         1 if !buffer.is_empty() => {
             let at = rng.below(buffer.len());
-            buffer[at] = match rng.below(4) {
+            let Some(byte) = buffer.get_mut(at) else {
+                return;
+            };
+            *byte = match rng.below(4) {
                 0 => 0,
                 1 => 0xff,
-                2 => buffer[at].wrapping_add(1),
+                2 => byte.wrapping_add(1),
                 _ => rng.byte(),
             };
         }
@@ -102,18 +108,33 @@ fn mutate(rng: &mut XorShift, buffer: &mut Vec<u8>) {
         }
         4 if !buffer.is_empty() => {
             let start = rng.below(buffer.len());
-            let end = start + rng.below(buffer.len() - start + 1);
-            let repeat = buffer[start..end].to_vec();
-            let at = rng.below(buffer.len() + 1);
+            let Some(suffix) = buffer.get(start..) else {
+                return;
+            };
+            let Some(bound) = suffix.len().checked_add(1) else {
+                return;
+            };
+            let length = rng.below(bound);
+            let Some(repeat) = suffix.get(..length) else {
+                return;
+            };
+            let repeat = repeat.to_vec();
+            let Some(bound) = buffer.len().checked_add(1) else {
+                return;
+            };
+            let at = rng.below(bound);
             buffer.splice(at..at, repeat);
         }
         _ if !buffer.is_empty() => {
             // A length byte: the shortest, the longest, or one off.
             let at = rng.below(buffer.len());
-            buffer[at] = match rng.below(3) {
+            let Some(byte) = buffer.get_mut(at) else {
+                return;
+            };
+            *byte = match rng.below(3) {
                 0 => 0,
                 1 => 0xff,
-                _ => buffer[at].wrapping_sub(1),
+                _ => byte.wrapping_sub(1),
             };
         }
         _ => buffer.push(rng.byte()),

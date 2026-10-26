@@ -20,6 +20,27 @@ const BEACON: [u8; 32] = [
 ];
 
 fn decode_all(bytes: &[u8]) {
+    // Reuse the existing arbitrary-byte harness for the cleaned cursor paths,
+    // including caller-supplied offsets which may overflow before slicing.
+    for (offset, length) in [
+        (0, bytes.len()),
+        (usize::MAX, bytes.len()),
+        (bytes.len(), usize::MAX),
+    ] {
+        let _ = crate::data::plan_data_decapsulation(
+            crate::data::DataInterfaceRole::Station,
+            bytes,
+            offset,
+            length,
+        );
+    }
+    let _ = crate::ht::ht_peer_capabilities(bytes).map(|peer| peer.highest_rx_mcs());
+    for &encoding in bytes {
+        if let Ok(allocation) = crate::he::He20MuSigBRuAllocation::try_new(encoding) {
+            let _ = allocation.user(encoding);
+            let _ = allocation.user(255);
+        }
+    }
     if let Some(header) = DecodedHeader::decode(bytes) {
         let control = header.control();
         let _ = (

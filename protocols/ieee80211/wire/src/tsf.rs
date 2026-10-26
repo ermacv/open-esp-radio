@@ -15,7 +15,7 @@ pub type TsfDuration = oer_time::RadioDuration<Ieee80211Tsf>;
 
 /// The length of `units` time units (TU) of 1024 µs of a TSF.
 pub const fn time_units(units: u16) -> TsfDuration {
-    TsfDuration::from_micros(units as u64 * 1024)
+    TsfDuration::from_micros((units as u64) << 10)
 }
 
 #[cfg(test)]

@@ -423,21 +423,41 @@ pub enum TriggerTargetRssi {
     Reserved,
 }
 
-impl TriggerTargetRssi {
-    const fn from_user_encoding(value: u8) -> Self {
-        if value == 0x7f {
-            Self::Reserved
-        } else {
-            Self::Dbm((value as i8).wrapping_sub(110))
+// IEEE Std 802.11ax-2021 9.3.1.22 / 9.2.4.6: each field has a finite
+// signed dBm mapping. Arithmetic and narrowing are evaluated at compilation.
+macro_rules! dbm_values {
+    ($value:expr, $offset:literal, $scale:literal; $($code:literal),+; $last:expr) => {
+        match $value.get() {
+            $($code => Self::Dbm(const {
+                let dbm = ($code as i16 - $offset) * $scale;
+                assert!(dbm >= i8::MIN as i16 && dbm <= i8::MAX as i16);
+                dbm as i8
+            }),)+
+            _ => $last,
         }
-    }
+    };
+}
 
-    const fn from_trs_encoding(value: u8) -> Self {
-        if value == 0x1f {
-            Self::Reserved
-        } else {
-            Self::Dbm((value as i8).wrapping_sub(45).wrapping_mul(2))
-        }
+impl TriggerTargetRssi {
+    const fn from_user_encoding(value: oer_wire::U8<7>) -> Self {
+        dbm_values!(value, 110, 1;
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+            32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+            48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
+            64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+            80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
+            96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
+            112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126
+            ; Self::Reserved
+        )
+    }
+    const fn from_trs_encoding(value: oer_wire::U8<5>) -> Self {
+        dbm_values!(value, 45, 2;
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30
+            ; Self::Reserved
+        )
     }
 }
 
@@ -448,16 +468,21 @@ pub enum TriggerApTxPower {
 }
 
 impl TriggerApTxPower {
-    const fn from_common_encoding(value: u8) -> Self {
-        Self::Dbm((value as i8).wrapping_sub(20))
+    const fn from_common_encoding(value: oer_wire::U8<6>) -> Self {
+        dbm_values!(value, 20, 1;
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+            32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+            48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62
+            ; Self::Dbm(43)
+        )
     }
-
-    const fn from_trs_encoding(value: u8) -> Self {
-        if value == 0x1f {
-            Self::Reserved
-        } else {
-            Self::Dbm((value as i8).wrapping_sub(10).wrapping_mul(2))
-        }
+    const fn from_trs_encoding(value: oer_wire::U8<5>) -> Self {
+        dbm_values!(value, 10, 2;
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30
+            ; Self::Reserved
+        )
     }
 }
 
@@ -688,7 +713,9 @@ pub fn parse_trigger_common_info(bytes: &[u8]) -> Result<TriggerCommonInfo, Trig
         uplink_stbc: fields.uplink_stbc(),
         ldpc_extra_symbol_segment: fields.ldpc_extra_symbol_segment(),
         ap_tx_power_encoding,
-        ap_tx_power: TriggerApTxPower::from_common_encoding(ap_tx_power_encoding),
+        ap_tx_power: TriggerApTxPower::from_common_encoding(oer_wire::U8::from_low_bits(
+            ap_tx_power_encoding,
+        )),
         pre_fec_padding_factor_encoding,
         pre_fec_padding_factor: if pre_fec_padding_factor_encoding == 0 {
             4
@@ -735,7 +762,9 @@ pub fn parse_trigger_user_ru(bytes: &[u8]) -> Result<TriggerUserRuInfo, TriggerP
         number_of_ra_ru: fields.number_of_ra_ru(),
         more_ra_ru: fields.more_ra_ru(),
         target_rssi_encoding,
-        target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding),
+        target_rssi: TriggerTargetRssi::from_user_encoding(oer_wire::U8::from_low_bits(
+            target_rssi_encoding,
+        )),
         reserved: fields.reserved(),
     })
 }
@@ -782,7 +811,9 @@ pub fn parse_trigger_user_spatial_stream(
         spatial_stream_count_encoding,
         spatial_stream_count: spatial_stream_count_encoding.saturating_add(1),
         target_rssi_encoding,
-        target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding),
+        target_rssi: TriggerTargetRssi::from_user_encoding(oer_wire::U8::from_low_bits(
+            target_rssi_encoding,
+        )),
         reserved: fields.reserved(),
     })
 }
@@ -838,7 +869,9 @@ pub fn parse_trigger_mu_bar_dependent(
         bar_control,
         ack_policy: BarControlFields::from_bytes(bar_control.to_le_bytes()).ack_policy(),
         bar_type: BarControlFields::from_bytes(bar_control.to_le_bytes()).bar_type(),
-        tid: BarControlFields::from_bytes(bar_control.to_le_bytes()).tid(),
+        tid: BarControlFields::from_bytes(bar_control.to_le_bytes())
+            .tid()
+            .get(),
         bar_information,
         starting_sequence_number: SequenceNumber::from_sequence_control(bar_information),
     })
@@ -901,8 +934,12 @@ pub fn parse_trigger_response_scheduling_control(
         uplink_target_rssi_encoding: fields.uplink_target_rssi_encoding(),
         mcs: fields.mcs(),
         trailing_reserved: fields.trailing_reserved(),
-        ap_tx_power: TriggerApTxPower::from_trs_encoding(ap_tx_power_encoding),
-        uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(uplink_target_rssi_encoding),
+        ap_tx_power: TriggerApTxPower::from_trs_encoding(oer_wire::U8::from_low_bits(
+            ap_tx_power_encoding,
+        )),
+        uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(oer_wire::U8::from_low_bits(
+            uplink_target_rssi_encoding,
+        )),
     })
 }
 
@@ -1056,7 +1093,7 @@ oer_wire::bitfield! {
     pub struct BarControlFields[2] (little) {
         pub ack_policy, with_ack_policy: bool = 0..1;
         pub bar_type, with_bar_type: u8 = 1..5;
-        pub tid, with_tid: u8 = 12..16;
+        pub tid, with_tid: (u8) = 12..16;
     }
 }
 

@@ -20,9 +20,9 @@ const ADVERTISEMENT: Advertisement = match Advertisement::new(
         false,
         [WmmAcParameters {
             admission_control_mandatory: false,
-            aifsn: 3,
-            ecw_min: 4,
-            ecw_max: 10,
+            aifsn: oer_wire::U8::constant::<3>(),
+            ecw_min: oer_wire::U8::constant::<4>(),
+            ecw_max: oer_wire::U8::constant::<10>(),
             txop_limit_units_32_us: 0,
         }; 4],
     ) {

@@ -45,10 +45,6 @@ impl<'a> Reader<'a> {
     /// Read a bounded, possibly unaligned little-endian bit span without
     /// advancing. Variable field placement (for example an HE-SIG-B list) stays
     /// with the protocol; bit copying belongs to the cursor.
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "the complete bit span is admitted before byte access"
-    )]
     pub fn bits<const WIDTH: usize>(&self, bit_offset: usize) -> Result<u64, Error> {
         const {
             assert!(WIDTH > 0 && WIDTH <= 64);
@@ -60,14 +56,23 @@ impl<'a> Reader<'a> {
                 required: usize::MAX,
                 remaining: self.bytes.len(),
             })?;
-        let complete = self.bytes.get(..required).ok_or(Error::Truncated {
-            required,
-            remaining: self.bytes.len(),
-        })?;
+        let complete = self
+            .bytes
+            .get(bit_offset / 8..required)
+            .ok_or(Error::Truncated {
+                required,
+                remaining: self.bytes.len(),
+            })?;
         let mut result = 0;
-        for bit in 0..WIDTH {
-            let source = bit_offset + bit;
-            result |= u64::from((complete[source / 8] >> (source % 8)) & 1) << bit;
+        // Iterate the admitted octets; no per-bit bounds check or offset sum.
+        for (destination, (byte, bit)) in complete
+            .iter()
+            .flat_map(|byte| (0..8).map(move |bit| (*byte, bit)))
+            .skip(bit_offset % 8)
+            .take(WIDTH)
+            .enumerate()
+        {
+            result |= u64::from((byte >> bit) & 1) << destination;
         }
         Ok(result)
     }
@@ -116,12 +121,15 @@ impl<'a> Writer<'a> {
                 remaining: self.bytes.len(),
             });
         }
+        let written = self
+            .written
+            .checked_add(input.len())
+            .ok_or(Error::LengthOverflow)?;
         let bytes = core::mem::take(&mut self.bytes);
         let (output, rest) = bytes.split_at_mut(input.len());
         output.copy_from_slice(input);
         self.bytes = rest;
-        // Both counts are portions of the original slice, so this cannot overflow.
-        self.written += input.len();
+        self.written = written;
         Ok(())
     }
     pub fn u8(&mut self, value: u8) -> Result<(), Error> {

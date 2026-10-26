@@ -130,20 +130,21 @@ pub const fn ht_capability_ie_for_peer(
         Some(peer) => {
             let local = HtAmpduParameters::from_bytes([local_ampdu_parameters]);
             let peer = HtAmpduParameters::from_bytes([peer.ampdu_parameters]);
-            let exponent = if local.exponent() < peer.exponent() {
+            let exponent = if local.exponent().get() < peer.exponent().get() {
                 local.exponent()
             } else {
                 peer.exponent()
             };
-            let spacing = if local.spacing() > peer.spacing() {
+            let spacing = if local.spacing().get() > peer.spacing().get() {
                 local.spacing()
             } else {
                 peer.spacing()
             };
-            let fields = crate::encoding::validated(
-                HtAmpduParameters::from_bytes([0]).with_exponent(exponent),
-            );
-            crate::encoding::validated(fields.with_spacing(spacing)).to_bytes()[0]
+            // Both values were decoded from these exact-width fields above.
+            HtAmpduParameters::from_bytes([0])
+                .with_exponent(exponent)
+                .with_spacing(spacing)
+                .to_bytes()[0]
         }
         None => local_ampdu_parameters,
     };
@@ -180,7 +181,7 @@ pub const fn ht_operation_ie(
 pub struct HtPeerCapabilities {
     capability_info: u16,
     ampdu_parameters: u8,
-    rx_mcs_0_to_7: u8,
+    rx_mcs_0_to_7: core::num::NonZeroU8,
     rx_ht_duplicate_mcs32: bool,
 }
 
@@ -229,16 +230,7 @@ impl HtPeerCapabilities {
 
     /// Highest common one-spatial-stream MCS advertised by the peer.
     pub const fn highest_rx_mcs(self) -> u8 {
-        #[expect(
-            clippy::expect_used,
-            reason = "`ht_peer_capabilities`, the only constructor, refuses a zero MCS bitmap"
-        )]
-        let highest = self
-            .rx_mcs_0_to_7
-            .checked_ilog2()
-            .expect("a peer advertises at least one receive MCS");
-        // The highest set bit of an octet is below eight.
-        highest as u8
+        self.rx_mcs_0_to_7.ilog2() as u8
     }
 }
 
@@ -249,7 +241,7 @@ pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
         let record = remaining.take(usize::from(length).checked_add(2)?).ok()?;
         if let Ok(record) = <&[u8; HT_CAPABILITY_IE_LEN]>::try_from(record)
             && let [45, _, c0, c1, ampdu_parameters, rx_mcs_0_to_7, ..] = *record
-            && rx_mcs_0_to_7 != 0
+            && let Some(rx_mcs_0_to_7) = core::num::NonZeroU8::new(rx_mcs_0_to_7)
         {
             return Some(HtPeerCapabilities {
                 capability_info: u16::from_le_bytes([c0, c1]),
@@ -277,8 +269,8 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
     pub struct HtAmpduParameters[1] (little) {
-        pub exponent, with_exponent: u8 = 0..2;
-        pub spacing, with_spacing: u8 = 2..5;
+        pub exponent, with_exponent: (u8) = 0..2;
+        pub spacing, with_spacing: (u8) = 2..5;
     }
 }
 oer_wire::bitfield! {
@@ -309,6 +301,6 @@ mod tests;
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (Minimum MPDU Start Spacing code).
     pub struct HtAmpduSpacingCode[1] (little) {
-        pub spacing, with_spacing: u8 = 0..3;
+        pub spacing, with_spacing: (u8) = 0..3;
     }
 }

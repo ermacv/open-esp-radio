@@ -323,11 +323,21 @@ impl<'payload> EspNowV1Payload<'payload> {
     }
 }
 
+// The admitted wire maximum proves both retained lengths fit in u16.
+const _: () = {
+    assert!(
+        ESP_NOW_MANAGEMENT_HEADER_LEN + ESP_NOW_V1_ACTION_OVERHEAD + ESP_NOW_V1_MAX_PAYLOAD_LEN
+            <= u16::MAX as usize
+    );
+};
+
 /// Strictly validated ESP-NOW v1 vendor Action body.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EspNowV1Action<'payload> {
     random_value: EspNowRandomValue,
     payload: EspNowV1Payload<'payload>,
+    encoded_length: u16,
+    frame_length: u16,
 }
 
 impl<'payload> EspNowV1Action<'payload> {
@@ -339,9 +349,21 @@ impl<'payload> EspNowV1Action<'payload> {
             Ok(payload) => payload,
             Err(error) => return Err(error),
         };
+        let Some(encoded_length) = ESP_NOW_V1_ACTION_OVERHEAD.checked_add(payload.len()) else {
+            return Err(EspNowV1WireError::PayloadTooLong {
+                length: payload.len(),
+            });
+        };
+        let Some(frame_length) = ESP_NOW_MANAGEMENT_HEADER_LEN.checked_add(encoded_length) else {
+            return Err(EspNowV1WireError::PayloadTooLong {
+                length: payload.len(),
+            });
+        };
         Ok(Self {
             random_value,
             payload,
+            encoded_length: encoded_length as u16,
+            frame_length: frame_length as u16,
         })
     }
 
@@ -354,7 +376,7 @@ impl<'payload> EspNowV1Action<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        ESP_NOW_V1_ACTION_OVERHEAD + self.payload.len()
+        self.encoded_length as usize
     }
 
     /// Encode category, action OUI, random value and exactly one v1 vendor IE.
@@ -370,7 +392,16 @@ impl<'payload> EspNowV1Action<'payload> {
             &self.random_value.bytes(),
             &[
                 ESP_NOW_VENDOR_ELEMENT_ID,
-                (VENDOR_ELEMENT_FIXED_BODY_LEN + self.payload.len()) as u8,
+                u8::try_from(
+                    VENDOR_ELEMENT_FIXED_BODY_LEN
+                        .checked_add(self.payload.len())
+                        .ok_or(EspNowV1WireError::PayloadTooLong {
+                            length: self.payload.len(),
+                        })?,
+                )
+                .map_err(|_| EspNowV1WireError::PayloadTooLong {
+                    length: self.payload.len(),
+                })?,
             ],
             &ESP_NOW_ORGANIZATION_IDENTIFIER,
             &[ESP_NOW_VENDOR_ELEMENT_TYPE, ESP_NOW_V1_VERSION],
@@ -455,10 +486,7 @@ impl<'payload> EspNowV1Action<'payload> {
             ));
         }
 
-        Ok(Self {
-            random_value: EspNowRandomValue::new([r0, r1, r2, r3]),
-            payload: EspNowV1Payload(payload),
-        })
+        Self::new(EspNowRandomValue::new([r0, r1, r2, r3]), payload)
     }
 }
 
@@ -514,7 +542,7 @@ impl<'payload> EspNowV1Frame<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        ESP_NOW_MANAGEMENT_HEADER_LEN + self.action.encoded_len()
+        self.action.frame_length as usize
     }
 
     /// Encode an Action MPDU with broadcast BSSID and no FCS.
@@ -727,7 +755,9 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
             retry: FrameControlFields::from_raw(frame_control).retry(),
-            key_id: crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]]).key_id(),
+            key_id: crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]])
+                .key_id()
+                .get(),
             packet_number,
             ccmp_header,
             ciphertext,

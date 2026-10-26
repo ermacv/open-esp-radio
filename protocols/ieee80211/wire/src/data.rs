@@ -358,13 +358,15 @@ impl<'a> AmsduSubframes<'a> {
         self.remaining = if rest.is_empty() {
             rest
         } else {
-            // A non-final subframe is padded to a multiple of four bytes;
-            // only the low two bits of its length matter, so the wrapping
-            // arithmetic is exact.
-            let padding = usize::from(msdu_length)
-                .wrapping_add(ETHERNET_HEADER_LEN)
-                .wrapping_neg()
-                & 3;
+            // SOURCE: IEEE Std 802.11-2020, 9.3.2.2 (A-MSDU subframe
+            // padding): the complete non-final subframe rounds to four octets.
+            let complete = usize::from(msdu_length)
+                .checked_add(ETHERNET_HEADER_LEN)
+                .ok_or(DataDecapError::Truncated)?;
+            let padding = 4_usize
+                .checked_sub(complete % 4)
+                .ok_or(DataDecapError::Truncated)?
+                % 4;
             let mut reader = oer_wire::Reader::new(rest);
             let _ = reader
                 .take(padding)
@@ -425,9 +427,14 @@ pub const fn plan_data_encapsulation(
         direction,
     ];
     let qos_control = if qos {
-        let control =
-            crate::encoding::validated(QosControl::from_bytes([0; 2]).with_tid(priority.value()));
-        crate::encoding::validated(control.with_ack_policy(if no_ack_policy { 1 } else { 0 }))
+        QosControl::from_bytes([0; 2])
+            // User priorities are three-bit values; the TID field is four bits.
+            .with_tid(oer_wire::U8::<3>::from_low_bits(priority.value()).widen())
+            .with_ack_policy(if no_ack_policy {
+                oer_wire::U8::constant::<1>()
+            } else {
+                oer_wire::U8::ZERO
+            })
             .to_bytes()
     } else {
         [0, 0]
@@ -549,13 +556,9 @@ fn single_decapsulation(
     }
     let payload = data_payload(header, payload_offset, payload_length)?;
     let parts = single_payload(header, payload)?;
-    #[expect(
-        clippy::expect_used,
-        reason = "data_payload found the payload, which begins with the LLC/SNAP header, within the MPDU"
-    )]
     let ethernet_payload_offset = payload_offset
         .checked_add(LLC_SNAP_HEADER_LEN)
-        .expect("the LLC/SNAP header lies within the MPDU");
+        .ok_or(DataDecapError::Truncated)?;
     let plan = DataDecapPlan {
         destination: parts.destination,
         source: parts.source,
@@ -600,15 +603,11 @@ fn data_payload(
     let end = offset
         .checked_add(length)
         .ok_or(DataDecapError::Truncated)?;
-    #[expect(
-        clippy::expect_used,
-        reason = "DecodedHeader::decode keeps the body as a suffix of the frame"
-    )]
     let header_length = header
         .frame()
         .len()
         .checked_sub(header.body().len())
-        .expect("the body is a suffix of the frame");
+        .ok_or(DataDecapError::Truncated)?;
     if offset < header_length {
         return Err(DataDecapError::Truncated);
     }

@@ -112,32 +112,36 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     // ERP-OFDM: 20 us preamble, 4 us symbols of 24 bits at 6 Mb/s, and the
     // signal extension. A 32-octet BlockAck: (16 + 256 + 6) / 24 -> 12.
     assert_eq!(
-        PhyRate::Legacy(LegacyRate::Ofdm6M).max_ppdu_duration_micros(32),
+        PhyRate::Legacy(LegacyRate::Ofdm6M)
+            .max_ppdu_duration_micros(32)
+            .unwrap(),
         20 + 48 + 6
     );
     // DSSS 1 Mb/s with the long preamble: 192 us and 8 us an octet.
     assert_eq!(
-        PhyRate::Legacy(LegacyRate::Dsss1M).max_ppdu_duration_micros(14),
+        PhyRate::Legacy(LegacyRate::Dsss1M)
+            .max_ppdu_duration_micros(14)
+            .unwrap(),
         192 + 112
     );
     // HT20 MCS 7, long GI, 1500 octets: 260 bits a symbol,
     // (16 + 12000 + 6) / 260 -> 47 symbols after the 36 us preamble.
     let ht = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap();
     assert_eq!(
-        PhyRate::Ht(ht).max_ppdu_duration_micros(1_500),
+        PhyRate::Ht(ht).max_ppdu_duration_micros(1_500).unwrap(),
         36 + 47 * 4 + 6
     );
     // The short GI keeps the symbols and shortens them to 3.6 us.
     let short = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, true).unwrap();
     assert_eq!(
-        PhyRate::Ht(short).max_ppdu_duration_micros(1_500),
+        PhyRate::Ht(short).max_ppdu_duration_micros(1_500).unwrap(),
         36 + 4 * 43 + 6
     );
     // HT40 doubles the bits a symbol.
     let ht40 = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, false).unwrap();
     assert!(
-        PhyRate::Ht(ht40).max_ppdu_duration_micros(1_500)
-            < PhyRate::Ht(ht).max_ppdu_duration_micros(1_500)
+        PhyRate::Ht(ht40).max_ppdu_duration_micros(1_500).unwrap()
+            < PhyRate::Ht(ht).max_ppdu_duration_micros(1_500).unwrap()
     );
     // HE20 MCS 7, one stream, 2x LTF and 0.8 us GI: 234 * 6 * 5/6 = 1170
     // bits a 13.6 us symbol, (16 + 12000 + 6) / 1170 -> 11 symbols.
@@ -151,7 +155,7 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     )
     .unwrap();
     assert_eq!(
-        PhyRate::He(he).max_ppdu_duration_micros(1_500),
+        PhyRate::He(he).max_ppdu_duration_micros(1_500).unwrap(),
         (36_000_u32 + 7_200 + 11 * 13_600).div_ceil(1_000) + 16 + 6
     );
     // Longer PSDUs never take less time.
@@ -160,6 +164,123 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
         PhyRate::He(he),
         PhyRate::Legacy(LegacyRate::Ofdm54M),
     ] {
-        assert!(rate.max_ppdu_duration_micros(3_000) >= rate.max_ppdu_duration_micros(1_500));
+        assert!(
+            rate.max_ppdu_duration_micros(3_000).unwrap()
+                >= rate.max_ppdu_duration_micros(1_500).unwrap()
+        );
+    }
+}
+
+#[test]
+fn unrepresentable_airtime_is_an_error_instead_of_a_truncated_duration() {
+    assert_eq!(
+        PhyRate::Legacy(LegacyRate::Dsss1M).max_ppdu_duration_micros(u32::MAX),
+        None
+    );
+    let rate = PhyRate::Legacy(LegacyRate::Dsss1M);
+    let last = (u32::MAX - 192) / 8;
+    assert!(rate.max_ppdu_duration_micros(last).is_some());
+    assert_eq!(rate.max_ppdu_duration_micros(last + 1), None);
+}
+
+#[test]
+fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
+    // Independent arithmetic oracle for Tables 19-27/19-28, including the
+    // tables' single-stream SGI rounding before multiplication by N_SS.
+    let ht_rows = [
+        (
+            PpduBandwidth::Mhz20,
+            [
+                6_500, 13_000, 19_500, 26_000, 39_000, 52_000, 58_500, 65_000,
+            ],
+            [
+                7_200, 14_400, 21_700, 28_900, 43_300, 57_800, 65_000, 72_200,
+            ],
+        ),
+        (
+            PpduBandwidth::Mhz40,
+            [
+                13_500, 27_000, 40_500, 54_000, 81_000, 108_000, 121_500, 135_000,
+            ],
+            [
+                15_000, 30_000, 45_000, 60_000, 90_000, 120_000, 135_000, 150_000,
+            ],
+        ),
+    ];
+    for (bandwidth, long, short) in ht_rows {
+        for index in 0..32 {
+            for short_gi in [false, true] {
+                let rate = HtRate::new(HtMcs::new(index).unwrap(), bandwidth, short_gi).unwrap();
+                let streams = u32::from(index / 8 + 1);
+                let row = if short_gi { short } else { long };
+                assert_eq!(rate.nominal_kbps(), row[usize::from(index % 8)] * streams);
+                assert_eq!(
+                    rate.parameters().2,
+                    u64::from(long[usize::from(index % 8)] * streams * 4 / 1_000)
+                );
+            }
+        }
+    }
+
+    // N_SD, N_BPSCS and coding fractions of 802.11ax-2021 27.5.1.
+    let modulation = [
+        (1, 1, 2),
+        (2, 1, 2),
+        (2, 3, 4),
+        (4, 1, 2),
+        (4, 3, 4),
+        (6, 2, 3),
+        (6, 3, 4),
+        (6, 5, 6),
+        (8, 3, 4),
+        (8, 5, 6),
+        (10, 3, 4),
+        (10, 5, 6),
+    ];
+    for (bandwidth, subcarriers) in [
+        (PpduBandwidth::Mhz20, 234_u64),
+        (PpduBandwidth::Mhz40, 468),
+        (PpduBandwidth::Mhz80, 980),
+        (PpduBandwidth::Mhz160, 1_960),
+    ] {
+        for index in 0..12 {
+            for streams in 1..=8 {
+                for gi in [
+                    HeGiLtf::Ltf1xGi800Ns,
+                    HeGiLtf::Ltf2xGi800Ns,
+                    HeGiLtf::Ltf2xGi1600Ns,
+                    HeGiLtf::Ltf4xGi3200Ns,
+                ] {
+                    for dcm in [false, true] {
+                        for fec in [FecCoding::Bcc, FecCoding::Ldpc] {
+                            let rate = HeRate::new(
+                                HeMcs::new(index).unwrap(),
+                                SpatialStreams::new(streams).unwrap(),
+                                bandwidth,
+                                gi,
+                                fec,
+                                dcm,
+                            );
+                            if dcm && (!matches!(index, 0 | 1 | 3 | 4) || streams > 2) {
+                                assert!(rate.is_none());
+                                continue;
+                            }
+                            let rate = rate.unwrap();
+                            let (bits, coding_numerator, coding_denominator) =
+                                modulation[usize::from(index)];
+                            let numerator =
+                                subcarriers * bits * coding_numerator * u64::from(streams);
+                            let denominator = coding_denominator * if dcm { 2 } else { 1 };
+                            assert_eq!(rate.data_bits_per_symbol(), (numerator, denominator));
+                            assert_eq!(
+                                u64::from(rate.nominal_kbps()),
+                                numerator * 1_000_000
+                                    / (denominator * (12_800 + u64::from(gi.guard_interval_ns())))
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }

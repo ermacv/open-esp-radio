@@ -575,7 +575,7 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
             return None;
         }
         Some((
-            parameters.tid(),
+            parameters.tid().get(),
             SequenceNumber::from_sequence_control(sequence),
         ))
     }

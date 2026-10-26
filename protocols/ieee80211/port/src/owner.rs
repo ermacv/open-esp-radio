@@ -478,14 +478,12 @@ impl<K: Ieee80211Capabilities> SupportedEdca<K> {
             category: WmmAccessCategory,
         ) -> bool {
             let record = parameters.access_category(category);
-            record.wmm.aifsn <= K::CAPS.edca_max_aifsn
-                && record.wmm.aifsn <= 15
-                && record.wmm.ecw_max <= K::CAPS.edca_max_cw_exponent
-                && record.wmm.ecw_max <= crate::edca::MAX_CW_EXPONENT
+            record.wmm.aifsn.get() <= K::CAPS.edca_max_aifsn
+                && record.wmm.ecw_max.get() <= K::CAPS.edca_max_cw_exponent
                 && record.wmm.txop_limit_units_32_us <= K::CAPS.edca_max_txop_limit_units_32_us
                 && record.msdu_lifetime.as_micros()
                     <= EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
-                && record.wmm.ecw_min <= record.wmm.ecw_max
+                && record.wmm.ecw_min.get() <= record.wmm.ecw_max.get()
         }
         if !(valid::<K>(parameters, WmmAccessCategory::BestEffort)
             && valid::<K>(parameters, WmmAccessCategory::Background)

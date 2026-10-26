@@ -19,6 +19,7 @@ oer-radio-port = { path = "../../radio/port" }
 oer-time = { path = "../../../portable/time" }
 
 [dev-dependencies]
+oer-wire = { path = "../../../portable/wire" }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 atomic-waker = "1.1.2"

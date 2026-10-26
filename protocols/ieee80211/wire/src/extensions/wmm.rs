@@ -28,9 +28,9 @@ const ALL_ACCESS_CATEGORIES: u8 = 0b1111;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WmmAcParameters {
     pub admission_control_mandatory: bool,
-    pub aifsn: u8,
-    pub ecw_min: u8,
-    pub ecw_max: u8,
+    pub aifsn: oer_wire::U8<4>,
+    pub ecw_min: oer_wire::U8<4>,
+    pub ecw_max: oer_wire::U8<4>,
     /// TXOP limit in the element's native 32-us units.
     pub txop_limit_units_32_us: u16,
 }
@@ -71,25 +71,59 @@ impl WmmParameterSet {
         false,
         [
             // AC_BE: aCWmin, aCWmax, AIFSN 3.
-            WmmAcParameters::contention(3, 4, 10, 0),
+            WmmAcParameters::contention(
+                oer_wire::U8::constant::<3>(),
+                oer_wire::U8::constant::<4>(),
+                oer_wire::U8::constant::<10>(),
+                0,
+            ),
             // AC_BK: aCWmin, aCWmax, AIFSN 7.
-            WmmAcParameters::contention(7, 4, 10, 0),
+            WmmAcParameters::contention(
+                oer_wire::U8::constant::<7>(),
+                oer_wire::U8::constant::<4>(),
+                oer_wire::U8::constant::<10>(),
+                0,
+            ),
             // AC_VI: (aCWmin+1)/2-1, aCWmin, AIFSN 2, TXOP 3.008 ms.
-            WmmAcParameters::contention(2, 3, 4, 94),
+            WmmAcParameters::contention(
+                oer_wire::U8::constant::<2>(),
+                oer_wire::U8::constant::<3>(),
+                oer_wire::U8::constant::<4>(),
+                94,
+            ),
             // AC_VO: (aCWmin+1)/4-1, (aCWmin+1)/2-1, AIFSN 2, TXOP 1.504 ms.
-            WmmAcParameters::contention(2, 2, 3, 47),
+            WmmAcParameters::contention(
+                oer_wire::U8::constant::<2>(),
+                oer_wire::U8::constant::<2>(),
+                oer_wire::U8::constant::<3>(),
+                47,
+            ),
         ],
     );
 
     /// The contention of a QoS station in a non-QoS BSS, which uses the
     /// DCF (IEEE 802.11-2020 10.3): every access category waits DIFS
     /// (AIFSN 2) with aCWmin 15 and aCWmax 1023 and holds no TXOP.
-    pub const DCF: Self = Self::new(0, false, [WmmAcParameters::contention(2, 4, 10, 0); 4]);
+    pub const DCF: Self = Self::new(
+        0,
+        false,
+        [WmmAcParameters::contention(
+            oer_wire::U8::constant::<2>(),
+            oer_wire::U8::constant::<4>(),
+            oer_wire::U8::constant::<10>(),
+            0,
+        ); 4],
+    );
 }
 
 impl WmmAcParameters {
     /// A record without admission control.
-    const fn contention(aifsn: u8, ecw_min: u8, ecw_max: u8, txop_limit_units_32_us: u16) -> Self {
+    const fn contention(
+        aifsn: oer_wire::U8<4>,
+        ecw_min: oer_wire::U8<4>,
+        ecw_max: oer_wire::U8<4>,
+        txop_limit_units_32_us: u16,
+    ) -> Self {
         Self {
             admission_control_mandatory: false,
             aifsn,
@@ -110,11 +144,22 @@ pub(crate) const fn encode_wmm_parameter_element(
 ) -> [u8; WMM_PARAMETER_ELEMENT_LEN] {
     const fn record(category: WmmAccessCategory, parameters: WmmAcParameters) -> [u8; 4] {
         let fields = AcRecord::from_bytes([0; 4]).with_acm(parameters.admission_control_mandatory);
-        let fields = crate::encoding::validated(fields.with_aifsn(parameters.aifsn));
-        let fields = crate::encoding::validated(fields.with_aci(category as u8));
-        let fields = crate::encoding::validated(fields.with_ecw_min(parameters.ecw_min));
-        let fields = crate::encoding::validated(fields.with_ecw_max(parameters.ecw_max));
-        crate::encoding::validated(fields.with_txop(parameters.txop_limit_units_32_us)).to_bytes()
+        // The record retains four-bit proofs; ACI is a finite enum and TXOP
+        // occupies its complete u16.
+        fields
+            .with_aifsn(parameters.aifsn)
+            .with_aci(match category {
+                WmmAccessCategory::BestEffort => oer_wire::U8::constant::<0>(),
+                WmmAccessCategory::Background => oer_wire::U8::constant::<1>(),
+                WmmAccessCategory::Video => oer_wire::U8::constant::<2>(),
+                WmmAccessCategory::Voice => oer_wire::U8::constant::<3>(),
+            })
+            .with_ecw_min(parameters.ecw_min)
+            .with_ecw_max(parameters.ecw_max)
+            .with_txop(oer_wire::U16::from_low_bits(
+                parameters.txop_limit_units_32_us,
+            ))
+            .to_bytes()
     }
     let [be, bk, vi, vo] = categories;
     let [be0, be1, be2, be3] = record(WmmAccessCategory::BestEffort, be);
@@ -199,7 +244,7 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
     let mut seen = 0_u8;
     for &[aci_aifsn, ecw, txop_low, txop_high] in records.as_chunks::<4>().0 {
         let fields = AcRecord::from_bytes([aci_aifsn, ecw, txop_low, txop_high]);
-        let aci = fields.aci();
+        let aci = fields.aci().get();
         let category = WmmAccessCategory::from_aci(aci)?;
         let bit = 1_u8 << aci;
         if seen & bit != 0 {
@@ -211,7 +256,7 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
             aifsn: fields.aifsn(),
             ecw_min: fields.ecw_min(),
             ecw_max: fields.ecw_max(),
-            txop_limit_units_32_us: fields.txop(),
+            txop_limit_units_32_us: fields.txop().get(),
         };
     }
     if seen != ALL_ACCESS_CATEGORIES {
@@ -228,12 +273,12 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
     pub struct AcRecord[4] (little) {
-        pub aifsn, with_aifsn: u8 = 0..4;
+        pub aifsn, with_aifsn: (u8) = 0..4;
         pub acm, with_acm: bool = 4..5;
-        pub aci, with_aci: u8 = 5..7;
-        pub ecw_min, with_ecw_min: u8 = 8..12;
-        pub ecw_max, with_ecw_max: u8 = 12..16;
-        pub txop, with_txop: u16 = 16..32;
+        pub aci, with_aci: (u8) = 5..7;
+        pub ecw_min, with_ecw_min: (u8) = 8..12;
+        pub ecw_max, with_ecw_max: (u8) = 12..16;
+        pub txop, with_txop: (u16) = 16..32;
     }
 }
 oer_wire::bitfield! {

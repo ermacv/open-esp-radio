@@ -6,7 +6,9 @@
     clippy::panic,
     clippy::unreachable,
     clippy::todo,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
 )]
 
 //! Allocation-free wire fields and byte cursors shared by radio protocols.
@@ -14,6 +16,9 @@
 //! Bit ranges are half-open and count from the least significant bit of the
 //! integer represented in the declared byte order. Setters reject values that
 //! do not fit and retain every other bit, including reserved bits.
+
+mod value;
+pub use value::{PrefixLength, U8, U16, U32, U64};
 
 mod cursor;
 pub use cursor::{Reader, Writer};
@@ -24,6 +29,7 @@ pub use cursor::{Reader, Writer};
 pub enum Error {
     Truncated { required: usize, remaining: usize },
     ValueOutOfRange,
+    LengthOverflow,
 }
 
 /// Declare a fixed-width wire value, or a wire enum with `Reserved(raw)`.
@@ -50,7 +56,9 @@ pub enum Error {
 /// An enum declaration supplies `from_encoding` and `encoding`; unknown values
 /// retain their complete encoding in `Reserved`. Optional conversion method names
 /// can follow the raw type, as `(from_raw, raw)`. Numeric and enum setters return
-/// `Result<Self, Error>`; a boolean setter is infallible. Invalid declarations
+/// `Result<Self, Error>`; a boolean setter is infallible. Parenthesized integer
+/// types, such as `(u16)`, return a width-proved [`U16`] from the getter and
+/// take that same type in an infallible setter. Invalid declarations
 /// (range, type width, byte order, implicit overlap) fail at compile time.
 #[macro_export]
 macro_rules! bitfield {
@@ -132,6 +140,25 @@ macro_rules! bitfield {
             self
         }
     };
+    // Parenthesized integers retain the width proof through reads and writes.
+    (@field $(#[$meta:meta])* $vis:vis $get:ident, $set:ident: ($ty:ident),
+        $start:literal, $end:literal, $size:literal, $order:ident) => {
+        $(#[$meta])*
+        $vis const fn $get(self) -> $crate::bitfield!(@bounded $ty, {$end - $start}) {
+            <$crate::bitfield!(@bounded $ty, {$end - $start})>::from_field::<
+                $start, $end, {$crate::bitfield!(@order $order)}, $size
+            >(&self.0)
+        }
+        $vis const fn $set(mut self, value: $crate::bitfield!(@bounded $ty, {$end - $start})) -> Self {
+            $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, value.get() as u64);
+            self
+        }
+    };
+    (@bounded u8, $width:expr) => { $crate::U8<$width> };
+    (@bounded u16, $width:expr) => { $crate::U16<$width> };
+    (@bounded u32, $width:expr) => { $crate::U32<$width> };
+    (@bounded u64, $width:expr) => { $crate::U64<$width> };
+    (@width ($ty:ident), $width:expr) => { assert!($width <= $ty::BITS as usize); };
     (@field $(#[$meta:meta])* $vis:vis $get:ident, $set:ident: [$ty:ident],
         $start:literal, $end:literal, $size:literal, $order:ident) => {
         $(#[$meta])*
@@ -185,10 +212,9 @@ pub mod __private {
         width >= 64 || value < (1_u64 << width)
     }
 
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "const bounds prove START..END belongs to the fixed array"
-    )]
+    // The slice endpoints and all counter ranges depend only on the const
+    // geometry. Saturating counter steps cannot saturate: the span is at most
+    // 64 bits and each iteration consumes one of its admitted octets.
     #[inline(always)]
     pub const fn get<const START: usize, const END: usize, const LITTLE: bool, const N: usize>(
         bytes: &[u8; N],
@@ -196,26 +222,44 @@ pub mod __private {
         const {
             assert!(START < END && END <= N * 8 && END - START <= 64);
         }
+        let mut bytes = if LITTLE {
+            bytes
+                .split_at(const { END.div_ceil(8) })
+                .0
+                .split_at(const { START / 8 })
+                .1
+        } else {
+            bytes
+                .split_at(const { N - START / 8 })
+                .0
+                .split_at(const { N - END.div_ceil(8) })
+                .1
+        };
         let mut result = 0;
-        let mut bit = START;
-        while bit < END {
-            let index = if LITTLE { bit / 8 } else { N - 1 - bit / 8 };
-            let count = if END - bit < 8 - bit % 8 {
-                END - bit
+        let mut shift = const { START % 8 };
+        let mut remaining = const { END - START };
+        let mut destination = 0_usize;
+        while let Some((&byte, rest)) = if LITTLE {
+            bytes.split_first()
+        } else {
+            bytes.split_last()
+        } {
+            let available = 8_usize.saturating_sub(shift);
+            let count = if remaining < available {
+                remaining
             } else {
-                8 - bit % 8
+                available
             };
-            let mask = (1_u16 << count) - 1;
-            result |= (((bytes[index] as u16 >> (bit % 8)) & mask) as u64) << (bit - START);
-            bit += count;
+            let mask = u8::MAX >> 8_usize.saturating_sub(count);
+            result |= (((byte >> shift) & mask) as u64) << destination;
+            remaining = remaining.saturating_sub(count);
+            destination = destination.saturating_add(count);
+            shift = 0;
+            bytes = rest;
         }
         result
     }
 
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "const bounds prove START..END belongs to the fixed array"
-    )]
     #[inline(always)]
     pub const fn set<const START: usize, const END: usize, const LITTLE: bool, const N: usize>(
         bytes: &mut [u8; N],
@@ -224,18 +268,39 @@ pub mod __private {
         const {
             assert!(START < END && END <= N * 8 && END - START <= 64);
         }
-        let mut bit = START;
-        while bit < END {
-            let index = if LITTLE { bit / 8 } else { N - 1 - bit / 8 };
-            let count = if END - bit < 8 - bit % 8 {
-                END - bit
+        let mut bytes = if LITTLE {
+            bytes
+                .split_at_mut(const { END.div_ceil(8) })
+                .0
+                .split_at_mut(const { START / 8 })
+                .1
+        } else {
+            bytes
+                .split_at_mut(const { N - START / 8 })
+                .0
+                .split_at_mut(const { N - END.div_ceil(8) })
+                .1
+        };
+        let mut shift = const { START % 8 };
+        let mut remaining = const { END - START };
+        let mut source = 0_usize;
+        while let Some((byte, rest)) = if LITTLE {
+            bytes.split_first_mut()
+        } else {
+            bytes.split_last_mut()
+        } {
+            let available = 8_usize.saturating_sub(shift);
+            let count = if remaining < available {
+                remaining
             } else {
-                8 - bit % 8
+                available
             };
-            let mask = (((1_u16 << count) - 1) << (bit % 8)) as u8;
-            bytes[index] =
-                (bytes[index] & !mask) | (((value >> (bit - START)) as u8) << (bit % 8) & mask);
-            bit += count;
+            let mask = (u8::MAX >> 8_usize.saturating_sub(count)) << shift;
+            *byte = (*byte & !mask) | (((value >> source) as u8) << shift & mask);
+            remaining = remaining.saturating_sub(count);
+            source = source.saturating_add(count);
+            shift = 0;
+            bytes = rest;
         }
     }
 }
@@ -286,3 +351,24 @@ mod tests;
 /// ```
 #[cfg(doctest)]
 pub struct InvalidDeclarations;
+
+/// Width, value and prefix geometry are checked during monomorphization.
+///
+/// ```compile_fail
+/// let _ = oer_wire::U8::<4>::constant::<16>();
+/// ```
+/// ```compile_fail
+/// let _ = oer_wire::U8::<0>::new(0);
+/// ```
+/// ```compile_fail
+/// let _ = oer_wire::U16::<12>::ZERO.widen::<8>();
+/// ```
+/// ```compile_fail
+/// let _ = oer_wire::PrefixLength::<4>::constant::<5>();
+/// ```
+/// ```compile_fail
+/// let length = oer_wire::PrefixLength::<4>::constant::<3>();
+/// let _ = length.borrow(&[0; 5]);
+/// ```
+#[cfg(doctest)]
+pub struct InvalidProofs;

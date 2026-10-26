@@ -41,6 +41,7 @@ const OPEN_SYSTEM_AUTHENTICATION_ALGORITHM: u16 = 0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApAssociationResponseError {
+    LengthOverflow,
     MissingAssociationId,
     OutputTooSmall { required: usize },
 }
@@ -54,6 +55,7 @@ pub enum ApPeerDisconnectKind {
 /// Invalid AP data-frame construction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApDataFrameError {
+    LengthOverflow,
     InvalidAccessPoint,
     InvalidPeer,
     InvalidUserPriority,
@@ -283,9 +285,13 @@ pub fn ap_amsdu_frame_length(
     let length = body
         .length()
         .map_err(|length| amsdu_error(crate::encoding::AmsduError::TooLong(length)))?;
-    Ok(crate::data::IEEE80211_QOS_DATA_HEADER_LEN
-        + if protected { CCMP_HEADER_LEN } else { 0 }
-        + length)
+    crate::data::IEEE80211_QOS_DATA_HEADER_LEN
+        .checked_add(if protected { CCMP_HEADER_LEN } else { 0 })
+        .and_then(|prefix| prefix.checked_add(length))
+        .ok_or(ApDataFrameError::AmsduTooLong {
+            length: usize::MAX,
+            maximum: AP_AMSDU_BASELINE_MAX_LEN,
+        })
 }
 
 fn amsdu_error(error: crate::encoding::AmsduError) -> ApDataFrameError {
@@ -388,11 +394,9 @@ impl ApProtectedDataFrame<'_> {
         if ethernet_length < ETHERNET_HEADER_LEN {
             return Err(ApDataFrameError::EthernetFrameTooShort);
         }
-        let ethernet_end = ethernet_offset.checked_add(ethernet_length).ok_or(
-            ApDataFrameError::OutputTooSmall {
-                required: usize::MAX,
-            },
-        )?;
+        let ethernet_end = ethernet_offset
+            .checked_add(ethernet_length)
+            .ok_or(ApDataFrameError::LengthOverflow)?;
         if storage.len() < ethernet_end {
             return Err(ApDataFrameError::OutputTooSmall {
                 required: ethernet_end,
@@ -424,14 +428,21 @@ impl ApProtectedDataFrame<'_> {
         if self.more_data {
             plan.set_more_data(true);
         }
-        let header_len = usize::from(plan.header_len);
-        let prefix_len = header_len + CCMP_HEADER_LEN + plan.llc_snap.len();
-        let headroom = prefix_len - ETHERNET_HEADER_LEN;
+        const PREFIX_LEN: usize = crate::data::IEEE80211_QOS_DATA_HEADER_LEN
+            + CCMP_HEADER_LEN
+            + crate::data::LLC_SNAP_HEADER_LEN;
+        const HEADROOM: usize = PREFIX_LEN - ETHERNET_HEADER_LEN;
+        let prefix_len = PREFIX_LEN;
+        let headroom = HEADROOM;
         let frame_offset = ethernet_offset
             .checked_sub(headroom)
             .ok_or(ApDataFrameError::OutputTooSmall { required: headroom })?;
-        let frame_length = ethernet_length + headroom;
-        let prefix_end = frame_offset + prefix_len;
+        let frame_length = ethernet_length
+            .checked_add(headroom)
+            .ok_or(ApDataFrameError::LengthOverflow)?;
+        let prefix_end = frame_offset
+            .checked_add(prefix_len)
+            .ok_or(ApDataFrameError::LengthOverflow)?;
         let frame =
             storage
                 .get_mut(frame_offset..prefix_end)
@@ -440,12 +451,7 @@ impl ApProtectedDataFrame<'_> {
                 })?;
         let mut header = plan.header;
         header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let header = oer_wire::Reader::new(&header)
-            .take(header_len)
-            .map_err(|_| ApDataFrameError::OutputTooSmall {
-                required: header_len,
-            })?;
-        crate::encoding::FrameParts([header, &self.ccmp_header, &plan.llc_snap])
+        crate::encoding::FrameParts([header.as_slice(), &self.ccmp_header, &plan.llc_snap])
             .write(frame)
             .map_err(|required| ApDataFrameError::OutputTooSmall { required })?;
         Ok(EncodedApFrame {
@@ -995,7 +1001,9 @@ pub fn write_ht_association_response_frame_for_security(
                 .to_le_bytes(),
         );
     }
-    Ok(MANAGEMENT_HEADER_LEN + body_len)
+    MANAGEMENT_HEADER_LEN
+        .checked_add(body_len)
+        .ok_or(ApAssociationResponseError::LengthOverflow)
 }
 
 /// Encode one AP-originated peer teardown frame.
@@ -1052,11 +1060,9 @@ pub fn write_ht_association_response(
 
     let encoded_association_id = if status == 0 {
         u16::from_le_bytes(
-            crate::encoding::validated(
-                crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
-                    .with_marker(3),
-            )
-            .to_bytes(),
+            crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
+                .with_marker(oer_wire::U8::constant::<3>())
+                .to_bytes(),
         )
     } else {
         0
@@ -1135,7 +1141,9 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
         let raw_association_id = u16::from_le_bytes([a0, a1]);
         let association_id =
             crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes()).aid();
-        if crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes()).marker()
+        if crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes())
+            .marker()
+            .get()
             != 3
             || association_id == 0
         {

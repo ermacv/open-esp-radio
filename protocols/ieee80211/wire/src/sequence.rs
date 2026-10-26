@@ -9,7 +9,7 @@
 /// Sequence numbers are modular, so the type deliberately has no ordering;
 /// use [`Self::forward_distance`] or [`Self::precedes`] for window decisions.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
-pub struct SequenceNumber(u16);
+pub struct SequenceNumber(oer_wire::U16<12>);
 
 impl SequenceNumber {
     /// Size of the sequence-number space.
@@ -17,24 +17,23 @@ impl SequenceNumber {
     /// Half of the sequence-number space: the comparison horizon of
     /// IEEE 802.11-2020 10.24.7.
     pub const HALF_SPACE: u16 = Self::MODULUS / 2;
-    pub const ZERO: Self = Self(0);
-    pub const MAX: Self = Self(Self::MASK);
+    pub const ZERO: Self = Self(oer_wire::U16::ZERO);
+    pub const MAX: Self = Self(oer_wire::U16::constant::<{ Self::MASK }>());
 
     const MASK: u16 = Self::MODULUS - 1;
 
     /// A sequence number, or `None` when `value` exceeds twelve bits.
     pub const fn new(value: u16) -> Option<Self> {
-        if value <= Self::MASK {
-            Some(Self(value))
-        } else {
-            None
+        match oer_wire::U16::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
         }
     }
 
     /// The low twelve bits of `value`, for entropy seeds and free-running
     /// counters whose wider bits are not part of the sequence space.
     pub const fn from_low_bits(value: u16) -> Self {
-        Self(value & Self::MASK)
+        Self(oer_wire::U16::from_low_bits(value))
     }
 
     /// The Sequence Number subfield of a Sequence Control field.
@@ -43,13 +42,14 @@ impl SequenceNumber {
     }
 
     pub const fn get(self) -> u16 {
-        self.0
+        self.0.get()
     }
 
     /// Sequence Control of an unfragmented MPDU (fragment number zero).
     pub const fn sequence_control(self) -> u16 {
         u16::from_le_bytes(
-            crate::encoding::validated(SequenceControl::from_bytes([0; 2]).with_sequence(self.0))
+            SequenceControl::from_bytes([0; 2])
+                .with_sequence(self.0)
                 .to_bytes(),
         )
     }
@@ -57,10 +57,9 @@ impl SequenceNumber {
     /// Sequence Control with an explicit four-bit fragment number.
     pub const fn sequence_control_with_fragment(self, fragment: u8) -> u16 {
         u16::from_le_bytes(
-            crate::encoding::validated(
-                SequenceControl::from_bytes([fragment, 0]).with_sequence(self.0),
-            )
-            .to_bytes(),
+            SequenceControl::from_bytes([fragment, 0])
+                .with_sequence(self.0)
+                .to_bytes(),
         )
     }
 
@@ -69,17 +68,21 @@ impl SequenceNumber {
         self.wrapping_add(1)
     }
 
+    // SOURCE: IEEE Std 802.11-2020, 9.2.4.4.2: sequence numbers wrap
+    // modulo 4096; u16 wrapping is congruent modulo this power-of-two space.
     pub const fn wrapping_add(self, increment: u16) -> Self {
-        Self(self.0.wrapping_add(increment) & Self::MASK)
+        Self::from_low_bits(self.get().wrapping_add(increment))
     }
 
+    // SOURCE: IEEE Std 802.11-2020, 9.2.4.4.2 (modulo-4096 sequence space).
     pub const fn wrapping_sub(self, decrement: u16) -> Self {
-        Self(self.0.wrapping_sub(decrement) & Self::MASK)
+        Self::from_low_bits(self.get().wrapping_sub(decrement))
     }
 
     /// Number of increments from `self` forward to `later`, in `0..4096`.
     pub const fn forward_distance(self, later: Self) -> u16 {
-        later.0.wrapping_sub(self.0) & Self::MASK
+        // SOURCE: IEEE Std 802.11-2020, 10.24.7 (modular sequence distance).
+        later.get().wrapping_sub(self.get()) & Self::MASK
     }
 
     /// Whether `self` strictly precedes `later` in modulo-4096 order: the
@@ -100,7 +103,7 @@ oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4 (Sequence Control field).
     pub struct SequenceControl[2] (little) {
         pub fragment, with_fragment: u8 = 0..4;
-        pub sequence, with_sequence: u16 = 4..16;
+        pub sequence, with_sequence: (u16) = 4..16;
     }
 }
 

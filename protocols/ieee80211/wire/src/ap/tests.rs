@@ -752,6 +752,14 @@ fn in_place_ap_encoder_rejects_overflowing_and_short_ethernet_ranges() {
         ccmp_header: [0; CCMP_HEADER_LEN],
         ethernet: &[],
     };
+    for (offset, length) in [(usize::MAX, 14), (1, usize::MAX)] {
+        let mut storage = [0xa5; 64];
+        assert_eq!(
+            frame.encode_in_place(&mut storage, offset, length),
+            Err(ApDataFrameError::LengthOverflow)
+        );
+        assert_eq!(storage, [0xa5; 64]);
+    }
     for (offset, length) in [(usize::MAX, 14), (1, usize::MAX), (64, 14), (0, 13)] {
         let mut storage = [0xa5; 64];
         assert!(frame.encode_in_place(&mut storage, offset, length).is_err());
