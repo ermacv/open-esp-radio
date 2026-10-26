@@ -251,7 +251,7 @@ set/clear priority, arbitrary wrap capacity or an exhaustive all-cause stop.
 
 ## Opaque digital observations
 
-Selections 10–13 are independent commands, excluded from selection 0:
+Selections 10–14 are independent commands, excluded from selection 0:
 
 | Selection | Experiment |
 | --- | --- |
@@ -259,6 +259,7 @@ Selections 10–13 are independent commands, excluded from selection 0:
 | 11 | P-BA: ordinary hardware index 0 and extra index 3, quiet staging and latched readback |
 | 12 | BB-L: digital BB reset/gates/interface prefix, reset action disabled, `c0010001` candidate, one 4096-cycle observation and IRQ/clear toggles |
 | 13 | P-TSENS: four bit9/bit23 cases, two sample edges each, up to 99 reads at 10–990 µs under a 1 ms deadline per edge |
+| 14 | P-I2C: DATA-seeded serial/parallel/serial reads, real TXRF map-clear edge, mask/host negative controls and restored positive reads |
 
 P0 and TSENS refuse timing attribution unless the owned CPU clock words show
 undivided XTAL with fractional numerator zero. On refusal, the leaf emits
@@ -279,20 +280,66 @@ not initialize RF, publish DMA or start a radio scheduler. The session is
 disposable: return it to ROM download with the leased stand reset after capture.
 These are not production frequency or calibrated-PHY conditions.
 
-Selection 14 is the P-I2C read-routing experiment. It repeats the HAL's
-modem/analog-I2C power, reset, clock, timing and register-mode prerequisites
-through PAC owners, then reads BBTOP 04 and TXRF 08 serially, in parallel
-(BBTOP on host 0, TXRF on host 1), then serially again. Every command is a
-read. The parallel host-map updates and combined complemented mask follow
-the complete ROM leaves cited in `opaque_wave2.rs`. No RF calibration,
-channel switch, memory initialization or traffic starts. The ROM's BBPLL
-calibration is not assumed; a busy timeout ends the leaf without a retry.
-The CPU must read undivided XTAL. Each host has a 40000-cycle deadline;
-the sourced power pre-delay is 4000 cycles. Tags `140–142` mark setup and
-its power/reset/gate readback; `150/154/158/160/164` record routing,
-following records contain returned bytes, polls, elapsed cycles and command
-block/index. `16f` marks completion of the entire six-byte sequence.
-Use a held stand lease and return this disposable session to ROM download.
+### P-I2C transport prefix and controls
+
+Selection 14 uses a **probe-specific transport prefix**, not production
+`power.rs::execute_owned` or complete `phy_rf_init`. It accesses only the
+existing PAC owners. The following differences delimit the result; source
+paths below are under `chips/esp32s31/`.
+
+| Production operation / order | Selection 14 difference and reason |
+| --- | --- |
+| `hal/src/power/chip_clocks.rs` adopts the Wi-Fi power gate before radio power. | The leaf opens that gate directly at entry: it has the sole PAC owner and no platform clock manager. |
+| `hal/src/power.rs::execute_owned` acquires an MPLL reference first; the PSRAM mapping already holds its permanent reference. | No refcount acquisition or PLL-power action: this SRAM facts image has no PSRAM mapping, HAL manager or assumed calibrated/permanent MPLL/BBPLL epoch. Gate readback and completed commands are the observations, not PLL readiness. |
+| PMU ICG selection/updates → register bus → syscon/shared maps → REF160/source → BB reset → calibration gates → I2C160/master gate. | These write edges keep that order. All six syscon maps use the production OR updates, including ZB4 and FE6; reserved/unrelated lanes are preserved. The leaf records selected fields, not all production `PowerClockReadback` checkpoints or their typed admission failures. |
+| `phy/src/analog/i2c.rs::PhyRfInitPrefixTransition` begins with `FeBbClock`: FE `0400`, FE `0800`, BB `0c80`, then PMU `enable_frontend_baseband_power`. | All four operations are omitted. The question is the APB analog master, not functioning FE/BB engines; the independently enabled modem/APB master is tested directly. No FE/BB readiness or minimal-gate necessity is claimed. |
+| BBPLL calibration-mode MMIO, then bias analog setup precede `OpenI2cXpd`. | Both are omitted to leave calibration state unmodified and avoid analog writes. A successful read does not establish calibrated PHY state. |
+| `OpenI2cXpd`: RF power off, BB-I2C tie release, 100 µs, RF power/tie on, conditional peripheral-I2C power/reset, then early SDM read/deadline loop. | The finite power/reset edges and 100 µs delay are retained. The false BB-I2C tie emits no write as in current HAL. The SDM read, stability loop and MAC-counter deadline are omitted: they admit a calibrated/stable SDM epoch, outside this transport fact. |
+| SDM stability → 10 µs post-delay → PBus clear → six timing writes → analog BBPLL enable → analog/MMIO ADC rate → register mode/enable. | The post-delay, PBus clear, analog BBPLL enable and ADC-rate operations are omitted; they prepare calibration/signal paths and include analog writes. All six timing writes and register mode/enable run **before the first read**, intentionally testing this initialized transport rather than production's default-timing first SDM read. |
+| Remaining RF-init suffix: PWDET, FE, TSENS/background, RC/filter/DCAP, analog init, RFPLL charge pump, command memory, SAR2, crystal-duty and channel/frequency work. | Entire suffix omitted: no calibration, tone, channel switch, initialized frequency memory or traffic is required/claimed by this leaf. |
+| Production owns timer edges, critical-section/lifecycle state, shared clock references and failure handling. | The disposable facts session has masked interrupts, hart1 held and no executor. A verified 40 MHz CPU XTAL supplies the 4000-cycle pre-delay and 40000-cycle deadline per host. No shared clock refcounts are manufactured; cleanup returns the session to ROM download. |
+| Normal read command DATA=0, normal routing; ROM parallel set-first/clear-second publication. | Every command uses a stated nonzero DATA seed with READ_WRITE=false; this separates returned zero from unchanged DATA. Before parallel reads, TXRF_MST0_SELECT is set to1 without a command, then BBTOP is set and TXRF is cleared through typed fields, with all three readbacks recorded. This verifies a real `1→0` storage edge. |
+| Production uses its admitted route only. | Two bounded negative controls deliberately disable all read selectors, then route BBTOP to host0 while issuing its read on host1. Each is followed by a restored positive BBTOP read. A changed result or timeout is expected relative to positive BBTOP; no exact no-responder byte is assumed. No analog writes occur. |
+
+The positive sequence reads BBTOP04 and TXRF08 serially on host1, then in
+parallel (BBTOP host0, TXRF host1), then serially on host1 again. BBTOP seeds
+are `a5/5a/3c`; TXRF seeds `a5/c3/5a`. The mask-negative and host-negative
+BBTOP reads use `a5`, restored positives `5a` and `3c`. A timeout or busy
+refusal stops further commands without retry; after a negative timeout the
+remaining control/restoration has no result. Every actual result must be
+reported; final completion does not assert an expected data value.
+
+All tags below are hexadecimal. Completion word `fac70001` only means the
+leaf returned. `16f` means the six positive reads completed; `1ff` means
+both negative controls and their restored positives also completed. Neither
+marker means the routing hypothesis passed.
+
+| Tag | Record `(a,b,c)` |
+| --- | --- |
+| `a0` | CPU root, integer divider, fractional numerator/denominator; shared with P0/TSENS. |
+| `140` | `(0,0,0)`, prefix entered. |
+| `141` | peripheral-I2C power, peripheral-I2C reset released, master clock gate. |
+| `142` | I2C160 source select, REF160 output gate, PHY register enable. |
+| `143`, `144`, `145` | BBTOP_MST0_SELECT, TXRF_MST0_SELECT, PHY_HOST_MAP_OTHER; after preset TXRF1, set BBTOP1, clear TXRF0 respectively. |
+| `14b` | `(case base, requested block, requested byte)`, no modeled route; leaf stops. |
+| `14c` | `(14,0,0)`, CPU clock refusal before the prefix; preceding `a0` gives observations. |
+| `14d` | `(case base, host,0)`, selected host busy before command publication; route/mask may already be set. Leaf stops. |
+| `14e` | `(170,busy0,busy1)`, parallel admission refused before lane changes; leaf stops. |
+| case base `+0` | reconstructed ANA_CONF1, BBTOP_MST0_SELECT, TXRF_MST0_SELECT. |
+| case base `+1` | returned data, number of busy polls, completion-observer cycles. **Data=`ffffffff` means timeout**, not an analog byte; `+2` is absent and the leaf stops. |
+| case base `+2` | command block, command byte, final busy. |
+| case base `+3` | PHY_HOST_MAP_OTHER, register mode, register enable. |
+| case base `+4` | host, DATA seed,0. |
+| `16f` | `(6,0,0)`, six positive commands completed. |
+| `1ff` | `(1,0,0)`, entire leaf completed. |
+
+Case bases: `150` initial BBTOP, `160` initial TXRF, `170` parallel BBTOP,
+`180` parallel TXRF, `190` final BBTOP, `1a0` final TXRF, `1b0` no-selector
+BBTOP, `1c0` restored BBTOP, `1d0` wrong-host BBTOP, `1e0` restored BBTOP.
+Each base is emitted once; refusal tags are disjoint. `14f` is unused.
+Parallel host1 progresses while host0 is being observed; observer cycles
+start after publication and do not measure a complete command duration.
+Use a held stand lease and return the disposable session to ROM download.
 
 Record tags: `a0` CPU clock fields; `a1` initial MODEM_CONF/PMU code; `a4`,
 `a8`, `ac`, `b0`, `b4`, `b8` P0 step readback/PMU code/cycle. For BA, `b0–b1`

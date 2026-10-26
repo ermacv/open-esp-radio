@@ -11,8 +11,8 @@ fn settle(cycles: u32) {
     while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 
-/// Repeat the relevant production prerequisite edges, without running PHY
-/// calibration. This does not prove that the ROM left the BBPLL calibrated.
+/// Probe-specific transport prefix. Its complete differences from production
+/// power/phy_rf_init are listed in the README; no calibrated epoch is claimed.
 fn prepare(s: &mut Session<'_>) {
     contain(s);
     // SOURCE: hal/src/power/chip_clocks.rs ClockCounts::adopt/ClockWords.
@@ -20,7 +20,8 @@ fn prepare(s: &mut Session<'_>) {
         .modem_lpcon_chip_clocks
         .set_modem_pwr_wifi_power_clock(true);
     // SOURCE: hal/src/power.rs execute_owned; modem/ops.rs. Preserve its
-    // PMU update -> APB -> maps -> source -> BB reset -> clocks order.
+    // PMU update -> APB -> maps -> source -> BB reset -> clocks order only.
+    // MPLL reference counting and the separate RF-init graph are not run.
     let p = &mut s.radio;
     p.pmu_radio.select_hp_active_modem_icg();
     p.pmu_radio.trigger_imm_modem_icg_update_dig_icg_modem_en();
@@ -29,10 +30,12 @@ fn prepare(s: &mut Session<'_>) {
         w.set_reg_modem_clk_en(pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled);
     });
     p.modem_syscon_radio.modify_clk_conf_power_st(|w| {
-        w.set_clk_modem_apb_st_map(Bits::constant::<6>())
-            .set_clk_modem_peri_st_map(Bits::constant::<4>())
-            .set_clk_wifi_st_map(Bits::constant::<6>())
-            .set_clk_bt_st_map(Bits::constant::<4>());
+        w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
+        w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
+        w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
+        w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
+        w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
+        w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
     });
     p.modem_lpcon_shared_clock.modify_clk_conf_power_st(|w| {
         w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
@@ -144,15 +147,34 @@ fn prepare(s: &mut Session<'_>) {
     oer_riscv::fence();
 }
 
-fn routing(s: &Session<'_>, tag: u32) {
+// A case has route at +0, completion at +1, identity at +2,
+// mode at +3 and request at +4. Refusals have separate global tags.
+fn routing(s: &Session<'_>, tag: u32, host: Host, seed: u8) {
     let m = &s.analog.i2c_ana_mst;
     let mask = m.read_ana_conf1();
+    let map = m.read_ana_conf2();
     emit(
         tag,
-        mask.ana_conf1().get() | (u32::from(mask.ana_status1()) << 24),
-        u32::from(m.read_ana_conf2().bbtop_mst0_select()),
-        m.read_ana_conf0().phy_register_mode().get(),
+        mask.ana_conf1().get()
+            | (u32::from(mask.ana_status1())
+                << pac::i2c_ana_mst::ana_conf1::ANA_STATUS1_MASK.trailing_zeros()),
+        u32::from(map.bbtop_mst0_select()),
+        u32::from(map.txrf_mst0_select()),
     );
+    emit(
+        tag + 3,
+        map.phy_host_map_other().get(),
+        m.read_ana_conf0().phy_register_mode().get(),
+        u32::from(m.read_ana_conf0().phy_register_enable()),
+    );
+    emit(tag + 4, host_number(host), u32::from(seed), 0);
+}
+
+fn host_number(host: Host) -> u32 {
+    match host {
+        Host::Host0 => 0,
+        Host::Host1 => 1,
+    }
 }
 
 fn busy(s: &Session<'_>, host: Host) -> bool {
@@ -163,22 +185,23 @@ fn busy(s: &Session<'_>, host: Host) -> bool {
     }
 }
 
-fn start(s: &mut Session<'_>, host: Host, address: Address) {
+fn start(s: &mut Session<'_>, host: Host, address: Address, seed: u8) {
     let m = &mut s.analog.i2c_ana_mst;
     // SOURCE: hal/src/phy/i2c/master.rs publish_command; ROM_REV0_PHY_I2C.
-    // READ_WRITE=false for every command; no analog write path exists here.
+    // Deliberate probe difference: nonzero DATA seeds distinguish a read
+    // returning zero from an unchanged command. READ_WRITE is always false.
     match host {
         Host::Host0 => m.write_i2c0_ctrl(|w| {
             w.set_slave_addr(address.block())
                 .set_slave_reg_addr(address.index())
-                .set_data(0)
+                .set_data(seed)
                 .set_read_write(false)
                 .set_start_or_reset(true);
         }),
         Host::Host1 => m.write_i2c1_ctrl(|w| {
             w.set_slave_addr(address.block())
                 .set_slave_reg_addr(address.index())
-                .set_data(0)
+                .set_data(seed)
                 .set_read_write(false)
                 .set_start_or_reset(true);
         }),
@@ -192,7 +215,7 @@ fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
         polls = polls.saturating_add(1);
         if oer_riscv::cycle32().wrapping_sub(start) >= COMMAND_CYCLES {
             emit(
-                tag,
+                tag + 1,
                 u32::MAX,
                 polls,
                 oer_riscv::cycle32().wrapping_sub(start),
@@ -212,13 +235,13 @@ fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
         }
     };
     emit(
-        tag,
+        tag + 1,
         u32::from(data),
         polls,
         oer_riscv::cycle32().wrapping_sub(start),
     );
     emit(
-        tag + 1,
+        tag + 2,
         u32::from(block),
         u32::from(index),
         u32::from(busy(s, host)),
@@ -226,36 +249,60 @@ fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
     true
 }
 
-fn serial(s: &mut Session<'_>, address: Address, tag: u32) -> bool {
-    let Some(route) = analog_i2c::route(Profile::LibphyNormal, address.block()) else {
-        return false;
-    };
-    if busy(s, route.host) {
-        emit(tag, u32::MAX, 0, 0);
-        return false;
-    }
+fn normal_map(s: &mut Session<'_>) {
+    // SOURCE: hal/src/phy/i2c/master.rs configure_host_map, image 0x3fa0.
     s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_bbtop_mst0_select(false)
             .set_txrf_mst0_select(false)
             .set_phy_host_map_other(Bits::constant::<0xfe8>());
     });
+}
+
+fn read_case(s: &mut Session<'_>, address: Address, host: Host, seed: u8, tag: u32) -> bool {
+    if busy(s, host) {
+        emit(0x14d, tag, host_number(host), 0);
+        return false;
+    }
+    routing(s, tag, host, seed);
+    start(s, host, address, seed);
+    finish(s, host, tag)
+}
+
+fn serial(s: &mut Session<'_>, address: Address, seed: u8, tag: u32) -> bool {
+    let Some(route) = analog_i2c::route(Profile::LibphyNormal, address.block()) else {
+        emit(
+            0x14b,
+            tag,
+            u32::from(address.block()),
+            u32::from(address.index()),
+        );
+        return false;
+    };
+    normal_map(s);
     s.analog
         .i2c_ana_mst
         .publish_phy_i2c_read_mask(Bits::truncate(route.complemented_read_select()));
-    routing(s, tag);
-    start(s, route.host, address);
-    finish(s, route.host, tag + 1)
+    read_case(s, address, route.host, seed, tag)
+}
+
+fn lane_snapshot(s: &Session<'_>, tag: u32) {
+    let m = s.analog.i2c_ana_mst.read_ana_conf2();
+    emit(
+        tag,
+        u32::from(m.bbtop_mst0_select()),
+        u32::from(m.txrf_mst0_select()),
+        m.phy_host_map_other().get(),
+    );
 }
 
 pub(super) fn i2c(s: &mut Session<'_>) {
     if !super::opaque::xtal_cpu(s) {
-        emit(0x14f, 14, 0, 0);
+        emit(0x14c, 14, 0, 0);
         return;
     }
     emit(0x140, 0, 0, 0);
     prepare(s);
-    let p = &s.radio;
-    let power = p.pmu_radio.read_ana_peri_pwr_ctrl();
+    let power = s.radio.pmu_radio.read_ana_peri_pwr_ctrl();
     let gates = s.clocks.modem_lpcon_chip_clocks.read_clk_conf();
     emit(
         0x141,
@@ -265,7 +312,12 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     );
     emit(
         0x142,
-        u32::from(p.modem_syscon_radio.read_clk_conf().clk_i2c_mst_sel_160m()),
+        u32::from(
+            s.radio
+                .modem_syscon_radio
+                .read_clk_conf()
+                .clk_i2c_mst_sel_160m(),
+        ),
         u32::from(
             s.clocks
                 .hp_sys_clkrst_pll160
@@ -276,43 +328,79 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     );
     let b = analog_i2c::bbtop::byte_04_opaque::ADDRESS;
     let t = analog_i2c::txrf::byte_08_opaque::ADDRESS;
-    if !serial(s, b, 0x150) || !serial(s, t, 0x154) {
+    if !serial(s, b, 0xa5, 0x150) || !serial(s, t, 0xa5, 0x160) {
         return;
     }
-    if busy(s, Host::Host0) || busy(s, Host::Host1) {
-        emit(0x14f, 0, 1, 0);
+    let busy0 = busy(s, Host::Host0);
+    let busy1 = busy(s, Host::Host1);
+    if busy0 || busy1 {
+        emit(0x14e, 0x170, u32::from(busy0), u32::from(busy1));
         return;
     }
-    // SOURCE: ROM_REV0_PHY_I2C, phy_i2c_paral_set_mst0 at 2f82a082:
-    // OR BBTOP read_select<<2, then clear TXRF read_select<<2 in ANA_CONF2.
-    // Within the modeled host-map field these are bits 0 and 1 respectively.
+    // Probe preparation makes the ROM's second operation a real 1->0 edge.
+    // No command executes while both banks are assigned to host zero.
+    s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
+        w.set_txrf_mst0_select(true);
+    });
+    lane_snapshot(s, 0x143);
+    // SOURCE: ROM_REV0_PHY_I2C_HOST_LANES: set BBTOP, then clear TXRF.
     s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_bbtop_mst0_select(true);
     });
+    lane_snapshot(s, 0x144);
     s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_txrf_mst0_select(false);
     });
+    lane_snapshot(s, 0x145);
     let Some(br) = analog_i2c::route(Profile::LibphyNormal, b.block()) else {
+        emit(0x14b, 0x170, u32::from(b.block()), u32::from(b.index()));
         return;
     };
     let Some(tr) = analog_i2c::route(Profile::LibphyNormal, t.block()) else {
+        emit(0x14b, 0x180, u32::from(t.block()), u32::from(t.index()));
         return;
     };
-    // SOURCE: ROM phy_i2c_paral_set_read and phy_i2c_paral_read, no callbacks.
+    // SOURCE: ROM phy_i2c_paral_set_read/read; host0 publication first.
     s.analog
         .i2c_ana_mst
         .publish_phy_i2c_read_mask(Bits::truncate(
             !(u32::from(br.read_select) | u32::from(tr.read_select)),
         ));
-    routing(s, 0x158);
-    start(s, Host::Host0, b);
-    start(s, Host::Host1, t);
-    if !finish(s, Host::Host0, 0x159) || !finish(s, Host::Host1, 0x15b) {
+    routing(s, 0x170, Host::Host0, 0x5a);
+    routing(s, 0x180, Host::Host1, 0xc3);
+    start(s, Host::Host0, b, 0x5a);
+    start(s, Host::Host1, t, 0xc3);
+    if !finish(s, Host::Host0, 0x170) || !finish(s, Host::Host1, 0x180) {
         return;
     }
-    if !serial(s, b, 0x160) || !serial(s, t, 0x164) {
+    if !serial(s, b, 0x3c, 0x190) || !serial(s, t, 0x5a, 0x1a0) {
         return;
     }
-    emit(0x16f, 1, 0, 0);
-    // The disposable session is returned to ROM download by the leased host.
+    emit(0x16f, 6, 0, 0); // Six positive reads finished, not a pass verdict.
+
+    // Negative control: no read selector enabled. Expected to differ from
+    // the positive BBTOP value or time out; no exact electrical code assumed.
+    normal_map(s);
+    s.analog
+        .i2c_ana_mst
+        .publish_phy_i2c_read_mask(Bits::truncate(u32::MAX));
+    if !read_case(s, b, Host::Host1, 0xa5, 0x1b0) {
+        return;
+    }
+    if !serial(s, b, 0x5a, 0x1c0) {
+        return;
+    }
+    // Negative control: BBTOP routed to host0, command deliberately on host1.
+    // The correct BBTOP read mask from the preceding serial read remains set.
+    s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
+        w.set_bbtop_mst0_select(true);
+    });
+    if !read_case(s, b, Host::Host1, 0xa5, 0x1d0) {
+        return;
+    }
+    if !serial(s, b, 0x3c, 0x1e0) {
+        return;
+    }
+    emit(0x1ff, 1, 0, 0);
+    // Return this disposable session to ROM download under the held lease.
 }
