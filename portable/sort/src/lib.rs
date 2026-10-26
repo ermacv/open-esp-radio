@@ -1,5 +1,14 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 
 //! In-place sorting without recursion, allocation or a pivot: the standard
 //! library's unstable sort recurses, which no stack bound can follow. The

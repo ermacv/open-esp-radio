@@ -9,6 +9,10 @@
 # `oer_hil_model::Wait` derived from a contract bound, a typed protocol
 # interval or the measured stand profile.
 disallowed-methods = [
+    { path = "core::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
+    { path = "core::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
+    { path = "std::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
+    { path = "std::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
     { path = "core::time::Duration::from_secs", reason = "derive the wait: oer_hil_model::Wait" },
     { path = "core::time::Duration::from_millis", reason = "derive the wait: oer_hil_model::Wait" },

@@ -10,6 +10,7 @@
         clippy::indexing_slicing
     )
 )]
+#![deny(clippy::todo, clippy::unimplemented)]
 
 //! Allocation-free RSN (IEEE 802.11 robust security network) protocol
 //! primitives shared by WPA2 and WPA3 authentication suites.

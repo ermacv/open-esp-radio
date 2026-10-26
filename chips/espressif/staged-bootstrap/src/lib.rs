@@ -1,3 +1,11 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+)]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 //! Staged bootstrap entry, application descriptor and payload relocation.

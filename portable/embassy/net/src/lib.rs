@@ -1,5 +1,11 @@
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented
+)]
 
 //! Owned-packet network boundary for the optimized Embassy/Xarxa integration.
 //!

@@ -28,12 +28,14 @@ system these rules serve.
 - **Compile time first.** Every check that can run at compile time runs there.
 - **Panics and unsafe.** A change introduces no new runtime panic sites or
   `unsafe` code. Compile-time checks and test assertions are allowed.
-  Input from outside never panics: frames from the air, any peer
-  value (counters, PNs, sequence numbers, lengths, indices), host and API
-  input return a handled error. Existing `todo!`, `unreachable!`, `panic!`
-  and `expect` (never a bare `unwrap()`) keep their static messages.
-  Panic lints warn; a crate moves to `deny` when its contract
-  freezes.
+  Remove existing runtime panics from image crates, including probes and
+  HIL; image panic budgets only shrink to 0. `const` panics evaluated at
+  compile time are allowed. Air, peer, host and API input return a handled
+  error. New panic-lint `allow` and `expect` attributes are test-only. A crate
+  moves each clean panic lint to crate-root `deny` in the PR that clears it,
+  keeping workspace lint inheritance. `debug_assert!` is not a guard.
+  Arithmetic on peer values names its overflow behavior with `checked_`,
+  `wrapping_` or `saturating_` operations.
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
   code never blocks or spins; it yields to its executor. The one exception is
   a named settle of a known length up to 20 µs. Before an executor exists

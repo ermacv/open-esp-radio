@@ -1,5 +1,14 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 
 //! Stateless IEEE 802.11 frame protection and bounded AES key wrapping.
 //! Packet-number allocation, replay frontiers and key negotiation belong to

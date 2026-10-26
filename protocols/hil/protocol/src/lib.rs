@@ -1,5 +1,13 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::unreachable))]
 //! Target-neutral control and evidence protocol for hardware-in-the-loop tests.
 //!
 //! The wire types deliberately contain no board paths, expected image hashes,

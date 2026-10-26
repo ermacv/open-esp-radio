@@ -10,6 +10,7 @@
         clippy::indexing_slicing
     )
 )]
+#![deny(clippy::todo, clippy::unimplemented)]
 
 //! IEEE 802.11 frame formats and shared value vocabulary.
 //!

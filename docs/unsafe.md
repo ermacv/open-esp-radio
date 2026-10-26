@@ -22,7 +22,15 @@ it:
   does not fire on the macro's own unsafe code. A crate that expands its own
   macro allows the unsafe code at the call site.
 - `[workspace.lints.clippy]` denies `disallowed_methods`; `clippy.toml` lists
-  them, and an intentional use carries a local `allow` with a reason.
+  them, including direct `core::mem::{zeroed, transmute}` and their `std`
+  counterparts. An intentional use carries a local `allow` or `expect`
+  with a reason. Crate-local Clippy configurations retain these bans.
+- A clean panic lint is denied at the crate root while `[lints]` retains
+  `workspace = true`. A non-test local `allow` or `expect` means the lint
+  is not clean, even when the host emits no diagnostic. New panic-lint
+  allowances belong only in tests. Remove existing non-test allowances as
+  the crate is cleaned, then move each clean lint to `deny`. Compile-time
+  checks remain allowed.
 
 Every `unsafe` block and `unsafe impl` below the boundary needs a
 `// SAFETY:` comment on the lines immediately before it, stating why its

@@ -1,3 +1,13 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 //! The header every HIL conformance trace starts with.
 //!
 //! A port's conformance crate owns its bounds as a type (`struct Bounds`

@@ -1,5 +1,6 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(clippy::unwrap_used, clippy::todo, clippy::unimplemented)]
 // A forgotten owner never releases what it holds, such as a modem clock lease,
 // so radio ownership must end in `Drop`.
 #![deny(clippy::mem_forget)]

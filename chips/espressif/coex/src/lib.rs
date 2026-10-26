@@ -1,5 +1,11 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::todo,
+    clippy::unimplemented
+)]
 
 //! Executor-neutral coexistence policy of the Espressif chips, recovered from
 //! esp-coex-lib.

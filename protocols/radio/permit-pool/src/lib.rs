@@ -1,6 +1,15 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::arithmetic_side_effects
+)]
 
 //! An allocation-free, first-in, first-out pool of a radio port install's
 //! permits ([`oer_radio_port::PermitPool`]).

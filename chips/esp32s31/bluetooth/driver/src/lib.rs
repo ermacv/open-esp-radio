@@ -1,3 +1,9 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+)]
 //! ESP32-S31 Bluetooth hardware engine.
 //!
 //! The HAL owns MMIO, controller-SRAM layouts and CPU/hardware ownership.

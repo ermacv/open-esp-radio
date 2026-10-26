@@ -1,3 +1,13 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 //! Espressif watchdog sequences over a chip's typed watchdog registers.
 //!
 //! The ESP32-S31 and the ESP32-C5 share the watchdog IP: a main watchdog

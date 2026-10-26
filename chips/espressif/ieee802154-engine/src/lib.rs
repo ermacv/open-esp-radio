@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::todo, clippy::unimplemented)]
 //! Chip-neutral IEEE 802.15.4 MAC driver engine.
 //!
 //! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`

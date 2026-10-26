@@ -38,6 +38,10 @@ pub(crate) fn receive(fd: RawFd, bytes: &mut [u8]) -> Message {
             iov_len: bytes.len(),
         };
         let mut control = [0_usize; 16];
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the libc output structure accepts all-zero initialization before the syscall"
+        )]
         let mut message: libc::msghdr = std::mem::zeroed();
         message.msg_iov = &mut vector;
         message.msg_iovlen = 1;
@@ -88,6 +92,10 @@ pub(crate) fn send(fd: RawFd, bytes: &[u8], descriptors: &[RawFd]) -> std::io::R
             iov_len: bytes.len(),
         };
         let mut control = [0_usize; 16];
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the libc output structure accepts all-zero initialization before the syscall"
+        )]
         let mut message: libc::msghdr = std::mem::zeroed();
         message.msg_iov = &mut vector;
         message.msg_iovlen = 1;

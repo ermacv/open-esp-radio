@@ -1,5 +1,6 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(clippy::unwrap_used, clippy::todo, clippy::unimplemented)]
 
 //! Role-neutral ESP32-S31 Wi-Fi device composition.
 //!
