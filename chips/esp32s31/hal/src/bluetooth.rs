@@ -787,10 +787,12 @@ impl ModemLpTimerCounterStartedOwner {
     ///
     /// This transition performs no MMIO and exposes no raw register owner.
     /// The timer's handler starts the timer and keeps the returned owner
-    /// until the Controller reset, lending it to the task only for software
-    /// work.
+    /// until the Controller reset. Software work receives only a time snapshot.
     pub fn stage_for_interrupt(self) -> ModemLpTimerInterruptReadyOwner {
-        ModemLpTimerInterruptReadyOwner { timer: self.timer }
+        ModemLpTimerInterruptReadyOwner {
+            timer: self.timer,
+            epoch: BluetoothModemLpTimerEpoch::new(),
+        }
     }
 }
 
@@ -798,6 +800,7 @@ impl ModemLpTimerCounterStartedOwner {
 #[must_use = "the modem LP-timer interrupt owner must remain in stable ISR storage"]
 pub struct ModemLpTimerInterruptReadyOwner {
     timer: BluetoothModemLpTimerRegisters,
+    epoch: BluetoothModemLpTimerEpoch,
 }
 
 /// Result of one bounded source-127 hard-handler register step.
@@ -817,6 +820,7 @@ pub enum ModemLpTimerInterruptStep {
 #[must_use = "the common modem LP-timer register phase remains pending"]
 pub struct ModemLpTimerHandlerPendingOwner {
     timer: BluetoothModemLpTimerRegisters,
+    epoch: BluetoothModemLpTimerEpoch,
     observation: BluetoothModemLpTimerInterruptObservation,
 }
 
@@ -830,86 +834,145 @@ impl ModemLpTimerHandlerPendingOwner {
     /// handler without invoking software or an RTOS service.
     pub fn step_registers(self) -> ModemLpTimerHandlerRegisterStep {
         let mut timer = self.timer;
-        match timer.acknowledge_handler_registers() {
-            None => {
-                ModemLpTimerHandlerRegisterStep::Rearmed(ModemLpTimerInterruptReadyOwner { timer })
-            }
-            Some(register_observation) => {
-                ModemLpTimerHandlerRegisterStep::SoftwarePending(ModemLpTimerSoftwarePendingOwner {
+        let mut epoch = self.epoch;
+        match timer.take_software_work(&mut epoch) {
+            None => ModemLpTimerHandlerRegisterStep::Rearmed(ModemLpTimerInterruptReadyOwner {
+                timer,
+                epoch,
+            }),
+            Some(work) => ModemLpTimerHandlerRegisterStep::SoftwarePending {
+                owner: ModemLpTimerSoftwarePendingOwner {
                     timer,
-                    interrupt_observation: self.observation,
-                    register_observation,
-                })
-            }
+                    epoch,
+                    deferred_dispatch: None,
+                },
+                work,
+            },
         }
     }
 }
 
 /// Result of the common handler's bounded register-acknowledgement phase.
-#[must_use = "retain the ready owner or complete the required software work"]
+#[must_use = "retain the register owner and hand software work to the task"]
 pub enum ModemLpTimerHandlerRegisterStep {
     /// No software work was requested and the interrupt owner is ready again.
     Rearmed(ModemLpTimerInterruptReadyOwner),
-    /// At least one acknowledged state byte requires software work.
-    SoftwarePending(ModemLpTimerSoftwarePendingOwner),
+    /// Keep the register owner in the handler and publish the value-only work.
+    SoftwarePending {
+        /// Register authority retained by the handler until its plan arrives.
+        owner: ModemLpTimerSoftwarePendingOwner,
+        /// Snapshot for the task's bounded queue processing.
+        work: ModemLpTimerWork,
+    },
 }
 
-/// Opaque HAL owner retained while source-127 software work is pending.
+/// Value-only source-127 work. It grants no register access.
 ///
-/// This owner has no raw register escape and cannot be rearmed until the no-RTOS
-/// timer runtime supplies the missing software transition and final register
-/// read.
-#[must_use = "software timer work and the final hardware read remain pending"]
+/// ```compile_fail
+/// use oer_esp32s31_hal::bluetooth::{ModemLpTimerWork, BluetoothModemLpTimerEpoch};
+/// fn task(mut work: ModemLpTimerWork, epoch: &mut BluetoothModemLpTimerEpoch) {
+///     work.sample_counter(epoch);
+/// }
+/// ```
+#[must_use = "complete software work and return its unarmed plan"]
+pub struct ModemLpTimerWork {
+    now: BluetoothModemLpTimerInstant,
+    epoch: BluetoothModemLpTimerEpoch,
+    dispatch_requested: bool,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl ModemLpTimerWork {
+    #[doc(hidden)]
+    pub const fn for_host_test(
+        now: BluetoothModemLpTimerInstant,
+        epoch: BluetoothModemLpTimerEpoch,
+        dispatch_requested: bool,
+    ) -> Self {
+        Self {
+            now,
+            epoch,
+            dispatch_requested,
+        }
+    }
+}
+
+impl ModemLpTimerWork {
+    /// Handler-sampled positional time, including acknowledged rollovers.
+    pub const fn instant(&self) -> BluetoothModemLpTimerInstant {
+        self.now
+    }
+
+    /// The handler's epoch at the snapshot; software retains only a copy.
+    pub const fn epoch(&self) -> BluetoothModemLpTimerEpoch {
+        self.epoch
+    }
+
+    /// Whether the acknowledged state requested queue dispatch.
+    pub const fn dispatch_requested(&self) -> bool {
+        self.dispatch_requested
+    }
+
+    /// Finish queue work without touching or arming hardware.
+    pub fn plan(self, deadline: Option<BluetoothModemLpTimerInstant>) -> ModemLpTimerPlan {
+        ModemLpTimerPlan { deadline }
+    }
+}
+
+/// An unarmed queue decision. Only the handler's retained owner applies it.
+#[must_use = "submit the plan to the timer handler"]
+pub struct ModemLpTimerPlan {
+    deadline: Option<BluetoothModemLpTimerInstant>,
+}
+
+impl ModemLpTimerPlan {
+    /// Selected software deadline, or an empty queue. This is not armed state.
+    pub const fn deadline(&self) -> Option<BluetoothModemLpTimerInstant> {
+        self.deadline
+    }
+}
+
+/// Register owner retained by the handler while P2 calculates a plan.
+#[must_use = "retain this owner in the handler until the software plan arrives"]
 pub struct ModemLpTimerSoftwarePendingOwner {
     timer: BluetoothModemLpTimerRegisters,
-    interrupt_observation: BluetoothModemLpTimerInterruptObservation,
-    register_observation: BluetoothModemLpTimerHandlerRegisterObservation,
+    epoch: BluetoothModemLpTimerEpoch,
+    deferred_dispatch: Option<bool>,
 }
 
 impl ModemLpTimerSoftwarePendingOwner {
-    /// Return the initial source-127 classifier path.
-    pub const fn interrupt_observation(&self) -> BluetoothModemLpTimerInterruptObservation {
-        self.interrupt_observation
+    /// Acknowledge a new interrupt while P2 owns the earlier snapshot. Retain
+    /// its software consequence here without overwriting the in-flight work.
+    /// Rollover acknowledgement advances only this handler-owned epoch.
+    pub fn observe_interrupt(&mut self) {
+        self.timer
+            .retain_interrupt(&mut self.epoch, &mut self.deferred_dispatch);
     }
 
-    /// Return the positional state bytes requiring software consequences.
-    pub const fn register_observation(&self) -> BluetoothModemLpTimerHandlerRegisterObservation {
-        self.register_observation
-    }
-
-    /// Sample one finite positional LP-timer instant and acknowledge a newly
-    /// observed rollover without polling.
-    pub fn sample_counter(
-        &mut self,
-        epoch: &mut BluetoothModemLpTimerEpoch,
-    ) -> BluetoothModemLpTimerCounterObservation {
-        self.timer.sample_counter(epoch)
-    }
-
-    /// Disable the currently programmed positional compare.
-    pub fn disable_compare(&mut self) {
-        self.timer.disable_compare();
-    }
-
-    /// Program one positional deadline and return the exact hardware branch.
-    pub fn program_compare(
-        &mut self,
-        deadline: BluetoothModemLpTimerInstant,
-        epoch: BluetoothModemLpTimerEpoch,
-    ) -> BluetoothModemLpTimerCompareDisposition {
-        self.timer.program_compare(deadline, epoch)
-    }
-
-    /// Perform the final fresh handler read and return the ISR-ready owner.
+    /// Apply the unarmed plan while holding the timer's sole register authority.
     ///
-    /// This seam is hidden because the controller timer state machine must call
-    /// it only after every software consequence represented by this owner has
-    /// completed.
-    #[doc(hidden)]
-    pub fn complete_software(self) -> ModemLpTimerInterruptReadyOwner {
+    /// A deadline uses the sourced disable/sample/program/bit-18 transaction.
+    /// Its rollover projection does not clear the rollover byte: the next
+    /// handler register phase acknowledges it and advances the retained epoch
+    /// exactly once. Pending arrivals stay in hardware or in this owner's deferred work.
+    /// The empty queue disables compare only; it proves no all-cause stop.
+    pub fn apply_plan(self, plan: ModemLpTimerPlan) -> ModemLpTimerHandlerRegisterStep {
         let mut timer = self.timer;
-        timer.sample_final_state();
-        ModemLpTimerInterruptReadyOwner { timer }
+        let mut epoch = self.epoch;
+        match timer.apply_plan(plan, &mut epoch, self.deferred_dispatch) {
+            Some(work) => ModemLpTimerHandlerRegisterStep::SoftwarePending {
+                owner: Self {
+                    timer,
+                    epoch,
+                    deferred_dispatch: None,
+                },
+                work,
+            },
+            None => ModemLpTimerHandlerRegisterStep::Rearmed(ModemLpTimerInterruptReadyOwner {
+                timer,
+                epoch,
+            }),
+        }
     }
 }
 
@@ -945,10 +1008,14 @@ impl ModemLpTimerInterruptReadyOwner {
     pub fn step(self) -> ModemLpTimerInterruptStep {
         let mut timer = self.timer;
         match timer.classify_interrupt() {
-            None => ModemLpTimerInterruptStep::Spurious(ModemLpTimerInterruptReadyOwner { timer }),
+            None => ModemLpTimerInterruptStep::Spurious(ModemLpTimerInterruptReadyOwner {
+                timer,
+                epoch: self.epoch,
+            }),
             Some(observation) => {
                 ModemLpTimerInterruptStep::HandlerPending(ModemLpTimerHandlerPendingOwner {
                     timer,
+                    epoch: self.epoch,
                     observation,
                 })
             }

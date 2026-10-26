@@ -28,6 +28,7 @@ fn model() -> (
             .ok()
             .unwrap();
     let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
+        epoch: bluetooth::BluetoothModemLpTimerEpoch::new(),
         timer: engine.registers.modem_lp_timer.take().unwrap(),
     };
     let output = bluetooth::InterruptOutputReleasedOwner {
@@ -249,6 +250,7 @@ fn dtm_only_profile_returns_one_arena_and_rejects_old_items() {
     .ok()
     .expect("DTM needs no global RX chains");
     let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
+        epoch: bluetooth::BluetoothModemLpTimerEpoch::new(),
         timer: engine.registers.modem_lp_timer.take().unwrap(),
     };
     let output = bluetooth::InterruptOutputReleasedOwner {
@@ -456,6 +458,7 @@ fn reset_returns_storage_outside_its_scoped_pool_and_epoch_brands() {
                 .ok()
                 .unwrap();
             let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
+                epoch: bluetooth::BluetoothModemLpTimerEpoch::new(),
                 timer: engine.registers.modem_lp_timer.take().unwrap(),
             };
             let output = bluetooth::InterruptOutputReleasedOwner {

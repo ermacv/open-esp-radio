@@ -130,3 +130,57 @@ fn source_127_readiness_wakes_the_worker_without_being_taken() {
         Poll::Ready(Err(oer_interrupt_table::signal::ForeignContext))
     );
 }
+
+#[test]
+fn p2_uses_one_snapshot_and_returns_a_plan_after_publication() {
+    use oer_time::{Clock, Duration, Instant};
+    use oer_time_virtual::VirtualClock;
+
+    let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(24));
+    let mut queue = ModemLpTimerQueue::<3>::new();
+    let _first = queue.schedule(instant(10), instant(20)).unwrap();
+    let _second = queue.schedule(instant(10), instant(25)).unwrap();
+    let _last = queue.schedule(instant(10), instant(30)).unwrap();
+    let mut epoch = BluetoothModemLpTimerEpoch::new();
+    let snapshot =
+        ModemLpTimerWork::for_host_test(instant(clock.now().as_micros() as u32), epoch, true);
+    let work = ModemLpTimerSoftwareWork::begin(&mut queue, &mut epoch, snapshot);
+    let ModemLpTimerSoftwareStep::Expiration(pending) = work.step() else {
+        panic!("the oldest due expiration must be published first");
+    };
+    assert_eq!(pending.event().deadline(), instant(20));
+    let events = ModemLpTimerEventCell::new();
+    let (work, _) = pending
+        .publish::<oer_interrupt_table::signal::host::Deferred>(&events)
+        .ok()
+        .unwrap();
+    clock.advance(Duration::from_micros(20)).unwrap();
+    // P2 has only the handler's old snapshot, even when it is delayed.
+    let ModemLpTimerSoftwareStep::Planned(plan) = work.step() else {
+        panic!("new time must be reconciled by the handler");
+    };
+    assert_eq!(plan.deadline(), Some(instant(25)));
+    assert_eq!(events.take().unwrap().deadline(), instant(20));
+    assert_eq!(queue.next_deadline(instant(44)), Some(instant(25)));
+}
+
+#[test]
+fn rollover_only_snapshot_plans_without_dispatching_and_empty_queue_stays_unarmed() {
+    let mut queue = ModemLpTimerQueue::<1>::new();
+    let _timer = queue.schedule(instant(10), instant(20)).unwrap();
+    let mut epoch = BluetoothModemLpTimerEpoch::new();
+    let snapshot = ModemLpTimerWork::for_host_test(instant(25), epoch, false);
+    let work = ModemLpTimerSoftwareWork::begin(&mut queue, &mut epoch, snapshot);
+    let ModemLpTimerSoftwareStep::Planned(plan) = work.step() else {
+        panic!("rollover alone does not dispatch the queue");
+    };
+    assert_eq!(plan.deadline(), Some(instant(20)));
+
+    let mut empty = ModemLpTimerQueue::<0>::new();
+    let snapshot = ModemLpTimerWork::for_host_test(instant(25), epoch, true);
+    let work = ModemLpTimerSoftwareWork::begin(&mut empty, &mut epoch, snapshot);
+    let ModemLpTimerSoftwareStep::Planned(plan) = work.step() else {
+        panic!("an empty queue returns an empty plan");
+    };
+    assert_eq!(plan.deadline(), None);
+}

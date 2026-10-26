@@ -655,6 +655,63 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
         }
     }
 
+    /// Acknowledge a handler epoch and sample time before publishing value-only
+    /// queue work. The handler retains both the registers and the actual epoch.
+    pub fn take_software_work(
+        &mut self,
+        epoch: &mut BluetoothModemLpTimerEpoch,
+    ) -> Option<crate::bluetooth::ModemLpTimerWork> {
+        let observation = self.acknowledge_handler_registers()?;
+        epoch.advance_for_handler_registers(observation);
+        let now = self.sample_counter(epoch).instant();
+        Some(crate::bluetooth::ModemLpTimerWork {
+            now,
+            epoch: *epoch,
+            dispatch_requested: observation.state_0024_low_byte_was_nonzero(),
+        })
+    }
+
+    /// Acknowledge a new entry while the task holds the earlier snapshot.
+    /// Keep its software facts with the handler, without replacing that work.
+    pub fn retain_interrupt(
+        &mut self,
+        epoch: &mut BluetoothModemLpTimerEpoch,
+        deferred_dispatch: &mut Option<bool>,
+    ) {
+        if self.classify_interrupt().is_none() {
+            return;
+        }
+        if let Some(observation) = self.acknowledge_handler_registers() {
+            epoch.advance_for_handler_registers(observation);
+            *deferred_dispatch = Some(
+                deferred_dispatch.unwrap_or(false) || observation.state_0024_low_byte_was_nonzero(),
+            );
+        }
+    }
+
+    /// Apply the software decision, then publish any software work retained
+    /// by intervening handler entries. Newly arriving state bytes remain for
+    /// the next register phase; the compare sample never clears them.
+    pub fn apply_plan(
+        &mut self,
+        plan: crate::bluetooth::ModemLpTimerPlan,
+        epoch: &mut BluetoothModemLpTimerEpoch,
+        deferred_dispatch: Option<bool>,
+    ) -> Option<crate::bluetooth::ModemLpTimerWork> {
+        match plan.deadline {
+            Some(deadline) => {
+                let _ = self.program_compare(deadline, *epoch);
+            }
+            None => self.disable_compare(),
+        }
+        self.sample_final_state();
+        deferred_dispatch.map(|dispatch_requested| crate::bluetooth::ModemLpTimerWork {
+            now: self.sample_counter(epoch).instant(),
+            epoch: *epoch,
+            dispatch_requested,
+        })
+    }
+
     /// Sample one complete positional LP-timer instant.
     ///
     /// A newly observed rollover advances `epoch` before the fresh counter

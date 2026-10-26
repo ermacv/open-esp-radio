@@ -6,7 +6,7 @@ use oer_bluetooth_le_port::TxPower;
 use oer_bluetooth_le_radio::LeBand;
 use oer_esp32s31_bluetooth_driver::{
     modem_timer::{
-        ControllerModemTimerBegin, ControllerModemTimerReadinessClass, ControllerModemTimerRearm,
+        ControllerModemTimerBegin, ControllerModemTimerReadinessClass, ControllerModemTimerPlanSubmission,
         ControllerModemTimerStep, ControllerModemTimerTask,
     },
     port::{

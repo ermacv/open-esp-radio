@@ -707,3 +707,140 @@ fn modem_lp_compare_accounts_for_unacknowledged_rollover_locally() {
         ]
     );
 }
+
+#[test]
+fn a_delayed_plan_retains_arrivals_and_only_the_handler_requests_immediate_work() {
+    use super::super::host::HostMemory;
+    use oer_esp32s31_pac::modem_pwr::{word_0024_opaque, word_0048_opaque};
+    use oer_time::{Clock, Duration, Instant};
+    use oer_time_virtual::VirtualClock;
+
+    for delay in [8, 9, 10, 11] {
+        let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(10));
+        let mut memory = HostMemory::filled(0);
+        memory.timer[word_0048_opaque::OFFSET / 4] = clock.now().as_micros() as u32;
+        memory.timer[word_0024_opaque::OFFSET / 4] = 1;
+        let mut epoch = BluetoothModemLpTimerEpoch::new();
+        let work = {
+            let (_, _, mut timer) = memory.owners();
+            timer.take_software_work(&mut epoch).unwrap()
+        };
+        let before = memory.clone();
+        let plan = work.plan(Some(BluetoothModemLpTimerInstant::from_bits(20)));
+        assert_eq!(memory, before, "P2 planning cannot write timer registers");
+        clock.advance(Duration::from_micros(delay)).unwrap();
+        memory.timer[word_0048_opaque::OFFSET / 4] = clock.now().as_micros() as u32;
+        // A fresh pending arrival after the snapshot is not acknowledged by apply.
+        memory.timer[word_0024_opaque::OFFSET / 4] = 7;
+        let (_, _, mut timer) = memory.owners();
+        assert!(timer.apply_plan(plan, &mut epoch, None).is_none());
+        assert_eq!(timer.runtime_control.read_word_0024_opaque().low_byte(), 1);
+        let work = timer.take_software_work(&mut epoch).unwrap();
+        assert!(work.dispatch_requested());
+        assert_eq!(work.instant().bits(), clock.now().as_micros() as u32);
+        assert!(timer.take_software_work(&mut epoch).is_none());
+    }
+}
+
+#[test]
+fn a_rollover_between_plan_and_apply_advances_the_handler_epoch_once() {
+    use super::super::host::HostMemory;
+    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque, word_0048_opaque};
+
+    let mut memory = HostMemory::filled(0);
+    memory.timer[word_0048_opaque::OFFSET / 4] = 0x00ff_fffe;
+    memory.timer[word_0024_opaque::OFFSET / 4] = 1;
+    let mut epoch = BluetoothModemLpTimerEpoch::new();
+    let work = {
+        let (_, _, mut timer) = memory.owners();
+        timer.take_software_work(&mut epoch).unwrap()
+    };
+    assert_eq!(work.epoch().high_byte(), 0);
+    let plan = work.plan(Some(BluetoothModemLpTimerInstant::from_bits(0x0100_0010)));
+    // Hardware rolls over and asserts pending while P2 holds only values.
+    memory.timer[word_0048_opaque::OFFSET / 4] = 3;
+    memory.timer[word_002c_opaque::OFFSET / 4] = 1;
+    memory.timer[word_0024_opaque::OFFSET / 4] = 1;
+    let (_, _, mut timer) = memory.owners();
+    assert!(timer.apply_plan(plan, &mut epoch, None).is_none());
+    assert_eq!(
+        timer
+            .runtime_control
+            .read_word_006c_opaque()
+            .bits_0_31_opaque(),
+        0x10
+    );
+    assert_ne!(timer.runtime_control.read_word_002c_opaque().low_byte(), 0);
+    assert_ne!(timer.runtime_control.read_word_0024_opaque().low_byte(), 0);
+    let work = timer.take_software_work(&mut epoch).unwrap();
+    assert_eq!(work.instant().bits(), 0x0100_0003);
+    assert_eq!(work.epoch().high_byte(), 1);
+    assert_eq!(epoch.high_byte(), 1);
+    assert!(work.dispatch_requested());
+    assert!(timer.take_software_work(&mut epoch).is_none());
+    assert_eq!(epoch.high_byte(), 1);
+}
+
+#[test]
+fn past_and_close_plans_follow_vendor_disable_sample_pending_command_order() {
+    for deadline in [0xff, 0x100, 0x101, 0x102] {
+        let mut recorder = RuntimeRecorder::new(0x100, 0, false);
+        assert_eq!(
+            execute_modem_lp_timer_compare_program(
+                &mut recorder,
+                BluetoothModemLpTimerInstant::from_bits(deadline),
+                BluetoothModemLpTimerEpoch::new()
+            ),
+            BluetoothModemLpTimerCompareDisposition::Immediate
+        );
+        assert_eq!(
+            recorder.operations,
+            [
+                RuntimeOperation::DisableCompare,
+                RuntimeOperation::ReadCounter(0x100),
+                RuntimeOperation::SampleRollover(false),
+                RuntimeOperation::PublishSoftwarePending,
+                RuntimeOperation::TriggerTimerCommand,
+                RuntimeOperation::Fence,
+            ]
+        );
+    }
+}
+
+#[test]
+fn entries_during_p2_work_retain_dispatch_and_epoch_until_the_plan_returns() {
+    use super::super::host::HostMemory;
+    use oer_esp32s31_pac::modem_pwr::{
+        word_002c_opaque, word_0024_opaque, word_0038_opaque, word_0048_opaque,
+    };
+
+    let mut memory = HostMemory::filled(0);
+    memory.timer[word_0024_opaque::OFFSET / 4] = 1;
+    let mut epoch = BluetoothModemLpTimerEpoch::new();
+    let work = {
+        let (_, _, mut timer) = memory.owners();
+        timer.take_software_work(&mut epoch).unwrap()
+    };
+    let plan = work.plan(Some(BluetoothModemLpTimerInstant::from_bits(0x0100_0010)));
+    // Another source entry arrives while P2 is still processing the snapshot.
+    memory.timer[word_0038_opaque::OFFSET / 4] = 1;
+    memory.timer[word_0024_opaque::OFFSET / 4] = 1;
+    memory.timer[word_002c_opaque::OFFSET / 4] = 1;
+    memory.timer[word_0048_opaque::OFFSET / 4] = 3;
+    let (_, _, mut timer) = memory.owners();
+    let mut deferred = None;
+    timer.retain_interrupt(&mut epoch, &mut deferred);
+    assert_eq!(epoch.high_byte(), 1);
+    assert_eq!(deferred, Some(true));
+    assert_eq!(timer.runtime_control.read_word_0024_opaque().low_byte(), 0);
+    assert_eq!(timer.runtime_control.read_word_002c_opaque().low_byte(), 0);
+    // Reentry with no new state cannot erase the retained dispatch or count
+    // the same rollover again.
+    timer.retain_interrupt(&mut epoch, &mut deferred);
+    assert_eq!(epoch.high_byte(), 1);
+    assert_eq!(deferred, Some(true));
+    let work = timer.apply_plan(plan, &mut epoch, deferred).unwrap();
+    assert!(work.dispatch_requested());
+    assert_eq!(work.instant().bits(), 0x0100_0003);
+    assert_eq!(work.epoch().high_byte(), 1);
+}

@@ -524,6 +524,15 @@ owners. MMIO outside the restricted PAC must use typed accessors. Missing
 register fields are reviewed in `chips/<chip>/registers/` and regenerated
 into the PAC, never reconstructed with local masks in a HAL or adapter.
 
+The Bluetooth modem LP timer retains its register authority in the permanently
+bound handler throughout software queue work. P2 receives only a positional
+time/epoch snapshot and returns an unarmed plan through the gate's single-slot
+queues. The snapshot and plan grant no MMIO access. Rollover acknowledgement,
+compare programming and software-pending commands execute only with the
+handler's retained owner. Repeated interrupts during planning acknowledge and
+retain new software work there; no additional unsafe sharing or second register
+writer is involved.
+
 ## Active-owner lifetime
 
 Normal stop proves IRQ, RX, TX and queue quiescence before returning reusable

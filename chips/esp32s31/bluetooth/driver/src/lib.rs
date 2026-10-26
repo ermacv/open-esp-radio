@@ -50,7 +50,7 @@ pub(crate) fn diagnostic_settle<C: oer_time::Clock>(clock: &C) -> oer_time::sett
 #[cfg(any(target_arch = "riscv32", test))]
 pub mod low_power;
 pub mod modem_lp_timer_queue;
-/// Controller modem low-power timer task over the published timer owner.
+/// Controller modem low-power timer task over snapshots and unarmed plans.
 #[cfg(target_arch = "riscv32")]
 pub mod modem_timer;
 /// Drain-before-retire rule of the modem low-power timer.

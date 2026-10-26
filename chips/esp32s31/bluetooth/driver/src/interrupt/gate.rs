@@ -10,8 +10,9 @@
 //! looks at what fired by each peripheral's own status and touches a
 //! register owner only while its gate holds it:
 //!
-//! 1. lower the doorbell line, then take the timer owner the task rearmed
-//!    and the task's gate request ([`BluetoothInterruptGate`]);
+//! 1. lower the doorbell line, apply the task's unarmed timer plan while
+//!    retaining its register owner, then serve the task's gate request
+//!    ([`BluetoothInterruptGate`]);
 //! 2. serve one request of the scheduler channel;
 //! 3. sample and acknowledge the bank's primary status, then its NRT
 //!    snapshots, publishing the primary capture to the scheduler worker;
@@ -27,8 +28,12 @@
 //! masked at the interrupt controller.
 //!
 //! The task and the handler share no lock: the gate's requests, replies and
-//! timer owners cross through one-slot queues, the doorbell announces a
-//! request and the handler's reply raises the task's static signal.
+//! value-only timer snapshots and unarmed plans cross through one-slot queues.
+//! The timer owner stays in the handler while P2 processes its queue; only
+//! the handler samples with rollover side effects and programs compare.
+//! Repeated entries acknowledge and retain new timer facts with that owner,
+//! without overwriting the task's in-flight snapshot.
+//! The doorbell announces a request and replies raise the task's static signal.
 
 use core::{
     future::poll_fn,
@@ -87,8 +92,12 @@ pub trait GateHardware: 'static {
     type TimerInitialized: Send + 'static;
     /// The timer ready for the handler's step.
     type Timer: Send + 'static;
-    /// The timer while its software work runs in the task.
+    /// Register owner retained in the handler while the task plans.
     type TimerPending: Send + 'static;
+    /// Value-only software work published to the task.
+    type TimerWork: Send + 'static;
+    /// Unarmed software plan returned by the task.
+    type TimerPlan: Send + 'static;
     /// The proof that the stopped timer's compare is disabled.
     type CompareDisabled: Send + 'static;
 
@@ -110,7 +119,16 @@ pub trait GateHardware: 'static {
     /// Sample and acknowledge the NRT snapshots; whether any was set.
     fn capture_nrt(bank: &mut Self::Bank) -> bool;
     /// One finite register step of the timer.
-    fn step_timer(timer: Self::Timer) -> TimerEntry<Self::Timer, Self::TimerPending>;
+    fn step_timer(
+        timer: Self::Timer,
+    ) -> TimerEntry<Self::Timer, Self::TimerPending, Self::TimerWork>;
+    /// Apply a plan with the retained register owner; only the handler arms.
+    fn apply_timer_plan(
+        timer: Self::TimerPending,
+        plan: Self::TimerPlan,
+    ) -> TimerEntry<Self::Timer, Self::TimerPending, Self::TimerWork>;
+    /// Acknowledge and retain new facts while the task processes its snapshot.
+    fn observe_timer(timer: &mut Self::TimerPending);
     /// Disable the compare of the drained timer.
     fn stop_timer(timer: &mut Self::Timer) -> Self::CompareDisabled;
     /// The released bank, or the bank back when its output is not released.
@@ -125,13 +143,13 @@ pub trait GateHardware: 'static {
 }
 
 /// One register step of the timer.
-pub enum TimerEntry<Timer, Pending> {
+pub enum TimerEntry<Timer, Pending, Work> {
     /// The status was clear; nothing was written.
     Spurious(Timer),
     /// The handler's registers were acknowledged without software work.
     Rearmed(Timer),
     /// Software work is pending in the task.
-    SoftwarePending(Pending),
+    SoftwarePending(Pending, Work),
 }
 
 /// Why the gate refused a request or could not exchange it.
@@ -143,8 +161,7 @@ pub enum GateError {
     NotOpen,
     /// The bank's output is not released; the bank stays with its handler.
     OutputNotReleased,
-    /// The timer is not with its handler (its software work runs in the
-    /// task) or is stopped already.
+    /// The timer awaits a software plan or is stopped already.
     TimerNotReady,
     /// The timer is not stopped.
     TimerNotStopped,
@@ -199,9 +216,10 @@ enum Bank<H: GateHardware> {
 
 /// The timer's gate.
 enum Timer<H: GateHardware> {
-    /// No owner: closed, or the software work runs in the task.
+    /// No owner: closed, or returned after the Controller reset.
     Vacant,
     Ready(H::Timer),
+    AwaitingPlan(H::TimerPending),
     /// Drained and its compare disabled, until the Controller reset.
     Stopped(H::Timer),
 }
@@ -210,8 +228,8 @@ enum Timer<H: GateHardware> {
 pub struct BluetoothInterruptStorage<H: GateHardware> {
     requests: Queue<Request<H>>,
     replies: Queue<Reply<H>>,
-    ready: Queue<H::Timer>,
-    pending: Queue<H::TimerPending>,
+    plans: Queue<H::TimerPlan>,
+    pending: Queue<H::TimerWork>,
 }
 
 impl<H: GateHardware> Default for BluetoothInterruptStorage<H> {
@@ -237,7 +255,7 @@ impl<H: GateHardware> BluetoothInterruptStorage<H> {
         Self {
             requests: Queue::new(),
             replies: Queue::new(),
-            ready: Queue::new(),
+            plans: Queue::new(),
             pending: Queue::new(),
         }
     }
@@ -255,13 +273,13 @@ impl<H: GateHardware> BluetoothInterruptStorage<H> {
     ) -> (BluetoothInterruptEnds<H, X>, BluetoothInterruptsOf<H, X, B>) {
         let (requests, requested) = self.requests.split();
         let (replying, replies) = self.replies.split();
-        let (ready, readied) = self.ready.split();
+        let (plans, planned) = self.plans.split();
         let (pending_out, pending) = self.pending.split();
         (
             BluetoothInterruptEnds {
                 requests,
                 replies,
-                ready,
+                plans,
                 pending,
                 reply: signals.reply,
             },
@@ -272,13 +290,14 @@ impl<H: GateHardware> BluetoothInterruptStorage<H> {
                 timer: Timer::Vacant,
                 requests: requested,
                 replies: replying,
-                ready: readied,
+                plans: planned,
                 pending: pending_out,
                 signals,
                 retained: Retained {
                     reply: None,
-                    ready: None,
+                    plan: None,
                     pending: None,
+                    work: None,
                 },
             },
         )
@@ -289,8 +308,8 @@ impl<H: GateHardware> BluetoothInterruptStorage<H> {
 pub struct BluetoothInterruptEnds<H: GateHardware, X: SignalExecutor + 'static> {
     requests: Sender<Request<H>>,
     replies: Receiver<Reply<H>>,
-    ready: Sender<H::Timer>,
-    pending: Receiver<H::TimerPending>,
+    plans: Sender<H::TimerPlan>,
+    pending: Receiver<H::TimerWork>,
     reply: &'static IrqSignal<X>,
 }
 
@@ -308,7 +327,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static> BluetoothInterruptEnds<H, X> 
                 awaiting: false,
             },
             ModemLpTimerPort {
-                ready: self.ready,
+                plans: self.plans,
                 pending: self.pending,
                 ring,
             },
@@ -320,8 +339,9 @@ impl<H: GateHardware, X: SignalExecutor + 'static> BluetoothInterruptEnds<H, X> 
 /// raises the fault flag.
 struct Retained<H: GateHardware> {
     reply: Option<Reply<H>>,
-    ready: Option<H::Timer>,
+    plan: Option<H::TimerPlan>,
     pending: Option<H::TimerPending>,
+    work: Option<H::TimerWork>,
 }
 
 /// The handler's part: the doorbell's interrupt part and lowering half, the
@@ -333,8 +353,8 @@ pub struct BluetoothInterruptsOf<H: GateHardware, X: SignalExecutor + 'static, B
     timer: Timer<H>,
     requests: Receiver<Request<H>>,
     replies: Sender<Reply<H>>,
-    ready: Receiver<H::Timer>,
-    pending: Sender<H::TimerPending>,
+    plans: Receiver<H::TimerPlan>,
+    pending: Sender<H::TimerWork>,
     signals: BluetoothInterruptSignals<X>,
     retained: Retained<H>,
 }
@@ -345,7 +365,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
     /// one timer step; diagnostic settles are bounded on `clock`.
     pub fn service<C: oer_time::Clock>(&mut self, clock: &C) {
         self.line.acknowledge();
-        self.take_rearmed_timer();
+        self.apply_timer_plan();
         self.serve_gate_request();
         if let Bank::Open {
             registers,
@@ -375,16 +395,19 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
         self.signals.fault.store(true, Ordering::Release);
     }
 
-    fn take_rearmed_timer(&mut self) {
-        let Ok(timer) = self.ready.try_receive() else {
+    fn apply_timer_plan(&mut self) {
+        let Ok(plan) = self.plans.try_receive() else {
             return;
         };
-        if matches!(self.timer, Timer::Vacant) {
-            self.timer = Timer::Ready(timer);
-        } else {
-            // A second ready owner: neither may run, both stay.
-            self.retained.ready = Some(timer);
-            self.fault();
+        match core::mem::replace(&mut self.timer, Timer::Vacant) {
+            Timer::AwaitingPlan(timer) => {
+                self.accept_timer_entry(H::apply_timer_plan(timer, plan));
+            }
+            other => {
+                self.timer = other;
+                self.retained.plan = Some(plan);
+                self.fault();
+            }
         }
     }
 
@@ -464,39 +487,47 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
         Reply::Opened
     }
 
+    fn accept_timer_entry(&mut self, entry: TimerEntry<H::Timer, H::TimerPending, H::TimerWork>) {
+        let step = match entry {
+            TimerEntry::Spurious(timer) => {
+                self.timer = Timer::Ready(timer);
+                ModemLpTimerStableInterruptStep::Spurious
+            }
+            TimerEntry::Rearmed(timer) => {
+                self.timer = Timer::Ready(timer);
+                ModemLpTimerStableInterruptStep::Rearmed
+            }
+            TimerEntry::SoftwarePending(owner, work) => {
+                self.timer = Timer::AwaitingPlan(owner);
+                if let Err(rejected) = self.pending.try_send(work) {
+                    self.retained.work = Some(rejected.0);
+                    self.fault();
+                }
+                ModemLpTimerStableInterruptStep::SoftwarePending
+            }
+        };
+        let _ = step.publish(self.signals.cells.timer_wake());
+    }
+
     fn step_timer(&mut self) {
-        let wake = self.signals.cells.timer_wake();
         match core::mem::replace(&mut self.timer, Timer::Vacant) {
             Timer::Ready(timer) => {
-                let step = match H::step_timer(timer) {
-                    TimerEntry::Spurious(timer) => {
-                        self.timer = Timer::Ready(timer);
-                        ModemLpTimerStableInterruptStep::Spurious
-                    }
-                    TimerEntry::Rearmed(timer) => {
-                        self.timer = Timer::Ready(timer);
-                        ModemLpTimerStableInterruptStep::Rearmed
-                    }
-                    TimerEntry::SoftwarePending(pending) => {
-                        if let Err(rejected) = self.pending.try_send(pending) {
-                            self.retained.pending = Some(rejected.0);
-                            self.fault();
-                        }
-                        ModemLpTimerStableInterruptStep::SoftwarePending
-                    }
-                };
-                let _ = step.publish(wake);
+                self.accept_timer_entry(H::step_timer(timer));
             }
             Timer::Stopped(timer) => match H::step_timer(timer) {
                 TimerEntry::Spurious(timer) | TimerEntry::Rearmed(timer) => {
                     self.timer = Timer::Stopped(timer);
                 }
-                TimerEntry::SoftwarePending(pending) => {
+                TimerEntry::SoftwarePending(pending, _work) => {
                     // The drained task takes no more work: keep the owner.
                     self.retained.pending = Some(pending);
                     self.fault();
                 }
             },
+            Timer::AwaitingPlan(mut timer) => {
+                H::observe_timer(&mut timer);
+                self.timer = Timer::AwaitingPlan(timer);
+            }
             Timer::Vacant => {}
         }
     }
@@ -632,27 +663,27 @@ impl<H: GateHardware, X: SignalExecutor + 'static, R: RadioDoorbell>
     }
 }
 
-/// The task's end of the timer's software work: it takes the pending owner
-/// the handler handed on and returns the rearmed one, ringing the doorbell.
+/// The task's value-only timer endpoint: take a snapshot and return an
+/// unarmed plan, ringing the doorbell. No register owner crosses this port.
 pub struct ModemLpTimerPort<H: GateHardware, R> {
-    ready: Sender<H::Timer>,
-    pending: Receiver<H::TimerPending>,
+    plans: Sender<H::TimerPlan>,
+    pending: Receiver<H::TimerWork>,
     ring: R,
 }
 
 impl<H: GateHardware, R: RadioDoorbell> ModemLpTimerPort<H, R> {
-    /// The pending owner the handler handed on, if any.
-    pub fn take_pending(&self) -> Option<H::TimerPending> {
+    /// The handler's software-work snapshot, if any.
+    pub fn take_work(&self) -> Option<H::TimerWork> {
         self.pending.try_receive().ok()
     }
 
-    /// Return the rearmed owner to its handler.
+    /// Submit an unarmed plan for the handler to apply.
     ///
     /// # Errors
     ///
-    /// The slot is occupied; the owner comes back.
-    pub fn restore_ready(&self, timer: H::Timer) -> Result<(), H::Timer> {
-        self.ready.try_send(timer).map_err(|rejected| rejected.0)?;
+    /// The slot is occupied; the plan comes back.
+    pub fn submit_plan(&self, plan: H::TimerPlan) -> Result<(), H::TimerPlan> {
+        self.plans.try_send(plan).map_err(|rejected| rejected.0)?;
         self.ring.ring();
         Ok(())
     }
@@ -685,6 +716,8 @@ impl GateHardware for ChipGate {
     type TimerInitialized = bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
     type Timer = bluetooth::ModemLpTimerInterruptReadyOwner;
     type TimerPending = bluetooth::ModemLpTimerSoftwarePendingOwner;
+    type TimerWork = bluetooth::ModemLpTimerWork;
+    type TimerPlan = bluetooth::ModemLpTimerPlan;
     type CompareDisabled = bluetooth::ModemLpTimerCompareDisabled;
 
     fn open_bank(setup: Self::Setup) -> Self::Bank {
@@ -714,7 +747,9 @@ impl GateHardware for ChipGate {
         super::nrt::step_nrt_default_interrupt(bank).is_some()
     }
 
-    fn step_timer(timer: Self::Timer) -> TimerEntry<Self::Timer, Self::TimerPending> {
+    fn step_timer(
+        timer: Self::Timer,
+    ) -> TimerEntry<Self::Timer, Self::TimerPending, Self::TimerWork> {
         match timer.step() {
             bluetooth::ModemLpTimerInterruptStep::Spurious(timer) => TimerEntry::Spurious(timer),
             bluetooth::ModemLpTimerInterruptStep::HandlerPending(pending) => {
@@ -722,12 +757,30 @@ impl GateHardware for ChipGate {
                     bluetooth::ModemLpTimerHandlerRegisterStep::Rearmed(timer) => {
                         TimerEntry::Rearmed(timer)
                     }
-                    bluetooth::ModemLpTimerHandlerRegisterStep::SoftwarePending(pending) => {
-                        TimerEntry::SoftwarePending(pending)
+                    bluetooth::ModemLpTimerHandlerRegisterStep::SoftwarePending { owner, work } => {
+                        TimerEntry::SoftwarePending(owner, work)
                     }
                 }
             }
         }
+    }
+
+    fn apply_timer_plan(
+        timer: Self::TimerPending,
+        plan: Self::TimerPlan,
+    ) -> TimerEntry<Self::Timer, Self::TimerPending, Self::TimerWork> {
+        match timer.apply_plan(plan) {
+            bluetooth::ModemLpTimerHandlerRegisterStep::Rearmed(timer) => {
+                TimerEntry::Rearmed(timer)
+            }
+            bluetooth::ModemLpTimerHandlerRegisterStep::SoftwarePending { owner, work } => {
+                TimerEntry::SoftwarePending(owner, work)
+            }
+        }
+    }
+
+    fn observe_timer(timer: &mut Self::TimerPending) {
+        timer.observe_interrupt();
     }
 
     fn stop_timer(timer: &mut Self::Timer) -> Self::CompareDisabled {
