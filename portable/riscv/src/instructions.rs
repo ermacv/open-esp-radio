@@ -127,11 +127,28 @@ pub fn restore_interrupt_threshold(threshold: u8) {
     };
 }
 
-/// Publish prior reads/writes to instruction fetch on this hart.
+/// Disable this hart's interrupts, synchronize instruction fetch and enter stage two.
+///
+/// # Safety
+/// `ENTRY` must be the checked entry of a published stage-two image whose
+/// entry installs its own stack. Interrupts are disabled inside this operation.
 #[inline(always)]
-pub fn synchronize_instructions() {
-    // SAFETY: these barriers order accesses and fetch, without accessing memory.
-    unsafe { asm!("fence rw, rw", "fence.i", options(nostack)) };
+pub unsafe fn jump_to_entry<const ENTRY: usize>() -> ! {
+    // SAFETY: the caller supplies the checked entry of a published image;
+    // interrupts stay disabled across the barriers and the jump.
+    unsafe {
+        asm!(
+            "csrci mstatus, {mie}",
+            "fence rw, rw",
+            "fence.i",
+            // t1, not t0: `jr t0` is a return to the analysis (the alternate link register).
+            "li t1, {entry}",
+            "jr t1",
+            entry = const ENTRY,
+            mie = const crate::machine::status::MIE,
+            options(noreturn),
+        )
+    }
 }
 
 /// Install the current hart's CLIC trap entry, vector table and interrupt stack,

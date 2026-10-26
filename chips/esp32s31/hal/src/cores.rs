@@ -535,7 +535,7 @@ fn reset_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placeme
 ) -> Result<(), StopError> {
     match cell.hold(key(hart), |words| {
         prepare_reset(words, hart);
-        oer_mmio::fence();
+        oer_riscv::fence();
         words.request_system_reset();
     }) {
         Ok(Held { value: (), .. }) => Ok(()),

@@ -115,6 +115,10 @@ operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
 debug triggers, waits and barriers. Its safe functions have no memory
 precondition. Installing trap vectors and `mscratch` is unsafe because the
 entries, table and exclusive interrupt stack must implement a live trap ABI.
+Entering stage two is unsafe: `jump_to_entry` requires the checked entry of a
+published image that installs its own stack. Its inlined assembly disables
+interrupts, executes both instruction-publication barriers and jumps to the
+constant entry in one block.
 Every instruction site has one narrow `// SAFETY:` proof. Moving instructions
 into this crate may increase its unsafe count only while the branch total
 decreases and no caller's count increases; runtime panic counts never increase.
@@ -122,9 +126,9 @@ Device ordering is `oer_riscv::fence`, including the host compiler fence;
 `oer-mmio` contains no architectural instruction or barrier API.
 
 Outside `oer-riscv`, firmware assembly is only `global_asm!`/`naked_asm!` for
-entry/trap ABI work: staged-bootstrap's `entry.rs` and its stage-two jump in
-`runtime.rs`, staged-runtime's `entry.rs` and trap-frame/stack entries in
-`stacks.rs`, and bootstrap/probe images. The layer test
+entry/trap ABI work: staged-bootstrap's `entry.rs`, staged-runtime's `entry.rs`
+and trap-frame/stack entries in `stacks.rs`, and bootstrap/probe images. The
+layer test
 `architectural_instructions_stay_in_oer_riscv` lists these owners and locations
 and rejects inline operations even there. Host compiler fixtures are test
 inputs, not firmware instruction owners.

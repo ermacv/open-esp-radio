@@ -185,11 +185,9 @@ pub fn hand_off<const ENTRY: usize>(
     }
     print("OER_BOOT bootstrap=PASS handoff=stage2\r\n");
     finish_boot();
-    oer_riscv::disable_interrupts();
-    oer_riscv::synchronize_instructions();
     // SAFETY: the entry equals the build's constant and lies in the checked
-    // executable range of the image.
-    unsafe { jump_to_runtime::<ENTRY>() }
+    // executable range of the published image; its entry installs its own stack.
+    unsafe { oer_riscv::jump_to_entry::<ENTRY>() }
 }
 
 #[derive(Clone, Copy)]
@@ -282,16 +280,6 @@ fn payload_crc32(address: *const u8, len: usize) -> u32 {
         crc.push(unsafe { address.add(index).read_volatile() });
     }
     crc.finish()
-}
-
-/// # Safety
-/// `ENTRY` must be the checked entry of a published stage-two image.
-#[allow(unsafe_code, reason = "the jump into stage two")]
-// SAFETY: the naked body preserves the incoming stack until ENTRY installs its own.
-#[unsafe(naked)]
-unsafe extern "C" fn jump_to_runtime<const ENTRY: usize>() -> ! {
-    // t1, not t0: `jr t0` is a return to the analysis (the alternate link register).
-    core::arch::naked_asm!("li t1, {entry}", "jr t1", entry = const ENTRY);
 }
 
 /// Print one `OER_BOOT` line through the early USB writer, which drops what

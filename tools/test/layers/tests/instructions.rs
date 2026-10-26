@@ -5,10 +5,7 @@ use proc_macro2::{TokenStream, TokenTree};
 
 // Only these crates/files may own assembly outside the instruction API.
 const ABI_ASSEMBLY: &[(&str, &[&str])] = &[
-    (
-        "chips/espressif/staged-bootstrap",
-        &["src/entry.rs", "src/runtime.rs"],
-    ),
+    ("chips/espressif/staged-bootstrap", &["src/entry.rs"]),
     (
         "chips/espressif/staged-runtime",
         &["src/entry.rs", "src/stacks.rs"],
@@ -194,6 +191,13 @@ fn only_listed_host_compiler_fixtures_are_skipped() {
 #[test]
 fn abi_exceptions_do_not_allow_inline_operations_or_other_files() {
     assert!(allowed("portable/riscv", "src/instructions.rs", "asm"));
+    for instruction in ["asm", "global_asm", "naked_asm"] {
+        assert!(!allowed(
+            "chips/espressif/staged-bootstrap",
+            "src/runtime.rs",
+            instruction
+        ));
+    }
     assert!(allowed(
         "chips/espressif/staged-runtime",
         "src/stacks.rs",
