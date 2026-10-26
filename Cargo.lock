@@ -3103,6 +3103,7 @@ dependencies = [
  "oer-analysis-riscv-stack",
  "oer-chip-profile",
  "oer-espressif-facts",
+ "oer-espressif-staged-runtime",
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",

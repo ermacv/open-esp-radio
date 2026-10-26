@@ -27,6 +27,7 @@ serde_json = "=1.0.151"
 toml = "1.1"
 
 [dev-dependencies]
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
 tempfile = "=3.27.0"
