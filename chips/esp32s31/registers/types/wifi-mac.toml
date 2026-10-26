@@ -2414,7 +2414,7 @@ accuracy = "exact"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
 
 [review.entity."STATUS"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
+sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2463,7 +2463,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL",
 accuracy = "exact"
 
 [review.entity."STATUS.RX_SUCCESS"]
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ"]
+sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -9797,7 +9797,7 @@ description = "Masked event bit enabled by the complete cold receive mask; its e
 name = "RX_SUCCESS"
 bits = "14"
 class = "read-only"
-description = "Successfully received frame is ready for the RX completion path."
+description = "RX success event used to schedule descriptor service. After the measured three-beacon capture and MAC/walker stop, this pending cause reappears through STATUS when RX delivery is unmasked and is hidden on remasking; a sampled acknowledgement clears it. RAW retention, CPU delivery and IRQ-to-payload ordering are not established by that observation."
 
 [[registers.fields]]
 name = "STA_BEACON_FILTER"

@@ -275221,7 +275221,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00002000) != 0
             }
 
-            /// Successfully received frame is ready for the RX completion path.
+            /// RX success event used to schedule descriptor service. After the measured three-beacon capture and MAC/walker stop, this pending cause reappears through STATUS when RX delivery is unmasked and is hidden on remasking; a sampled acknowledgement clears it. RAW retention, CPU delivery and IRQ-to-payload ordering are not established by that observation.
             #[inline]
             pub const fn rx_success(self) -> bool {
                 (self.0 & 0x00004000) != 0
@@ -307394,10 +307394,10 @@ pub mod layouts {
         pub const LENGTH_WIDTH: u32 = 14;
         /// Greatest unsigned image of `LENGTH`.
         pub const LENGTH_MAX: u32 = 0x3fff;
-        /// Project-assigned name. The bytes the hardware wrote into the buffer; software sets it to SIZE when it arms the descriptor.
+        /// Project-assigned name. Software arms LENGTH with SIZE. On the measured three-node beacon chains, terminal LENGTH is 12 for SIZE=128; first and intermediate nodes retain the armed LENGTH=128 image. That unchanged image does not prove a hardware writeback or distinguish a filled nonterminal from an untouched node.
         ///
         /// `LENGTH`, bits 27:14; written by the hardware.
-        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
+        /// SOURCE: HW18_RX_CHAIN_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
         pub const fn length(self) -> u16 {
             ((self.0 >> 14) & 0x3fff) as u16
         }
@@ -307426,7 +307426,7 @@ pub mod layouts {
         /// Opaque: meaning not established. Vendor sosf bit, cleared on rearm. The acronym and its hardware effects are not established.
         ///
         /// `BIT_29_OPAQUE`, bit 29; written by the CPU.
-        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027.
         pub const fn bit_29_opaque(self) -> bool {
             self.0 & 0x20000000 != 0
         }
@@ -307447,7 +307447,7 @@ pub mod layouts {
         /// Project-assigned name. Set by the hardware on a receive unit's terminal descriptor when the unit completes; a walk is delimited by it through the saved LAST. Software clears it on rearm.
         ///
         /// `RX_DONE`, bit 30; written by the hardware.
-        /// SOURCE: ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_OWNER_BIT_2026_10_18.
+        /// SOURCE: HW18_RX_CHAIN_20261027, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_OWNER_BIT_2026_10_18.
         pub const fn rx_done(self) -> bool {
             self.0 & 0x40000000 != 0
         }
@@ -307468,7 +307468,7 @@ pub mod layouts {
         /// Project-assigned name. 1: the walker may fill this descriptor; it stops at one with 0 without writing it, and a reload doorbell after the bit is set again resumes it there. The hardware checks it and never clears it: completion is RX_DONE. It does not check the bit of LAST when a doorbell follows LAST's link.
         ///
         /// `OWNER`, bit 31; written by the CPU.
-        /// SOURCE: HIL_W1_OWNER_BIT_2026_10_18.
+        /// SOURCE: HW18_RX_CHAIN_20261027, HIL_W1_OWNER_BIT_2026_10_18.
         pub const fn owner(self) -> bool {
             self.0 & 0x80000000 != 0
         }
@@ -307588,7 +307588,7 @@ pub mod layouts {
         /// Project-assigned name. The next descriptor's address, or zero at the end.
         ///
         /// `ADDRESS`, bits 31:0; written by the CPU. The address of a [`WifiRxDmaDescriptor`], or zero.
-        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27, HW18_RX_CHAIN_20261027.
         pub const fn address(self) -> u32 {
             self.0
         }

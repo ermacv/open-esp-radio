@@ -1,0 +1,12 @@
+# SOURCE: bounded RX facts; raw evidence is outside git, in the cited report.
+schema = 1
+
+[[sources]]
+id = "HW18_RX_CHAIN_20261027"
+kind = "unattested-hil-observation"
+description = "SOURCE: s31-b rev0, run hw18-20261027-rx-radio-01-s31b, cargo stand lease 895; /home/ermacv/dev/oer-notes/research/hw-rx-radio.md. One passive capture, limited to three terminals or 700 ms, uses 32 nodes plus R with SIZE=LENGTH=128 and the production leading sentinel. Three laboratory AP beacons (consecutive sequences 623-625, matched BSSID and channel 13) each occupy three linked nodes: R/0/1, 2/3/4, 5/6/7. Stopped snapshots show first and intermediate CONTROL=0x80200080, identical to armed state; terminals have CONTROL=0xc0030080 (RX_DONE=1, LENGTH=12). OWNER=1, bit29=0 and NEXT retains its original link on all these nodes. Nonterminal LENGTH=128 does not prove a hardware store or distinguish an untouched node. Other buffers also change without a terminal; their producer/history is unclassified. No recycle/reload, IRQ-entry timing, all-beat ordering or general sentinel-removal proof. Execution took place on 2026-10-26; the run ID follows the task-wave date."
+
+[[sources]]
+id = "HW18_RX_MASK_STATUS_20261027"
+kind = "unattested-hil-observation"
+description = "SOURCE: s31-b rev0, run hw18-20261027-rx-radio-01-s31b, cargo stand lease 895; /home/ermacv/dev/oer-notes/research/hw-rx-radio.md. The public HAL clears all MAC events with ENABLE=0 before the same three-beacon capture, then keeps the bank masked. After outer MAC stop, walker stop and descriptor observation, semantic STATUS has RX_SUCCESS=0 and combined RX auxiliary=0; enabling only RX group 5/14/24 exposes RX_SUCCESS=1 and auxiliary=1, masking hides both, enabling again restores both, acknowledging that full sample leaves both zero. No further RX publication occurs between these phases. RAW, individual auxiliaries 5 versus 24, other masked causes and source120 CPU delivery are not observed; this is pending STATUS replay after producer stop, not a production descriptor drain or IRQ-to-payload ordering proof."
