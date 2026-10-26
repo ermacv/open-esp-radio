@@ -383,11 +383,22 @@ identify individual conversion/readout gates or establish a READY handshake.
 
 Selections 105–108 establish, respectively, one real compare, one natural
 rollover, both, and neither, with both LP delivery lanes enabled. Each checks
-the exact pending-byte precondition, then repeats the hart-0 production
-`fatal::reset_recording` reset sequence with hart1 already held: threshold
-ceiling, MIE off, held confirmation, recording, UART0 XTAL restoration,
-boot-address zero, other-core reset pulse, stall, fence, SYS_SW_RST, WFI.
-There is no timer cleanup before this reset.
+the exact pending-byte precondition, then on hart0 with hart1 already held:
+threshold ceiling, MIE off, held confirmation, LP snapshot, UART0 XTAL
+restoration, boot-address zero, other-core reset pulse, stall, retained SRAM
+record publication, fence, SYS_SW_RST, WFI. There is no timer cleanup before
+this reset.
+
+The successful path preserves the reset-control register-effect order of
+production `fatal::reset_recording`: UART0 restoration, boot-address zero,
+other-core reset pulse, stall, fence and SYS_SW_RST. The complete sequences
+differ: the probe publishes its retained SRAM record after the
+UART0/boot-address/pulse/stall writes, whereas production's record callback
+runs before them. The probe has no ClaimCell election or StopError handling,
+and does not implement production's watchdog-fallback path. A failed hold
+check returns from the leaf with MIE cleared. The comparison covers those
+successful reset-control effects and the next ROM-loader entry, not full
+production fatal-path equivalence.
 
 On the next ROM MEM_END entry, the retained LP reason automatically selects
 109. No debugger reset or re-entry of `_start` may intervene. The observer

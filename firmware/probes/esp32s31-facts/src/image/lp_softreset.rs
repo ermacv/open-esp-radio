@@ -127,7 +127,8 @@ fn run(s: &mut Session<'_>, scenario: u32) {
     if !held.reg_core1_global_rst_en() || held.reg_core1_cpu_clk_en() {
         return;
     }
-    // The recording closure samples only. The register sequence starts here.
+    // Sample before reset-control writes; the retained SRAM record below is
+    // published after the stall, unlike production's earlier record callback.
     let before = snapshot(s);
     s.uart0_clock.hp_sys_clkrst_uart0.modify_uart0_ctrl0(|w| {
         w.set_reg_uart0_clk_src_sel(Bits::constant::<0>())
@@ -185,8 +186,8 @@ pub(super) fn control(s: &mut Session<'_>) {
 }
 
 pub(super) fn observe(s: &mut Session<'_>) {
-    // First hardware reads of this boot: no contain, clocks, prepare, reset,
-    // enable, acknowledge or timer start precedes this matrix/LP snapshot.
+    // First hardware reads of this boot, before contain(), clock setup,
+    // timer prepare/reset/enable/acknowledge or start.
     state(s, 0xb100);
     clocks(s, 0xb102);
     let r = retained_record();
