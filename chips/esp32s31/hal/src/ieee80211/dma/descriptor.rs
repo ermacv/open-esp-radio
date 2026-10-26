@@ -258,7 +258,7 @@ pub const fn rx_detached_word(word0: WifiRxDmaDescriptorControl) -> WifiRxDmaDes
     word0.with_owner(false)
 }
 
-/// Fresh/recycled RX word: `OWNER` set, `RX_DONE` and `BIT_29_OPAQUE`
+/// Fresh/recycled RX word: `OWNER` set, `RX_DONE` and `SOSF`
 /// clear, length equals capacity.
 ///
 /// S31 keeps `OWNER` set when it completes RX and sets `RX_DONE` as the
@@ -279,7 +279,7 @@ pub const fn rx_armed_word(capacity: u32) -> Option<WifiRxDmaDescriptorControl> 
 }
 
 /// Rearms a hardware-completed or detached RX word while preserving unrelated
-/// bits: `OWNER` is set again, `RX_DONE` and `BIT_29_OPAQUE` cleared, the
+/// bits: `OWNER` is set again, `RX_DONE` and `SOSF` cleared, the
 /// length set back to the capacity.
 pub const fn rx_rearm_word(
     word0: WifiRxDmaDescriptorControl,
@@ -291,7 +291,7 @@ pub const fn rx_rearm_word(
     match word0.with_length(capacity) {
         Some(word0) => Some(
             word0
-                .with_bit_29_opaque(false)
+                .with_sosf(false)
                 .with_rx_done(false)
                 .with_owner(true),
         ),

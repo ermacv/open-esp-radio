@@ -307419,20 +307419,41 @@ pub mod layouts {
             Self((self.0 & 0xf0003fff) | (value as u32) << 14)
         }
 
-        /// Width of `BIT_29_OPAQUE` in bits.
-        pub const BIT_29_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_29_OPAQUE`.
-        pub const BIT_29_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. Vendor sosf bit, cleared on rearm. The acronym and its hardware effects are not established.
+        /// Width of `OFFSET` in bits.
+        pub const OFFSET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OFFSET`.
+        pub const OFFSET_MAX: u32 = 0x1;
+        /// Project-assigned name. Vendor offset bit. Software initializes it through the control image; its encoding, units, hardware write behavior and effect are unknown. It is not an independently established completion marker.
         ///
-        /// `BIT_29_OPAQUE`, bit 29; written by the CPU.
-        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027.
-        pub const fn bit_29_opaque(self) -> bool {
+        /// `OFFSET`, bit 28; written by the CPU.
+        /// SOURCE: BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES.
+        pub const fn offset(self) -> bool {
+            self.0 & 0x10000000 != 0
+        }
+
+        /// This value with `OFFSET` set to `value`.
+        pub const fn with_offset(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x10000000)
+            } else {
+                Self(self.0 & 0xefffffff)
+            }
+        }
+
+        /// Width of `SOSF` in bits.
+        pub const SOSF_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SOSF`.
+        pub const SOSF_MAX: u32 = 0x1;
+        /// Project-assigned name. Vendor sosf bit, cleared on rearm. Its acronym, hardware effects and relation to frame boundaries are unknown. It stayed zero on all sampled nodes in the single 32-by-128-byte, three-beacon capture; that observation does not establish behavior for other formats or errors.
+        ///
+        /// `SOSF`, bit 29; written by the CPU.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027.
+        pub const fn sosf(self) -> bool {
             self.0 & 0x20000000 != 0
         }
 
-        /// This value with `BIT_29_OPAQUE` set to `value`.
-        pub const fn with_bit_29_opaque(self, value: bool) -> Self {
+        /// This value with `SOSF` set to `value`.
+        pub const fn with_sosf(self, value: bool) -> Self {
             if value {
                 Self(self.0 | 0x20000000)
             } else {

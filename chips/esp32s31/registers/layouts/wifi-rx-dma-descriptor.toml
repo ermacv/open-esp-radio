@@ -40,11 +40,16 @@ writer = "hardware"
 description = "Set by the hardware on a receive unit's terminal descriptor when the unit completes; a walk is delimited by it through the saved LAST. Software clears it on rearm."
 
 [[layout.words.fields]]
-name = "BIT_29_OPAQUE"
-opaque = true
+name = "SOSF"
 bits = "29"
 writer = "cpu"
-description = "Vendor sosf bit, cleared on rearm. The acronym and its hardware effects are not established."
+description = "Vendor sosf bit, cleared on rearm. Its acronym, hardware effects and relation to frame boundaries are unknown. It stayed zero on all sampled nodes in the single 32-by-128-byte, three-beacon capture; that observation does not establish behavior for other formats or errors."
+
+[[layout.words.fields]]
+name = "OFFSET"
+bits = "28"
+writer = "cpu"
+description = "Vendor offset bit. Software initializes it through the control image; its encoding, units, hardware write behavior and effect are unknown. It is not an independently established completion marker."
 
 [[layout.words.fields]]
 name = "LENGTH"
@@ -123,12 +128,12 @@ naming = "descriptive"
 
 # SOURCE: the short capture leaves bit29's physical meaning unresolved.
 [[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.BIT_29_OPAQUE"
-sources = ["VENDOR_WIFI_RX_IDENTITIES", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18", "HW18_RX_CHAIN_20261027"]
+entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.SOSF"
+sources = ["VENDOR_WIFI_RX_IDENTITIES", "BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18", "HW18_RX_CHAIN_20261027"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-naming = "opaque"
+naming = "descriptive"
 
 [[review]]
 entity = "WIFI_RX_DMA_DESCRIPTOR.NEXT.ADDRESS"
@@ -136,4 +141,12 @@ sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTO
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.OFFSET"
+sources = ["BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
 naming = "descriptive"
