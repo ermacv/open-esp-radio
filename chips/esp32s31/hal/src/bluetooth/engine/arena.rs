@@ -179,6 +179,26 @@ impl<
 
     /// Validate all capacities before taking either input owner. Only a fresh
     /// task partition is admitted; HAL initialization runs through this owner.
+    ///
+    /// Raw static storage does not provide placement proof for the PHY engine
+    /// or the other controller objects:
+    ///
+    /// ```compile_fail,E0308
+    /// use oer_esp32s31_hal::bluetooth::{ClockedOwner, engine::{
+    ///     ArenaMemory, BluetoothArena, ControllerDmaSpace, Engine,
+    ///     EpochScope, PoolScope, SchedulerAllocationConfig,
+    /// }};
+    /// fn from_raw<'pool, 'epoch, D: ControllerDmaSpace>(
+    ///     clocked: ClockedOwner,
+    ///     storage: &'static mut BluetoothArena<0, 0, 0, 0, 0, 0>,
+    ///     pool: PoolScope<'pool>, epoch: EpochScope<'epoch>,
+    ///     config: SchedulerAllocationConfig,
+    /// ) {
+    ///     let _ = Engine::<ArenaMemory<'pool, 'epoch, 0, 0, 0, 0, 0, 0, 1>>::new::<D>(
+    ///         clocked, storage, pool, epoch, config,
+    ///     );
+    /// }
+    /// ```
     #[allow(clippy::type_complexity, clippy::result_large_err)]
     pub fn new<D: ControllerDmaSpace>(
         clocked: crate::bluetooth::ClockedOwner,

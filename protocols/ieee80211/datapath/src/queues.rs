@@ -43,7 +43,7 @@ impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACI
     /// An empty arena with capacity checked at compile time.
     ///
     /// ```compile_fail,E0080
-    /// use oer_ieee80211_datapath::queues::TxQueues;
+    /// use oer_ieee80211_datapath::TxQueues;
     /// let _ = TxQueues::<u8, u8, 0>::new();
     /// ```
     pub const fn new() -> Self {
