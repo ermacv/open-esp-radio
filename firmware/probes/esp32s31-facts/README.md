@@ -258,10 +258,17 @@ Selections 10–13 are independent commands, excluded from selection 0:
 | 10 | P0: six-field PLL-gate readback, old `3d→25` and staged `15→1d→2d→25`, once each |
 | 11 | P-BA: ordinary hardware index 0 and extra index 3, quiet staging and latched readback |
 | 12 | BB-L: digital BB reset/gates/interface prefix, reset action disabled, `c0010001` candidate, one 4096-cycle observation and IRQ/clear toggles |
-| 13 | P-TSENS: four bit9/bit23 cases, two sample edges each, nominal 10 µs sampling under a 1 ms deadline per edge |
+| 13 | P-TSENS: four bit9/bit23 cases, two sample edges each, up to 99 reads at 10–990 µs under a 1 ms deadline per edge |
 
 P0 and TSENS refuse timing attribution unless the owned CPU clock words show
-undivided XTAL with fractional numerator zero. P0 touches only HP/LP words
+undivided XTAL with fractional numerator zero. On refusal, the leaf emits
+record tag `0xaf` with `(a,b,c)=(10,0,0)` for P0 or `(13,0,0)` for TSENS;
+`a` is the decimal selection ID. The preceding `0xa0` record contains the
+observed CPU root/divider fields. The experiment returns before its hardware
+writes. The normal completion word may still be `0xfac70001`: `0xaf` means
+the experiment was skipped, not that the hardware claim passed.
+
+P0 touches only HP/LP words
 while changing the modem source; a BTLC latch is not safe evidence before its
 clock path is independently established. It observes six named bits, preserving
 reserved lanes, and establishes neither PLL lock nor transition glitch freedom.
@@ -288,6 +295,12 @@ post-read records; they do not prove a side-effect-free read or read-to-ack.
 `e5` records the candidate's observed status. All tags are hexadecimal. A zero
 producer result does not authorize a reset-scope claim, read-to-ack semantics,
 clear effectiveness or a universal source123 silence claim.
+
+TSENS schedules at most 99 in-window reads per edge at offsets 10–990 µs.
+The nominal 100th iteration waits until 1000 µs and is rejected by the
+`>= 1 ms` deadline before reading; an earlier overrun may reduce the count.
+The before-edge CTRL read is separate. The output does not record an exact
+sample denominator; ready-sample and OUT-change counts are bounded by 99.
 
 TSENS pairs `f0–ff` report before READY/OUT, ready-sample count, final READY/OUT
 and OUT-change count, requested images 11,01,10,00, two edges per case. Tags

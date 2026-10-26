@@ -460,7 +460,8 @@ pub(super) fn temperature(s: &mut Session<'_>) {
             let mut last = before;
             let start = oer_riscv::cycle32();
             for sample in 1..=100u32 {
-                // Absolute 10 us sample times, under one 1 ms deadline.
+                // At most 99 reads at 10..990 us: the 1000 us iteration
+                // reaches the deadline and exits before its read.
                 while oer_riscv::cycle32().wrapping_sub(start) < sample * 400 {}
                 if oer_riscv::cycle32().wrapping_sub(start) >= 40_000 {
                     break;
