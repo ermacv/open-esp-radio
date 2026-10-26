@@ -240342,13 +240342,13 @@ pub mod tsens {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Blob-evidenced conversion-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
             #[inline]
             pub const fn bit_9_opaque(self) -> bool {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Blob-evidenced readout-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
             #[inline]
             pub const fn bit_23_opaque(self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -240365,13 +240365,13 @@ pub mod tsens {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Blob-evidenced conversion-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
             #[inline]
             pub const fn bit_9_opaque(&self) -> bool {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Blob-evidenced readout-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
             #[inline]
             pub const fn bit_23_opaque(&self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -250760,6 +250760,26 @@ pub mod wifi_bb {
         }
     }
 
+    /// The `WORD_004C_OPAQUE` register.
+    ///
+    /// Opaque word loaded by bb_intr_handl and observed as zero in the quiet HW11 session. Only those reads are established; write behavior and read side effects, including read-to-clear, are unknown. No side-effect-free read-only or source-123 acknowledgement contract is established. The unknown class deliberately exposes no PAC access until these semantics are resolved.
+    pub mod word_004c_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4c;
+
+        /// Width of `BITS_0_31_OPAQUE` in bits.
+        pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
+        pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `BITS_0_31_OPAQUE`.
+        pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
+    }
+
     /// The `WORD_0050_OPAQUE` register.
     ///
     /// Complete phy_get_noise_floor reads this word; hardware access semantics remain unknown.
@@ -255885,7 +255905,7 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Request clearing the watchdog timeout. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
+            /// Request clearing the watchdog timeout. In the cited quiet stand mode a set reads back zero; self-clear versus read-zero and clearing a positively pending timeout remain unresolved. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, HW11_S31_BB_20261027.
             #[inline]
             pub const fn watchdog_timeout_clear_request(self) -> bool {
                 (self.0 & 0x20000000) != 0
@@ -255914,7 +255934,7 @@ pub mod wifi_bb {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Request clearing the watchdog timeout. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
+            /// Request clearing the watchdog timeout. In the cited quiet stand mode a set reads back zero; self-clear versus read-zero and clearing a positively pending timeout remain unresolved. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, HW11_S31_BB_20261027.
             #[inline]
             pub const fn watchdog_timeout_clear_request(&self) -> bool {
                 (self.0 & 0x20000000) != 0
@@ -257621,17 +257641,17 @@ pub mod wifi_bb {
     impl oer_mmio::Registers for PhyBasebandConfigOracleWifiBbWords {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
-            0x18, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c, 0x478,
-            0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30, 0xc3c,
-            0xc40, 0xc44, 0xc50, 0xc6c, 0xca8, 0xcd0,
+            0x18, 0x4c, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c,
+            0x478, 0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30,
+            0xc3c, 0xc40, 0xc44, 0xc50, 0xc6c, 0xca8, 0xcd0,
         ];
     }
 
     impl oer_mmio::Words for PhyBasebandConfigOracleWifiBbWords {
         const OWNED: &'static [usize] = &[
-            0x18, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c, 0x478,
-            0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30, 0xc3c,
-            0xc40, 0xc44, 0xc50, 0xc6c, 0xca8, 0xcd0,
+            0x18, 0x4c, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c,
+            0x478, 0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30,
+            0xc3c, 0xc40, 0xc44, 0xc50, 0xc6c, 0xca8, 0xcd0,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -264471,7 +264491,7 @@ pub mod wifi_mac {
 
     /// The `RX_BLOCK_ACK_ENTRY%s_CONTROL` register.
     ///
-    /// Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i.
+    /// Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant.
     pub mod rx_block_ack_entry_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -283151,7 +283171,7 @@ pub mod wifi_mac {
 
     /// The `EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL` register.
     ///
-    /// Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead.
+    /// Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant.
     pub mod extra_softap_rx_block_ack_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -283383,7 +283403,7 @@ pub mod wifi_mac {
 
     /// The `EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY` register.
     ///
-    /// Shared extra-SoftAP staging word carrying peer MAC bytes four and five, interface and reorder-window size.
+    /// Shared extra-SoftAP staging word carrying peer MAC bytes four and five, interface and reorder-window size. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant.
     pub mod extra_softap_rx_block_ack_peer_tail_and_policy {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;

@@ -427,3 +427,7 @@ description = "espressif/esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21
 [[sources]]
 id = "BLOB_LIBPP_WIFI_IRQ_FACTS_20261026"
 description = "SOURCE: Blobray, esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a. wdev.o::wDev_ProcessFiq+0x138..0x148 posts message14 for MAC21; pp.o::ppTask+0xa2..0xb4/+0x1cc..0x1e8 selects the Wi-Fi assertion diagnostic and terminal loop (relocation .rodata+0x38 to .L1035). Its physical trigger is unknown. wdev.o::wDev_ProcessFiq+0x78/+0x8c..0xa2 and pm_twt.o::pm_on_isr_sleep+0x0..0x44 select MAC27/28 as logical WDEV timers0/1 used by TWT; pm_twt_set_target_wdev_time+0xb8/+0xc4/+0xe8 and hal_tsf.o::hal_wdev_timer_target_enable+0xa/+0x12/+0x20 identify their separate controls. hal_pwr.o::pwr_hal_set_beacon_filter_soc_wakeup_and_intr_enable+0x8/+0x14/+0x16/+0x1a selects power17, and pwr_hal_set_mac_modem_beacon_miss_intr_enable at the same offsets selects power19; wdev.o::wDev_ProcessFiq+0x108..0x114 services beacon miss. These software roles do not identify other opaque producers or establish all-lane mask equations."
+
+[[sources]]
+id = "BLOB_LIBPP_BB_INTR_HANDL"
+description = "SOURCE: esp32-wifi-lib@af55a0ca258ce9d791d1661d7c2bbb65f08c0c21 esp32s31/libpp.a [if_hwctrl.o]::bb_intr_handl+0x4 loads 0x2010704c; ermacv/oer-notes research/irq-blobray-wifi.md section Source 123. The loaded value is unused. A read-to-clear effect and the source-123 binding are unproved."

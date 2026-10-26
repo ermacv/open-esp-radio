@@ -831,9 +831,11 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."RX_BLOCK_ACK_ENTRY%s_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HIL_OPEN_RX_BLOCK_ACK_DIRECT_BANK_2026_07_30"]
-accuracy = "exact"
-completeness = "complete"
+# Vendor publication layout and bounded HW11 quiet/staging observations only;
+# HW11 does not establish live agreement acceptance or opaque-bit evolution.
+sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HIL_OPEN_RX_BLOCK_ACK_DIRECT_BANK_2026_07_30", "HW11_S31_BLOCK_ACK_20261027"]
+accuracy = "bounded"
+completeness = "partial"
 
 [review.entity."RX_BLOCK_ACK_ENTRY%s_CONTROL.ENABLE"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HIL_OPEN_RX_BLOCK_ACK_DIRECT_BANK_2026_07_30"]
@@ -4014,10 +4016,12 @@ sources = ["BLOB_LIBPP_HAL_HE_OBSS_NARROW_BAND_RU"]
 provenance = "observed"
 
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+# Vendor publication layout and bounded HW11 quiet/staging observations only;
+# HW11 does not establish live agreement acceptance or opaque-bit evolution.
+sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HW11_S31_BLOCK_ACK_20261027"]
 provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
+accuracy = "bounded"
+completeness = "partial"
 
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.ENABLE"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
@@ -4051,10 +4055,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+# Vendor publication layout and bounded HW11 quiet/staging observations only;
+# HW11 does not establish live agreement acceptance or opaque-bit evolution.
+sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HW11_S31_BLOCK_ACK_20261027"]
 provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
+accuracy = "bounded"
+completeness = "partial"
 
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.PEER_ADDRESS_TAIL"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
@@ -7342,7 +7348,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 name = "RX_BLOCK_ACK_ENTRY%s_CONTROL"
 offset = 0x178
 dim = { count = 8, stride = 0x24 }
-description = "Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i."
+description = "Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant."
 
 [[registers.fields]]
 name = "ENABLE"
@@ -11785,7 +11791,7 @@ write-range = { min = 0x0, max = 0x1f }
 [[registers]]
 name = "EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL"
 offset = 0xea4
-description = "Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead."
+description = "Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant."
 
 [[registers.fields]]
 name = "ENABLE"
@@ -11835,7 +11841,7 @@ description = "The pinned full-word diagnostic output consumes these lanes; indi
 [[registers]]
 name = "EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY"
 offset = 0xea8
-description = "Shared extra-SoftAP staging word carrying peer MAC bytes four and five, interface and reorder-window size."
+description = "Shared extra-SoftAP staging word carrying peer MAC bytes four and five, interface and reorder-window size. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant."
 
 [[registers.fields]]
 name = "PEER_ADDRESS_TAIL"

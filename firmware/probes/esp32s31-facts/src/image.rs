@@ -11,6 +11,8 @@ use core::{
 };
 use oer_esp32s31_pac as pac;
 use oer_mmio::{Bits, Index};
+#[path = "opaque.rs"]
+mod opaque;
 
 mod ble;
 mod ble_wave2;
@@ -177,6 +179,7 @@ struct Session<'a> {
     ble: ble::Ble,
     radio: radio_local::Radio,
     generic: generic::Hardware,
+    opaque: opaque::Hardware,
 }
 struct Probe {
     id: u32,
@@ -185,6 +188,22 @@ struct Probe {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 10,
+        run: opaque::pll,
+    },
+    Probe {
+        id: 11,
+        run: opaque::block_ack,
+    },
+    Probe {
+        id: 12,
+        run: opaque::watchdog,
+    },
+    Probe {
+        id: 13,
+        run: opaque::temperature,
+    },
     Probe {
         id: 102,
         run: ble_wave2::overflow_ack,
@@ -422,6 +441,14 @@ extern "C" fn facts_main() -> ! {
             positional: p.bluetooth.ble_hw_positional_word1ff0,
             etm: p.modem_etm.modem_etm_bluetooth,
             task_irq: p.bluetooth.btmac_ble_phy_init,
+        },
+        opaque: opaque::Hardware {
+            wifi_bb: p.radio_phy.phy_baseband_config_oracle_wifi_bb,
+            block_ack: p.wifi_mac.wifi_mac_block_ack,
+            core_enable: p.wifi_mac.wifi_mac_core_enable,
+            mac_interrupt: p.wifi_interrupts.wifi_mac_interrupt,
+            tsens: p.radio_phy.lp_tsens,
+            periclkrst: p.radio_phy.lp_periclkrst,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();
