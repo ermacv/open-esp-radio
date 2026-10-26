@@ -15,6 +15,12 @@ every ESP-IDF header the build uses, with its SHA-256 at the pinned revision.
 sources are compiled unmodified with the Kconfig defaults in
 [`shim/include/sdkconfig.h`](shim/include/sdkconfig.h).
 
+The shared ESP-IDF ledger also pins platform sources for analysis. The stand
+compiles only `components/ieee802154/*.c` (including its `driver/` sources)
+and the S31 `ieee802154_periph.c` connection used for modem clocks and
+interrupt allocation. It does not compile the SPI flash HAL: the driver and
+its recording boundaries reference no `spi_flash_hal_*` symbols.
+
 The stand replaces only the boundaries the driver does not own:
 
 | Boundary | Replacement |

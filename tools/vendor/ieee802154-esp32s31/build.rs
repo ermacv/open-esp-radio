@@ -16,6 +16,8 @@ use std::{
 
 use oer_tool_pins::Manifest;
 
+mod build_sources;
+
 const SOURCE_ENV: &str = "OER_ESP_IDF_DIR";
 const COMMON_LL: &str = "components/esp_hal_ieee802154/include/hal/ieee802154_common_ll.h";
 
@@ -269,7 +271,7 @@ fn main() {
         build.define("CONFIG_ESP_COEX_SW_COEXIST_ENABLE", "1");
     }
     for source in sources.iter().filter(|source| {
-        source.path.ends_with(".c")
+        build_sources::is_translation_unit(&source.path)
             && source
                 .requires
                 .as_deref()
