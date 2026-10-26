@@ -147,7 +147,7 @@ fn a_fatal_path_never_takes_the_words_from_an_operation() {
 #[test]
 fn a_held_hart_1_is_stopped_without_a_stall_request() {
     let mut memory = Memory::new(0);
-    memory.registers().hold(Hart::SECONDARIES[0].hart());
+    memory.registers().hold(Hart::SECONDARIES[0]);
     let cell = memory.cell();
     assert_eq!(
         stop_with(&cell, crate::platform::BOOT_HART, 4),

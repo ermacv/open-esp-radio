@@ -343,7 +343,6 @@ pub struct InterruptContract {
     pub tie_break: TieBreak,
     pub harts: Vec<u32>,
     /// The hart that owns reset and primary image initialization.
-    #[serde(default)]
     pub boot_hart: u32,
     pub level_writers: Vec<LevelWriter>,
     /// Maximum allocation of each hart's dedicated SRAM interrupt stack.

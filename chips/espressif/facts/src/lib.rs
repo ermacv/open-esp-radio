@@ -617,6 +617,22 @@ pub(crate) mod tests {
         cores = 1\n";
 
     #[test]
+    fn interrupt_contract_requires_an_explicit_boot_hart() {
+        let mut table = load(&mut tracked::Tracked, "esp32s31").unwrap().table;
+        for registry in REGISTRY {
+            table.remove(*registry);
+        }
+        table
+            .get_mut("interrupts")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .remove("boot-hart");
+        let error = Facts::from_table("esp32s31", "chip.toml", table).unwrap_err();
+        assert!(error.to_string().contains("boot-hart"), "{error}");
+    }
+
+    #[test]
     fn the_tracked_chips_resolve_from_their_boards() {
         for (id, board, module, revision) in [(
             "esp32s31",

@@ -7565,7 +7565,6 @@ instance = "LP_ANA_PERI"
 registers = ["LP_ANA_VDD_SOURCE_CNTL", "LP_ANA_PG_GLITCH_CNTL", "LP_ANA_INT_RAW", "LP_ANA_INT_ST", "LP_ANA_INT_ENA", "LP_ANA_INT_CLR", "LP_ANA_LP_INT_RAW", "LP_ANA_LP_INT_ST", "LP_ANA_LP_INT_ENA", "LP_ANA_LP_INT_CLR", "LP_ANA_DATE"]
 reason = "No owner yet: the bootstrap reaches only its boot part's words."
 
-
 [[unclaimed]]
 instance = "BUS_MONITOR"
 registers = ["CORE_%s_RCD_EN", "CORE_%s_RCD_PDEBUGPC", "CORE_%s_RCD_PDEBUGSP"]

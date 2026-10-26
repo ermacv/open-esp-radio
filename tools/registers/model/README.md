@@ -1053,16 +1053,19 @@ to registers and fields.
 
 A root may name `hart-facts = "../platform/chip.toml"`. The file's
 `[interrupts] harts` is a nonempty contiguous list from zero; `boot-hart`
-names primary initialization. In an inline `dim`, `count = "harts"` or
-`count = "secondary-harts"` resolves from that list before model validation.
+is required and names primary initialization. In an inline `dim`,
+`count = "harts"` or `count = "secondary-harts"` resolves from that list before
+model validation.
 The generated PAC exposes the facts renderer's `HARTS`, `Hart` and
 `SecondaryHart`; fixed IDs are checked inside inline const, raw conversion
 returns an error and enum-based array selection has no dynamic bounds check.
 
 A register `dim` also accepts `first` (default zero), the first label, distinct
-from its zero-based array index. `element-resets` may list the complete reset
-images of a top-level register family; list length and reset geometry must
-agree with the family. The common reset still governs reserved-bit writes.
+from its zero-based array index. `first = "first-secondary-hart"` derives the
+first nonboot label from the same fact and requires contiguous secondary
+labels; a noncontiguous family is rejected. `element-resets` may list the
+complete reset images of a top-level register family; list length and reset
+geometry must agree with the family. The common reset still governs reserved-bit writes.
 An instance may have `dim`, expanding its `%s` name and base by the given
 count and byte stride before overlap and ownership validation.
 

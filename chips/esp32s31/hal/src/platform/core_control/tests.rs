@@ -62,13 +62,13 @@ fn holding_core_1_gates_its_clocks_and_asserts_its_reset_and_releasing_undoes_it
     let mut memory = Memory::filled(0);
     let mut registers = memory.registers();
     assert!(!registers.held(Hart::SECONDARIES[0].hart()));
-    registers.hold(Hart::SECONDARIES[0].hart());
+    registers.hold(Hart::SECONDARIES[0]);
     assert!(registers.held(Hart::SECONDARIES[0].hart()));
     let control = registers
         .clocks
         .read_hpcore_ctrl0(Hart::SECONDARIES[0].hart().index());
     assert!(!control.reg_core_clic_clk_en() && !control.reg_core_force_norst());
-    registers.release(Hart::SECONDARIES[0].hart());
+    registers.release(Hart::SECONDARIES[0]);
     assert!(!registers.held(Hart::SECONDARIES[0].hart()));
     let control = registers
         .clocks

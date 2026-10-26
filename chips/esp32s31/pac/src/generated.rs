@@ -122235,7 +122235,7 @@ pub mod lp_system_reg {
 
     /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE%s` register.
     ///
-    /// The boot ROM's HP core 1 entry address; zero leaves the core waiting. SOURCE: HW1_S31_BOOT_ADDRESS_20261026 verifies full-word storage including low bits and zero readback while hart1 remains held; the ROM waiting protocol was not exercised.
+    /// The boot ROM's selected secondary HP core entry address; zero leaves that core waiting. SOURCE: HW1_S31_BOOT_ADDRESS_20261026 verifies full-word storage including low bits and zero readback while the measured secondary hart remains held; the ROM waiting protocol was not exercised.
     pub mod boot_addr_hp_core {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -154253,7 +154253,7 @@ pub mod pmu {
 
     /// The `CPU_STALL_SW` register.
     ///
-    /// Software stall request codes of the two HP cores: 0x86 requests a stall, 0xFF lets the core run.
+    /// Software stall request codes of the HP cores: 0x86 requests a stall, 0xFF lets the core run.
     pub mod cpu_stall_sw {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffff0000;

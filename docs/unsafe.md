@@ -196,9 +196,10 @@ that election retains the existing watchdog outcome.
 The PAC's `Hart` is generated from the platform's HP-hart list, with checked
 raw conversion and fixed-index admission inside inline const. Its exhaustive
 selection of per-hart arrays adds no runtime bounds panic. `SecondaryHart`
-names only nonboot harts and their ROM boot-word indices. Neither type grants
-execution or register ownership. The HAL's fatal proof carries a checked
-identity or `Fault::InvalidHart { raw }`; an invalid identity receives no
+names only nonboot harts and their ROM boot-word indices. The core-control
+clock hold and release methods require this type, excluding the boot hart.
+Neither type grants execution or register ownership. The HAL's fatal proof
+carries a checked identity or `Fault::InvalidHart { raw }`; an invalid identity receives no
 hart's ClaimCell key. The staged fatal path retains its full raw ID in the
 existing record slot and requests reset through a sealed free control owner;
 a lent or held owner is never taken over. An unavailable reset owner retains

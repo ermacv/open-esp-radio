@@ -4,10 +4,15 @@
 #[cfg(test)]
 pub(crate) mod tests;
 
+#[cfg(feature = "chip")]
+use crate::chip::platform::HARTS;
+#[cfg(not(feature = "chip"))]
+use oer_esp32s31_hal::platform::HARTS;
+
 // The low bits identify every fact-defined hart and one unassigned sentinel.
 // The existing core-assignment word also carries a wrapping poll timestamp.
 // The wrapping timestamp period is 2^(32 - CORE_BITS) microseconds.
-const CORE_BITS: u32 = crate::chip::platform::HARTS.ilog2() + 1;
+const CORE_BITS: u32 = HARTS.ilog2() + 1;
 const CORE_MASK: usize = (1 << CORE_BITS) - 1;
 const STAMP_MASK: u32 = u32::MAX >> CORE_BITS;
 const _: () = assert!(
@@ -16,7 +21,7 @@ const _: () = assert!(
 );
 pub(crate) fn assigned_core(state: usize) -> Option<usize> {
     let core = state & CORE_MASK;
-    (core < crate::chip::platform::HARTS).then_some(core)
+    (core < HARTS).then_some(core)
 }
 pub(crate) fn poll_stamp(state: usize, now: u64) -> usize {
     (state & CORE_MASK) | (((now as u32 & STAMP_MASK) as usize) << CORE_BITS)

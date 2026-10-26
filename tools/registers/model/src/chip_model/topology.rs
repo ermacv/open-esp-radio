@@ -17,9 +17,9 @@ pub(super) fn count(base: &Path, file: Option<&str>) -> Result<Option<Geometry>,
         interrupts: Interrupts,
     }
     #[derive(Deserialize)]
+    #[serde(rename_all = "kebab-case")]
     struct Interrupts {
         harts: Vec<u32>,
-        #[serde(default)]
         boot_hart: u32,
     }
     let text = std::fs::read_to_string(&path)
@@ -50,50 +50,70 @@ pub(super) fn count(base: &Path, file: Option<&str>) -> Result<Option<Geometry>,
     }))
 }
 
-pub(super) fn resolve(text: &str, n: Option<u32>, path: &Path) -> Result<String, Error> {
+pub(super) fn resolve(
+    text: &str,
+    geometry: Option<Geometry>,
+    path: &Path,
+) -> Result<String, Error> {
     let mut doc = text
         .parse::<toml_edit::DocumentMut>()
         .map_err(|e| Error::new(path, "", ErrorKind::Parse(e.to_string())))?;
-    fn value(v: &mut toml_edit::Value, n: Option<u32>) -> Result<(), &'static str> {
+    fn value(v: &mut toml_edit::Value, geometry: Option<Geometry>) -> Result<(), &'static str> {
         match v {
             toml_edit::Value::InlineTable(t) => {
                 for (key, v) in t.iter_mut() {
                     if key == "count"
                         && let Some(symbol) = v.as_str()
                     {
-                        let n = n.ok_or("a symbolic count needs hart-facts")?;
+                        let n = geometry.ok_or("a symbolic count needs hart-facts")?.harts;
                         let count = match symbol {
                             "harts" => n,
                             "secondary-harts" => n - 1,
                             _ => return Err("unknown count symbol"),
                         };
                         *v = toml_edit::Value::from(i64::from(count));
+                    } else if key == "first"
+                        && let Some(symbol) = v.as_str()
+                    {
+                        let geometry = geometry.ok_or("a symbolic first label needs hart-facts")?;
+                        if symbol != "first-secondary-hart" {
+                            return Err("unknown first label symbol");
+                        }
+                        let mut secondaries =
+                            (0..geometry.harts).filter(|h| *h != geometry.boot_hart);
+                        let first = secondaries
+                            .next()
+                            .ok_or("the geometry has no secondary hart")?;
+                        if !secondaries.eq(first + 1..first + geometry.harts - 1) {
+                            return Err("a secondary register family needs contiguous hart labels");
+                        }
+                        *v = toml_edit::Value::from(i64::from(first));
                     } else {
-                        value(v, n)?;
+                        value(v, geometry)?;
                     }
                 }
             }
             toml_edit::Value::Array(a) => {
                 for v in a.iter_mut() {
-                    value(v, n)?;
+                    value(v, geometry)?;
                 }
             }
             _ => (),
         }
         Ok(())
     }
-    fn item(i: &mut toml_edit::Item, n: Option<u32>) -> Result<(), &'static str> {
+    fn item(i: &mut toml_edit::Item, geometry: Option<Geometry>) -> Result<(), &'static str> {
         match i {
-            toml_edit::Item::Value(v) => value(v, n)?,
+            toml_edit::Item::Value(v) => value(v, geometry)?,
             toml_edit::Item::Table(t) => {
                 for (_, i) in t.iter_mut() {
-                    item(i, n)?;
+                    item(i, geometry)?;
                 }
             }
             toml_edit::Item::ArrayOfTables(a) => {
                 for t in a.iter_mut() {
                     for (_, i) in t.iter_mut() {
-                        item(i, n)?;
+                        item(i, geometry)?;
                     }
                 }
             }
@@ -101,7 +121,8 @@ pub(super) fn resolve(text: &str, n: Option<u32>, path: &Path) -> Result<String,
         }
         Ok(())
     }
-    item(doc.as_item_mut(), n).map_err(|e| Error::new(path, "", ErrorKind::Dim(e.into())))?;
+    item(doc.as_item_mut(), geometry)
+        .map_err(|e| Error::new(path, "", ErrorKind::Dim(e.into())))?;
     Ok(doc.to_string())
 }
 
@@ -221,4 +242,57 @@ pub(super) fn fields(file: &mut TypeFile, path: &Path) -> Result<(), Error> {
         register.fields = expanded;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn boot_hart_is_required_and_uses_the_platform_key() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("platform.toml");
+        std::fs::write(&path, "[interrupts]\nharts = [0, 1, 2]\n").unwrap();
+        let error = count(directory.path(), Some("platform.toml")).unwrap_err();
+        assert!(error.to_string().contains("boot-hart"), "{error}");
+        std::fs::write(&path, "[interrupts]\nharts = [0, 1, 2]\nboot-hart = 2\n").unwrap();
+        let geometry = count(directory.path(), Some("platform.toml"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(geometry.boot_hart, 2);
+    }
+
+    #[test]
+    fn secondary_labels_follow_the_explicit_boot_role() {
+        for (boot_hart, first) in [(0, 1), (2, 0)] {
+            let text = resolve(
+                "dim = { count = 'secondary-harts', first = 'first-secondary-hart', stride = 4 }",
+                Some(Geometry {
+                    harts: 3,
+                    boot_hart,
+                }),
+                Path::new("synthetic.toml"),
+            )
+            .unwrap();
+            let value: toml_edit::DocumentMut = text.parse().unwrap();
+            assert_eq!(value["dim"]["first"].as_integer(), Some(first));
+            assert_eq!(value["dim"]["count"].as_integer(), Some(2));
+        }
+        for geometry in [
+            Geometry {
+                harts: 1,
+                boot_hart: 0,
+            },
+            Geometry {
+                harts: 3,
+                boot_hart: 1,
+            },
+        ] {
+            assert!(resolve(
+                "dim = { count = 'secondary-harts', first = 'first-secondary-hart', stride = 4 }",
+                Some(geometry),
+                Path::new("synthetic.toml"),
+            ).is_err(), "an empty or noncontiguous secondary label range is refused");
+        }
+    }
 }

@@ -149,34 +149,36 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
         control.reg_core_global_rst_en() && !control.reg_core_cpu_clk_en()
     }
 
-    /// Hold the selected HP core: gate its CPU and CLIC clocks and assert its global
-    /// reset, keeping every other bit.
+    /// Hold the selected secondary HP core: gate its CPU and CLIC clocks and
+    /// assert its global reset, keeping every other bit.
     ///
     /// SOURCE: ESP-IDF 4d59230d `components/esp_system/port/cpu_start.c`
     /// (the single-core start) and
     /// `components/hal/esp32s31/include/hal/cpu_utility_ll.h`.
-    pub fn hold(&mut self, core: Hart) {
-        self.clocks.modify_hpcore_ctrl0(core.index(), |control| {
-            control
-                .set_reg_core_cpu_clk_en(false)
-                .set_reg_core_clic_clk_en(false)
-                .set_reg_core_global_rst_en(true);
-        });
+    pub fn hold(&mut self, core: SecondaryHart) {
+        self.clocks
+            .modify_hpcore_ctrl0(core.hart().index(), |control| {
+                control
+                    .set_reg_core_cpu_clk_en(false)
+                    .set_reg_core_clic_clk_en(false)
+                    .set_reg_core_global_rst_en(true);
+            });
     }
 
-    /// Release the selected HP core: enable its CPU and CLIC clocks and deassert its
-    /// global reset, keeping every other bit.
+    /// Release the selected secondary HP core: enable its CPU and CLIC clocks
+    /// and deassert its global reset, keeping every other bit.
     ///
     /// SOURCE: ESP-IDF 4d59230d `components/esp_system/port/cpu_start.c`
     /// (`start_other_core`).
     #[cfg(any(test, feature = "cpu1-runs"))]
-    pub fn release(&mut self, core: Hart) {
-        self.clocks.modify_hpcore_ctrl0(core.index(), |control| {
-            control
-                .set_reg_core_cpu_clk_en(true)
-                .set_reg_core_clic_clk_en(true)
-                .set_reg_core_global_rst_en(false);
-        });
+    pub fn release(&mut self, core: SecondaryHart) {
+        self.clocks
+            .modify_hpcore_ctrl0(core.hart().index(), |control| {
+                control
+                    .set_reg_core_cpu_clk_en(true)
+                    .set_reg_core_clic_clk_en(true)
+                    .set_reg_core_global_rst_en(false);
+            });
     }
 
     /// Reset `core`'s CPU once: a pulse, not a hold.

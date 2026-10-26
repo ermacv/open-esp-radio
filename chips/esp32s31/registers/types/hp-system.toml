@@ -249,7 +249,7 @@ name = "HP_REG_CORE%s_CORESTALLED_ST"
 dim = { count = "harts", stride = 1 }
 bits = "0"
 class = "read-only"
-description = "hp core0 corestalled status HP core 0 is stalled."
+description = "Whether the selected HP core is stalled."
 
 [[registers]]
 name = "HP_CRYPTO_CTRL"

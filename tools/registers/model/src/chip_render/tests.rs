@@ -1394,7 +1394,10 @@ fn symbolic_hart_fields_preserve_every_other_lane_for_n_one_and_three() {
         ]);
         std::fs::write(
             directory.path().join("platform.toml"),
-            format!("[interrupts]\nharts = {:?}\n", (0..n).collect::<Vec<_>>()),
+            format!(
+                "[interrupts]\nboot-hart = 0\nharts = {:?}\n",
+                (0..n).collect::<Vec<_>>()
+            ),
         )
         .unwrap();
         let (model, policy) = load(directory.path());
@@ -1435,7 +1438,7 @@ fn instance_families_follow_one_and_three_harts_and_invalid_lists_are_refused() 
         ]);
         std::fs::write(
             directory.path().join("platform.toml"),
-            format!("[interrupts]\nharts = {harts:?}\n"),
+            format!("[interrupts]\nboot-hart = 0\nharts = {harts:?}\n"),
         )
         .unwrap();
         let evidence =

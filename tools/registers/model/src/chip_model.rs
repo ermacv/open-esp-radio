@@ -110,7 +110,7 @@ impl ChipModel {
             .map_err(|e| Error::new(path, "", ErrorKind::Parse(e.to_string())))?;
         let base = path.parent().unwrap_or(Path::new("."));
         let harts = topology::count(base, source.hart_facts.as_deref())?;
-        let resolved = topology::resolve(&text, harts.map(|g| g.harts), path)?;
+        let resolved = topology::resolve(&text, harts, path)?;
         let mut root: RootFile = toml_edit::de::from_str(&resolved)
             .map_err(|error| Error::new(path, "", ErrorKind::Parse(error.to_string())))?;
         let context = Context {
@@ -140,7 +140,7 @@ impl ChipModel {
         let base = path.parent().unwrap_or(Path::new("."));
 
         topology::instances(&mut root, path)?;
-        let types = load_types(context, base, &root.types, harts.map(|g| g.harts))?;
+        let types = load_types(context, base, &root.types, harts)?;
         let mut layouts = load_layouts(context, base, &root.layouts)?;
         let regions = check_ram_regions(context, &root.ram_regions)?;
         let mut names = BTreeSet::new();
@@ -266,7 +266,7 @@ fn load_types(
     context: Context<'_>,
     base: &Path,
     includes: &[String],
-    harts: Option<u32>,
+    harts: Option<topology::Geometry>,
 ) -> Result<BTreeMap<String, BlockType>, Error> {
     let mut seen = BTreeSet::new();
     let mut types = BTreeMap::new();

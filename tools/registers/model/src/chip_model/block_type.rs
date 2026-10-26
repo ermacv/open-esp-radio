@@ -185,7 +185,7 @@ impl BlockType {
         path: &Path,
         evidence: &BTreeSet<String>,
         budget: &mut ExpansionBudget,
-        harts: Option<u32>,
+        harts: Option<super::topology::Geometry>,
     ) -> Result<Self, Error> {
         let text = std::fs::read_to_string(path)
             .map_err(|error| Error::new(path, "", ErrorKind::Read(error)))?;

@@ -231,10 +231,12 @@ moves; ownership, orchestration and wiring are rebuilt.
   executor and task.
 - **Hart topology.** ESP32-S31's `[interrupts] harts` in
   `chips/esp32s31/platform/chip.toml` is the sole HP-hart cardinality;
-  `boot-hart` names primary initialization. Facts derive the host core count,
-  vector geometry and the PAC's checked `Hart`, `SecondaryHart` and `HARTS`.
-  Per-hart register and instance families take their counts from that list;
-  typed indices connect their geometry to HAL reads and writes. Fixed indices
+  `boot-hart` is required and names primary initialization. Facts derive the
+  host core count, vector geometry and the PAC's checked `Hart`,
+  `SecondaryHart` and `HARTS`. Per-hart register and instance families take
+  their counts from that list. Secondary boot-word labels also derive from
+  its explicit boot role. Typed indices connect their geometry to HAL reads
+  and writes. Fixed indices
   and list/count mismatches fail during the build. Every current image keeps
   secondary harts contained; `cpu1-runs` is rejected at compile time.
   An architectural ID outside this list is `InvalidHart { raw }`, never a

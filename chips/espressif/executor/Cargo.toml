@@ -46,6 +46,7 @@ tempfile = "=3.27.0"
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [dev-dependencies]
+oer-esp32s31-hal = { path = "../../esp32s31/hal" }
 oer-interrupt-table = { path = "../../../portable/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 

@@ -318,7 +318,7 @@ impl Cores {
         self.operate(|words| {
             words.set_boot_address(hart, 0);
             run(words, hart.hart(), STALL_POLLS)?;
-            words.release(hart.hart());
+            words.release(hart);
             words.set_boot_address(hart, entry as usize as u32);
             Ok(())
         })?
@@ -358,7 +358,7 @@ pub(crate) fn park<P: Placement, Q: Placement, R: Placement, S: Placement, T: Pl
     hart: SecondaryHart,
 ) {
     words.request_stall(hart.hart());
-    words.hold(hart.hart());
+    words.hold(hart);
 }
 
 /// How a secondary hart stands.
