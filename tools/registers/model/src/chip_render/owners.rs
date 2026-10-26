@@ -465,7 +465,8 @@ fn render_owner(
              impl<P: oer_mmio::Placement> Copy for {name}<P> {{}}\n"
         );
     }
-    // The word lists.
+    // The word lists and the policy marker that derives their sharing.
+    let sharing = if owner.part.shared { "Shared" } else { "Owned" };
     let listed = owner.listed();
     match owner.division {
         None => {
@@ -473,7 +474,7 @@ fn render_owner(
                 output,
                 "/// The words [`{name}`] holds, as byte offsets from its instance's base.\n\
                  pub struct {words};\n\n\
-                 impl oer_mmio::Registers for {words} {{\nconst WORDS: &'static [usize] = &[{}];\n}}\n\n\
+                 impl oer_mmio::Registers for {words} {{\ntype Sharing = oer_mmio::sharing::{sharing};\nconst WORDS: &'static [usize] = &[{}];\n}}\n\n\
                  impl oer_mmio::Words for {words} {{\nconst OWNED: &'static [usize] = &[{}];\nconst OBSERVED: &'static [usize] = &[];\n}}\n",
                 list(listed.iter().copied()),
                 list(listed.iter().copied()),
@@ -483,7 +484,7 @@ fn render_owner(
                     output,
                     "// SOURCE: {}. The shared part's words are side-effect-free reads,\n\
                      // write-trigger strobes and one-field words stored whole.\n\
-                     impl oer_mmio::SharedRegisters for {words} {{}}\n",
+                     // The sharing marker grants SharedRegisters and derives Sync.\n",
                     owner.part.sources.join(", ")
                 );
             }
@@ -715,7 +716,7 @@ fn render_division(output: &mut String, division: &Division, owners: &[Owner<'_>
         "/// The words of `{}` its parts {} hold, which one block divides:\n\
          /// the parts observe or split each other's words.\n\
          pub struct {name};\n\n\
-         impl oer_mmio::Registers for {name} {{\nconst WORDS: &'static [usize] = &[{}];\n}}\n\n\
+         impl oer_mmio::Registers for {name} {{\ntype Sharing = oer_mmio::sharing::Owned;\nconst WORDS: &'static [usize] = &[{}];\n}}\n\n\
          /// The divided words' device registers, as the PAC root claims them.\n\
          pub type {name}Claim = oer_mmio::Block<oer_mmio::Fixed<0x{base:x}>, {name}>;\n\n\
          /// Divide the block into its parts.\n\

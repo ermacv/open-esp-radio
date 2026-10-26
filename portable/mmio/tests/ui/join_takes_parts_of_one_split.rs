@@ -3,6 +3,7 @@ use oer_mmio::{Block, Fixed, Registers, Words};
 
 pub struct Pair;
 impl Registers for Pair {
+    type Sharing = oer_mmio::sharing::Owned;
     const WORDS: &'static [usize] = &[0, 4];
 }
 

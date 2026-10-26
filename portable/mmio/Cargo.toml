@@ -7,9 +7,6 @@ license.workspace = true
 repository.workspace = true
 description = "The one volatile register-access core under the generated register code"
 
-[dependencies]
-bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
-
 [dev-dependencies]
 oer-test-ui-cases = { path = "../../tools/test/ui-cases" }
 

@@ -590,7 +590,7 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
     // window's prefix, the RX append doorbell, the analog-I2C host words
     // written from zero and the console's own snapshot events.
     for item in [
-        "pub fn set_address(&mut self, value: oer_mmio::DmaRef<super::super::layouts::WifiRxDmaDescriptor>) -> &mut Self",
+        "pub fn set_address(&mut self, value: oer_memory::DmaRef<super::super::layouts::WifiRxDmaDescriptor>) -> &mut Self",
         "pub fn set_address_high_prefix(&mut self) -> &mut Self",
         "self.0 = (self.0 & 0x000fffff) | 0x2f000000;",
         "pub fn rx_control_append_descriptor_reload_pending(&self) -> bool",

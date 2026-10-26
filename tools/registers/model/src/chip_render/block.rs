@@ -39,7 +39,7 @@ pub(super) enum Setter {
     Enum,
     /// The field's bounded type: a write range narrower than its width.
     Range,
-    /// A typed address of the field's placement: `oer_mmio::DmaRef` of its
+    /// A typed address of the field's placement: `oer_memory::DmaRef` of its
     /// target layout, or the window's `DmaWindowAddress`.
     Pointer,
 }
@@ -185,7 +185,7 @@ impl FieldPlan<'_> {
         };
         match (self.setter, &self.values, &self.pointer) {
             (Setter::Pointer, _, Some(pointer)) => match &pointer.target {
-                Some(target) => format!("oer_mmio::DmaRef<{layouts}::{target}>"),
+                Some(target) => format!("oer_memory::DmaRef<{layouts}::{target}>"),
                 None => format!("{layouts}::DmaWindowAddress"),
             },
             (Setter::Enum, Some(values), _) => qualify(&values.name),

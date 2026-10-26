@@ -5,7 +5,7 @@
 //! append/reload request is the generated doorbell with its pending read.
 
 use oer_esp32s31_pac::layouts::WifiRxDmaDescriptor;
-use oer_mmio::DmaRef;
+use oer_memory::DmaRef;
 
 use crate::ieee80211::registers::{MacPlacement, WifiRxDmaRegisters, bits};
 

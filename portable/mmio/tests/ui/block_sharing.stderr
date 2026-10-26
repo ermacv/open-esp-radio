@@ -1,0 +1,80 @@
+error[E0277]: `Cell<()>` cannot be shared between threads safely
+  --> tests/ui/block_sharing.rs:32:16
+   |
+32 |         sync::<Block<Fixed<0x1000>, Owned>>(); // ui-error: E0277
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Cell<()>` cannot be shared between threads safely
+   |
+   = help: within `Block<Fixed<4096>, Owned>`, the trait `Sync` is not implemented for `Cell<()>`
+   = note: if you want to do aliasing and mutation between multiple threads, use `std::sync::RwLock`
+note: required because it appears within the type `PhantomData<Cell<()>>`
+  --> $RUST/core/src/marker.rs
+   |
+   | pub struct PhantomData<T: PointeeSized>;
+   |            ^^^^^^^^^^^
+note: required because it appears within the type `oer_mmio::sharing::Owned`
+  --> src/lib.rs
+   |
+   |     pub struct Owned(PhantomData<Cell<()>>);
+   |                ^^^^^
+note: required because it appears within the type `PhantomData<oer_mmio::sharing::Owned>`
+  --> $RUST/core/src/marker.rs
+   |
+   | pub struct PhantomData<T: PointeeSized>;
+   |            ^^^^^^^^^^^
+note: required because it appears within the type `Block<Fixed<4096>, Owned>`
+  --> src/lib.rs
+   |
+   | pub struct Block<P: Placement, R: Registers> {
+   |            ^^^^^
+note: required by a bound in `sync`
+  --> tests/ui/block_sharing.rs:21:12
+   |
+21 | fn sync<T: Sync>() {}
+   |            ^^^^ required by this bound in `sync`
+
+error[E0277]: `Cell<()>` cannot be shared between threads safely
+  --> tests/ui/block_sharing.rs:33:16
+   |
+33 |         sync::<Part<Fixed<0x1000>, Owned, Owned>>(); // ui-error: E0277
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Cell<()>` cannot be shared between threads safely
+   |
+   = help: within `Part<Fixed<4096>, Owned, Owned>`, the trait `Sync` is not implemented for `Cell<()>`
+   = note: if you want to do aliasing and mutation between multiple threads, use `std::sync::RwLock`
+note: required because it appears within the type `PhantomData<Cell<()>>`
+  --> $RUST/core/src/marker.rs
+   |
+   | pub struct PhantomData<T: PointeeSized>;
+   |            ^^^^^^^^^^^
+note: required because it appears within the type `Part<Fixed<4096>, Owned, Owned>`
+  --> src/lib.rs
+   |
+   | pub struct Part<P: Placement, R: Registers, W: Words> {
+   |            ^^^^
+note: required by a bound in `sync`
+  --> tests/ui/block_sharing.rs:21:12
+   |
+21 | fn sync<T: Sync>() {}
+   |            ^^^^ required by this bound in `sync`
+
+error[E0277]: `NonNull<u32>` cannot be shared between threads safely
+  --> tests/ui/block_sharing.rs:34:16
+   |
+34 |         sync::<Block<oer_mmio::Host<'static>, Shared>>(); // ui-error: E0277
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `NonNull<u32>` cannot be shared between threads safely
+   |
+   = help: within `Block<Host<'static>, Shared>`, the trait `Sync` is not implemented for `NonNull<u32>`
+note: required because it appears within the type `Host<'static>`
+  --> src/lib.rs
+   |
+   | pub struct Host<'a> {
+   |            ^^^^
+note: required because it appears within the type `Block<Host<'static>, Shared>`
+  --> src/lib.rs
+   |
+   | pub struct Block<P: Placement, R: Registers> {
+   |            ^^^^^
+note: required by a bound in `sync`
+  --> tests/ui/block_sharing.rs:21:12
+   |
+21 | fn sync<T: Sync>() {}
+   |            ^^^^ required by this bound in `sync`

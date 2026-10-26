@@ -9,7 +9,9 @@
 //! retained TX allocation cannot move, while [`RxHandoffPool`] transfers one
 //! final receive buffer through finite state-specific leases.
 //! [`StableDmaRange`] carries an unforgeable address/lifetime proof from those
-//! audited storage leaves into otherwise safe register APIs. Higher protocol
+//! audited storage leaves into otherwise safe register APIs. [`DmaRef`] and
+//! [`DmaWindowAddress`] name placed DMA objects and buffers; [`VolatileCell`]
+//! gives generated memory layouts volatile words. Higher protocol
 //! and integration crates use only these safe capabilities. [`zeroed`] gives
 //! statics in regions the boot zeroes an initializer that is all zero bytes;
 //! [`HandlerCell`] in such a static hands one value to an interrupt handler;
@@ -30,6 +32,7 @@ use core::marker::PhantomData;
 
 mod affine_spsc;
 mod claim_cell;
+mod dma_address;
 mod dma_bytes;
 mod handler_cell;
 mod indexed_custody;
@@ -44,6 +47,7 @@ mod rx_handoff;
 mod static_place;
 mod static_ref;
 mod volatile;
+mod volatile_cell;
 pub mod zeroed;
 
 pub use request_slot::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
@@ -55,6 +59,7 @@ pub use affine_spsc::{
     LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
 pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
+pub use dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};
 pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
@@ -75,6 +80,7 @@ pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
 pub use static_place::{PlacedFuture, StaticPlace};
 pub use static_ref::StaticRef;
 pub use volatile::read_volatile;
+pub use volatile_cell::VolatileCell;
 
 /// Authority to prepare registers for one retained, software-owned TX chain.
 ///

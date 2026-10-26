@@ -1015,32 +1015,32 @@ pub(crate) fn render(
 }
 
 /// The typed addresses of the DMA region: a buffer address and a reference
-/// to a layout placed there, `oer-mmio`'s types bound to this chip's
-/// window. Their constructors are `unsafe` in `oer-mmio`: the caller
+/// to a layout placed there, `oer-memory`'s types bound to this chip's
+/// window. Their constructors are `unsafe` in `oer-memory`: the caller
 /// promises an address inside a static the HAL placed in the region.
 fn render_addresses(output: &mut String, layouts: &[MemoryLayout]) {
     let region = region_constant(DMA_REGION);
     let _ = writeln!(
         output,
-        "/// The [`{region}`] region as `oer-mmio`'s typed addresses name it.\n\
+        "/// The [`{region}`] region as `oer-memory`'s typed addresses name it.\n\
          pub struct DmaWindow;\n\n\
-         impl oer_mmio::DmaWindow for DmaWindow {{\n\
+         impl oer_memory::DmaWindow for DmaWindow {{\n\
          const RANGE: core::ops::Range<u32> = {region};\n\
          }}\n\n\
          /// An address inside [`{region}`] whose memory stays reserved for the\n\
          /// hardware while it may read the address, as the hardware reads it.\n\
-         pub type DmaWindowAddress = oer_mmio::DmaWindowAddress<DmaWindow>;\n\n\
+         pub type DmaWindowAddress = oer_memory::DmaWindowAddress<DmaWindow>;\n\n\
          /// The address of a layout inside [`{region}`].\n\
-         pub use oer_mmio::DmaRef;\n\n\
+         pub use oer_memory::DmaRef;\n\n\
          /// A layout placed in [`{region}`] only, which a [`DmaRef`] may point at.\n\
-         pub trait DmaLayout: oer_mmio::DmaLayout<Window = DmaWindow> {{}}\n\n\
-         impl<L: oer_mmio::DmaLayout<Window = DmaWindow>> DmaLayout for L {{}}\n"
+         pub trait DmaLayout: oer_memory::DmaLayout<Window = DmaWindow> {{}}\n\n\
+         impl<L: oer_memory::DmaLayout<Window = DmaWindow>> DmaLayout for L {{}}\n"
     );
     for layout in layouts.iter().filter(|layout| layout.is_dma_target()) {
         let ty = camel(&layout.name);
         let _ = writeln!(
             output,
-            "impl oer_mmio::DmaLayout for {ty} {{\ntype Window = DmaWindow;\n}}\n"
+            "impl oer_memory::DmaLayout for {ty} {{\ntype Window = DmaWindow;\n}}\n"
         );
     }
     if layouts
@@ -1149,7 +1149,7 @@ fn render_words(output: &mut String, layout: &MemoryLayout) {
     for unit in &layout.units {
         let _ = writeln!(
             output,
-            "{}: {ty}{}Cell(oer_mmio::VolatileCell::new(0)),",
+            "{}: {ty}{}Cell(oer_memory::VolatileCell::new(0)),",
             snake(&unit.name),
             camel(&unit.name)
         );
@@ -1185,7 +1185,7 @@ fn render_word(output: &mut String, layout: &MemoryLayout, unit: &LayoutUnit, ty
         "/// The `{}.{}` word as the hardware may change it: volatile access only.\n\
          #[repr(transparent)]\n\
          #[derive(bytemuck::Zeroable)]\n\
-         pub struct {value}Cell(oer_mmio::VolatileCell<u32>);\n\n\
+         pub struct {value}Cell(oer_memory::VolatileCell<u32>);\n\n\
          impl {value}Cell {{\n\
          /// One volatile read of the word.\n\
          #[inline]\n\

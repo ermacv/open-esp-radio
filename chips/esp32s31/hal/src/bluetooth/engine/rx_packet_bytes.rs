@@ -2,7 +2,7 @@
 
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 use crate::layouts::*;
-use oer_mmio::VolatileCell;
+use oer_memory::VolatileCell;
 
 /// SOURCE: pinned `memMgmt_3.o` receive allocator and receive-recycling bodies.
 const REARMED_RESULT: BleRxPacketPrefixResult = BleRxPacketPrefixResult::from_bits(0)

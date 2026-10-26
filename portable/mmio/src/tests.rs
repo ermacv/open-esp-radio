@@ -1,17 +1,18 @@
 use super::{
-    Bits, Block, Fixed, Host, Index, IndexError, NotOneSplit, Reader, Registers, SharedRegisters,
-    ValueError, VolatileCell, Words,
+    Bits, Block, Fixed, Host, Index, IndexError, NotOneSplit, Reader, Registers, ValueError, Words,
 };
 
 /// A block of four consecutive words.
 struct Four;
 impl Registers for Four {
+    type Sharing = super::sharing::Owned;
     const WORDS: &'static [usize] = &[0, 4, 8, 12];
 }
 
 /// A block whose words leave a hole at byte 4.
 struct Holed;
 impl Registers for Holed {
+    type Sharing = super::sharing::Owned;
     const WORDS: &'static [usize] = &[0, 8];
 }
 
@@ -142,15 +143,6 @@ fn parts_of_two_host_blocks_do_not_join() {
     drop(Block::try_join(other_low, other_high).expect("parts of one split"));
     assert_eq!(first, [0, 0, 0, 3]);
     assert_eq!(second, [0; 4]);
-}
-
-#[test]
-fn a_volatile_cell_holds_the_value_last_written() {
-    let cell = VolatileCell::new(0_u32);
-    cell.set(0xdead_beef);
-    assert_eq!(cell.get(), 0xdead_beef);
-    let zero: VolatileCell<u32> = bytemuck::Zeroable::zeroed();
-    assert_eq!(zero.get(), 0);
 }
 
 #[test]
@@ -314,9 +306,9 @@ fn the_division_checks_accept_only_disjoint_owners_and_trigger_bits() {
 /// A shared block of two words.
 struct Shared;
 impl Registers for Shared {
+    type Sharing = super::sharing::Shared;
     const WORDS: &'static [usize] = &[0, 4];
 }
-impl SharedRegisters for Shared {}
 
 #[test]
 fn a_shared_store_through_a_shared_borrow_writes_only_its_word() {

@@ -9,8 +9,8 @@ disallowed-methods = [
     { path = "oer_esp32s31_hal::cores::Cores::start_hart1", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
     # A typed DMA address comes from placed storage or a loan, made only in
     # the chip's HAL `dma_address` module (docs/hardware-memory.md).
-    { path = "oer_mmio::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
-    { path = "oer_mmio::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    { path = "oer_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    { path = "oer_memory::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
     # Typed register blocks are claimed once, by the chip PAC's root from
     # the single reset root (docs/unsafe.md, Generated access).
     { path = "oer_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },

@@ -59,7 +59,7 @@ C5 code lies outside the workspace and its checks:
 
 | Kind | Directories |
 | --- | --- |
-| The volatile register-access core | `portable/mmio` |
+| Volatile register words and their claim | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32s31/pac`, `chips/esp32s31/hal` |
 | Platform, executor, architectural instructions and framework bindings | `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `portable/embassy/`, `portable/riscv` |
 | Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
@@ -73,7 +73,9 @@ Typed register blocks are generated without `unsafe`: `cargo registers
 generate --chip <chip>` renders every MMIO block type of the chip's register
 model, with the owners of its policy's parts, into the chip PAC's
 `generated.rs`. The unsafe code under a typed block is `oer-mmio`
-(`portable/mmio`) alone, and the PAC root's one claim:
+(`portable/mmio`) alone, and the PAC root's one claim; `oer-mmio` holds
+only volatile register words and their access authority (DMA addresses and
+volatile DMA-memory cells live in `oer-memory`):
 
 - `oer_mmio::assume_owned` promises exclusive ownership of the declared
   words, rather than every word of an overlapping address range. The chip's
@@ -83,7 +85,8 @@ model, with the owners of its policy's parts, into the chip PAC's
   Generated const assertions exclude overlapping claims. Fatal paths mask
   their hart permanently and use the HAL's `StopTheWorld` proof to prepare
   reset; they do not revoke or take over another owner's peripheral.
-- The volatile reads and writes of a `Block` and of a `Part`. Every word
+- The private `DeviceWord::{load, store}` pair implements volatile reads
+  and writes for `Block`, `Part` and `Reader`. Every word
   offset, stride and element count is a const generic, checked against the
   block's word list at compile time; an array index is an `Index<N>` from a
   checked constructor; the two parts of a split own disjoint word lists,
@@ -101,14 +104,20 @@ model, with the owners of its policy's parts, into the chip PAC's
 - `oer_mmio::Reader`, the `Copy` read-only authority a block or part
   becomes when it gives up its writes: no owner writes the words it took
   over, and every copy only reads.
-- The `Sync` implementation of a shared block at a fixed address
+- The marker-derived `Sync` of a shared block at a fixed address
   (`oer_mmio::SharedRegisters`, a policy's `[[shared-blocks]]`) and its
   `write_shared`: a device word is not Rust memory, and the block's writes
   are whole-word stores that read nothing back, so every execution context
-  reaches its one owner through `&self`.
-- `VolatileCell`, the volatile word of the generated memory layouts; both
-  the cell and the layouts derive `Zeroable`. The constructors of
-  `DmaWindowAddress` and `DmaRef` are `unsafe`.
+  reaches its one owner through `&self`. `Registers::Sharing` is
+  `sharing::Shared` for those blocks and `sharing::Owned` otherwise;
+  owned blocks and parts remain `!Sync`, and host placements also stay
+  `!Send`. No unsafe sharing implementation is needed.
+
+`oer-memory::VolatileCell` is the volatile word of generated DMA-memory
+layouts; both the cell and the layouts derive `Zeroable`. `DmaWindow`,
+`DmaLayout`, `DmaWindowAddress` and `DmaRef` live beside `DmaBytes` in
+`oer-memory`. Their two unsafe constructors preserve the placed-storage
+and retention contracts.
 
 `oer-riscv` (`portable/riscv`) is the only crate with `asm!` for architectural
 operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
@@ -241,7 +250,7 @@ it.
 
 Each chip's HAL has one module that makes typed DMA addresses,
 `dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
-`DmaRef` constructors of `oer-mmio`, which the PAC's generated `layouts`
+`DmaRef` constructors of `oer-memory`, which the PAC's generated `layouts`
 bind to the chip's DMA window (clippy `disallowed-methods` refuses them
 elsewhere). Its `placed`/`placed_link`
 take an address of storage the caller keeps pinned in the DMA window: a

@@ -1,6 +1,6 @@
 //! The thin PAC renderer on a synthetic chip (`fixture/`): every field
 //! class, register construct and ownership flag. Rendered code is compiled
-//! against the workspace's `oer-mmio` and run on host memory; compile-fail
+//! against the workspace's `oer-mmio` and `oer-memory` and run on host memory; compile-fail
 //! programs show what an owner cannot do.
 
 use std::path::{Path, PathBuf};
@@ -61,7 +61,7 @@ fn edited(edits: &[(&str, &str, &str)]) -> tempfile::TempDir {
     directory
 }
 
-/// Builds `rendered` with the workspace's `oer-mmio` and `main` into a
+/// Builds `rendered` with the workspace's MMIO/memory crates and `main` into a
 /// program in `directory` (the pinned cargo, offline, its own target
 /// directory), runs it and returns its standard output.
 fn run(rendered: &str, main: &str) -> String {
@@ -85,14 +85,17 @@ fn refused(rendered: &str, main: &str) -> String {
 
 fn cargo(directory: &Path, rendered: &str, main: &str, command: &str) -> std::process::Output {
     let mmio = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../portable/mmio");
+    let memory = mmio.with_file_name("memory");
     std::fs::write(
         directory.join("Cargo.toml"),
         format!(
             "[package]\nname = \"rendered\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
              [dependencies]\noer-mmio = {{ path = {:?} }}\n\
+             oer-memory = {{ path = {:?} }}\n\
              bytemuck = {{ version = \"1.25.2\", default-features = false, features = [\"derive\", \"min_const_generics\"] }}\n\
              [workspace]\n",
-            mmio.display().to_string()
+            mmio.display().to_string(),
+            memory.display().to_string()
         ),
     )
     .expect("the program manifest is written");
@@ -666,7 +669,7 @@ fn hex(word: u32) -> String {
 
 /// A typed address reaches the pointer's setter; never called, as only
 /// the hardware's placement makes one.
-fn publish(task: &mut radio::Task<oer_mmio::Host<'_>>, next: oer_mmio::DmaRef<layouts::RxDescriptor>) {
+fn publish(task: &mut radio::Task<oer_mmio::Host<'_>>, next: oer_memory::DmaRef<layouts::RxDescriptor>) {
     task.modify_low(|w| {
         w.set_address(next);
     });
@@ -977,7 +980,7 @@ fn hex(word: u32) -> String {
 
 /// The vendor's OR takes a typed reference alone; never called, as only the
 /// hardware's placement makes one.
-fn or(task: &mut radio::Task<oer_mmio::Host<'_>>, next: oer_mmio::DmaRef<layouts::RxDescriptor>) {
+fn or(task: &mut radio::Task<oer_mmio::Host<'_>>, next: oer_memory::DmaRef<layouts::RxDescriptor>) {
     task.or_descriptor(next);
 }
 
@@ -1040,7 +1043,7 @@ fn a_pointer_takes_its_zero_image_and_triggers_share_one_write() {
 fn a_pointer_or_renders_on_its_part_and_reads_the_word_fresh() {
     let rust = rendered_with(&with_trigger_word_and_pointer_or());
     for item in [
-        "pub fn or_descriptor(&mut self, value: oer_mmio::DmaRef<super::layouts::RxDescriptor>)",
+        "pub fn or_descriptor(&mut self, value: oer_memory::DmaRef<super::layouts::RxDescriptor>)",
         "self.0.write::<0x5c>(self.0.read::<0x5c>() | value.bits());",
     ] {
         assert!(rust.contains(item), "{item}\n{rust}");
