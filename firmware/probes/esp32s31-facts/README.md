@@ -183,6 +183,9 @@ and elapsed cycles; the following records hold all three capture words.
 Tag 0x9030 reports completion flags and the first-word delta. A stuck request
 or zero delta is a failed prerequisite, not an interrupt-mask result. No RF,
 scheduler RUN or DMA publication is involved.
+On s31-b, run `hw9-20261027-btlc-02` completed both latch requests and captured
+the seed, but the first word stayed fixed: the advancing-time prerequisite
+remains unestablished. SOURCE: `HW9_S31_BTLC_LATCH_SEED_20261026`.
 
 | Selection | Bounded experiment |
 | --- | --- |

@@ -392,7 +392,7 @@ sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBREDR_HAL_LINK_AC
 sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS"]
 
 [review.entity."BTLC_TIMER_CONTROL"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026"]
 completeness = "partial"
 
 [review.entity."BTLC_TIMER_CONTROL.CLOCK_SHIFT"]
@@ -406,7 +406,7 @@ sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
 completeness = "complete"
 
 [review.entity."BTLC_TIMER_CONTROL.LATCH_REQUEST"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "HW9_S31_BTLC_LATCH_SEED_20261026"]
 
 [review.entity."BTLC_TIMER_CONTROL.BITS_27_30_OPAQUE"]
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
@@ -440,7 +440,7 @@ completeness = "partial"
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
 
 [review.entity."BTLC_TIMER_CAPTURE_0"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026"]
 
 [review.entity."BTLC_TIMER_CAPTURE_0.VALUE"]
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
@@ -2249,7 +2249,7 @@ class = "write-only"
 [[registers]]
 name = "BTLC_TIMER_CONTROL"
 offset = 0x90
-description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31."
+description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026."
 
 [[registers.fields]]
 name = "CLOCK_SHIFT"
@@ -2324,7 +2324,7 @@ class = "plain"
 [[registers]]
 name = "BTLC_TIMER_CAPTURE_0"
 offset = 0xac
-description = "First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears."
+description = "First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026."
 
 [[registers.fields]]
 name = "VALUE"

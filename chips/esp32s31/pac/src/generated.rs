@@ -22611,7 +22611,7 @@ pub mod bt_mac {
 
     /// The `BTLC_TIMER_CONTROL` register.
     ///
-    /// BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31.
+    /// BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026.
     pub mod btlc_timer_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -22967,7 +22967,7 @@ pub mod bt_mac {
 
     /// The `BTLC_TIMER_CAPTURE_0` register.
     ///
-    /// First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears.
+    /// First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026.
     pub mod btlc_timer_capture_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
