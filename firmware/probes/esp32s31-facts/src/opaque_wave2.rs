@@ -8,9 +8,7 @@ const COMMAND_CYCLES: u32 = 40_000;
 
 fn settle(cycles: u32) {
     let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < cycles {
-        core::hint::spin_loop();
-    }
+    while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 
 /// Repeat the relevant production prerequisite edges, without running PHY
@@ -201,7 +199,6 @@ fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
             );
             return false;
         }
-        core::hint::spin_loop();
     }
     let m = &s.analog.i2c_ana_mst;
     let (data, block, index) = match host {
@@ -266,10 +263,7 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     );
     emit(
         0x142,
-        p.modem_syscon_radio
-            .read_clk_conf()
-            .clk_i2c_mst_sel_160m()
-            .field(),
+        u32::from(p.modem_syscon_radio.read_clk_conf().clk_i2c_mst_sel_160m()),
         u32::from(
             s.clocks
                 .hp_sys_clkrst_pll160

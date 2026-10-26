@@ -143,19 +143,19 @@ accuracy = "positional"
 completeness = "unknown"
 
 [review.entity."ANA_CONF1"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD", "HW15_S31_I2C_20261027"]
 
 [review.entity."ANA_CONF1.ANA_CONF1"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD", "HW15_S31_I2C_20261027"]
 
 [review.entity."ANA_CONF1.ANA_STATUS1"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD", "HW15_S31_I2C_20261027"]
 
 [review.entity."ANA_CONF2"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
 [review.entity."ANA_CONF2.PHY_HOST_MAP"]
-sources = ["BLOB_LIBPHY_PHY_I2C"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "HW15_S31_I2C_20261027"]
 provenance = "observed"
 naming = "descriptive"
 
@@ -415,7 +415,7 @@ class = "read-only"
 [[registers]]
 name = "ANA_CONF1"
 offset = 0x1c
-description = "Shared analog-I2C routing and read-mask word."
+description = "Shared analog-I2C routing and read-mask word. The scoped s31-b serial/parallel/serial probe observes low masks fffffb/fffff7/fffff3 and the same two distinct source bytes; it establishes neither other routes nor analog byte meaning."
 reset = { value = 0x2d }
 
 [[registers.fields]]
@@ -429,7 +429,7 @@ write-range = { min = 0x0, max = 0xffffff }
 name = "ANA_STATUS1"
 bits = "31:24"
 class = "read-only"
-description = "High byte of the complete complemented PHY-I2C read-mask publication."
+description = "High byte of the complete complemented PHY-I2C read-mask publication. Reads zero in the scoped s31-b transport probe despite the sourced publication writing ones to this lane; this does not establish ignored writes versus a transient effect."
 
 [[registers]]
 name = "ANA_CONF2"

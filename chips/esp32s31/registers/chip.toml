@@ -2049,7 +2049,7 @@ request-code = 0x67
 host = 1
 read-select = 4
 read-mask-bits = 24
-sources = ["BLOB_LIBPHY_PHY_I2C"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "HW15_S31_I2C_20261027"]
 
 [[analog-i2c.instances]]
 name = "BLOCK_68"
@@ -2105,7 +2105,7 @@ request-code = 0x6b
 host = 1
 read-select = 8
 read-mask-bits = 24
-sources = ["BLOB_LIBPHY_PHY_I2C"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "HW15_S31_I2C_20261027"]
 
 [[analog-i2c.instances]]
 name = "BLOCK_6C"

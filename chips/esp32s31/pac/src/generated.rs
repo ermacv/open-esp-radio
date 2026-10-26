@@ -104368,7 +104368,7 @@ pub mod i2c_ana_mst {
 
     /// The `ANA_CONF1` register.
     ///
-    /// Shared analog-I2C routing and read-mask word.
+    /// Shared analog-I2C routing and read-mask word. The scoped s31-b serial/parallel/serial probe observes low masks fffffb/fffff7/fffff3 and the same two distinct source bytes; it establishes neither other routes nor analog byte meaning.
     pub mod ana_conf1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -104403,7 +104403,7 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// High byte of the complete complemented PHY-I2C read-mask publication.
+            /// High byte of the complete complemented PHY-I2C read-mask publication. Reads zero in the scoped s31-b transport probe despite the sourced publication writing ones to this lane; this does not establish ignored writes versus a transient effect.
             #[inline]
             pub const fn ana_status1(self) -> u8 {
                 (self.0 >> 24) as u8
@@ -104420,7 +104420,7 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// High byte of the complete complemented PHY-I2C read-mask publication.
+            /// High byte of the complete complemented PHY-I2C read-mask publication. Reads zero in the scoped s31-b transport probe despite the sourced publication writing ones to this lane; this does not establish ignored writes versus a transient effect.
             #[inline]
             pub const fn ana_status1(&self) -> u8 {
                 (self.0 >> 24) as u8
@@ -301430,7 +301430,7 @@ pub mod analog_i2c {
                 read_select: 0x80,
                 read_mask_bits: 24,
             }),
-            // SOURCE: BLOB_LIBPHY_PHY_I2C.
+            // SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027.
             (Profile::LibphyNormal, 0x67) => Some(Route {
                 request_code: 0x67,
                 command_code: 0x67,
@@ -301462,7 +301462,7 @@ pub mod analog_i2c {
                 read_select: 0x40,
                 read_mask_bits: 24,
             }),
-            // SOURCE: BLOB_LIBPHY_PHY_I2C.
+            // SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027.
             (Profile::LibphyNormal, 0x6b) => Some(Route {
                 request_code: 0x6b,
                 command_code: 0x6b,

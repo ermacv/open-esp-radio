@@ -2,6 +2,10 @@
 schema = 1
 
 [[sources]]
+id = "HW15_S31_I2C_20261027"
+description = "SOURCE: stand s31-b rev0 run hw15-20261027-opaque-05, lease #890; ermacv/oer-notes research/hw-opaque-wave2.md P-I2C; target/hw-hw15/hw15-20261027-opaque-05/i2c.json. One PAC-only loader session repeats the production modem/analog-I2C clock, power/reset, timing and register-mode prerequisite edges without analog writes or PHY calibration. Serial host1 reads BBTOP04=0x10 and TXRF08=0x00 with low masks 0xfffffb and 0xfffff7 and host map 0x3fa0. Combined low mask 0xfffff3 and host map 0x3fa1 return BBTOP04=0x10 on host0 and TXRF08=0x00 on host1; subsequent serial reads match. All six reads complete without the 40000-CPU-cycle deadline. ANA_CONF1 high byte reads zero after the sourced whole-word publication writes ones there. This confirms the tested route for these distinct existing bytes, not other routes, per-gate necessity, persistent analog reset values, calibrated PHY timing or electrical byte meanings. P-EST/P-FREQ did not run."
+
+[[sources]]
 id = "HW11_S31_PLL_20261027"
 description = "SOURCE: stand s31-a rev0 run hw11-20261027-opaque-02, lease #848; ermacv/oer-notes research/hw-opaque-wave1.md P0. With CPU root XTAL, divider zero and fractional numerator zero, one six-field typed RMW per sourced image read back 0x3d,0x25 and 0x15,0x1d,0x2d,0x25. PMU active ICG code stayed 2. Closed six-bit images agree; the open images differ in XTAL-enable bit 5. No running modem-counter, PLL-lock or glitch-equivalence fact follows. Reserved high bits were preserved, not observed."
 
