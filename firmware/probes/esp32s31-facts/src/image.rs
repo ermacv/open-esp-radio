@@ -267,6 +267,7 @@ extern "C" fn facts_main() -> ! {
             bank: p.bluetooth_interrupts.bluetooth_interrupt_bank,
             core: p.bluetooth.bluetooth_controller_core,
             timer: p.bluetooth_modem_lp_timer.btdm_runtime_control,
+            timer_status: p.bluetooth_modem_lp_timer.btdm_lp_timer_status,
             clocks: p.radio_phy.modem_syscon_radio,
             lp_clock: p.radio_phy.modem_lpcon_shared_clock,
             gates: p.chip_clocks.modem_lpcon_chip_clocks,

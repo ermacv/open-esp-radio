@@ -7,6 +7,7 @@ pub(super) struct Ble {
     pub bank: pac::bt_mac::BluetoothInterruptBank,
     pub core: pac::bt_mac::BluetoothControllerCore,
     pub timer: pac::modem_pwr::BtdmRuntimeControl,
+    pub timer_status: pac::modem_pwr::BtdmLpTimerStatus,
     pub clocks: pac::modem_syscon::ModemSysconRadio,
     pub lp_clock: pac::modem_lpcon::ModemLpconSharedClock,
     pub gates: pac::modem_lpcon::ModemLpconChipClocks,
@@ -297,7 +298,7 @@ fn lp_state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(b),
-        b.timer.read_word_0038_opaque().bits_0_31_opaque(),
+        b.timer_status.read_word_0038_opaque().bits_0_31_opaque(),
         pending(s),
     );
     emit(
@@ -383,7 +384,12 @@ fn command18(b: &mut Ble) {
 }
 fn wait_cause(s: &Session<'_>) {
     let start = oer_riscv::cycle32();
-    while s.ble.timer.read_word_0038_opaque().bits_0_31_opaque() == 0
+    while s
+        .ble
+        .timer_status
+        .read_word_0038_opaque()
+        .bits_0_31_opaque()
+        == 0
         && oer_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT
     {}
     emit(0x23ff, oer_riscv::cycle32().wrapping_sub(start), 0, 0);
