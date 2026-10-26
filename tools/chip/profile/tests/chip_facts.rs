@@ -27,8 +27,8 @@ fn profile(id: &str) -> Facts {
 
 fn region(region: LayoutRegion) -> Region {
     Region {
-        origin: region.origin,
-        length: region.length,
+        origin: region.origin(),
+        length: region.length(),
     }
 }
 
@@ -52,7 +52,7 @@ fn memory_mismatches(profile: &Facts, layout: &Layout) -> Vec<String> {
     check(
         "runtime-psram",
         memory.runtime_psram,
-        region(layout.runtime_psram()),
+        region(layout.runtime_psram().expect("runtime PSRAM fits")),
     );
     check("retained", memory.retained, region(layout.retained));
     let probe = profile
@@ -143,7 +143,8 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
         assert!(!moved(&|p| p.interrupts.as_mut().unwrap().irq_stack_bytes += 16).is_empty());
 
         let mut other = layout;
-        other.sram = LayoutRegion::new(layout.sram.origin, layout.sram.length + 16);
+        other.sram = LayoutRegion::new(layout.sram.origin(), layout.sram.length() + 16)
+            .expect("region fits");
         other.cpu0_task_stack_bytes += 16;
         other.irq_stack_bytes += 16;
         assert!(memory_mismatches(&base, &other).len() >= 3, "{id}");

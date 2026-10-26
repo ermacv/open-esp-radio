@@ -56,7 +56,7 @@ pub fn default_cpu0_task_stack_bytes(policy: &str) -> Result<u32> {
 
 fn region(region: Region) -> String {
     format!(
-        "oer_espressif_staged_layout::Region::new({:#010x}, {:#010x})",
+        "const {{ oer_espressif_staged_layout::Region::new({:#010x}, {:#010x}).expect(\"region end fits u32\") }}",
         region.origin, region.length
     )
 }
@@ -375,10 +375,10 @@ mod tests {
         let facts = tracked("esp32s31");
         let layout = layout(&facts, 0x3_0000).expect("a staged layout");
         for field in [
-            "sram: oer_espressif_staged_layout::Region::new(0x2f000000, 0x0007afc0),",
+            "sram: const { oer_espressif_staged_layout::Region::new(0x2f000000, 0x0007afc0).expect(\"region end fits u32\") },",
             "second_stage_loader_start: 0x2f06cfb0,",
-            "psram: oer_espressif_staged_layout::Region::new(0x50000000, 0x01000000),",
-            "retained: oer_espressif_staged_layout::Region::new(0x2e000000, 0x00008000),",
+            "psram: const { oer_espressif_staged_layout::Region::new(0x50000000, 0x01000000).expect(\"region end fits u32\") },",
+            "retained: const { oer_espressif_staged_layout::Region::new(0x2e000000, 0x00008000).expect(\"region end fits u32\") },",
             "retained_reserved_tail: 24,",
             "cpu0_task_stack_bytes: 0x30000,",
             "irq_stack_bytes: 0x8000,",

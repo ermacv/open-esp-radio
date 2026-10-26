@@ -371,7 +371,11 @@ still holds (`FREE`, `SEALED` or held).
 trait `AdoptsBootstrapMapping`, a board's promise that its adoption of the
 bootstrap's PSRAM mapping neither resets nor remaps PSRAM, and the
 `StageTwoHandoff` proof only the staged runtime's entry mints. It holds no
-other unsafe code.
+other unsafe code. Its memory regions keep their geometry private: const
+admission rejects address overflow and out-of-bounds subregions. Generated
+maps and chip linker bindings check fixed geometry in const initializers;
+the bootstrap handles refusal of a dynamic runtime PSRAM window as an
+invalid header.
 
 ## The host's operating-system bindings
 

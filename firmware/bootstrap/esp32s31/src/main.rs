@@ -81,7 +81,7 @@ extern "C" fn bootstrap_main() -> ! {
             psram: &mut hardware.psram,
             cache: &mut hardware.cache,
         },
-        boot::octal_psram(LAYOUT.psram.length),
+        boot::octal_psram(LAYOUT.psram.length()),
         hardware.psram_window,
         boot::CACHE_GEOMETRY,
         boot::PSRAM_WAITS,

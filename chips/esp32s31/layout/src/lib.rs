@@ -22,6 +22,15 @@
 //! value's `SOURCE:` is in those files. With the `build` feature, [`build`]
 //! links a binary with the shared scripts and this chip's ROM script
 //! (generated in this crate's build directory).
+//!
+//! An invalid derived window is rejected during constant evaluation:
+//!
+//! ```compile_fail,E0080
+//! use oer_esp32s31_layout::LAYOUT;
+//! use oer_espressif_staged_layout::Layout;
+//! const INVALID: Layout = Layout { bootstrap_psram_bytes: u32::MAX, ..LAYOUT };
+//! const _: () = INVALID.check();
+//! ```
 
 include!(concat!(env!("OUT_DIR"), "/layout.rs"));
 
@@ -38,12 +47,27 @@ pub mod build {
 
     /// Link binary `bin` as a stage-two runtime of this board.
     pub fn configure_runtime(bin: &str) {
-        oer_espressif_staged_layout::build::configure_runtime(bin, &super::LAYOUT, &linker_dir());
+        oer_espressif_staged_layout::build::configure_runtime(
+            bin,
+            &super::LAYOUT,
+            const { super::LAYOUT.runtime_psram().expect("runtime PSRAM fits") },
+            &linker_dir(),
+        );
     }
 
     /// Link binary `bin` as this board's Flash-resident bootstrap.
     pub fn configure_bootstrap(bin: &str) {
-        oer_espressif_staged_layout::build::configure_bootstrap(bin, &super::LAYOUT, &linker_dir());
+        oer_espressif_staged_layout::build::configure_bootstrap(
+            bin,
+            &super::LAYOUT,
+            const { super::LAYOUT.runtime_psram().expect("runtime PSRAM fits") },
+            const {
+                super::LAYOUT
+                    .bootstrap_flash_text()
+                    .expect("bootstrap Flash text fits")
+            },
+            &linker_dir(),
+        );
     }
 }
 
