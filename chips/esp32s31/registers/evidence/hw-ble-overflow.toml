@@ -1,0 +1,14 @@
+# Bounded PAC-only observations; no RF or qualification series.
+schema = 1
+
+[[sources]]
+id = "HW12_S31_BLE_OVERFLOW_ACK_20261026"
+description = "SOURCE: s31-b rev0 run hw12-20261026-ble-overflow-01, lease #871; overflow-ack.json tags 0xa20f-0xa260: baseline ENA0=0x8000, ENA1=0x1302; captured seed 0xfffffc02 crossed to 0, primary STATUS_1=2 and matrix 124 high. Masking ENA1[1] hid status/output; restoring it redelivered 2/high without another wrap. Both NRT snapshots and 133 stayed zero; copying their sampled zeros to the shared clears left primary pending. Copying primary sampled image 2 to CLEAR_1 while enabled gave 0/low, retained through 4096 cycles. Isolated W1C and mask retention are established; coincident priority, event counts and positive NRT producers are not. Report: /home/ermacv/dev/oer-notes/research/hw-ble-overflow.md; raw logs: /home/ermacv/dev/open-esp-radio/target/wt-hw12/target/hw-hw12/hw12-20261026-ble-overflow-01/."
+
+[[sources]]
+id = "HW12_S31_BTLC_RATE_20261026"
+description = "SOURCE: s31-b rev0 run hw12-20261026-ble-overflow-01, lease #871; overflow-rate.json tags 0xa300-0xa360: CLOCK_SHIFT=3, CONFIG_24=0, CONTROL0=1; MODEM source select=1 and PLL gate=1. CPU root XTAL, divider fields 0/0/0 (nominal 40 MHz). Capture 65780 in mcycle bracket [159839759,159839829], then 305789 in [164639945,164640015]: delta 240009, interval [4800116,4800256] cycles. One-tick quantization yields 19.9996500..20.0004000 cycles/tick, nominal 1.999960..2.000035 MHz. Rate-derived 32-bit period 85.897842744..85.901063850 billion cycles, or 2147.446069..2147.526596 s at nominal 40 MHz. Seed/capture 0xfffffc02 then crossed to 0 with primary 2/124 high and NRT 0/133 low within the 200000-cycle bound. No natural full-period wait, universal divider equation or oscillator calibration. Report: /home/ermacv/dev/oer-notes/research/hw-ble-overflow.md; raw logs: /home/ermacv/dev/open-esp-radio/target/wt-hw12/target/hw-hw12/hw12-20261026-ble-overflow-01/."
+
+[[sources]]
+id = "HW12_S31_BLE_APB_RESET_20261026"
+description = "SOURCE: s31-b rev0 run hw12-20261026-ble-overflow-01, lease #871; overflow-reset.json tags 0xa410-0xa4d0: positive overflow, ENA0=0x8000, ENA1=0x1302, STATUS_1=2, matrix 124 high. MAC assert/release preserved enables and pending/output. Following APB assert/release, every modeled ENA0/ENA1 field read zero, as did primary/NRT status and 124/133. Restoring the baseline without ack did not redeliver, including a 4096-cycle window and CONTROL0 reopen. Fresh seeded wrap then produced 2/124 high. This establishes removal of the tested pending cause, beyond masking by zero enables; no POR or ungenerated-lane pending state is established. Report: /home/ermacv/dev/oer-notes/research/hw-ble-overflow.md; raw logs: /home/ermacv/dev/open-esp-radio/target/wt-hw12/target/hw-hw12/hw12-20261026-ble-overflow-01/."

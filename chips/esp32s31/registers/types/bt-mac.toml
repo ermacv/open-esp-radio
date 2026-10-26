@@ -84,7 +84,7 @@ sources = ["S31_MMIO_USE_20101048"]
 sources = ["S31_MMIO_USE_20101048", "S31_MMIO_DECLARED_20101048"]
 
 [review.entity."IRQ_ENABLE_0"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_APB_RESET_20261026"]
 completeness = "partial"
 
 [review.entity."IRQ_ENABLE_0.SOURCE_0"]
@@ -198,7 +198,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."IRQ_ENABLE_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW12_S31_BLE_APB_RESET_20261026"]
 completeness = "partial"
 
 [review.entity."IRQ_ENABLE_1.SOURCE_3"]
@@ -244,7 +244,7 @@ sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
 sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
 
 [review.entity."IRQ_CLEAR_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026"]
 
 [review.entity."IRQ_CLEAR_1.BITS_0_2_OPAQUE"]
 sources = ["S31_MMIO_MANUAL_20101064"]
@@ -271,7 +271,7 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 sources = ["S31_MMIO_MANUAL_20101064"]
 
 [review.entity."IRQ_STATUS_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW12_S31_BLE_APB_RESET_20261026"]
 completeness = "partial"
 
 [review.entity."IRQ_STATUS_1.BITS_0_2_OPAQUE"]
@@ -392,7 +392,7 @@ sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBREDR_HAL_LINK_AC
 sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS"]
 
 [review.entity."BTLC_TIMER_CONTROL"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026", "HW9_S31_BTLC_START_20261027"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026", "HW9_S31_BTLC_START_20261027", "HW12_S31_BTLC_RATE_20261026"]
 completeness = "partial"
 
 [review.entity."BTLC_TIMER_CONTROL.CLOCK_SHIFT"]
@@ -449,7 +449,7 @@ completeness = "partial"
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
 
 [review.entity."BTLC_TIMER_CAPTURE_0"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026", "HW9_S31_MAC_CAUSES_20261027"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026", "HW9_S31_MAC_CAUSES_20261027", "HW12_S31_BTLC_RATE_20261026"]
 
 [review.entity."BTLC_TIMER_CAPTURE_0.VALUE"]
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
@@ -980,13 +980,13 @@ completeness = "complete"
 sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_20101324"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_0"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT", "HW12_S31_BLE_OVERFLOW_ACK_20261026"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_0.PENDING_BITS"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT", "HW9_S31_MAC_MASK_ACK_20261027"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT", "HW9_S31_MAC_MASK_ACK_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_1.PENDING_BITS"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
@@ -1781,7 +1781,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "IRQ_ENABLE_0"
 offset = 0x54
-description = "First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000."
+description = "First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000. BT MAC reset preserved the tested 0x8000 image; subsequent APB reset made every modeled lane zero. No POR value follows. SOURCE: HW12_S31_BLE_APB_RESET_20261026."
 
 [[registers.fields]]
 name = "SOURCE_0"
@@ -1953,7 +1953,7 @@ class = "read-only"
 [[registers]]
 name = "IRQ_ENABLE_1"
 offset = 0x60
-description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is0x00001300 and does not newly arm source 1; a seeded first-word BTLC wrap is now a measured primary producer, while normal handling and arming policy remain separate obligations. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper)."
+description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is0x00001300 and does not newly arm source 1; a seeded first-word BTLC wrap is now a measured primary producer, while normal handling and arming policy remain separate obligations. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking source 1 retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026."
 
 [[registers.fields]]
 name = "SOURCE_1"
@@ -2034,7 +2034,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "IRQ_CLEAR_1"
 offset = 0x64
-description = "Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027."
+description = "Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027. A positive sampled image 2 written while ENA1[1]=1 cleared isolated overflow pending and lowered 124; copying the zero NRT pair did not clear that primary cause. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026."
 
 [[registers.fields]]
 name = "BITS_0_2_OPAQUE"
@@ -2079,7 +2079,7 @@ class = "write-one-to-clear"
 [[registers]]
 name = "IRQ_STATUS_1"
 offset = 0x68
-description = "Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027."
+description = "Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027. An enabled sampled overflow image2 was acknowledged to zero with124 low. APB reset also removed the tested pending cause, checked after re-enable and CONTROL0 reopen before a fresh positive wrap. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026."
 
 [[registers.fields]]
 name = "BITS_0_2_OPAQUE"
@@ -2258,7 +2258,7 @@ class = "write-only"
 [[registers]]
 name = "BTLC_TIMER_CONTROL"
 offset = 0x90
-description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027."
+description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027. At CLOCK_SHIFT=3/CONFIG_24=0 with CONTROL0=1 in the sourced digital clock setup, the first capture word advanced approximately 2 million ticks/s at the nominal 40 MHz CPU clock. This is a measured positional-word rate, not validation of a universal crystal/shift equation. SOURCE: HW12_S31_BTLC_RATE_20261026."
 
 [[registers.fields]]
 name = "CLOCK_SHIFT"
@@ -2350,7 +2350,7 @@ class = "plain"
 [[registers]]
 name = "BTLC_TIMER_CAPTURE_0"
 offset = 0xac
-description = "First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. After CONTROL0=1, subsequent completed captures advanced; a verified near-max seed crossed the first-word 32-bit boundary and produced primary bank1 bit 1/source 124 with that enable set. Neither the physical unit nor every overflow/output relationship is established. SOURCE: HW9_S31_BTLC_START_20261027; HW9_S31_MAC_CAUSES_20261027."
+description = "First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. After CONTROL0=1, subsequent completed captures advanced; a verified near-max seed crossed the first-word 32-bit boundary and produced primary bank1 bit 1/source 124 with that enable set. Neither the physical unit nor every overflow/output relationship is established. SOURCE: HW9_S31_BTLC_START_20261027; HW9_S31_MAC_CAUSES_20261027. One bracketed rate interval gives approximately 20 mcycle counts/tick, consistent with2 ticks/us at the nominal 40 MHz XTAL CPU clock. A full 32-bit period is therefore approximately 2147.483648 s for this setting; its boundary was checked by near-wrap seeding, without a natural full-period wait. SOURCE: HW12_S31_BTLC_RATE_20261026."
 
 [[registers.fields]]
 name = "VALUE"
@@ -3310,7 +3310,7 @@ class = "read-only"
 [[registers]]
 name = "IRQ_STATUS_SNAPSHOT_0"
 offset = 0x340
-description = "Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2)."
+description = "Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2). With baseline ENA1=0x1302 and positive primary overflow, both NRT snapshots stayed zero and 133 low; copying their sampled zeros to the shared clears left primary overflow pending. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026."
 
 [[registers.fields]]
 name = "PENDING_BITS"
@@ -3320,7 +3320,7 @@ class = "read-only"
 [[registers]]
 name = "IRQ_STATUS_SNAPSHOT_1"
 offset = 0x348
-description = "Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2). For the three positively generated local primary causes (compare0/1 and seeded first-word wrap), this view stayed zero even while primary status and124 were asserted. It is not an enable-independent RAW alias of those primary causes. Other NRT producers and the133 output equation remain unknown. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027."
+description = "Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2). For the three positively generated local primary causes (compare0/1 and seeded first-word wrap), this view stayed zero even while primary status and124 were asserted. It is not an enable-independent RAW alias of those primary causes. Other NRT producers and the133 output equation remain unknown. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027. With baseline ENA1=0x1302 and positive primary overflow, both NRT snapshots stayed zero and 133 low; copying their sampled zeros to the shared clears left primary overflow pending. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026."
 
 [[registers.fields]]
 name = "PENDING_BITS"

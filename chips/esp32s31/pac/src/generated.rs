@@ -20486,7 +20486,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_0` register.
     ///
-    /// First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000.
+    /// First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000. BT MAC reset preserved the tested 0x8000 image; subsequent APB reset made every modeled lane zero. No POR value follows. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
     pub mod irq_enable_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21267,7 +21267,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_1` register.
     ///
-    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is0x00001300 and does not newly arm source 1; a seeded first-word BTLC wrap is now a measured primary producer, while normal handling and arming policy remain separate obligations. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper).
+    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is0x00001300 and does not newly arm source 1; a seeded first-word BTLC wrap is now a measured primary producer, while normal handling and arming policy remain separate obligations. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking source 1 retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026.
     pub mod irq_enable_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21655,7 +21655,7 @@ pub mod bt_mac {
 
     /// The `IRQ_CLEAR_1` register.
     ///
-    /// Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027.
+    /// Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027. A positive sampled image 2 written while ENA1[1]=1 cleared isolated overflow pending and lowered 124; copying the zero NRT pair did not clear that primary cause. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026.
     pub mod irq_clear_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21910,7 +21910,7 @@ pub mod bt_mac {
 
     /// The `IRQ_STATUS_1` register.
     ///
-    /// Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027.
+    /// Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027. An enabled sampled overflow image2 was acknowledged to zero with124 low. APB reset also removed the tested pending cause, checked after re-enable and CONTROL0 reopen before a fresh positive wrap. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026.
     pub mod irq_status_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -22611,7 +22611,7 @@ pub mod bt_mac {
 
     /// The `BTLC_TIMER_CONTROL` register.
     ///
-    /// BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027.
+    /// BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027. At CLOCK_SHIFT=3/CONFIG_24=0 with CONTROL0=1 in the sourced digital clock setup, the first capture word advanced approximately 2 million ticks/s at the nominal 40 MHz CPU clock. This is a measured positional-word rate, not validation of a universal crystal/shift equation. SOURCE: HW12_S31_BTLC_RATE_20261026.
     pub mod btlc_timer_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -23045,7 +23045,7 @@ pub mod bt_mac {
 
     /// The `BTLC_TIMER_CAPTURE_0` register.
     ///
-    /// First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. After CONTROL0=1, subsequent completed captures advanced; a verified near-max seed crossed the first-word 32-bit boundary and produced primary bank1 bit 1/source 124 with that enable set. Neither the physical unit nor every overflow/output relationship is established. SOURCE: HW9_S31_BTLC_START_20261027; HW9_S31_MAC_CAUSES_20261027.
+    /// First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. After CONTROL0=1, subsequent completed captures advanced; a verified near-max seed crossed the first-word 32-bit boundary and produced primary bank1 bit 1/source 124 with that enable set. Neither the physical unit nor every overflow/output relationship is established. SOURCE: HW9_S31_BTLC_START_20261027; HW9_S31_MAC_CAUSES_20261027. One bracketed rate interval gives approximately 20 mcycle counts/tick, consistent with2 ticks/us at the nominal 40 MHz XTAL CPU clock. A full 32-bit period is therefore approximately 2147.483648 s for this setting; its boundary was checked by near-wrap seeding, without a natural full-period wait. SOURCE: HW12_S31_BTLC_RATE_20261026.
     pub mod btlc_timer_capture_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -27197,7 +27197,7 @@ pub mod bt_mac {
 
     /// The `IRQ_STATUS_SNAPSHOT_0` register.
     ///
-    /// Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2).
+    /// Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2). With baseline ENA1=0x1302 and positive primary overflow, both NRT snapshots stayed zero and 133 low; copying their sampled zeros to the shared clears left primary overflow pending. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026.
     pub mod irq_status_snapshot_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -27229,7 +27229,7 @@ pub mod bt_mac {
 
     /// The `IRQ_STATUS_SNAPSHOT_1` register.
     ///
-    /// Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2). For the three positively generated local primary causes (compare0/1 and seeded first-word wrap), this view stayed zero even while primary status and124 were asserted. It is not an enable-independent RAW alias of those primary causes. Other NRT producers and the133 output equation remain unknown. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027.
+    /// Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2). For the three positively generated local primary causes (compare0/1 and seeded first-word wrap), this view stayed zero even while primary status and124 were asserted. It is not an enable-independent RAW alias of those primary causes. Other NRT producers and the133 output equation remain unknown. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027. With baseline ENA1=0x1302 and positive primary overflow, both NRT snapshots stayed zero and 133 low; copying their sampled zeros to the shared clears left primary overflow pending. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026.
     pub mod irq_status_snapshot_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -137640,7 +137640,7 @@ pub mod modem_syscon {
                 (self.0 & 0x00004000) != 0
             }
 
-            /// Bluetooth MAC APB reset.
+            /// Bluetooth MAC APB reset. After BT MAC reset, this assert/release cleared the tested ENA0/ENA1 images 0x8000/0x1302 to zero and removed isolated overflow pending, verified after re-enable and CONTROL0 reopen with a fresh positive wrap control. Other pending causes and POR state are unqualified. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
             pub const fn rst_btmac_apb(self) -> bool {
                 (self.0 & 0x00008000) != 0
@@ -137652,7 +137652,7 @@ pub mod modem_syscon {
                 RstBtmacApb::from_field(self.0 >> 15)
             }
 
-            /// Bluetooth MAC reset.
+            /// Bluetooth MAC reset. In the bounded overflow experiment, assert/release preserved ENA0=0x8000, ENA1=0x1302 and primary pending 2/124 high before the separate APB reset. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
             pub const fn rst_btmac(self) -> bool {
                 (self.0 & 0x00010000) != 0
@@ -137843,7 +137843,7 @@ pub mod modem_syscon {
                 (self.0 & 0x00004000) != 0
             }
 
-            /// Bluetooth MAC APB reset.
+            /// Bluetooth MAC APB reset. After BT MAC reset, this assert/release cleared the tested ENA0/ENA1 images 0x8000/0x1302 to zero and removed isolated overflow pending, verified after re-enable and CONTROL0 reopen with a fresh positive wrap control. Other pending causes and POR state are unqualified. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
             pub const fn rst_btmac_apb(&self) -> bool {
                 (self.0 & 0x00008000) != 0
@@ -137855,7 +137855,7 @@ pub mod modem_syscon {
                 RstBtmacApb::from_field(self.0 >> 15)
             }
 
-            /// Bluetooth MAC reset.
+            /// Bluetooth MAC reset. In the bounded overflow experiment, assert/release preserved ENA0=0x8000, ENA1=0x1302 and primary pending 2/124 high before the separate APB reset. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
             pub const fn rst_btmac(&self) -> bool {
                 (self.0 & 0x00010000) != 0

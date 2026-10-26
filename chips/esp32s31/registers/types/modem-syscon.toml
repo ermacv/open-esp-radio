@@ -112,10 +112,10 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S3
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
 
 [review.entity."MODEM_RST_CONF.RST_BTMAC_APB"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD", "HW12_S31_BLE_APB_RESET_20261026"]
 
 [review.entity."MODEM_RST_CONF.RST_BTMAC"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD", "HW12_S31_BLE_APB_RESET_20261026"]
 
 [review.entity."MODEM_RST_CONF.RST_ZBMAC_APB"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
@@ -631,7 +631,7 @@ class = "plain"
 name = "RST_BTMAC_APB"
 bits = "15"
 class = "plain"
-description = "Bluetooth MAC APB reset."
+description = "Bluetooth MAC APB reset. After BT MAC reset, this assert/release cleared the tested ENA0/ENA1 images 0x8000/0x1302 to zero and removed isolated overflow pending, verified after re-enable and CONTROL0 reopen with a fresh positive wrap control. Other pending causes and POR state are unqualified. SOURCE: HW12_S31_BLE_APB_RESET_20261026."
 values = [{ name = "RELEASED", value = 0x0, description = "The selected MODEM_SYSCON reset is released.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }, { name = "ASSERTED", value = 0x1, description = "The selected MODEM_SYSCON reset is asserted.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }]
 write-values-only = true
 
@@ -639,7 +639,7 @@ write-values-only = true
 name = "RST_BTMAC"
 bits = "16"
 class = "plain"
-description = "Bluetooth MAC reset."
+description = "Bluetooth MAC reset. In the bounded overflow experiment, assert/release preserved ENA0=0x8000, ENA1=0x1302 and primary pending 2/124 high before the separate APB reset. SOURCE: HW12_S31_BLE_APB_RESET_20261026."
 values = [{ name = "RELEASED", value = 0x0, description = "The selected MODEM_SYSCON reset is released.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }, { name = "ASSERTED", value = 0x1, description = "The selected MODEM_SYSCON reset is asserted.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }]
 write-values-only = true
 
