@@ -14,9 +14,7 @@ use crate::{
 use crate::clock::PlatformClockRefs;
 
 pub(crate) trait PowerSequenceBackend {
-    fn select_hp_active_modem_icg(&mut self);
-    fn apply_modem_icg_selection(&mut self);
-    fn apply_sleep_icg_selection(&mut self);
+    fn publish_modem_power_state(&mut self);
     fn enable_modem_register_bus_clock(&mut self);
     /// Take one platform clock reference for common power.
     fn acquire_platform_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError>;
@@ -40,14 +38,8 @@ pub(crate) struct RoutePower<'route, P: PlatformClockProvider> {
 }
 
 impl<P: PlatformClockProvider> PowerSequenceBackend for RoutePower<'_, P> {
-    fn select_hp_active_modem_icg(&mut self) {
-        self.phy.select_hp_active_modem_icg();
-    }
-    fn apply_modem_icg_selection(&mut self) {
-        self.phy.apply_modem_icg_selection();
-    }
-    fn apply_sleep_icg_selection(&mut self) {
-        self.phy.apply_sleep_icg_selection();
+    fn publish_modem_power_state(&mut self) {
+        self.phy.publish_modem_power_state();
     }
     fn enable_modem_register_bus_clock(&mut self) {
         self.phy.enable_modem_register_bus_clock();
@@ -148,9 +140,7 @@ pub(crate) fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result
     registers
         .acquire_platform_clock(PlatformClock::Mpll)
         .map_err(|PlatformClockError| refused(PowerCheckpoint::Mpll))?;
-    registers.select_hp_active_modem_icg();
-    registers.apply_modem_icg_selection();
-    registers.apply_sleep_icg_selection();
+    registers.publish_modem_power_state();
     registers.enable_modem_register_bus_clock();
     registers.configure_wifi_power_clock_map();
     registers.prepare_shared_modem_clock_map();

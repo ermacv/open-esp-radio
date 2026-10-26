@@ -315,3 +315,33 @@ fn phy_and_calibration_publish_power_before_any_clock_edge() {
             .unwrap_or_else(|_| panic!("release"));
     }
 }
+
+/// Exercise the real PAC writes as well as the mock-port ordering above.
+#[test]
+fn prepare_power_state_selects_active_modem_on_host_registers() {
+    for fill in [0, u32::MAX] {
+        crate::phy::registers::host::with_registers(fill, |registers| {
+            assert!(
+                !registers
+                    .platform_clock_power_observation()
+                    .hp_active_icg_selected
+            );
+            registers.prepare_power_state();
+            assert!(
+                registers
+                    .platform_clock_power_observation()
+                    .hp_active_icg_selected
+            );
+            assert!(
+                registers
+                    .modem_syscon_power_observation()
+                    .active_clock_map_configured
+            );
+            assert!(
+                registers
+                    .shared_modem_clock_observation()
+                    .power_state_map_configured
+            );
+        });
+    }
+}

@@ -365,19 +365,11 @@ pub(crate) trait ModemClockPort {
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool);
 }
 
-impl ModemClockPort for RadioPhyRegisters {
+impl<P: crate::phy::registers::RadioPlacement> ModemClockPort for RadioPhyRegisters<P> {
     fn prepare_power_state(&mut self) {
         self.prepare_modem_syscon_clock_map();
         self.prepare_shared_modem_clock_map();
-        // SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP; ESP-IDF 4d59230d
-        // pmu_init.c:93,137-138. The maps select code two, so module gates
-        // alone cannot admit register access with the reset code zero.
-        // SOURCE: hw10-20261026-radio-start-23-fe-clock and
-        // hw10-20261026-radio-start-25-active-icg;
-        // /home/ermacv/dev/oer-notes/research/hw-radio-start.md.
-        self.select_hp_active_modem_icg();
-        self.apply_modem_icg_selection();
-        self.apply_sleep_icg_selection();
+        self.publish_modem_power_state();
     }
 
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool) {

@@ -291,6 +291,13 @@ impl MacLocalTime {
     }
 }
 
+#[cfg(test)]
+impl<'a> MacLocalTime<oer_mmio::Host<'a>> {
+    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+        WifiMacLocalTime::host(words).map(Self)
+    }
+}
+
 impl<P: Placement> MacLocalTime<P> {
     /// The counter now: a full-width wrapping value in microseconds, at the
     /// system timer's rate (observed on hardware).
