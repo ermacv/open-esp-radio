@@ -10,7 +10,10 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(s),
-        t.read_word_0038_opaque().bits_0_31_opaque(),
+        s.ble
+            .timer_status
+            .read_word_0038_opaque()
+            .bits_0_31_opaque(),
         s.interrupt_matrix
             .interrupt_core0_status
             .read_int_status_reg_3()
