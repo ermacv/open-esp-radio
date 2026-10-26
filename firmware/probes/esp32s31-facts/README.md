@@ -422,3 +422,30 @@ and power/clock (POWER_UP, POWER_UP_FORCE, LP clock, LP reset). Named LP clock,
 forced power and divider15 are fixed; the saved power/clock/divider/sample
 fields are restored afterwards. Changing OUT with READY always zero does not
 identify individual conversion/readout gates or establish a READY handshake.
+
+## LP sleep and delivery lanes
+
+Selections 110–112 observe MODEM_PWR sleep state and the known source-127
+bank with both modeled delivery commands (bits 1/18) enabled. No unobserved
+bit0/16/17 command at +0x10 is invented from the sleep-command positions.
+The absence of such a sourced enable prevents an exhaustive cause-map claim.
+
+| Selection | Bounded experiment |
+| --- | --- |
+| 110 | Sleep16/+64 crossing under each control0/4 image; persistence, +44 disable, +40 re-enable, +34 all-clear and fresh software delivery without a new enable |
+| 111 | One real rollover plus software pending with the counter stopped; all four control0/4 images and each sleep0/16/17 command; delivery mask, separate enable commands, enabled +34 clear and fresh pending |
+| 112 | Advancing completed BTLC prerequisite; +68 target before sleep0/17 commands and ETM companions, alone and with a positive sleep16 companion |
+
+Each state is four records: counter/cause/matrix bank3; bytes1c/20/24;
+byte2c/compact mode58/matrix bank4; PMU HP RAW/LP RAW/wake cause. PMU RAW
+records are sampled without acknowledgement. Context records add reject and
+LP-CPU wake causes, compact wake/reject/LP-wake STATUS and their enables.
+PMU state and enables are never changed by these leaves. A change of a
+local sleep flag alone does not establish a PMU sleep/wake transition.
+
+Cause/target waits stop after 200,000 cycles. Selection111 requests exactly
+one natural wrap, bounded by 40,000,000 cycles. Persistence windows are
+4096 cycles. Selection110 emits at most124 records in the128-record buffer.
+CPU interrupts remain masked; no CPU handler delivery is measured. Hart1
+stays held. The SRAM loader and debugger capture must run inside an s31-c
+stand lease; only command/result SRAM is accessed by the debugger.

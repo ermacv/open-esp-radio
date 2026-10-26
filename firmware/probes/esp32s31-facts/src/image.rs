@@ -19,6 +19,7 @@ mod opaque_wave2;
 mod ble;
 mod ble_wave2;
 mod generic;
+mod lp_lanes;
 mod lp_softreset;
 mod radio_local;
 
@@ -210,6 +211,18 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 13,
         run: opaque::temperature,
+    },
+    Probe {
+        id: 110,
+        run: lp_lanes::sleep16,
+    },
+    Probe {
+        id: 111,
+        run: lp_lanes::delivery,
+    },
+    Probe {
+        id: 112,
+        run: lp_lanes::sleep_other,
     },
     Probe {
         id: 105,
