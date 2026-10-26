@@ -320,7 +320,7 @@ impl ExternalRxHandoffSlot {
     }
 
     fn adoption(&self, index: u8) -> ExternalRxAdoption {
-        // SAFETY: the network lease being consumed uniquely owns this
+        // SAFETY: the live network lease uniquely owns this
         // non-free slot and its range metadata.
         #[allow(unsafe_code, reason = "live lease retains external slot ownership")]
         let (offset, length, buffer) = unsafe {
@@ -553,16 +553,29 @@ impl<const FRAME_CAPACITY: usize> ExternalRxNetworkLease<'_, FRAME_CAPACITY> {
         self.index
     }
 
+    /// Inspect the storage layout while retaining ownership of the slot.
+    ///
+    /// The returned pointer and lengths grant no access to the bytes and no
+    /// release authority. Use [`Self::frame`] for safe access, or consume the
+    /// lease with [`Self::into_adoption`] before adopting the storage.
+    pub fn adoption_view(&self) -> ExternalRxAdoption {
+        self.slot.adoption(self.index)
+    }
+
     /// Hand the slot's storage to an owner that holds it by raw pointer, such
     /// as a network stack packet. The slot stays network-owned until
     /// [`ExternalRxHandoffPool::release_adopted`] returns it.
     pub fn into_adoption(mut self) -> ExternalRxAdoption {
+        let adoption = self.adoption_view();
         self.live = false;
-        self.slot.adoption(self.index)
+        adoption
     }
 }
 
-/// Storage of a network slot taken out of its affine lease.
+/// Storage layout of a network slot, without access or release authority.
+///
+/// Only [`ExternalRxNetworkLease::into_adoption`] transfers slot ownership;
+/// [`ExternalRxNetworkLease::adoption_view`] leaves it with the lease.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ExternalRxAdoption {
     /// Slot index to pass to [`ExternalRxHandoffPool::release_adopted`].
