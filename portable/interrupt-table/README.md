@@ -61,10 +61,12 @@ word at 8, 12 bytes on the chip.
 `platform::interrupt_controller` implements it on the typed blocks and
 gives the CLIC three level bits):
 
-- `Router::install` refuses an entry of the hart whose source, line or level
-  lies outside the controller (`Error::NoSuchSource`, `NoSuchLine`,
-  `NoSuchLevel`) before any write, silences every source and disables every
-  line of the hart, then verifies;
+- `Router::install` checks the controller's implemented geometry and level
+  bits against its chip facts (`Controller::verify_configuration`), refuses
+  an entry of the hart whose source, line or level lies outside the
+  controller (`Error::NoSuchSource`, `NoSuchLine`, `NoSuchLevel`) before any
+  write, silences every source and disables every line of the hart, then
+  verifies;
 - `Router::bind` consumes an entry's token and its part, moves the part where
   only the entry's handler reaches it, writes the entry's line (enabled,
   hardware-vectored, positive-level-triggered, its level in the control
@@ -80,7 +82,8 @@ gives the CLIC three level bits):
 - a controller refuses a source or line outside it and writes nothing; it
   writes a line's enable apart from its attributes and control, so a line is
   never enabled with another level or trigger than the router's;
-- `Router::verify` checks that every routed source is an entry of the hart
+- `Router::verify` checks the controller's configuration again, then that
+  every routed source is an entry of the hart
   on its line, every routed line holds its entry's level, and every other
   line is disabled.
 

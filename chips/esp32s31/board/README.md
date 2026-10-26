@@ -85,9 +85,11 @@ whose panic entry would otherwise reach the bootstrap through the board.
 (`mtvec` names the exception entry, `mtvt` the hart's table) and takes the
 hart's routes and lines through `controller`, the chip's
 `oer_interrupt_table::Controller`: it silences every source and disables
-every line. It returns `Adopted`, whose router binds each entry and whose
+every line. It returns `Result<Adopted, BootError>`: a controller whose
+implemented geometry or level bits differ from the chip facts is a typed
+boot failure. `Adopted`'s router binds each entry, and its
 `enable_interrupts` checks the vectors, routes and lines and sets global
-interrupt enable. The runtime owns each hart's vector table: the word of
+interrupt enable, or returns the `BootError` that stopped it. The runtime owns each hart's vector table: the word of
 line `n` holds that line's entry, which switches to the SRAM stack, calls the
 line's handler directly and returns through the checked exit.
 
