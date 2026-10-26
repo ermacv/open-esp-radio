@@ -73,7 +73,7 @@ opaque = true
 bits = "0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
+description = "ISO sync error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
 
 [[layout.bytes.fields]]
 name = "BIT_1_OPAQUE"
@@ -81,7 +81,7 @@ opaque = true
 bits = "1"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
+description = "ISO configured-length error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
 
 [[layout.bytes.fields]]
 name = "BIT_2_OPAQUE"
@@ -89,7 +89,7 @@ opaque = true
 bits = "2"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
+description = "ISO maximum-length error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
 
 [[layout.bytes.fields]]
 name = "BIT_3_OPAQUE"
@@ -97,7 +97,7 @@ opaque = true
 bits = "3"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
+description = "ISO MIC-length error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
 
 [[layout.bytes.fields]]
 name = "BIT_4_OPAQUE"
@@ -105,7 +105,7 @@ opaque = true
 bits = "4"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
+description = "ISO CRC error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
 
 [[layout.bytes.fields]]
 name = "BITS_5_8_OPAQUE"
@@ -113,7 +113,7 @@ opaque = true
 bits = "8:5"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
+description = "ISO bit 5 is MIC error; bits 6..8 have no identified meaning. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
 
 [[layout.bytes.fields]]
 name = "BIT_9_OPAQUE"
@@ -137,7 +137,7 @@ opaque = true
 bits = "23:11"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
+description = "ISO bits 21/22/23 are NPI-length error, LLID error and power stop; bits 11..20 have no identified meaning. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
 
 [[layout.bytes.fields]]
 name = "RSSI"
@@ -217,3 +217,59 @@ sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_0_OPAQUE"
+sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_1_OPAQUE"
+sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_2_OPAQUE"
+sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_3_OPAQUE"
+sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_4_OPAQUE"
+sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BITS_5_8_OPAQUE"
+sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BITS_11_23_OPAQUE"
+sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

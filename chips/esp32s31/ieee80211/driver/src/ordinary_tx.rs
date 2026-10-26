@@ -305,6 +305,7 @@ pub struct OrdinaryTxPlan {
     /// Portable exchange policy translated by this ESP32-S31 adapter.
     pub exchange: MacTxPlan<TxPhyRate>,
     pub hardware_mic_length: usize,
+    pub descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
     pub interface: OrdinaryTxInterface,
     pub scheduler_priority: u8,
@@ -449,6 +450,7 @@ struct ActiveTx<X: BackendTxProfile> {
     transfer_length: u32,
     route: ActiveTxRoute,
     hardware_mic_length: usize,
+    descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     hardware_key_selector: u8,
     scheduler_priority: u8,
     packet_priority: u8,
@@ -1283,6 +1285,7 @@ where
                 plan.interface,
             ),
             hardware_mic_length: plan.hardware_mic_length,
+            descriptor_flags: plan.descriptor_flags,
             hardware_key_selector: plan.hardware_key_selector,
             scheduler_priority: plan.scheduler_priority,
             packet_priority: plan.packet_priority,
@@ -1784,6 +1787,7 @@ where
                 config.pti = active.packet_priority;
                 config.pti_count = active.priority_count;
                 config.response = active.response;
+                config.descriptor_flags = active.descriptor_flags;
                 config.hardware_key_selector = active.hardware_key_selector;
                 config.interface = active.route.mac_interface();
                 self.slot
@@ -1815,6 +1819,7 @@ where
                 config.scheduler_priority = active.scheduler_priority;
                 config.pti = active.packet_priority;
                 config.pti_count = active.priority_count;
+                config.descriptor_flags = active.descriptor_flags;
                 config.hardware_key_selector = active.hardware_key_selector;
                 config.interface = active.route.mac_interface();
                 self.slot
@@ -1849,6 +1854,7 @@ where
                 config.scheduler_priority = active.scheduler_priority;
                 config.pti = active.packet_priority;
                 config.pti_count = active.priority_count;
+                config.descriptor_flags = active.descriptor_flags;
                 config.hardware_key_selector = active.hardware_key_selector;
                 config.interface = active.route.mac_interface();
                 self.slot

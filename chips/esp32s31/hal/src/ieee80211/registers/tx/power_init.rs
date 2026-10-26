@@ -247,62 +247,52 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // three fields through three separate RMWs for every command word.
         const RESPONSE: [(u8, u8, u8); 10] = [
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate00.bits() as u8,
                 0,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate01.bits() as u8,
                 0,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate05.bits() as u8,
                 5,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate0b.bits() as u8,
                 11,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate0a.bits() as u8,
                 10,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate09.bits() as u8,
                 9,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format2.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate10.bits() as u8,
                 16,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format2.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate11.bits() as u8,
                 17,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format2.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate12.bits() as u8,
                 18,
             ),
             (
-                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format2.bits()
-                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2.bits() as u8,
                 oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate12.bits() as u8,
                 18,
             ),
@@ -310,7 +300,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         for (word, (format, encoded_rate, lookup_rate)) in RESPONSE.into_iter().enumerate() {
             let response = element::<10>(word);
             init.modify_immediate_response(response, |w| {
-                w.set_bits_22_23_opaque(bits(u32::from(format)));
+                w.set_sig_mode(bits(u32::from(format)));
             });
             init.modify_immediate_response(response, |w| {
                 w.set_rate_index(bits(u32::from(encoded_rate)));

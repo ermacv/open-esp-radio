@@ -20,6 +20,13 @@ size = 4
 access = "owned"
 
 [[layout.bytes.fields]]
+name = "BITS_6_7_OPAQUE"
+opaque = true
+bits = "7:6"
+writer = "cpu"
+description = "Vendor TXOP class predicate: CONTROL bit 22 is set only for value two. The ordinary CCMP fragmentation path uses two; physical meaning of the class remains unqualified."
+
+[[layout.bytes.fields]]
 name = "STATION_REQUEST"
 bits = "3"
 writer = "cpu"
@@ -79,3 +86,11 @@ sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
+
+[[review]]
+entity = "WIFI_TX_DESCRIPTOR_PREFIX.FLAGS.BITS_6_7_OPAQUE"
+sources = ["VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "partial"
+naming = "opaque"

@@ -29,6 +29,7 @@ fn role_adapter_changes_only_interface_and_key_authority() {
     let station = ht_ampdu_publication_config(
         AmpduTxRoleAdapter {
             interface: MacInterface::Station,
+            descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 2,
         },
         inputs,
@@ -37,6 +38,7 @@ fn role_adapter_changes_only_interface_and_key_authority() {
     let access_point = ht_ampdu_publication_config(
         AmpduTxRoleAdapter {
             interface: MacInterface::AccessPoint,
+            descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 8,
         },
         inputs,
@@ -62,6 +64,7 @@ fn role_policy_binds_key_rate_and_every_batch_limit() {
     let policy = HtAmpduTxRolePolicy::new(
         AmpduTxRoleAdapter {
             interface: MacInterface::AccessPoint,
+            descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 8,
         },
         rate,
@@ -88,6 +91,9 @@ fn role_policy_rejects_unrepresentable_windows_instead_of_truncating() {
         HtAmpduTxRolePolicy::new(
             AmpduTxRoleAdapter {
                 interface: MacInterface::Station,
+                descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(
+                    0
+                ),
                 hardware_key_selector: 2,
             },
             rate,

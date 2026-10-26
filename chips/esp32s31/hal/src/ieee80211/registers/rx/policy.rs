@@ -42,7 +42,9 @@ pub struct MacStaReceivePolicySnapshot {
     pub bssid_address_check_enabled: bool,
     pub interface_is_soft_ap: bool,
     pub interface_rx_policy_enabled: bool,
-    pub beacon_filter_control: u8,
+    pub beacon_filter_enabled: bool,
+    pub broadcast_wakeup_enabled: bool,
+    pub unicast_wakeup_enabled: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -207,19 +209,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .interface
             .read_address_high(MacInterface::Station.index());
 
+        let bssid = bssid(bssids, STATION);
+        let beacon_filter = self
+            .mac
+            .wifi_mac_sta_beacon_filter
+            .read_sta_beacon_filter_control();
         MacStaReceivePolicySnapshot {
-            bssid: bssid(bssids, STATION),
+            bssid,
             association_id: crate::ieee80211::registers::halfword(bssid_high.association_id()),
             minimum_mpdu_start_spacing: byte(bssid_high.minimum_mpdu_start_spacing()),
             bssid_address_check_enabled: bssid_high.address_check_enable(),
             interface_is_soft_ap: bssid_high.interface_is_soft_ap(),
             interface_rx_policy_enabled: interface.rx_policy_enable(),
-            beacon_filter_control: byte(
-                self.mac
-                    .wifi_mac_sta_beacon_filter
-                    .read_sta_beacon_filter_control()
-                    .bits_0_2_opaque(),
-            ),
+            beacon_filter_enabled: beacon_filter.beacon_filter_enable(),
+            broadcast_wakeup_enabled: beacon_filter.broadcast_wakeup_enable(),
+            unicast_wakeup_enabled: beacon_filter.unicast_wakeup_enable(),
         }
     }
 

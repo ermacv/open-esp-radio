@@ -2,7 +2,7 @@ schema = 1
 
 [layout]
 name = "BLE_RESOLVING_LIST"
-description = "Resolving-list allocation published to the PHY. The initialized high head bit is positional; privacy semantics and the remaining allocation are unassigned."
+description = "Resolving-list allocation published to the PHY. Head bit 31 terminates the list; privacy semantics and the remaining allocation are unassigned."
 size = 64
 align = 4
 
@@ -27,11 +27,10 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BIT_31_OPAQUE"
-opaque = true
+name = "END_OF_LIST"
 bits = "31"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "End-of-list marker; the initialized empty head has this bit set."
 
 [[layout.words]]
 fields = []
@@ -152,3 +151,11 @@ opaque = true
 offset = 0x3c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
+
+[[review]]
+entity = "BLE_RESOLVING_LIST.WORD_0000_OPAQUE.END_OF_LIST"
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"

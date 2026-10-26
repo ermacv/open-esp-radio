@@ -2637,6 +2637,8 @@ pub struct LegacyTxConfig {
     /// authentication/association/WPA2/DHCP runs. A BlockAckReq selects
     /// format two ([`MacLegacyTxResponse::BlockAck`]).
     pub response: MacLegacyTxResponse,
+    /// Vendor descriptor flags; TXOP class is independent of the key index.
+    pub descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     /// Six-bit key-entry index. Zero is plaintext; protected traffic uses its
     /// owned hardware key slot. The formatter combines this with
     /// [`Self::interface`] in the recovered PLCP1 descriptor-control byte.
@@ -2664,6 +2666,8 @@ pub struct HtTxConfig {
     pub scheduler_priority: u8,
     pub pti: u8,
     pub pti_count: u16,
+    /// Vendor descriptor flags; TXOP class is independent of the key index.
+    pub descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
 }
 
@@ -2697,6 +2701,7 @@ impl HtTxConfig {
             scheduler_priority: 1,
             pti: 1,
             pti_count: 1,
+            descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 0,
         })
     }
@@ -2718,6 +2723,7 @@ impl HtTxConfig {
             aifsn: self.aifsn,
             contention_window: self.contention_window,
             interface: self.interface,
+            descriptor_flags: self.descriptor_flags,
             hardware_key_selector: self.hardware_key_selector,
             txop: false,
         }
@@ -2748,6 +2754,8 @@ pub struct HeSmpduTxConfig {
     pub scheduler_priority: u8,
     pub pti: u8,
     pub pti_count: u16,
+    /// Vendor descriptor flags; TXOP class is independent of the key index.
+    pub descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
     pub protection_spacing: u16,
 }
@@ -2785,6 +2793,7 @@ impl HeSmpduTxConfig {
             scheduler_priority: 1,
             pti: 1,
             pti_count: 1,
+            descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 0,
             protection_spacing: 0x31,
         })
@@ -2830,6 +2839,7 @@ impl HeSmpduTxConfig {
             aifsn: self.aifsn,
             contention_window: self.contention_window,
             interface: self.interface,
+            descriptor_flags: self.descriptor_flags,
             hardware_key_selector: self.hardware_key_selector,
         }
     }
@@ -2858,6 +2868,8 @@ pub struct HtAmpduTxConfig {
     pub scheduler_priority: u8,
     pub pti: u8,
     pub pti_count: u16,
+    /// Vendor descriptor flags; TXOP class is independent of the key index.
+    pub descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
 }
 
@@ -2886,6 +2898,7 @@ impl HtAmpduTxConfig {
             scheduler_priority: 1,
             pti: 1,
             pti_count: 1,
+            descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 0,
         })
     }
@@ -2907,6 +2920,7 @@ impl HtAmpduTxConfig {
             aifsn: self.aifsn,
             contention_window: self.contention_window,
             interface: self.interface,
+            descriptor_flags: self.descriptor_flags,
             hardware_key_selector: self.hardware_key_selector,
             txop: false,
         }
@@ -3000,6 +3014,8 @@ pub struct HeAmpduTxConfig {
     pub scheduler_priority: u8,
     pub pti: u8,
     pub pti_count: u16,
+    /// Vendor descriptor flags; TXOP class is independent of the key index.
+    pub descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     pub hardware_key_selector: u8,
 }
 
@@ -3079,6 +3095,7 @@ impl HeAmpduTxConfig {
             scheduler_priority: 1,
             pti: 1,
             pti_count: 1,
+            descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 0,
         })
     }
@@ -3149,6 +3166,7 @@ impl HeAmpduTxConfig {
             aifsn: self.aifsn,
             contention_window: self.contention_window,
             interface: self.interface,
+            descriptor_flags: self.descriptor_flags,
             hardware_key_selector: self.hardware_key_selector,
         }
     }
@@ -3251,6 +3269,7 @@ impl LegacyTxConfig {
             pti: 1,
             pti_count: 1,
             response: MacLegacyTxResponse::Ack,
+            descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
             hardware_key_selector: 0,
         }
     }
@@ -3502,6 +3521,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
                 signal: config.signal,
                 data_power: config.data_power,
                 response: config.response,
+                descriptor_flags: config.descriptor_flags,
                 hardware_key_selector: config.hardware_key_selector,
                 interface: config.interface,
                 aifsn: config.aifsn,

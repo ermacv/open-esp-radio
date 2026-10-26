@@ -87,7 +87,7 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
             w.set_address_high_prefix();
         });
         self.dma.modify_word_007c_opaque(|w| {
-            w.set_bits_0_7_opaque(0);
+            w.set_rx_control_buffer_offset(0);
         });
     }
 

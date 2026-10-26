@@ -49,3 +49,15 @@ The IRQ control commands, LP command lanes and mode controls have unknown
 internal actions. The NRT snapshots do not establish an output-mask equation,
 and compare disable does not prove all-cause quiescence. The register model
 records those limits; the transactions supply no additional output-off proof.
+
+Modem PLL source gating uses the pinned ESP-IDF 4d59230d whole-word sequence:
+open `0x15 → 0x1d`, close `0x2d → 0x25`. Platform source-clock readback
+requires the open PLL image with the XTAL gate clear
+(`ESP_IDF_4D59230D_S31_MODEM_PLL_GATE`).
+
+Ordinary Wi-Fi TX programs carry vendor descriptor flags independently of
+the key-entry index. Queue CONTROL bit 22 follows flags `[7:6] == 2` for
+legacy, HT and HE publications (`VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS`).
+CCMP key admission selects class two; open admission selects class zero.
+FE `+0x8d0[21:20]` remains opaque: its nonzero sample contributes diagnostic
+and RX-saturation observations, while estimator completion uses READY.

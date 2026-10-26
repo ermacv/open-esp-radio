@@ -1,0 +1,30 @@
+# SOURCE: direct vendor identities and explicitly qualified cross-format inferences.
+schema = 1
+
+[[sources]]
+id = "VENDOR_WIFI_RX_IDENTITIES"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_wifi/include/esp_wifi_he_types.h (sha256 602abd515ad617d06d8fe01e94fdf755890e72194a56a03821fa49770544162d), lines 184-187: MAC-v3 rxmatch0/1/2 identify reception-interface matches at word bits 28/29/30, hence RX byte 3 bits 4/5/6. soc_caps.h selects MAC version 3. Pinned libpp.a (esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4) pp.o::ppRxProtoProc+0x24..0x92 and ROM copy 0x2f83278a independently use those routes. hal_debug.o::dbg_dump_rx_links+0x3e,+0x5e,+0x76,+0x8a identifies RX descriptor bit 29 as sosf. The acronym and hardware effect are not established."
+
+[[sources]]
+id = "VENDOR_WIFI_MAC_IDENTITIES"
+description = "Pinned esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21 libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. hal_pwr.o pwr_hal_set_beacon_filter_enable/broadcast_wakeup_enable/unicast_wakeup_enable+0x8,+0xe and their disable leaves identify WIFI_MAC+0x2b4 bits 0/1/2. hal_debug.o::dbg_read_imrsp_power+0x2e..0x40 and its PWR_TAB diagnostic +0x98/+0x9c name +0x408+4*n bits 23:22 sig_mode; hal_init_imrsp_power uses 0 for entries 0..5 and 2 for 6..9. Pinned librftest.a (esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a) bb_common.o::get_rxctrl_addr+0x8..0x22 adds WIFI_MAC+0x7c low byte to the descriptor buffer address to find RX control."
+
+[[sources]]
+id = "VENDOR_NRX_QUOTIENT_SHIFT"
+description = "esp-rom-elfs 20260528 esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87, phy_nrx_freq_set at 0x2f8280ec: loads NRX+0x848 at +0x4/+0x8, forms 80 shifted by the first high byte, signed-divides by frequency, masks low 24 bits and stores at +0x2c preserving the second high byte. RV32 variable shifts consume only bits 28:24; bits 31:29 have no established quotient role."
+
+[[sources]]
+id = "VENDOR_BLE_NAMED_IDENTITIES"
+description = "esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8 libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723. Named same-chip 31c30949541a5d3abd4043a1cb66d55aa55577dd BLE archive sha256 ec10a20eaf869f7cd2300100fe54826980525911f8417206af5a0745a9f85f63 provides accessor-role names; current bodies independently prove masks and accesses. ble_radio_crc_config role sym_ble_4XaXjpmqvjOMHEb2H4Aw+0x10 writes BT_MAC+0x538=0x65b; packet-error-mask set/clear roles sym_ble_RLVLyTT9fe5VBSIexDJ5+0x8/+0x14 and sym_ble_H2YnFWtQL1AZhlNAxiD6+0x8/+0x18 modify +0x85c. ble_radio_cte_enable role sym_ble_0QLTh7jLx8xIT9qMwPJP+0x14/+0x22 controls +0x800 bit 21. conn_4.o::sym_conn_9o4sfTJUuO7muCutlmpa+0x10/+0x14/+0x1e (setDefaultAbortedOpcode role) and connSim_1.o::sym_connSim_Dzx5u6gHUrhrEF6GLX1p+0x38/+0x44/+0x4e (setAbortedOpcode role) identify +0x8a4/+0x8a8 as byte-wide aborted-opcode selectors; hardware matching effects remain unqualified. ble_38.o::r_sym_ble_i9ueDYrYDxBz0nBLKKMM+0x32/+0x36 inserts 0x80000000 in the resolving head, links the software successor at +4 and publishes the head; historical r_ble_ll_resolv_insert_eof_head and terminal-entry handling identify bit31 as end-of-list."
+
+[[sources]]
+id = "VENDOR_BLE_ISO_RX_ERRORS"
+description = "esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8 libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723, ble_62.o. Complete instruction-byte-identical matches to named ISO RX helpers in 31c30949541a5d3abd4043a1cb66d55aa55577dd (BLE sha256 ec10a20eaf869f7cd2300100fe54826980525911f8417206af5a0745a9f85f63): sync_err=r_sym_ble_Hja67yKHXnf531oCQ6t1; len_cfg_err=r_sym_ble_nIHGEOR1UTuZaB1vMhhM; len_max_err=r_sym_ble_I9ZxSceqXA3AE7Hy2Bnl; len_mic_err=r_sym_ble_CybO4oi9yntaJKwRI58R; crc_err=r_sym_ble_i6RbJ0EHN50GbHbzu46i; mic_err=r_sym_ble_a549OJsdn8KazByjTrkw; npi_len_err=r_sym_ble_rZXRkBR2kMKjLg5qHwEA; llid_err=r_sym_ble_aiIds6eAEMKVUmcn59aA; pwr_stop=r_sym_ble_kc1skHfr2DAVnww9CQ82. They select result bits 0/1/2/3/4/5/21/22/23 after excluding the unproduced sentinel (sync extraction +0x28, other errors +0x1e/+0x20, power-stop +0x1e). These are direct ISO-format identities; transfer to ordinary RX is inference, with no change to its admission masks."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_MODEM_PLL_GATE"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/hal/esp32s31/modem_clock_hal.c sha256 6348b8fb6eee516bbcaf73e3706d08ec2b87091ecca97245f2409d22da5bd75e, lines 120-135: modem_clock_hal_enable_soc_pll_source_cg makes whole-word stores to HP_SYS_CLKRST.MODEM_CONF, open 0x15 then 0x1d and close 0x2d then 0x25; the enabled predicate compares with 0x1d. hp_sys_clkrst_reg.h lines 4390-4439 names bits 0..5 APB enable, reset, source enable, source select, PLL enable, XTAL enable."
+
+[[sources]]
+id = "VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS"
+description = "Pinned esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21 libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4, hal_mac_tx.o::mac_tx_set_txop_q+0x86..0xae sets ordinary queue CONTROL bit 22 iff descriptor flags bits 7:6 equal 2; +0xd0..0xda clears it for other classes, before optional successor-chain filling even with no successor. ROM same-named body agrees. mac_tx_set_plcp0+0xc..0x26 initially uses low control image 0x00600000, before that TXOP adjustment. Physical meaning of bit 22 is unresolved. Historical libpp sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e has the same class predicate; its reviewed ordinary CCMP selector-three fragmentation sets flag 7 and clears flag 6."

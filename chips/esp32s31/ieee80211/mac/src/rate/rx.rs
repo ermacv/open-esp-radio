@@ -25,15 +25,15 @@ impl RxRateControlRoute {
 pub const fn rate_control_route(rx_flags: u8) -> Option<RxRateControlRoute> {
     let bytes = [rx_flags];
     let flags = WifiRxRateControlFlags::new(&bytes).flags();
-    if flags.bit_4_opaque() {
-        if flags.bit_5_opaque() {
+    if flags.rxmatch0() {
+        if flags.rxmatch1() {
             None
         } else {
             Some(RxRateControlRoute(0))
         }
-    } else if flags.bit_5_opaque() {
+    } else if flags.rxmatch1() {
         Some(RxRateControlRoute(1))
-    } else if flags.bit_6_opaque() {
+    } else if flags.rxmatch2() {
         Some(RxRateControlRoute(2))
     } else {
         None

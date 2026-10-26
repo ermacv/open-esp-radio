@@ -111,13 +111,9 @@ pub fn read_signal_power<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> [
     [sum_i, difference_i, difference_q, sum_q]
 }
 
-/// Sample the shared estimator-activity field once.
+/// Sample the opaque indication pair once; its nonzero predicate is not busy.
 ///
 /// The bounded 100-sample policy remains in the upper PHY transition.
 pub fn active<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> bool {
-    estimator
-        .read_estimator_activity_status()
-        .bits_20_21_opaque()
-        .get()
-        != 0
+    estimator.read_word_08d0_opaque().bits_20_21_opaque().get() != 0
 }

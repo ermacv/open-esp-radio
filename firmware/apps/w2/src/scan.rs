@@ -459,6 +459,7 @@ fn begin_probe(
             publication_timeout: TX_TIMEOUT,
         },
         hardware_mic_length: 0,
+        descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
         hardware_key_selector: 0,
         interface: OrdinaryTxInterface::Station,
         scheduler_priority: priority.scheduler.value(),

@@ -128,10 +128,13 @@ fn the_nrx_frequency_keeps_the_high_fields_it_read_and_stores_the_quotient() {
         let mut memory = vec![fill; 31976 / 4];
         let mut registers = FrequencyRegisters::host(&mut memory).expect("memory holds the block");
         let read = registers.wifi_bb.read_nrx_frequency_control();
-        let shift = read.bits_24_28_opaque().get() + read.bits_29_31_opaque().get() * 0x20;
+        let shift = read.frequency_numerator_shift().get() + read.bits_29_31_opaque().get() * 0x20;
         configure_nrx_frequency(&mut registers, 2412);
         let written = registers.wifi_bb.read_nrx_frequency_control();
-        assert_eq!(written.bits_24_28_opaque(), read.bits_24_28_opaque());
+        assert_eq!(
+            written.frequency_numerator_shift(),
+            read.frequency_numerator_shift()
+        );
         assert_eq!(written.bits_29_31_opaque(), read.bits_29_31_opaque());
         assert_eq!(
             written.bits_0_23_opaque(),
@@ -159,13 +162,13 @@ fn the_nrx_shift_comes_from_the_first_sample_and_the_high_fields_from_the_second
         between_samples += 1;
         registers.wifi_bb.modify_nrx_frequency_control(|w| {
             w.set_bits_0_23_opaque(oer_mmio::Bits::constant::<0>())
-                .set_bits_24_28_opaque(second_low)
+                .set_frequency_numerator_shift(second_low)
                 .set_bits_29_31_opaque(second_high);
         });
     });
     assert_eq!(between_samples, 1);
     let written = registers.wifi_bb.read_nrx_frequency_control();
-    assert_eq!(written.bits_24_28_opaque(), second_low);
+    assert_eq!(written.frequency_numerator_shift(), second_low);
     assert_eq!(written.bits_29_31_opaque(), second_high);
     assert_eq!(
         written.bits_0_23_opaque(),

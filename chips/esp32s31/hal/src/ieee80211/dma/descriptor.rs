@@ -289,12 +289,7 @@ pub const fn rx_rearm_word(
         return None;
     }
     match word0.with_length(capacity) {
-        Some(word0) => Some(
-            word0
-                .with_bit_29_opaque(false)
-                .with_rx_done(false)
-                .with_owner(true),
-        ),
+        Some(word0) => Some(word0.with_sosf(false).with_rx_done(false).with_owner(true)),
         None => None,
     }
 }

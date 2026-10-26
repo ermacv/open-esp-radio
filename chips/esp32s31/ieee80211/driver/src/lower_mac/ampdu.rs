@@ -660,6 +660,7 @@ where
                 config.scheduler_priority = publication.scheduler_priority;
                 config.pti = publication.packet_priority;
                 config.pti_count = 1;
+                config.descriptor_flags = plan.role.descriptor_flags;
                 config.hardware_key_selector = plan.role.hardware_key_selector;
                 owner.submit_he(hardware, cookie, plan.queue, config)?;
             }

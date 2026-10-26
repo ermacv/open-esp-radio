@@ -336,7 +336,7 @@ pub(crate) fn configure_nrx_frequency_between_samples<P: PhyPlacement>(
     between: impl FnOnce(&mut FrequencyRegisters<P>),
 ) {
     let first = frequency_registers.wifi_bb.read_nrx_frequency_control();
-    let shift = first.bits_24_28_opaque().get() + first.bits_29_31_opaque().get() * 0x20;
+    let shift = first.frequency_numerator_shift().get() + first.bits_29_31_opaque().get() * 0x20;
     between(frequency_registers);
     let quotient = nrx_frequency_quotient(shift, frequency);
     frequency_registers
@@ -356,7 +356,7 @@ pub fn initialize_nrx_baseband<P: PhyPlacement>(frequency: &mut FrequencyRegiste
     });
     // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
     frequency.wifi_bb.modify_nrx_frequency_control(|w| {
-        w.set_bits_24_28_opaque(Bits::constant::<0x17>());
+        w.set_frequency_numerator_shift(Bits::constant::<0x17>());
     });
 }
 

@@ -970,6 +970,7 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
             publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
         },
         hardware_mic_length: 0,
+        descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
         hardware_key_selector: 0,
         interface: OrdinaryTxInterface::Station,
         scheduler_priority: 1,
@@ -1077,6 +1078,7 @@ fn check_management_transmissions(
             publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
         },
         hardware_mic_length: 0,
+        descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
         hardware_key_selector: 0,
         interface: OrdinaryTxInterface::Station,
         scheduler_priority: 1,
@@ -3731,6 +3733,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             let index = key.index;
             let ticket = core.take_ticket();
             let admission = TxAdmission::Protected(core.admit_key(&key, ticket).ok().unwrap());
+            assert_eq!(admission.descriptor_flags().bits_6_7_opaque(), 2);
             let queue = core.free[BE].take().unwrap();
             let source = backings();
             let mut buffer = aggregate_of(source, 0, 26);
@@ -4295,6 +4298,7 @@ fn an_irq_legacy_transmitter_refuses_ht_before_reserving_or_publishing_dma() {
             publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
         },
         hardware_mic_length: 0,
+        descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags::from_bits(0),
         hardware_key_selector: 0,
         interface: OrdinaryTxInterface::Station,
         scheduler_priority: 1,

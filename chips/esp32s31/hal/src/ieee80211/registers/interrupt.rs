@@ -310,7 +310,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac
             .wifi_mac_sta_beacon_filter
             .modify_sta_beacon_filter_control(|w| {
-                w.set_bits_0_2_opaque(Bits::constant::<0>());
+                w.set_beacon_filter_enable(false)
+                    .set_broadcast_wakeup_enable(false)
+                    .set_unicast_wakeup_enable(false);
             });
         ConnectedStaWithoutPowerSavePrepared { _private: () }
     }

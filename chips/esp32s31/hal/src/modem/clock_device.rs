@@ -8,7 +8,8 @@
 //!
 //! SOURCE: reviewed evidence `ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK`
 //! (`modem_clock_impl.c` configure actions, `modem_clock_hal.c`,
-//! `modem_syscon_ll.h`) and `S31_MODEM_LPCON_STRUCT` for the coexistence gate.
+//! `modem_syscon_ll.h`), `ESP_IDF_4D59230D_S31_MODEM_PLL_GATE` for the PLL
+//! gate sequence, and `S31_MODEM_LPCON_STRUCT` for the coexistence gate.
 
 #![forbid(unsafe_code)]
 
@@ -75,12 +76,10 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
                 }
             }
             ModemClockDevice::PllSourceGate => {
-                let clkrst = &mut self.peripherals.hp_sys_clkrst_radio;
-                if enable {
-                    clkrst.open_modem_pll_source_gate();
-                } else {
-                    clkrst.close_modem_pll_source_gate();
-                }
+                configure_pll_source_gate(
+                    &mut PllSourceGate(&mut self.peripherals.hp_sys_clkrst_radio),
+                    enable,
+                );
             }
             ModemClockDevice::WifiApb => super::ops::set_modem_wifi_apb_clock(syscon, gate(enable)),
             ModemClockDevice::WifiBaseband44m => {
@@ -113,6 +112,40 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             }
         }
     }
+}
+
+pub(super) trait PllSourceGatePort {
+    fn prepare(&mut self, enabled: bool);
+    fn select(&mut self, enabled: bool);
+}
+
+pub(super) struct PllSourceGate<'a, P: oer_mmio::Placement>(
+    pub(super) &'a mut oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P>,
+);
+
+impl<P: oer_mmio::Placement> PllSourceGatePort for PllSourceGate<'_, P> {
+    fn prepare(&mut self, enabled: bool) {
+        if enabled {
+            self.0.prepare_open_modem_pll_source_gate();
+        } else {
+            self.0.prepare_close_modem_pll_source_gate();
+        }
+    }
+
+    fn select(&mut self, enabled: bool) {
+        if enabled {
+            self.0.open_modem_pll_source_gate();
+        } else {
+            self.0.close_modem_pll_source_gate();
+        }
+    }
+}
+
+// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE. Both edges use two whole-word
+// stores, with preparation before source selection; no RMW or delay intervenes.
+pub(super) fn configure_pll_source_gate(port: &mut impl PllSourceGatePort, enabled: bool) {
+    port.prepare(enabled);
+    port.select(enabled);
 }
 
 trait BasebandClockPort {
@@ -148,6 +181,54 @@ fn configure_wifi_baseband(port: &mut impl BasebandClockPort, enabled: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl PllSourceGatePort for Port {
+        fn prepare(&mut self, enabled: bool) {
+            self.0.push(("prepare", enabled));
+        }
+        fn select(&mut self, enabled: bool) {
+            self.0.push(("select", enabled));
+        }
+    }
+
+    #[test]
+    fn pll_gate_prepares_each_edge_before_selecting_its_source() {
+        let mut port = Port::default();
+        for enabled in [true, false, true] {
+            configure_pll_source_gate(&mut port, enabled);
+        }
+        assert_eq!(
+            port.0,
+            [
+                ("prepare", true),
+                ("select", true),
+                ("prepare", false),
+                ("select", false),
+                ("prepare", true),
+                ("select", true),
+            ]
+        );
+    }
+
+    #[test]
+    fn pinned_pll_gate_opens_without_xtal_and_closes_on_xtal() {
+        use oer_esp32s31_pac::hp_sys_clkrst::{HpSysClkrstRadio, HpSysClkrstRadioWords};
+        use oer_mmio::Registers;
+
+        let words = HpSysClkrstRadioWords::WORDS.iter().copied().max().unwrap() / 4 + 1;
+        let mut memory = std::vec![u32::MAX; words];
+        let mut registers = HpSysClkrstRadio::host(&mut memory).unwrap();
+        for enabled in [true, false, true] {
+            configure_pll_source_gate(&mut PllSourceGate(&mut registers), enabled);
+            let observed = registers.read_modem_conf();
+            assert!(observed.modem_apb_clk_en());
+            assert!(!observed.modem_rst_en());
+            assert!(observed.modem_clk_en());
+            assert_eq!(observed.modem_clk_source_sel(), enabled);
+            assert_eq!(observed.modem_pll_clk_en(), enabled);
+            assert_eq!(observed.modem_xtal_clk_en(), !enabled);
+        }
+    }
     #[derive(Default)]
     struct Port(std::vec::Vec<(&'static str, bool)>);
     impl BasebandClockPort for Port {

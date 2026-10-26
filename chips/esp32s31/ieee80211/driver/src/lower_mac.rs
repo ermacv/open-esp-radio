@@ -1237,6 +1237,7 @@ where
             queue: LegacyTxQueue::from_access_category(access_category),
             role,
             rate,
+            descriptor_flags: admission.descriptor_flags(),
             hardware_key_selector,
             hardware_mic_length,
             single: SingleAttempt {
@@ -1290,6 +1291,7 @@ where
                 publication_timeout: self.config.publication_timeout,
             },
             hardware_mic_length: common.hardware_mic_length,
+            descriptor_flags: common.descriptor_flags,
             hardware_key_selector: common.hardware_key_selector,
             interface: match common.role {
                 VifRole::Station => OrdinaryTxInterface::Station,
@@ -1559,6 +1561,7 @@ where
             format,
             role: AmpduTxRoleAdapter {
                 interface: mac_interface(common.role),
+                descriptor_flags: common.descriptor_flags,
                 hardware_key_selector: common.hardware_key_selector,
             },
             hardware_mic_length: common.hardware_mic_length as u8,
@@ -2398,6 +2401,7 @@ struct CommonAdmission {
     queue: LegacyTxQueue,
     role: VifRole,
     rate: TxPhyRate,
+    descriptor_flags: oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixFlags,
     hardware_key_selector: u8,
     hardware_mic_length: usize,
     /// Protection, backoff and power ceiling; `no_ack` is the MPDU's.

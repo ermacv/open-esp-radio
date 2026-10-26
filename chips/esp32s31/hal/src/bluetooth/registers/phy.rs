@@ -240,27 +240,27 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
             w.set_bits_16_18_opaque(oer_mmio::Bits::constant::<0>());
         });
 
-        btmac.modify_word_0538_opaque(|w| {
-            w.set_bits_0_31_opaque(0x65b);
+        btmac.modify_crc_config(|w| {
+            w.set_value(0x65b);
         });
-        btmac.modify_word_08a4_opaque(|w| {
-            w.set_bits_0_7_opaque(0x2);
-            w.set_bits_8_15_opaque(0x2);
-            w.set_bits_16_23_opaque(0x2);
-            w.set_bits_24_31_opaque(0x2);
+        btmac.modify_aborted_opcode_selectors_0(|w| {
+            w.set_opcode_0(0x2);
+            w.set_opcode_1(0x2);
+            w.set_opcode_2(0x2);
+            w.set_opcode_3(0x2);
         });
-        btmac.modify_word_08a8_opaque(|w| {
-            w.set_bits_0_7_opaque(0x2);
-            w.set_bits_8_15_opaque(0x2);
-            w.set_bits_16_23_opaque(0x2);
-            w.set_bits_24_31_opaque(0x2);
+        btmac.modify_aborted_opcode_selectors_1(|w| {
+            w.set_opcode_4(0x2);
+            w.set_opcode_5(0x2);
+            w.set_opcode_6(0x2);
+            w.set_opcode_7(0x2);
         });
         btmac.modify_phy_environment_member_pointer(|w| {
             w.set_address(inputs.environment);
         });
         btmac.publish_ble_phy_init_value_04ac();
-        btmac.modify_word_085c_opaque(|w| {
-            w.set_bits_0_31_opaque(0x8);
+        btmac.modify_packet_error_mask(|w| {
+            w.set_value(0x8);
         });
 
         // Four independent fresh-read updates at 0x20101654; the last two
@@ -304,7 +304,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
         btmac.modify_word_0800_opaque(|w| {
             w.set_init_enable_31(true);
             w.set_init_enable_22(false);
-            w.set_bit_21_opaque(false);
+            w.set_cte_enable(false);
         });
         btmac.modify_word_0800_opaque(|w| {
             w.set_init_enable_22(true);

@@ -2,7 +2,7 @@ schema = 1
 
 [layout]
 name = "WIFI_RX_RATE_CONTROL_FLAGS"
-description = "One captured byte at RX-control prefix offset 3, used by ppRxProtoProc to select a rate-control route. Individual electrical meanings are unassigned."
+description = "One captured byte at RX-control prefix offset 3, used by ppRxProtoProc to select a rate-control route. Bits 4/5/6 indicate reception-interface matches 0/1/2."
 size = 1
 align = 1
 
@@ -26,25 +26,22 @@ size = 1
 access = "owned"
 
 [[layout.bytes.fields]]
-name = "BIT_4_OPAQUE"
-opaque = true
+name = "RXMATCH0"
 bits = "4"
 writer = "hardware"
-description = "With bit 5 clear, selects route zero."
+description = "Reception matched interface 0; the vendor rate-control route also depends on the other match flags."
 
 [[layout.bytes.fields]]
-name = "BIT_5_OPAQUE"
-opaque = true
+name = "RXMATCH1"
 bits = "5"
 writer = "hardware"
-description = "With bit 4 clear, selects route one; with bit 4 set, suppresses lookup."
+description = "Reception matched interface 1; the vendor rate-control route also depends on the other match flags."
 
 [[layout.bytes.fields]]
-name = "BIT_6_OPAQUE"
-opaque = true
+name = "RXMATCH2"
 bits = "6"
 writer = "hardware"
-description = "With bits 4 and 5 clear, selects route two."
+description = "Reception matched interface 2; the vendor rate-control route also depends on the other match flags."
 
 [[review]]
 entity = "WIFI_RX_RATE_CONTROL_FLAGS.FLAGS"
@@ -53,3 +50,27 @@ provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_RX_RATE_CONTROL_FLAGS.FLAGS.RXMATCH0"
+sources = ["VENDOR_WIFI_RX_IDENTITIES"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_RX_RATE_CONTROL_FLAGS.FLAGS.RXMATCH1"
+sources = ["VENDOR_WIFI_RX_IDENTITIES"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_RX_RATE_CONTROL_FLAGS.FLAGS.RXMATCH2"
+sources = ["VENDOR_WIFI_RX_IDENTITIES"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"

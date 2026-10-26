@@ -134,7 +134,7 @@ fn cold_power_publication_fills_every_table_from_the_rate_powers() {
     // The last two immediate-response words both look up rate 18.
     for word in [8, 9] {
         let response = init.read_immediate_response(element::<10>(word));
-        assert_eq!(response.bits_22_23_opaque().get(), 2);
+        assert_eq!(response.sig_mode().get(), 2);
         assert_eq!(response.rate_index().get(), 18);
         assert_eq!(response.power_index().get(), 38);
     }

@@ -29686,10 +29686,10 @@ pub mod bt_mac {
         }
     }
 
-    /// The `WORD_0538_OPAQUE` register.
+    /// The `CRC_CONFIG` register.
     ///
-    /// BLE PHY register initialization writes the finite complete image 0x0000065B.
-    pub mod word_0538_opaque {
+    /// CRC configuration word; the reviewed initialization image is 0x65b. The polynomial interpretation and effective hardware width remain unqualified.
+    pub mod crc_config {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -29698,21 +29698,21 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x538;
 
-        /// Width of `BITS_0_31_OPAQUE` in bits.
-        pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
-        pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `BITS_0_31_OPAQUE`.
-        pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
+        /// Width of `VALUE` in bits.
+        pub const VALUE_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `VALUE`.
+        pub const VALUE_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `VALUE`.
+        pub const VALUE_MASK: u32 = 0xffffffff;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_31_OPAQUE` field.
+            /// CRC configuration word; the reviewed initialization image is 0x65b. The polynomial interpretation and effective hardware width remain unqualified.
             #[inline]
-            pub const fn bits_0_31_opaque(self) -> u32 {
+            pub const fn value(self) -> u32 {
                 self.0
             }
         }
@@ -29721,15 +29721,15 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_31_OPAQUE` field.
+            /// CRC configuration word; the reviewed initialization image is 0x65b. The polynomial interpretation and effective hardware width remain unqualified.
             #[inline]
-            pub const fn bits_0_31_opaque(&self) -> u32 {
+            pub const fn value(&self) -> u32 {
                 self.0
             }
 
-            /// Set `BITS_0_31_OPAQUE`.
+            /// Set `VALUE`.
             #[inline]
-            pub fn set_bits_0_31_opaque(&mut self, value: u32) -> &mut Self {
+            pub fn set_value(&mut self, value: u32) -> &mut Self {
                 self.0 = value;
                 self
             }
@@ -30095,12 +30095,12 @@ pub mod bt_mac {
         /// Positioned bits of `INIT_ENABLE_31`.
         pub const INIT_ENABLE_31_MASK: u32 = 0x80000000;
 
-        /// Width of `BIT_21_OPAQUE` in bits.
-        pub const BIT_21_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_21_OPAQUE`.
-        pub const BIT_21_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_21_OPAQUE`.
-        pub const BIT_21_OPAQUE_MASK: u32 = 0x200000;
+        /// Width of `CTE_ENABLE` in bits.
+        pub const CTE_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CTE_ENABLE`.
+        pub const CTE_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `CTE_ENABLE`.
+        pub const CTE_ENABLE_MASK: u32 = 0x200000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30119,9 +30119,9 @@ pub mod bt_mac {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// CTE-enable bit controlled by the vendor ble_radio_cte_enable accessor. Physical effects require CTE traffic.
             #[inline]
-            pub const fn bit_21_opaque(self) -> bool {
+            pub const fn cte_enable(self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
         }
@@ -30142,9 +30142,9 @@ pub mod bt_mac {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// CTE-enable bit controlled by the vendor ble_radio_cte_enable accessor. Physical effects require CTE traffic.
             #[inline]
-            pub const fn bit_21_opaque(&self) -> bool {
+            pub const fn cte_enable(&self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
 
@@ -30162,9 +30162,9 @@ pub mod bt_mac {
                 self
             }
 
-            /// Set `BIT_21_OPAQUE`.
+            /// Set `CTE_ENABLE`.
             #[inline]
-            pub fn set_bit_21_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_cte_enable(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xffdfffff) | (u32::from(value) << 21);
                 self
             }
@@ -30293,10 +30293,10 @@ pub mod bt_mac {
         }
     }
 
-    /// The `WORD_085C_OPAQUE` register.
+    /// The `PACKET_ERROR_MASK` register.
     ///
-    /// BLE PHY register initialization writes the finite complete image 8.
-    pub mod word_085c_opaque {
+    /// Packet-error mask modified by the named set/clear-mask accessors; individual error mapping and polarity remain unqualified.
+    pub mod packet_error_mask {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -30305,21 +30305,21 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x85c;
 
-        /// Width of `BITS_0_31_OPAQUE` in bits.
-        pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
-        pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `BITS_0_31_OPAQUE`.
-        pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
+        /// Width of `VALUE` in bits.
+        pub const VALUE_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `VALUE`.
+        pub const VALUE_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `VALUE`.
+        pub const VALUE_MASK: u32 = 0xffffffff;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_31_OPAQUE` field.
+            /// Packet-error mask modified by the named set/clear-mask accessors; individual error mapping and polarity remain unqualified.
             #[inline]
-            pub const fn bits_0_31_opaque(self) -> u32 {
+            pub const fn value(self) -> u32 {
                 self.0
             }
         }
@@ -30328,15 +30328,15 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_31_OPAQUE` field.
+            /// Packet-error mask modified by the named set/clear-mask accessors; individual error mapping and polarity remain unqualified.
             #[inline]
-            pub const fn bits_0_31_opaque(&self) -> u32 {
+            pub const fn value(&self) -> u32 {
                 self.0
             }
 
-            /// Set `BITS_0_31_OPAQUE`.
+            /// Set `VALUE`.
             #[inline]
-            pub fn set_bits_0_31_opaque(&mut self, value: u32) -> &mut Self {
+            pub fn set_value(&mut self, value: u32) -> &mut Self {
                 self.0 = value;
                 self
             }
@@ -30653,10 +30653,10 @@ pub mod bt_mac {
         }
     }
 
-    /// The `WORD_08A4_OPAQUE` register.
+    /// The `ABORTED_OPCODE_SELECTORS_0` register.
     ///
-    /// BLE PHY register initialization writes four byte images equal to 2.
-    pub mod word_08a4_opaque {
+    /// First four byte-wide aborted-opcode selectors; default bytes are two. Hardware abort matching effects remain unqualified.
+    pub mod aborted_opcode_selectors_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -30665,60 +30665,60 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x8a4;
 
-        /// Width of `BITS_0_7_OPAQUE` in bits.
-        pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MASK: u32 = 0xff;
+        /// Width of `OPCODE_0` in bits.
+        pub const OPCODE_0_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `OPCODE_0`.
+        pub const OPCODE_0_MAX: u32 = 0xff;
+        /// Positioned bits of `OPCODE_0`.
+        pub const OPCODE_0_MASK: u32 = 0xff;
 
-        /// Width of `BITS_8_15_OPAQUE` in bits.
-        pub const BITS_8_15_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_8_15_OPAQUE`.
-        pub const BITS_8_15_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_8_15_OPAQUE`.
-        pub const BITS_8_15_OPAQUE_MASK: u32 = 0xff00;
+        /// Width of `OPCODE_1` in bits.
+        pub const OPCODE_1_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `OPCODE_1`.
+        pub const OPCODE_1_MAX: u32 = 0xff;
+        /// Positioned bits of `OPCODE_1`.
+        pub const OPCODE_1_MASK: u32 = 0xff00;
 
-        /// Width of `BITS_16_23_OPAQUE` in bits.
-        pub const BITS_16_23_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_16_23_OPAQUE`.
-        pub const BITS_16_23_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_16_23_OPAQUE`.
-        pub const BITS_16_23_OPAQUE_MASK: u32 = 0xff0000;
+        /// Width of `OPCODE_2` in bits.
+        pub const OPCODE_2_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `OPCODE_2`.
+        pub const OPCODE_2_MAX: u32 = 0xff;
+        /// Positioned bits of `OPCODE_2`.
+        pub const OPCODE_2_MASK: u32 = 0xff0000;
 
-        /// Width of `BITS_24_31_OPAQUE` in bits.
-        pub const BITS_24_31_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_24_31_OPAQUE`.
-        pub const BITS_24_31_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_24_31_OPAQUE`.
-        pub const BITS_24_31_OPAQUE_MASK: u32 = 0xff000000;
+        /// Width of `OPCODE_3` in bits.
+        pub const OPCODE_3_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `OPCODE_3`.
+        pub const OPCODE_3_MAX: u32 = 0xff;
+        /// Positioned bits of `OPCODE_3`.
+        pub const OPCODE_3_MASK: u32 = 0xff000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_0_7_opaque(self) -> u8 {
+            pub const fn opcode_0(self) -> u8 {
                 self.0 as u8
             }
 
-            /// The `BITS_8_15_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_8_15_opaque(self) -> u8 {
+            pub const fn opcode_1(self) -> u8 {
                 (self.0 >> 8) as u8
             }
 
-            /// The `BITS_16_23_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_16_23_opaque(self) -> u8 {
+            pub const fn opcode_2(self) -> u8 {
                 (self.0 >> 16) as u8
             }
 
-            /// The `BITS_24_31_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_24_31_opaque(self) -> u8 {
+            pub const fn opcode_3(self) -> u8 {
                 (self.0 >> 24) as u8
             }
         }
@@ -30727,64 +30727,64 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_0_7_opaque(&self) -> u8 {
+            pub const fn opcode_0(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// The `BITS_8_15_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_8_15_opaque(&self) -> u8 {
+            pub const fn opcode_1(&self) -> u8 {
                 (self.0 >> 8) as u8
             }
 
-            /// The `BITS_16_23_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_16_23_opaque(&self) -> u8 {
+            pub const fn opcode_2(&self) -> u8 {
                 (self.0 >> 16) as u8
             }
 
-            /// The `BITS_24_31_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_24_31_opaque(&self) -> u8 {
+            pub const fn opcode_3(&self) -> u8 {
                 (self.0 >> 24) as u8
             }
 
-            /// Set `BITS_0_7_OPAQUE`.
+            /// Set `OPCODE_0`.
             #[inline]
-            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_opcode_0(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xffffff00) | u32::from(value);
                 self
             }
 
-            /// Set `BITS_8_15_OPAQUE`.
+            /// Set `OPCODE_1`.
             #[inline]
-            pub fn set_bits_8_15_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_opcode_1(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xffff00ff) | (u32::from(value) << 8);
                 self
             }
 
-            /// Set `BITS_16_23_OPAQUE`.
+            /// Set `OPCODE_2`.
             #[inline]
-            pub fn set_bits_16_23_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_opcode_2(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xff00ffff) | (u32::from(value) << 16);
                 self
             }
 
-            /// Set `BITS_24_31_OPAQUE`.
+            /// Set `OPCODE_3`.
             #[inline]
-            pub fn set_bits_24_31_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_opcode_3(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0x00ffffff) | (u32::from(value) << 24);
                 self
             }
         }
     }
 
-    /// The `WORD_08A8_OPAQUE` register.
+    /// The `ABORTED_OPCODE_SELECTORS_1` register.
     ///
-    /// BLE PHY register initialization writes four byte images equal to 2.
-    pub mod word_08a8_opaque {
+    /// Next four byte-wide aborted-opcode selectors; default bytes are two. Hardware abort matching effects remain unqualified.
+    pub mod aborted_opcode_selectors_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -30793,60 +30793,60 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x8a8;
 
-        /// Width of `BITS_0_7_OPAQUE` in bits.
-        pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MASK: u32 = 0xff;
+        /// Width of `OPCODE_4` in bits.
+        pub const OPCODE_4_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `OPCODE_4`.
+        pub const OPCODE_4_MAX: u32 = 0xff;
+        /// Positioned bits of `OPCODE_4`.
+        pub const OPCODE_4_MASK: u32 = 0xff;
 
-        /// Width of `BITS_8_15_OPAQUE` in bits.
-        pub const BITS_8_15_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_8_15_OPAQUE`.
-        pub const BITS_8_15_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_8_15_OPAQUE`.
-        pub const BITS_8_15_OPAQUE_MASK: u32 = 0xff00;
+        /// Width of `OPCODE_5` in bits.
+        pub const OPCODE_5_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `OPCODE_5`.
+        pub const OPCODE_5_MAX: u32 = 0xff;
+        /// Positioned bits of `OPCODE_5`.
+        pub const OPCODE_5_MASK: u32 = 0xff00;
 
-        /// Width of `BITS_16_23_OPAQUE` in bits.
-        pub const BITS_16_23_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_16_23_OPAQUE`.
-        pub const BITS_16_23_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_16_23_OPAQUE`.
-        pub const BITS_16_23_OPAQUE_MASK: u32 = 0xff0000;
+        /// Width of `OPCODE_6` in bits.
+        pub const OPCODE_6_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `OPCODE_6`.
+        pub const OPCODE_6_MAX: u32 = 0xff;
+        /// Positioned bits of `OPCODE_6`.
+        pub const OPCODE_6_MASK: u32 = 0xff0000;
 
-        /// Width of `BITS_24_31_OPAQUE` in bits.
-        pub const BITS_24_31_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_24_31_OPAQUE`.
-        pub const BITS_24_31_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_24_31_OPAQUE`.
-        pub const BITS_24_31_OPAQUE_MASK: u32 = 0xff000000;
+        /// Width of `OPCODE_7` in bits.
+        pub const OPCODE_7_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `OPCODE_7`.
+        pub const OPCODE_7_MAX: u32 = 0xff;
+        /// Positioned bits of `OPCODE_7`.
+        pub const OPCODE_7_MASK: u32 = 0xff000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_0_7_opaque(self) -> u8 {
+            pub const fn opcode_4(self) -> u8 {
                 self.0 as u8
             }
 
-            /// The `BITS_8_15_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_8_15_opaque(self) -> u8 {
+            pub const fn opcode_5(self) -> u8 {
                 (self.0 >> 8) as u8
             }
 
-            /// The `BITS_16_23_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_16_23_opaque(self) -> u8 {
+            pub const fn opcode_6(self) -> u8 {
                 (self.0 >> 16) as u8
             }
 
-            /// The `BITS_24_31_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_24_31_opaque(self) -> u8 {
+            pub const fn opcode_7(self) -> u8 {
                 (self.0 >> 24) as u8
             }
         }
@@ -30855,54 +30855,54 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_0_7_opaque(&self) -> u8 {
+            pub const fn opcode_4(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// The `BITS_8_15_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_8_15_opaque(&self) -> u8 {
+            pub const fn opcode_5(&self) -> u8 {
                 (self.0 >> 8) as u8
             }
 
-            /// The `BITS_16_23_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_16_23_opaque(&self) -> u8 {
+            pub const fn opcode_6(&self) -> u8 {
                 (self.0 >> 16) as u8
             }
 
-            /// The `BITS_24_31_OPAQUE` field.
+            /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
-            pub const fn bits_24_31_opaque(&self) -> u8 {
+            pub const fn opcode_7(&self) -> u8 {
                 (self.0 >> 24) as u8
             }
 
-            /// Set `BITS_0_7_OPAQUE`.
+            /// Set `OPCODE_4`.
             #[inline]
-            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_opcode_4(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xffffff00) | u32::from(value);
                 self
             }
 
-            /// Set `BITS_8_15_OPAQUE`.
+            /// Set `OPCODE_5`.
             #[inline]
-            pub fn set_bits_8_15_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_opcode_5(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xffff00ff) | (u32::from(value) << 8);
                 self
             }
 
-            /// Set `BITS_16_23_OPAQUE`.
+            /// Set `OPCODE_6`.
             #[inline]
-            pub fn set_bits_16_23_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_opcode_6(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xff00ffff) | (u32::from(value) << 16);
                 self
             }
 
-            /// Set `BITS_24_31_OPAQUE`.
+            /// Set `OPCODE_7`.
             #[inline]
-            pub fn set_bits_24_31_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_opcode_7(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0x00ffffff) | (u32::from(value) << 24);
                 self
             }
@@ -34077,17 +34077,17 @@ pub mod bt_mac {
             self.0.write::<0x4b8>(triggers.0);
         }
 
-        /// Read `WORD_0538_OPAQUE`.
+        /// Read `CRC_CONFIG`.
         #[inline]
-        pub fn read_word_0538_opaque(&self) -> word_0538_opaque::R {
-            word_0538_opaque::R(self.0.read::<0x538>())
+        pub fn read_crc_config(&self) -> crc_config::R {
+            crc_config::R(self.0.read::<0x538>())
         }
 
-        /// Read `WORD_0538_OPAQUE`, change fields and write it back; every other bit keeps
+        /// Read `CRC_CONFIG`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_word_0538_opaque(&mut self, change: impl FnOnce(&mut word_0538_opaque::W)) {
-            let mut value = word_0538_opaque::W(self.0.read::<0x538>());
+        pub fn modify_crc_config(&mut self, change: impl FnOnce(&mut crc_config::W)) {
+            let mut value = crc_config::W(self.0.read::<0x538>());
             change(&mut value);
             self.0.write::<0x538>(value.0);
         }
@@ -34155,17 +34155,17 @@ pub mod bt_mac {
             self.0.write::<0x858>(value.0);
         }
 
-        /// Read `WORD_085C_OPAQUE`.
+        /// Read `PACKET_ERROR_MASK`.
         #[inline]
-        pub fn read_word_085c_opaque(&self) -> word_085c_opaque::R {
-            word_085c_opaque::R(self.0.read::<0x85c>())
+        pub fn read_packet_error_mask(&self) -> packet_error_mask::R {
+            packet_error_mask::R(self.0.read::<0x85c>())
         }
 
-        /// Read `WORD_085C_OPAQUE`, change fields and write it back; every other bit keeps
+        /// Read `PACKET_ERROR_MASK`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_word_085c_opaque(&mut self, change: impl FnOnce(&mut word_085c_opaque::W)) {
-            let mut value = word_085c_opaque::W(self.0.read::<0x85c>());
+        pub fn modify_packet_error_mask(&mut self, change: impl FnOnce(&mut packet_error_mask::W)) {
+            let mut value = packet_error_mask::W(self.0.read::<0x85c>());
             change(&mut value);
             self.0.write::<0x85c>(value.0);
         }
@@ -34220,32 +34220,38 @@ pub mod bt_mac {
             self.0.write::<0x8a0>(value.0);
         }
 
-        /// Read `WORD_08A4_OPAQUE`.
+        /// Read `ABORTED_OPCODE_SELECTORS_0`.
         #[inline]
-        pub fn read_word_08a4_opaque(&self) -> word_08a4_opaque::R {
-            word_08a4_opaque::R(self.0.read::<0x8a4>())
+        pub fn read_aborted_opcode_selectors_0(&self) -> aborted_opcode_selectors_0::R {
+            aborted_opcode_selectors_0::R(self.0.read::<0x8a4>())
         }
 
-        /// Read `WORD_08A4_OPAQUE`, change fields and write it back; every other bit keeps
+        /// Read `ABORTED_OPCODE_SELECTORS_0`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_word_08a4_opaque(&mut self, change: impl FnOnce(&mut word_08a4_opaque::W)) {
-            let mut value = word_08a4_opaque::W(self.0.read::<0x8a4>());
+        pub fn modify_aborted_opcode_selectors_0(
+            &mut self,
+            change: impl FnOnce(&mut aborted_opcode_selectors_0::W),
+        ) {
+            let mut value = aborted_opcode_selectors_0::W(self.0.read::<0x8a4>());
             change(&mut value);
             self.0.write::<0x8a4>(value.0);
         }
 
-        /// Read `WORD_08A8_OPAQUE`.
+        /// Read `ABORTED_OPCODE_SELECTORS_1`.
         #[inline]
-        pub fn read_word_08a8_opaque(&self) -> word_08a8_opaque::R {
-            word_08a8_opaque::R(self.0.read::<0x8a8>())
+        pub fn read_aborted_opcode_selectors_1(&self) -> aborted_opcode_selectors_1::R {
+            aborted_opcode_selectors_1::R(self.0.read::<0x8a8>())
         }
 
-        /// Read `WORD_08A8_OPAQUE`, change fields and write it back; every other bit keeps
+        /// Read `ABORTED_OPCODE_SELECTORS_1`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_word_08a8_opaque(&mut self, change: impl FnOnce(&mut word_08a8_opaque::W)) {
-            let mut value = word_08a8_opaque::W(self.0.read::<0x8a8>());
+        pub fn modify_aborted_opcode_selectors_1(
+            &mut self,
+            change: impl FnOnce(&mut aborted_opcode_selectors_1::W),
+        ) {
+            let mut value = aborted_opcode_selectors_1::W(self.0.read::<0x8a8>());
             change(&mut value);
             self.0.write::<0x8a8>(value.0);
         }
@@ -70300,10 +70306,10 @@ pub mod fe {
         }
     }
 
-    /// The `ESTIMATOR_ACTIVITY_STATUS` register.
+    /// The `WORD_08D0_OPAQUE` register.
     ///
     /// Complete phy_iq_est_enable counts nonzero bits 21:20 while waiting; complete phy_check_rx_sat samples the same field exactly 100 times.
-    pub mod estimator_activity_status {
+    pub mod word_08d0_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00300000;
         /// The register's width in bits.
@@ -70324,7 +70330,7 @@ pub mod fe {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Nonzero is treated as IQ-estimator activity and as an RX-saturation sample.
+            /// Sampled only while estimator READY is clear, for a diagnostic count; phy_check_rx_sat samples the same pair 100 times. RX saturation is a strong inference, generic activity a weak inference; these are not established estimator-busy or completion bits. Individual bit meanings remain unassigned.
             #[inline]
             pub const fn bits_20_21_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -72380,10 +72386,10 @@ pub mod fe {
             estimator_ready_status::R(self.0.read::<0x47c>())
         }
 
-        /// Read `ESTIMATOR_ACTIVITY_STATUS`.
+        /// Read `WORD_08D0_OPAQUE`.
         #[inline]
-        pub fn read_estimator_activity_status(&self) -> estimator_activity_status::R {
-            estimator_activity_status::R(self.0.read::<0x8d0>())
+        pub fn read_word_08d0_opaque(&self) -> word_08d0_opaque::R {
+            word_08d0_opaque::R(self.0.read::<0x8d0>())
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -102737,17 +102743,33 @@ pub mod hp_sys_clkrst {
             self.0.write::<0x1e0>(value.0);
         }
 
-        /// Write the vendor's whole-word image `0x0000003d`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
+        /// Write the vendor's whole-word image `0x00000015`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
         ///
-        /// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK.
+        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
+        #[inline]
+        pub fn prepare_open_modem_pll_source_gate(&mut self) {
+            self.0.write::<0x1e0>(0x00000015);
+        }
+
+        /// Write the vendor's whole-word image `0x0000002d`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
+        #[inline]
+        pub fn prepare_close_modem_pll_source_gate(&mut self) {
+            self.0.write::<0x1e0>(0x0000002d);
+        }
+
+        /// Write the vendor's whole-word image `0x0000001d`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
         #[inline]
         pub fn open_modem_pll_source_gate(&mut self) {
-            self.0.write::<0x1e0>(0x0000003d);
+            self.0.write::<0x1e0>(0x0000001d);
         }
 
         /// Write the vendor's whole-word image `0x00000025`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
         ///
-        /// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK.
+        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
         #[inline]
         pub fn close_modem_pll_source_gate(&mut self) {
             self.0.write::<0x1e0>(0x00000025);
@@ -253338,12 +253360,12 @@ pub mod wifi_bb {
         /// Positioned bits of `BITS_0_23_OPAQUE`.
         pub const BITS_0_23_OPAQUE_MASK: u32 = 0xffffff;
 
-        /// Width of `BITS_24_28_OPAQUE` in bits.
-        pub const BITS_24_28_OPAQUE_WIDTH: u32 = 5;
-        /// Greatest unsigned image of `BITS_24_28_OPAQUE`.
-        pub const BITS_24_28_OPAQUE_MAX: u32 = 0x1f;
-        /// Positioned bits of `BITS_24_28_OPAQUE`.
-        pub const BITS_24_28_OPAQUE_MASK: u32 = 0x1f000000;
+        /// Width of `FREQUENCY_NUMERATOR_SHIFT` in bits.
+        pub const FREQUENCY_NUMERATOR_SHIFT_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `FREQUENCY_NUMERATOR_SHIFT`.
+        pub const FREQUENCY_NUMERATOR_SHIFT_MAX: u32 = 0x1f;
+        /// Positioned bits of `FREQUENCY_NUMERATOR_SHIFT`.
+        pub const FREQUENCY_NUMERATOR_SHIFT_MASK: u32 = 0x1f000000;
 
         /// Width of `BITS_29_31_OPAQUE` in bits.
         pub const BITS_29_31_OPAQUE_WIDTH: u32 = 3;
@@ -253363,9 +253385,9 @@ pub mod wifi_bb {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// The `BITS_24_28_OPAQUE` field.
+            /// Shift applied to numerator 80 before division by the supplied frequency; physical units remain unqualified.
             #[inline]
-            pub const fn bits_24_28_opaque(self) -> oer_mmio::Bits<5> {
+            pub const fn frequency_numerator_shift(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 24)
             }
 
@@ -253386,9 +253408,9 @@ pub mod wifi_bb {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// The `BITS_24_28_OPAQUE` field.
+            /// Shift applied to numerator 80 before division by the supplied frequency; physical units remain unqualified.
             #[inline]
-            pub const fn bits_24_28_opaque(&self) -> oer_mmio::Bits<5> {
+            pub const fn frequency_numerator_shift(&self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 24)
             }
 
@@ -253405,9 +253427,9 @@ pub mod wifi_bb {
                 self
             }
 
-            /// Set `BITS_24_28_OPAQUE`.
+            /// Set `FREQUENCY_NUMERATOR_SHIFT`.
             #[inline]
-            pub fn set_bits_24_28_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+            pub fn set_frequency_numerator_shift(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
                 self.0 = (self.0 & 0xe0ffffff) | (value.get() << 24);
                 self
             }
@@ -258824,7 +258846,7 @@ pub mod wifi_bb_brx {
 /// Words 0x178-0x1538: Block-ack registers of the Wi-Fi MAC beside the RX descriptor walker, at the same base: the per-queue TX block-ack state, the RX block-ack agreement update and the extra soft-AP RX block-ack entry.
 /// Words 0x29c-0x2ac: Complete dbg_read_internal_txba reads one internal WDEVTXBA result: a 64-bit bitmap, two transmitter-address words and a combined fragment/starting-sequence/TID word.
 /// Words 0x2b0-0x11ac: Complete hal_attenna_init transaction. The misspelled vendor symbol first visits eight reverse-stride queue/vector words, then updates one common word.
-/// Word 0x2b4: Station beacon-filter control word recovered from the complete enable and disable leaves. The three low bits are toggled together; individual hardware meanings remain unknown.
+/// Word 0x2b4: Station beacon-filter control word recovered from the complete enable and disable leaves. The three low bits select beacon filtering, broadcast wakeup and unicast wakeup.
 /// Words 0x2fc-0xddc: Complete COEX/PTI tail of hal_init and complete setter leaves. PTI values remain platform-supplied because the coexistence table may be changed at runtime.
 /// Word 0x300: Full beacon-IE CRC/result word returned through the caller output pointer by complete hal_beacon_ie_crc_get.
 /// Words 0x308-0xca8: Eight Wi-Fi-owned direct fresh-read RMW edges after the three external HE callbacks in complete mac_txrx_init. The ninth edge reaches the independently shared physical word at 0x20104C24 and is modeled by SHARED_RADIO_INIT_CONTROL.
@@ -260250,7 +260272,7 @@ pub mod wifi_mac {
 
     /// The `WORD_007C_OPAQUE` register.
     ///
-    /// Complete mac_rxbuf_init clears the low byte immediately before publishing the descriptor base. Individual bit meanings are unknown.
+    /// The low byte is the RX-control displacement in the RX buffer, cleared by mac_rxbuf_init before descriptor-base publication. Bit 28 remains unqualified.
     pub mod word_007c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x100000ff;
@@ -260260,12 +260282,12 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x7c;
 
-        /// Width of `BITS_0_7_OPAQUE` in bits.
-        pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MASK: u32 = 0xff;
+        /// Width of `RX_CONTROL_BUFFER_OFFSET` in bits.
+        pub const RX_CONTROL_BUFFER_OFFSET_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `RX_CONTROL_BUFFER_OFFSET`.
+        pub const RX_CONTROL_BUFFER_OFFSET_MAX: u32 = 0xff;
+        /// Positioned bits of `RX_CONTROL_BUFFER_OFFSET`.
+        pub const RX_CONTROL_BUFFER_OFFSET_MASK: u32 = 0xff;
 
         /// Width of `BIT_28_OPAQUE` in bits.
         pub const BIT_28_OPAQUE_WIDTH: u32 = 1;
@@ -260279,9 +260301,9 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Byte displacement added to the RX buffer address to locate RX control.
             #[inline]
-            pub const fn bits_0_7_opaque(self) -> u8 {
+            pub const fn rx_control_buffer_offset(self) -> u8 {
                 self.0 as u8
             }
 
@@ -260296,9 +260318,9 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Byte displacement added to the RX buffer address to locate RX control.
             #[inline]
-            pub const fn bits_0_7_opaque(&self) -> u8 {
+            pub const fn rx_control_buffer_offset(&self) -> u8 {
                 self.0 as u8
             }
 
@@ -260308,9 +260330,9 @@ pub mod wifi_mac {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Set `BITS_0_7_OPAQUE`.
+            /// Set `RX_CONTROL_BUFFER_OFFSET`.
             #[inline]
-            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_rx_control_buffer_offset(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xffffff00) | u32::from(value);
                 self
             }
@@ -264497,12 +264519,26 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x2b4;
 
-        /// Width of `BITS_0_2_OPAQUE` in bits.
-        pub const BITS_0_2_OPAQUE_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `BITS_0_2_OPAQUE`.
-        pub const BITS_0_2_OPAQUE_MAX: u32 = 0x7;
-        /// Positioned bits of `BITS_0_2_OPAQUE`.
-        pub const BITS_0_2_OPAQUE_MASK: u32 = 0x7;
+        /// Width of `BEACON_FILTER_ENABLE` in bits.
+        pub const BEACON_FILTER_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_FILTER_ENABLE`.
+        pub const BEACON_FILTER_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_FILTER_ENABLE`.
+        pub const BEACON_FILTER_ENABLE_MASK: u32 = 0x1;
+
+        /// Width of `BROADCAST_WAKEUP_ENABLE` in bits.
+        pub const BROADCAST_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BROADCAST_WAKEUP_ENABLE`.
+        pub const BROADCAST_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `BROADCAST_WAKEUP_ENABLE`.
+        pub const BROADCAST_WAKEUP_ENABLE_MASK: u32 = 0x2;
+
+        /// Width of `UNICAST_WAKEUP_ENABLE` in bits.
+        pub const UNICAST_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `UNICAST_WAKEUP_ENABLE`.
+        pub const UNICAST_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `UNICAST_WAKEUP_ENABLE`.
+        pub const UNICAST_WAKEUP_ENABLE_MASK: u32 = 0x4;
 
         /// Width of `BITS_3_31_OPAQUE` in bits.
         pub const BITS_3_31_OPAQUE_WIDTH: u32 = 29;
@@ -264516,10 +264552,22 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_2_OPAQUE` field.
+            /// Beacon-filter enable.
             #[inline]
-            pub const fn bits_0_2_opaque(self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn beacon_filter_enable(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Broadcast wakeup enable.
+            #[inline]
+            pub const fn broadcast_wakeup_enable(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Unicast wakeup enable.
+            #[inline]
+            pub const fn unicast_wakeup_enable(self) -> bool {
+                (self.0 & 0x00000004) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -264533,10 +264581,22 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_2_OPAQUE` field.
+            /// Beacon-filter enable.
             #[inline]
-            pub const fn bits_0_2_opaque(&self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn beacon_filter_enable(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Broadcast wakeup enable.
+            #[inline]
+            pub const fn broadcast_wakeup_enable(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Unicast wakeup enable.
+            #[inline]
+            pub const fn unicast_wakeup_enable(&self) -> bool {
+                (self.0 & 0x00000004) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -264545,10 +264605,24 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 3)
             }
 
-            /// Set `BITS_0_2_OPAQUE`.
+            /// Set `BEACON_FILTER_ENABLE`.
             #[inline]
-            pub fn set_bits_0_2_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
-                self.0 = (self.0 & 0xfffffff8) | value.get();
+            pub fn set_beacon_filter_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `BROADCAST_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_broadcast_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `UNICAST_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_unicast_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
                 self
             }
 
@@ -266749,25 +266823,25 @@ pub mod wifi_mac {
             }
         }
 
-        /// Width of `BITS_22_23_OPAQUE` in bits.
-        pub const BITS_22_23_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_22_23_OPAQUE`.
-        pub const BITS_22_23_OPAQUE_MAX: u32 = 0x3;
-        /// Positioned bits of `BITS_22_23_OPAQUE`.
-        pub const BITS_22_23_OPAQUE_MASK: u32 = 0xc00000;
+        /// Width of `SIG_MODE` in bits.
+        pub const SIG_MODE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `SIG_MODE`.
+        pub const SIG_MODE_MAX: u32 = 0x3;
+        /// Positioned bits of `SIG_MODE`.
+        pub const SIG_MODE_MASK: u32 = 0xc00000;
 
-        /// The declared values of the `BITS_22_23_OPAQUE` field.
+        /// The declared values of the `SIG_MODE` field.
         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         #[allow(
             clippy::enum_variant_names,
             reason = "the variants are the model's value names"
         )]
-        pub enum Bits22_23Opaque {
+        pub enum SigMode {
             Format0 = 0x0,
             Format2 = 0x2,
         }
 
-        impl Bits22_23Opaque {
+        impl SigMode {
             /// The value's field bits.
             #[inline]
             pub const fn bits(self) -> u32 {
@@ -266835,16 +266909,16 @@ pub mod wifi_mac {
                 RateIndex::from_bits((self.0 >> 16) & 0x3f)
             }
 
-            /// Zero for the six legacy response words and two for the four HE response words.
+            /// Vendor sig_mode: zero for six legacy response entries and two for four HE response entries.
             #[inline]
-            pub const fn bits_22_23_opaque(self) -> oer_mmio::Bits<2> {
+            pub const fn sig_mode(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
             }
 
-            /// The `BITS_22_23_OPAQUE` field as its declared value, if it is one.
+            /// The `SIG_MODE` field as its declared value, if it is one.
             #[inline]
-            pub const fn bits_22_23_opaque_variant(self) -> Option<Bits22_23Opaque> {
-                Bits22_23Opaque::from_bits((self.0 >> 22) & 0x3)
+            pub const fn sig_mode_variant(self) -> Option<SigMode> {
+                SigMode::from_bits((self.0 >> 22) & 0x3)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -266888,16 +266962,16 @@ pub mod wifi_mac {
                 RateIndex::from_bits((self.0 >> 16) & 0x3f)
             }
 
-            /// Zero for the six legacy response words and two for the four HE response words.
+            /// Vendor sig_mode: zero for six legacy response entries and two for four HE response entries.
             #[inline]
-            pub const fn bits_22_23_opaque(&self) -> oer_mmio::Bits<2> {
+            pub const fn sig_mode(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
             }
 
-            /// The `BITS_22_23_OPAQUE` field as its declared value, if it is one.
+            /// The `SIG_MODE` field as its declared value, if it is one.
             #[inline]
-            pub const fn bits_22_23_opaque_variant(&self) -> Option<Bits22_23Opaque> {
-                Bits22_23Opaque::from_bits((self.0 >> 22) & 0x3)
+            pub const fn sig_mode_variant(&self) -> Option<SigMode> {
+                SigMode::from_bits((self.0 >> 22) & 0x3)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -266932,9 +267006,9 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BITS_22_23_OPAQUE`.
+            /// Set `SIG_MODE`.
             #[inline]
-            pub fn set_bits_22_23_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+            pub fn set_sig_mode(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
                 self.0 = (self.0 & 0xff3fffff) | (value.get() << 22);
                 self
             }
@@ -304298,7 +304372,7 @@ pub mod layouts {
             Some(index)
         }
     }
-    /// One captured byte at RX-control prefix offset 3, used by ppRxProtoProc to select a rate-control route. Individual electrical meanings are unassigned.
+    /// One captured byte at RX-control prefix offset 3, used by ppRxProtoProc to select a rate-control route. Bits 4/5/6 indicate reception-interface matches 0/1/2.
     ///
     /// A decoder over the 1 bytes the hardware wrote, read only after the
     /// handover that gives them to the CPU.
@@ -304341,39 +304415,39 @@ pub mod layouts {
             self.0
         }
 
-        /// Width of `BIT_4_OPAQUE` in bits.
-        pub const BIT_4_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_4_OPAQUE`.
-        pub const BIT_4_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. With bit 5 clear, selects route zero.
+        /// Width of `RXMATCH0` in bits.
+        pub const RXMATCH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `RXMATCH0`.
+        pub const RXMATCH0_MAX: u32 = 0x1;
+        /// Reception matched interface 0; the vendor rate-control route also depends on the other match flags.
         ///
-        /// `BIT_4_OPAQUE`, bit 4; written by the hardware.
-        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
-        pub const fn bit_4_opaque(self) -> bool {
+        /// `RXMATCH0`, bit 4; written by the hardware.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES.
+        pub const fn rxmatch0(self) -> bool {
             self.0 & 0x10 != 0
         }
 
-        /// Width of `BIT_5_OPAQUE` in bits.
-        pub const BIT_5_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_5_OPAQUE`.
-        pub const BIT_5_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. With bit 4 clear, selects route one; with bit 4 set, suppresses lookup.
+        /// Width of `RXMATCH1` in bits.
+        pub const RXMATCH1_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `RXMATCH1`.
+        pub const RXMATCH1_MAX: u32 = 0x1;
+        /// Reception matched interface 1; the vendor rate-control route also depends on the other match flags.
         ///
-        /// `BIT_5_OPAQUE`, bit 5; written by the hardware.
-        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
-        pub const fn bit_5_opaque(self) -> bool {
+        /// `RXMATCH1`, bit 5; written by the hardware.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES.
+        pub const fn rxmatch1(self) -> bool {
             self.0 & 0x20 != 0
         }
 
-        /// Width of `BIT_6_OPAQUE` in bits.
-        pub const BIT_6_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_6_OPAQUE`.
-        pub const BIT_6_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. With bits 4 and 5 clear, selects route two.
+        /// Width of `RXMATCH2` in bits.
+        pub const RXMATCH2_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `RXMATCH2`.
+        pub const RXMATCH2_MAX: u32 = 0x1;
+        /// Reception matched interface 2; the vendor rate-control route also depends on the other match flags.
         ///
-        /// `BIT_6_OPAQUE`, bit 6; written by the hardware.
-        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
-        pub const fn bit_6_opaque(self) -> bool {
+        /// `RXMATCH2`, bit 6; written by the hardware.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES.
+        pub const fn rxmatch2(self) -> bool {
             self.0 & 0x40 != 0
         }
     }
@@ -304486,6 +304560,35 @@ pub mod layouts {
             } else {
                 Self(self.0 & 0xffffffef)
             }
+        }
+
+        /// Width of `BITS_6_7_OPAQUE` in bits.
+        pub const BITS_6_7_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_6_7_OPAQUE`.
+        pub const BITS_6_7_OPAQUE_MAX: u32 = 0x3;
+        /// Opaque: meaning not established. Vendor TXOP class predicate: CONTROL bit 22 is set only for value two. The ordinary CCMP fragmentation path uses two; physical meaning of the class remains unqualified.
+        ///
+        /// `BITS_6_7_OPAQUE`, bits 7:6; written by the CPU.
+        /// SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS.
+        pub const fn bits_6_7_opaque(self) -> u8 {
+            ((self.0 >> 6) & 0x3) as u8
+        }
+
+        /// This value with `BITS_6_7_OPAQUE` set to `value`, or `None` when `value` does not
+        /// fit its 2 bits.
+        pub const fn with_bits_6_7_opaque(self, value: u8) -> Option<Self> {
+            if value > 0x3 {
+                None
+            } else {
+                Some(Self((self.0 & 0xffffff3f) | (value as u32) << 6))
+            }
+        }
+
+        /// This value with `BITS_6_7_OPAQUE` set to `VALUE`, checked at compile time.
+        pub const fn with_bits_6_7_opaque_constant<const VALUE: u8>(self) -> Self {
+            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xffffff3f) | (value as u32) << 6)
         }
 
         /// Width of `HE` in bits.
@@ -305707,20 +305810,20 @@ pub mod layouts {
             Self((self.0 & 0xf0003fff) | (value as u32) << 14)
         }
 
-        /// Width of `BIT_29_OPAQUE` in bits.
-        pub const BIT_29_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_29_OPAQUE`.
-        pub const BIT_29_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. Cleared when the descriptor is rearmed and clear on every armed descriptor; what the hardware does with it is unknown.
+        /// Width of `SOSF` in bits.
+        pub const SOSF_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SOSF`.
+        pub const SOSF_MAX: u32 = 0x1;
+        /// Vendor sosf bit, cleared on rearm. The acronym and its hardware effects are not established.
         ///
-        /// `BIT_29_OPAQUE`, bit 29; written by the CPU.
-        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
-        pub const fn bit_29_opaque(self) -> bool {
+        /// `SOSF`, bit 29; written by the CPU.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES.
+        pub const fn sosf(self) -> bool {
             self.0 & 0x20000000 != 0
         }
 
-        /// This value with `BIT_29_OPAQUE` set to `value`.
-        pub const fn with_bit_29_opaque(self, value: bool) -> Self {
+        /// This value with `SOSF` set to `value`.
+        pub const fn with_sosf(self, value: bool) -> Self {
             if value {
                 Self(self.0 | 0x20000000)
             } else {
@@ -307787,10 +307890,10 @@ pub mod layouts {
         pub const BIT_0_OPAQUE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `BIT_0_OPAQUE`.
         pub const BIT_0_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. ISO sync error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
         ///
         /// `BIT_0_OPAQUE`, bit 0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
+        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
         pub const fn bit_0_opaque(self) -> bool {
             self.0 & 0x1 != 0
         }
@@ -307808,10 +307911,10 @@ pub mod layouts {
         pub const BIT_1_OPAQUE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `BIT_1_OPAQUE`.
         pub const BIT_1_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. ISO configured-length error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
         ///
         /// `BIT_1_OPAQUE`, bit 1; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
+        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
         pub const fn bit_1_opaque(self) -> bool {
             self.0 & 0x2 != 0
         }
@@ -307829,10 +307932,10 @@ pub mod layouts {
         pub const BIT_2_OPAQUE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `BIT_2_OPAQUE`.
         pub const BIT_2_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. ISO maximum-length error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
         ///
         /// `BIT_2_OPAQUE`, bit 2; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
+        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
         pub const fn bit_2_opaque(self) -> bool {
             self.0 & 0x4 != 0
         }
@@ -307850,10 +307953,10 @@ pub mod layouts {
         pub const BIT_3_OPAQUE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `BIT_3_OPAQUE`.
         pub const BIT_3_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. ISO MIC-length error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
         ///
         /// `BIT_3_OPAQUE`, bit 3; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
+        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
         pub const fn bit_3_opaque(self) -> bool {
             self.0 & 0x8 != 0
         }
@@ -307871,10 +307974,10 @@ pub mod layouts {
         pub const BIT_4_OPAQUE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `BIT_4_OPAQUE`.
         pub const BIT_4_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. ISO CRC error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
         ///
         /// `BIT_4_OPAQUE`, bit 4; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
+        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
         pub const fn bit_4_opaque(self) -> bool {
             self.0 & 0x10 != 0
         }
@@ -307892,10 +307995,10 @@ pub mod layouts {
         pub const BITS_5_8_OPAQUE_WIDTH: u32 = 4;
         /// Greatest unsigned image of `BITS_5_8_OPAQUE`.
         pub const BITS_5_8_OPAQUE_MAX: u32 = 0xf;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. ISO bit 5 is MIC error; bits 6..8 have no identified meaning. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
         ///
         /// `BITS_5_8_OPAQUE`, bits 8:5; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
+        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
         pub const fn bits_5_8_opaque(self) -> u8 {
             ((self.0 >> 5) & 0xf) as u8
         }
@@ -307963,10 +308066,10 @@ pub mod layouts {
         pub const BITS_11_23_OPAQUE_WIDTH: u32 = 13;
         /// Greatest unsigned image of `BITS_11_23_OPAQUE`.
         pub const BITS_11_23_OPAQUE_MAX: u32 = 0x1fff;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. ISO bits 21/22/23 are NPI-length error, LLID error and power stop; bits 11..20 have no identified meaning. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
         ///
         /// `BITS_11_23_OPAQUE`, bits 23:11; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
+        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
         pub const fn bits_11_23_opaque(self) -> u16 {
             ((self.0 >> 11) & 0x1fff) as u16
         }
@@ -317406,7 +317509,7 @@ pub mod layouts {
         }
     }
 
-    /// Resolving-list allocation published to the PHY. The initialized high head bit is positional; privacy semantics and the remaining allocation are unassigned.
+    /// Resolving-list allocation published to the PHY. Head bit 31 terminates the list; privacy semantics and the remaining allocation are unassigned.
     ///
     /// 64 bytes, aligned to 4; its zero bytes are an all-zero structure.
     /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
@@ -317619,20 +317722,20 @@ pub mod layouts {
             self.0
         }
 
-        /// Width of `BIT_31_OPAQUE` in bits.
-        pub const BIT_31_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_31_OPAQUE`.
-        pub const BIT_31_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Width of `END_OF_LIST` in bits.
+        pub const END_OF_LIST_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `END_OF_LIST`.
+        pub const END_OF_LIST_MAX: u32 = 0x1;
+        /// Project-assigned name. End-of-list marker; the initialized empty head has this bit set.
         ///
-        /// `BIT_31_OPAQUE`, bit 31; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bit_31_opaque(self) -> bool {
+        /// `END_OF_LIST`, bit 31; written by the CPU.
+        /// SOURCE: VENDOR_BLE_NAMED_IDENTITIES.
+        pub const fn end_of_list(self) -> bool {
             self.0 & 0x80000000 != 0
         }
 
-        /// This value with `BIT_31_OPAQUE` set to `value`.
-        pub const fn with_bit_31_opaque(self, value: bool) -> Self {
+        /// This value with `END_OF_LIST` set to `value`.
+        pub const fn with_end_of_list(self, value: bool) -> Self {
             if value {
                 Self(self.0 | 0x80000000)
             } else {

@@ -32,7 +32,7 @@ const TX_POWER_LEVELS: [i8; 16] = oer_esp32s31_knowledge::tx_power::TX_POWER_LEV
 const TX_POWER_LEVELS_BYTES: usize = TX_POWER_LEVELS.len();
 /// SOURCE: pinned BLE PHY allocation, resolving-list initial opaque head.
 const RESOLVING_LIST_INITIAL_HEAD: BleResolvingListWord0000Opaque =
-    BleResolvingListWord0000Opaque::ZERO.with_bit_31_opaque(true);
+    BleResolvingListWord0000Opaque::ZERO.with_end_of_list(true);
 
 #[derive(Clone, Copy)]
 enum BlePhyPacketMode {
