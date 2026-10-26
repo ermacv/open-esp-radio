@@ -150,8 +150,10 @@ fn the_interrupt_output_enables_the_baseline_and_its_release_masks_it() {
         .read_irq_enable_1();
     assert!(enable_0.source_15());
     assert!(
-        enable_1.source_1() && enable_1.source_8() && enable_1.source_9() && enable_1.source_12()
+        !enable_1.source_1(),
+        "the unclassified vendor source stays disabled"
     );
+    assert!(enable_1.source_8() && enable_1.source_9() && enable_1.source_12());
     let released = prepared.release_controller_output();
     let enable_0 = released
         .peripherals
@@ -394,9 +396,10 @@ fn the_low_power_component_routes_channels_four_through_seven() {
 fn baseline_clear_enable_and_release_preserve_unrelated_sources() {
     use oer_esp32s31_pac::bt_mac::{irq_clear_1, irq_enable_1};
 
-    // SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5): clear/OR-enable/mask
-    // the same baseline, including source 1 whose cause is unknown.
-    for inherited in [0, u32::MAX, 0xa55a_a55a] {
+    // SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ: the HAL's classified baseline.
+    // Source 1 is outside this baseline: leave it unchanged, including an
+    // inherited enable, until B1 identifies its event and handling.
+    for inherited in [0, 2, u32::MAX, 0xa55a_a55a] {
         let mut memory = HostMemory::filled(inherited);
         {
             let (_, interrupts, _) = memory.owners();
@@ -406,10 +409,10 @@ fn baseline_clear_enable_and_release_preserve_unrelated_sources() {
             .prepare_controller_output();
             drop(prepared);
         }
-        assert_eq!(memory.interrupt_bank[irq_clear_1::OFFSET / 4], 0x1302);
+        assert_eq!(memory.interrupt_bank[irq_clear_1::OFFSET / 4], 0x1300);
         assert_eq!(
             memory.interrupt_bank[irq_enable_1::OFFSET / 4],
-            inherited | 0x1302
+            inherited | 0x1300
         );
         {
             let (_, interrupts, _) = memory.owners();
@@ -422,7 +425,7 @@ fn baseline_clear_enable_and_release_preserve_unrelated_sources() {
         }
         assert_eq!(
             memory.interrupt_bank[irq_enable_1::OFFSET / 4],
-            inherited & !0x1302
+            inherited & !0x1300
         );
     }
 }

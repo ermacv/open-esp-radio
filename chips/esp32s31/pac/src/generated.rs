@@ -21192,7 +21192,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_1` register.
     ///
-    /// Second controller interrupt-enable bank. Primary setup clears stale image 0x00001302 then ORs that baseline into this word; teardown removes the same bits, preserving all others. Source 1 has unknown identity. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5).
+    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is 0x00001300 and does not arm source 1 until B1 identifies its event and handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper).
     pub mod irq_enable_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21305,7 +21305,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Current baseline source; cause identity and NRT relationship unknown. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5).
+            /// The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established.
             #[inline]
             pub const fn source_1(self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -21394,7 +21394,7 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Current baseline source; cause identity and NRT relationship unknown. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5).
+            /// The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established.
             #[inline]
             pub const fn source_1(&self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -34885,14 +34885,14 @@ pub mod bt_mac {
             self.0.write::<0x58>(0x00008000);
         }
 
-        /// Mask the sources of `0x00001302` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
+        /// Mask the sources of `0x00001300` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT.
+        /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ.
         #[inline]
         pub fn clear_bluetooth_primary_baseline_bank_1(&mut self) {
             let bits = self.0.read::<0x60>();
-            self.0.write::<0x60>(bits & 0xffffecfd);
-            self.0.write::<0x64>(0x00001302);
+            self.0.write::<0x60>(bits & 0xffffecff);
+            self.0.write::<0x64>(0x00001300);
         }
 
         /// Mask the sources of `0x18200000` in `BT_MAC.IRQ_ENABLE_0`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_0`).

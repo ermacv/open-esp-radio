@@ -33,13 +33,16 @@ clock owner and prevents installing it again with that root.
 
 ## Bluetooth register transactions
 
-The interrupt bank clears and enables baseline images `0x8000` / `0x1302`,
+The interrupt bank clears and enables baseline images `0x8000` / `0x1300`,
 then masks the same sources on release while preserving unrelated enables.
-Bank-one source 1 has no established cause identity. The modem LP timer
+The current vendor pin includes bank-one source 1 in baseline `0x1302`;
+its cause identity is unknown and the HAL does not arm it until B1 identifies
+the event and its handling. The modem LP timer
 samples the low bytes of its pending and rollover words, acknowledges each
 nonzero byte with a reviewed whole-word zero, and publishes software pending
 with a whole-word one. These stores include the unmodeled upper bytes.
-SOURCE: `BLOB_LIBBTDM_BASELINE_IRQ_CURRENT` (N5) and
+SOURCE: `BLOB_LIBBTDM_CONTROLLER_IRQ` (HAL baseline),
+`BLOB_LIBBTDM_BASELINE_IRQ_CURRENT` (N5, current vendor baseline) and
 `BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT` (L4/L6/L7) in the register evidence.
 
 The IRQ control commands, LP command lanes and mode controls have unknown

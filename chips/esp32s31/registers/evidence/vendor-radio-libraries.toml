@@ -562,7 +562,7 @@ description = "espressif/esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0 es
 
 [[sources]]
 id = "BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"
-description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray function records, SOURCE: N5, member 8.o r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe clears bank images 0x00008000/0x00001302; r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16 OR-enables the same images; r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18 removes those bits while preserving all others. Bank-one bit 1 has unknown cause identity and no established NRT relationship. No reset state is established."
+description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray function records, SOURCE: N5, member 8.o r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe clears bank images 0x00008000/0x00001302; r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16 OR-enables the same images; r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18 removes those bits while preserving all others. The current vendor pin therefore arms bank-one bit 1 in its baseline 0x00001302; this bit has unknown cause identity and no established NRT relationship. The HAL baseline remains 0x00001300 and does not arm bit 1 until B1 identifies the event and its handling, because its handler currently treats this pending source as unclassified. No reset state is established."
 
 [[sources]]
 id = "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"

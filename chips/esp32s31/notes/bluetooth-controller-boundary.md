@@ -83,6 +83,9 @@ output strobe. Its handler samples masked status; the NRT handler samples its
 dedicated snapshot status. Both acknowledge through the same two W1C clear banks. The HAL
 therefore exposes a transition that stages a single shared register owner
 before either CPU route is bound and preserves the distinct snapshot modes.
+The current vendor pin additionally arms bank-one bit 1 (`0x1302`), whose
+identity is unknown; the HAL does not arm it until B1 identifies the event and
+its handling (SOURCE: [BLOB_LIBBTDM_BASELINE_IRQ_CURRENT, N5](../registers/evidence/vendor-radio-libraries.toml)).
 
 This closes route identity, level, residency policy, baseline masks and the
 setup/teardown prefix. The complete primary suffix review structurally

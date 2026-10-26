@@ -2850,9 +2850,9 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_1"
 register = "BT_MAC.IRQ_CLEAR_1"
-value = 0x00001302
+value = 0x00001300
 masks = "BT_MAC.IRQ_ENABLE_1"
-sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[fixed-register-images]]
 name = "frequency_parameter_0"
@@ -3519,9 +3519,9 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[field-or-modifies]]
 name = "enable_bluetooth_primary_baseline_bank_1"
-fields = [{ field = "BT_MAC.IRQ_ENABLE_1.SOURCE_1", source-bit-offset = 1 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_8", source-bit-offset = 8 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_9", source-bit-offset = 9 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_12", source-bit-offset = 12 }]
-value = 0x00001302
-sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"]
+fields = [{ field = "BT_MAC.IRQ_ENABLE_1.SOURCE_8", source-bit-offset = 8 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_9", source-bit-offset = 9 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_12", source-bit-offset = 12 }]
+value = 0x00001300
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[field-or-modifies]]
 name = "prepare_bluetooth_modem_lp_timer_control_25"
@@ -3932,9 +3932,9 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[field-replace-modifies]]
 name = "mask_bluetooth_primary_baseline_bank_1"
-fields = [{ field = "BT_MAC.IRQ_ENABLE_1.SOURCE_1", source-bit-offset = 1 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_8", source-bit-offset = 8 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_9", source-bit-offset = 9 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_12", source-bit-offset = 12 }]
+fields = [{ field = "BT_MAC.IRQ_ENABLE_1.SOURCE_8", source-bit-offset = 8 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_9", source-bit-offset = 9 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_12", source-bit-offset = 12 }]
 value = 0
-sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[field-replace-modifies]]
 name = "clear_bluetooth_low_power_controls_0_4"
