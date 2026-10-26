@@ -240342,13 +240342,13 @@ pub mod tsens {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Blob-evidenced conversion-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
             #[inline]
             pub const fn bit_9_opaque(self) -> bool {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Blob-evidenced readout-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
             #[inline]
             pub const fn bit_23_opaque(self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -240365,13 +240365,13 @@ pub mod tsens {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Blob-evidenced conversion-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
             #[inline]
             pub const fn bit_9_opaque(&self) -> bool {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Blob-evidenced readout-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
             #[inline]
             pub const fn bit_23_opaque(&self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -255917,7 +255917,7 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Request clearing the watchdog timeout. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
+            /// Request clearing the watchdog timeout. In the cited quiet stand mode a set reads back zero; self-clear versus read-zero and clearing a positively pending timeout remain unresolved. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, HW11_S31_BB_20261027.
             #[inline]
             pub const fn watchdog_timeout_clear_request(self) -> bool {
                 (self.0 & 0x20000000) != 0
@@ -255946,7 +255946,7 @@ pub mod wifi_bb {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Request clearing the watchdog timeout. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
+            /// Request clearing the watchdog timeout. In the cited quiet stand mode a set reads back zero; self-clear versus read-zero and clearing a positively pending timeout remain unresolved. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, HW11_S31_BB_20261027.
             #[inline]
             pub const fn watchdog_timeout_clear_request(&self) -> bool {
                 (self.0 & 0x20000000) != 0

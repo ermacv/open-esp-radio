@@ -1,0 +1,18 @@
+# Short PAC-only digital observations, scoped to their exact reset-isolated mode.
+schema = 1
+
+[[sources]]
+id = "HW11_S31_PLL_20261027"
+description = "SOURCE: stand s31-a rev0 run hw11-20261027-opaque-02, lease #848; ermacv/oer-notes research/hw-opaque-wave1.md P0. With CPU root XTAL, divider zero and fractional numerator zero, one six-field typed RMW per sourced image read back 0x3d,0x25 and 0x15,0x1d,0x2d,0x25. PMU active ICG code stayed 2. Closed six-bit images agree; the open images differ in XTAL-enable bit 5. No running modem-counter, PLL-lock or glitch-equivalence fact follows. Reserved high bits were preserved, not observed."
+
+[[sources]]
+id = "HW11_S31_BB_20261027"
+description = "SOURCE: stand s31-a rev0 run hw11-20261027-opaque-05, lease #852; ermacv/oer-notes research/hw-opaque-wave1.md BB-L. With CPU admission masked, without RF initialization, MAC disable code 15, XTAL modem source and digital BB clocks/interface enabled, control 0xc0010001 and IRQ30 set produced no status during 4096 CPU cycles. BB+0xc08 and +0x4c, MAC RAW/ST and matrix source120/123 read zero. Bit30 retained both levels. Bit29 read zero after setting it with IRQ30 enabled and disabled; this distinguishes readback from stored plain state but establishes neither a read-zero versus self-clear mechanism nor timeout clearing without a positive event. Reset31 remained zero; reset scope is untested."
+
+[[sources]]
+id = "HW11_S31_TSENS_20261027"
+description = "SOURCE: stand s31-a rev0 runs hw11-20261027-opaque-02 (lease #848) and hw11-20261027-opaque-07 (lease #857); ermacv/oer-notes research/hw-opaque-wave1.md P-TSENS. Requested CLK_CONF bit9/bit23 images 11,01,10,00 each received two SAMPLE_EN rising edges with 10-us sampling under a 1-ms deadline. Run07 verifies CLK_EN=1, divider15, forced power and LP peripheral clock enabled, peripheral reset0. Both opaque bits read zero immediately after every requested image, including writes of one. OUT changed in every case and READY was always zero. Thus the readback does not establish four stored gate configurations, individual bit necessity or separate conversion/readout identities; ignored writes versus read-zero or transient commands remain unresolved. Preserve the vendor sequence."
+
+[[sources]]
+id = "HW11_S31_BLOCK_ACK_20261027"
+description = "SOURCE: stand s31-a rev0 runs hw11-20261027-opaque-03 and hw11-20261027-opaque-06; ermacv/oer-notes research/hw-opaque-wave1.md P-BA. On an XTAL-sourced, non-RF-initialized, MAC-disabled path, ordinary index0 CONTROL read 0xc0003001 after publication and an extra update, opaque lanes zero. Extra index3 staging CONTROL read 0xc0003061 and policy 0x00800504 with opaque lanes zero. Extra latched readback was empty (CONTROL 0x60, peer/sequence/bitmap zero), and ordinary CURRENT_SEQUENCE remained zero despite SSN load 0x123. These are staging/quiet observations, not a successfully accepted live BA agreement or proof of a permanent zero-readback invariant. Enabling the digital BB interface in run06 did not change that limitation."

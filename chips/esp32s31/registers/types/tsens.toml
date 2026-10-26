@@ -85,13 +85,13 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 
 [review.entity."CLK_CONF.BIT_9_OPAQUE"]
-sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018"]
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018", "HW11_S31_TSENS_20261027"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
 [review.entity."CLK_CONF.BIT_23_OPAQUE"]
-sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018"]
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018", "HW11_S31_TSENS_20261027"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -239,13 +239,13 @@ description = "Tsens regbank clock gating enable. Temperature-sensor register-ba
 name = "BIT_9_OPAQUE"
 bits = "9"
 class = "plain"
-description = "Blob-evidenced conversion-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
+description = "Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved."
 
 [[registers.fields]]
 name = "BIT_23_OPAQUE"
 bits = "23"
 class = "plain"
-description = "Blob-evidenced readout-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
+description = "Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved."
 
 [[registers]]
 name = "INT_ENA_W1TS"

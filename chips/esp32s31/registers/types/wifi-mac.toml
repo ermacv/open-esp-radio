@@ -831,7 +831,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."RX_BLOCK_ACK_ENTRY%s_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HIL_OPEN_RX_BLOCK_ACK_DIRECT_BANK_2026_07_30"]
+sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HIL_OPEN_RX_BLOCK_ACK_DIRECT_BANK_2026_07_30", "HW11_S31_BLOCK_ACK_20261027"]
 accuracy = "exact"
 completeness = "complete"
 
@@ -4014,7 +4014,7 @@ sources = ["BLOB_LIBPP_HAL_HE_OBSS_NARROW_BAND_RU"]
 provenance = "observed"
 
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HW11_S31_BLOCK_ACK_20261027"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -4051,7 +4051,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HW11_S31_BLOCK_ACK_20261027"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

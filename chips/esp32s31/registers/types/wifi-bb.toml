@@ -169,7 +169,7 @@ sources = ["ROM_REV0_PHY_AGC"]
 accuracy = "exact"
 
 [review.entity."WORD_004C_OPAQUE"]
-sources = ["BLOB_LIBPP_BB_INTR_HANDL"]
+sources = ["BLOB_LIBPP_BB_INTR_HANDL", "HW11_S31_BB_20261027"]
 
 [review.entity."WORD_004C_OPAQUE.BITS_0_31_OPAQUE"]
 sources = ["BLOB_LIBPP_BB_INTR_HANDL"]
@@ -820,7 +820,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."BASEBAND_WATCHDOG_STATUS"]
-sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "HW11_S31_BB_20261027"]
 completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_STATUS.STATUS"]
@@ -884,15 +884,15 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE"]
-sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "HW11_S31_BB_20261027"]
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR_REQUEST"]
-sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "HW11_S31_BB_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_INTERRUPT_ENABLE"]
-sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "HW11_S31_BB_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -2409,7 +2409,7 @@ description = "BB watchdog reset-enable (31), interrupt-enable (30), and timeout
 name = "WATCHDOG_TIMEOUT_CLEAR_REQUEST"
 bits = "29"
 class = "plain"
-description = "Request clearing the watchdog timeout. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026."
+description = "Request clearing the watchdog timeout. In the cited quiet stand mode a set reads back zero; self-clear versus read-zero and clearing a positively pending timeout remain unresolved. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, HW11_S31_BB_20261027."
 
 [[registers.fields]]
 name = "WATCHDOG_INTERRUPT_ENABLE"

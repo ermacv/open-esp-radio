@@ -248,3 +248,48 @@ compact enables. The compact flags are result encoding, not MMIO masks.
 Selection 80's retained-one byte cannot independently count a second
 compare. None of these phased experiments establishes simultaneous
 set/clear priority, arbitrary wrap capacity or an exhaustive all-cause stop.
+
+## Opaque digital observations
+
+Selections 10–13 are independent commands, excluded from selection 0:
+
+| Selection | Experiment |
+| --- | --- |
+| 10 | P0: six-field PLL-gate readback, old `3d→25` and staged `15→1d→2d→25`, once each |
+| 11 | P-BA: ordinary hardware index 0 and extra index 3, quiet staging and latched readback |
+| 12 | BB-L: digital BB reset/gates/interface prefix, reset action disabled, `c0010001` candidate, one 4096-cycle observation and IRQ/clear toggles |
+| 13 | P-TSENS: four bit9/bit23 cases, two sample edges each, nominal 10 µs sampling under a 1 ms deadline per edge |
+
+P0 and TSENS refuse timing attribution unless the owned CPU clock words show
+undivided XTAL with fractional numerator zero. P0 touches only HP/LP words
+while changing the modem source; a BTLC latch is not safe evidence before its
+clock path is independently established. It observes six named bits, preserving
+reserved lanes, and establishes neither PLL lock nor transition glitch freedom.
+
+The BA/BB prefix selects the XTAL modem source and active digital clock maps,
+keeps MAC disable code 15, and enables the digital BB clocks/interface. It does
+not initialize RF, publish DMA or start a radio scheduler. The session is
+disposable: return it to ROM download with the leased stand reset after capture.
+These are not production frequency or calibrated-PHY conditions.
+
+Record tags: `a0` CPU clock fields; `a1` initial MODEM_CONF/PMU code; `a4`,
+`a8`, `ac`, `b0`, `b4`, `b8` P0 step readback/PMU code/cycle. For BA, `b0–b1`
+are clock maps/gates/reset observations. Pairs `c0–cf` contain CONTROL,
+peer/policy/head, sequence and bitmap: initial ordinary/extra; ordinary first,
+second and post-update; extra first, second and latched. Full modeled words
+are reconstructed from typed getters and generated field geometry.
+
+BB groups `d0,d3,d6,d9,dc,df,e2` contain status/handler word/control,
+enables/MAC RAW/ST, matrix bank3/MAC disable/ordinary peer marker. The same
+group tag plus `100` records status/matrix after the handler-word read. `e5`
+records the candidate's observed status. All tags are hexadecimal. A zero
+producer result does not authorize a reset-scope claim, read-to-ack semantics,
+clear effectiveness or a universal source123 silence claim.
+
+TSENS pairs `f0–ff` report before READY/OUT, ready-sample count, final READY/OUT
+and OUT-change count, requested images 11,01,10,00, two edges per case. Tags
+`110–113` verify CLK_CONF (semantic bits: bit9, bit23, CLK_EN), divider,
+and power/clock (POWER_UP, POWER_UP_FORCE, LP clock, LP reset). Named LP clock,
+forced power and divider15 are fixed; the saved power/clock/divider/sample
+fields are restored afterwards. Changing OUT with READY always zero does not
+identify individual conversion/readout gates or establish a READY handshake.
