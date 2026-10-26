@@ -3,7 +3,10 @@ use super::{Session, contain, emit};
 use oer_esp32s31_pac as pac;
 use oer_mmio::Bits;
 
+mod arrival;
 mod reset;
+
+pub(super) use arrival::{compare_ack, two_wraps};
 
 pub(super) fn timer_reset_on(s: &mut Session<'_>) {
     reset::run(s, false, false);

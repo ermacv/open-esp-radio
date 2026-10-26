@@ -175,6 +175,14 @@ struct Probe {
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
     Probe {
+        id: 80,
+        run: ble::compare_ack,
+    },
+    Probe {
+        id: 81,
+        run: ble::two_wraps,
+    },
+    Probe {
         id: 32,
         run: ble::timer_reset_on,
     },
