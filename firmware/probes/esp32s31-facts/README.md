@@ -249,6 +249,48 @@ Selection 80's retained-one byte cannot independently count a second
 compare. None of these phased experiments establishes simultaneous
 set/clear priority, arbitrary wrap capacity or an exhaustive all-cause stop.
 
+Selections 105–108 establish, respectively, one real compare, one natural
+rollover, both, and neither, with both LP delivery lanes enabled. Each checks
+the exact pending-byte precondition, then on hart0 with hart1 already held:
+threshold ceiling, MIE off, held confirmation, LP snapshot, UART0 XTAL
+restoration, boot-address zero, other-core reset pulse, stall, retained SRAM
+record publication, fence, SYS_SW_RST, WFI. There is no timer cleanup before
+this reset.
+
+The successful path preserves the reset-control register-effect order of
+production `fatal::reset_recording`: UART0 restoration, boot-address zero,
+other-core reset pulse, stall, fence and SYS_SW_RST. The complete sequences
+differ: the probe publishes its retained SRAM record after the
+UART0/boot-address/pulse/stall writes, whereas production's record callback
+runs before them. The probe has no ClaimCell election or StopError handling,
+and does not implement production's watchdog-fallback path. A failed hold
+check returns from the leaf with MIE cleared. The comparison covers those
+successful reset-control effects and the next ROM-loader entry, not full
+production fatal-path equivalence.
+
+On the next ROM MEM_END entry, the retained LP reason automatically selects
+109. No debugger reset or re-entry of `_start` may intervene. The observer
+first samples the complete matrix status word containing source 127, LP
+cause, pending bytes and counter (0xb100/1), plus inherited clock fields
+(0xb102/3), before any peripheral write. It emits the retained pre-reset
+record at 0xb110–13 and HP reset causes/record validity at 0xb114. A separate
+clock-only restoration phase samples at 0xb120–23 without preparing the
+LP timer or writing +0x10. A separate LP XTAL/divider restoration, still
+without clear/prepare/start/enable, samples at 0xb124–27 to distinguish a
+source-clock-hidden state. These phases must not be conflated if clocks
+make the initial bus image unqualified.
+
+`+0x10` has no modeled read accessor. A fresh software cause tests retained
+bit18 delivery before/after an explicit enable (0xb130/2). With only compare
+disabled, a single natural rollover after counter-clock/control25/start restoration
+tests bit1 delivery before/after enable (0xb142/4). If the disabled wrap
+produces no pending byte, a fresh enabled wrap is the positive control
+(0xb148); this distinguishes a masked producer from a broken stimulus.
+No all-ones disable precedes that test. Waits are bounded to 40 million cycles for one rollover,
+200 thousand for compare, and 4096 for a diagnostic settle. A missing
+precondition, timeout or absent positive control invalidates the affected
+claim; completion alone is not success. The reason is consumed once.
+
 ## Opaque digital observations
 
 Selections 10–14 are independent commands, excluded from selection 0:
@@ -380,45 +422,3 @@ and power/clock (POWER_UP, POWER_UP_FORCE, LP clock, LP reset). Named LP clock,
 forced power and divider15 are fixed; the saved power/clock/divider/sample
 fields are restored afterwards. Changing OUT with READY always zero does not
 identify individual conversion/readout gates or establish a READY handshake.
-
-Selections 105–108 establish, respectively, one real compare, one natural
-rollover, both, and neither, with both LP delivery lanes enabled. Each checks
-the exact pending-byte precondition, then on hart0 with hart1 already held:
-threshold ceiling, MIE off, held confirmation, LP snapshot, UART0 XTAL
-restoration, boot-address zero, other-core reset pulse, stall, retained SRAM
-record publication, fence, SYS_SW_RST, WFI. There is no timer cleanup before
-this reset.
-
-The successful path preserves the reset-control register-effect order of
-production `fatal::reset_recording`: UART0 restoration, boot-address zero,
-other-core reset pulse, stall, fence and SYS_SW_RST. The complete sequences
-differ: the probe publishes its retained SRAM record after the
-UART0/boot-address/pulse/stall writes, whereas production's record callback
-runs before them. The probe has no ClaimCell election or StopError handling,
-and does not implement production's watchdog-fallback path. A failed hold
-check returns from the leaf with MIE cleared. The comparison covers those
-successful reset-control effects and the next ROM-loader entry, not full
-production fatal-path equivalence.
-
-On the next ROM MEM_END entry, the retained LP reason automatically selects
-109. No debugger reset or re-entry of `_start` may intervene. The observer
-first samples the complete matrix status word containing source 127, LP
-cause, pending bytes and counter (0xb100/1), plus inherited clock fields
-(0xb102/3), before any peripheral write. It emits the retained pre-reset
-record at 0xb110–13 and HP reset causes/record validity at 0xb114. A separate
-clock-only restoration phase samples at 0xb120–23 without preparing the
-LP timer or writing +0x10. A separate LP XTAL/divider restoration, still
-without clear/prepare/start/enable, samples at 0xb124–27 to distinguish a
-source-clock-hidden state. These phases must not be conflated if clocks
-make the initial bus image unqualified.
-
-`+0x10` has no modeled read accessor. A fresh software cause tests retained
-bit18 delivery before/after an explicit enable (0xb130/2). With only compare
-disabled, a single natural rollover after counter-clock/control25/start restoration
-tests bit1 delivery before/after enable (0xb142/4). If the disabled wrap
-produces no pending byte, a fresh enabled wrap is the positive control
-(0xb148); this distinguishes a masked producer from a broken stimulus.
-No all-ones disable precedes that test. Waits are bounded to 40 million cycles for one rollover,
-200 thousand for compare, and 4096 for a diagnostic settle. A missing
-precondition, timeout or absent positive control invalidates the affected
-claim; completion alone is not success. The reason is consumed once.

@@ -1,6 +1,7 @@
 //! HP system reset with positive BLE LP causes, followed by read-before-prepare.
 use super::{
-    Bits, FACTS_OUTPUT, Ordering, RETAINED, Session, ble, emit, halt, pac, retained_record,
+    Bits, FACTS_OUTPUT, Ordering, RETAINED, SECONDARY, Session, ble, emit, halt, pac,
+    retained_record,
 };
 
 const MAGIC: u32 = 0xfac70007;
@@ -26,7 +27,10 @@ fn snapshot(s: &Session<'_>) -> [u32; 5] {
     let output = matrix(s);
     let t = &s.ble.timer;
     [
-        t.read_word_0038_opaque().bits_0_31_opaque(),
+        s.ble
+            .timer_status
+            .read_word_0038_opaque()
+            .bits_0_31_opaque(),
         u32::from(t.read_word_0024_opaque().low_byte()),
         u32::from(t.read_word_002c_opaque().low_byte()),
         counter(s),
@@ -123,8 +127,11 @@ fn run(s: &mut Session<'_>, scenario: u32) {
     let _ = oer_riscv::swap_interrupt_threshold(u8::MAX);
     oer_riscv::disable_interrupts();
     core::sync::atomic::compiler_fence(Ordering::SeqCst);
-    let held = s.core_control.hp_sys_clkrst_core.read_hpcore1_ctrl0();
-    if !held.reg_core1_global_rst_en() || held.reg_core1_cpu_clk_en() {
+    let held = s
+        .core_control
+        .hp_sys_clkrst_core
+        .read_hpcore_ctrl0(SECONDARY.hart().index());
+    if !held.reg_core_global_rst_en() || held.reg_core_cpu_clk_en() {
         return;
     }
     // Sample before reset-control writes; the retained SRAM record below is
@@ -139,14 +146,14 @@ fn run(s: &mut Session<'_>, scenario: u32) {
     });
     s.core_control
         .lp_sys_core_control
-        .modify_boot_addr_hp_core1(|w| {
-            w.set_boot_addr_hp_core1(0);
+        .modify_boot_addr_hp_core(SECONDARY.index(), |w| {
+            w.set_boot_addr_hp_core(0);
         });
     s.core_control
         .lp_aon_clkrst_core_reset
-        .trigger_hpcore1_reset_ctrl_hpcore1_sw_reset();
+        .trigger_hpcore_reset_ctrl_hpcore_sw_reset(SECONDARY.hart().index());
     s.core_control.pmu_cpu_stall.modify_cpu_stall_sw(|w| {
-        w.set_hpcore1_sw_stall_code(0x86);
+        w.set_hpcore_sw_stall_code(SECONDARY.hart().index(), 0x86);
     });
     RETAINED[0].store(0, Ordering::Relaxed);
     for (word, value) in RETAINED.iter().skip(1).zip([
@@ -200,13 +207,13 @@ pub(super) fn observe(s: &mut Session<'_>) {
         0xb114,
         s.reset_cause
             .lp_aon_reset_cause
-            .read_hpcore0_reset_cause()
-            .hpcore0_reset_cause()
+            .read_hpcore_reset_cause(pac::BOOT_HART.index())
+            .hpcore_reset_cause()
             .get(),
         s.reset_cause
             .lp_aon_reset_cause
-            .read_hpcore1_reset_cause()
-            .hpcore1_reset_cause()
+            .read_hpcore_reset_cause(SECONDARY.hart().index())
+            .hpcore_reset_cause()
             .get(),
         u32::from(is_record(&r)),
     );
