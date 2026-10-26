@@ -40,14 +40,21 @@ The final state is dumped without rearm, then the production release closes RF.
 Sampling gaps and scan bounds are reported. No absence or universal ordering
 claim follows from an event that the sampling loop did not see.
 
-The current staged launch is blocked before probe entry by the standard
-bootstrap's `psram-density-mismatch` on both s31-b (run
-`hw4-20261026-rx-chain-01`, lease 781) and the separately authorized s31-c
-(run `hw4-20261026-rx-chain-03-s31c`, lease 788). No RX data was collected.
-The common image/bootstrap/profile needs investigation; actual density and
-cold-boot behavior remain unknown. No memory profile was changed, and no
-additional recovery was attempted on s31-c. The earlier s31-b power-reset
-request was refused before actuation (run 02, lease 783). See the external
+The RX experiment currently stops in the public radio-start path after stage-two
+entry. With the bootstrap PSRAM/cache-placement fixes applied locally, s31-c
+reaches `RXCHAIN boot` and `RXCHAIN radio-start` but produces no `RXCHAIN begin`
+or descriptor records in the bounded capture (`hw4-20261026-rx-chain-08-s31c`).
+No sentinel-replacement or RX timing fact follows from this launch.
+The bootstrap fixes are separate from this probe's branch. See the external
 report `/home/ermacv/dev/oer-notes/research/hw-rx-chain-descriptors.md`.
-The staged product-style stack check also reports an unresolved P2 stack path;
-this probe remains diagnostic and unqualified.
+
+The probe retains exception/panic details in reset-retained memory through the
+runtime's public hooks; a subsequent boot reports them before opening the live
+console and stops with a failed verdict. Phase 1 precedes task setup, phase 2
+covers public radio startup, and phase 3 follows its return. No handler takes
+hardware from the console's live owner. These records diagnose pre-RX failure;
+they do not observe MAC DMA completion.
+
+The staged product-style stack check reports an unresolved P2 stack path.
+This is a diagnostic, unqualified image; no panic budget or memory profile is
+raised to make a product check pass.
