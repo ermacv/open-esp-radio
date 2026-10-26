@@ -202,6 +202,8 @@ extern "C" fn oer_exception_handler(_frame: usize) -> ! {
 }
 
 struct Session<'a> {
+    // Sole PHY/chip-clock/boot owners; serial thread probes borrow these
+    // same groups. Only the SAR action transfers this owner to P2.
     sar: sar::Sar,
     source: &'a pac::hp_system::FromCpu2,
     interrupt_matrix: pac::ownership::InterruptMatrixPeripherals,
@@ -287,163 +289,163 @@ const PROBES: &[Probe] = &[
     },
     Probe {
         id: 102,
-        run: ble_wave2::overflow_ack,
+        run: Action::Thread(ble_wave2::overflow_ack),
     },
     Probe {
         id: 103,
-        run: ble_wave2::overflow_rate,
+        run: Action::Thread(ble_wave2::overflow_rate),
     },
     Probe {
         id: 104,
-        run: ble_wave2::overflow_reset,
+        run: Action::Thread(ble_wave2::overflow_reset),
     },
     Probe {
         id: 101,
-        run: ble_wave2::lp_masked,
+        run: Action::Thread(ble_wave2::lp_masked),
     },
     Probe {
         id: 96,
-        run: ble_wave2::lp_clear,
+        run: Action::Thread(ble_wave2::lp_clear),
     },
     Probe {
         id: 97,
-        run: ble_wave2::sleep16,
+        run: Action::Thread(ble_wave2::sleep16),
     },
     Probe {
         id: 98,
-        run: ble_wave2::sleep_other,
+        run: Action::Thread(ble_wave2::sleep_other),
     },
     Probe {
         id: 99,
-        run: ble_wave2::shutdown_soft,
+        run: Action::Thread(ble_wave2::shutdown_soft),
     },
     Probe {
         id: 100,
-        run: ble_wave2::shutdown_wrap,
+        run: Action::Thread(ble_wave2::shutdown_wrap),
     },
     Probe {
         id: 91,
-        run: ble_wave2::mapping,
+        run: Action::Thread(ble_wave2::mapping),
     },
     Probe {
         id: 92,
-        run: ble_wave2::masks,
+        run: Action::Thread(ble_wave2::masks),
     },
     Probe {
         id: 93,
-        run: ble_wave2::controls,
+        run: Action::Thread(ble_wave2::controls),
     },
     Probe {
         id: 94,
-        run: ble_wave2::groups,
+        run: Action::Thread(ble_wave2::groups),
     },
     Probe {
         id: 95,
-        run: ble_wave2::arrivals,
+        run: Action::Thread(ble_wave2::arrivals),
     },
     Probe {
         id: 90,
-        run: ble_wave2::prerequisite,
+        run: Action::Thread(ble_wave2::prerequisite),
     },
     Probe {
         id: 82,
-        run: radio_local::ieee_timers,
+        run: Action::Thread(radio_local::ieee_timers),
     },
     Probe {
         id: 83,
-        run: radio_local::wifi_timers,
+        run: Action::Thread(radio_local::wifi_timers),
     },
     Probe {
         id: 80,
-        run: ble::compare_ack,
+        run: Action::Thread(ble::compare_ack),
     },
     Probe {
         id: 81,
-        run: ble::two_wraps,
+        run: Action::Thread(ble::two_wraps),
     },
     Probe {
         id: 40,
-        run: generic::matrix,
+        run: Action::Thread(generic::matrix),
     },
     Probe {
         id: 41,
-        run: generic::usb,
+        run: Action::Thread(generic::usb),
     },
     Probe {
         id: 42,
-        run: generic::systimer0,
+        run: Action::Thread(generic::systimer0),
     },
     Probe {
         id: 43,
-        run: generic::systimer1,
+        run: Action::Thread(generic::systimer1),
     },
     Probe {
         id: 44,
-        run: generic::timer0,
+        run: Action::Thread(generic::timer0),
     },
     Probe {
         id: 32,
-        run: ble::timer_reset_on,
+        run: Action::Thread(ble::timer_reset_on),
     },
     Probe {
         id: 33,
-        run: ble::timer_reset_off,
+        run: Action::Thread(ble::timer_reset_off),
     },
     Probe {
         id: 34,
-        run: ble::controller_reset_on,
+        run: Action::Thread(ble::controller_reset_on),
     },
     Probe {
         id: 35,
-        run: ble::controller_reset_off,
+        run: Action::Thread(ble::controller_reset_off),
     },
     Probe {
         id: 20,
-        run: ble::inherited,
+        run: Action::Thread(ble::inherited),
     },
     Probe {
         id: 31,
-        run: ble::btlc_prefix,
+        run: Action::Thread(ble::btlc_prefix),
     },
     Probe {
         id: 30,
-        run: ble::rollover_gates,
+        run: Action::Thread(ble::rollover_gates),
     },
     Probe {
         id: 29,
-        run: ble::software_pending,
+        run: Action::Thread(ble::software_pending),
     },
     Probe {
         id: 28,
-        run: ble::counter_controls,
+        run: Action::Thread(ble::counter_controls),
     },
     Probe {
         id: 27,
-        run: ble::bit_one,
+        run: Action::Thread(ble::bit_one),
     },
     Probe {
         id: 21,
-        run: ble::nrt_controls,
+        run: Action::Thread(ble::nrt_controls),
     },
     Probe {
         id: 22,
-        run: ble::nrt_arrivals,
+        run: Action::Thread(ble::nrt_arrivals),
     },
     Probe {
         id: 23,
-        run: ble::lp_causes,
+        run: Action::Thread(ble::lp_causes),
     },
     Probe {
         id: 24,
-        run: ble::lp_stop,
+        run: Action::Thread(ble::lp_stop),
     },
     Probe {
         id: 25,
-        run: ble::lp_wrap,
+        run: Action::Thread(ble::lp_wrap),
     },
     Probe {
         id: 26,
-        run: ble::lp_modes,
+        run: Action::Thread(ble::lp_modes),
     },
     Probe {
         id: 140,
@@ -530,7 +532,6 @@ extern "C" fn facts_main() -> ! {
         reset_cause: p.reset_cause,
         wake_status: p.pmu_wake.pmu_wake_status,
         radio: radio_local::Radio {
-            tick: p.radio_phy.modem_lpcon_phy_tick,
             local_time: p.mac_local_time.wifi_mac_local_time,
             status: p.wifi_mac.wifi_mac_tsf_status,
             zb: p.ieee802154,
@@ -554,11 +555,6 @@ extern "C" fn facts_main() -> ! {
             core: p.bluetooth.bluetooth_controller_core,
             timer: p.bluetooth_modem_lp_timer.btdm_runtime_control,
             timer_status: p.bluetooth_modem_lp_timer.btdm_lp_timer_status,
-            clocks: p.radio_phy.modem_syscon_radio,
-            lp_clock: p.radio_phy.modem_lpcon_shared_clock,
-            gates: p.chip_clocks.modem_lpcon_chip_clocks,
-            upstream: p.radio_phy.hp_sys_clkrst_radio,
-            pmu: p.radio_phy.pmu_radio,
             watchdog: p.watchdog.lp_wdt,
             positional: p.bluetooth.ble_hw_positional_word1ff0,
             etm: p.modem_etm.modem_etm_bluetooth,

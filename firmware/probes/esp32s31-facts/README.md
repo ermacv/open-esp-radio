@@ -628,11 +628,26 @@ Run `hw17-20261027-sar-review-04` (s31-a, lease #898) loaded the ELF built
 by `cargo fw probe` from commit
 `17e5ad48e577d8fd80071f7adb0305147e94174c`. The run directory under
 `target/hw-hw17/` retains that ELF, all three probe Rust sources, the revision
-and raw outputs. Subsequent PR changes annotate this README, the model's
-evidence/field descriptions and generated PAC metadata; they change no probe
-or HAL operation. Thus the retained measured ELF belongs to that named
-revision, not an unspecified later PR binary. SOURCE
-`HW17_S31_SAR_REVIEW_20261027` records the same distinction.
+and raw outputs. The measured ELF is **not** the final rebased image.
+The differences after capture are explicit:
+
+- Rebase onto `b92ff8f26acddcd5bf237e36e696c15b058f8bb4` incorporates
+  upstream BLE/local/generic-interrupt probes (#683/#686/#689/#691/#692/#699),
+  PAC ownership/model/generator updates and watchdog support. These add linked
+  code, registry entries, root storage and a generic-IRQ dispatch check;
+  image layout and timing are not assumed identical to the capture.
+- Shared PHY, chip-clock and boot PAC groups remain owned once in `Session.sar`.
+  BLE/local probe helpers borrow those existing owners rather than claiming
+  duplicate handles. All registrations use the same `Action` registry.
+  `sar.rs` and `sar_prepare.rs` remain byte-identical to the captured sources;
+  the SAR preparation/measurement transactions are unchanged.
+- This README, SAR evidence/field descriptions and generated PAC documentation
+  annotate the capture. No measurement is relabelled as a final-head run.
+
+SOURCE `HW17_S31_SAR_REVIEW_20261027` records the same distinction. The report
+retains the measured/final revisions and exact changed-file inventory. The
+rebased image is compile/link/host checked; its added non-SAR probes are not
+run by this task.
 
 The corrected-prefix run contains ten conversions (two preflight, four HOLD,
 four EDGE), on one board in one short run. HOLD retained data/ready through

@@ -229,50 +229,50 @@ pub(in crate::image) fn sleep_other(s: &mut Session<'_>) {
 fn reset(s: &mut Session<'_>, tag: u32) {
     use pac::modem_syscon::modem_rst_conf as r;
     // SOURCE: production reset_bluetooth_controller_domains, unchanged order.
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac(r::RstBtmac::Asserted);
     });
     state(s, tag);
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac(r::RstBtmac::Released);
     });
     state(s, tag + 8);
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac_apb(r::RstBtmacApb::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac_apb(r::RstBtmacApb::Released);
     });
     state(s, tag + 16);
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_ble_timer(r::RstBleTimer::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_ble_timer(r::RstBleTimer::Released);
     });
     state(s, tag + 24);
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_modem_ecb(r::RstModemEcb::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_modem_ccm(r::RstModemCcm::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_modem_bah(r::RstModemBah::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_modem_sec(r::RstModemSec::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_modem_ecb(r::RstModemEcb::Released);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_modem_ccm(r::RstModemCcm::Released);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_modem_bah(r::RstModemBah::Released);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_modem_sec(r::RstModemSec::Released);
     });
     oer_riscv::fence();
@@ -340,34 +340,43 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
     state(s, 0x9a40);
     // Digital clock release/restoration diagnostic. No gated MAC reads and
     // no START, publication or enable command accompany restoration.
-    let saved0 = s.ble.clocks.read_clk_conf();
-    let saved1 = s.ble.clocks.read_clk_conf1();
-    s.ble.lp_clock.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_osc_slow(false)
-            .set_clk_lp_timer_sel_osc_fast(false)
-            .set_clk_lp_timer_sel_xtal32k(false)
-            .set_clk_lp_timer_sel_xtal(false);
-    });
-    s.ble.clocks.modify_clk_conf(|w| {
+    let saved0 = s.sar.radio.modem_syscon_radio.read_clk_conf();
+    let saved1 = s.sar.radio.modem_syscon_radio.read_clk_conf1();
+    s.sar
+        .radio
+        .modem_lpcon_shared_clock
+        .modify_lp_timer_conf(|w| {
+            w.set_clk_lp_timer_sel_osc_slow(false)
+                .set_clk_lp_timer_sel_osc_fast(false)
+                .set_clk_lp_timer_sel_xtal32k(false)
+                .set_clk_lp_timer_sel_xtal(false);
+        });
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_ble_timer_en(pac::modem_syscon::clk_conf::ClkBleTimerEn::Disabled);
     });
-    s.ble.gates.set_modem_pwr_lp_timer_clock(false);
+    s.sar
+        .clocks
+        .modem_lpcon_chip_clocks
+        .set_modem_pwr_lp_timer_clock(false);
     // SOURCE: production Bluetooth module clock-device release actions; this
     // isolated image has no other radio client. Observe the matrix only until
     // its APB clock is restored. No RF front-end gate is touched.
-    s.ble.clocks.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_etm_en(pac::modem_syscon::clk_conf::ClkEtmEn::Disabled)
             .set_clk_modem_sec_apb_en(pac::modem_syscon::clk_conf::ClkModemSecApbEn::Disabled)
             .set_clk_modem_sec_ecb_en(pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Disabled)
             .set_clk_modem_sec_ccm_en(pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Disabled);
     });
-    s.ble.clocks.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
         w.set_clk_btmac_en(pac::modem_syscon::clk_conf1::ClkBtmacEn::Disabled)
             .set_clk_bt_apb_en(pac::modem_syscon::clk_conf1::ClkBtApbEn::Disabled)
             .set_clk_btbb_en(pac::modem_syscon::clk_conf1::ClkBtbbEn::Disabled)
             .set_clk_wifibb_80x1_en(pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Disabled);
     });
-    s.ble.upstream.close_modem_pll_source_gate();
+    s.sar
+        .radio
+        .hp_sys_clkrst_radio
+        .close_modem_pll_source_gate();
 
     oer_riscv::fence();
     emit(
@@ -382,8 +391,8 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
             .read_int_status_reg_4()
             .int_status_4(),
     );
-    s.ble.upstream.open_modem_pll_source_gate();
-    s.ble.clocks.modify_clk_conf1(|w| {
+    s.sar.radio.hp_sys_clkrst_radio.open_modem_pll_source_gate();
+    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
         w.set_clk_btmac_en(if saved1.clk_btmac_en() {
             pac::modem_syscon::clk_conf1::ClkBtmacEn::Enabled
         } else {
@@ -405,7 +414,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
             pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Disabled
         });
     });
-    s.ble.clocks.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_etm_en(if saved0.clk_etm_en() {
             pac::modem_syscon::clk_conf::ClkEtmEn::Enabled
         } else {
@@ -427,13 +436,19 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
             pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Disabled
         });
     });
-    s.ble.clocks.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_ble_timer_en(pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled);
     });
-    s.ble.gates.set_modem_pwr_lp_timer_clock(true);
-    s.ble.lp_clock.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_xtal(true);
-    });
+    s.sar
+        .clocks
+        .modem_lpcon_chip_clocks
+        .set_modem_pwr_lp_timer_clock(true);
+    s.sar
+        .radio
+        .modem_lpcon_shared_clock
+        .modify_lp_timer_conf(|w| {
+            w.set_clk_lp_timer_sel_xtal(true);
+        });
     oer_riscv::fence();
     state(s, 0x9a60);
     window(4096);

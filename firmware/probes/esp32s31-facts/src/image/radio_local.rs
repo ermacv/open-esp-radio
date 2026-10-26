@@ -3,7 +3,6 @@ use super::{Session, ble, contain, emit, pac};
 use oer_mmio::{Bits, Index};
 
 pub(super) struct Radio {
-    pub tick: pac::modem_lpcon::ModemLpconPhyTick,
     pub local_time: pac::modem_pwr::WifiMacLocalTime,
     pub status: pac::modem_pwr::WifiMacTsfStatus,
     pub zb: pac::ownership::Ieee802154Peripherals,
@@ -25,49 +24,57 @@ fn window() {
 fn prepare(s: &mut Session<'_>) {
     oer_riscv::disable_interrupts();
     contain(s);
-    ble::clocks(&mut s.ble);
+    ble::clocks(s);
     // SOURCE: HAL modem::ops::configure_modem_source_clocks. Adopt the
     // production digital source selection without a PHY/RF bring-up.
-    s.ble.upstream.modify_modem_conf(|w| {
+    s.sar.radio.hp_sys_clkrst_radio.modify_modem_conf(|w| {
         w.set_modem_clk_source_sel(true).set_modem_pll_clk_en(true);
     });
     // SOURCE: HAL configure_fixed_xtal_40mhz_tick / BLOB_LIBPHY_PHY_GET_XTAL_FREQ.
-    s.radio.tick.modify_tick_conf(|w| {
+    s.sar.radio.modem_lpcon_phy_tick.modify_tick_conf(|w| {
         w.set_modem_pwr_tick_target(Bits::constant::<39>());
     });
     emit(
         0x8203,
-        s.radio.tick.read_tick_conf().modem_pwr_tick_target().get(),
+        s.sar
+            .radio
+            .modem_lpcon_phy_tick
+            .read_tick_conf()
+            .modem_pwr_tick_target()
+            .get(),
         0,
         0,
     );
     // SOURCE: HAL modem::ops module maps and enable_wifi_mac_clocks. These
     // digital clock prerequisites do not start a MAC or enable RF ADC/DAC.
-    s.ble.clocks.modify_clk_conf_power_st(|w| {
-        w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
-    });
-    s.ble.clocks.modify_clk_conf1(|w| {
+    s.sar
+        .radio
+        .modem_syscon_radio
+        .modify_clk_conf_power_st(|w| {
+            w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
+        });
+    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
         w.set_clk_wifimac_en(pac::modem_syscon::clk_conf1::ClkWifimacEn::Enabled)
             .set_clk_wifi_apb_en(pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled)
             .set_clk_wifibb_80x1_en(pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled);
     });
-    s.ble.clocks.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_etm_en(pac::modem_syscon::clk_conf::ClkEtmEn::Enabled)
             .set_clk_modem_sec_apb_en(pac::modem_syscon::clk_conf::ClkModemSecApbEn::Enabled);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_wifimac(pac::modem_syscon::modem_rst_conf::RstWifimac::Released);
     });
     oer_riscv::fence();
-    let c = s.ble.clocks.read_clk_conf1();
-    let r = s.ble.clocks.read_modem_rst_conf();
+    let c = s.sar.radio.modem_syscon_radio.read_clk_conf1();
+    let r = s.sar.radio.modem_syscon_radio.read_modem_rst_conf();
     emit(
         0x8201,
         u32::from(c.clk_wifimac_en()),
         u32::from(c.clk_wifibb_80x1_en()),
         u32::from(r.rst_wifimac()),
     );
-    let m = s.ble.upstream.read_modem_conf();
+    let m = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
     emit(
         0x8202,
         u32::from(m.modem_clk_source_sel()),
@@ -180,21 +187,24 @@ pub(super) fn ieee_timers(s: &mut Session<'_>) {
     prepare(s);
     // SOURCE: HAL modem::ops IEEE MAC/APB clocks and reset order. No RF gate,
     // PHY calibration, RX_START, ED_START or TX_START is needed for this leaf.
-    s.ble.clocks.modify_clk_conf_power_st(|w| {
-        w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
-    });
-    s.ble.clocks.modify_clk_conf(|w| {
+    s.sar
+        .radio
+        .modem_syscon_radio
+        .modify_clk_conf_power_st(|w| {
+            w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
+        });
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_zb_apb_en(pac::modem_syscon::clk_conf::ClkZbApbEn::Enabled)
             .set_clk_zbmac_en(pac::modem_syscon::clk_conf::ClkZbmacEn::Enabled);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_zbmac(pac::modem_syscon::modem_rst_conf::RstZbmac::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_zbmac(pac::modem_syscon::modem_rst_conf::RstZbmac::Released)
             .set_rst_zbmac_apb(pac::modem_syscon::modem_rst_conf::RstZbmacApb::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_zbmac_apb(pac::modem_syscon::modem_rst_conf::RstZbmacApb::Released);
     });
     zb_mask(s, false);
@@ -390,13 +400,16 @@ pub(super) fn wifi_timers(s: &mut Session<'_>) {
     );
     // SOURCE: production select_wifi_low_power_clock(SlowOscillator), then
     // TSF enable/load transactions. Wi-Fi's divider is not the BLE divider.
-    s.ble.lp_clock.modify_wifi_lp_clk_conf(|w| {
-        w.set_clk_wifipwr_lp_sel_osc_slow(true)
-            .set_clk_wifipwr_lp_sel_osc_fast(false)
-            .set_clk_wifipwr_lp_sel_xtal32k(false)
-            .set_clk_wifipwr_lp_sel_xtal(false)
-            .set_clk_wifipwr_lp_div_num(Bits::constant::<0>());
-    });
+    s.sar
+        .radio
+        .modem_lpcon_shared_clock
+        .modify_wifi_lp_clk_conf(|w| {
+            w.set_clk_wifipwr_lp_sel_osc_slow(true)
+                .set_clk_wifipwr_lp_sel_osc_fast(false)
+                .set_clk_wifipwr_lp_sel_xtal32k(false)
+                .set_clk_wifipwr_lp_sel_xtal(false)
+                .set_clk_wifipwr_lp_div_num(Bits::constant::<0>());
+        });
     emit(0x8303, s.radio.local_time.read_counter().value(), 0, 0);
     s.radio.rtc.modify_sta_tsf_control(|w| {
         w.set_sta_tsf_enable_low(true)

@@ -48,15 +48,15 @@ fn capture(s: &mut Session<'_>, tag: u32) -> Option<u32> {
 fn setup(s: &mut Session<'_>) {
     oer_riscv::disable_interrupts();
     contain(s);
-    ble::clocks(&mut s.ble);
+    ble::clocks(s);
     // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, production
     // modem::clock_device and configure_modem_source_clocks. Digital clocks
     // only: no front-end ADC/DAC, analog calibration or radio operation.
-    s.ble.upstream.open_modem_pll_source_gate();
-    s.ble.clocks.modify_clk_conf1(|w| {
+    s.sar.radio.hp_sys_clkrst_radio.open_modem_pll_source_gate();
+    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
         w.set_clk_wifibb_80x1_en(pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled);
     });
-    s.ble.clocks.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_etm_en(pac::modem_syscon::clk_conf::ClkEtmEn::Enabled)
             .set_clk_modem_sec_apb_en(pac::modem_syscon::clk_conf::ClkModemSecApbEn::Enabled)
             .set_clk_modem_sec_ecb_en(pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Enabled)
@@ -64,24 +64,24 @@ fn setup(s: &mut Session<'_>) {
     });
     // SOURCE: production Bluetooth controller reset domains. No shared BTBB
     // reset is needed; hart 1 remains contained and no client is running.
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released)
             .set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Released)
             .set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Released);
     });
     oer_riscv::fence();
-    let m = s.ble.upstream.read_modem_conf();
-    let c = s.ble.clocks.read_clk_conf1();
-    let r = s.ble.clocks.read_modem_rst_conf();
+    let m = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
+    let c = s.sar.radio.modem_syscon_radio.read_clk_conf1();
+    let r = s.sar.radio.modem_syscon_radio.read_modem_rst_conf();
     emit(
         0x9000,
         u32::from(m.modem_clk_source_sel()),
@@ -164,13 +164,16 @@ pub(super) fn prerequisite(s: &mut Session<'_>) {
     // SOURCE: current BTDM runtime preparation. Establish its separate LP
     // counter prerequisite without PHY/RF initialization or an IRQ route.
     let b = &mut s.ble;
-    b.lp_clock.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_osc_slow(false)
-            .set_clk_lp_timer_sel_osc_fast(false)
-            .set_clk_lp_timer_sel_xtal32k(false)
-            .set_clk_lp_timer_sel_xtal(true)
-            .set_clk_lp_timer_div_num(Bits::constant::<1>());
-    });
+    s.sar
+        .radio
+        .modem_lpcon_shared_clock
+        .modify_lp_timer_conf(|w| {
+            w.set_clk_lp_timer_sel_osc_slow(false)
+                .set_clk_lp_timer_sel_osc_fast(false)
+                .set_clk_lp_timer_sel_xtal32k(false)
+                .set_clk_lp_timer_sel_xtal(true)
+                .set_clk_lp_timer_div_num(Bits::constant::<1>());
+        });
     b.timer.write_word_004c_opaque(|w| {
         w.set_bits_0_31_opaque(0);
     });

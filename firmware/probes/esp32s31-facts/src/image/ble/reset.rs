@@ -15,98 +15,140 @@ fn state(s: &Session<'_>, tag: u32) {
         tag + 1,
         u32::from(b.timer.read_word_0024_opaque().low_byte()),
         u32::from(b.timer.read_word_002c_opaque().low_byte()),
-        u32::from(b.clocks.read_modem_rst_conf().rst_ble_timer()),
+        u32::from(
+            s.sar
+                .radio
+                .modem_syscon_radio
+                .read_modem_rst_conf()
+                .rst_ble_timer(),
+        ),
     );
     emit(
         tag + 2,
-        u32::from(b.clocks.read_clk_conf().clk_ble_timer_en()),
-        u32::from(b.gates.read_clk_conf().clk_lp_timer_en()),
-        u32::from(b.lp_clock.read_lp_timer_conf().clk_lp_timer_sel_xtal()),
+        u32::from(
+            s.sar
+                .radio
+                .modem_syscon_radio
+                .read_clk_conf()
+                .clk_ble_timer_en(),
+        ),
+        u32::from(
+            s.sar
+                .clocks
+                .modem_lpcon_chip_clocks
+                .read_clk_conf()
+                .clk_lp_timer_en(),
+        ),
+        u32::from(
+            s.sar
+                .radio
+                .modem_lpcon_shared_clock
+                .read_lp_timer_conf()
+                .clk_lp_timer_sel_xtal(),
+        ),
     );
 }
 
-fn lp_clocks(b: &mut Ble, on: bool) {
+fn lp_clocks(s: &mut Session<'_>, on: bool) {
     if !on {
         // SOURCE: production deselect_bluetooth_low_power_timer_sources:
         // one fresh RMW per selector, in this order. Keep MODEM_PWR APB live.
-        b.lp_clock.modify_lp_timer_conf(|w| {
-            w.set_clk_lp_timer_sel_osc_slow(false);
-        });
-        b.lp_clock.modify_lp_timer_conf(|w| {
-            w.set_clk_lp_timer_sel_osc_fast(false);
-        });
-        b.lp_clock.modify_lp_timer_conf(|w| {
-            w.set_clk_lp_timer_sel_xtal32k(false);
-        });
-        b.lp_clock.modify_lp_timer_conf(|w| {
-            w.set_clk_lp_timer_sel_xtal(false);
-        });
+        s.sar
+            .radio
+            .modem_lpcon_shared_clock
+            .modify_lp_timer_conf(|w| {
+                w.set_clk_lp_timer_sel_osc_slow(false);
+            });
+        s.sar
+            .radio
+            .modem_lpcon_shared_clock
+            .modify_lp_timer_conf(|w| {
+                w.set_clk_lp_timer_sel_osc_fast(false);
+            });
+        s.sar
+            .radio
+            .modem_lpcon_shared_clock
+            .modify_lp_timer_conf(|w| {
+                w.set_clk_lp_timer_sel_xtal32k(false);
+            });
+        s.sar
+            .radio
+            .modem_lpcon_shared_clock
+            .modify_lp_timer_conf(|w| {
+                w.set_clk_lp_timer_sel_xtal(false);
+            });
     }
     // SOURCE: HAL restore_bluetooth_peripheral_clocks, BLE timer field;
     // chip-clock policy's already-sourced MODEM_PWR LP-timer gate.
-    b.clocks.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_ble_timer_en(if on {
             pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled
         } else {
             pac::modem_syscon::clk_conf::ClkBleTimerEn::Disabled
         });
     });
-    b.gates.set_modem_pwr_lp_timer_clock(on);
+    s.sar
+        .clocks
+        .modem_lpcon_chip_clocks
+        .set_modem_pwr_lp_timer_clock(on);
     if on {
-        b.lp_clock.modify_lp_timer_conf(|w| {
-            w.set_clk_lp_timer_sel_xtal(true);
-        });
+        s.sar
+            .radio
+            .modem_lpcon_shared_clock
+            .modify_lp_timer_conf(|w| {
+                w.set_clk_lp_timer_sel_xtal(true);
+            });
     }
     oer_riscv::fence();
 }
 
-fn reset(b: &mut Ble, full: bool) {
+fn reset(s: &mut Session<'_>, full: bool) {
     use pac::modem_syscon::modem_rst_conf as r;
     // SOURCE: HAL modem/syscon.rs::reset_bluetooth_controller_domains.
     // Each RMW and the final device fence retain the production ordering.
     if full {
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_btmac(r::RstBtmac::Asserted);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_btmac(r::RstBtmac::Released);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_btmac_apb(r::RstBtmacApb::Asserted);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_btmac_apb(r::RstBtmacApb::Released);
         });
     }
-    b.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_ble_timer(r::RstBleTimer::Asserted);
     });
-    b.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_ble_timer(r::RstBleTimer::Released);
     });
     if full {
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_modem_ecb(r::RstModemEcb::Asserted);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_modem_ccm(r::RstModemCcm::Asserted);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_modem_bah(r::RstModemBah::Asserted);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_modem_sec(r::RstModemSec::Asserted);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_modem_ecb(r::RstModemEcb::Released);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_modem_ccm(r::RstModemCcm::Released);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_modem_bah(r::RstModemBah::Released);
         });
-        b.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_modem_sec(r::RstModemSec::Released);
         });
     }
@@ -115,15 +157,15 @@ fn reset(b: &mut Ble, full: bool) {
 
 fn observe_reset(s: &mut Session<'_>, full: bool, gated: bool, tag: u32) {
     if gated {
-        lp_clocks(&mut s.ble, false);
+        lp_clocks(s, false);
     }
     state(s, tag);
-    reset(&mut s.ble, full);
+    reset(s, full);
     state(s, tag + 0x10);
     window(4096);
     state(s, tag + 0x20);
     // Clock restoration never sends START, a pending publication or +0x10.
-    lp_clocks(&mut s.ble, true);
+    lp_clocks(s, true);
     state(s, tag + 0x30);
     window(4096);
     state(s, tag + 0x40);
