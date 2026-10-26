@@ -270,7 +270,11 @@ fn wifi_mask(s: &mut Session<'_>, enabled: bool) {
             .set_tsf_timer_1(enabled)
             .set_tsf_timer_2(false)
             .set_tsf_timer_3(false)
-            .set_bits_8_31_opaque(Bits::constant::<0>());
+            .set_bits_8_16_opaque(Bits::constant::<0>())
+            .set_beacon_filter_wake(false)
+            .set_bit_18_opaque(false)
+            .set_beacon_miss(false)
+            .set_bits_20_31_opaque(Bits::constant::<0>());
     });
     oer_riscv::fence();
 }
