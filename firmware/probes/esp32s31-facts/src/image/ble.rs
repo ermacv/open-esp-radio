@@ -44,7 +44,7 @@ fn window(cycles: u32) {
     while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 
-fn clocks(b: &mut Ble) {
+pub(super) fn clocks(b: &mut Ble) {
     // Retain the ROM's reset backstop; feed once per bounded leaf so debugger
     // command dwell does not consume its boot deadline. No host WDT MMIO.
     b.watchdog.modify_wprotect(|w| {
