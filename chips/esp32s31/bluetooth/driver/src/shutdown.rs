@@ -4,8 +4,8 @@
 //! task. [`retire`] then releases the Controller output with the bank's
 //! interrupt handler, closes the bank's gate (the released bank and the
 //! handler's scheduler endpoint leave the handler), retires the scheduler
-//! channel and has the timer's handler disable its compare; the interrupt
-//! route stays. The shared actor leaves the shared PHY domain and BTBB before
+//! channel and has the timer's handler stop the counter and both measured
+//! delivery lanes; the interrupt route stays. The shared actor leaves the shared PHY domain and BTBB before
 //! reset, releases clocks/coexistence/power, and closes RF only after the last
 //! client leaves. [`ControllerRetired::shut_down`] resets the Controller
 //! domains, and [`ControllerResetTimerPending::reunite`] takes the timer from
@@ -21,7 +21,7 @@ use oer_esp32s31_hal::bluetooth::engine::{
     EngineShutdownFailure, scheduler::interrupt::SchedulerDoorbell,
 };
 use oer_esp32s31_hal::{
-    bluetooth::{InterruptOutputReleasedOwner, ModemLpTimerCompareDisabled},
+    bluetooth::{InterruptOutputReleasedOwner, ModemLpTimerStopped},
     domain::RadioDomain,
 };
 use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
@@ -97,12 +97,12 @@ impl<X: SignalExecutor, M: ControllerMemory> core::fmt::Debug for ControllerShut
 }
 
 /// A retired Controller awaiting the actor's PHY/BTBB leave and reset: its
-/// output is released and its timer's handler disabled the compare.
+/// output is released and its timer's counter and both measured lanes are stopped.
 #[must_use = "the retired Controller must be shut down"]
 pub struct ControllerRetired<M: ControllerMemory> {
     task: TaskResources<M>,
     output: InterruptOutputReleasedOwner,
-    compare: ModemLpTimerCompareDisabled,
+    stopped: ModemLpTimerStopped,
 }
 
 /// The reset Controller, awaiting the timer its handler gives up.
@@ -116,7 +116,9 @@ pub type ControllerShutDown<M> = EngineShutDown<M>;
 
 /// Retire a stopped epoch: release the Controller output with the bank's
 /// handler over the scheduler channel `bell` reaches, close the bank's gate,
-/// retire the channel and have the timer's handler disable its compare.
+/// retire the channel and have the timer's handler stop its counter and both
+/// measured delivery lanes. `timer_port` is the retired task's endpoint of
+/// this gate, whose late rollover-only snapshot is discarded after stop.
 /// BUSY samples of the release settle in the handler.
 ///
 /// # Errors
@@ -131,6 +133,7 @@ pub async fn retire<X: SignalExecutor, M: ControllerMemory, R: RadioDoorbell>(
     mut task: ControllerPoweredTaskRuntime<'static, X, M>,
     gate: &mut BluetoothInterruptGate<ChipGate, X, R>,
     bell: &impl SchedulerDoorbell,
+    timer_port: &crate::interrupt::ModemLpTimerPort<ChipGate, R>,
 ) -> Result<ControllerRetired<M>, ControllerShutdownFailure<X, M>> {
     let failed = |error, task| {
         Err(ControllerShutdownFailure {
@@ -164,11 +167,18 @@ pub async fn retire<X: SignalExecutor, M: ControllerMemory, R: RadioDoorbell>(
         Err((error, task)) => return failed(ControllerShutdownError::Task(error), task),
     };
     match gate.stop_timer().await {
-        Ok(compare) => Ok(ControllerRetired {
-            task,
-            output,
-            compare,
-        }),
+        Ok(stopped) => {
+            // Stop admits only rollover-only AwaitingPlan. The task already
+            // drained; discard its late snapshot/epoch shift so no old work
+            // remains in the single-slot queue for the next epoch. Dispatch
+            // requests refuse in the handler, before reaching this branch.
+            let _retired_rollover = timer_port.take_work();
+            Ok(ControllerRetired {
+                task,
+                output,
+                stopped,
+            })
+        }
         Err(error) => Err(ControllerShutdownFailure {
             error: ControllerShutdownError::Gate(error),
             _retained: Retained::Output { task, output },
@@ -218,9 +228,9 @@ impl<M: ControllerMemory> ControllerRetired<M> {
         let Self {
             task,
             output,
-            compare,
+            stopped,
         } = self;
-        match task.shut_down(radio, output, compare) {
+        match task.shut_down(radio, output, stopped) {
             Ok(engine) => {
                 let _cleared = cells.clear_notifications_after_reset();
                 Ok(ControllerResetTimerPending { engine })

@@ -65,17 +65,18 @@ pub use registers::{
     BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerCounterObservation,
     BluetoothModemLpTimerEpoch, BluetoothModemLpTimerHandlerRegisterObservation,
     BluetoothModemLpTimerInstant, BluetoothModemLpTimerInterruptObservation,
-    BluetoothNrtInterruptAcknowledged, BluetoothPrimaryFaultSources,
-    BluetoothPrimaryInterruptEpoch, BluetoothRawTickDeltaProjection, BluetoothScanStartPublished,
-    BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationDisposition,
-    BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationReleased,
-    BluetoothSchedulerCancellationRequested, BluetoothSchedulerCancellationSourceAcknowledged,
-    BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionModifyDisposition,
-    BluetoothSchedulerExecutionModifyPublished, BluetoothSchedulerFinishedHardwareListObserved,
-    BluetoothSchedulerFinishedListObservation, BluetoothSchedulerFinishedListPop,
-    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerHardwareListsCleared,
-    BluetoothSchedulerHardwareRunCommandPublished, BluetoothSchedulerInsertionCommand,
-    BluetoothSchedulerInsertionCommandStartCleared,
+    BluetoothModemLpTimerPendingObservation, BluetoothModemLpTimerStoppedInterruptFault,
+    BluetoothModemLpTimerStoppedInterruptObservation, BluetoothNrtInterruptAcknowledged,
+    BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch, BluetoothRawTickDeltaProjection,
+    BluetoothScanStartPublished, BluetoothSchedulerBusyObservation,
+    BluetoothSchedulerCancellationDisposition, BluetoothSchedulerCancellationIndexed,
+    BluetoothSchedulerCancellationReleased, BluetoothSchedulerCancellationRequested,
+    BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerExecutionLockDisposition,
+    BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
+    BluetoothSchedulerFinishedHardwareListObserved, BluetoothSchedulerFinishedListObservation,
+    BluetoothSchedulerFinishedListPop, BluetoothSchedulerHardwareListIndex,
+    BluetoothSchedulerHardwareListsCleared, BluetoothSchedulerHardwareRunCommandPublished,
+    BluetoothSchedulerInsertionCommand, BluetoothSchedulerInsertionCommandStartCleared,
     BluetoothSchedulerLockModifyInterruptObservation, BluetoothSchedulerLockModifyObservation,
     BluetoothSchedulerLockModifyPublished, BluetoothSchedulerLockModifyTaskObservation,
     BluetoothSchedulerReferenceCleared, BluetoothSchedulerReferenceGateObservation,
@@ -501,17 +502,17 @@ impl TaskOwner {
     /// up after the reset.
     ///
     /// The caller has released Controller output, drained the source-127
-    /// software work, had the timer's handler disable its compare and left
-    /// the shared PHY domain and BTBB baseband. The Controller retains every
+    /// software work, had the timer's handler stop the counter and both
+    /// measured delivery lanes and left the shared PHY domain and BTBB baseband. The Controller retains every
     /// published memory owner until the reunion.
     #[doc(hidden)]
     pub fn shut_down<B: PlatformClockBackend, T>(
         self,
         radio: &mut RadioDomain<B, T>,
         output: InterruptOutputReleasedOwner,
-        compare: ModemLpTimerCompareDisabled,
+        stopped: ModemLpTimerStopped,
     ) -> Result<BluetoothControllerResetTimerPending, BluetoothShutdownFailure> {
-        shutdown::shut_down(self, radio, output.registers, compare)
+        shutdown::shut_down(self, radio, output.registers, stopped)
     }
 
     /// Admit the release of the controller output: no controller-time
@@ -673,7 +674,9 @@ impl TaskOwner {
     }
 
     /// Apply the exact modem low-power timer register prefix before source 127
-    /// is installed.
+    /// starts. Preparation arms the independent rollover lane with the
+    /// counter stopped, after sampling and clearing both inherited pending
+    /// bytes. The returned observation exposes the removed stale state.
     ///
     /// This extracts only the generated timer partition. Controller task
     /// ownership remains available for scheduler and Link-Layer progress while
@@ -685,7 +688,13 @@ impl TaskOwner {
     #[doc(hidden)]
     pub fn prepare_modem_lp_timer_registers(
         &mut self,
-    ) -> Result<ModemLpTimerRegistersPreparedOwner, BluetoothModemLpTimerOwnerError> {
+    ) -> Result<
+        (
+            ModemLpTimerRegistersPreparedOwner,
+            BluetoothModemLpTimerPendingObservation,
+        ),
+        BluetoothModemLpTimerOwnerError,
+    > {
         self.reunitable = false;
         // Extract the partition before the first MMIO effect: cancellation or
         // panic can only lose timer authority fail-stop.
@@ -693,8 +702,8 @@ impl TaskOwner {
             .modem_lp_timer
             .take()
             .ok_or(BluetoothModemLpTimerOwnerError::OwnerSeparated)?;
-        timer.prepare_registers();
-        Ok(ModemLpTimerRegistersPreparedOwner { timer })
+        let stale = timer.prepare_registers();
+        Ok((ModemLpTimerRegistersPreparedOwner { timer }, stale))
     }
 }
 
@@ -845,6 +854,7 @@ impl ModemLpTimerHandlerPendingOwner {
                     timer,
                     epoch,
                     deferred_dispatch: None,
+                    dispatch_requested: work.dispatch_requested(),
                 },
                 work,
             },
@@ -938,9 +948,31 @@ pub struct ModemLpTimerSoftwarePendingOwner {
     timer: BluetoothModemLpTimerRegisters,
     epoch: BluetoothModemLpTimerEpoch,
     deferred_dispatch: Option<bool>,
+    dispatch_requested: bool,
 }
 
 impl ModemLpTimerSoftwarePendingOwner {
+    /// Stop only rollover work. The retired epoch needs no further deadline
+    /// projection; its outstanding task snapshot/epoch shift is discarded.
+    /// Dispatch requested by that snapshot or a later entry refuses without
+    /// changing registers or discarding any software work.
+    #[allow(
+        clippy::result_large_err,
+        reason = "refusal retains the register owner"
+    )]
+    pub fn stop_for_shutdown(
+        self,
+    ) -> Result<(ModemLpTimerStoppedOwner, ModemLpTimerStopped), Self> {
+        if self.dispatch_requested || self.deferred_dispatch == Some(true) {
+            return Err(self);
+        }
+        Ok(ModemLpTimerInterruptReadyOwner {
+            timer: self.timer,
+            epoch: self.epoch,
+        }
+        .stop_for_shutdown())
+    }
+
     /// Acknowledge a new interrupt while P2 owns the earlier snapshot. Retain
     /// its software consequence here without overwriting the in-flight work.
     /// Rollover acknowledgement advances only this handler-owned epoch.
@@ -965,6 +997,7 @@ impl ModemLpTimerSoftwarePendingOwner {
                     timer,
                     epoch,
                     deferred_dispatch: None,
+                    dispatch_requested: work.dispatch_requested(),
                 },
                 work,
             },
@@ -976,28 +1009,70 @@ impl ModemLpTimerSoftwarePendingOwner {
     }
 }
 
-/// The timer's handler disabled the compare of its stopped epoch: the
-/// Controller may reset.
+/// The counter is stopped and both measured delivery lanes are disabled.
+/// Both pending words were cleared after retaining their stop-time observation.
 #[derive(Debug)]
-#[must_use = "the disabled compare admits the Controller reset"]
-pub struct ModemLpTimerCompareDisabled {
-    _private: (),
+#[must_use = "the stopped timer admits the Controller reset"]
+pub struct ModemLpTimerStopped {
+    pending: BluetoothModemLpTimerPendingObservation,
+}
+
+impl ModemLpTimerStopped {
+    /// Pending bytes sampled after counter stop, before both words were cleared.
+    pub const fn pending_observation(&self) -> BluetoothModemLpTimerPendingObservation {
+        self.pending
+    }
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl ModemLpTimerCompareDisabled {
+impl ModemLpTimerStopped {
     #[doc(hidden)]
-    pub const fn for_host_test() -> Self {
-        Self { _private: () }
+    pub fn for_host_test() -> Self {
+        Self {
+            pending: BluetoothModemLpTimerPendingObservation::default(),
+        }
+    }
+}
+
+/// Register authority retained after stop, until the Controller reset.
+///
+/// A stopped owner cannot resume the running interrupt path:
+/// ```compile_fail
+/// use oer_esp32s31_hal::bluetooth::ModemLpTimerStoppedOwner;
+/// fn rearm(timer: ModemLpTimerStoppedOwner) { let _ = timer.step(); }
+/// ```
+#[must_use = "the stopped owner stays with the handler until reset"]
+pub struct ModemLpTimerStoppedOwner {
+    timer: BluetoothModemLpTimerRegisters,
+    epoch: BluetoothModemLpTimerEpoch,
+}
+
+impl ModemLpTimerStoppedOwner {
+    /// Acknowledge rollover without sampling time or rearming delivery.
+    /// Invalid software pending or unknown nonzero status remains for the
+    /// gate's existing fault path.
+    pub fn acknowledge_interrupt(
+        &mut self,
+    ) -> Result<
+        BluetoothModemLpTimerStoppedInterruptObservation,
+        BluetoothModemLpTimerStoppedInterruptFault,
+    > {
+        self.timer.acknowledge_stopped_interrupt(&mut self.epoch)
     }
 }
 
 impl ModemLpTimerInterruptReadyOwner {
-    /// Disable the compare once the software queue of the epoch drained,
-    /// before the Controller reset; the handler keeps the owner until then.
-    pub fn disable_compare_for_shutdown(&mut self) -> ModemLpTimerCompareDisabled {
-        self.timer.disable_compare();
-        ModemLpTimerCompareDisabled { _private: () }
+    /// Stop both measured delivery lanes and the counter after the task drained.
+    /// The handler keeps the stopped register owner until Controller reset.
+    pub fn stop_for_shutdown(mut self) -> (ModemLpTimerStoppedOwner, ModemLpTimerStopped) {
+        let pending = self.timer.stop_for_shutdown();
+        (
+            ModemLpTimerStoppedOwner {
+                timer: self.timer,
+                epoch: self.epoch,
+            },
+            ModemLpTimerStopped { pending },
+        )
     }
 
     /// Perform one finite source-127 register classification.

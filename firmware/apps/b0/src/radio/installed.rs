@@ -122,10 +122,11 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         }
         // The timer's owner stays with its handler; the task's queue ends
         // with the epoch.
-        let _retired_timer = match timer_task.try_retire() {
+        let retired_timer = match timer_task.try_retire() {
             Ok(t) => t,
             Err((_, mut t)) => fail(&mut t, &mut boot.reply).await,
         };
+        let (_retired_timer_runtime, timer_port) = retired_timer.into_shutdown_parts();
         let task = match runner.into_stopped() {
             Ok(t) => t,
             Err(mut r) => fail(&mut r, &mut boot.reply).await,
@@ -134,6 +135,7 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
             task,
             actor.attachment_mut().controller_mut().gate_mut(),
             &release,
+            timer_port,
         )
         .await
         {

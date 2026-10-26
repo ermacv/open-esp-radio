@@ -21,13 +21,13 @@ fn placed() -> Placed<Backing> {
 fn model() -> (
     Engine<Memory>,
     bluetooth::InterruptOutputReleasedOwner,
-    bluetooth::ModemLpTimerInterruptReadyOwner,
+    bluetooth::ModemLpTimerStoppedOwner,
 ) {
     let (mut engine, interrupts) =
         Engine::for_host_test::<HostDma<0x2f00_1000>>(clocked(), placed(), config())
             .ok()
             .unwrap();
-    let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
+    let timer = bluetooth::ModemLpTimerStoppedOwner {
         epoch: bluetooth::BluetoothModemLpTimerEpoch::new(),
         timer: engine.registers.modem_lp_timer.take().unwrap(),
     };
@@ -249,7 +249,7 @@ fn dtm_only_profile_returns_one_arena_and_rejects_old_items() {
     )
     .ok()
     .expect("DTM needs no global RX chains");
-    let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
+    let timer = bluetooth::ModemLpTimerStoppedOwner {
         epoch: bluetooth::BluetoothModemLpTimerEpoch::new(),
         timer: engine.registers.modem_lp_timer.take().unwrap(),
     };
@@ -270,7 +270,7 @@ fn epoch_cycle<
 >(
     mut engine: Engine<ArenaMemory<'static, 'static, A, C, N, S, R, O, Q>>,
     output: bluetooth::InterruptOutputReleasedOwner,
-    timer: bluetooth::ModemLpTimerInterruptReadyOwner,
+    timer: bluetooth::ModemLpTimerStoppedOwner,
 ) {
     let root = engine.memory.root_address_for_test();
     let epoch = engine.epoch;
@@ -457,7 +457,7 @@ fn reset_returns_storage_outside_its_scoped_pool_and_epoch_brands() {
                 )
                 .ok()
                 .unwrap();
-            let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
+            let timer = bluetooth::ModemLpTimerStoppedOwner {
                 epoch: bluetooth::BluetoothModemLpTimerEpoch::new(),
                 timer: engine.registers.modem_lp_timer.take().unwrap(),
             };

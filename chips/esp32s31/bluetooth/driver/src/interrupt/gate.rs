@@ -21,7 +21,9 @@
 //! A clear status writes nothing. The task opens the gates with the epoch's
 //! owners (the bank still unprepared, the timer initialized but not
 //! started): the handler prepares the controller output and starts the
-//! timer, so no source is armed while the task holds its owner. The bank
+//! timer. Preparation already arms the independent rollover lane after
+//! reporting and clearing stale pending, while the counter remains stopped.
+//! The bank
 //! leaves only released ([`BluetoothInterruptGate::close`]) and the timer
 //! only stopped and after the Controller reset
 //! ([`BluetoothInterruptGate::take_timer`]). The route stays; nothing is
@@ -98,8 +100,10 @@ pub trait GateHardware: 'static {
     type TimerWork: Send + 'static;
     /// Unarmed software plan returned by the task.
     type TimerPlan: Send + 'static;
-    /// The proof that the stopped timer's compare is disabled.
-    type CompareDisabled: Send + 'static;
+    /// Register owner after the counter and measured delivery lanes stopped.
+    type StoppedTimer: Send + 'static;
+    /// Stop proof retaining the pending-byte observation.
+    type StopProof: Send + 'static;
 
     /// Prepare the controller output of `setup` for the epoch.
     fn open_bank(setup: Self::Setup) -> Self::Bank;
@@ -129,8 +133,19 @@ pub trait GateHardware: 'static {
     ) -> TimerEntry<Self::Timer, Self::TimerPending, Self::TimerWork>;
     /// Acknowledge and retain new facts while the task processes its snapshot.
     fn observe_timer(timer: &mut Self::TimerPending);
-    /// Disable the compare of the drained timer.
-    fn stop_timer(timer: &mut Self::Timer) -> Self::CompareDisabled;
+    /// Quiet the drained timer, retaining sampled pending in the stop proof.
+    fn stop_timer(timer: Self::Timer) -> (Self::StoppedTimer, Self::StopProof);
+    /// Retire rollover-only planning; dispatch refuses with the owner intact.
+    fn stop_pending_timer(
+        timer: Self::TimerPending,
+    ) -> Result<(Self::StoppedTimer, Self::StopProof), Self::TimerPending>;
+    /// Acknowledge rollover while stopped without rearming delivery.
+    fn step_stopped_timer(
+        timer: &mut Self::StoppedTimer,
+    ) -> Result<
+        bluetooth::BluetoothModemLpTimerStoppedInterruptObservation,
+        bluetooth::BluetoothModemLpTimerStoppedInterruptFault,
+    >;
     /// The released bank, or the bank back when its output is not released.
     ///
     /// # Errors
@@ -161,8 +176,10 @@ pub enum GateError {
     NotOpen,
     /// The bank's output is not released; the bank stays with its handler.
     OutputNotReleased,
-    /// The timer awaits a software plan or is stopped already.
+    /// The timer is absent or stopped already.
     TimerNotReady,
+    /// The outstanding plan or a later interrupt still requires dispatch.
+    TimerDispatchPending,
     /// The timer is not stopped.
     TimerNotStopped,
     /// An earlier request was abandoned before its reply: the gate stays
@@ -196,12 +213,12 @@ pub(crate) enum Reply<H: GateHardware> {
         scheduler: H::Scheduler,
         timer: H::TimerInitialized,
     },
-    TimerStopped(H::CompareDisabled),
+    TimerStopped(H::StopProof),
     Closed {
         output: H::Released,
         scheduler: H::Scheduler,
     },
-    Timer(H::Timer),
+    Timer(H::StoppedTimer),
     Refused(GateError),
 }
 
@@ -220,8 +237,8 @@ enum Timer<H: GateHardware> {
     Vacant,
     Ready(H::Timer),
     AwaitingPlan(H::TimerPending),
-    /// Drained and its compare disabled, until the Controller reset.
-    Stopped(H::Timer),
+    /// Counter and both measured delivery lanes stopped until Controller reset.
+    Stopped(H::StoppedTimer),
 }
 
 /// The static queues of the gate, one per image.
@@ -296,7 +313,7 @@ impl<H: GateHardware> BluetoothInterruptStorage<H> {
                 retained: Retained {
                     reply: None,
                     plan: None,
-                    pending: None,
+                    stopped: None,
                     work: None,
                 },
             },
@@ -340,7 +357,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static> BluetoothInterruptEnds<H, X> 
 struct Retained<H: GateHardware> {
     reply: Option<Reply<H>>,
     plan: Option<H::TimerPlan>,
-    pending: Option<H::TimerPending>,
+    stopped: Option<H::StoppedTimer>,
     work: Option<H::TimerWork>,
 }
 
@@ -422,11 +439,22 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
                 timer,
             } => self.open(setup, scheduler, timer),
             Request::StopTimer => match core::mem::replace(&mut self.timer, Timer::Vacant) {
-                Timer::Ready(mut timer) => {
-                    let disabled = H::stop_timer(&mut timer);
+                Timer::Ready(timer) => {
+                    let (timer, stopped) = H::stop_timer(timer);
                     self.timer = Timer::Stopped(timer);
-                    Reply::TimerStopped(disabled)
+                    Reply::TimerStopped(stopped)
                 }
+                Timer::AwaitingPlan(timer) => match H::stop_pending_timer(timer) {
+                    Ok((timer, stopped)) => {
+                        // Only the ending epoch's rollover projection is discarded.
+                        self.timer = Timer::Stopped(timer);
+                        Reply::TimerStopped(stopped)
+                    }
+                    Err(timer) => {
+                        self.timer = Timer::AwaitingPlan(timer);
+                        Reply::Refused(GateError::TimerDispatchPending)
+                    }
+                },
                 other => {
                     self.timer = other;
                     Reply::Refused(GateError::TimerNotReady)
@@ -514,13 +542,11 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
             Timer::Ready(timer) => {
                 self.accept_timer_entry(H::step_timer(timer));
             }
-            Timer::Stopped(timer) => match H::step_timer(timer) {
-                TimerEntry::Spurious(timer) | TimerEntry::Rearmed(timer) => {
-                    self.timer = Timer::Stopped(timer);
-                }
-                TimerEntry::SoftwarePending(pending, _work) => {
-                    // The drained task takes no more work: keep the owner.
-                    self.retained.pending = Some(pending);
+            Timer::Stopped(mut timer) => match H::step_stopped_timer(&mut timer) {
+                Ok(_) => self.timer = Timer::Stopped(timer),
+                Err(_) => {
+                    // Keep invalid stopped state through the existing fault path.
+                    self.retained.stopped = Some(timer);
                     self.fault();
                 }
             },
@@ -628,13 +654,15 @@ impl<H: GateHardware, X: SignalExecutor + 'static, R: RadioDoorbell>
         }
     }
 
-    /// Disable the compare of the drained timer, which stays with its
-    /// handler until the Controller reset.
+    /// Stop the counter and both measured delivery lanes of the drained
+    /// timer. Rollover-only planning may retire its epoch projection; any
+    /// outstanding dispatch refuses. The handler keeps the stopped owner
+    /// until the Controller reset.
     ///
     /// # Errors
     ///
     /// The timer is not with its handler, or the exchange failed.
-    pub async fn stop_timer(&mut self) -> Result<H::CompareDisabled, GateError> {
+    pub async fn stop_timer(&mut self) -> Result<H::StopProof, GateError> {
         match self.exchange(Request::StopTimer).await? {
             Reply::TimerStopped(disabled) => Ok(disabled),
             Reply::Refused(error) => Err(error),
@@ -660,7 +688,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, R: RadioDoorbell>
         }
     }
 
-    pub(crate) async fn take_stopped_timer(&mut self) -> Result<H::Timer, GateError> {
+    pub(crate) async fn take_stopped_timer(&mut self) -> Result<H::StoppedTimer, GateError> {
         match self.exchange(Request::TakeTimer).await? {
             Reply::Timer(timer) => Ok(timer),
             Reply::Refused(error) => Err(error),
@@ -724,7 +752,8 @@ impl GateHardware for ChipGate {
     type TimerPending = bluetooth::ModemLpTimerSoftwarePendingOwner;
     type TimerWork = bluetooth::ModemLpTimerWork;
     type TimerPlan = bluetooth::ModemLpTimerPlan;
-    type CompareDisabled = bluetooth::ModemLpTimerCompareDisabled;
+    type StoppedTimer = bluetooth::ModemLpTimerStoppedOwner;
+    type StopProof = bluetooth::ModemLpTimerStopped;
 
     fn open_bank(setup: Self::Setup) -> Self::Bank {
         setup.prepare_controller_output().stage_for_handler()
@@ -789,8 +818,23 @@ impl GateHardware for ChipGate {
         timer.observe_interrupt();
     }
 
-    fn stop_timer(timer: &mut Self::Timer) -> Self::CompareDisabled {
-        timer.disable_compare_for_shutdown()
+    fn stop_timer(timer: Self::Timer) -> (Self::StoppedTimer, Self::StopProof) {
+        timer.stop_for_shutdown()
+    }
+
+    fn stop_pending_timer(
+        timer: Self::TimerPending,
+    ) -> Result<(Self::StoppedTimer, Self::StopProof), Self::TimerPending> {
+        timer.stop_for_shutdown()
+    }
+
+    fn step_stopped_timer(
+        timer: &mut Self::StoppedTimer,
+    ) -> Result<
+        bluetooth::BluetoothModemLpTimerStoppedInterruptObservation,
+        bluetooth::BluetoothModemLpTimerStoppedInterruptFault,
+    > {
+        timer.acknowledge_interrupt()
     }
 
     fn close_bank(
@@ -882,7 +926,7 @@ impl<X: SignalExecutor + 'static, R: RadioDoorbell> BluetoothInterruptGate<ChipG
     pub async fn take_timer<M: ControllerMemory>(
         &mut self,
         _reset: &EngineResetTimerPending<M>,
-    ) -> Result<bluetooth::ModemLpTimerInterruptReadyOwner, GateError> {
+    ) -> Result<bluetooth::ModemLpTimerStoppedOwner, GateError> {
         self.take_stopped_timer().await
     }
 }

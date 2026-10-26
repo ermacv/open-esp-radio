@@ -26,6 +26,7 @@ enum Op {
     ApplyPlan,
     ObserveTimer,
     StopTimer,
+    StoppedTimerStep,
     CloseBank,
 }
 
@@ -35,6 +36,8 @@ enum Step {
     Spurious,
     Rearmed,
     Pending,
+    Rollover,
+    Unknown,
 }
 
 /// The hardware the fake owners reach, shared by every owner of one test.
@@ -65,7 +68,8 @@ struct ReleaseProof;
 struct Scheduler;
 struct TimerInitialized(Shared);
 struct Timer(Shared);
-struct TimerPending(Shared, bool);
+struct TimerPending(Shared, bool, bool);
+struct StoppedTimer(Shared);
 struct Work;
 struct Plan;
 struct Compare;
@@ -82,7 +86,8 @@ impl GateHardware for Fake {
     type TimerPending = TimerPending;
     type TimerWork = Work;
     type TimerPlan = Plan;
-    type CompareDisabled = Compare;
+    type StoppedTimer = StoppedTimer;
+    type StopProof = Compare;
 
     fn open_bank(setup: Setup) -> FakeBank {
         record(&setup.0, Op::PrepareOutput);
@@ -124,14 +129,18 @@ impl GateHardware for Fake {
         match step {
             Step::Spurious => TimerEntry::Spurious(timer),
             Step::Rearmed => TimerEntry::Rearmed(timer),
-            Step::Pending => TimerEntry::SoftwarePending(TimerPending(timer.0, false), Work),
+            Step::Pending => TimerEntry::SoftwarePending(TimerPending(timer.0, true, false), Work),
+            Step::Rollover => {
+                TimerEntry::SoftwarePending(TimerPending(timer.0, false, false), Work)
+            }
+            Step::Unknown => panic!("unknown status only scripted while stopped"),
         }
     }
 
     fn apply_timer_plan(timer: TimerPending, _: Plan) -> TimerEntry<Timer, TimerPending, Work> {
         record(&timer.0, Op::ApplyPlan);
-        if timer.1 {
-            TimerEntry::SoftwarePending(TimerPending(timer.0, false), Work)
+        if timer.2 {
+            TimerEntry::SoftwarePending(TimerPending(timer.0, true, false), Work)
         } else {
             TimerEntry::Rearmed(Timer(timer.0))
         }
@@ -141,13 +150,40 @@ impl GateHardware for Fake {
         let mut model = timer.0.lock().unwrap();
         model.ops.push(Op::ObserveTimer);
         if matches!(model.timer.pop_front(), Some(Step::Pending)) {
-            timer.1 = true;
+            timer.2 = true;
         }
     }
 
-    fn stop_timer(timer: &mut Timer) -> Compare {
+    fn stop_timer(timer: Timer) -> (StoppedTimer, Compare) {
         record(&timer.0, Op::StopTimer);
-        Compare
+        (StoppedTimer(timer.0), Compare)
+    }
+
+    fn stop_pending_timer(timer: TimerPending) -> Result<(StoppedTimer, Compare), TimerPending> {
+        if timer.1 || timer.2 {
+            return Err(timer);
+        }
+        Ok(Self::stop_timer(Timer(timer.0)))
+    }
+
+    fn step_stopped_timer(
+        timer: &mut StoppedTimer,
+    ) -> Result<
+        bluetooth::BluetoothModemLpTimerStoppedInterruptObservation,
+        bluetooth::BluetoothModemLpTimerStoppedInterruptFault,
+    > {
+        use bluetooth::{
+            BluetoothModemLpTimerStoppedInterruptFault as Fault,
+            BluetoothModemLpTimerStoppedInterruptObservation as Ack,
+        };
+        let mut model = timer.0.lock().unwrap();
+        model.ops.push(Op::StoppedTimerStep);
+        match model.timer.pop_front().unwrap_or(Step::Spurious) {
+            Step::Spurious | Step::Rearmed => Ok(Ack::Quiet),
+            Step::Rollover => Ok(Ack::RolloverAcknowledged(Default::default())),
+            Step::Pending => Err(Fault::SoftwarePending(Default::default())),
+            Step::Unknown => Err(Fault::UnexpectedStatus(u32::MAX)),
+        }
     }
 
     fn close_bank(bank: FakeBank, _: ReleaseProof) -> Result<Released, FakeBank> {
@@ -452,7 +488,7 @@ fn the_timer_leaves_only_stopped_and_on_request() {
     // The handler retains the owner but cannot stop until the plan arrives.
     assert!(matches!(
         harness.exchange(Request::StopTimer),
-        Ok(Reply::Refused(GateError::TimerNotReady))
+        Ok(Reply::Refused(GateError::TimerDispatchPending))
     ));
     assert!(harness.port.submit_plan(Plan).is_ok());
     harness.ops();
@@ -463,7 +499,7 @@ fn the_timer_leaves_only_stopped_and_on_request() {
     assert!(harness.ops().contains(&Op::StopTimer));
     // Stopped, the handler still quiets the timer's status.
     harness.enter();
-    assert_eq!(harness.ops().last(), Some(&Op::TimerStep));
+    assert_eq!(harness.ops().last(), Some(&Op::StoppedTimerStep));
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
         Ok(Reply::Timer(_))
@@ -569,4 +605,94 @@ fn an_event_between_plan_and_application_waits_for_the_retained_owner() {
     assert!(harness.port.take_work().is_some());
     assert_eq!(is_pending(harness.cells), (false, true));
     assert!(!harness.fault.load(Ordering::Acquire));
+}
+
+#[test]
+fn stopped_rollover_is_acknowledged_and_the_owner_can_reunite() {
+    let mut harness = Harness::new();
+    harness.open();
+    assert!(matches!(
+        harness.exchange(Request::StopTimer),
+        Ok(Reply::TimerStopped(_))
+    ));
+    harness
+        .clock
+        .advance(oer_time::Duration::from_micros(10))
+        .unwrap();
+    harness.script(|m| m.timer.push_back(Step::Rollover));
+    harness.enter();
+    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(harness.port.take_work().is_none());
+    assert!(matches!(
+        harness.exchange(Request::TakeTimer),
+        Ok(Reply::Timer(_))
+    ));
+}
+
+#[test]
+fn stop_accepts_rollover_only_planning_after_the_task_drained() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness
+        .clock
+        .advance(oer_time::Duration::from_micros(10))
+        .unwrap();
+    harness.script(|m| m.timer.push_back(Step::Rollover));
+    harness.enter();
+    assert!(matches!(harness.part.timer, super::Timer::AwaitingPlan(_)));
+    // No plan is returned by the already-drained task.
+    assert!(matches!(
+        harness.exchange(Request::StopTimer),
+        Ok(Reply::TimerStopped(_))
+    ));
+    // Retirement discards only the late rollover snapshot/epoch projection.
+    let _rollover = harness.port.take_work().unwrap();
+    assert!(!harness.fault.load(Ordering::Acquire));
+    assert!(matches!(
+        harness.exchange(Request::TakeTimer),
+        Ok(Reply::Timer(_))
+    ));
+    assert!(harness.port.take_work().is_none());
+}
+
+#[test]
+fn a_dispatch_retained_during_rollover_planning_refuses_stop() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.script(|m| m.timer.push_back(Step::Rollover));
+    harness.enter();
+    let _rollover = harness.port.take_work().unwrap();
+    harness.script(|m| m.timer.push_back(Step::Pending));
+    harness.enter();
+    harness.ops();
+    assert!(matches!(
+        harness.exchange(Request::StopTimer),
+        Ok(Reply::Refused(GateError::TimerDispatchPending))
+    ));
+    assert!(!harness.ops().contains(&Op::StopTimer));
+    assert!(matches!(harness.part.timer, super::Timer::AwaitingPlan(_)));
+    assert!(harness.port.submit_plan(Plan).is_ok());
+    harness.enter();
+    assert!(
+        harness.port.take_work().is_some(),
+        "dispatch remains deliverable"
+    );
+}
+
+#[test]
+fn stopped_unknown_status_uses_the_existing_fault_path() {
+    let mut harness = Harness::new();
+    harness.open();
+    assert!(matches!(
+        harness.exchange(Request::StopTimer),
+        Ok(Reply::TimerStopped(_))
+    ));
+    harness.script(|m| m.timer.push_back(Step::Unknown));
+    harness.enter();
+    assert!(harness.fault.load(Ordering::Acquire));
+    assert!(harness.part.retained.stopped.is_some());
+    assert!(matches!(
+        harness.exchange(Request::TakeTimer),
+        Ok(Reply::Refused(GateError::TimerNotStopped))
+    ));
 }

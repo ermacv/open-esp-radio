@@ -70,6 +70,43 @@ impl BluetoothModemLpTimerHandlerRegisterObservation {
     }
 }
 
+/// Sampled low bytes retained across preparation or shutdown.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[must_use = "pending observations retain state removed at prepare or shutdown"]
+pub struct BluetoothModemLpTimerPendingObservation {
+    state_0024: u8,
+    state_002c: u8,
+}
+
+impl BluetoothModemLpTimerPendingObservation {
+    /// Sampled software-dispatch byte.
+    pub const fn state_0024(self) -> u8 {
+        self.state_0024
+    }
+    /// Sampled rollover byte; no event-count interpretation is implied.
+    pub const fn state_002c(self) -> u8 {
+        self.state_002c
+    }
+}
+
+/// Finite acknowledgement while the counter and both measured lanes are stopped.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BluetoothModemLpTimerStoppedInterruptObservation {
+    /// Neither sampled pending byte requested work.
+    Quiet,
+    /// The sampled rollover byte was acknowledged without dispatch or rearming.
+    RolloverAcknowledged(BluetoothModemLpTimerPendingObservation),
+}
+
+/// Stopped state that the gate sends through its existing fault path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BluetoothModemLpTimerStoppedInterruptFault {
+    /// Software dispatch is pending after the task drained; bytes remain intact.
+    SoftwarePending(BluetoothModemLpTimerPendingObservation),
+    /// A nonzero status other than the measured rollover-only image; no ack ran.
+    UnexpectedStatus(u32),
+}
+
 /// Source-owned high byte paired with the modem LP timer's positional counter.
 ///
 /// The vendor environment advances this byte with wrapping arithmetic whenever
@@ -164,7 +201,65 @@ pub enum BluetoothModemLpTimerCompareDisposition {
 
 trait ModemLpTimerTransaction {
     fn prepare_hardware(&mut self);
+    fn sample_pending(&mut self) -> BluetoothModemLpTimerPendingObservation;
+    fn clear_pending(&mut self);
+    fn enable_rollover(&mut self);
     fn fence(&mut self);
+}
+
+trait ModemLpTimerStopTransaction {
+    fn disable_delivery(&mut self);
+    fn stop_counter(&mut self);
+    fn sample_pending(&mut self) -> BluetoothModemLpTimerPendingObservation;
+    fn read_status(&mut self) -> u32;
+    fn clear_rollover(&mut self);
+    fn clear_pending(&mut self);
+    fn fence(&mut self);
+}
+
+fn execute_modem_lp_timer_stop(
+    transaction: &mut impl ModemLpTimerStopTransaction,
+) -> BluetoothModemLpTimerPendingObservation {
+    transaction.disable_delivery();
+    transaction.stop_counter();
+    transaction.fence();
+    let pending = transaction.sample_pending();
+    // SOURCE: HW6_S31_LP_QUIET_20261026, hw6-20261026-reset-02,
+    // tags 0x3260/0x3380-0x33e2 (oer-notes/research/hw-ble-lp-reset.md).
+    // Controller reset does not clear these bytes. Preserve their observation
+    // before the measured whole-word zeros make the stopped timer quiet.
+    transaction.clear_pending();
+    transaction.fence();
+    pending
+}
+
+fn execute_modem_lp_timer_stopped_interrupt(
+    transaction: &mut impl ModemLpTimerStopTransaction,
+    epoch: &mut BluetoothModemLpTimerEpoch,
+) -> Result<
+    BluetoothModemLpTimerStoppedInterruptObservation,
+    BluetoothModemLpTimerStoppedInterruptFault,
+> {
+    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::Bits0_31Opaque;
+    let status = transaction.read_status();
+    let pending = transaction.sample_pending();
+    if pending.state_0024() != 0 {
+        return Err(BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending(
+            pending,
+        ));
+    }
+    if status != Bits0_31Opaque::Inactive.bits() && status != Bits0_31Opaque::RolloverPending.bits()
+    {
+        return Err(BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(status));
+    }
+    if pending.state_002c() != 0 {
+        transaction.clear_rollover();
+        epoch.advance();
+        transaction.fence();
+        Ok(BluetoothModemLpTimerStoppedInterruptObservation::RolloverAcknowledged(pending))
+    } else {
+        Ok(BluetoothModemLpTimerStoppedInterruptObservation::Quiet)
+    }
 }
 
 trait ModemLpTimerLowPowerInitTransaction {
@@ -332,9 +427,18 @@ fn execute_modem_lp_timer_compare_program(
     disposition
 }
 
-fn execute_modem_lp_timer_prepare(transaction: &mut impl ModemLpTimerTransaction) {
+fn execute_modem_lp_timer_prepare(
+    transaction: &mut impl ModemLpTimerTransaction,
+) -> BluetoothModemLpTimerPendingObservation {
     transaction.prepare_hardware();
+    let stale = transaction.sample_pending();
+    // SOURCE: HW_BLE_LP_CAUSES_2026_10_26, R08 0x3004-0x3008.
+    // Unlike vendor init, clear inherited pending before arming rollover:
+    // retained +0x2c otherwise delivers immediately before the gate opens.
+    transaction.clear_pending();
+    transaction.enable_rollover();
     transaction.fence();
+    stale
 }
 
 fn execute_modem_lp_timer_low_power_init(
@@ -461,11 +565,54 @@ impl<B: oer_mmio::Placement> ModemLpTimerTransaction for HardwareModemLpTimerTra
             .prepare_bluetooth_modem_lp_timer_command_0014();
         self.registers
             .prepare_bluetooth_modem_lp_timer_command_0034();
+    }
+
+    fn sample_pending(&mut self) -> BluetoothModemLpTimerPendingObservation {
+        BluetoothModemLpTimerPendingObservation {
+            state_0024: self.registers.read_word_0024_opaque().low_byte(),
+            state_002c: self.registers.read_word_002c_opaque().low_byte(),
+        }
+    }
+
+    fn clear_pending(&mut self) {
+        self.registers.clear_bluetooth_modem_lp_timer_state_0024();
+        self.registers.clear_bluetooth_modem_lp_timer_state_002c();
+    }
+
+    fn enable_rollover(&mut self) {
         self.registers.write_word_0010_opaque(|w| {
             w.set_bit_1_opaque(true);
         });
     }
 
+    fn fence(&mut self) {
+        device_fence();
+    }
+}
+
+impl<B: oer_mmio::Placement> ModemLpTimerStopTransaction
+    for HardwareModemLpTimerTransaction<'_, B>
+{
+    fn disable_delivery(&mut self) {
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_0014();
+    }
+    fn stop_counter(&mut self) {
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_0004();
+    }
+    fn sample_pending(&mut self) -> BluetoothModemLpTimerPendingObservation {
+        ModemLpTimerTransaction::sample_pending(self)
+    }
+    fn read_status(&mut self) -> u32 {
+        self.registers.read_word_0038_opaque().bits_0_31_opaque()
+    }
+    fn clear_rollover(&mut self) {
+        self.registers.clear_bluetooth_modem_lp_timer_state_002c();
+    }
+    fn clear_pending(&mut self) {
+        ModemLpTimerTransaction::clear_pending(self);
+    }
     fn fence(&mut self) {
         device_fence();
     }
@@ -572,14 +719,45 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     /// SOURCE: public ESP32-S31 `libbtdm_common.a` member `9.o`, complete
     /// symbol `r_sym_bt_waDX0omCE7oLuPVSoPOK`, role-mapped by the public
     /// same-chip unobfuscated `r_btdm_hal_rtc_init`. The body performs seven
-    /// writes and one fresh read in the exact order encoded by this module.
-    /// A single device fence follows the last write. The reviewed source-127
-    /// teardown does not reverse these eight operations.
-    pub fn prepare_registers(&mut self) {
+    /// writes and one fresh read. Before the final rollover command, both
+    /// pending bytes are sampled and cleared with whole-word zeros; the
+    /// returned observation exposes that stale state to the caller.
+    /// SOURCE: HW_BLE_LP_CAUSES_2026_10_26, R08 0x3004-0x3008: clearing
+    /// inherited pending before arming avoids delivery into a vacant gate.
+    pub fn prepare_registers(&mut self) -> BluetoothModemLpTimerPendingObservation {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
         };
-        execute_modem_lp_timer_prepare(&mut transaction);
+        execute_modem_lp_timer_prepare(&mut transaction)
+    }
+
+    /// Disable both measured delivery lanes, stop the counter and fence,
+    /// sample pending, then clear both pending words and fence again. The
+    /// returned observation retains the removed pending bytes. No exhaustive
+    /// all-source or concurrent-arrival proof is implied.
+    /// SOURCE: HW6_S31_LP_QUIET_20261026, hw6-20261026-reset-02,
+    /// tags 0x3260/0x3380-0x33e2 (oer-notes/research/hw-ble-lp-reset.md).
+    pub fn stop_for_shutdown(&mut self) -> BluetoothModemLpTimerPendingObservation {
+        execute_modem_lp_timer_stop(&mut HardwareModemLpTimerTransaction {
+            registers: &mut self.runtime_control,
+        })
+    }
+
+    /// Acknowledge only rollover while stopped, with no compare command or
+    /// software-pending publication. Invalid state remains unacknowledged.
+    pub fn acknowledge_stopped_interrupt(
+        &mut self,
+        epoch: &mut BluetoothModemLpTimerEpoch,
+    ) -> Result<
+        BluetoothModemLpTimerStoppedInterruptObservation,
+        BluetoothModemLpTimerStoppedInterruptFault,
+    > {
+        execute_modem_lp_timer_stopped_interrupt(
+            &mut HardwareModemLpTimerTransaction {
+                registers: &mut self.runtime_control,
+            },
+            epoch,
+        )
     }
 
     /// Complete the reviewed BTDM low-power hardware component.

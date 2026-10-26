@@ -1,21 +1,23 @@
-//! Final Bluetooth reset and timer reunion before the clocks are released.
+//! Final Controller reset and reunion with its explicitly quieted LP timer.
 //!
-//! Caller admission retains the idle task and released output, the timer's
-//! handler disabled its compare and still holds the source-127 owner, and
-//! Bluetooth has left the shared BTBB baseband. Reset uses the same reviewed
-//! S31 `modem_clock_module_mac_reset(PERIPH_BT_MODULE)` domain transaction as
-//! boot and `btdm_lp_shutdown`; no synthetic runtime-counter stop register is
-//! used. The timer leaves its handler only after the reset, when no source of
-//! the reset domain raises it, and the reunion takes it then.
+//! Caller admission retains the idle task and released output. The timer's
+//! handler disabled both measured delivery lanes, stopped the counter,
+//! sampled pending into its stop proof and cleared both pending words with
+//! fences; it still holds the source-127 owner. Bluetooth has left BTBB.
+//! Controller reset uses the reviewed S31
+//! `modem_clock_module_mac_reset(PERIPH_BT_MODULE)` domain transaction.
+//! That reset and `rst_ble_timer` neither silence LP pending nor stop its
+//! counter while LP clocks are on. Gated reads do not prove LP quiescence.
+//! SOURCE: HW6_S31_LP_RESET_RETENTION_20261026 and HW6_S31_LP_QUIET_20261026,
+//! run hw6-20261026-reset-02 (oer-notes/research/hw-ble-lp-reset.md).
+//! The LP owner returns after explicit LP quieting and the Controller reset;
+//! reset admits Controller-memory reunion, not LP silence.
 
 use crate::power::PlatformClockBackend;
 
 use crate::bluetooth::registers::{BluetoothInterruptSetup, BluetoothTaskRegisters};
 
-use super::{
-    ClockedOwner, ModemLpTimerCompareDisabled, ModemLpTimerInterruptReadyOwner, Partition,
-    TaskOwner,
-};
+use super::{ClockedOwner, ModemLpTimerStopped, ModemLpTimerStoppedOwner, Partition, TaskOwner};
 use crate::domain::{RadioClient, RadioDomain};
 
 /// Proof that the Bluetooth Controller domains were reset.
@@ -88,9 +90,11 @@ trait Control {
     fn reset_released(&self) -> bool;
 }
 
-/// Admit the reset and reset the Controller domains. The timer's handler
-/// disabled its compare before (the caller's proof), as the physical
-/// counter shutdown follows from the reset and the clock release.
+/// Admit and reset the Controller domains. The caller's LP stop proof
+/// establishes the explicit disable/stop/sample/clear sequence independently:
+/// neither reset nor clock gating proves LP counter stop or pending clearance.
+/// SOURCE: HW6_S31_LP_RESET_RETENTION_20261026 and HW6_S31_LP_QUIET_20261026,
+/// run hw6-20261026-reset-02 (oer-notes/research/hw-ble-lp-reset.md).
 fn prepare(control: &mut impl Control) -> Result<(), BluetoothShutdownError> {
     if control.time_pending() {
         return Err(BluetoothShutdownError::ControllerTimePending);
@@ -147,7 +151,7 @@ impl BluetoothControllerResetTimerPending {
     /// the clocked owner with the proof of the reset. Performs no MMIO.
     pub fn reunite(
         self,
-        timer: ModemLpTimerInterruptReadyOwner,
+        timer: ModemLpTimerStoppedOwner,
     ) -> (ClockedOwner, BluetoothControllerReset) {
         (
             ClockedOwner {
@@ -171,7 +175,7 @@ pub(super) fn shut_down<B: PlatformClockBackend, T>(
     mut task: TaskOwner,
     radio: &mut RadioDomain<B, T>,
     output: BluetoothInterruptSetup,
-    _compare: ModemLpTimerCompareDisabled,
+    _compare: ModemLpTimerStopped,
 ) -> Result<BluetoothControllerResetTimerPending, BluetoothShutdownFailure> {
     if let Err(error) = prepare(&mut Hardware {
         task: &mut task,

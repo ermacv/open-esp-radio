@@ -91,8 +91,11 @@ doorbell line's lowering half from the start; the task's end exists only
 once the router's `Bound` proof of the part made the doorbell's ringing half
 (`BluetoothInterruptEnds::attach`). Opening an epoch hands the handler the
 unprepared bank, the HAL's channel endpoint and the initialized timer: the handler prepares the
-controller output, then starts the runtime timer, so no source is armed while
-the task holds its owner. The timer register owner and authoritative epoch
+controller output, then starts the runtime timer. Preparation already arms
+the independent rollover lane with the counter stopped, after sampling and
+clearing both inherited pending bytes with whole-word zeros. The removed
+state is exposed by `stale_pending_observation` and the BLE PHY initialization
+report. The timer register owner and authoritative epoch
 stay in the handler while value-only snapshots and unarmed plans cross through
 `interrupt::ModemLpTimerPort`. P2 only mutates the queue and publishes
 expirations. The handler applies the sourced disable/sample/program/command
@@ -101,6 +104,21 @@ pending/rollover facts; their software work is published after the in-flight
 plan returns. The route is never removed and nothing is
 masked at the interrupt controller: the task and the handler share no lock,
 only one-slot queues, the doorbell and the static reply signal.
+
+The LP stop transaction writes the sourced all-ones disable image at `+0x14`
+and the vendor deinit command at `+0x04`, then fences and samples both
+pending bytes into the returned type. Whole-word zeros at `+0x24` and `+0x2c`
+and another fence complete the measured quiet state. Pending observations
+remain in the stop proof; Controller reset does not clear LP pending or stop
+its counter with LP clocks on. No exhaustive all-source or concurrent-arrival
+claim is made. SOURCE: `HW6_S31_LP_QUIET_20261026` and
+`HW6_S31_LP_RESET_RETENTION_20261026`, run `hw6-20261026-reset-02`
+(`oer-notes/research/hw-ble-lp-reset.md`). The stopped owner acknowledges rollover-only pending without dispatch
+or rearming. Software pending (`+0x24`) or an unknown nonzero status uses the
+gate's existing fault path. `AwaitingPlan` can stop only if neither its
+original work nor retained arrivals request dispatch; retiring rollover-only
+work discards only the ending epoch's time projection. Retirement consumes
+its late queued snapshot before another epoch can open.
 
 `Engine::install_scheduler_interrupts` binds a static single-request channel
 to its installation epoch. `SchedulerDoorbell` rings the doorbell and waits
@@ -174,7 +192,7 @@ Stop:
    task's list heads, the handler's mask, the task's RUN disable, the
    handler's release), closes the bank's gate (the released bank and the
    channel endpoint leave the handler), reunites both quiet channel endpoints
-   and has the handler disable the timer's compare. A fault the handler
+   and has the handler stop the counter and both measured LP delivery lanes. A fault the handler
    acknowledged during the epoch refuses the release. Return the retired
    Controller to `ControllerLifecycle`; only the exact running installation
    is accepted;

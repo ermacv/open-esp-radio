@@ -330,3 +330,30 @@ fn a_scanner_starts_only_on_the_scanning_list_of_its_own_epoch() {
         Some(ScanStartError::NotScanningList)
     );
 }
+
+#[test]
+fn stopping_a_planning_timer_preserves_original_and_deferred_dispatch_on_refusal() {
+    use super::{BluetoothModemLpTimerEpoch, ModemLpTimerSoftwarePendingOwner};
+    for (dispatch_requested, deferred_dispatch) in
+        [(true, None), (false, Some(true)), (true, Some(false))]
+    {
+        let (_, partitions) = crate::root::RadioHardware::for_host_test()
+            .split::<crate::power::test_clocks::CountingBackend, _>(());
+        let (mut task, _) =
+            ClockedOwner::for_host_test(partitions.bluetooth).separate_interrupt_owner();
+        let pending = ModemLpTimerSoftwarePendingOwner {
+            timer: task.modem_lp_timer.take().unwrap(),
+            epoch: BluetoothModemLpTimerEpoch::new(),
+            dispatch_requested,
+            deferred_dispatch,
+        };
+        // This fictitious root has no accessible MMIO: refusal must precede
+        // any hardware operation and return all software facts unchanged.
+        let refused = pending
+            .stop_for_shutdown()
+            .err()
+            .expect("dispatch refuses stop");
+        assert_eq!(refused.dispatch_requested, dispatch_requested);
+        assert_eq!(refused.deferred_dispatch, deferred_dispatch);
+    }
+}

@@ -624,7 +624,17 @@ queues. The snapshot and plan grant no MMIO access. Rollover acknowledgement,
 compare programming and software-pending commands execute only with the
 handler's retained owner. Repeated interrupts during planning acknowledge and
 retain new software work there; no additional unsafe sharing or second register
-writer is involved.
+writer is involved. Preparation reports and clears both inherited pending
+bytes before arming the rollover lane with the counter stopped. Shutdown
+disables both measured delivery lanes, stops the counter and fences, retains
+both sampled pending bytes in its returned type, then clears both whole words
+and fences again. Controller reset and clock gating supply no LP-quiescence
+proof (SOURCE: HW6_S31_LP_QUIET_20261026 and
+HW6_S31_LP_RESET_RETENTION_20261026, hw6-20261026-reset-02). A stopped typestate
+acknowledges rollover without dispatch or rearming.
+Outstanding dispatch refuses stop, while rollover-only planning can retire
+its ending epoch projection. Invalid stopped state uses the gate's existing
+fault path.
 
 ## Active-owner lifetime
 

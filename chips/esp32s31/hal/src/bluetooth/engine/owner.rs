@@ -59,7 +59,7 @@ pub struct EngineResetTimerPending<M: ControllerMemory> {
 
 impl<M: ControllerMemory> EngineResetTimerPending<M> {
     /// Reunite the timer and return the clocked client with the arena.
-    pub fn reunite(self, timer: bluetooth::ModemLpTimerInterruptReadyOwner) -> EngineShutDown<M> {
+    pub fn reunite(self, timer: bluetooth::ModemLpTimerStoppedOwner) -> EngineShutDown<M> {
         let (clocked, reset) = self.controller.reunite(timer);
         EngineShutDown {
             clocked,
@@ -196,11 +196,17 @@ impl<M: ControllerMemory> Engine<M> {
     pub fn initialize_modem_lp_timer_hardware(
         &mut self,
     ) -> Result<
-        bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
+        (
+            bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
+            bluetooth::BluetoothModemLpTimerPendingObservation,
+        ),
         bluetooth::BluetoothModemLpTimerOwnerError,
     > {
-        let prepared = self.registers.prepare_modem_lp_timer_registers()?;
-        Ok(prepared.initialize_low_power_hardware(&mut self.registers))
+        let (prepared, stale) = self.registers.prepare_modem_lp_timer_registers()?;
+        Ok((
+            prepared.initialize_low_power_hardware(&mut self.registers),
+            stale,
+        ))
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -330,16 +336,16 @@ impl<M: ControllerMemory> Engine<M> {
     }
 
     /// Reset the stopped Controller, whose output is released and whose
-    /// timer's handler disabled its compare, and await that timer.
+    /// timer's counter and both measured delivery lanes stopped, and await that timer.
     #[allow(clippy::result_large_err)]
     pub fn shut_down<B: crate::power::PlatformClockBackend, T>(
         self,
         radio: &mut crate::domain::RadioDomain<B, T>,
         output: bluetooth::InterruptOutputReleasedOwner,
-        compare: bluetooth::ModemLpTimerCompareDisabled,
+        stopped: bluetooth::ModemLpTimerStopped,
     ) -> Result<EngineResetTimerPending<M>, EngineShutdownFailure<M>> {
         self.shut_down_with(output, |registers, output| {
-            registers.shut_down(radio, output, compare)
+            registers.shut_down(radio, output, stopped)
         })
     }
 

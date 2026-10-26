@@ -304,7 +304,7 @@ where
 }
 
 /// Drained software timer task; its HAL owner stays with the timer's
-/// interrupt handler, which disables the compare and keeps the owner until
+/// interrupt handler, which stops the counter and both measured lanes and keeps the owner until
 /// the Controller reset.
 ///
 /// This state is not a timer reset, BTBB stop, or permission to release PHY.

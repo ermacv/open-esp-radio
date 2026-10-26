@@ -1,0 +1,7 @@
+# Measured Bluetooth LP timer causes; no exhaustive output equation.
+schema = 1
+
+[[sources]]
+id = "HW_BLE_LP_CAUSES_2026_10_26"
+kind = "unattested-hil-observation"
+description = "ESP32-S31 s31-b, hw2 runs hw2-20261026-ble-07 (#786) and hw2-20261026-ble-08 (#787); oer-notes/research/hw-ble-nrt-lp.md, R07 lp-causes.json/lp-stop.json/lp-wrap.json and R08 rollover-gates.json tags 0x3000-0x3008. Isolated rollover set +0x2c=1, status +0x38=2 and source 127 high; compare/software used +0x24=1 and status 0x40000; both gave 0x40002. +0x14=0x40000 suppressed only compare/software. +0x14=0xffffffff suppressed both measured lanes with both pending bytes retained. +0x04=1 froze the counter without lowering pending/output; START retained low phase. Whole-word zeros at +0x24/+0x2c lowered the corresponding enabled lane. No collision priority, wrap-count capacity or exhaustive cause claim."
