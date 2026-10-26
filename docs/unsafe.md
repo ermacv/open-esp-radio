@@ -27,8 +27,10 @@ it:
   with a reason. Crate-local Clippy configurations retain these bans.
 - A clean panic lint is denied at the crate root while `[lints]` retains
   `workspace = true`. A non-test local `allow` or `expect` means the lint
-  is not clean, even when the host emits no diagnostic. Panic-lint
-  allowances belong only in tests; compile-time checks remain allowed.
+  is not clean, even when the host emits no diagnostic. New panic-lint
+  allowances belong only in tests. Remove existing non-test allowances as
+  the crate is cleaned, then move each clean lint to `deny`. Compile-time
+  checks remain allowed.
 
 Every `unsafe` block and `unsafe impl` below the boundary needs a
 `// SAFETY:` comment on the lines immediately before it, stating why its
