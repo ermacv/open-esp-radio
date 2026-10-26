@@ -6,8 +6,8 @@ use oer_bluetooth_le_port::TxPower;
 use oer_bluetooth_le_radio::LeBand;
 use oer_esp32s31_bluetooth_driver::{
     modem_timer::{
-        ControllerModemTimerBegin, ControllerModemTimerReadinessClass, ControllerModemTimerPlanSubmission,
-        ControllerModemTimerStep, ControllerModemTimerTask,
+        ControllerModemTimerBegin, ControllerModemTimerPlanSubmission,
+        ControllerModemTimerReadinessClass, ControllerModemTimerStep, ControllerModemTimerTask,
     },
     port::{
         Fault, mailbox as rpc,
@@ -19,8 +19,6 @@ use oer_esp32s31_bluetooth_driver::{
 };
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{
-    power::ChipClocks,
-    root::Root,
     bluetooth::engine::{
         ArenaError, BluetoothArena, ChipDma, Engine, EpochScope, PoolScope,
         SchedulerAllocationConfig, with_epoch_async, with_pool_async,
@@ -28,6 +26,8 @@ use oer_esp32s31_hal::{
     bluetooth::{ClockedOwner, ColdOwner, InterruptSetupOwner},
     dma_static::Placed,
     domain::{BluetoothClient, CoexAbsent},
+    power::ChipClocks,
+    root::Root,
 };
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,
