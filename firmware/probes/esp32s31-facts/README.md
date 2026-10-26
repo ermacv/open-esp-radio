@@ -279,6 +279,21 @@ not initialize RF, publish DMA or start a radio scheduler. The session is
 disposable: return it to ROM download with the leased stand reset after capture.
 These are not production frequency or calibrated-PHY conditions.
 
+Selection 14 is the P-I2C read-routing experiment. It repeats the HAL's
+modem/analog-I2C power, reset, clock, timing and register-mode prerequisites
+through PAC owners, then reads BBTOP 04 and TXRF 08 serially, in parallel
+(BBTOP on host 0, TXRF on host 1), then serially again. Every command is a
+read. The parallel host-map updates and combined complemented mask follow
+the complete ROM leaves cited in `opaque_wave2.rs`. No RF calibration,
+channel switch, memory initialization or traffic starts. The ROM's BBPLL
+calibration is not assumed; a busy timeout ends the leaf without a retry.
+The CPU must read undivided XTAL. Each host has a 40000-cycle deadline;
+the sourced power pre-delay is 4000 cycles. Tags `140–142` mark setup and
+its power/reset/gate readback; `150/154/158/160/164` record routing,
+following records contain returned bytes, polls, elapsed cycles and command
+block/index. `16f` marks completion of the entire six-byte sequence.
+Use a held stand lease and return this disposable session to ROM download.
+
 Record tags: `a0` CPU clock fields; `a1` initial MODEM_CONF/PMU code; `a4`,
 `a8`, `ac`, `b0`, `b4`, `b8` P0 step readback/PMU code/cycle. For BA, `b0–b1`
 are clock maps/gates/reset observations. Pairs `c0–cf` contain CONTROL,

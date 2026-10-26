@@ -13,6 +13,8 @@ use oer_esp32s31_pac as pac;
 use oer_mmio::{Bits, Index};
 #[path = "opaque.rs"]
 mod opaque;
+#[path = "opaque_wave2.rs"]
+mod opaque_wave2;
 
 mod ble;
 mod ble_wave2;
@@ -188,6 +190,10 @@ struct Probe {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 14,
+        run: opaque_wave2::i2c,
+    },
     Probe {
         id: 10,
         run: opaque::pll,
