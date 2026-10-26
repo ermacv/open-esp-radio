@@ -1,7 +1,7 @@
 //! One request at a time between a client and a server, without a lock.
 //!
-//! A [`RequestSlot`] lives in permanent backing and moves through four
-//! states:
+//! A [`RequestSlot`] lives in permanent backing. Its default [`ByValue`]
+//! mode moves through four states:
 //!
 //! - `IDLE`: the client holds the slot's [`Poster`]; neither side touches
 //!   the payload;
@@ -17,8 +17,15 @@
 //! posts only with the slot's one [`Poster`], which [`RequestSlot::claim`]
 //! gives once, [`Poster::post`] consumes and [`Awaiting::poll_answer`]
 //! returns with the answer, so at most one request is in a slot. Waits register their waker
-//! before they check the state, so no wake is lost. The protocol is CAS-only
-//! and stays correct when one side preempts the other.
+//! before they check the state, so no wake is lost. The by-value handoff is
+//! CAS-only and stays correct when one side preempts the other.
+//!
+//! [`InPlace`] uses the same handoffs without either waker or a doorbell:
+//! its unique server borrows the whole exchange, including the reply, in
+//! `WORKING`. Its unique client validates in `ANSWERED` before taking the
+//! exchange and returning to `IDLE`. External signals carry only readiness.
+//! Abandonment leaves the seat claimed; both idle endpoints must reunite
+//! before another pair can claim it.
 
 use core::{
     cell::UnsafeCell,
@@ -69,15 +76,30 @@ impl Default for Doorbell {
     }
 }
 
+/// By-value requests and answers, with task notifications in both directions.
+pub struct ByValue {
+    client: PriorityWaker,
+    doorbell: &'static Doorbell,
+    bit: u32,
+}
+
+/// In-place processing with external notifications and no stored wakers.
+///
+/// The request also carries its reply. Dropping either endpoint retains the
+/// seat permanently; only reuniting both idle endpoints permits a new claim.
+pub struct InPlace;
+
 /// The permanent backing of one client's requests and answers.
-pub struct RequestSlot<Req, Ans> {
+///
+/// The default [`ByValue`] mode moves requests and answers between tasks.
+/// [`InPlace`] instead lends the request to a server and retains it until
+/// the client validates and takes the completed exchange.
+pub struct RequestSlot<Req, Ans, Mode = ByValue> {
     claimed: AtomicBool,
     state: AtomicU8,
     request: UnsafeCell<MaybeUninit<Req>>,
     answer: UnsafeCell<MaybeUninit<Ans>>,
-    client: PriorityWaker,
-    doorbell: &'static Doorbell,
-    bit: u32,
+    mode: Mode,
 }
 
 #[allow(
@@ -85,10 +107,12 @@ pub struct RequestSlot<Req, Ans> {
     reason = "the slot's state protocol gives each payload place one accessor at a time"
 )]
 // SAFETY: `request` and `answer` are accessed only through `Poster::post`,
-// `take_request`, `Responder::answer` and `Awaiting::poll_answer`, each of
-// which first owns the state that admits it (see the module docs); payloads
-// move between execution contexts, so they must be `Send`.
-unsafe impl<Req: Send, Ans: Send> Sync for RequestSlot<Req, Ans> {}
+// `take_request`, `Responder::answer`, `Awaiting::poll_answer`, and the
+// in-place endpoints, each of which first owns the state that admits it.
+// In-place server borrows end before ANSWERED, and the client validates and
+// takes only in ANSWERED. A forgotten endpoint or interrupted service retains
+// the seat. Payloads cross contexts and must be Send; mode data must be Sync.
+unsafe impl<Req: Send, Ans: Send, Mode: Sync> Sync for RequestSlot<Req, Ans, Mode> {}
 
 impl<Req, Ans> RequestSlot<Req, Ans> {
     /// A slot that rings `bit` of `doorbell`.
@@ -98,15 +122,17 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
             state: AtomicU8::new(IDLE),
             request: UnsafeCell::new(MaybeUninit::uninit()),
             answer: UnsafeCell::new(MaybeUninit::uninit()),
-            client: PriorityWaker::new(),
-            doorbell,
-            bit,
+            mode: ByValue {
+                client: PriorityWaker::new(),
+                doorbell,
+                bit,
+            },
         }
     }
 
     /// The doorbell bit of this slot.
     pub const fn bit(&self) -> u32 {
-        self.bit
+        self.mode.bit
     }
 
     /// The slot's one [`Poster`]; `None` after the first call.
@@ -117,45 +143,18 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
         Some(Poster { slot: self })
     }
 
-    /// Write `request` and ring the doorbell. Only a [`Poster`] calls this,
-    /// and a poster exists only while the slot is `IDLE`.
-    fn post(&self, request: Req) {
-        debug_assert_eq!(self.state.load(Ordering::Relaxed), IDLE);
-        #[allow(
-            unsafe_code,
-            reason = "the IDLE slot's token holder owns the request place"
-        )]
-        // SAFETY: the slot is IDLE and the caller holds its unique poster: the
-        // server touches `request` only after its CAS from POSTED, which has
-        // not happened, and the previous request was moved out before the
-        // slot returned to IDLE.
-        unsafe {
-            (*self.request.get()).write(request);
-        }
-        self.state.store(POSTED, Ordering::Release);
-        self.doorbell.ring(self.bit);
-    }
-
     /// Take a posted request and the duty to answer it.
     pub fn take_request(&self) -> Option<(Req, Responder<'_, Req, Ans>)> {
         self.state
             .compare_exchange(POSTED, WORKING, Ordering::Acquire, Ordering::Relaxed)
             .ok()?;
-        #[allow(
-            unsafe_code,
-            reason = "the WORKING slot's server owns the request place"
-        )]
-        // SAFETY: the CAS from POSTED to WORKING succeeded only here, so the
-        // server is the request place's only accessor; the client's write
-        // happened before its Release store of POSTED, which the Acquire CAS
-        // observed.
-        let request = unsafe { (*self.request.get()).assume_init_read() };
+        let request = self.take_request_payload();
         Some((request, Responder { slot: self }))
     }
 
     /// The answer, once the server gave it; the slot is `IDLE` again.
     fn poll_answer(&self, cx: &mut Context<'_>) -> Poll<Ans> {
-        self.client.register(cx.waker());
+        self.mode.client.register(cx.waker());
         if self
             .state
             .compare_exchange(ANSWERED, IDLE, Ordering::Acquire, Ordering::Relaxed)
@@ -175,6 +174,156 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
     }
 }
 
+impl<Req, Ans, Mode> RequestSlot<Req, Ans, Mode> {
+    /// Write `request` and publish POSTED. The unique client calls
+    /// this only while the slot is `IDLE`.
+    fn post(&self, request: Req) {
+        #[allow(
+            unsafe_code,
+            reason = "the IDLE slot's token holder owns the request place"
+        )]
+        // SAFETY: the slot is IDLE and the caller holds its unique client token: the
+        // server touches `request` only after its CAS from POSTED, which has
+        // not happened, and the previous request was moved out before the
+        // slot returned to IDLE.
+        unsafe {
+            (*self.request.get()).write(request);
+        }
+        self.state.store(POSTED, Ordering::Release);
+    }
+
+    // Only the by-value server in WORKING or the in-place client in
+    // ANSWERED may consume the initialized request.
+    fn take_request_payload(&self) -> Req {
+        #[allow(
+            unsafe_code,
+            reason = "the state protocol grants exclusive access to the initialized request"
+        )]
+        // SAFETY: the by-value server owns WORKING after its Acquire CAS, or
+        // the unique in-place client observed ANSWERED with Acquire and ended
+        // its validation borrow. The other endpoint cannot access the place
+        // in either phase; the current request is initialized and read once.
+        unsafe {
+            (*self.request.get()).assume_init_read()
+        }
+    }
+}
+
+impl<Req> RequestSlot<Req, (), InPlace> {
+    /// Permanent storage whose notifications are supplied by its endpoints.
+    pub const fn new_in_place() -> Self {
+        Self {
+            claimed: AtomicBool::new(false),
+            state: AtomicU8::new(IDLE),
+            request: UnsafeCell::new(MaybeUninit::uninit()),
+            answer: UnsafeCell::new(MaybeUninit::uninit()),
+            mode: InPlace,
+        }
+    }
+
+    /// Claim both unique endpoints. An abandoned seat cannot be reclaimed.
+    pub fn claim_in_place(&'static self) -> Option<(InPlaceClient<Req>, InPlaceServer<Req>)> {
+        if self.claimed.swap(true, Ordering::AcqRel) {
+            return None;
+        }
+        Some((InPlaceClient { slot: self }, InPlaceServer { slot: self }))
+    }
+}
+
+/// The unique client of an in-place slot; notification stays with the caller.
+#[must_use = "dropping the client retains the seat"]
+pub struct InPlaceClient<Req: 'static> {
+    slot: &'static RequestSlot<Req, (), InPlace>,
+}
+
+/// The unique server of an in-place slot; it stores no waker.
+#[must_use = "dropping the server retains the seat"]
+pub struct InPlaceServer<Req: 'static> {
+    slot: &'static RequestSlot<Req, (), InPlace>,
+}
+
+impl<Req> InPlaceClient<Req> {
+    /// Post an exchange only into an idle slot. An occupied slot returns the
+    /// new request untouched, retaining the previous exchange in place.
+    pub fn post(&mut self, request: Req) -> Result<(), Req> {
+        if !self.is_idle() {
+            return Err(request);
+        }
+        self.slot.post(request);
+        Ok(())
+    }
+
+    /// Whether there is no request or reply retained by this client.
+    pub fn is_idle(&self) -> bool {
+        self.slot.state.load(Ordering::Acquire) == IDLE
+    }
+
+    /// Validate the completed exchange before consuming it. A refusal leaves
+    /// the exchange in place, so repeated validation cannot duplicate or drop
+    /// its payload. No reference into the slot escapes the validation call.
+    pub fn try_take_if<E>(
+        &mut self,
+        validate: impl FnOnce(&Req) -> Result<(), E>,
+    ) -> Option<Result<Req, E>> {
+        if self.slot.state.load(Ordering::Acquire) != ANSWERED {
+            return None;
+        }
+        #[allow(
+            unsafe_code,
+            reason = "ANSWERED grants the unique client the completed exchange"
+        )]
+        // SAFETY: the server's Release store of ANSWERED ended its mutable
+        // borrow. Only this client can read the exchange or return it to IDLE;
+        // the validation borrow ends before the payload is moved below.
+        let reply = unsafe { (&*self.slot.request.get()).assume_init_ref() };
+        if let Err(error) = validate(reply) {
+            return Some(Err(error));
+        }
+        let reply = self.slot.take_request_payload();
+        self.slot.state.store(IDLE, Ordering::Release);
+        Some(Ok(reply))
+    }
+
+    /// Release the seat only by consuming both matching idle endpoints.
+    /// Refusal returns both owners and leaves the seat claimed.
+    pub fn reunite(self, server: InPlaceServer<Req>) -> Result<(), (Self, InPlaceServer<Req>)> {
+        if !core::ptr::eq(self.slot, server.slot) || !self.is_idle() {
+            return Err((self, server));
+        }
+        self.slot.claimed.store(false, Ordering::Release);
+        Ok(())
+    }
+}
+
+impl<Req> InPlaceServer<Req> {
+    /// Process at most one posted request by borrowing it in place. The
+    /// callback writes its reply into the exchange; its borrow ends before
+    /// Release publishes ANSWERED. Duplicate or nested service does nothing.
+    /// The caller publishes its external reply notification on `true`.
+    pub fn service(&mut self, process: impl FnOnce(&mut Req)) -> bool {
+        if self
+            .slot
+            .state
+            .compare_exchange(POSTED, WORKING, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            return false;
+        }
+        #[allow(
+            unsafe_code,
+            reason = "WORKING grants the server exclusive in-place access"
+        )]
+        // SAFETY: the Acquire CAS observed the client's Release publication
+        // of a fully initialized request and grants this server sole access.
+        // P2 cannot read or replace it before ANSWERED, stored after the
+        // callback's borrow ends. An interrupted callback retains WORKING.
+        let request = unsafe { (&mut *self.slot.request.get()).assume_init_mut() };
+        process(request);
+        self.slot.state.store(ANSWERED, Ordering::Release);
+        true
+    }
+}
+
 /// The client's right to post one request: the slot is `IDLE`.
 #[must_use = "the poster is the client's only way to the server"]
 pub struct Poster<Req: 'static, Ans: 'static> {
@@ -186,6 +335,7 @@ impl<Req, Ans> Poster<Req, Ans> {
     /// poster.
     pub fn post(self, request: Req) -> Awaiting<Req, Ans> {
         self.slot.post(request);
+        self.slot.mode.doorbell.ring(self.slot.mode.bit);
         Awaiting {
             slot: Some(self.slot),
         }
@@ -245,7 +395,7 @@ impl<Req, Ans> Responder<'_, Req, Ans> {
             (*slot.answer.get()).write(answer);
         }
         slot.state.store(ANSWERED, Ordering::Release);
-        slot.client.wake();
+        slot.mode.client.wake();
     }
 }
 

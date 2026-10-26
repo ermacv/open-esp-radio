@@ -5,12 +5,12 @@
 //! calls the other or borrows its registers, and no waker crosses into P3.
 
 use core::{
-    cell::UnsafeCell,
     future::poll_fn,
-    mem::MaybeUninit,
     sync::atomic::{AtomicU32, Ordering},
     task::{Context, Poll},
 };
+
+use oer_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
 
 use crate::bluetooth::{
     BluetoothControllerOutputReleaseError, BluetoothDynamicSourcesMasked,
@@ -20,12 +20,6 @@ use crate::bluetooth::{
     BluetoothSchedulerLockModifyInterruptObservation, BluetoothSchedulerRunDisabled,
     BluetoothSchedulerRunInterruptsPrepared, InterruptRegistersOwner,
 };
-
-const FREE: u32 = 0;
-const EMPTY: u32 = 1;
-const REQUEST: u32 = 2;
-const EXECUTING: u32 = 3;
-const RESPONSE: u32 = 4;
 
 /// The image's shared P3 radio doorbell and P2 reply signal.
 ///
@@ -96,8 +90,8 @@ enum Reply {
     OutputReleased(Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError>),
 }
 
-// Initialized by P2 before REQUEST. P3 borrows this one message in place,
-// writes only the reply, then publishes RESPONSE. In particular the indexed
+// Initialized by P2 before POSTED. P3 borrows this one message in place,
+// writes only the reply, then publishes ANSWERED. In particular the indexed
 // cancellation owner never needs an enum/envelope move through P3.
 struct Exchange {
     epoch: u32,
@@ -111,21 +105,9 @@ struct Exchange {
 /// Both endpoints must reunite after scheduler stop before another epoch
 /// can install. A pending or abandoned request keeps the slot reserved.
 pub struct SchedulerInterruptChannel {
-    state: AtomicU32,
+    slot: RequestSlot<Exchange, (), InPlace>,
     sequence: AtomicU32,
-    payload: UnsafeCell<MaybeUninit<Exchange>>,
 }
-
-#[allow(
-    unsafe_code,
-    reason = "the atomic state transfers exclusive payload ownership"
-)]
-// SAFETY: EMPTY is exclusively P2's; REQUEST transfers the initialized
-// payload to the unique P3 endpoint; RESPONSE transfers it back. Release
-// stores and Acquire loads cover every payload access. Endpoints cannot be
-// cloned. Reinstallation consumes both quiet endpoints of the old epoch.
-// No endpoint reads EXECUTING.
-unsafe impl Sync for SchedulerInterruptChannel {}
 
 impl Default for SchedulerInterruptChannel {
     fn default() -> Self {
@@ -136,9 +118,8 @@ impl Default for SchedulerInterruptChannel {
 impl SchedulerInterruptChannel {
     pub const fn new() -> Self {
         Self {
-            state: AtomicU32::new(FREE),
+            slot: RequestSlot::new_in_place(),
             sequence: AtomicU32::new(0),
-            payload: UnsafeCell::new(MaybeUninit::uninit()),
         }
     }
 
@@ -146,9 +127,10 @@ impl SchedulerInterruptChannel {
         &'static self,
         epoch: u32,
     ) -> Result<(SchedulerTaskHalf, SchedulerInterruptHalf), SchedulerInterruptError> {
-        self.state
-            .compare_exchange(FREE, EMPTY, Ordering::AcqRel, Ordering::Acquire)
-            .map_err(|_| SchedulerInterruptError::Occupied)?;
+        let (client, server) = self
+            .slot
+            .claim_in_place()
+            .ok_or(SchedulerInterruptError::Occupied)?;
         let sequence = self.sequence.load(Ordering::Relaxed);
         Ok((
             SchedulerTaskHalf {
@@ -156,11 +138,13 @@ impl SchedulerInterruptChannel {
                 epoch,
                 sequence,
                 pending: false,
+                client,
             },
             SchedulerInterruptHalf {
                 channel: self,
                 epoch,
                 sequence,
+                server,
             },
         ))
     }
@@ -173,6 +157,7 @@ pub struct SchedulerInterruptHalf {
     channel: &'static SchedulerInterruptChannel,
     epoch: u32,
     sequence: u32,
+    server: InPlaceServer<Exchange>,
 }
 
 pub(crate) struct SchedulerTaskHalf {
@@ -180,6 +165,7 @@ pub(crate) struct SchedulerTaskHalf {
     epoch: u32,
     sequence: u32,
     pending: bool,
+    client: InPlaceClient<Exchange>,
 }
 
 impl SchedulerInterruptHalf {
@@ -252,30 +238,21 @@ impl SchedulerInterruptHalf {
         })
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the unique P3 endpoint consumes only a Release-published request"
-    )]
     fn service_with(
         &mut self,
         execute: impl FnOnce(&Command) -> Result<Reply, SchedulerInterruptError>,
     ) -> bool {
-        if self.channel.state.load(Ordering::Acquire) != REQUEST {
-            return false;
-        }
-        self.channel.state.store(EXECUTING, Ordering::Relaxed);
-        // SAFETY: REQUEST transferred the slot to this unique endpoint. P2
-        // cannot touch it until RESPONSE, and no other P3 endpoint exists.
-        let request = unsafe { (&mut *self.channel.payload.get()).assume_init_mut() };
-        let next = self.sequence.checked_add(1);
-        request.reply = if request.epoch != self.epoch || next != Some(request.sequence) {
-            Err(SchedulerInterruptError::ForeignReply)
-        } else {
-            self.sequence = request.sequence;
-            execute(&request.command)
-        };
-        self.channel.state.store(RESPONSE, Ordering::Release);
-        true
+        let epoch = self.epoch;
+        let sequence = &mut self.sequence;
+        self.server.service(|request| {
+            let next = sequence.checked_add(1);
+            request.reply = if request.epoch != epoch || next != Some(request.sequence) {
+                Err(SchedulerInterruptError::ForeignReply)
+            } else {
+                *sequence = request.sequence;
+                execute(&request.command)
+            };
+        })
     }
 }
 
@@ -287,11 +264,20 @@ impl SchedulerTaskHalf {
         if !core::ptr::eq(self.channel, interrupts.channel) || self.epoch != interrupts.epoch {
             return Err((SchedulerInterruptError::ForeignReply, self, interrupts));
         }
-        if !self.is_quiet() || self.channel.state.load(Ordering::Acquire) != EMPTY {
+        if !self.is_quiet() || !self.client.is_idle() {
             return Err((SchedulerInterruptError::Abandoned, self, interrupts));
         }
-        self.channel.state.store(FREE, Ordering::Release);
-        Ok(())
+        match self.client.reunite(interrupts.server) {
+            Ok(()) => Ok(()),
+            Err((client, server)) => Err((
+                SchedulerInterruptError::Abandoned,
+                Self { client, ..self },
+                SchedulerInterruptHalf {
+                    server,
+                    ..interrupts
+                },
+            )),
+        }
     }
 
     pub(crate) const fn is_quiet(&self) -> bool {
@@ -307,10 +293,6 @@ impl SchedulerTaskHalf {
         poll_fn(|cx| self.poll_exchange(bell, cx)).await
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the unique P2 endpoint owns EMPTY and publishes REQUEST"
-    )]
     fn begin(
         &mut self,
         bell: &impl SchedulerDoorbell,
@@ -323,24 +305,22 @@ impl SchedulerTaskHalf {
             .sequence
             .checked_add(1)
             .ok_or(SchedulerInterruptError::SequenceExhausted)?;
-        if self.channel.state.load(Ordering::Acquire) != EMPTY {
+        if !self.client.is_idle() {
             return Err(SchedulerInterruptError::Occupied);
         }
-        self.sequence = sequence;
-        self.channel.sequence.store(sequence, Ordering::Relaxed);
-        self.pending = true;
-        // SAFETY: this unique endpoint owns EMPTY; P3 accesses only REQUEST.
-        unsafe {
-            (*self.channel.payload.get()).write(Exchange {
+        self.client
+            .post(Exchange {
                 epoch: self.epoch,
                 sequence,
                 command,
-                // P3 replaces this before RESPONSE; P2 never interprets the
+                // P3 replaces this before ANSWERED; P2 never interprets the
                 // request's initial reply as a hardware observation.
                 reply: Err(SchedulerInterruptError::Abandoned),
-            });
-        }
-        self.channel.state.store(REQUEST, Ordering::Release);
+            })
+            .map_err(|_| SchedulerInterruptError::Occupied)?;
+        self.sequence = sequence;
+        self.channel.sequence.store(sequence, Ordering::Relaxed);
+        self.pending = true;
         bell.ring();
         Ok(())
     }
@@ -396,28 +376,18 @@ impl SchedulerTaskHalf {
         })
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "Acquire of RESPONSE grants the unique P2 endpoint the payload"
-    )]
     fn take_reply(&mut self) -> Option<Result<(Command, Reply), SchedulerInterruptError>> {
-        if self.channel.state.load(Ordering::Acquire) != RESPONSE {
-            return None;
-        }
-        // SAFETY: P3 Release-published RESPONSE after writing its reply. It
-        // cannot touch the initialized message before P2 opens a new REQUEST.
-        let reply = unsafe { (&*self.channel.payload.get()).assume_init_ref() };
-        if reply.epoch != self.epoch || reply.sequence != self.sequence {
-            // Keep the actual message in place and the endpoint poisoned.
-            // Repeated observation cannot duplicate/drop its affine command.
-            return Some(Err(SchedulerInterruptError::ForeignReply));
-        }
-        // SAFETY: this unique P2 endpoint validated the message above and
-        // consumes it once; EMPTY grants neither P3 nor another reader access.
-        let reply = unsafe { (&*self.channel.payload.get()).assume_init_read() };
-        self.pending = false;
-        self.channel.state.store(EMPTY, Ordering::Release);
-        Some(reply.reply.map(|value| (reply.command, value)))
+        let reply = self.client.try_take_if(|reply| {
+            if reply.epoch != self.epoch || reply.sequence != self.sequence {
+                // Keep the actual message in place and the endpoint poisoned.
+                return Err(SchedulerInterruptError::ForeignReply);
+            }
+            Ok(())
+        })?;
+        Some(reply.and_then(|reply| {
+            self.pending = false;
+            reply.reply.map(|value| (reply.command, value))
+        }))
     }
 
     pub(crate) async fn busy(
