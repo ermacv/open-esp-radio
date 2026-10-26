@@ -301469,7 +301469,7 @@ pub mod analog_i2c {
                 read_select: 0x40,
                 read_mask_bits: 24,
             }),
-            // SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027.
+            // SOURCE: BLOB_LIBPHY_PHY_I2C.
             (Profile::LibphyNormal, 0x6b) => Some(Route {
                 request_code: 0x6b,
                 command_code: 0x6b,
@@ -303056,7 +303056,7 @@ pub mod analog_i2c {
 
             /// The register's byte.
             ///
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027.
+            /// SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027, HW15_S31_BBTOP_RUN05_20261027.
             pub const ADDRESS: Address = Address::new(0x67, 0x4);
 
             /// Width of `BITS_0_7_OPAQUE`.
