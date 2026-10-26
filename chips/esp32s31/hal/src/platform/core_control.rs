@@ -87,19 +87,19 @@ impl Uart0ClockRegisters {
     }
 }
 
-impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement> crate::cores::BootAddress
-    for CoreControlRegisters<P, Q, R, S, T>
-{
-    /// SOURCE: pinned rev0 ROM `ets_set_appcpu_boot_addr` (Blobray
-    /// function-records): one whole-word store of the argument, then return.
-    fn set(&mut self, entry: u32) {
-        self.system.write_boot_addr_hp_core1(entry);
-    }
-}
-
 impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     CoreControlRegisters<P, Q, R, S, T>
 {
+    /// Make hart 1's ROM jump to `entry`; zero keeps it waiting in the ROM.
+    ///
+    /// SOURCE: pinned rev0 ROM `ets_set_appcpu_boot_addr` (Blobray
+    /// function-records): one whole-word store of the argument, then return.
+    pub(crate) fn set_boot_address(&mut self, entry: u32) {
+        self.system.modify_boot_addr_hp_core1(|word| {
+            word.set_boot_addr_hp_core1(entry);
+        });
+    }
+
     /// Request the HP system reset without acknowledging LP wakeup status.
     ///
     /// SOURCE: pinned rev0 ROM `software_reset` (Blobray function-records)

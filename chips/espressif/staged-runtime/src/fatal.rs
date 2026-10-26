@@ -56,10 +56,10 @@ pub fn reset_recording(
 /// Reset the chip from a fatal path that records nothing
 /// ([`reset_recording`]): mask this hart's interrupts for good, stop the
 /// other hart, then the chip HAL's software reset, which restores what the
-/// boot ROM needs and resets through the ROM. A path that cannot hold the
-/// core-control words (`cores::AwaitWatchdog`) halts its masked hart until
-/// the RTC watchdog the image armed when it took its watchdogs
-/// (`watchdog::Watchdogs`) resets the chip.
+/// boot ROM needs and triggers the system reset through the owned PAC words.
+/// A path that cannot hold the core-control words (`cores::AwaitWatchdog`)
+/// halts its masked hart until the RTC watchdog the image armed when it
+/// took its watchdogs (`watchdog::Watchdogs`) resets the chip.
 #[cfg(target_arch = "riscv32")]
 pub fn reset() -> ! {
     reset_recording(|_stop| ())

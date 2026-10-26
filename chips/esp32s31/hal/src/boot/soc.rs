@@ -23,10 +23,7 @@ use oer_espressif_boot::wait::{BootDeadline, WaitFailure};
 use oer_mmio::{Bits, Fixed, Placement};
 use oer_time::{Clock, Duration};
 
-use crate::{
-    cores::{self, BootAddress},
-    platform::core_control::CoreControlRegisters,
-};
+use crate::{cores, platform::core_control::CoreControlRegisters};
 
 #[cfg(test)]
 mod tests;
@@ -129,7 +126,7 @@ fn contain_hart1<U: Placement, V: Placement, W: Placement, X: Placement, Y: Plac
     cores: &mut CoreControlRegisters<U, V, W, X, Y>,
 ) {
     cores::park_hart1(cores);
-    cores.set(0);
+    cores.set_boot_address(0);
 }
 
 /// Open the APM access-path filters of every master: each enable written

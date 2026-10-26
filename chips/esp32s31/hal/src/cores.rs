@@ -218,12 +218,6 @@ fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placeme
     stall(words, other, polls).map(|()| Stopped::Stalled)
 }
 
-/// Where hart 1 starts after its reset: the owned ROM boot handoff word.
-pub(crate) trait BootAddress {
-    /// Make hart 1's ROM jump to `entry`; zero keeps it waiting in the ROM.
-    fn set(&mut self, entry: u32);
-}
-
 /// Prepare the chip's reset on `this` hart, holding the core-control words:
 /// no boot address for hart 1, then the other hart reset and stalled. The
 /// boot address is cleared before the reset pulse, so a running hart 1
@@ -237,7 +231,7 @@ fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement, T: Plac
     words: &mut CoreControlRegisters<P, Q, R, S, T>,
     this: HpCore,
 ) {
-    words.set(0);
+    words.set_boot_address(0);
     let other = other(this);
     words.reset_core(other);
     words.request_stall(other);
@@ -318,10 +312,10 @@ impl Cores {
     #[cfg(feature = "cpu1-runs")]
     pub fn start_hart1(&mut self, entry: extern "C" fn() -> !) -> Result<(), CoresError> {
         self.operate(|words| {
-            words.set(0);
+            words.set_boot_address(0);
             run(words, HpCore::Core1, STALL_POLLS)?;
             words.release_core1();
-            words.set(entry as usize as u32);
+            words.set_boot_address(entry as usize as u32);
             Ok(())
         })?
         .map_err(|Unconfirmed| CoresError::Unconfirmed)

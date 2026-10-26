@@ -108,14 +108,12 @@ fn uart0_s_clock_returns_to_undivided_xtal_with_its_gate_open() {
 
 #[test]
 fn the_boot_address_store_replaces_the_whole_word_including_zero() {
-    use crate::cores::BootAddress;
-
     let mut memory = Memory::filled(u32::MAX);
     let before = memory.0.clone();
     let entry = 0x2f01_2400;
     {
         let mut registers = memory.registers();
-        registers.set(entry);
+        registers.set_boot_address(entry);
         assert_eq!(
             registers
                 .system
@@ -123,7 +121,7 @@ fn the_boot_address_store_replaces_the_whole_word_including_zero() {
                 .boot_addr_hp_core1(),
             entry
         );
-        registers.set(0);
+        registers.set_boot_address(0);
         assert_eq!(
             registers
                 .system

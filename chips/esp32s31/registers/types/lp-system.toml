@@ -75,8 +75,6 @@ name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1"
 offset = 0x164
 description = "The boot ROM's HP core 1 entry address; zero leaves the core waiting."
 reset = { value = 0 }
-# SOURCE: pinned rev0 ROM ets_set_appcpu_boot_addr stores the argument whole.
-data-port = { sources = ["ROM_REV0_CORE_BOOT_ADDRESS"] }
 
 [[registers.fields]]
 name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1"

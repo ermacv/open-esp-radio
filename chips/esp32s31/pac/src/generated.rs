@@ -122291,6 +122291,24 @@ pub mod lp_system_reg {
                 self.0
             }
         }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1` field.
+            #[inline]
+            pub const fn boot_addr_hp_core1(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1`.
+            #[inline]
+            pub fn set_boot_addr_hp_core1(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
     }
 
     /// The `LpSysCoreControl` part of `LP_SYS`.
@@ -122359,11 +122377,16 @@ pub mod lp_system_reg {
             boot_addr_hp_core1::R(self.0.read::<0x164>())
         }
 
-        /// Store the data word `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1` whole: its one field `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1`, zero in every
-        /// other bit; the hardware also writes it, so it is never modified.
+        /// Read `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn write_boot_addr_hp_core1(&mut self, value: u32) {
-            self.0.write::<0x164>(value);
+        pub fn modify_boot_addr_hp_core1(
+            &mut self,
+            change: impl FnOnce(&mut boot_addr_hp_core1::W),
+        ) {
+            let mut value = boot_addr_hp_core1::W(self.0.read::<0x164>());
+            change(&mut value);
+            self.0.write::<0x164>(value.0);
         }
     }
 }
@@ -298244,7 +298267,7 @@ pub mod ownership {
         pub usb_serial_jtag_pads: super::usb_serial_jtag::UsbSerialJtagPads,
     }
 
-    /// Core control: each HP core's stall request and stall status, HP core 1's clocks and global reset each core's software CPU reset, the HP core 1 boot address and the system reset trigger, written by the cores' owner and the fatal path.
+    /// Core control: each HP core's stall request and stall status, HP core 1's clocks and global reset and each core's software CPU reset, the HP core 1 boot address and the system reset trigger, written by the cores' owner and the fatal path.
     pub struct CoreControlPeripherals {
         /// The `PmuCpuStall` part.
         pub pmu_cpu_stall: super::pmu::PmuCpuStall,
