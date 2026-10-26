@@ -200,9 +200,7 @@ impl CcmpHeader {
         }
         Ok(Self {
             packet_number: CcmpPacketNumber::from_header_bytes(bytes),
-            key_id: CcmpKeyId(oer_wire::U8::from_low_bits(
-                CcmpKeyControl::from_bytes([bytes[3]]).key_id(),
-            )),
+            key_id: CcmpKeyId(CcmpKeyControl::from_bytes([bytes[3]]).key_id()),
         })
     }
 

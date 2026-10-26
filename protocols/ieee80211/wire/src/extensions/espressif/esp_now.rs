@@ -755,7 +755,9 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
             retry: FrameControlFields::from_raw(frame_control).retry(),
-            key_id: crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]]).key_id(),
+            key_id: crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]])
+                .key_id()
+                .get(),
             packet_number,
             ccmp_header,
             ciphertext,

@@ -190,8 +190,14 @@ fn proved_fields_refuse_bad_input_before_infallible_insertion() {
         let value = Proved::from_bytes([0xa5, 0x5a])
             .with_sequence(crate::U16::new(sequence).unwrap())
             .with_fragment(crate::U8::constant::<13>());
-        assert_eq!(value.sequence(), sequence);
-        assert_eq!(value.fragment(), 13);
+        assert_eq!(
+            value
+                .with_sequence(value.sequence())
+                .with_fragment(value.fragment()),
+            value
+        );
+        assert_eq!(value.sequence().get(), sequence);
+        assert_eq!(value.fragment().get(), 13);
         assert_eq!(value.to_bytes(), ((sequence << 4) | 13).to_le_bytes());
     }
 }
@@ -224,6 +230,31 @@ fn unaligned_big_endian_fields_retain_reserved_end_bits() {
         let mut little = changed.to_bytes();
         little.reverse();
         assert_eq!(Reader::new(&little).bits::<64>(7), Ok(value));
+        assert_eq!(changed.to_bytes()[0] & 0x80, 0x80);
+        assert_eq!(changed.to_bytes()[8] & 0x7f, 0x25);
+    }
+}
+
+crate::bitfield! {
+    struct Proved32[4] (little) { value, with_value: (u32) = 0..32; }
+}
+crate::bitfield! {
+    struct ProvedBigSpan[9] (big) { value, with_value: (u64) = 7..71; }
+}
+
+#[test]
+fn full_width_and_unaligned_getters_retain_proofs_without_truncation() {
+    let field = Proved32::from_bytes(u32::MAX.to_le_bytes());
+    assert_eq!(field.value().get(), u32::MAX);
+    assert_eq!(
+        Proved32::from_bytes([0; 4]).with_value(field.value()),
+        field
+    );
+    for raw in [0, 1, 0x0123_4567_89ab_cdef, u64::MAX] {
+        let original = ProvedBigSpan::from_bytes([0xa5; 9]);
+        let changed = original.with_value(crate::U64::new(raw).unwrap());
+        assert_eq!(changed.value().get(), raw);
+        assert_eq!(changed.with_value(changed.value()), changed);
         assert_eq!(changed.to_bytes()[0] & 0x80, 0x80);
         assert_eq!(changed.to_bytes()[8] & 0x7f, 0x25);
     }

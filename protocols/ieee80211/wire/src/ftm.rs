@@ -296,8 +296,8 @@ impl FtmRequestParameters {
             return Err(FtmParameterError::ReservedBitsSet);
         }
         Self::new(
-            FtmParameterFields::from_bytes(fields).bursts(),
-            FtmBurstDuration::from_wire(FtmParameterFields::from_bytes(fields).duration())?,
+            FtmParameterFields::from_bytes(fields).bursts().get(),
+            FtmBurstDuration::from_wire(FtmParameterFields::from_bytes(fields).duration().get())?,
             fields[2],
             if !partial_tsf_no_preference {
                 Some(partial_tsf)
@@ -305,8 +305,10 @@ impl FtmRequestParameters {
                 None
             },
             FtmParameterFields::from_bytes(fields).asap(),
-            FtmParameterFields::from_bytes(fields).ftms(),
-            FtmFormatAndBandwidth::from_wire(FtmParameterFields::from_bytes(fields).bandwidth())?,
+            FtmParameterFields::from_bytes(fields).ftms().get(),
+            FtmFormatAndBandwidth::from_wire(
+                FtmParameterFields::from_bytes(fields).bandwidth().get(),
+            )?,
             u16::from_le_bytes([fields[7], fields[8]]),
         )
     }
@@ -352,17 +354,18 @@ impl FtmResponseParameters {
             return Err(FtmParameterError::ReservedBitsSet);
         }
         let burst_duration =
-            FtmBurstDuration::from_wire(FtmParameterFields::from_bytes(fields).duration())?;
-        let format_and_bandwidth =
-            FtmFormatAndBandwidth::from_wire(FtmParameterFields::from_bytes(fields).bandwidth())?;
+            FtmBurstDuration::from_wire(FtmParameterFields::from_bytes(fields).duration().get())?;
+        let format_and_bandwidth = FtmFormatAndBandwidth::from_wire(
+            FtmParameterFields::from_bytes(fields).bandwidth().get(),
+        )?;
         if matches!(status, FtmResponseStatus::Success)
             && (burst_duration == FtmBurstDuration::NoPreference
-                || FtmParameterFields::from_bytes(fields).ftms() == 0
+                || FtmParameterFields::from_bytes(fields).ftms().get() == 0
                 || format_and_bandwidth == FtmFormatAndBandwidth::NoPreference)
         {
             return Err(FtmParameterError::ResponseNoPreference);
         }
-        let number_of_bursts_exponent = FtmParameterFields::from_bytes(fields).bursts();
+        let number_of_bursts_exponent = FtmParameterFields::from_bytes(fields).bursts().get();
         let burst_period_100ms = u16::from_le_bytes([fields[7], fields[8]]);
         if number_of_bursts_exponent == 0 && burst_period_100ms != 0 {
             return Err(FtmParameterError::BurstPeriodReserved);
@@ -375,7 +378,7 @@ impl FtmResponseParameters {
             partial_tsf_timer: u16::from_le_bytes([fields[3], fields[4]]),
             asap_capable: FtmParameterFields::from_bytes(fields).asap_capable(),
             asap: FtmParameterFields::from_bytes(fields).asap(),
-            ftms_per_burst: FtmParameterFields::from_bytes(fields).ftms(),
+            ftms_per_burst: FtmParameterFields::from_bytes(fields).ftms().get(),
             format_and_bandwidth,
             burst_period_100ms,
         })

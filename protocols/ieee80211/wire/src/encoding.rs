@@ -31,15 +31,13 @@ impl<'a, const N: usize> FrameParts<'a, N> {
 enum Fragment<'a> {
     Borrowed(&'a [u8]),
     Length([u8; 2]),
-    Refused,
 }
 
 impl Fragment<'_> {
-    fn bytes(&self) -> Result<&[u8], usize> {
+    fn bytes(&self) -> &[u8] {
         match self {
-            Self::Borrowed(bytes) => Ok(bytes),
-            Self::Length(bytes) => Ok(bytes),
-            Self::Refused => Err(usize::MAX),
+            Self::Borrowed(bytes) => bytes,
+            Self::Length(bytes) => bytes,
         }
     }
 }
@@ -49,7 +47,7 @@ struct FragmentPlan<I>(I);
 impl<'a, I: Clone + Iterator<Item = Fragment<'a>>> FragmentPlan<I> {
     fn length(&self) -> Result<usize, usize> {
         self.0.clone().try_fold(0_usize, |size, part| {
-            size.checked_add(part.bytes()?.len()).ok_or(usize::MAX)
+            size.checked_add(part.bytes().len()).ok_or(usize::MAX)
         })
     }
 
@@ -58,7 +56,7 @@ impl<'a, I: Clone + Iterator<Item = Fragment<'a>>> FragmentPlan<I> {
         let frame = output.get_mut(..required).ok_or(required)?;
         let mut writer = oer_wire::Writer::new(frame);
         for part in self.0 {
-            writer.write(part.bytes()?).map_err(|_| required)?;
+            writer.write(part.bytes()).map_err(|_| required)?;
         }
         Ok(frame.len())
     }
@@ -116,30 +114,25 @@ impl<'a> AmsduBody<'a> {
             .copied()
             .enumerate()
             .flat_map(move |(index, frame)| {
-                let mut reader = oer_wire::Reader::new(frame);
-                let Ok(addresses) = reader.array::<12>() else {
-                    return core::array::from_fn(|_| Fragment::Refused);
-                };
-                let Ok(ether_type) = reader.array::<2>() else {
-                    return core::array::from_fn(|_| Fragment::Refused);
-                };
-                let payload = reader.remaining();
-                let Some(msdu_length) = LLC_SNAP_HEADER_LEN.checked_add(payload.len()) else {
-                    return core::array::from_fn(|_| Fragment::Refused);
-                };
+                // AmsduBody's only constructor admitted every immutable
+                // Ethernet header and the u16 MSDU limit. Total iterator
+                // splits retain that admission without an error-only fragment.
+                let (addresses, after_addresses) = admitted_prefix::<12>(frame);
+                let (ether_type, payload) = admitted_prefix::<2>(after_addresses);
+                // Admission proves payload + LLC <= u16::MAX. Neither this
+                // sum nor the subframe sum below can saturate.
+                const {
+                    assert!(usize::MAX - ETHERNET_HEADER_LEN >= u16::MAX as usize);
+                }
+                let msdu_length = payload.len().saturating_add(LLC_SNAP_HEADER_LEN);
                 let padding: &[u8] = if Some(index) == count.checked_sub(1) {
                     &[]
                 } else {
-                    match ETHERNET_HEADER_LEN
-                        .checked_add(msdu_length)
-                        .map(|value| value % 4)
-                        .ok_or(usize::MAX)
-                    {
-                        Ok(0) => &[],
-                        Ok(1) => &[0; 3],
-                        Ok(2) => &[0; 2],
-                        Ok(_) => &[0; 1],
-                        Err(_) => return core::array::from_fn(|_| Fragment::Refused),
+                    match ETHERNET_HEADER_LEN.saturating_add(msdu_length) % 4 {
+                        0 => &[],
+                        1 => &[0; 3],
+                        2 => &[0; 2],
+                        _ => &[0; 1],
                     }
                 };
                 [
@@ -152,6 +145,24 @@ impl<'a> AmsduBody<'a> {
                 ]
             })
     }
+}
+
+/// Split an already admitted prefix through total slice-iterator operations.
+/// The AmsduBody proof guarantees at least N bytes at each call. There is no
+/// panicking split or second admission; the immutable source cannot shrink.
+fn admitted_prefix<const N: usize>(bytes: &[u8]) -> (&[u8], &[u8]) {
+    const {
+        assert!(N > 0);
+    }
+    let mut rest = bytes.iter();
+    rest.nth(const { N - 1 });
+    let rest = rest.as_slice();
+    let mut prefix = bytes.iter();
+    let mut tail = rest.iter();
+    if tail.next().is_some() {
+        prefix.nth_back(tail.len());
+    }
+    (prefix.as_slice(), rest)
 }
 
 #[cfg(test)]
@@ -188,5 +199,35 @@ mod tests {
             AmsduBody::checked(&[], 3839),
             Err(AmsduError::Empty)
         ));
+    }
+    #[test]
+    fn admitted_ethernet_parts_preserve_every_length_and_padding_class() {
+        use super::AmsduBody;
+        // Exercise all alignments and the largest u16 MSDU admitted by the
+        // body proof, independently of the station/AP's smaller wire limit.
+        for length in [0, 1, 2, 3, 4, 15, 1_500, 3_800, 65_527] {
+            let mut first = std::vec![0x5a; 14 + length];
+            first[..14].copy_from_slice(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 8, 0]);
+            let last = [0xa5; 14];
+            let frames = [first.as_slice(), last.as_slice()];
+            let Ok(body) = AmsduBody::checked(&frames, usize::MAX) else {
+                panic!("valid Ethernet frames within the u16 MSDU limit");
+            };
+            let mut expected = first[..12].to_vec();
+            expected.extend_from_slice(&((length + 8) as u16).to_be_bytes());
+            expected.extend_from_slice(&crate::data::RFC1042_LLC_SNAP_PREFIX);
+            expected.extend_from_slice(&first[12..]);
+            expected.resize(expected.len().next_multiple_of(4), 0);
+            expected.extend_from_slice(&last[..12]);
+            expected.extend_from_slice(&8_u16.to_be_bytes());
+            expected.extend_from_slice(&crate::data::RFC1042_LLC_SNAP_PREFIX);
+            expected.extend_from_slice(&last[12..]);
+            let mut output = std::vec![0xcc; expected.len()];
+            assert_eq!(
+                FrameParts([]).write_amsdu(body, &mut output),
+                Ok(expected.len())
+            );
+            assert_eq!(output, expected);
+        }
     }
 }

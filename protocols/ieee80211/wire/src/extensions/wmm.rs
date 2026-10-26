@@ -244,7 +244,7 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
     let mut seen = 0_u8;
     for &[aci_aifsn, ecw, txop_low, txop_high] in records.as_chunks::<4>().0 {
         let fields = AcRecord::from_bytes([aci_aifsn, ecw, txop_low, txop_high]);
-        let aci = fields.aci();
+        let aci = fields.aci().get();
         let category = WmmAccessCategory::from_aci(aci)?;
         let bit = 1_u8 << aci;
         if seen & bit != 0 {
@@ -253,10 +253,10 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
         seen |= bit;
         *category.select_mut(&mut access_categories) = WmmAcParameters {
             admission_control_mandatory: fields.acm(),
-            aifsn: oer_wire::U8::from_low_bits(fields.aifsn()),
-            ecw_min: oer_wire::U8::from_low_bits(fields.ecw_min()),
-            ecw_max: oer_wire::U8::from_low_bits(fields.ecw_max()),
-            txop_limit_units_32_us: fields.txop(),
+            aifsn: fields.aifsn(),
+            ecw_min: fields.ecw_min(),
+            ecw_max: fields.ecw_max(),
+            txop_limit_units_32_us: fields.txop().get(),
         };
     }
     if seen != ALL_ACCESS_CATEGORIES {

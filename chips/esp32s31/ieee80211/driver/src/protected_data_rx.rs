@@ -35,7 +35,7 @@ macro_rules! protected_data_view_body {
         let sequence_control = u16::from_le_bytes([mpdu[22], mpdu[23]]);
         let control = FrameControlFields::from_raw(frame_control);
         let tid = if control.qos() && mpdu.len() >= 26 {
-            Some(QosControl::from_bytes([mpdu[24], mpdu[25]]).tid())
+            Some(QosControl::from_bytes([mpdu[24], mpdu[25]]).tid().get())
         } else {
             None
         };
@@ -229,7 +229,9 @@ pub fn view_unprotected_data(
         return Err(RxError::Bounds);
     }
     let tid = qos.then(|| {
-        QosControl::from_bytes([mpdu[payload_offset - 2], mpdu[payload_offset - 1]]).tid()
+        QosControl::from_bytes([mpdu[payload_offset - 2], mpdu[payload_offset - 1]])
+            .tid()
+            .get()
     });
     let mut metadata = normalized.metadata;
     metadata.crypto = RxEvidence::ProtocolValidated(RxCryptoStatus::Unprotected);

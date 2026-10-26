@@ -189,11 +189,66 @@ macro_rules! channel_table {
         const _: () = {
             let mut entries = CHANNELS.as_slice();
             let mut slot = 0;
+            let mut wifi_count = 0;
             while let Some((entry, remaining)) = entries.split_first() {
                 assert!(entry.index as usize == slot);
                 slot += 1;
+
+                // Independent rule admission: IEEE Std 802.11-2020 Table
+                // E-4 and 9.4.2.56. Each row must name a permitted primary
+                // and secondary-channel relationship, not just a valid span.
+                let valid = match entry.band {
+                    Band::Ghz2_4 => {
+                        wifi_count += 1;
+                        match entry.width {
+                            ChannelWidth::Mhz20 => entry.number >= 1 && entry.number <= 14,
+                            ChannelWidth::Mhz40Above => entry.number >= 1 && entry.number <= 9,
+                            ChannelWidth::Mhz40Below => entry.number >= 5 && entry.number <= 13,
+                        }
+                    }
+                    Band::Ghz5 => {
+                        let base = match entry.number {
+                            36..=64 => 36,
+                            100..=144 => 100,
+                            149..=177 => 149,
+                            _ => panic!("channel outside Table E-4"),
+                        };
+                        let offset = entry.number - base;
+                        offset % 4 == 0 && match entry.width {
+                            ChannelWidth::Mhz20 => true,
+                            ChannelWidth::Mhz40Above => offset % 8 == 0,
+                            ChannelWidth::Mhz40Below => offset % 8 == 4,
+                        }
+                    }
+                };
+                assert!(valid);
+                let primary = match entry.band {
+                    Band::Ghz2_4 if entry.number == 14 => 2_484,
+                    Band::Ghz2_4 => 2_407 + 5 * entry.number as u16,
+                    Band::Ghz5 => 5_000 + 5 * entry.number as u16,
+                };
+                let center = match entry.width {
+                    ChannelWidth::Mhz20 => primary,
+                    ChannelWidth::Mhz40Above => primary + 10,
+                    ChannelWidth::Mhz40Below => primary - 10,
+                };
+                let half_khz = entry.width.bandwidth_mhz() as u32 * 500;
+                assert!(entry.primary_mhz == primary && entry.center_mhz == center);
+                assert!(entry.span.low_khz() == center as u32 * 1_000 - half_khz);
+                assert!(entry.span.high_khz() == center as u32 * 1_000 + half_khz);
+                let mut others = remaining;
+                while let Some((other, tail)) = others.split_first() {
+                    assert!(entry.band as u8 != other.band as u8
+                        || entry.number != other.number
+                        || entry.width as u8 != other.width as u8);
+                    others = tail;
+                }
                 entries = remaining;
             }
+            // Valid, unique rows of these rule-derived cardinalities cover
+            // every geometry: 32 in 2.4 GHz and 56 in 5 GHz.
+            assert!(wifi_count == 14 + 9 + 9);
+            assert!(CHANNELS.len() == 14 + 9 + 9 + 2 * (8 + 12 + 8));
         };
     };
 }

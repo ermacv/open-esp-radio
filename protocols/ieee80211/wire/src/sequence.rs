@@ -38,7 +38,7 @@ impl SequenceNumber {
 
     /// The Sequence Number subfield of a Sequence Control field.
     pub const fn from_sequence_control(sequence_control: u16) -> Self {
-        Self::from_low_bits(SequenceControl::from_bytes(sequence_control.to_le_bytes()).sequence())
+        Self(SequenceControl::from_bytes(sequence_control.to_le_bytes()).sequence())
     }
 
     pub const fn get(self) -> u16 {

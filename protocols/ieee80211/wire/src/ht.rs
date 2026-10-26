@@ -130,20 +130,20 @@ pub const fn ht_capability_ie_for_peer(
         Some(peer) => {
             let local = HtAmpduParameters::from_bytes([local_ampdu_parameters]);
             let peer = HtAmpduParameters::from_bytes([peer.ampdu_parameters]);
-            let exponent = if local.exponent() < peer.exponent() {
+            let exponent = if local.exponent().get() < peer.exponent().get() {
                 local.exponent()
             } else {
                 peer.exponent()
             };
-            let spacing = if local.spacing() > peer.spacing() {
+            let spacing = if local.spacing().get() > peer.spacing().get() {
                 local.spacing()
             } else {
                 peer.spacing()
             };
             // Both values were decoded from these exact-width fields above.
             HtAmpduParameters::from_bytes([0])
-                .with_exponent(oer_wire::U8::from_low_bits(exponent))
-                .with_spacing(oer_wire::U8::from_low_bits(spacing))
+                .with_exponent(exponent)
+                .with_spacing(spacing)
                 .to_bytes()[0]
         }
         None => local_ampdu_parameters,

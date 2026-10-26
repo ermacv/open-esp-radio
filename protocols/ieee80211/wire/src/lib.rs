@@ -26,8 +26,8 @@
 //! Management and A-MSDU construction retain immutable frame parts through
 //! capacity admission and writing. Those same parts determine the output
 //! length; no independent final-offset assertion protects the layout.
-//! In-place station encapsulation borrows prefix and payload separately so
-//! writing a new prefix cannot overwrite the retained Ethernet payload.
+//! In-place station encapsulation retains the complete frame borrow. Its
+//! immutable prefix parts define all bytes written, preserving the payload.
 //!
 //! The strict-lint parser contract requires field boundaries established
 //! with the bounded `oer_wire::Reader` and retained as fixed-size arrays through

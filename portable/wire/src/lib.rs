@@ -57,7 +57,8 @@ pub enum Error {
 /// retain their complete encoding in `Reserved`. Optional conversion method names
 /// can follow the raw type, as `(from_raw, raw)`. Numeric and enum setters return
 /// `Result<Self, Error>`; a boolean setter is infallible. Parenthesized integer
-/// types, such as `(u16)`, instead take a width-proved [`U16`] and return `Self`. Invalid declarations
+/// types, such as `(u16)`, return a width-proved [`U16`] from the getter and
+/// take that same type in an infallible setter. Invalid declarations
 /// (range, type width, byte order, implicit overlap) fail at compile time.
 #[macro_export]
 macro_rules! bitfield {
@@ -139,13 +140,14 @@ macro_rules! bitfield {
             self
         }
     };
-    // Parenthesized integers take a width-proved value and cannot refuse it.
+    // Parenthesized integers retain the width proof through reads and writes.
     (@field $(#[$meta:meta])* $vis:vis $get:ident, $set:ident: ($ty:ident),
         $start:literal, $end:literal, $size:literal, $order:ident) => {
         $(#[$meta])*
-        $vis const fn $get(self) -> $ty {
-            const { assert!($start < $end && $end <= $size * 8 && $end - $start <= $ty::BITS as usize); }
-            $crate::__private::get::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&self.0) as $ty
+        $vis const fn $get(self) -> $crate::bitfield!(@bounded $ty, {$end - $start}) {
+            <$crate::bitfield!(@bounded $ty, {$end - $start})>::from_field::<
+                $start, $end, {$crate::bitfield!(@order $order)}, $size
+            >(&self.0)
         }
         $vis const fn $set(mut self, value: $crate::bitfield!(@bounded $ty, {$end - $start})) -> Self {
             $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, value.get() as u64);

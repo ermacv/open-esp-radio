@@ -78,7 +78,9 @@ pub fn rx_block_ack_mpdu_key(
     let qos_offset = frame_offset + 24 + usize::from(frame_control.ds() == 3) * 6;
     Some(RxBlockAckMpduKey {
         peer,
-        tid: QosControl::from_bytes([*raw.get(qos_offset)?, 0]).tid(),
+        tid: QosControl::from_bytes([*raw.get(qos_offset)?, 0])
+            .tid()
+            .get(),
         sequence: SequenceNumber::from_sequence_control(sequence_control),
         retry: frame_control.retry(),
     })
@@ -122,7 +124,9 @@ pub fn rx_block_ack_request_key(
         return None;
     }
     let control = u16::from_le_bytes([frame[16], frame[17]]);
-    let tid = BarControlFields::from_bytes(control.to_le_bytes()).tid();
+    let tid = BarControlFields::from_bytes(control.to_le_bytes())
+        .tid()
+        .get();
     if tid > 7 {
         return None;
     }

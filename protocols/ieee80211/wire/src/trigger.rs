@@ -869,7 +869,9 @@ pub fn parse_trigger_mu_bar_dependent(
         bar_control,
         ack_policy: BarControlFields::from_bytes(bar_control.to_le_bytes()).ack_policy(),
         bar_type: BarControlFields::from_bytes(bar_control.to_le_bytes()).bar_type(),
-        tid: BarControlFields::from_bytes(bar_control.to_le_bytes()).tid(),
+        tid: BarControlFields::from_bytes(bar_control.to_le_bytes())
+            .tid()
+            .get(),
         bar_information,
         starting_sequence_number: SequenceNumber::from_sequence_control(bar_information),
     })

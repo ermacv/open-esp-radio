@@ -46,6 +46,30 @@ macro_rules! unsigned {
                 Self(value & const { <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH) })
             }
 
+            /// Decode a field whose const geometry proves this exact width.
+            ///
+            /// ```compile_fail,E0080
+            /// // A five-bit extraction cannot be a four-bit proof.
+            /// let _ = oer_wire::U8::<4>::from_field::<0, 5, true, 1>(&[0xff]);
+            /// ```
+            #[doc(hidden)]
+            pub const fn from_field<
+                const START: usize,
+                const END: usize,
+                const LITTLE: bool,
+                const N: usize,
+            >(
+                bytes: &[u8; N],
+            ) -> Self {
+                const {
+                    assert!(START < END && END - START == WIDTH);
+                    assert!(WIDTH <= <$raw>::BITS as usize);
+                }
+                // Extraction returns exactly END-START bits; the const proof
+                // makes this narrowing lossless, without a second mask.
+                Self(crate::__private::get::<START, END, LITTLE, N>(bytes) as $raw)
+            }
+
             pub const fn get(self) -> $raw {
                 self.0
             }

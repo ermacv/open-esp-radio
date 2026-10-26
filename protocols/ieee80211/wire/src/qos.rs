@@ -314,9 +314,7 @@ pub fn classify_ethernet_wmm(ethernet: &[u8]) -> WmmTrafficClass {
             if Ipv4VersionIhl::from_bytes([version_and_length]).version() != 4 {
                 return WmmTrafficClass::BEST_EFFORT;
             }
-            Dscp(oer_wire::U8::from_low_bits(
-                DsField::from_bytes([services]).dscp(),
-            ))
+            Dscp(DsField::from_bytes([services]).dscp())
         }
         ETHER_TYPE_IPV6 => {
             let Some(&[version_and_class, class_and_label]) = payload.first_chunk::<2>() else {
@@ -326,9 +324,7 @@ pub fn classify_ethernet_wmm(ethernet: &[u8]) -> WmmTrafficClass {
             if prefix.version() != 6 {
                 return WmmTrafficClass::BEST_EFFORT;
             }
-            Dscp(oer_wire::U8::from_low_bits(
-                DsField::from_bytes([prefix.traffic_class()]).dscp(),
-            ))
+            Dscp(DsField::from_bytes([prefix.traffic_class()]).dscp())
         }
         _ => return WmmTrafficClass::BEST_EFFORT,
     };
