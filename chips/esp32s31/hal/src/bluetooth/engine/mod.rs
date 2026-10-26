@@ -53,7 +53,6 @@ mod le_rx_packet;
 mod le_tx_packet;
 mod le_tx_power;
 pub use le_tx_power::LeTxPower;
-mod layout_reference;
 mod lease;
 pub use lease::{EpochScope, PoolScope, with_epoch, with_epoch_async, with_pool, with_pool_async};
 mod advertising_image;

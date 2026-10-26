@@ -59,47 +59,24 @@ pub(crate) struct DirectionFindingWorkspaceBinding {
 }
 
 impl DirectionFindingWorkspaceBinding {
-    fn new<S: ControllerDmaSpace>(
+    pub(super) fn new(
         storage: &DirectionFindingWorkspaceStorage,
-        placement: &Placement<S>,
-    ) -> Self {
-        let descriptor = placement.address(storage.layout.word_000c_opaque());
-        let descriptor = placement.offset(descriptor, 0, BleDirectionFindingDescriptor::SIZE);
-        const {
-            assert!(
-                align_of::<BleDirectionFindingDescriptor>()
-                    <= align_of::<BleDirectionFindingWorkspace>()
-            );
-        }
-        #[allow(
-            unsafe_code,
-            reason = "the reviewed descriptor occupies words within this placed workspace"
-        )]
-        // SAFETY: the descriptor starts at the reviewed workspace word; the
-        // full generated descriptor extent was checked within this allocation.
-        // Both layouts have word alignment and shared volatile words. Placed
-        // proves placement; the owner retains it for every publication epoch.
-        let disabled_cte_descriptor = unsafe {
-            crate::bluetooth::engine::layout_reference::controller_reference(descriptor.get())
-        };
-        let configuration = placement.address(storage.layout.word_0008_opaque());
-        let configuration =
-            placement.offset(configuration, 0, BleDirectionFindingConfiguration::SIZE);
-        #[allow(
-            unsafe_code,
-            reason = "the reviewed configuration word lies within this placed workspace"
-        )]
-        // SAFETY: the configuration is the workspace's word at +8, a word of
-        // this allocation whose extent was checked above; it has word
-        // alignment. Placed proves placement; the owner retains it for every
-        // epoch a link state may follow it.
-        let link_state_configuration = unsafe {
-            crate::bluetooth::engine::layout_reference::controller_reference(configuration.get())
-        };
-        Self {
+        placement: &crate::dma_address::PlacementProjection,
+    ) -> Result<Self, crate::dma_address::ProjectionError> {
+        let disabled_cte_descriptor = placement
+            .reference_at::<BleDirectionFindingDescriptor, _, _>(
+                &storage.layout,
+                storage.layout.word_000c_opaque(),
+            )?;
+        let link_state_configuration = placement
+            .reference_at::<BleDirectionFindingConfiguration, _, _>(
+                &storage.layout,
+                storage.layout.word_0008_opaque(),
+            )?;
+        Ok(Self {
             link_state_configuration: ControllerSramLink::new(link_state_configuration),
             disabled_cte_descriptor,
-        }
+        })
     }
 
     /// Descriptor published into CTE hardware buffer zero.
@@ -193,16 +170,16 @@ impl DirectionFindingWorkspaceStorage {
     /// Claim the linker-proven workspace and install its disabled-CTE baseline.
     pub(crate) fn place<S: ControllerDmaSpace>(
         placed: Placed<Self>,
-    ) -> DirectionFindingWorkspaceCpuOwned {
+    ) -> Result<DirectionFindingWorkspaceCpuOwned, crate::dma_address::ProjectionError> {
         let (storage, placement) = Placement::<S>::take(placed);
-        Self::from_parts::<S>(storage, &placement)
+        let binding = DirectionFindingWorkspaceBinding::new(storage, placement.projection())?;
+        Ok(Self::from_parts(storage, binding))
     }
 
-    pub(super) fn from_parts<S: ControllerDmaSpace>(
+    pub(super) fn from_parts(
         storage: &'static mut Self,
-        placement: &Placement<S>,
+        binding: DirectionFindingWorkspaceBinding,
     ) -> DirectionFindingWorkspaceCpuOwned {
-        let binding = DirectionFindingWorkspaceBinding::new(storage, placement);
         storage.initialize_disabled_baseline();
         DirectionFindingWorkspaceCpuOwned {
             storage: Pin::static_mut(storage),

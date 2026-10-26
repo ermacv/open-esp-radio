@@ -19,7 +19,7 @@ fn storage() -> PinnedAmpduDmaStorage<4, 256> {
 }
 
 struct TestBytes {
-    bytes: Box<[u8; 128]>,
+    bytes: Box<[u8]>,
     drops: Rc<Cell<usize>>,
     region_calls: Option<Rc<Cell<usize>>>,
     prepare_calls: Option<Rc<Cell<usize>>>,
@@ -155,9 +155,14 @@ fn retaining_a_backing_samples_its_dma_region_once() {
     let mut owner = retained_owner();
     owner.begin().unwrap();
 
-    let (backing, bytes) = owner
-        .push_backing_region(TestBacking::counting(drops.clone(), region_calls.clone()))
-        .unwrap();
+    let lease = TestBacking::counting(drops.clone(), region_calls.clone());
+    assert_eq!(
+        region_calls.get(),
+        1,
+        "host placement samples the allocation once"
+    );
+    region_calls.set(0);
+    let (backing, bytes) = owner.push_backing_region(lease).unwrap();
     assert_eq!(bytes.len(), 128);
     assert_eq!(region_calls.get(), 1);
     drop(owner.pop_last_backing(backing).unwrap());
@@ -393,8 +398,16 @@ fn external_chain_retains_backings_through_detach() {
     owner.begin().unwrap();
     let first = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
     let second = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
-    owner.reserved_backing_mut(&first).unwrap().bytes[8] = 0x11;
-    owner.reserved_backing_mut(&second).unwrap().bytes[16] = 0x22;
+    owner
+        .reserved_backing_mut(&first)
+        .unwrap()
+        .stable_dma_region()
+        .as_mut_slice()[8] = 0x11;
+    owner
+        .reserved_backing_mut(&second)
+        .unwrap()
+        .stable_dma_region()
+        .as_mut_slice()[16] = 0x22;
     let first_address = owner
         .reserved_backing_mut(&first)
         .unwrap()
@@ -947,4 +960,50 @@ fn external_chain_publishes_each_lease_at_its_address_in_the_arena_space() {
         .unwrap();
     owner.release_detached().unwrap();
     assert_eq!(drops.get(), 2);
+}
+
+#[test]
+fn an_empty_backing_is_removed_without_leaving_a_lifo_hole() {
+    let drops = Rc::new(Cell::new(0));
+    let mut owner = retained_owner();
+    owner.begin().unwrap();
+    let mut empty = TestBytes::new(drops.clone());
+    empty.bytes = std::vec::Vec::new().into_boxed_slice();
+    assert!(matches!(
+        owner.push_backing(PlacedTxLease::host(empty)),
+        Err(AmpduDmaStorageError::Address)
+    ));
+    assert_eq!(owner.held, 0);
+    assert_eq!(drops.get(), 1);
+    assert!(owner.retention().backings[0].is_none());
+    let next = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    assert_eq!(next.index, 0);
+    drop(owner.pop_last_backing(next).unwrap());
+    assert_eq!(drops.get(), 2);
+}
+
+#[test]
+fn a_failed_insertion_between_successes_preserves_backing_indices() {
+    let drops = Rc::new(Cell::new(0));
+    let mut owner = retained_owner();
+    owner.begin().unwrap();
+    let first = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    let rejected = PlacedTxLease::host_refused(
+        TestBytes::new(drops.clone()),
+        crate::dma_address::ProjectionError::AddressWidth,
+    );
+    assert!(matches!(
+        owner.push_backing_region(rejected),
+        Err(AmpduDmaStorageError::Address)
+    ));
+    assert_eq!(owner.held, 1);
+    assert_eq!(drops.get(), 1);
+    assert!(owner.retention().backings[1].is_none());
+    assert!(owner.retention().backing_identities[1].is_none());
+    assert!(owner.retention().backing_descriptors[1].is_none());
+    let second = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    assert_eq!((first.index, second.index), (0, 1));
+    drop(owner.pop_last_backing(second).unwrap());
+    drop(owner.pop_last_backing(first).unwrap());
+    assert_eq!(drops.get(), 3);
 }

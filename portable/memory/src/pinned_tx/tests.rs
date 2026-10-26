@@ -222,3 +222,19 @@ fn pinning_installs_the_guard_a_dma_overrun_breaks() {
     }
     drop(radio);
 }
+
+#[test]
+fn pre_pin_locations_name_the_exact_regions_later_lent_to_radio() {
+    let storage = Box::leak(Box::new(PinnedDmaTxPool::<64, 8, 4, 3>::new()));
+    let locations = storage.dma_storage_locations();
+    let pool = PinnedDmaTxPool::pin_static(storage);
+    for (index, (pointer, capacity)) in locations.into_iter().enumerate() {
+        let index = u8::try_from(index).unwrap();
+        pool.claim_network(index).publish(0, |_| {});
+        let mut lease = pool.claim_radio(index);
+        let bytes = lease.stable_dma_region().into_mut_slice();
+        assert_eq!(bytes.as_ptr(), pointer);
+        assert_eq!(bytes.len(), capacity);
+        drop(lease);
+    }
+}

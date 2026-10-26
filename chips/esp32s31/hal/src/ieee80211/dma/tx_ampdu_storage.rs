@@ -151,67 +151,38 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
     pub fn pin<S: DmaSpace>(
         placed: Placed<Self>,
     ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
-        let (storage, range) = placed
+        let (storage, range, projection) = placed
             .into_dma_parts::<S>()
             .ok_or(AmpduDmaStorageError::Address)?;
-        let descriptor_base = S::address(storage, storage.descriptors.as_ptr())
-            .ok_or(AmpduDmaStorageError::Address)?;
-        let buffer_base = if BUFFER_SIZE == 0 {
-            0
-        } else {
-            S::address(storage, storage.buffers.as_ptr()).ok_or(AmpduDmaStorageError::Address)?
-        };
-        Self::pin_static_inner(
-            storage,
-            range,
-            descriptor_base,
-            buffer_base,
-            external_region_address::<S>,
-        )
-    }
-
-    #[allow(
-        unsafe_code,
-        reason = "unique static aggregate storage becomes retained DMA authority once"
-    )]
-    fn pin_static_inner(
-        storage: &'static mut Self,
-        range: StableDmaRange<'static>,
-        descriptor_base: u32,
-        buffer_base: u32,
-        external_region: fn(&[u8]) -> Option<u32>,
-    ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
         let descriptor_count = u8::try_from(SLOTS).map_err(|_| AmpduDmaStorageError::Count)?;
         if descriptor_count == 0 {
             return Err(AmpduDmaStorageError::Count);
         }
+        let descriptors = projection
+            .table::<WifiTxDmaDescriptor>(
+                storage
+                    .descriptors
+                    .iter()
+                    .map(|descriptor| descriptor.layout()),
+            )
+            .map_err(|_| AmpduDmaStorageError::Address)?;
         let descriptor_len = u32::try_from(core::mem::size_of_val(&storage.descriptors))
             .map_err(|_| AmpduDmaStorageError::Address)?;
         let descriptor_range = range
-            .subrange(descriptor_base, descriptor_len)
+            .subrange(descriptors.base(), descriptor_len)
             .ok_or(AmpduDmaStorageError::Address)?;
-        // SAFETY: `descriptor_base` is the DMA address of the placed static
-        // arena's SLOTS aligned descriptors, which the link keeps in the DMA
-        // window; the owner retains the whole allocation permanently.
-        let descriptors = unsafe { PlacedTable::new(descriptor_base, SLOTS) }
-            .ok_or(AmpduDmaStorageError::Address)?;
-
-        let buffer_stride = u32::try_from(core::mem::size_of::<AmpduDmaBuffer<BUFFER_SIZE>>())
-            .map_err(|_| AmpduDmaStorageError::Address)?;
         let buffer_capacity =
             u32::try_from(BUFFER_SIZE).map_err(|_| AmpduDmaStorageError::Address)?;
         let (buffer_range, buffers) = if BUFFER_SIZE == 0 {
             (None, None)
         } else {
+            let buffers = projection
+                .slots(&storage.buffers)
+                .map_err(|_| AmpduDmaStorageError::Address)?;
             let buffer_len = u32::try_from(core::mem::size_of_val(&storage.buffers))
                 .map_err(|_| AmpduDmaStorageError::Address)?;
             let buffer_range = range
-                .subrange(buffer_base, buffer_len)
-                .ok_or(AmpduDmaStorageError::Address)?;
-            // SAFETY: `buffer_base` is the DMA address of the placed static
-            // arena's SLOTS buffers of `buffer_stride` bytes, inside its
-            // range (checked above); the owner retains them permanently.
-            let buffers = unsafe { PlacedSlots::new(buffer_base, buffer_stride, SLOTS) }
+                .subrange(buffers.base(), buffer_len)
                 .ok_or(AmpduDmaStorageError::Address)?;
             (Some(buffer_range), Some(buffers))
         };
@@ -225,19 +196,9 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
                 buffers,
                 buffer_capacity,
                 buffer_range,
-                external_region,
             },
         })
     }
-}
-
-/// The DMA address of an external region's first byte in space `S`.
-///
-/// A retained lease is not a field of the arena, so its region is its own
-/// arena: on the chip that is the region's address, in a host model the
-/// synthetic start of the DMA window.
-fn external_region_address<S: DmaSpace>(region: &[u8]) -> Option<u32> {
-    S::address(region, region.as_ptr())
 }
 
 impl<const SLOTS: usize, const BUFFER_SIZE: usize> Default for AmpduDmaStorage<SLOTS, BUFFER_SIZE> {
@@ -255,9 +216,6 @@ pub struct AmpduDmaBinding {
     buffers: Option<PlacedSlots>,
     buffer_capacity: u32,
     buffer_range: Option<StableDmaRange<'static>>,
-    /// The space this arena was bound in, applied to the external regions
-    /// its retained leases publish.
-    external_region: fn(&[u8]) -> Option<u32>,
 }
 
 impl AmpduDmaBinding {
@@ -613,7 +571,7 @@ struct RetainedDmaBackingIdentity {
     len: usize,
     /// The region's DMA addresses, `None` when it has none in the arena's
     /// space.
-    dma_region: Option<PlacedRegion>,
+    dma_region: PlacedRegion,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -937,8 +895,8 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             "retained append owns its next vacant backing slot"
         );
         let descriptor_head = self.descriptor_head();
-        let external_region = self.dma().binding.external_region;
         let generation = self.next_lease_generation()?;
+        let region = backing.dma_region();
         self.retention_mut().backings[index] = Some(ManuallyDrop::new(backing));
         // Count the lease before borrowing its region. If a backing's unsafe
         // implementation panics while producing the region, Drop still owns
@@ -946,6 +904,20 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         // exact slice returned by the single stability call can also be
         // returned to the encoder without sampling the backing twice.
         self.held += 1;
+        let dma_region = match region {
+            Ok(region) => region,
+            Err(_) => {
+                self.held = index;
+                let retention = self.retention_mut();
+                let rejected = retention.backings[index]
+                    .take()
+                    .map(ManuallyDrop::into_inner);
+                retention.backing_identities[index] = None;
+                retention.backing_descriptors[index] = None;
+                drop(rejected);
+                return Err(AmpduDmaStorageError::Address);
+            }
+        };
         let retention = self
             .retention
             .as_deref_mut()
@@ -956,19 +928,6 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             .expect("retained backing was inserted")
             .stable_dma_region()
             .into_mut_slice();
-        let dma_region = external_region(bytes)
-            .zip(u32::try_from(bytes.len()).ok())
-            .and_then(|(start, len)| {
-                // SAFETY: the region is a retained `PlacedBacking`'s: its
-                // pool placed it in the DMA window, and this owner keeps the
-                // lease (and so the region) until the hardware is done with
-                // it or quarantines it. A host model's synthetic address is
-                // recorded, never dereferenced.
-                #[allow(unsafe_code, reason = "a retained placed backing's region")]
-                unsafe {
-                    PlacedRegion::new(start, len)
-                }
-            });
         let identity = RetainedDmaBackingIdentity {
             generation,
             address: bytes.as_ptr().addr(),
@@ -1331,10 +1290,10 @@ fn external_dma_address(
     identity: RetainedDmaBackingIdentity,
     offset: usize,
 ) -> Result<DmaWindowAddress, AmpduDmaStorageError> {
+    let offset = u32::try_from(offset).map_err(|_| AmpduDmaStorageError::Address)?;
     identity
         .dma_region
-        .zip(u32::try_from(offset).ok())
-        .and_then(|(region, offset)| region.at(offset))
+        .at(offset)
         .ok_or(AmpduDmaStorageError::Address)
 }
 

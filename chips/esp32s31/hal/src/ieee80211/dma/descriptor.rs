@@ -68,6 +68,10 @@ const _: () = {
 };
 
 impl RxDescriptor {
+    pub(crate) fn layout(&self) -> &WifiRxDmaDescriptor {
+        &self.0
+    }
+
     pub const fn new() -> Self {
         Self(WifiRxDmaDescriptor::zeroed())
     }
@@ -180,6 +184,10 @@ const _: () = {
 };
 
 impl TxDescriptor {
+    pub(crate) fn layout(&self) -> &WifiTxDmaDescriptor {
+        &self.0
+    }
+
     pub const fn new() -> Self {
         Self(WifiTxDmaDescriptor::zeroed())
     }

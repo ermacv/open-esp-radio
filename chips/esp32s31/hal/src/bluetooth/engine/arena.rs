@@ -54,6 +54,7 @@ pub enum ArenaError {
     Receive(LeRxChainPlaceError),
     SchedulerCapacity,
     EpochExhausted,
+    Placement(crate::dma_address::ProjectionError),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -267,9 +268,22 @@ impl<
         let Some(installation) = EngineEpoch::allocate(&EPOCHS) else {
             return Err((ArenaError::EpochExhausted, clocked, placed));
         };
+        let projected = crate::dma_address::PlacementProjection::try_with_controller::<D, _, _>(
+            placed,
+            |storage, projection| {
+                direction_finding_workspace::DirectionFindingWorkspaceBinding::new(
+                    &storage.0.1.0,
+                    projection,
+                )
+            },
+        );
+        let (storage, projection, df_binding) = match projected {
+            Ok(parts) => parts,
+            Err((error, placed)) => return Err((ArenaError::Placement(error), clocked, placed)),
+        };
+        let placement = Placement::<D>::from_projection(projection);
         let (registers, interrupts) = clocked.separate_interrupt_owner();
         let epoch = installation.0;
-        let (storage, placement) = Placement::<D>::take(placed);
         let root = core::ptr::NonNull::from(storage);
         #[allow(
             unsafe_code,
@@ -314,7 +328,7 @@ impl<
                         epoch,
                     ),
                     phy: BlePhyEngineStorage::from_parts(phy, &placement),
-                    direction_finding: DirectionFindingWorkspaceStorage::from_parts(df, &placement),
+                    direction_finding: DirectionFindingWorkspaceStorage::from_parts(df, df_binding),
                     devices: LeDeviceTable::from_parts(devices, &placement),
                     scanning_rx: scanning_rx.each_mut().map(|storage| {
                         LeRxChain::from_parts(
@@ -388,12 +402,11 @@ impl<
         // in place before releasing its pin contract, then initialize a new
         // zeroed value in the same allocation. Every arena field is Zeroable.
         // The original placement proof still covers the reunited tuple.
-        let storage = unsafe {
+        unsafe {
             core::ptr::drop_in_place(root.as_ptr());
             core::ptr::write_bytes(root.as_ptr(), 0, 1);
-            &mut *root.as_ptr()
-        };
-        Placed::returned(storage)
+            Placed::from_retained(&mut *root.as_ptr())
+        }
     }
 }
 impl<

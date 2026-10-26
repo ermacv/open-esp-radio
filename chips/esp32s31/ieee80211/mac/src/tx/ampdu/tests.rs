@@ -16,7 +16,7 @@ fn host_pool<
 >(
     storage: &'static mut PinnedDmaTxPool<CAPACITY, HEADROOM, TRAILER, DEPTH>,
 ) -> PlacedTxPool<CAPACITY, HEADROOM, TRAILER, DEPTH> {
-    PlacedTxPool::pin(Placed::host(storage))
+    PlacedTxPool::pin(Placed::host(storage)).unwrap_or_else(|_| panic!("placed pool geometry"))
 }
 mod length_budget;
 use crate::tx::{
@@ -306,7 +306,7 @@ fn frame<const CAPACITY: usize, const DEPTH: usize>(
         .publish(TX_AMPDU_METADATA_SIZE + length, |bytes| {
             encode(&mut bytes[TX_AMPDU_METADATA_SIZE..]);
         });
-    pool.claim_radio(index)
+    pool.claim_radio(index).expect("ready placed slot")
 }
 
 /// The first `length` bytes of a returned slot: the image the MAC left for
@@ -372,7 +372,7 @@ fn retained_dma_owner_cancels_reserved_storage_before_releasing_backing() {
     let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |bytes| {
         bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
     });
-    let backing = pool.claim_radio(index);
+    let backing = pool.claim_radio(index).expect("ready placed slot");
     let mut retention = RetainedAmpduDmaStorage::new();
 
     {
@@ -411,7 +411,7 @@ fn rejected_referenced_commit_rolls_back_the_lower_lease() {
     )));
     let network = pool.claim_network(0);
     let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |_| {});
-    let backing = pool.claim_radio(index);
+    let backing = pool.claim_radio(index).expect("ready placed slot");
 
     {
         let mut retention = RetainedAmpduDmaStorage::new();
@@ -453,7 +453,7 @@ fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
     let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |bytes| {
         bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
     });
-    let backing = pool.claim_radio(index);
+    let backing = pool.claim_radio(index).expect("ready placed slot");
 
     {
         let mut retention = RetainedAmpduDmaStorage::new();
@@ -508,7 +508,7 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
         owner
             .commit_ht(
                 cookie,
-                pool.claim_radio(index),
+                pool.claim_radio(index).expect("ready placed slot"),
                 ht_frame_request(0, 32, 8, 0, rate),
             )
             .unwrap();
@@ -574,7 +574,7 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
         owner
             .commit_ht(
                 cookie,
-                pool.claim_radio(index),
+                pool.claim_radio(index).expect("ready placed slot"),
                 ht_frame_request(0, 32, 8, 0, rate),
             )
             .unwrap();

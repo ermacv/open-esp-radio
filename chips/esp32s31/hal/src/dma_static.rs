@@ -68,8 +68,16 @@ pub struct Placed<T: 'static> {
 
 impl<T: 'static> Placed<T> {
     /// Reunite an allocation whose HAL owner retained its original placement.
+    ///
+    /// # Safety
+    /// `value` is the exact original allocation consumed from `Placed<T>`.
+    /// All field borrows have ended and hardware has stopped following it.
     #[cfg(feature = "bluetooth-engine")]
-    pub(crate) fn returned(value: &'static mut T) -> Self {
+    #[allow(
+        unsafe_code,
+        reason = "the retained owner restores the original placement"
+    )]
+    pub(crate) unsafe fn from_retained(value: &'static mut T) -> Self {
         Self { value }
     }
 
@@ -77,12 +85,23 @@ impl<T: 'static> Placed<T> {
     #[allow(unsafe_code, reason = "the consumed Placed proves static DMA storage")]
     pub(crate) fn into_dma_parts<S: crate::ieee80211::dma::space::DmaSpace>(
         self,
-    ) -> Option<(&'static mut T, oer_memory::StableDmaRange<'static>)> {
-        let start = S::address(self.value, core::ptr::from_ref(self.value))?;
+    ) -> Option<(
+        &'static mut T,
+        oer_memory::StableDmaRange<'static>,
+        crate::dma_address::PlacementProjection,
+    )> {
+        let (storage, projection) =
+            crate::dma_address::PlacementProjection::take::<S, _>(self).ok()?;
+        let start = projection.address(storage).ok()?.get();
         // SAFETY: Placed owns this unique static allocation in the DMA window.
         // The returned storage owner must synchronize access for its complete
         // DMA lifecycle; the proof contains no reference aliasing that owner.
-        unsafe { oer_memory::StableDmaRange::from_owner(self.value, start) }
+        unsafe { oer_memory::StableDmaRange::from_owner(storage, start) }
+            .map(|(storage, range)| (storage, range, projection))
+    }
+
+    pub(crate) fn as_ref(&self) -> &T {
+        self.value
     }
 
     /// The placed value.
@@ -117,6 +136,7 @@ pub struct PlacedTxPool<
     const QUEUE_DEPTH: usize,
 > {
     handle: PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>,
+    regions: [crate::dma_address::PlacedRegion; QUEUE_DEPTH],
 }
 
 impl<
@@ -127,26 +147,48 @@ impl<
 > PlacedTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
 {
     /// Pin the `placed` pool (coherent memory).
+    ///
+    /// # Errors
+    /// Returns the unchanged placement if a slot region cannot be represented.
     pub fn pin(
         placed: Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
-    ) -> Self {
-        Self {
-            handle: PinnedDmaTxPool::pin_static(placed.into_inner()),
-        }
+    ) -> Result<
+        Self,
+        (
+            crate::dma_address::ProjectionError,
+            Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
+        ),
+    > {
+        let (storage, regions) = crate::dma_address::PlacementProjection::pool_regions(placed)?;
+        Ok(Self {
+            handle: PinnedDmaTxPool::pin_static(storage),
+            regions,
+        })
     }
 
     /// Pin the `placed` pool, which needs `prepare_for_dma_read` before a
     /// DMA reader receives a buffer.
+    ///
+    /// # Errors
+    /// Returns the unchanged placement if a slot region cannot be represented.
     pub fn pin_with_dma_read_prepare(
         placed: Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
         prepare_for_dma_read: fn(&mut [u8]),
-    ) -> Self {
-        Self {
+    ) -> Result<
+        Self,
+        (
+            crate::dma_address::ProjectionError,
+            Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
+        ),
+    > {
+        let (storage, regions) = crate::dma_address::PlacementProjection::pool_regions(placed)?;
+        Ok(Self {
             handle: PinnedDmaTxPool::pin_static_with_dma_read_prepare(
-                placed.into_inner(),
+                storage,
                 prepare_for_dma_read,
             ),
-        }
+            regions,
+        })
     }
 
     /// A free slot for a unique network writer
@@ -160,11 +202,24 @@ impl<
 
     /// A published slot for the radio, as a placed buffer
     /// ([`PinnedDmaTxPoolHandle::claim_radio`]).
+    ///
+    /// # Errors
+    /// Refuses an index outside this pool before claiming a slot.
     pub fn claim_radio(
         &self,
         index: u8,
-    ) -> PlacedTxLease<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>> {
-        PlacedTxLease(self.handle.claim_radio(index))
+    ) -> Result<
+        PlacedTxLease<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>>,
+        crate::dma_address::ProjectionError,
+    > {
+        let region = *self
+            .regions
+            .get(usize::from(index))
+            .ok_or(crate::dma_address::ProjectionError::OutsideAllocation)?;
+        Ok(PlacedTxLease {
+            lease: self.handle.claim_radio(index),
+            region: Ok(region),
+        })
     }
 
     /// Slots held by a network, ready or radio stage.
@@ -175,18 +230,33 @@ impl<
 
 /// A buffer lease of a pool placed in the DMA window: only
 /// [`PlacedTxPool::claim_radio`] makes one on the chip.
-pub struct PlacedTxLease<L>(L);
+pub struct PlacedTxLease<L> {
+    lease: L,
+    region: Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError>,
+}
 
 impl<L> PlacedTxLease<L> {
     /// A host model's lease, as if placed: host builds have no DMA window.
     #[cfg(any(test, feature = "test-support"))]
-    pub fn host(lease: L) -> Self {
-        Self(lease)
+    pub fn host(mut lease: L) -> Self
+    where
+        L: StableDmaBacking,
+    {
+        let region = crate::dma_address::model_region(lease.stable_dma_region().len());
+        Self { lease, region }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn host_refused(lease: L, error: crate::dma_address::ProjectionError) -> Self {
+        Self {
+            lease,
+            region: Err(error),
+        }
     }
 
     /// The lease.
     pub fn into_inner(self) -> L {
-        self.0
+        self.lease
     }
 }
 
@@ -194,32 +264,26 @@ impl<L> core::ops::Deref for PlacedTxLease<L> {
     type Target = L;
 
     fn deref(&self) -> &L {
-        &self.0
-    }
-}
-
-impl<L> core::ops::DerefMut for PlacedTxLease<L> {
-    fn deref_mut(&mut self) -> &mut L {
-        &mut self.0
+        &self.lease
     }
 }
 
 #[allow(unsafe_code, reason = "the stability is the wrapped lease's")]
-// SAFETY: the wrapper adds no state; the wrapped lease's stability proof is
-// unchanged.
+// SAFETY: immutable region metadata does not change the wrapped lease's
+// stability. The backing cannot be replaced through the wrapper.
 unsafe impl<L: StableDmaBacking> StableDmaBacking for PlacedTxLease<L> {
     fn stable_dma_region(&mut self) -> StableDmaRegion<'_> {
-        self.0.stable_dma_region()
+        self.lease.stable_dma_region()
     }
 
     fn prepare_for_dma_read(&mut self) {
-        self.0.prepare_for_dma_read();
+        self.lease.prepare_for_dma_read();
     }
 }
 
 impl<L: IndexedStableDmaLease> IndexedStableDmaLease for PlacedTxLease<L> {
     fn release_index(self) -> u8 {
-        self.0.release_index()
+        self.lease.release_index()
     }
 }
 
@@ -230,12 +294,29 @@ mod sealed {
 /// A stable DMA backing whose bytes lie in the DMA window: a
 /// [`PlacedTxLease`], or a pool wrapper around one. Sealed: placement is the
 /// HAL's to prove, so DMA engines may publish its address unchecked.
-pub trait PlacedBacking: StableDmaBacking + sealed::Sealed {}
+pub trait PlacedBacking: StableDmaBacking + sealed::Sealed {
+    /// The region proved once at placement; this never samples the backing.
+    fn dma_region(
+        &self,
+    ) -> Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError>;
+}
 
 impl<L> sealed::Sealed for PlacedTxLease<L> {}
-impl<L: StableDmaBacking> PlacedBacking for PlacedTxLease<L> {}
+impl<L: StableDmaBacking> PlacedBacking for PlacedTxLease<L> {
+    fn dma_region(
+        &self,
+    ) -> Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError> {
+        self.region
+    }
+}
 impl<T, B: PlacedBacking> sealed::Sealed for TaggedStableDmaBacking<T, B> {}
-impl<T, B: PlacedBacking> PlacedBacking for TaggedStableDmaBacking<T, B> {}
+impl<T, B: PlacedBacking> PlacedBacking for TaggedStableDmaBacking<T, B> {
+    fn dma_region(
+        &self,
+    ) -> Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError> {
+        core::ops::Deref::deref(self).dma_region()
+    }
+}
 impl<B: IndexedStableDmaLease + PlacedBacking, R: DmaIndexReturn> sealed::Sealed
     for ReturningStableDmaBacking<B, R>
 {
@@ -243,6 +324,11 @@ impl<B: IndexedStableDmaLease + PlacedBacking, R: DmaIndexReturn> sealed::Sealed
 impl<B: IndexedStableDmaLease + PlacedBacking, R: DmaIndexReturn> PlacedBacking
     for ReturningStableDmaBacking<B, R>
 {
+    fn dma_region(
+        &self,
+    ) -> Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError> {
+        core::ops::Deref::deref(self).dma_region()
+    }
 }
 
 /// Declare a zero-initialised static in the DMA window: a
@@ -327,5 +413,31 @@ mod tests {
         let placed = CELL.take().unwrap();
         assert_eq!(*placed.into_inner(), [0; 4]);
         assert!(CELL.take().is_none());
+    }
+}
+
+#[cfg(test)]
+mod lease_region_tests {
+    use super::*;
+
+    #[test]
+    fn pool_placement_carries_distinct_immutable_regions_into_each_lease() {
+        let storage =
+            std::boxed::Box::leak(std::boxed::Box::new(PinnedDmaTxPool::<64, 8, 4, 2>::new()));
+        let pool = PlacedTxPool::pin(Placed::host(storage))
+            .unwrap_or_else(|_| panic!("placed pool geometry"));
+        assert!(pool.claim_radio(2).is_err());
+        let mut previous = None;
+        for index in 0..2 {
+            pool.claim_network(index).publish(0, |_| {});
+            let mut lease = pool.claim_radio(index).unwrap();
+            let region = lease.dma_region().unwrap();
+            assert_eq!(region.len() as usize, lease.stable_dma_region().len());
+            assert_ne!(previous, Some(region));
+            previous = Some(region);
+            assert_eq!(lease.dma_region(), Ok(region));
+            drop(lease);
+        }
+        assert_eq!(pool.claimed_slots(), 0);
     }
 }

@@ -52,3 +52,79 @@ fn recorded_addresses_read_back_typed_and_absent_ones_do_not() {
         [0, BASE, 0]
     );
 }
+
+fn allocation() -> (
+    &'static mut ([WifiTxDmaDescriptor; 2], [u8; 16]),
+    super::PlacementProjection,
+) {
+    let placed = crate::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new((
+        [const { WifiTxDmaDescriptor::zeroed() }; 2],
+        [0; 16],
+    ))));
+    let (storage, _, projection) = placed
+        .into_dma_parts::<crate::ieee80211::dma::space::HostDma>()
+        .expect("host allocation has a DMA range");
+    (storage, projection)
+}
+
+#[test]
+fn projections_keep_each_field_in_the_consumed_allocation() {
+    let (storage, projection) = allocation();
+    let first = projection
+        .link::<WifiTxDmaDescriptor>(&storage.0[0])
+        .unwrap();
+    let table = projection.table::<WifiTxDmaDescriptor>(&storage.0).unwrap();
+    assert_eq!(table.first(), first);
+    assert_eq!(table.element(1), projection.link(&storage.0[1]).ok());
+    let slots = projection.slots(&storage.0).unwrap();
+    assert_eq!(slots.slot(1), table.element(1).map(|link| link.address()));
+    let region = projection.region(&storage.1).unwrap();
+    assert_eq!(region.len(), 16);
+    assert_eq!(region.at(15).unwrap().get(), region.start().get() + 15);
+    assert!(region.at(16).is_none());
+}
+
+#[test]
+fn projections_refuse_foreign_fields_empty_extents_and_noncontiguous_tables() {
+    use super::ProjectionError::*;
+    let (storage, projection) = allocation();
+    let foreign = WifiTxDmaDescriptor::zeroed();
+    assert_eq!(projection.link(&foreign), Err(OutsideAllocation));
+    assert_eq!(projection.region(&[1; 32]), Err(OutsideAllocation));
+    assert_eq!(projection.region(&[]), Err(Empty));
+    assert_eq!(projection.slots::<[u8; 0]>(&[[]]), Err(Empty));
+    assert_eq!(projection.table::<WifiTxDmaDescriptor>(&[]), Err(Empty));
+    assert_eq!(
+        projection.table([&storage.0[1], &storage.0[0]]),
+        Err(NonContiguous)
+    );
+}
+
+#[test]
+fn projections_refuse_misaligned_dma_addresses_and_width_overflow() {
+    for (base, error) in [
+        (BASE + 1, super::ProjectionError::Misaligned),
+        (u32::MAX - 3, super::ProjectionError::AddressWidth),
+    ] {
+        let placed = crate::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new(
+            WifiTxDmaDescriptor::zeroed(),
+        )));
+        let (storage, projection) = super::PlacementProjection::for_test(placed, base);
+        assert_eq!(projection.link(storage), Err(error));
+    }
+}
+
+#[test]
+fn refusing_a_projection_returns_the_exact_unchanged_placement() {
+    let storage = std::boxed::Box::leak(std::boxed::Box::new([7u32; 4]));
+    let original = core::ptr::from_ref(storage).addr();
+    let placed = crate::dma_static::Placed::host(storage);
+    let result = super::PlacementProjection::try_with::<crate::ieee80211::dma::space::HostDma, _, _>(
+        placed,
+        |_, projection| projection.region(&[0; 128]),
+    );
+    let (error, returned) = result.err().expect("foreign region is refused");
+    assert_eq!(error, super::ProjectionError::OutsideAllocation);
+    assert_eq!(core::ptr::from_ref(returned.as_ref()).addr(), original);
+    assert_eq!(*returned.into_inner(), [7; 4]);
+}

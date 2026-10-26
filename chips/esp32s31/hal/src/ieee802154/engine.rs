@@ -41,6 +41,21 @@ pub struct DetachedIeee802154Engine {
     inner: DetachedEngine<'static, DmaWindowAddress>,
 }
 
+/// Rejected placement returns both unchanged affine owners.
+pub struct PlacementRefusal<Ll> {
+    pub error: crate::dma_address::ProjectionError,
+    pub mac: Ll,
+    pub buffers: Placed<Ieee802154EngineBuffers>,
+}
+
+impl<Ll> core::fmt::Debug for PlacementRefusal<Ll> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PlacementRefusal")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
 impl DetachedIeee802154Engine {
     /// Rebind the retained, already placed storage to the returned MAC owners.
     /// No new storage claim, address construction or register access occurs.
@@ -73,17 +88,23 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
     }
 
     /// Own `mac` with the uniquely placed buffers. No register is touched.
+    ///
+    /// # Errors
+    /// Returns both unchanged owners if a frame's DMA projection is refused.
     pub fn place(
         mac: Ll,
         buffers: Placed<Ieee802154EngineBuffers>,
         levels: Ieee802154TxPowerLevels<'static>,
         defaults: Ieee802154PibDefaults,
         start: Ieee802154Permit,
-    ) -> Self {
+    ) -> Result<Self, PlacementRefusal<Ll>> {
         Self::bind(mac, buffers, levels, defaults, start, None)
     }
 
     /// Own `mac` and the placed buffers with multi-PAN enabled.
+    ///
+    /// # Errors
+    /// Returns both unchanged owners if a frame's DMA projection is refused.
     pub fn place_multipan(
         mac: Ll,
         buffers: Placed<Ieee802154EngineBuffers>,
@@ -91,14 +112,10 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         defaults: Ieee802154PibDefaults,
         interfaces: Ieee802154Interfaces,
         start: Ieee802154Permit,
-    ) -> Self {
+    ) -> Result<Self, PlacementRefusal<Ll>> {
         Self::bind(mac, buffers, levels, defaults, start, Some(interfaces))
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the owner consumes and retains the placed frame storage"
-    )]
     fn bind(
         mac: Ll,
         buffers: Placed<Ieee802154EngineBuffers>,
@@ -106,20 +123,32 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         defaults: Ieee802154PibDefaults,
         start: Ieee802154Permit,
         interfaces: Option<Ieee802154Interfaces>,
-    ) -> Self {
-        let buffers = buffers.into_inner();
-        // SAFETY: every frame is a transparent, four-byte-aligned DMA byte image
-        // inside the consumed Placed allocation. The inner engine retains its
-        // unique static borrow for every hardware epoch; native models record
-        // these identities without dereferencing them as pointers.
-        let addresses = unsafe {
-            let address = |frame: &oer_espressif_ieee802154_engine::engine::DmaFrame| {
-                crate::dma_address::placed(core::ptr::from_ref(frame).addr() as u32)
-            };
-            Ieee802154DmaAddresses {
-                rx: buffers.rx_frames().each_ref().map(address),
-                tx: address(buffers.tx_frame()),
-                enhanced_ack: address(buffers.enhanced_ack_frame()),
+    ) -> Result<Self, PlacementRefusal<Ll>> {
+        let projected = crate::dma_address::PlacementProjection::try_with::<
+            crate::ieee80211::dma::space::NativeDma,
+            _,
+            _,
+        >(buffers, |storage, projection| {
+            let tx = projection.address(storage.tx_frame())?;
+            let enhanced_ack = projection.address(storage.enhanced_ack_frame())?;
+            let mut rx = [tx; oer_espressif_ieee802154_engine::engine::RX_BUFFER_COUNT + 1];
+            for (address, frame) in rx.iter_mut().zip(storage.rx_frames()) {
+                *address = projection.address(frame)?;
+            }
+            Ok(Ieee802154DmaAddresses {
+                rx,
+                tx,
+                enhanced_ack,
+            })
+        });
+        let (buffers, addresses) = match projected {
+            Ok(parts) => parts,
+            Err((error, buffers)) => {
+                return Err(PlacementRefusal {
+                    error,
+                    mac,
+                    buffers,
+                });
             }
         };
         let engine = match interfaces {
@@ -128,9 +157,9 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
             }
             None => SharedEngine::new(buffers, addresses, levels, defaults, start),
         };
-        Self {
+        Ok(Self {
             inner: Ieee802154EngineOwner::new(engine, mac),
-        }
+        })
     }
 }
 

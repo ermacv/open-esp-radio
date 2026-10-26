@@ -5,7 +5,6 @@
 //! in the MAC backend. The split lets those safe upper layers pass an unforgeable memory
 //! capability instead of a bare descriptor address to the register boundary.
 
-use crate::dma_address;
 use crate::dma_static::Placed;
 use core::{marker::PhantomPinned, pin::Pin};
 
@@ -78,26 +77,18 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
     pub fn pin<S: DmaSpace>(
         placed: Placed<Self>,
     ) -> Result<PinnedTxDmaStorage<BUFFER_SIZE>, TxDmaStorageError> {
-        let (storage, range) = placed
+        let (storage, range, projection) = placed
             .into_dma_parts::<S>()
             .ok_or(TxDmaStorageError::Address)?;
-        let descriptor_address = S::address(storage, core::ptr::addr_of!(storage.descriptor))
-            .ok_or(TxDmaStorageError::Address)?;
-        let buffer_address =
-            S::address(storage, storage.buffer.0.as_ptr()).ok_or(TxDmaStorageError::Address)?;
-        Self::pin_static_inner(storage, range, descriptor_address, buffer_address)
-    }
-
-    #[allow(
-        unsafe_code,
-        reason = "static storage is converted once into non-forgeable DMA ranges"
-    )]
-    fn pin_static_inner(
-        storage: &'static mut Self,
-        range: StableDmaRange<'static>,
-        descriptor_address: u32,
-        buffer_address: u32,
-    ) -> Result<PinnedTxDmaStorage<BUFFER_SIZE>, TxDmaStorageError> {
+        let descriptor_head = projection
+            .link::<WifiTxDmaDescriptor>(storage.descriptor.layout())
+            .map_err(|_| TxDmaStorageError::Address)?;
+        let buffer = projection
+            .region(&storage.buffer.0)
+            .map_err(|_| TxDmaStorageError::Address)?
+            .start();
+        let descriptor_address = descriptor_head.bits();
+        let buffer_address = buffer.get();
         let buffer_len = u32::try_from(BUFFER_SIZE).map_err(|_| TxDmaStorageError::Address)?;
 
         let descriptor_range = range
@@ -106,16 +97,6 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
         let buffer_range = range
             .subrange(buffer_address, buffer_len)
             .ok_or(TxDmaStorageError::Address)?;
-
-        // SAFETY: this address names the initialized descriptor at its placed
-        // static location; the owner retains the allocation permanently.
-        let descriptor_head = unsafe { dma_address::placed_link(descriptor_address) }
-            .ok_or(TxDmaStorageError::Address)?;
-
-        // SAFETY: `buffer_address` is the DMA address of the placed static's
-        // buffer, which the link keeps in the DMA window and the owner
-        // retains permanently.
-        let buffer = unsafe { dma_address::placed(buffer_address) };
 
         Ok(PinnedTxDmaStorage {
             storage: Pin::static_mut(storage),
