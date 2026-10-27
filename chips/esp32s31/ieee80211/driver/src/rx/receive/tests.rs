@@ -470,6 +470,11 @@ impl<X: SignalExecutor> Harness<X> {
     /// one terminal) at the next descriptors, as the DMA engine would, and
     /// leave the walker past them.
     fn complete_unit(&mut self, lengths: &[u32]) {
+        // A cold walker must finish its reserved unit before a distinct
+        // frame can start wholly at the ring head.
+        if self.host.walker.borrow().next_descriptor_low == self.reserved_low() {
+            self.land_in_reserved(4);
+        }
         for (step, &length) in lengths.iter().enumerate() {
             let index = (self.next + step) % COUNT;
             let terminal = step + 1 == lengths.len();

@@ -115,15 +115,15 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     /// Whether DMA has overwritten the leading recycle guard.
     ///
     /// This is observation only: it never transfers buffer ownership. It is
-    /// used together with a later terminal descriptor to distinguish a full
-    /// non-terminal segment from an untouched armed descriptor.
+    /// used only to detect a late write into the retired reserved buffer.
+    /// It establishes neither accepted-frame membership nor a segment length.
     #[allow(
         unsafe_code,
         reason = "volatile read observes the asynchronous DMA writer"
     )]
     pub(crate) fn leading_guard_overwritten(&self) -> bool {
         // SAFETY: volatile access models the asynchronous DMA writer. The
-        // result is only evidence for a subsequent descriptor observation.
+        // result only diagnoses a late write; it grants no byte access.
         unsafe { self.0.get().cast::<u32>().read_volatile() != RX_BUFFER_SENTINEL }
     }
 }

@@ -872,21 +872,15 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// Snapshot the complete units which one frozen cursor has released to
     /// software, through its LAST inclusive. A descriptor-local `RX_DONE`
     /// observation is intentionally insufficient for recycling its link
-    /// word. NEXT=0 and LAST at the accepted tail release untouched
-    /// intermediate descriptors which the vendor worker also walks before
-    /// the terminal.
+    /// word. Units contain every descriptor from the accepted-unit cursor
+    /// through the first terminal, regardless of buffer contents.
     pub fn completed_unit_frontier_through_cursor(
         &self,
         ring: &RxRingLive<'_, COUNT>,
         cursor: RxFrozenCursor,
     ) -> Result<RxCompletedUnitFrontier, RxRingError> {
         self.validate_live_ring(ring)?;
-        Ok(
-            ring.completed_unit_frontier_through_cursor_with(cursor, |index| {
-                self.buffer_for_descriptor(index)
-                    .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-            }),
-        )
+        Ok(ring.completed_unit_frontier_through_cursor(cursor))
     }
 
     /// Return the first complete unit at the software frontier, bounded by
@@ -898,16 +892,12 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         cursor: RxFrozenCursor,
     ) -> Result<RxCompletedUnitFrontier, RxRingError> {
         self.validate_live_ring(ring)?;
-        Ok(
-            ring.first_completed_unit_frontier_through_cursor_with(cursor, |index| {
-                self.buffer_for_descriptor(index)
-                    .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-            }),
-        )
+        Ok(ring.first_completed_unit_frontier_through_cursor(cursor))
     }
 
-    /// Copy bytes from the first descriptor of the first complete unit without
-    /// transferring descriptor ownership.
+    /// Copy bytes from a complete single-descriptor unit without transferring
+    /// descriptor ownership. Chains and reserved-descriptor tails refuse
+    /// preview: their first buffer alone is not an admissible frame header.
     ///
     /// This is a deliberately narrow admission-preview boundary. The ordered
     /// LAST/NEXT cursor proves that the first unit is complete, while copying
@@ -926,16 +916,16 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         output: &mut [u8],
     ) -> Result<bool, RxRingError> {
         self.validate_live_ring(ring)?;
-        let frontier = ring.first_completed_unit_frontier_through_cursor_with(cursor, |index| {
-            self.buffer_for_descriptor(index)
-                .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-        });
-        if frontier.unit_count == 0 {
+        let frontier = ring.first_completed_unit_frontier_through_cursor(cursor);
+        if frontier.descriptor_count != 1 || ring.unit_continues_reserved() {
             return Ok(false);
         }
         let index = self
             .completion_frontier_head(ring)?
             .ok_or(RxRingError::Corrupt)?;
+        if !ring.validate_completed_descriptor(index)? {
+            return Ok(false);
+        }
         let available = usize::from(ring.descriptors()[index].word0().length());
         let Some(end) = offset
             .checked_add(output.len())
@@ -982,14 +972,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     > {
         let binding = BoundBuffers::live(self, ring)?;
         let unit = match with_bound_buffers(binding, |ring, buffers| {
-            ring.take_completed_unit_owned(
-                cursor,
-                |index| {
-                    self.buffer_for_descriptor(index)
-                        .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-                },
-                &buffers,
-            )
+            ring.take_completed_unit_owned(cursor, &buffers)
         }) {
             Ok(Some(unit)) => unit,
             Ok(None) => return Ok(None),

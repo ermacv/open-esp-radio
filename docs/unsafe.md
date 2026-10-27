@@ -370,8 +370,23 @@ capacity; backing storage covers that capacity, with no trailing guard word.
 Constructor, pre-publication byte views and DMA placement enforce this
 geometry at monomorphization, including storage initialized as zero bytes
 without calling `new`.
-The leading observation remains evidence of a DMA write, not a completion
-or ownership proof.
+Accepted RX units contain every descriptor from the software cursor through
+its first terminal `RX_DONE`, bounded by the frozen LAST. Lengths and metadata
+come from that descriptor interval alone; buffer contents never select a
+member, a length or a metadata source. Exhaustion uses the same membership
+rule. Admission preview refuses chains and reserved-descriptor tails before
+reading bytes. R remains in the accepted-unit cursor until its terminal has
+been observed, unless the epoch resumes at a retained ring NEXT; its leading
+word cannot establish a continuation.
+The leading observation is used only to detect a late write into retired R,
+which keeps the existing Corrupt/reset quarantine path. Its baseline is
+restored when R's link is cleared even if its old bytes were rejected traffic.
+The general hardware premise is that LAST releases exact accepted prefixes
+with fresh head metadata and excludes later writes into released storage.
+SOURCE: `oer-notes/research/hw-rx-radio.md`, R3 A(2),
+`hw18-20261027-rx-radio-03-s31b`: three exact prefixes and nine stable committed
+buffers support this premise in that capture; arbitrary in-flight detach and
+recycle remain unmeasured. No buffer-content fallback supplies this proof.
 Compiler fixtures build internal callers against the actual HAL source;
 weakened-bound controls confirm every callback escape case detects a regression.
 
