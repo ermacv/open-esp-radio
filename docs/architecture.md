@@ -103,9 +103,15 @@ moves; ownership, orchestration and wiring are rebuilt.
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
 - A signal's constructor declares its receiving executor entry and all its
-  raising contexts. Each raising handler is above that executor, or the
-  raiser is a task of a lower context; thread-mode tasks are at level zero.
-  The declaration checks the executor's software source and common hart.
+  raising contexts. An ordinary `FromHandler` is strictly above that executor,
+  or the raiser is a task of a lower context; thread-mode tasks are at level
+  zero. `FromExecutorLevel<Entry>` admits only an `Exempt(ExecutorLevel)`
+  handler on the receiving executor's hart and level. Equal-level handlers
+  cannot preempt the executor's round: the handler publishes atomic facts
+  and pends the executor, whose next round observes the signal and wakes its
+  task. The handler never calls the task's waker or touches task-owned state.
+  The declaration checks the executor's software source, the same-level
+  raiser's class, the directions and common hart.
   Doorbell construction, Wi-Fi activation and BLE gate exchange check that
   the request handler is above the requesting executor on the same hart;
   the driver also checks the doorbell against the bound handler. These are

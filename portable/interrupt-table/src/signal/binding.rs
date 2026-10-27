@@ -6,8 +6,13 @@ use crate::{Class, Context, Entry, InterruptSource};
 
 use super::SignalExecutor;
 
-/// An interrupt table handler that raises facts.
+/// An interrupt table handler strictly above the receiving executor.
 pub struct FromHandler<E>(PhantomData<E>);
+
+/// An `Exempt(ExecutorLevel)` handler on the receiving executor's level
+/// and hart. It cannot preempt that executor's round; its facts are serviced
+/// by the next round, without calling a task waker in the handler.
+pub struct FromExecutorLevel<E>(PhantomData<E>);
 
 /// A task of executor `X`, whose interrupt or thread-wake entry is `E`.
 pub struct FromTask<X, E>(PhantomData<(X, E)>);
@@ -15,6 +20,7 @@ pub struct FromTask<X, E>(PhantomData<(X, E)>);
 mod sealed {
     pub trait Sealed {}
     impl<E: crate::Entry> Sealed for super::FromHandler<E> {}
+    impl<E: crate::Entry> Sealed for super::FromExecutorLevel<E> {}
     impl<X: super::SignalExecutor, E: crate::Entry> Sealed for super::FromTask<X, E> where
         E::Part: crate::InterruptSource
     {
@@ -33,12 +39,23 @@ pub trait Raisers: sealed::Sealed {
 #[doc(hidden)]
 pub enum Raising {
     Handler(Context),
+    ExecutorLevel(Context),
     Task(Context),
     Pair(&'static Raising, &'static Raising),
 }
 
 impl<E: Entry> Raisers for FromHandler<E> {
     const CONTEXTS: Raising = Raising::Handler(E::CONTEXT);
+}
+
+impl<E: Entry> Raisers for FromExecutorLevel<E> {
+    const CONTEXTS: Raising = {
+        assert!(
+            matches!(E::CLASS, Class::ExemptExecutorLevel),
+            "a same-level signal handler must have class Exempt(ExecutorLevel)"
+        );
+        Raising::ExecutorLevel(E::CONTEXT)
+    };
 }
 
 impl<X: SignalExecutor, E: Entry> Raisers for FromTask<X, E>
@@ -100,6 +117,16 @@ impl Raising {
                 assert!(
                     from.level < executor.level,
                     "a signal task must be below its executor"
+                );
+            }
+            Self::ExecutorLevel(from) => {
+                assert!(
+                    from.hart == executor.hart,
+                    "a signal and its raiser must share a hart"
+                );
+                assert!(
+                    from.level == executor.level,
+                    "a same-level signal handler must be on its receiving executor's level"
                 );
             }
             Self::Pair(a, b) => {

@@ -107,8 +107,16 @@ IrqSignal::<RadioExecutor>::new::<
 ```
 
 `FromHandler<Entry>` must run above the receiving executor; `FromTask<X, Entry>`
-must be a lower executor's task. Each executor entry must name its actual
-software interrupt source, all participating contexts share a hart, and an
+must be a lower executor's task. `FromExecutorLevel<Entry>` admits only a
+handler of class `Exempt(ExecutorLevel)` on the receiving executor's hart and
+level. This handler cannot preempt the executor's round; it publishes atomic
+facts and pends the executor, whose next round services those facts and wakes
+the task in its own context. The handler calls no task waker and shares no
+lock or task-owned signal state. Ordinary `FromHandler` still requires a
+strictly higher level, including for exempt handlers.
+
+Each executor entry must name its actual software interrupt source, all
+participating contexts share a hart, and an
 interrupt-mode executor's entry has class `Executor`. A thread-mode executor's
 wake entry represents its tasks at level zero. Nested pairs declare several
 raisers of one signal; the signal's layout and atomic publication are unchanged.
@@ -124,7 +132,7 @@ and checks the requester's `Executor` class; image wrappers derive their
 metadata from that type. Static signal initializers are checked by
 `cargo check`. The generic runtime constructors and driver calls evaluate
 their inline const checks at monomorphization, covered by paired codegen
-tests in the executor and driver crates. Stable Rust cannot use these
+tests here and in the executor and driver crates. Stable Rust cannot use these
 associated scheduling constants in generic const expressions in a signature.
 
 ```console

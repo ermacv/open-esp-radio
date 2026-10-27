@@ -18,9 +18,18 @@
 //! A fact raised while the executor walks its signals lands in the swapped
 //! word, is new again, and pends the executor once more: it is never lost.
 //! Facts raised before the executor services them coalesce into one wake.
+//!
+//! [`FromHandler`] requires a handler strictly above the receiving executor.
+//! [`FromExecutorLevel`] admits only an `Exempt(ExecutorLevel)` handler on
+//! that executor's hart and level. Equal-level handlers cannot preempt the
+//! executor's round: the handler publishes facts and pends the next round,
+//! which services them in the executor's own context. [`FromTask`] admits
+//! tasks strictly below the receiver. Construction checks the same-level
+//! class, each raiser's hart and direction at compile time, including runtime constructors
+//! through inline const evaluation at monomorphization.
 
 mod binding;
-pub use binding::{FromHandler, FromTask, Raisers};
+pub use binding::{FromExecutorLevel, FromHandler, FromTask, Raisers};
 
 use core::{
     marker::PhantomData,
@@ -145,8 +154,9 @@ pub struct ForeignTask;
 
 impl<E: SignalExecutor> IrqSignal<E> {
     /// A signal of `E` with no fact. `Target` is its executor's table entry;
-    /// `R` names every raising handler or task (`FromHandler`, `FromTask`,
-    /// or nested pairs). The software source, hart and directions are checked
+    /// `R` names every raising handler or task (`FromHandler`,
+    /// `FromExecutorLevel`, `FromTask`, or nested pairs).
+    /// The software source, class, hart and directions are checked
     /// at compile time. No scheduling metadata is stored in the signal.
     pub const fn new<R: Raisers, Target: crate::Entry>() -> Self
     where

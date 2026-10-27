@@ -3185,6 +3185,7 @@ dependencies = [
  "oer-mmio",
  "oer-test-ui-cases",
  "static_cell",
+ "tempfile",
 ]
 
 [[package]]
