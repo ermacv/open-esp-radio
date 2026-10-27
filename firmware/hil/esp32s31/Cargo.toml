@@ -77,7 +77,7 @@ oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac", opt
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port", optional = true }
 oer-embassy-net = { path = "../../../portable/embassy/net", optional = true }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy", optional = true }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", optional = true }

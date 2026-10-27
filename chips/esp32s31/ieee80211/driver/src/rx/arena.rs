@@ -11,7 +11,7 @@
 //! [`bind`]: WifiRxArena::bind
 
 use core::mem::MaybeUninit;
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_espressif_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::{
     dma_static::Placed,
@@ -36,8 +36,8 @@ use crate::irq::{WifiIrqLine, WifiIrqLineParts, WifiIrqRequests};
 /// The image's two static signals of the radio executor that carry the
 /// line's facts to the receive runner: the MAC facts and the power facts.
 pub struct WifiIrqSignals<X: SignalExecutor> {
-    pub mac: &'static oer_interrupt_table::signal::IrqSignal<X>,
-    pub power: &'static oer_interrupt_table::signal::IrqSignal<X>,
+    pub mac: &'static oer_espressif_interrupt_table::signal::IrqSignal<X>,
+    pub power: &'static oer_espressif_interrupt_table::signal::IrqSignal<X>,
 }
 
 /// The static arena of one receive epoch.

@@ -1,5 +1,5 @@
 //! The hart's interrupt controller: its interrupt-matrix bank and its CLIC,
-//! which the interrupt table's router (`oer_interrupt_table::Router`)
+//! which the interrupt table's router (`oer_espressif_interrupt_table::Router`)
 //! writes through the typed blocks.
 //!
 //! Each method of [`Controller`] reads or read-modify-writes one word: a
@@ -20,7 +20,7 @@ use oer_esp32s31_pac::{
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
     ownership::InterruptMatrixPeripherals,
 };
-use oer_interrupt_table::{Controller, Error, LineState, Trigger};
+use oer_espressif_interrupt_table::{Controller, Error, LineState, Trigger};
 use oer_memory::{ClaimCell, zeroed::ZeroedOnce};
 
 use crate::cores::{StopTheWorld, key};

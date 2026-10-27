@@ -20,7 +20,7 @@ embassy-futures = "0.1.2"
 oer-esp32s31-hal = { path = "../../hal", features = ["bluetooth-engine"] }
 oer-esp32s31-phy = { path = "../../phy" }
 oer-time = { path = "../../../../portable/time" }
-oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
+oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table" }
 
 [dev-dependencies]
 oer-time-virtual = { path = "../../../../portable/time-virtual" }
@@ -32,7 +32,7 @@ oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 # Host tests need the std implementation; chip doctests build without it.
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 tempfile = "=3.27.0"
-oer-interrupt-table = { path = "../../../../portable/interrupt-table", features = ["host-signal"] }
+oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table", features = ["host-signal"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 
 [lints]

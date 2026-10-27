@@ -56,6 +56,7 @@ jobs:
           exit "$status"
       - name: Tests
         # The default members: every package but the chip-only firmware ones.
+        # This includes host tests of chips/espressif/interrupt-table.
         run: cargo test --locked
       - name: Tests in the feature sets the workspace run does not build
         run: |
@@ -101,6 +102,7 @@ jobs:
         # Every library of protocols/, portable/ and chips/ builds for the chip;
         # the platform packages (the boards and the staged runtime and
         # bootstrap) are checked with the images.
+        # chips/espressif/interrupt-table is included by the chips/ selection.
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))

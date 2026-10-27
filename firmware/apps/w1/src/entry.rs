@@ -146,7 +146,7 @@ oer_espressif_executor::tasks! {
         p2_timers(lines: oer_memory::AffineSpscSender<'static, TimerLine, 2>) = measure::p2_timers;
         rx_task(
             registers: oer_esp32s31_hal::owner::RadioAccess,
-            bound_part: oer_interrupt_table::Bound<WifiToken>,
+            bound_part: oer_espressif_interrupt_table::Bound<WifiToken>,
             doorbell: ImageDoorbell,
             bound: oer_memory::AffineSpscSender<'static, Bound, 1>,
         ) = irq::rx_task;
@@ -199,7 +199,7 @@ struct Boot {
     station: [u8; 6],
     access_point: [u8; 6],
     radio: Spawner<RadioTasks>,
-    wifi_bound: oer_interrupt_table::Bound<WifiToken>,
+    wifi_bound: oer_espressif_interrupt_table::Bound<WifiToken>,
     doorbell: ImageDoorbell,
     bound: (
         oer_memory::AffineSpscSender<'static, Bound, 1>,
@@ -409,7 +409,7 @@ struct Parts {
     station: [u8; 6],
     access_point: [u8; 6],
     radio: Spawner<RadioTasks>,
-    wifi_bound: oer_interrupt_table::Bound<WifiToken>,
+    wifi_bound: oer_espressif_interrupt_table::Bound<WifiToken>,
     doorbell: ImageDoorbell,
     bound: (
         oer_memory::AffineSpscSender<'static, Bound, 1>,

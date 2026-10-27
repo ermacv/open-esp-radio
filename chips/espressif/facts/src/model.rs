@@ -316,7 +316,7 @@ pub struct InterruptContract {
     /// The CPU line the entry's source is routed to.
     pub table_line: [u32; 2],
     pub table_level: [u32; 2],
-    /// The entry's handler class (`oer_interrupt_table::Class`).
+    /// The entry's handler class (`oer_espressif_interrupt_table::Class`).
     pub table_class: [u32; 2],
     pub table_core: [u32; 2],
     pub table_handler: u32,

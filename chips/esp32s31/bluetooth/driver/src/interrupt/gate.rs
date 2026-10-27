@@ -48,7 +48,7 @@ use oer_esp32s31_hal::bluetooth::{
     },
 };
 use oer_esp32s31_hal::platform::FromCpu3Irq;
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Bound,
     signal::{IrqSignal, SignalExecutor},
 };
@@ -716,7 +716,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, R: RadioDoorbell>
     pub(crate) async fn exchange(&mut self, request: Request<H>) -> Result<Reply<H>, GateError> {
         const {
             assert!(
-                oer_interrupt_table::request_direction(R::HANDLER, R::EXECUTOR),
+                oer_espressif_interrupt_table::request_direction(R::HANDLER, R::EXECUTOR),
                 "a request handler must be above its executor on the same hart"
             )
         };
@@ -865,10 +865,10 @@ pub enum ChipGate {}
 /// once; its handler calls [`BluetoothInterruptsOf::service`].
 pub type BluetoothInterrupts<X, B> = BluetoothInterruptsOf<ChipGate, X, B>;
 
-impl<X: SignalExecutor + 'static, B> oer_interrupt_table::InterruptSources
+impl<X: SignalExecutor + 'static, B> oer_espressif_interrupt_table::InterruptSources
     for BluetoothInterrupts<X, B>
 {
-    const SOURCES: &'static [u16] = oer_interrupt_table::interrupt_sources![
+    const SOURCES: &'static [u16] = oer_espressif_interrupt_table::interrupt_sources![
         bluetooth::BluetoothInterruptBankSources,
         bluetooth::ModemLpTimerSource,
         FromCpu3Irq,
@@ -1003,11 +1003,11 @@ impl<X: SignalExecutor + 'static> BluetoothInterruptEnds<ChipGate, X> {
         ModemLpTimerPort<ChipGate, R>,
     )
     where
-        E: oer_interrupt_table::Entry<Part = BluetoothInterrupts<X, B>>,
+        E: oer_espressif_interrupt_table::Entry<Part = BluetoothInterrupts<X, B>>,
     {
         const {
             assert!(
-                oer_interrupt_table::request_direction(E::CONTEXT, R::EXECUTOR),
+                oer_espressif_interrupt_table::request_direction(E::CONTEXT, R::EXECUTOR),
                 "a request handler must be above its executor on the same hart"
             );
             assert!(

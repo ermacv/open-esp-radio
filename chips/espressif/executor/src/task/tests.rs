@@ -504,7 +504,7 @@ fn declared_tasks_start_once_with_their_arguments_and_poll_by_index() {
 mod thread_signals {
     use super::*;
     use crate::context::Running;
-    use oer_interrupt_table::signal::{
+    use oer_espressif_interrupt_table::signal::{
         ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList,
     };
 
@@ -565,7 +565,7 @@ mod thread_signals {
         let running = RUNNING.with(|running| *running);
         let mut more = false;
         running.enter(EXECUTOR, LEVEL.with(Cell::get), || {
-            oer_interrupt_table::signal::service::<TestThread>();
+            oer_espressif_interrupt_table::signal::service::<TestThread>();
             more = CURRENT.with(|current| round::<T>(current));
         });
         more
@@ -615,7 +615,7 @@ mod thread_signals {
             Poll::Pending
         }
     }
-    use oer_interrupt_table::signal::ForeignContext;
+    use oer_espressif_interrupt_table::signal::ForeignContext;
 }
 
 #[test]
@@ -644,7 +644,7 @@ fn a_signal_raised_for_a_thread_executor_task_wakes_it() {
 
 #[test]
 fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_signals() {
-    use oer_interrupt_table::signal::ForeignContext;
+    use oer_espressif_interrupt_table::signal::ForeignContext;
     use thread_signals::{PREEMPTED_SIGNAL, Preempted, Seized, run_round};
     probe_set!(Set, Thread, Preempted);
     let seized: &'static core::cell::RefCell<Seized> = Box::leak(Box::default());

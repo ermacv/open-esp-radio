@@ -17,7 +17,7 @@
 //!   ED result words; the task side holds every other register.
 //!
 //! The armed interrupt owner has two homes. An interrupt table's handler
-//! holds it once `oer_interrupt_table::Router::bind` placed it, and the task
+//! holds it once `oer_espressif_interrupt_table::Router::bind` placed it, and the task
 //! activates its affine startup task owner with the binding's `Bound` proof,
 //! publishing the same ten runtime events as later sessions
 //! ([`Ieee802154TaskOwner::enable_events`]) and mask them again at the end
@@ -45,7 +45,7 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154InterruptTransitionPort, execute_interrupt_deactivation,
     execute_interrupt_initialization,
 };
-use oer_interrupt_table::{Bound, Silent};
+use oer_espressif_interrupt_table::{Bound, Silent};
 use oer_mmio::{Fixed, Placement};
 
 mod etm;
@@ -94,7 +94,7 @@ pub struct Ieee802154TaskOwner<
 ///
 /// ```compile_fail,E0382
 /// use oer_esp32s31_hal::ieee802154::mac::{Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner};
-/// use oer_interrupt_table::{Bound, Entry};
+/// use oer_espressif_interrupt_table::{Bound, Entry};
 /// fn twice<I: Entry<Part = Ieee802154InterruptOwner>>(startup: Ieee802154ArmedTaskOwner, bound: &Bound<I>) {
 ///     let _first = startup.activate(bound);
 ///     let _second = startup.activate(bound);
@@ -120,7 +120,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154ArmedTaskOwner<P, E, B>
     /// Publish the ten runtime events after the IRQ owner has moved into
     /// its permanent handler. This accesses only task-owned enable registers;
     /// it never borrows the handler cell or grants acknowledgement authority.
-    pub fn activate<I: oer_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
+    pub fn activate<I: oer_espressif_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
         mut self,
         _bound: &Bound<I>,
     ) -> Ieee802154TaskOwner<P, E, B> {
@@ -158,9 +158,9 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 ///     Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner,
 /// };
 /// use oer_esp32s31_hal::platform::InterruptController;
-/// use oer_interrupt_table::{BindError, Bound, Router};
-/// # const LINES: oer_interrupt_table::Lines =
-/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_esp32s31_pac::HARTS as u8, tie_break: oer_interrupt_table::TieBreak::HighestLine };
+/// use oer_espressif_interrupt_table::{BindError, Bound, Router};
+/// # const LINES: oer_espressif_interrupt_table::Lines =
+/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_esp32s31_pac::HARTS as u8, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };
 /// use oer_espressif_ieee802154_engine::types::Ieee802154EventMask;
 /// pub fn on_ieee802154(mac: &mut Ieee802154InterruptOwner) {
 ///     // Acknowledge the sampled named events; latch them for the task.
@@ -168,7 +168,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 ///     let _observed = snapshot.observation();
 ///     mac.clear_events(snapshot, Ieee802154EventMask::NAMED);
 /// }
-/// oer_interrupt_table::interrupt_table! {
+/// oer_espressif_interrupt_table::interrupt_table! {
 ///     lines: LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
@@ -200,11 +200,11 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// ```compile_fail,E0382
 /// # use oer_esp32s31_hal::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
 /// # use oer_esp32s31_hal::platform::InterruptController;
-/// # use oer_interrupt_table::Router;
-/// # const LINES: oer_interrupt_table::Lines =
-/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_esp32s31_pac::HARTS as u8, tie_break: oer_interrupt_table::TieBreak::HighestLine };
+/// # use oer_espressif_interrupt_table::Router;
+/// # const LINES: oer_espressif_interrupt_table::Lines =
+/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_esp32s31_pac::HARTS as u8, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };
 /// # pub fn on_ieee802154(_: &mut Ieee802154InterruptOwner) {}
-/// # oer_interrupt_table::interrupt_table! {
+/// # oer_espressif_interrupt_table::interrupt_table! {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
 /// #     contexts { radio: 3; }
@@ -371,17 +371,19 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     ///
     /// ```compile_fail,E0271
     /// # use oer_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
-    /// # use oer_interrupt_table::Bound;
+    /// # use oer_espressif_interrupt_table::Bound;
     /// struct OtherIrq;
     /// impl oer_mmio::InterruptSource for OtherIrq {
     ///     const SOURCE: u16 = 3;
     /// }
-    /// fn enable<E: oer_interrupt_table::Entry<Part = OtherIrq>>(task: &mut Ieee802154TaskOwner, bound: &Bound<E>) {
+    /// fn enable<E: oer_espressif_interrupt_table::Entry<Part = OtherIrq>>(task: &mut Ieee802154TaskOwner, bound: &Bound<E>) {
     ///     // Another part's binding proves nothing about this interrupt.
     ///     task.enable_events(bound);
     /// }
     /// ```
-    pub fn enable_events<I: oer_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
+    pub fn enable_events<
+        I: oer_espressif_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
+    >(
         &mut self,
         bound: &Bound<I>,
     ) {

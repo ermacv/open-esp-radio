@@ -19,7 +19,7 @@
 //! quarantined with [`DrainTimeout`](super::control::WifiRxQuarantine::DrainTimeout).
 
 use core::{future::poll_fn, task::Poll};
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_espressif_interrupt_table::signal::SignalExecutor;
 
 use atomic_waker::AtomicWaker;
 use oer_esp32s31_ieee80211_mac::rx::{

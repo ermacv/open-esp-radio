@@ -16,7 +16,7 @@ use oer_diagnostics::Note;
 use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
 use oer_espressif_staged_runtime::fatal::{StopError, StopTheWorld};
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
-use oer_interrupt_table::Trigger;
+use oer_espressif_interrupt_table::Trigger;
 
 const MAGIC: u32 = u32::from_le_bytes(*b"OFTL");
 #[cfg(feature = "panic-hook")]
@@ -138,7 +138,7 @@ impl Failure {
 
     pub(crate) fn from_boot(error: oer_espressif_staged_runtime::BootError) -> Self {
         use oer_espressif_staged_runtime::BootError;
-        use oer_interrupt_table::Error;
+        use oer_espressif_interrupt_table::Error;
         match error {
             BootError::WrongHart { .. } => Self::InterruptHart,
             BootError::NoInterruptStack { .. } => Self::InterruptStack,

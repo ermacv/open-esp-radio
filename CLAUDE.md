@@ -127,7 +127,8 @@ system these rules serve.
   the complete zero word, without reading or implying an acknowledgement.
   Generated register code has no `unsafe`: volatile access lives in
   `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
-  instructions in `portable/riscv`, the PAC's one root claim, probe images,
+  instructions in `portable/riscv`, Espressif interrupt bindings in
+  `chips/espressif/interrupt-table`, the PAC's one root claim, probe images,
   the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
   Only `oer-riscv` contains `asm!` for architectural operations. Entry/trap

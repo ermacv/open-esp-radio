@@ -78,7 +78,7 @@ fn a_pending_notification_keeps_the_next_epoch_from_starting_until_reset_clears_
 
 #[test]
 fn a_foreign_context_neither_observes_nor_clears_the_cells() {
-    use oer_interrupt_table::signal::{ForeignContext, host};
+    use oer_espressif_interrupt_table::signal::{ForeignContext, host};
 
     let cells = ControllerEventCells::new(host::foreign_signal(), host::foreign_signal());
     let (interrupt, _task, _timer) = ControllerRuntimeResources::<2, _>::new(&cells).split();

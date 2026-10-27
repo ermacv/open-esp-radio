@@ -16,7 +16,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
+use oer_espressif_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 
 use super::PrimaryInterruptCapture;
 

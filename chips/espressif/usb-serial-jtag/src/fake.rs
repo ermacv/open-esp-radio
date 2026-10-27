@@ -94,7 +94,7 @@ impl EndpointRegisters for Task {
 
     fn enable_events(
         &mut self,
-        _authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+        _authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
     ) {
         self.0.lock().enabled = true;
     }
@@ -102,16 +102,16 @@ impl EndpointRegisters for Task {
 
 pub(crate) struct Irq(pub(crate) Shared);
 
-impl oer_interrupt_table::InterruptSource for Irq {
+impl oer_espressif_interrupt_table::InterruptSource for Irq {
     // Synthetic source in the host controller, independent of chip identities.
     const SOURCE: u16 = 0;
 }
 
-oer_interrupt_table::__fake_controller!();
+oer_espressif_interrupt_table::__fake_controller!();
 
 /// A real router-issued proof over the fake's unrouted source.
-pub(crate) fn silent() -> oer_interrupt_table::Silent<Irq> {
-    oer_interrupt_table::Router::install(FakeController::new(0), &[])
+pub(crate) fn silent() -> oer_espressif_interrupt_table::Silent<Irq> {
+    oer_espressif_interrupt_table::Router::install(FakeController::new(0), &[])
         .and_then(|router| router.silent())
         .expect("the empty table leaves the fake USB source silent")
 }

@@ -12,7 +12,7 @@ use oer_esp32s31_bluetooth_driver::runtime_resources::ControllerEventCells;
 use oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerInterruptChannel;
 use oer_esp32s31_hal::platform::{FromCpu3, FromCpu3Irq};
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger};
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Controller, Router,
     signal::{FromHandler, IrqSignal},
 };
@@ -32,13 +32,13 @@ pub type Interrupts = BluetoothInterrupts<X, Ack>;
 
 /// The doorbell's ringing half, which the task's ends share.
 pub struct Bell<
-    E: oer_interrupt_table::Entry = crate::BtToken,
-    R: oer_interrupt_table::Entry = crate::RadioToken,
+    E: oer_espressif_interrupt_table::Entry = crate::BtToken,
+    R: oer_espressif_interrupt_table::Entry = crate::RadioToken,
 >(Doorbell<3, E, R>);
 
-impl<E: oer_interrupt_table::Entry, R: oer_interrupt_table::Entry> RadioDoorbell for &Bell<E, R> {
-    const HANDLER: oer_interrupt_table::Context = Doorbell::<3, E, R>::HANDLER;
-    const EXECUTOR: oer_interrupt_table::Context = Doorbell::<3, E, R>::EXECUTOR;
+impl<E: oer_espressif_interrupt_table::Entry, R: oer_espressif_interrupt_table::Entry> RadioDoorbell for &Bell<E, R> {
+    const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<3, E, R>::HANDLER;
+    const EXECUTOR: oer_espressif_interrupt_table::Context = Doorbell::<3, E, R>::EXECUTOR;
     fn ring(&self) {
         self.0.ring();
     }

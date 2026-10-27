@@ -30,13 +30,13 @@ observed-functions = [
 
 # The interrupt contract the interrupt-stack check reads: the staged runtime
 # (chips/espressif/staged-runtime) installs these vectors and stacks; the
-# symbols are the interrupt table's (portable/interrupt-table) and the staged
+# symbols are the interrupt table's (chips/espressif/interrupt-table) and the staged
 # runtime's (chips/espressif/staged-runtime stacks.rs). A chip adds its harts
 # and their guards.
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
-# `oer_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
-# u8 at 3, class u8 at 4 (`oer_interrupt_table::Class`), hart u8 at 5,
+# `oer_espressif_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
+# u8 at 3, class u8 at 4 (`oer_espressif_interrupt_table::Class`), hart u8 at 5,
 # handler word at 8; fields as [offset, bytes]. An exempt entry's reason is
 # the bytes of the symbol named by the prefix and the entry's handler symbol.
 table-entry-bytes = 12
@@ -81,7 +81,7 @@ tie-break = "highest-line"
 irq-stack-bytes = 0x8000
 irq-stack-margin-percent = 10
 # Routes and line levels are written through the interrupt table's router
-# (portable/interrupt-table) by the chip's controller, whose writer
+# (chips/espressif/interrupt-table) by the chip's controller, whose writer
 # functions this list names with the contexts they may run in.
 level-writers = []
 

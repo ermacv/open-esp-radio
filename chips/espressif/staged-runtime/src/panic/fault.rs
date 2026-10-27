@@ -1,5 +1,5 @@
 //! Numeric retained fault reasons. Text is decoded only by next-boot reporting.
-use oer_interrupt_table::BindFaultCode;
+use oer_espressif_interrupt_table::BindFaultCode;
 
 /// Stable software diagnostic code; capture never borrows cached reason text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

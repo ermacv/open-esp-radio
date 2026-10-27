@@ -41,7 +41,7 @@ application          credentials, network stack (embassy-net), sockets
                      routing, clocks, power, resets, DMA engines
   PAC                the exact hardware model, generated: blocks, field
                      accessors, value domains, DMA pointers, ownership parts
-platform (firmware/) staged boot, interrupt table, panic record, linker layout
+platform             Espressif staged boot, interrupt table, panic record, linker layout
 ```
 
 Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
@@ -138,6 +138,10 @@ release a secondary hart.
   The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
+- `chips/espressif/interrupt-table` (`oer-espressif-interrupt-table`) owns
+  the Espressif interrupt matrix contract, CLIC encodings, vector ABI and
+  staged-runtime symbol names. Chip crates and firmware use it directly;
+  portable support and protocol cores do not depend on it.
 - A signal's constructor declares its receiving executor entry and all its
   raising contexts. An ordinary `FromHandler` is strictly above that executor,
   or the raiser is a task of a lower context; thread-mode tasks are at level

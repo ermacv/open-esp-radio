@@ -3,7 +3,7 @@
 
 use std::boxed::Box;
 
-use oer_interrupt_table::signal::host::Deferred;
+use oer_espressif_interrupt_table::signal::host::Deferred;
 
 use super::Interrupt;
 use crate::fake::{Irq, Shared};

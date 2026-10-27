@@ -3,7 +3,7 @@ use oer_esp32s31_hal::domain::transaction::{Fault, FaultReason, SarSetupFault, S
 use oer_esp32s31_hal::platform::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmParts};
 use oer_esp32s31_phy::sar_pilot;
 use oer_espressif_executor::InterruptExecutor;
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Controller, Router,
     signal::{FromExecutorLevel, IrqSignal},
 };
@@ -11,10 +11,10 @@ use oer_memory::HandlerCell;
 use static_cell::StaticCell;
 
 type X = InterruptExecutor<2>;
-pub(crate) type Client = sar_pilot::Client<oer_interrupt_table::Bound<crate::PhyToken>, X>;
-type Handler = sar_pilot::Interrupt<oer_interrupt_table::Bound<crate::PhyToken>, X>;
+pub(crate) type Client = sar_pilot::Client<oer_espressif_interrupt_table::Bound<crate::PhyToken>, X>;
+type Handler = sar_pilot::Interrupt<oer_espressif_interrupt_table::Bound<crate::PhyToken>, X>;
 oer_espressif_staged_runtime::placed_static! {
-    static CELLS: StaticCell<sar_pilot::Cells<oer_interrupt_table::Bound<crate::PhyToken>>> = StaticCell::new(), in critical_data "phy_pilot";
+    static CELLS: StaticCell<sar_pilot::Cells<oer_espressif_interrupt_table::Bound<crate::PhyToken>>> = StaticCell::new(), in critical_data "phy_pilot";
     static STATE: StaticCell<Handler> = StaticCell::new(), in critical_data "phy_pilot";
     static HANDLER: HandlerCell<Handler> = HandlerCell::new(), in critical_data "phy_pilot";
     static REPLY: IrqSignal<X> = IrqSignal::new::<FromExecutorLevel<crate::PhyToken>, crate::RadioToken>(), in critical_data "phy_pilot";

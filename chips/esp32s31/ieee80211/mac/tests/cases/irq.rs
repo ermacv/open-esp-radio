@@ -5,7 +5,7 @@ use oer_esp32s31_ieee80211_mac::irq::{
 
 #[test]
 fn split_publication_preserves_all_coalesced_facts_in_vendor_order() {
-    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
+    let mut storage = IrqStorage::new(oer_espressif_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     publisher.publish(
         EVENT_BSS_COLOR_COLLISION | EVENT_TX_TIMEOUT | EVENT_TX_COMPLETE | EVENT_RX_SUCCESS,
@@ -26,7 +26,7 @@ fn split_publication_preserves_all_coalesced_facts_in_vendor_order() {
 
 #[test]
 fn taking_a_finite_batch_does_not_consume_a_later_publication() {
-    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
+    let mut storage = IrqStorage::new(oer_espressif_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     publisher.publish(EVENT_RX_SUCCESS | EVENT_TX_COMPLETE);
     let batch = consumer.take_batch().unwrap();

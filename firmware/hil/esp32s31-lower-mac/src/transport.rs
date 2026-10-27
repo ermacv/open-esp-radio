@@ -63,8 +63,8 @@ pub type Usb = Endpoint<Executor<0>, ConsoleEndpoint>;
 /// Opens the console over the block the early writer retires: the router
 /// moves the interrupt's part to its handler and routes it. The image never
 /// switches the pads, which it keeps.
-pub fn open_usb<C: oer_interrupt_table::Controller>(
-    router: &mut oer_interrupt_table::Router<C>,
+pub fn open_usb<C: oer_espressif_interrupt_table::Controller>(
+    router: &mut oer_espressif_interrupt_table::Router<C>,
     token: crate::ConsoleUsb,
 ) -> Result<(Usb, UsbPads), &'static str> {
     let (endpoint, interrupt, pads) = retire_early_writer().map_err(|_| "console-retire")?;

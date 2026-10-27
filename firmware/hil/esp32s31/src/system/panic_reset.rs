@@ -18,10 +18,10 @@ oer_espressif_executor::tasks! {
 type RtcWatchdog =
     oer_esp32s31_hal::watchdog::ArmedRtcWatchdog<oer_esp32s31_hal::watchdog::RwdtRegisters>;
 
-pub(crate) fn start<C: oer_interrupt_table::Controller>(
+pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
     executor: crate::Executor<0>,
     hart: &oer_espressif_staged_runtime::Hart<{ oer_espressif_staged_runtime::BOOT_HART }>,
-    router: &mut oer_interrupt_table::Router<C>,
+    router: &mut oer_espressif_interrupt_table::Router<C>,
     (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),
     (usb, _pads): (
         crate::transport::Usb,

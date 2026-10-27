@@ -10,7 +10,7 @@ use std::{boxed::Box, vec::Vec};
 
 use embedded_io_async::ErrorType;
 use oer_diagnostics::Note;
-use oer_interrupt_table::signal::host::Host;
+use oer_espressif_interrupt_table::signal::host::Host;
 
 use super::{NoteError, write_note};
 use crate::{

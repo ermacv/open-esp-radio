@@ -11,7 +11,7 @@ use oer_esp32s31_hal::{
     },
     platform::timg0_alarm::{InvalidDelay, Observation, Timg0AlarmInterrupt, Timg0AlarmProgram},
 };
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Bound, Entry,
     signal::{IrqSignal, SignalExecutor},
 };
@@ -131,7 +131,7 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> UnboundC
         const {
             assert!(matches!(
                 I::CLASS,
-                oer_interrupt_table::Class::ExemptExecutorLevel
+                oer_espressif_interrupt_table::Class::ExemptExecutorLevel
             ));
         }
         self.into_client(bound)

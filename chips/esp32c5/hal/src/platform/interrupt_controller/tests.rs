@@ -2,7 +2,7 @@ use std::vec;
 use std::vec::Vec;
 
 use oer_esp32c5_pac::platform::{Clic, InterruptCore0, clic, interrupt_core0};
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Binding, Class, Controller, Error, LineState, Lines, Router, Table, Trigger, line_control,
 };
 use oer_mmio::{Bits, Host, Index, InterruptSource};
@@ -242,7 +242,7 @@ const LINES: Lines = Lines {
     harts: 1,
 };
 
-oer_interrupt_table::interrupt_table! {
+oer_espressif_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];
     mac: MacToken = MacIrq => on_mac, line 20, level 3, hart 0, Hardware;

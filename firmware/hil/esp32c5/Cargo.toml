@@ -33,7 +33,7 @@ oer-espressif-staged-runtime = { workspace = true, features = ["esp32c5"] }
 oer-esp32c5-board.workspace = true
 oer-espressif-usb-serial-jtag.workspace = true
 embedded-io-async = "0.7.0"
-oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-executor = { workspace = true, features = ["esp32c5"] }
 critical-section = { workspace = true, optional = true }

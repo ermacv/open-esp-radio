@@ -6,7 +6,7 @@ use oer_esp32s31_pac::{
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
 };
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Binding, Class, Controller, Error, LineState, Router, Table, Trigger, line_control,
 };
 use oer_mmio::{Bits, Host, Index, InterruptSource};
@@ -424,7 +424,7 @@ impl InterruptSource for WakeIrq {
 
 pub fn on_wake(_: &mut WakeIrq) {}
 
-oer_interrupt_table::interrupt_table! {
+oer_espressif_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];
     contexts { radio: 3; }

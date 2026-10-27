@@ -33,7 +33,7 @@ oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31", "port-slots"] }
 oer-espressif-usb-serial-jtag.workspace = true
 oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }

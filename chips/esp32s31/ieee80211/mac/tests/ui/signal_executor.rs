@@ -1,5 +1,5 @@
 #![no_std]
-use oer_interrupt_table::signal::{IrqSignal, SignalExecutor};
+use oer_espressif_interrupt_table::signal::{IrqSignal, SignalExecutor};
 
 fn accept<E: SignalExecutor>(_: &'static IrqSignal<E>) {}
 

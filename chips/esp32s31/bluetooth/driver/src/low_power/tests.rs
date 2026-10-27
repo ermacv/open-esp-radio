@@ -7,11 +7,11 @@ use crate::{
 };
 
 fn scheduler(
-    cells: &ControllerEventCells<oer_interrupt_table::signal::host::Deferred>,
+    cells: &ControllerEventCells<oer_espressif_interrupt_table::signal::host::Deferred>,
 ) -> SchedulerInitialized<
     '_,
     4,
-    oer_interrupt_table::signal::host::Deferred,
+    oer_espressif_interrupt_table::signal::host::Deferred,
     crate::test_clocks::ModelMemory,
 > {
     let (_shared, partitions) = RadioHardware::for_host_test()

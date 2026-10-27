@@ -4,7 +4,7 @@
 
 use core::marker::PhantomData;
 
-use oer_interrupt_table::signal::{IrqSignal, SignalExecutor};
+use oer_espressif_interrupt_table::signal::{IrqSignal, SignalExecutor};
 
 use crate::{Events, InterruptRegisters};
 
@@ -21,14 +21,17 @@ pub struct Interrupt<E: SignalExecutor, R> {
 
 impl<E: SignalExecutor, R: InterruptRegisters> Interrupt<E, R> {
     pub const fn new<
-        Source: oer_interrupt_table::Entry<Part = R>,
-        Target: oer_interrupt_table::Entry,
+        Source: oer_espressif_interrupt_table::Entry<Part = R>,
+        Target: oer_espressif_interrupt_table::Entry,
     >() -> Self
     where
-        Target::Part: oer_interrupt_table::InterruptSource,
+        Target::Part: oer_espressif_interrupt_table::InterruptSource,
     {
         Self {
-            signal: IrqSignal::new::<oer_interrupt_table::signal::FromHandler<Source>, Target>(),
+            signal: IrqSignal::new::<
+                oer_espressif_interrupt_table::signal::FromHandler<Source>,
+                Target,
+            >(),
             registers: PhantomData,
         }
     }

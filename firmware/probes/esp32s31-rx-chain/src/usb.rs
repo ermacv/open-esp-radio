@@ -6,8 +6,8 @@ use oer_esp32s31_hal::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
+use oer_espressif_interrupt_table::{Controller, Router};
 use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
-use oer_interrupt_table::{Controller, Router};
 
 /// The console's endpoint, polled by the core-0 executor's task.
 pub(crate) type Console = Endpoint<Executor<0>, ConsoleEndpoint>;

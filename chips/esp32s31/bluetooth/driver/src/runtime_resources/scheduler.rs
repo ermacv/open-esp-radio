@@ -3,7 +3,7 @@
 use super::ControllerPoweredTaskRuntime;
 use crate::{interrupt::SchedulerWakeBatch, scheduler::SchedulerFinishedListCaptureError};
 use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_espressif_interrupt_table::signal::SignalExecutor;
 impl<X: SignalExecutor, M: ControllerMemory> ControllerPoweredTaskRuntime<'_, X, M> {
     /// Capture one fenced finished-list transfer into this epoch's worker.
     pub fn capture_scheduler_finished_lists(

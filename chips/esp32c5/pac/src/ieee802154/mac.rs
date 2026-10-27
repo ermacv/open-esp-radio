@@ -32,7 +32,7 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort, execute_interrupt_arming,
     execute_interrupt_deactivation,
 };
-use oer_interrupt_table::EventAuthority;
+use oer_espressif_interrupt_table::EventAuthority;
 use oer_mmio::InterruptSource;
 
 /// The shared observation of one chip `EVENT_ENABLE` or `EVENT_STATUS`
@@ -1225,7 +1225,7 @@ impl Ieee802154TaskRegisters {
     /// ([`Ieee802154InterruptSetup::arm`]), and order the write: from here
     /// the MAC raises its interrupt. `authority` proves that a handler holds
     /// a part of the MAC's source or that no line receives it
-    /// ([`oer_interrupt_table::Bound`], [`oer_interrupt_table::Silent`]).
+    /// ([`oer_espressif_interrupt_table::Bound`], [`oer_espressif_interrupt_table::Silent`]).
     ///
     /// ```compile_fail,E0061
     /// fn enable(task: &mut oer_esp32c5_pac::Ieee802154TaskRegisters) {
@@ -1235,7 +1235,7 @@ impl Ieee802154TaskRegisters {
     /// ```
     ///
     /// ```compile_fail,E0080
-    /// # use oer_interrupt_table::Bound;
+    /// # use oer_espressif_interrupt_table::Bound;
     /// struct OtherIrq;
     /// impl oer_mmio::InterruptSource for OtherIrq {
     ///     const SOURCE: u16 = 3;

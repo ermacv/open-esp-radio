@@ -31,8 +31,8 @@ use oer_espressif_executor::{
     Doorbell, DoorbellAcknowledger, InterruptExecutor,
     poll_timing::{CycleSource, Mcycle},
 };
-use oer_interrupt_table::InterruptSource;
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::InterruptSource;
+use oer_espressif_interrupt_table::{
     Bound as Binding,
     signal::{FromHandler, FromTask, IrqSignal},
 };
@@ -107,7 +107,7 @@ pub fn on_wifi(part: &mut WifiPart) {
         measure::raise(&RING_TO_DOORBELL_MAX, Mcycle.now().wrapping_sub(rung));
     }
     let hart = oer_esp32s31_hal::platform::Hart::constant::<
-        { <crate::WifiToken as oer_interrupt_table::Entry>::HART as usize },
+        { <crate::WifiToken as oer_espressif_interrupt_table::Entry>::HART as usize },
     >();
     let mac = Platform::is_pending(hart, MacInterruptRegisters::SOURCE);
     let power = Platform::is_pending(hart, MacPowerInterruptRegisters::SOURCE);
@@ -138,15 +138,15 @@ pub fn radio_executor(part: &mut FromCpu2Irq) {
 
 /// The radio doorbell, its ring stamped.
 pub struct ImageDoorbell<
-    E: oer_interrupt_table::Entry = crate::WifiToken,
-    X: oer_interrupt_table::Entry = crate::RadioToken,
+    E: oer_espressif_interrupt_table::Entry = crate::WifiToken,
+    X: oer_espressif_interrupt_table::Entry = crate::RadioToken,
 >(pub Doorbell<3, E, X>);
 
-impl<E: oer_interrupt_table::Entry, X: oer_interrupt_table::Entry> RadioDoorbell
+impl<E: oer_espressif_interrupt_table::Entry, X: oer_espressif_interrupt_table::Entry> RadioDoorbell
     for ImageDoorbell<E, X>
 {
-    const HANDLER: oer_interrupt_table::Context = Doorbell::<3, E, X>::HANDLER;
-    const EXECUTOR: oer_interrupt_table::Context = Doorbell::<3, E, X>::EXECUTOR;
+    const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<3, E, X>::HANDLER;
+    const EXECUTOR: oer_espressif_interrupt_table::Context = Doorbell::<3, E, X>::EXECUTOR;
     fn ring(&self) {
         // The handler takes the stamp; a ring before it took the last one
         // keeps the earlier stamp.

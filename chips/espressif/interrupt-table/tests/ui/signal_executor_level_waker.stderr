@@ -1,0 +1,25 @@
+error[E0080]: evaluation panicked: a same-level signal handler must have class Exempt(ExecutorLevel)
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `<oer_espressif_interrupt_table::signal::FromExecutorLevel<IrqToken> as oer_espressif_interrupt_table::signal::Raisers>::CONTEXTS` failed here
+  |
+ ::: src/signal/binding.rs
+  |
+  | /         assert!(
+  | |             matches!(E::CLASS, Class::ExemptExecutorLevel),
+  | |             "a same-level signal handler must have class Exempt(ExecutorLevel)"
+  | |         );
+  | |_________- in this macro invocation
+
+note: erroneous constant encountered
+ --> src/signal.rs
+  |
+  |         const { R::CONTEXTS.check(binding::executor_context::<E, Target>()) };
+  |                 ^^^^^^^^^^^
+
+note: erroneous constant encountered
+ --> src/signal.rs
+  |
+  |         const { R::CONTEXTS.check(binding::executor_context::<E, Target>()) };
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

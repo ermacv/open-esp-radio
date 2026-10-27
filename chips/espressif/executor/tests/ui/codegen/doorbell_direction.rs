@@ -1,12 +1,12 @@
-use oer_interrupt_table::Bound;
-oer_interrupt_table::__fake_parts!();
+use oer_espressif_interrupt_table::Bound;
+oer_espressif_interrupt_table::__fake_parts!();
 include!("support/doorbell.rs");
 
 pub fn on_timer(_: &mut TimerIrq) {}
 pub fn on_radio(_: &mut RadioIrq) {}
 macro_rules! table {
     ($requester_level:literal) => {
-        oer_interrupt_table::interrupt_table! {
+        oer_espressif_interrupt_table::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { radio: 3; executor: $requester_level; }

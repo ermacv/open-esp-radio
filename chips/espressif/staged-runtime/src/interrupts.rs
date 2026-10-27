@@ -1,12 +1,12 @@
 //! The image's interrupt table: [`interrupt_table!`](crate::interrupt_table)
-//! declares it; the hart's [`Router`](oer_interrupt_table::Router) binds its
+//! declares it; the hart's [`Router`](oer_espressif_interrupt_table::Router) binds its
 //! entries, and the runtime's vectors call each entry's handler directly.
 
 /// The CPU lines of the chip's CLIC and its harts, generated from the chip
 /// facts' interrupt contract (`[interrupts] lines`, `first-source-line`,
 /// `control-bits`, `level-bits` and `harts`).
 #[cfg(feature = "esp32s31")]
-pub const LINES: oer_interrupt_table::Lines = crate::vectors::LINES;
+pub const LINES: oer_espressif_interrupt_table::Lines = crate::vectors::LINES;
 
 /// Declare the image's interrupt table, once per image, and hand its
 /// `INTERRUPT_TABLE` to [`Handoff::adopt`](crate::Handoff::adopt):
@@ -24,7 +24,7 @@ pub const LINES: oer_interrupt_table::Lines = crate::vectors::LINES;
 /// handler holds (its type names the source:
 /// [`oer_mmio::InterruptSource`]), the handler (`fn(&mut Part)`), the CPU
 /// line ([`LINES`]: 16 to 47), a named context, the hart and the handler's class
-/// (`oer_interrupt_table::Class`: `Hardware`, `Executor` or
+/// (`oer_espressif_interrupt_table::Class`: `Hardware`, `Executor` or
 /// `Exempt(VIOLATION, "reason")`), which the image gate checks. The macro
 /// checks the declared low-to-high line order at each level against the
 /// facts' tie-break rule and defines the line's handler symbol, which the line's vector calls, the
@@ -43,7 +43,9 @@ macro_rules! interrupt_table {
 /// Retain a binding refusal or invariant fault and reset with every setup,
 /// handler and interrupted owner held. No owner recovery or retry is issued.
 #[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
-pub fn reset_binding<E: oer_interrupt_table::Entry>(error: oer_interrupt_table::BindError<E>) -> ! {
+pub fn reset_binding<E: oer_espressif_interrupt_table::Entry>(
+    error: oer_espressif_interrupt_table::BindError<E>,
+) -> ! {
     let held = core::mem::ManuallyDrop::new(error);
     let (code, observations) = held.diagnostic();
     crate::panic::reset_fault(code.into(), observations)

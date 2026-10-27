@@ -777,7 +777,7 @@ fn physical_duration_admission_enforces_the_retained_scales_half_range() {
 #[test]
 fn counted_time_survives_n_overflows_without_live_samples_or_p2_dequeues() {
     use crate::interrupt::{PrimaryInterruptCapture, SchedulerWakeCell};
-    use oer_interrupt_table::signal::host;
+    use oer_espressif_interrupt_table::signal::host;
     use oer_time::{Clock, Duration, Instant};
     use oer_time_virtual::VirtualClock;
     let clock = VirtualClock::<1>::starting_at(Instant::EPOCH);

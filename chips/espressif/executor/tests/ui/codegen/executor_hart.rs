@@ -1,12 +1,12 @@
 #[path = "__HART_BINDING__"]
 mod hart_binding;
 
-oer_interrupt_table::__fake_parts!();
+oer_espressif_interrupt_table::__fake_parts!();
 pub fn on_wake(_: &mut RadioIrq) {}
 
 macro_rules! table {
     ($hart:literal) => {
-        oer_interrupt_table::interrupt_table! {
+        oer_espressif_interrupt_table::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { executor: 1; }

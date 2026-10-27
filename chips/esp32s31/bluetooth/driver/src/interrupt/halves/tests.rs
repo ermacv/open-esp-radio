@@ -1,14 +1,14 @@
 use super::*;
 use core::{cell::Cell, task::Waker};
-use oer_interrupt_table::signal::host;
+use oer_espressif_interrupt_table::signal::host;
 use std::boxed::Box;
 
 struct Bell(Cell<usize>);
 impl RadioDoorbell for Bell {
-    const HANDLER: oer_interrupt_table::Context =
-        oer_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_interrupt_table::Context =
-        oer_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_espressif_interrupt_table::Context =
+        oer_espressif_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_espressif_interrupt_table::Context =
+        oer_espressif_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.0.set(self.0.get() + 1);
     }

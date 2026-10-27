@@ -7,7 +7,7 @@ use oer_esp32s31_ieee80211_driver::{
 };
 use oer_esp32s31_ieee80211_mac::tx::TxSlot;
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Bound,
     signal::{FromHandler, FromTask, IrqSignal},
 };
@@ -81,15 +81,15 @@ pub fn on_wifi(part: &mut WifiPart) {
 
 /// The radio doorbell's ringing half.
 pub struct ImageDoorbell<
-    E: oer_interrupt_table::Entry = crate::WifiToken,
-    X: oer_interrupt_table::Entry = crate::RadioToken,
+    E: oer_espressif_interrupt_table::Entry = crate::WifiToken,
+    X: oer_espressif_interrupt_table::Entry = crate::RadioToken,
 >(pub Doorbell<3, E, X>);
 
-impl<E: oer_interrupt_table::Entry, X: oer_interrupt_table::Entry> RadioDoorbell
+impl<E: oer_espressif_interrupt_table::Entry, X: oer_espressif_interrupt_table::Entry> RadioDoorbell
     for ImageDoorbell<E, X>
 {
-    const HANDLER: oer_interrupt_table::Context = Doorbell::<3, E, X>::HANDLER;
-    const EXECUTOR: oer_interrupt_table::Context = Doorbell::<3, E, X>::EXECUTOR;
+    const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<3, E, X>::HANDLER;
+    const EXECUTOR: oer_espressif_interrupt_table::Context = Doorbell::<3, E, X>::EXECUTOR;
     fn ring(&self) {
         self.0.ring();
     }

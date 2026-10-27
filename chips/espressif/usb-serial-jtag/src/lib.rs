@@ -25,9 +25,9 @@
 //! [`Interrupt`]: the handler, which holds the interrupt's registers as its
 //! table entry's part, reads the pending events, acknowledges exactly those
 //! and raises the endpoint's static
-//! [`IrqSignal`](oer_interrupt_table::signal::IrqSignal); it calls no
+//! [`IrqSignal`](oer_espressif_interrupt_table::signal::IrqSignal); it calls no
 //! waker, and the interrupt enables belong to the task, which sets them once
-//! with the part's [`EventAuthority`](oer_interrupt_table::EventAuthority),
+//! with the part's [`EventAuthority`](oer_espressif_interrupt_table::EventAuthority),
 //! so the two share no register and no lock. A fatal path takes only a free
 //! block, for good, and never one the driver or an early record holds.
 
@@ -79,7 +79,7 @@ impl Events {
 /// the interrupt enables.
 pub trait EndpointRegisters {
     /// The interrupt part whose binding or silence permits event enablement.
-    type Interrupt: oer_interrupt_table::InterruptSources;
+    type Interrupt: oer_espressif_interrupt_table::InterruptSources;
 
     /// Whether the IN FIFO has room for a byte. After [`send`](Self::send)
     /// it has none until the host read the packet.
@@ -97,7 +97,7 @@ pub trait EndpointRegisters {
     /// proof that this part is bound to its handler or remains silent.
     fn enable_events(
         &mut self,
-        authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+        authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
     );
 }
 

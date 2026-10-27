@@ -84,7 +84,7 @@ const BELOW_THE_BOUNDARY: &[&str] = &[
     "portable/memory",
     "portable/mmio",
     "portable/riscv",
-    "portable/interrupt-table",
+    "chips/espressif/interrupt-table",
     "tools/os/process",
     "tools/os/serial",
     "tools/vendor/ieee802154-esp32s31",

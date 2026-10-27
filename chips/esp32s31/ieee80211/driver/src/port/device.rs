@@ -22,7 +22,7 @@ use oer_esp32s31_ieee80211_mac::{
     rx::pool::NetworkRxFrame,
 };
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_espressif_interrupt_table::signal::SignalExecutor;
 use oer_memory::HandlerCell;
 use oer_radio_regulatory::{PowerLimits, RegulatoryDomain};
 
@@ -83,7 +83,7 @@ struct Active<W> {
 
 /// The image supplies one hardware partition, actor cell, static RX arena,
 /// the router's proof that the image binds the radio handler's part (`V`,
-/// a [`Bound`](oer_interrupt_table::Bound) of a
+/// a [`Bound`](oer_espressif_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)) and the doorbell.
 /// Every one stays with this task-side owner.
 pub struct RadioDevice<

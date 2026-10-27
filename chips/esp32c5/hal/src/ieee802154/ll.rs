@@ -42,7 +42,7 @@ use oer_espressif_ieee802154_engine::{
         Ieee802154TxAbortReasonObservation,
     },
 };
-use oer_interrupt_table::Silent;
+use oer_espressif_interrupt_table::Silent;
 
 use crate::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
 
@@ -306,7 +306,7 @@ fn mac_pti(pti: CoexPti) -> PacPti {
 /// ```no_run
 /// use oer_esp32c5_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
 /// use oer_esp32c5_hal::platform::InterruptController;
-/// use oer_interrupt_table::Router;
+/// use oer_espressif_interrupt_table::Router;
 /// fn poll(
 ///     router: &Router<InterruptController>,
 ///     mut task: Ieee802154TaskOwner,
@@ -338,7 +338,7 @@ pub struct Ieee802154MacOwners {
 impl Ieee802154MacOwners {
     /// Hold the task owner with the interrupt owner it armed and the proof
     /// that no line receives the MAC's source
-    /// (`oer_interrupt_table::Router::silent`).
+    /// (`oer_espressif_interrupt_table::Router::silent`).
     pub const fn new(
         task: Ieee802154TaskOwner,
         interrupts: Ieee802154InterruptOwner,

@@ -10,7 +10,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
+use oer_espressif_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothModemLpTimerEpoch, BluetoothModemLpTimerInstant, ModemLpTimerHandlerRegisterStep,

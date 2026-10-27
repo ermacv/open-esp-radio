@@ -46,7 +46,7 @@ use oer_ieee80211_wire::{
     scan::parse_management,
     sequence::SequenceNumber,
 };
-use oer_interrupt_table::Bound;
+use oer_espressif_interrupt_table::Bound;
 use oer_memory::AffineSpscSender;
 use oer_radio_regulatory::{Country, Initiate, RegulatoryDomain, TxCeiling};
 use oer_time::{Clock, Duration, Instant, Timer};

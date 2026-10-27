@@ -28,15 +28,15 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   network/      the network stack boundary
   hil/          the HIL protocol and its trace header
 portable/   generic support no protocol or chip owns (no_std)
-  time/ time-virtual/ memory/ sync/ trace/ interrupt-table/ wire/
+  time/ time-virtual/ memory/ sync/ trace/ wire/
   riscv/        architectural RISC-V constants and instructions
   embassy/      bindings to Embassy (time, net)
   hil-agent/    the agent core the HIL images run
 chips/      everything about Espressif hardware
   espressif/    IP shared by Espressif chips: analog, modem
                 clock, coexistence, the 802.15.4 engine, Wi-Fi policy, the
-                staged boot (bootstrap, runtime, layout), executor,
-                the chip facts model (facts/) and the
+                staged boot (bootstrap, runtime, layout), interrupt table,
+                executor, the chip facts model (facts/) and the
                 family and ISA fact layers (platform/); registers/ and notes/
                 shared by the chips
   esp32s31/ esp32c5/   (esp32c5 lies outside the Cargo workspace and CI)
@@ -69,6 +69,10 @@ Chip knowledge (tables, constants, pure functions about a chip) lives in
 `chips/`, beside the hardware access it describes; a host tool that needs a
 chip fact takes it from a crate that does not touch hardware
 (`chips/esp32s31/knowledge`) and never links a HAL.
+
+`chips/espressif/interrupt-table` owns the Espressif interrupt matrix,
+CLIC encodings, vector ABI and staged-runtime symbols. Its package is
+`oer-espressif-interrupt-table`; its consumers are chip crates and firmware.
 
 ## A protocol: wire, port, cores, backends
 

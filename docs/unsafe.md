@@ -84,11 +84,17 @@ C5 code lies outside the workspace and its checks:
 | --- | --- |
 | Volatile register words and their claim | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32s31/pac`, `chips/esp32s31/hal` |
-| Platform, executor and architectural instructions | `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `portable/riscv` |
-| Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
+| Platform, interrupt bindings, executor and architectural instructions | `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/interrupt-table`, `chips/espressif/executor`, `portable/riscv` |
+| Cores of memory the hardware shares | `portable/memory`, `chips/espressif/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
 | Bootstrap and probe images | `firmware/bootstrap/`, `firmware/probes/` |
+
+`oer-espressif-interrupt-table` owns the Espressif interrupt matrix contract,
+CLIC encodings, vector ABI and staged-runtime symbols. Its narrow unsafe
+contracts cover unique entry tokens, handler-part storage, signal execution
+contexts and exported symbols. It depends on the memory and MMIO cores;
+chip crates and firmware consume its bindings directly.
 
 ## Generated access and trusted handwritten code
 
