@@ -348,7 +348,7 @@ sources = ["BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
 sources = ["BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
 
 [review.entity."WORD_010C_OPAQUE.BIT_26_OPAQUE"]
-sources = ["BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
+sources = ["BX4_S31_LP_SLEEP0_OBSERVERS_20261027", "HW29_S31_LP_SLEEP_20261027"]
 
 [[registers]]
 name = "WORD_010C_OPAQUE"
@@ -359,4 +359,4 @@ description = "Sleep-disable checks bit26 before the sleep0 disable helper. No c
 name = "BIT_26_OPAQUE"
 bits = "26"
 class = "read-only"
-description = "Selected assertion input in the sleep-disable path; physical meaning unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."
+description = "Selected assertion input in the sleep-disable path; physical meaning unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027. At divider399, sourced sleep0 enable/disable command pairs changed this input0->1->0, qualifying commanded state only, not completion SOURCE: HW29_S31_LP_SLEEP_20261027."

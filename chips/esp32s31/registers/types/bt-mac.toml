@@ -229,10 +229,10 @@ sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT", "HW2_S31_BLE_INHERITED_20261026", "HW9_S31_MAC_CAUSES_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW27_S31_BTLC_NATURAL_20261027"]
 
 [review.entity."IRQ_ENABLE_1.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027", "HW29_S31_BANK1_RETENTION_20261027"]
 
 [review.entity."IRQ_ENABLE_1.BIT_2_OPAQUE"]
-sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027", "HW29_S31_BANK1_RETENTION_20261027"]
 
 [review.entity."IRQ_ENABLE_1.BIT_7_OPAQUE"]
 sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
@@ -2206,13 +2206,13 @@ class = "plain"
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "plain"
-description = "Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands."
+description = "Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands. On s31-a, a separately seeded enable survived the reviewed primary baseline/dynamic clear, enable and mask stores and the classic unchanged-image init/deinit stores. This proves retention for these stores only, without a producer, reset or output equation SOURCE: HW29_S31_BANK1_RETENTION_20261027."
 
 [[registers.fields]]
 name = "BIT_2_OPAQUE"
 bits = "2"
 class = "plain"
-description = "Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands."
+description = "Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands. On s31-a, a separately seeded enable survived the reviewed primary baseline/dynamic clear, enable and mask stores and the classic unchanged-image init/deinit stores. This proves retention for these stores only, without a producer, reset or output equation SOURCE: HW29_S31_BANK1_RETENTION_20261027."
 
 [[registers.fields]]
 name = "BIT_7_OPAQUE"

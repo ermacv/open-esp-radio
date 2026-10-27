@@ -1101,7 +1101,7 @@ instance = "MODEM_ETM"
 elements = [{ register = "CH%s_EVENT", first = 4, count = 4 }, { register = "CH%s_TASK", first = 4, count = 4 }]
 triggers = [{ register = "CHANNEL_ENABLE_SET", fields = ["CH4", "CH5", "CH6", "CH7", "BIT_11_OPAQUE"] }, { register = "CHANNEL_ENABLE_CLEAR", fields = ["CH4", "CH5", "CH6", "CH7"] }]
 description = "The Bluetooth runtime's event channels four through seven and their bits of the write-trigger set and clear words."
-sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027", "HW29_S31_LP_SLEEP_20261027"]
 registers = ["WORD_010C_OPAQUE", "WORD_0110_OPAQUE", "WORD_0114_OPAQUE"]
 
 [[partitions]]
