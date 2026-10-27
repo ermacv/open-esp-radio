@@ -29227,7 +29227,7 @@ pub mod bt_mac {
 
     /// The `INTERRUPT_ENABLE` register.
     ///
-    /// BLE base-stack interrupt enable bank at +0x4b4, distinct from primary IRQ_ENABLE_0/1. BLE PHY initialization preserves only inherited source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here; its paired disable masks only 14 and preserves all other enables in that store. Common primary baseline/dynamic mask leaves do not write this word. No all-task-output-low effect follows. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027; BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. All omitted source identities remain unknown.
+    /// BLE base-stack interrupt enable bank at +0x4b4, distinct from primary IRQ_ENABLE_0/1. BLE PHY initialization preserves only inherited source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here; its paired disable masks only 14 and preserves all other enables in that store. Common primary baseline/dynamic mask leaves do not write this word. These observations do not establish whether the complete release transaction lowers every task interrupt output. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027; BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. All omitted source identities remain unknown.
     pub mod interrupt_enable {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -29283,7 +29283,7 @@ pub mod bt_mac {
                 (self.0 & 0x00004000) != 0
             }
 
-            /// BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask debug helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027.
+            /// BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027.
             #[inline]
             pub const fn source_17(self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -29318,7 +29318,7 @@ pub mod bt_mac {
                 (self.0 & 0x00004000) != 0
             }
 
-            /// BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask debug helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027.
+            /// BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027.
             #[inline]
             pub const fn source_17(&self) -> bool {
                 (self.0 & 0x00020000) != 0
