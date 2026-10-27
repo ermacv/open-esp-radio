@@ -52,6 +52,43 @@ kind = "git"
 repository = "https://github.com/espressif/esp-idf"
 revision = "4d59230ddff16327812782151ef0afef202dc6d7"
 
+# Additional upstream revisions use dated IDs; existing IDs retain their pins.
+[[source]]
+id = "esp32-wifi-lib-20261027"
+kind = "git"
+repository = "https://github.com/espressif/esp32-wifi-lib"
+revision = "f856b5db55cb18e2d1826044430f3f4089e47cf9"
+
+[[source]]
+id = "esp32s31-bt-lib-20261027"
+kind = "git"
+repository = "https://github.com/espressif/esp32s31-bt-lib"
+revision = "7a85006f35f6839ae7ea5adee16e68a757759196"
+
+[[source]]
+id = "esp-coex-lib-20261027"
+kind = "git"
+repository = "https://github.com/espressif/esp-coex-lib"
+revision = "fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9"
+
+[[source]]
+id = "esp-idf-20261027"
+kind = "git"
+repository = "https://github.com/espressif/esp-idf"
+revision = "4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d"
+
+[[source]]
+id = "esp-idf-phy-20261027"
+kind = "git"
+repository = "https://github.com/espressif/esp-idf"
+revision = "4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d"
+
+[[source]]
+id = "esp-idf-clocks-20261027"
+kind = "git"
+repository = "https://github.com/espressif/esp-idf"
+revision = "4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d"
+
 # ESP-IDF's `esp_phy` component at the same revision, read for the vendor PHY
 # path (enable, tracking and modem retention) and compiled by no host
 # comparison; kept apart from the IEEE 802.15.4 sources. Its prebuilt library
