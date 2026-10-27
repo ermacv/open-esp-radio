@@ -238653,6 +238653,15 @@ pub mod timg {
                 .write::<0x0>((self.0.read::<0x0>() & 0x00000bff) | 0x40051000);
         }
 
+        /// Apply the fixed configuration `0x40051400`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
+        #[inline]
+        pub fn configure_timg0_timer0_stopped_alarm(&mut self) {
+            self.0
+                .write::<0x0>((self.0.read::<0x0>() & 0x00000bff) | 0x40051400);
+        }
+
         /// Apply the fixed configuration `0xc0051000`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
         ///
         /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.

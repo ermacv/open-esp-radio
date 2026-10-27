@@ -2836,6 +2836,12 @@ value = 0x40051000
 sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
 
 [[fixed-register-images]]
+name = "configure_timg0_timer0_stopped_alarm"
+register = "TIMG0.T0CONFIG"
+value = 0x40051400
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[fixed-register-images]]
 name = "configure_timg0_timer0_counting"
 register = "TIMG0.T0CONFIG"
 value = 0xc0051000
