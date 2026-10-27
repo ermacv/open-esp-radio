@@ -2620,3 +2620,147 @@ fn referenced_ranges_bound_writes_and_cannot_be_shifted_or_redeclared() -> TestR
     assert!(matches!(kind_of(&fixture)?, ErrorKind::WriteConstraint(_)));
     Ok(())
 }
+
+fn register_image_read(register: &str) -> String {
+    format!(
+        "\n[[register-image-reads]]\nname = \"read_image\"\nregister = \"{register}\"\nsources = [\"SRC_DRIVER\"]\n"
+    )
+}
+
+#[test]
+fn register_image_read_accepts_split_fields_on_the_existing_owner() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(&register_image_read("TIMER0.CONFIG"))?;
+    assert_eq!(
+        fixture.load()?.owner("read_image"),
+        Some(PartId {
+            partition: 0,
+            part: 0
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn register_image_read_rejects_side_effects_and_unreadable_words() -> TestResult {
+    for register in ["TIMER0.FIFO", "TIMER0.LOAD", "TIMER0.WO", "TIMER0.STATE"] {
+        let fixture = Fixture::new()?;
+        fixture.append(&register_image_read(register))?;
+        assert!(
+            matches!(kind_of(&fixture)?, ErrorKind::Register(_)),
+            "{register}"
+        );
+    }
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"CONFIG\"\noffset = 0x00",
+            "name = \"CONFIG\"\noffset = 0x00\nread-side-effect = { sources = [\"SRC_HEADER\"] }",
+        )?
+        .append(&register_image_read("TIMER0.CONFIG"))?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Register(_)));
+    Ok(())
+}
+
+#[test]
+fn register_image_read_rejects_templates_and_unclaimed_words() -> TestResult {
+    for (register, unclaimed) in [("TIMER0.ALARM_%s", false), ("TIMER2.VALUE", true)] {
+        let fixture = Fixture::new()?;
+        fixture.append(&register_image_read(register))?;
+        let error = kind_of(&fixture)?;
+        assert!(
+            if unclaimed {
+                matches!(error, ErrorKind::ReachesUnclaimed(_))
+            } else {
+                matches!(error, ErrorKind::Transaction(_))
+            },
+            "{register}: {error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn register_image_read_requires_evidence_and_a_unique_name() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(&register_image_read("TIMER0.CONFIG").replace("SRC_DRIVER", "MISSING"))?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::UnknownSource(_)));
+    let fixture = Fixture::new()?;
+    fixture
+        .append(&register_image_read("TIMER0.CONFIG"))?
+        .append(&register_image_read("TIMER0.VALUE"))?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Duplicate(_)));
+    Ok(())
+}
+
+#[test]
+fn register_image_read_rejects_write_one_to_clear_word() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(&register_image_read("TIMER0.INT_CLR"))?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "read_image");
+    assert!(
+        matches!(error.kind, ErrorKind::WriteOneToClear(_)),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn register_image_read_rejects_each_nonobservational_lane_in_a_mixed_word() -> TestResult {
+    for class in [
+        "write-trigger",
+        "write-one-to-clear",
+        "write-only",
+        "unknown",
+    ] {
+        let fixture = whole_word_bits("")?;
+        fixture
+            .remove("zero-based-field-writes", "write_timer0_key")?
+            .edit(
+                "types/timer.toml",
+                "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"",
+                &format!("name = \"KEY\"\nbits = \"7:0\"\nclass = \"{class}\""),
+            )?;
+        // The word and its ordinary read-only neighbour are valid before
+        // requesting a whole-word observation.
+        fixture.load()?;
+        fixture.append(&register_image_read("TIMER0.WO"))?;
+        let error = fixture.rejection()?;
+        assert_eq!(error.entity, "read_image");
+        assert!(
+            matches!(
+                error.kind,
+                ErrorKind::FieldClass(_) | ErrorKind::WriteOneToClear(_)
+            ),
+            "{class}: {error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn register_image_read_accepts_each_defined_observational_class() -> TestResult {
+    for class in [
+        "plain",
+        "read-only",
+        "read-observed",
+        "set-only",
+        "self-clearing",
+        "hardware-written",
+        "debug-only",
+    ] {
+        let fixture = whole_word_bits("")?;
+        fixture
+            .remove("zero-based-field-writes", "write_timer0_key")?
+            .edit(
+                "types/timer.toml",
+                "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"",
+                &format!("name = \"KEY\"\nbits = \"7:0\"\nclass = \"{class}\""),
+            )?
+            .append(&register_image_read("TIMER0.WO"))?;
+        fixture.load()?;
+    }
+    Ok(())
+}

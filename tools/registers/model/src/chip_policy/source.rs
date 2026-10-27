@@ -36,6 +36,8 @@ pub struct PolicyFile {
     #[serde(default)]
     pub full_register_reads: Vec<FullRegisterRead>,
     #[serde(default)]
+    pub register_image_reads: Vec<RegisterImageRead>,
+    #[serde(default)]
     pub partition_image_reads: Vec<PartitionImageRead>,
     #[serde(default)]
     pub full_register_writes: Vec<FullRegisterWrite>,
@@ -306,6 +308,16 @@ pub struct FullRegisterRead {
     /// `INSTANCE.REGISTER.FIELD`.
     pub field: String,
     pub domain: String,
+    pub sources: Vec<String>,
+}
+
+/// One side-effect-free 32-bit register, whole and undecoded.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RegisterImageRead {
+    pub name: String,
+    /// `INSTANCE.REGISTER`: one element, irrespective of its field split.
+    pub register: String,
     pub sources: Vec<String>,
 }
 
