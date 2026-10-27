@@ -22,7 +22,10 @@ use oer_vendor_phy::calibration_capture::boots::{
 };
 use oer_vendor_phy::calibration_capture::space::Register;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 
 mod initial_pair;
 pub use initial_pair::{InitialPairMatch, PairMatchReason};
@@ -39,9 +42,15 @@ pub(crate) const TOLERANCES: &str = include_str!("tolerances.toml");
 
 /// The reviews file: every name carries one review, or several whose
 /// lifecycle points differ.
+#[derive(Clone)]
+pub struct ReviewFile {
+    fields: BTreeMap<String, Reviews>,
+    registers: BTreeMap<String, Reviews>,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ReviewFile {
+struct ReviewDocument {
     schema: u16,
     #[serde(default)]
     fields: BTreeMap<String, Reviews>,
@@ -51,7 +60,7 @@ pub struct ReviewFile {
     registers: BTreeMap<String, Reviews>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(untagged)]
 enum Reviews {
     One(Tolerance),
@@ -91,9 +100,6 @@ impl ReviewFile {
     /// The reviews that apply at `lifecycle`: a review without a point, or
     /// the one naming it. Two reviews of one name applying at one point fail.
     pub(crate) fn at(self, lifecycle: Lifecycle) -> Result<Tolerances> {
-        if self.schema != TOLERANCE_SCHEMA {
-            return Err(format!("unsupported tolerance schema {}", self.schema).into());
-        }
         let select = |reviews: BTreeMap<String, Reviews>| -> Result<BTreeMap<String, Tolerance>> {
             let mut applied = BTreeMap::new();
             for (name, reviews) in reviews {
@@ -502,10 +508,15 @@ pub(crate) fn utc_date(unix_seconds: u64) -> String {
 }
 
 impl ReviewFile {
-    /// The reviewed tolerances this library was built with, checked
-    /// against the relation: a review naming no compared field fails.
-    pub fn reviewed() -> Result<Self> {
-        let reviews: Self = toml::from_str(TOLERANCES)?;
+    /// The compiled reviews checked against the relation and the full current
+    /// register catalog, including registers outside the active PHY image.
+    pub fn reviewed(root: &Path) -> Result<Self> {
+        Self::read(TOLERANCES, &crate::registers::review_names(root)?)
+    }
+
+    /// Read only reviews whose names belong to the supplied current model.
+    pub fn read(text: &str, register_names: &BTreeSet<String>) -> Result<Self> {
+        let reviews: ReviewDocument = toml::from_str(text)?;
         if reviews.schema != TOLERANCE_SCHEMA {
             return Err(format!("unsupported tolerance schema {}", reviews.schema).into());
         }
@@ -519,8 +530,27 @@ impl ReviewFile {
                 format!("tolerance for {unknown}, which the relation does not compare").into(),
             );
         }
-        Ok(reviews)
+        if let Some(unknown) = reviews
+            .registers
+            .keys()
+            .find(|name| !register_names.contains(*name))
+        {
+            return Err(format!("tolerance for unknown register {unknown}").into());
+        }
+        Ok(Self {
+            fields: reviews.fields,
+            registers: reviews.registers,
+        })
     }
+}
+
+#[cfg(test)]
+pub(crate) fn fixture_reviews() -> ReviewFile {
+    // Algorithm tests use synthetic images and a catalog declaring the fixture's
+    // review names. The committed-reference test checks the real model catalog.
+    let document: ReviewDocument = toml::from_str(TOLERANCES).unwrap();
+    let names = document.registers.keys().cloned().collect();
+    ReviewFile::read(TOLERANCES, &names).unwrap()
 }
 
 /// Compare the `vendor` and `production` boots captured at `lifecycle`
@@ -641,6 +671,22 @@ pub fn compare(
 mod tests {
     use super::*;
     use crate::committed::field;
+
+    #[test]
+    fn reading_rejects_unknown_register_reviews_before_lifecycle_selection() {
+        let names = ["KNOWN.REGISTER".to_owned()].into();
+        let valid = "schema=3\n[registers.\"KNOWN.REGISTER\"]\nexcluded=true\nreason='reviewed'\n";
+        assert!(ReviewFile::read(valid, &names).is_ok());
+        let unknown = valid.replace("KNOWN.REGISTER", "UNKNOWN.REGISTER");
+        let error = ReviewFile::read(&unknown, &names).err().unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("unknown register UNKNOWN.REGISTER")
+        );
+        let inactive = unknown + "lifecycle='ieee802154-restart'\n";
+        assert!(ReviewFile::read(&inactive, &names).is_err());
+    }
 
     fn review() -> Tolerance {
         Tolerance {
@@ -898,7 +944,7 @@ mod tests {
             &images,
             &vendor,
             &production,
-            ReviewFile::reviewed().unwrap(),
+            fixture_reviews(),
             (&image, &image),
         )
         .unwrap();
@@ -919,7 +965,7 @@ mod tests {
                 &images,
                 &vendor,
                 &production,
-                ReviewFile::reviewed().unwrap(),
+                fixture_reviews(),
                 (&image, &image),
             )
             .is_err()
@@ -946,7 +992,7 @@ mod tests {
         };
         let vendor = [readings(0x60)];
         for lifecycle in [Lifecycle::Restart, Lifecycle::Ieee802154Restart] {
-            let reviews = ReviewFile::reviewed().unwrap().at(lifecycle).unwrap();
+            let reviews = fixture_reviews().at(lifecycle).unwrap();
             let mismatch = readings(0x65);
             let summary = compare_registers(&registers, &vendor, [&mismatch], &reviews.registers);
             assert_eq!(summary.verdict, Verdict::Diff);
@@ -960,7 +1006,7 @@ mod tests {
             assert_eq!((summary.compared, summary.matched), (2, 2));
         }
 
-        let reviews = ReviewFile::reviewed().unwrap().at(Lifecycle::Cold).unwrap();
+        let reviews = fixture_reviews().at(Lifecycle::Cold).unwrap();
         let cold_registration = readings(0x65);
         let summary = compare_registers(
             &registers,
@@ -996,7 +1042,8 @@ mod tests {
              [registers.B]\nexcluded = true\nreason = \"always\"\n\
              [[registers.C]]\nexcluded = true\nlifecycle = \"cold\"\nreason = \"cold\"\n\
              [[registers.C]]\nexcluded = true\nlifecycle = \"restart\"\nreason = \"woken\"\n";
-        let reviews = || toml::from_str::<ReviewFile>(text).unwrap();
+        let reviews =
+            || ReviewFile::read(text, &["A".into(), "B".into(), "C".into()].into()).unwrap();
         let restart = reviews().at(Lifecycle::Restart).unwrap();
         assert!(!restart.registers.contains_key("A"));
         assert!(restart.registers.contains_key("B"));
@@ -1008,7 +1055,7 @@ mod tests {
         let ambiguous =
             "schema = 3\n[[registers.D]]\nreason = \"a\"\n[[registers.D]]\nreason = \"b\"\n";
         assert!(
-            toml::from_str::<ReviewFile>(ambiguous)
+            ReviewFile::read(ambiguous, &["D".into()].into())
                 .unwrap()
                 .at(Lifecycle::Cold)
                 .is_err()

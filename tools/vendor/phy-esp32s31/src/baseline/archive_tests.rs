@@ -13,9 +13,9 @@ fn captured() -> Vec<VendorBoot> {
         })
         .collect()
 }
-fn current_images() -> RegisterImages {
+fn current_images() -> Model {
     let mut images = images();
-    images.registers = vec![Register {
+    images.images.registers = vec![Register {
         name: "renamed-control".into(),
         address: 4,
         mask: 0xf,
@@ -52,7 +52,7 @@ fn archive_rebuild_uses_current_names_and_masks_and_keeps_original_retired_boots
     );
     assert!(!reference.entries.contains_key("control"));
     assert_eq!(reference.provenance.retired_mmio.len(), 1);
-    let retired_name = "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1";
+    let retired_name = "WIFI_BB.CCA_COUNTER_RESULT_1";
     assert_eq!(
         reference.provenance.retired_mmio[retired_name],
         original.entries[retired_name]

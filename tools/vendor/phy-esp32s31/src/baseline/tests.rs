@@ -19,25 +19,28 @@ pub(super) fn provenance() -> Provenance {
         retired_series: vec![],
     }
 }
-pub(super) fn images() -> RegisterImages {
-    RegisterImages {
-        registers: vec![
-            Register {
+pub(super) fn images() -> Model {
+    Model {
+        reviews: compare::fixture_reviews(),
+        images: RegisterImages {
+            registers: vec![
+                Register {
+                    mask: u32::MAX,
+                    name: "control".into(),
+                    address: 4,
+                },
+                Register {
+                    mask: u32::MAX,
+                    name: "WIFI_BB.CCA_COUNTER_RESULT_1".into(),
+                    address: 8,
+                },
+            ],
+            analog: vec![Register {
                 mask: u32::MAX,
-                name: "control".into(),
-                address: 4,
-            },
-            Register {
-                mask: u32::MAX,
-                name: "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1".into(),
-                address: 8,
-            },
-        ],
-        analog: vec![Register {
-            mask: u32::MAX,
-            name: "analog".into(),
-            address: 1,
-        }],
+                name: "analog".into(),
+                address: 1,
+            }],
+        },
     }
 }
 pub(super) fn identity() -> Images {
@@ -177,8 +180,8 @@ fn recorded_and_live_bounds_accept_only_the_same_boot_whole_initial_pair() {
             &identity(),
             &boots,
             std::slice::from_ref(&p),
-            compare::ReviewFile::reviewed().unwrap(),
-            (&image.registers, &image.analog),
+            compare::fixture_reviews(),
+            (&image.images.registers, &image.images.analog),
         )
         .unwrap();
         let recorded = reference.check(&signature(), &image, "s31-a", 0, &identity(), &[p]);
@@ -195,7 +198,7 @@ fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_ex
         .unwrap();
     assert_eq!(reference.entries["control"].shared, Some(9));
     assert_eq!(reference.entries["common-reference"].shared, None);
-    let cca = &reference.entries["PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1"];
+    let cca = &reference.entries["WIFI_BB.CCA_COUNTER_RESULT_1"];
     assert_eq!(
         cca.excluded.as_deref(),
         Some("hardware measurement result over a window, not calibration")
@@ -211,8 +214,8 @@ fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_ex
                     &identity(),
                     boots,
                     std::slice::from_ref(&p),
-                    compare::ReviewFile::reviewed().unwrap(),
-                    (&images().registers, &images().analog),
+                    compare::fixture_reviews(),
+                    (&images().images.registers, &images().images.analog),
                 )
                 .unwrap();
                 let frozen = reference.check(
@@ -426,7 +429,7 @@ fn out_of_width_external_bounds_are_incomplete_without_arithmetic_overflow() {
 #[test]
 fn recorded_bounds_use_masked_samples_before_computing_spread() {
     let mut images = images();
-    images.registers[0].mask = 0xf;
+    images.images.registers[0].mask = 0xf;
     let boots = (0..10)
         .map(|i| {
             let mut boot = vendor(0, 4);
@@ -563,11 +566,39 @@ fn committed_reference_is_valid_for_the_current_libphy_and_every_recorded_board(
     let root = crate::registers::repository();
     let key = Signature::current(&root).unwrap();
     let reference = key.read_reference(&root).unwrap();
-    assert_ne!(
-        reference.provenance.idf_revision,
-        "4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d"
-    );
-    let images = super::images(&root).unwrap();
+    let images = super::model(&root).unwrap();
+    let names = crate::registers::review_names(&root).unwrap();
+    for lifecycle in [
+        Lifecycle::Cold,
+        Lifecycle::Restart,
+        Lifecycle::Ieee802154,
+        Lifecycle::Ieee802154Restart,
+    ] {
+        for name in images
+            .reviews
+            .clone()
+            .at(lifecycle)
+            .unwrap()
+            .registers
+            .keys()
+        {
+            assert!(
+                names.contains(name),
+                "review does not name a current register: {name}"
+            );
+        }
+    }
+    let reviews = images.reviews.clone().at(Lifecycle::Cold).unwrap();
+    for register in images.images.registers.iter().chain(&images.images.analog) {
+        if let Some(review) = reviews.registers.get(&register.name).filter(|r| r.excluded) {
+            assert_eq!(
+                reference.entries[&register.name].excluded.as_deref(),
+                Some(review.reason.as_str()),
+                "lost exclusion: {}",
+                register.name
+            );
+        }
+    }
     for (label, board) in &reference.boards {
         reference
             .validate(&key, &images, label, board.revision)

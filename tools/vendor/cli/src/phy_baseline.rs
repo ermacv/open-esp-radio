@@ -62,7 +62,7 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
                 )?);
             }
             let output = output.unwrap_or_else(|| signature.path(&ctx.root));
-            let images = baseline::images(&ctx.root)?;
+            let images = baseline::model(&ctx.root)?;
             let reference = match reference {
                 Some(path) => Reference::read(&path)?.regenerate(signature, inputs, &images)?,
                 None => {
@@ -105,7 +105,7 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
                     baseline::runs::production(&run, &board, reference.channel)?;
                 Ok(reference.check(
                     &signature,
-                    &baseline::images(&ctx.root)?,
+                    &baseline::model(&ctx.root)?,
                     &board,
                     revision,
                     &identity,

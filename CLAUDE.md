@@ -158,6 +158,8 @@ system these rules serve.
   Regeneration projects archived primary captures through current metadata;
   retired MMIO bounds and unmasked per-boot observations remain provenance.
   Only active words are compared, with exact coverage still required.
+  Register reviews are read against the full current model catalog; an unknown
+  key is an error even when its lifecycle or register is outside the active image.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables

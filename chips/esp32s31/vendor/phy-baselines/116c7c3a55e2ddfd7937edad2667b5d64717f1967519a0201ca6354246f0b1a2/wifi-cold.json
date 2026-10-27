@@ -2378,6 +2378,7 @@
       "mask": [
         131071
       ],
+      "excluded": "live state: the last PBus command word",
       "shared": 81932,
       "boards": {}
     },
@@ -2526,6 +2527,7 @@
       "mask": [
         4294967295
       ],
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2558,6 +2560,7 @@
       "mask": [
         4294967295
       ],
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2590,6 +2593,7 @@
       "mask": [
         4294967295
       ],
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2622,6 +2626,7 @@
       "mask": [
         4294967295
       ],
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2654,6 +2659,7 @@
       "mask": [
         4294967295
       ],
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "shared": 262144,
       "boards": {}
     },
@@ -3002,6 +3008,7 @@
       "mask": [
         63
       ],
+      "excluded": "clock policy: the modem XTAL clock enable follows the active radio modules",
       "shared": 29,
       "boards": {}
     },
@@ -3228,6 +3235,7 @@
       "mask": [
         4294967295
       ],
+      "excluded": "clock policy: modem clock enables follow the active radio clients and leases, not calibration",
       "shared": 3729407,
       "boards": {}
     },
@@ -3288,6 +3296,7 @@
       "mask": [
         2146959375
       ],
+      "excluded": "clock policy: active-state clock power follows the active radio clients",
       "shared": 432013312,
       "boards": {}
     },
@@ -3348,6 +3357,7 @@
       "mask": [
         4278190080
       ],
+      "excluded": "live state: varies between production boots with the running AGC",
       "shared": 3523215360,
       "boards": {}
     },
@@ -3456,6 +3466,7 @@
       "mask": [
         4294967295
       ],
+      "excluded": "live state: baseband watchdog status",
       "boards": {
         "s31-a": {
           "status": "read",
@@ -3500,6 +3511,7 @@
       "mask": [
         268435455
       ],
+      "excluded": "hardware measurement result over a window, not calibration",
       "shared": 134283264,
       "boards": {}
     },
@@ -3512,6 +3524,7 @@
       "mask": [
         134217727
       ],
+      "excluded": "hardware measurement result over a window, not calibration",
       "boards": {
         "s31-a": {
           "status": "read",
@@ -3756,6 +3769,7 @@
       "mask": [
         511
       ],
+      "excluded": "lifecycle: the last writer is phy_reg_update_new after cold registration and phy_bb_agc_reg_update after an RF wake or RX table init; the vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration, and production's wake keeps the vendor order",
       "shared": 456,
       "boards": {}
     },
@@ -3920,6 +3934,7 @@
       "mask": [
         65280
       ],
+      "excluded": "live state: AGC RSSI status",
       "boards": {
         "s31-a": {
           "status": "read",
@@ -4156,6 +4171,7 @@
       "mask": [
         3758096384
       ],
+      "excluded": "live state: carrier frequency offset estimation",
       "shared": 1073741824,
       "boards": {}
     },

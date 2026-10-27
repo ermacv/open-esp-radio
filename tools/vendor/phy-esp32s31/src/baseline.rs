@@ -25,6 +25,12 @@ pub const SCHEMA: u16 = 2;
 const CHIP: &str = "esp32s31";
 const SCENARIO: &str = "phy-vendor-calibration-cold";
 
+/// The current capture image and reviews validated against the full model.
+pub struct Model {
+    pub images: RegisterImages,
+    pub reviews: compare::ReviewFile,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Signature {
@@ -316,8 +322,9 @@ fn complete(
     }
     Ok(())
 }
-fn metadata(lifecycle: Lifecycle, images: &RegisterImages) -> Result<BTreeMap<String, Entry>> {
-    let reviews = compare::ReviewFile::reviewed()?.at(lifecycle)?;
+fn metadata(lifecycle: Lifecycle, model: &Model) -> Result<BTreeMap<String, Entry>> {
+    let images = &model.images;
+    let reviews = model.reviews.clone().at(lifecycle)?;
     let mut entries = BTreeMap::new();
     for f in compare::fields() {
         let r = reviews
@@ -380,8 +387,9 @@ pub fn generate(
     signature: Signature,
     provenance: Provenance,
     inputs: Vec<Input>,
-    images: &RegisterImages,
+    model: &Model,
 ) -> Result<Reference> {
+    let images = &model.images;
     let first = inputs.first().ok_or("no primary vendor captures")?;
     let mut reference = Reference {
         schema: SCHEMA,
@@ -399,7 +407,7 @@ pub fn generate(
             .ok_or("missing vendor calibration")?
             .len(),
         boards: BTreeMap::new(),
-        entries: metadata(Lifecycle::Cold, images)?,
+        entries: metadata(Lifecycle::Cold, model)?,
     };
     let mut boots: BTreeMap<String, Vec<VendorBoot>> = BTreeMap::new();
     let mut source_ids = BTreeSet::new();
@@ -466,7 +474,7 @@ pub fn generate(
         }
         boots.entry(input.label).or_default().extend(input.boots);
     }
-    let reviews = compare::ReviewFile::reviewed()?.at(Lifecycle::Cold)?;
+    let reviews = model.reviews.clone().at(Lifecycle::Cold)?;
     for (name, entry) in &mut reference.entries {
         for (label, boots) in &boots {
             let state = match entry.space {
@@ -603,10 +611,11 @@ impl Reference {
     pub fn validate(
         &self,
         signature: &Signature,
-        images: &RegisterImages,
+        model: &Model,
         board: &str,
         revision: u16,
     ) -> Result<()> {
+        let images = &model.images;
         if &self.signature != signature {
             return Err(format!("no PHY baseline for libphy {}", signature.libphy_sha256).into());
         }
@@ -635,7 +644,7 @@ impl Reference {
             }
         }
         archive::validate(&self.provenance, &self.boards, images)?;
-        let expected = metadata(self.lifecycle, images)?;
+        let expected = metadata(self.lifecycle, model)?;
         if expected.len() != self.entries.len() {
             return Err("missing reference coverage".into());
         }
@@ -733,13 +742,13 @@ impl Reference {
     pub fn check(
         &self,
         signature: &Signature,
-        images: &RegisterImages,
+        model: &Model,
         board: &str,
         revision: u16,
         identity: &Images,
         production: &[ProductionBoot],
     ) -> Check {
-        match self.check_complete(signature, images, board, revision, identity, production) {
+        match self.check_complete(signature, model, board, revision, identity, production) {
             Ok(summary) => Check {
                 verdict: summary.verdict,
                 reasons: vec![],
@@ -751,13 +760,14 @@ impl Reference {
     fn check_complete(
         &self,
         signature: &Signature,
-        images: &RegisterImages,
+        model: &Model,
         board: &str,
         revision: u16,
         identity: &Images,
         production: &[ProductionBoot],
     ) -> Result<compare::Summary> {
-        self.validate(signature, images, board, revision)?;
+        let images = &model.images;
+        self.validate(signature, model, board, revision)?;
         if identity.vendor_project != "calibration" || identity.production_image != "diagnostic-phy"
         {
             return Err("capture image identity differs from the reference".into());
@@ -793,7 +803,7 @@ impl Reference {
                     .ok_or("missing production projection")?,
             );
         }
-        let reviews = compare::ReviewFile::reviewed()?.at(self.lifecycle)?;
+        let reviews = model.reviews.clone().at(self.lifecycle)?;
         let mut fields = vec![];
         let mut excluded = vec![];
         for f in compare::fields() {
@@ -871,6 +881,9 @@ impl Reference {
         })
     }
 }
-pub fn images(root: &Path) -> Result<RegisterImages> {
-    Esp32s31::images(root)
+pub fn model(root: &Path) -> Result<Model> {
+    Ok(Model {
+        images: Esp32s31::images(root)?,
+        reviews: compare::ReviewFile::reviewed(root)?,
+    })
 }

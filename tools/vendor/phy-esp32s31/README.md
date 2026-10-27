@@ -70,6 +70,11 @@ projected as the CONTROL subject. Reported bounds and margins remain measured.
 `excluded` skips only value comparison. Every vendor-readable register,
 including an excluded one, must be read in every production boot. A missing
 or unreadable production sample yields INCOMPLETE.
+Reviews are loaded against the full current MMIO and published analog-name
+catalog before lifecycle selection; an unknown key is a hard error, including
+keys outside the active image. The host comparison receives its checkout root
+for that validation. Recorded comparisons carry the validated reviews together
+with their current register images.
 
 Each run retains per-boot captures, console evidence, image digests, reference
 ESP-IDF revision, readable/unreadable registers and the complete comparison

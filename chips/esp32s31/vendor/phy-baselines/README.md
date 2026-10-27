@@ -54,6 +54,24 @@ merged. CCA counter result words retain their measured bounds and a reviewed
 value exclusion: every production capture must still read them. The CCA
 window/control word remains subject to the vendor-spread value comparison.
 
+Review keys name current model identities. Loading reviews rejects every
+unknown key, including reviews outside the selected lifecycle or PHY image.
+A register rename requires remapping its review by address. An obsolete key
+is rejected instead of silently restoring vendor-spread comparison.
+
+`PMU.HP_ACTIVE_HP_CK_POWER` retains the current model's readable mask
+`0x7ff8000f`: opaque bits 3:0 and the header-defined power/isolation/retention
+fields at bits 19:30 in `registers/types/pmu.toml`. The archived primary words
+produce the shared masked value `0x19c00000`; restricting those same words to
+the former `0x0040000f` projection yields `0x00400000`. The additional set
+lanes are CPLL/BBPLL power and their I2C power controls. These are clock policy,
+so the reviewed whole-word value exclusion applies while every readable sample
+is still required. The whole-word read does not expand a writer's authority:
+the mixed-owner partition policy retains the word's ownership, and
+`HW31_S31_CK_POWER_READBACK_20261027` establishes preservation outside only
+`0x0040000f`, with low4 reading zero after a requested15. It does not establish
+the physical function of low4 or a wider write mask.
+
 The document's `signature` contains only `libphy-sha256`. Its `provenance`
 retains the capture's IDF revision and vendor application SHA-256, plus the
 scenario, register model, relation, reviews and capture/comparison recipe

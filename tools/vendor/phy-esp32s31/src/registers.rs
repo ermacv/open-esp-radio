@@ -17,6 +17,21 @@ use oer_registers_model::{
 use oer_vendor_phy::calibration_capture::space::{Register, analog_address};
 use std::path::Path;
 
+/// Every current model identity that a register review may name, including
+/// registers outside the active PHY partition and published analog bytes.
+pub fn review_names(root: &Path) -> Result<std::collections::BTreeSet<String>> {
+    let chip = Chip::load(root, CHIP)?;
+    let mut names = chip
+        .model
+        .registers()
+        .iter()
+        .filter(|r| matches!(r.location, Location::Mmio { .. }))
+        .map(|r| r.identity.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    names.extend(analog(root)?.into_iter().map(|r| r.name));
+    Ok(names)
+}
+
 /// The chip whose register model the cross-check reads.
 const CHIP: &str = "esp32s31";
 /// The ownership partition of the role-neutral RF and PHY registers.

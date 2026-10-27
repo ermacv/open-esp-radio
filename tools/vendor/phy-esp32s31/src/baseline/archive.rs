@@ -96,8 +96,9 @@ impl Reference {
         self,
         signature: Signature,
         inputs: Vec<Input>,
-        images: &RegisterImages,
+        model: &Model,
     ) -> Result<Self> {
+        let images = &model.images;
         if self.signature != signature
             || self.schema != SCHEMA
             || self.chip != CHIP
@@ -117,7 +118,7 @@ impl Reference {
                 return Err("duplicate retired MMIO metadata".into());
             }
         }
-        let reference = generate(signature, provenance, inputs, images)?;
+        let reference = generate(signature, provenance, inputs, model)?;
         if reference.boards != self.boards
             || reference.channel != self.channel
             || reference.vendor_object_bytes != self.vendor_object_bytes

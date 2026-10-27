@@ -23,8 +23,7 @@ fn set_pair(data: &mut [u8], offset: u32, gain: u32, pair: [u16; 2]) {
 }
 
 fn review(field: &OutputField) -> Tolerance {
-    ReviewFile::reviewed()
-        .unwrap()
+    crate::compare::fixture_reviews()
         .at(Lifecycle::Cold)
         .unwrap()
         .fields
@@ -139,7 +138,7 @@ fn rule_requires_complete_unsigned_rx_dc_fields_and_the_current_schema() {
         let text =
             format!("schema=3\n[{table}]\ninitial-pair=\"rx-dc-gain0\"\nreason=\"review\"\n");
         assert!(
-            toml::from_str::<ReviewFile>(&text)
+            ReviewFile::read(&text, &["A".into()].into())
                 .unwrap()
                 .at(Lifecycle::Cold)
                 .is_err()
@@ -147,11 +146,6 @@ fn rule_requires_complete_unsigned_rx_dc_fields_and_the_current_schema() {
     }
     for schema in [1, 2, 4] {
         let text = format!("schema={schema}\n");
-        assert!(
-            toml::from_str::<ReviewFile>(&text)
-                .unwrap()
-                .at(Lifecycle::Cold)
-                .is_err()
-        );
+        assert!(ReviewFile::read(&text, &["A".into()].into()).is_err());
     }
 }
