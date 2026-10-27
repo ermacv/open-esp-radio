@@ -141689,7 +141689,7 @@ pub mod pmu {
             reason = "the variants are the model's value names"
         )]
         pub enum HpActiveDigIcgModemCode {
-            /// Active-state modem clock-gating code published by official ESP-HAL.
+            /// SDK active-state bitmap position.
             Active = 0x2,
         }
 
@@ -141721,7 +141721,7 @@ pub mod pmu {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Two-bit active-state modem clock-gating code; official ESP-HAL publishes code two for the active configuration.
+            /// Active-state modem clock bitmap selector. The SDK selects bitmap position two; per-domain state maps and module gates determine delivered clocks.
             #[inline]
             pub const fn hp_active_dig_icg_modem_code(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 30)
@@ -141740,7 +141740,7 @@ pub mod pmu {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Two-bit active-state modem clock-gating code; official ESP-HAL publishes code two for the active configuration.
+            /// Active-state modem clock bitmap selector. The SDK selects bitmap position two; per-domain state maps and module gates determine delivered clocks.
             #[inline]
             pub const fn hp_active_dig_icg_modem_code(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 30)
@@ -157405,14 +157405,6 @@ pub mod pmu {
             let mut value = ana_peri_pwr_ctrl::W(self.0.read::<0x208>());
             change(&mut value);
             self.0.write::<0x208>(value.0);
-        }
-
-        /// Write the vendor's whole-word image `0x80000000`, undeclared bits included (`PMU.HP_ACTIVE_ICG_MODEM`).
-        ///
-        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, S31_PMU_HEADERS.
-        #[inline]
-        pub fn select_hp_active_modem_icg(&mut self) {
-            self.0.write::<0x14>(0x80000000);
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic

@@ -2,6 +2,7 @@
 use super::{Session, contain, emit};
 use oer_esp32s31_pac as pac;
 use oer_mmio::Bits;
+use pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
 
 mod arrival;
 mod reset;
@@ -54,7 +55,9 @@ pub(super) fn clocks(s: &mut Session<'_>) {
     });
     // SOURCE: HAL modem::platform / modem::ops upstream register-clock and
     // PMU ICG prerequisites. Use XTAL, without RF/PLL calibration or enable.
-    s.sar.radio.pmu_radio.select_hp_active_modem_icg();
+    s.sar.radio.pmu_radio.modify_hp_active_icg_modem(|w| {
+        w.set_hp_active_dig_icg_modem_code(HpActiveDigIcgModemCode::Active);
+    });
     s.sar
         .radio
         .pmu_radio
