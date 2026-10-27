@@ -26,6 +26,7 @@ use oer_esp32s31_hal::{
 };
 use oer_esp32s31_phy::{
     concurrent::{ConcurrentAcquire, ConcurrentPhy, PhyClientAccess, phy_ready},
+    executor::boundary::Boundary,
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
     *,
 };
@@ -621,7 +622,7 @@ impl Radio {
                 pilot,
             )));
             crate::hold::metrics::observe(
-                oer_esp32s31_phy::executor::boundary::Boundary::new(future.as_mut()),
+                Boundary::new(future.as_mut()),
                 &crate::PHY_CLOCK,
                 &metrics,
             )
@@ -717,7 +718,7 @@ impl Radio {
         match config.radio {
             CaptureRadio::Wifi => {
                 let mut enter = core::pin::pin!(self.enter(config.channel));
-                enter.as_mut().await
+                Boundary::new(enter.as_mut()).await
             }
             CaptureRadio::Ieee802154 { power_dbm } => {
                 let mut enter = core::pin::pin!(self.ieee802154.enter(
@@ -728,7 +729,7 @@ impl Radio {
                         config.channel,
                         power_dbm,
                     ));
-                enter.as_mut().await
+                Boundary::new(enter.as_mut()).await
             }
         }
     }
@@ -737,11 +738,11 @@ impl Radio {
         match radio {
             CaptureRadio::Wifi => {
                 let mut exit = core::pin::pin!(self.exit());
-                exit.as_mut().await
+                Boundary::new(exit.as_mut()).await
             }
             CaptureRadio::Ieee802154 { .. } => {
                 let mut exit = core::pin::pin!(self.ieee802154.exit(&mut self.domain, self.radio_fault));
-                exit.as_mut().await
+                Boundary::new(exit.as_mut()).await
             }
         }
     }
