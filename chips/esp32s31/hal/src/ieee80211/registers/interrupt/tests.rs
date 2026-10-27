@@ -3,6 +3,35 @@ use crate::ieee80211::registers::{
 };
 
 #[test]
+fn opaque_enables_distinguish_unknown_images_without_writing_the_bank() {
+    use super::MacOpaqueInterruptEnables;
+    let mut words = HostWords::filled(0);
+    for selected in 0..16 {
+        {
+            let mut owners = words.owners();
+            owners.mac_interrupt.mac.modify_enable(|w| {
+                w.set_bit_6_opaque(selected & 1 != 0)
+                    .set_bit_12_opaque(selected & 2 != 0)
+                    .set_bit_13_opaque(selected & 4 != 0)
+                    .set_bit_23_opaque(selected & 8 != 0);
+            });
+        }
+        let before = words.clone();
+        let observed = words.owners().mac_interrupt.mac_opaque_interrupt_enable();
+        assert_eq!(
+            observed,
+            MacOpaqueInterruptEnables {
+                lane_6: selected & 1 != 0,
+                lane_12: selected & 2 != 0,
+                lane_13: selected & 4 != 0,
+                lane_23: selected & 8 != 0,
+            }
+        );
+        assert!(before.changes(&words).is_empty());
+    }
+}
+
+#[test]
 fn rx_selection_keeps_only_sampled_selected_lanes() {
     use super::MacRxInterrupts;
     for selected in [
