@@ -543,3 +543,19 @@ fn a_source_is_pending_at_its_bit_of_its_status_word() {
     assert!(!super::pending_in(&status, 169), "no such source");
     assert!(!super::pending_in(&status, u16::MAX));
 }
+
+#[test]
+fn pending_reads_select_only_the_named_harts_bank() {
+    use crate::platform::{HARTS, Hart};
+    for active in Hart::ALL {
+        let mut words: [Vec<u32>; HARTS] =
+            core::array::from_fn(|_| vec![0; instances::interrupt_core0::SIZE / 4]);
+        active.at_mut(&mut words)[interrupt_core::int_status_reg_2::OFFSET / 4] = 1 << 4;
+        let banks = host_pending!(&mut words);
+        for observed in Hart::ALL {
+            assert_eq!(banks.is_pending(observed, 68), observed == active);
+            assert!(!banks.is_pending(observed, 67));
+            assert!(!banks.is_pending(observed, u16::MAX));
+        }
+    }
+}

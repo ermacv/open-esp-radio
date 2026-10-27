@@ -132,6 +132,8 @@ struct Boot {
 oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+    const URGENT_SOURCES: &[u16] = &[];
+
     let Some(root) = Root::take() else {
         fail("root");
     };
@@ -192,10 +194,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     wifi_irqs.mac.mask_all_mac_interrupts();
     wifi_irqs.power.mask_all_power_interrupts();
     let software = runtime.software_interrupts;
+    let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        URGENT_SOURCES,
     );
     if RadioTasks::actor(&radio, actor).is_err() {
         fail("actor-task");
@@ -204,7 +209,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Ok(value) => value,
         Err(error) => fail(error.reason()),
     };
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(value) => value,
         Err(error) => fail(error.name()),
     };
@@ -219,9 +224,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ap,
     };
     Executor::<0>::new(software.line0).run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        URGENT_SOURCES,
         move |spawner| {
             if AppTasks::capture(spawner, boot).is_err()
                 || AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err()

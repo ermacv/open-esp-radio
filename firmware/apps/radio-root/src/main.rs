@@ -38,6 +38,8 @@ oer_espressif_executor::tasks! {
 oer_espressif_staged_runtime::entry!(main);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+    const URGENT_SOURCES: &[u16] = &[];
+
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
@@ -102,15 +104,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     let software = runtime.software_interrupts;
     let executor = Executor::<0>::new(software.line0);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
     executor.run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        URGENT_SOURCES,
         move |spawner| {
             if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
                 fail("task-start");

@@ -66,12 +66,22 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 | Context | Runs | Rule |
 | --- | --- | --- |
-| P3, boot hart | radio interrupt handlers; the radio doorbell on `FROM_CPU` line 3, a source of its radio's interrupt part; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
-| P2 | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
-| P1 / thread | role bodies, network stack, application | — |
+| P3, boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
+| P2, boot hart | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
+| P1 / thread, boot hart | role bodies, network stack, application | — |
 
 - An interrupt handler never shares a lock with a task and reaches tasks
   through static typed signals, never through an executor's waker.
+- Each executor starts with a borrowed affine `Hart<H>`; its interrupt entry
+  must name that hart at compile time. A software source identifies one
+  executor globally, and its task wakers stay on its owning hart. Current
+  execution state has one slot per facts-defined `HARTS`; its packed poll
+  stamp reserves enough low bits for every hart and an unassigned sentinel.
+  The remaining timestamp bits must hold the cooperative admission budget.
+  Each image supplies its executor's urgent doorbell sources. Admission reads
+  those sources and its own wake source from the current hart's pending bank;
+  an idle wait checks that hart's debug status. These read-only selections use
+  the PAC's checked hart identity; invalid raw IDs take the retained fatal path.
 - Drivers never block or spin. A named settle of a known length up to 20 µs
   may busy-wait and counts against its context's step bound; a wait of
   unknown length is a timer-woken step with a deadline.
@@ -260,7 +270,9 @@ moves; ownership, orchestration and wiring are rebuilt.
   The runtime's `Hart<H>` execution token and `PreAdmission<H>` stack-install
   authority are local, affine values minted from the boot entry's unique
   handoff proof. Adoption retains that authority until interrupt enable
-  consumes it. Facts generate one typed, aligned Rust vector-table row per
+  consumes it and returns the router with the same `Hart<H>`. Before enable,
+  `Adopted::parts` lends the hart and mutable router together for executor
+  setup. Facts generate one typed, aligned Rust vector-table row per
   hart, with assembly entry/exit and compiler-derived frame offsets.
   Generated secondary entry stubs admit no Rust code or interrupts and have
   no linked launcher.

@@ -12,15 +12,16 @@ use platform::system_timer::counter;
 /// The HAL's executor contract: its source identities and its pending and
 /// debugger reads.
 impl ExecutorPlatform for Chip {
+    type Hart = platform::Hart;
     const SOFTWARE_SOURCES: [u16; 4] = Chip::SOFTWARE_SOURCES;
     const ALARM_SOURCES: [u16; 3] = Chip::ALARM_SOURCES;
 
-    fn debugger_connected() -> bool {
-        Chip::debugger_connected()
+    fn debugger_connected(hart: Self::Hart) -> bool {
+        Chip::debugger_connected(hart)
     }
 
-    fn is_pending(source: u16) -> bool {
-        Chip::is_pending(source)
+    fn is_pending(hart: Self::Hart, source: u16) -> bool {
+        Chip::is_pending(hart, source)
     }
 }
 
@@ -33,7 +34,28 @@ pub(crate) const TICKS_PER_MICROSECOND: u64 = platform::system_timer::TICKS_PER_
 /// The core running the caller.
 #[inline(always)]
 pub(crate) fn current_core() -> usize {
-    oer_riscv::hart_id()
+    current_hart().get()
+}
+
+/// Validate the architectural ID before selecting any per-hart state.
+#[inline(always)]
+pub(crate) fn current_hart() -> platform::Hart {
+    match platform::Hart::new(oer_riscv::hart_id() as u32) {
+        Ok(hart) => hart,
+        Err(_fault) => {
+            // The existing fatal path retains InvalidHart's full raw ID;
+            // no executor or register owner is released on this path.
+            #[cfg(target_arch = "riscv32")]
+            {
+                oer_espressif_staged_runtime::fatal::reset_recording(|_| ())
+            }
+            // Host type checks have no reset hardware or retained boot record.
+            #[cfg(not(target_arch = "riscv32"))]
+            {
+                oer_esp32s31_hal::cores::fatal(|_| ())
+            }
+        }
+    }
 }
 
 /// The interrupt level the caller runs at: the CLIC's `mintstatus.mil`,
@@ -82,7 +104,7 @@ pub(crate) fn now() -> u64 {
 /// Whether `source` is pending at the current core's interrupt matrix.
 #[inline(always)]
 pub(crate) fn is_pending(source: u16) -> bool {
-    Chip::is_pending(source)
+    Chip::is_pending(current_hart(), source)
 }
 
 pub(crate) const fn software_interrupt_source(swi: u8) -> u16 {
@@ -94,7 +116,7 @@ pub(crate) const fn alarm_source(comparator: usize) -> u16 {
 }
 
 pub(crate) fn wait_for_interrupt() {
-    if !Chip::debugger_connected() {
+    if !Chip::debugger_connected(current_hart()) {
         oer_riscv::wait_for_interrupt();
     }
 }

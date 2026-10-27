@@ -39,6 +39,7 @@ oer_espressif_executor::tasks! {
 
 pub(crate) fn start<C: oer_interrupt_table::Controller>(
     executor: crate::Executor<0>,
+    hart: &oer_espressif_staged_runtime::Hart<{ oer_espressif_staged_runtime::BOOT_HART }>,
     router: &mut oer_interrupt_table::Router<C>,
     (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),
     (usb, pads): (crate::transport::Usb, Pads),
@@ -52,7 +53,7 @@ pub(crate) fn start<C: oer_interrupt_table::Controller>(
     #[cfg(not(feature = "usb-jtag-off"))]
     let _pads = pads;
     CONSOLE.start(boot);
-    executor.run(router, wake, line, |spawner| {
+    executor.run(hart, router, wake, line, &[], |spawner| {
         WatchdogTasks::test_watchdog(spawner, service).expect("system watchdog test task");
         WatchdogTasks::panic_on_request(spawner).expect("panic task");
         #[cfg(feature = "usb-jtag-off")]

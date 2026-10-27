@@ -134,6 +134,8 @@ pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::Emba
 oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+    const URGENT_SOURCES: &[u16] = &[];
+
     oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start("phy"));
     let Some(root) = Root::take() else {
         fail("root-taken");
@@ -195,10 +197,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
     let software = runtime.software_interrupts;
+    let (hart, router) = adopted.parts();
     let radio_spawner = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        URGENT_SOURCES,
     );
     if RadioTasks::serve_radio(&radio_spawner, radio).is_err() {
         fail("task-start");
@@ -213,15 +218,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         fail("console");
     };
     transport::CONSOLE.start(boot);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
     Executor::<0>::new(software.line0).run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        URGENT_SOURCES,
         move |spawner| {
             if AppTasks::console(spawner, usb, boot, chip).is_err()
                 || AppTasks::dispatch(spawner, poster).is_err()

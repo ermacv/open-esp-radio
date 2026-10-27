@@ -148,6 +148,10 @@ pub fn permission(profile: Profile) -> (Permission, TxPower) {
 }
 
 pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+    const URGENT_SOURCES: &[u16] = &[
+        <oer_esp32s31_hal::platform::FromCpu1Irq as oer_interrupt_table::InterruptSource>::SOURCE,
+    ];
+
     let previous = oer_espressif_staged_runtime::panic::take_previous();
     let Some(root) = Root::take() else {
         crate::fail("root-taken")
@@ -227,7 +231,9 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         crate::fail("scheduler-bell")
     };
     let _ = bridge::clock_state();
-    let radio = X::new(software.line2).start(adopted.router(), tokens.radio, software.irq2);
+    let (hart, router) = adopted.parts();
+    let radio =
+        X::new(software.line2).start(hart, router, tokens.radio, software.irq2, URGENT_SOURCES);
     let Some(arena) = ARENA.take() else {
         crate::fail("arena")
     };
@@ -257,28 +263,35 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     }
     let (console, pads) = usb::open(adopted.router(), tokens.console_usb);
     let app = Executor::<0>::new(software.line0);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => crate::fail(error.name()),
     };
     let rng = host::Rng::new(runtime.entropy, EmbassyClock);
     let watchdog = runtime.watchdogs.rtc;
-    app.run(&mut router, tokens.wake, software.irq0, move |spawner| {
-        let (_, power) = permission(profile);
-        if AppTasks::serve(
-            spawner,
-            console,
-            pads,
-            rng,
-            bridge::frontend(stop_reports),
-            power,
-        )
-        .is_err()
-            || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
-        {
-            crate::fail("app-tasks");
-        }
-    })
+    app.run(
+        &hart,
+        &mut router,
+        tokens.wake,
+        software.irq0,
+        URGENT_SOURCES,
+        move |spawner| {
+            let (_, power) = permission(profile);
+            if AppTasks::serve(
+                spawner,
+                console,
+                pads,
+                rng,
+                bridge::frontend(stop_reports),
+                power,
+            )
+            .is_err()
+                || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
+            {
+                crate::fail("app-tasks");
+            }
+        },
+    )
 }
 async fn hold<T>(owner: &mut T) -> ! {
     core::hint::black_box(owner);

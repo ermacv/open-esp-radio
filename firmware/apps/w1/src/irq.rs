@@ -106,8 +106,11 @@ pub fn on_wifi(part: &mut WifiPart) {
     if rung != 0 {
         measure::raise(&RING_TO_DOORBELL_MAX, Mcycle.now().wrapping_sub(rung));
     }
-    let mac = Platform::is_pending(MacInterruptRegisters::SOURCE);
-    let power = Platform::is_pending(MacPowerInterruptRegisters::SOURCE);
+    let hart = oer_esp32s31_hal::platform::Hart::constant::<
+        { <crate::WifiToken as oer_interrupt_table::Entry>::HART as usize },
+    >();
+    let mac = Platform::is_pending(hart, MacInterruptRegisters::SOURCE);
+    let power = Platform::is_pending(hart, MacPowerInterruptRegisters::SOURCE);
     if mac {
         let _latched =
             MAC_LATCH.compare_exchange(0, measure::stamp(), Ordering::AcqRel, Ordering::Relaxed);

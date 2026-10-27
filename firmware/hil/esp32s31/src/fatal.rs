@@ -217,9 +217,12 @@ fn record(kind: u32, ra: u32, stage: u32, stop: Result<&StopTheWorld<'_>, StopEr
     let vector = mcause & 0x0fff;
     let mtvt_slot = trap::current_hart_vector_slot(vector).unwrap_or(0);
     let mut pending = [0; SOURCE_WORDS];
+    // An invalid raw ID is retained by the runtime's fatal path; it grants
+    // no other hart's bank for this diagnostic sample.
+    let checked_hart = oer_esp32s31_hal::platform::Hart::new(hart as u32);
     for source in 0..SOURCE_WORDS * 32 {
         // At most 192 sources: the count fits a source number.
-        if interrupt_controller::is_pending(source as u16) {
+        if checked_hart.is_ok_and(|hart| interrupt_controller::is_pending(hart, source as u16)) {
             set(&mut pending, source);
         }
     }

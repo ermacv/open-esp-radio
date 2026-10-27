@@ -227,10 +227,10 @@ pub struct Adopted<C: oer_interrupt_table::Controller> {
 }
 
 impl<C: oer_interrupt_table::Controller> Adopted<C> {
-    /// The local identity whose pre-admission authority this value retains.
+    /// Borrow the local execution identity and router together before admission.
     #[cfg(feature = "esp32s31")]
-    pub fn hart(&self) -> &Hart<BOOT_HART> {
-        self.admission.hart()
+    pub fn parts(&mut self) -> (&Hart<BOOT_HART>, &mut oer_interrupt_table::Router<C>) {
+        (self.admission.hart(), &mut self.router)
     }
 
     /// The hart's router: bind entries before interrupts are enabled.
@@ -240,7 +240,8 @@ impl<C: oer_interrupt_table::Controller> Adopted<C> {
 
     /// Check the hart's vectors, routes and lines and hand global interrupt
     /// enable (`mstatus.MIE`) to this hart's executor; the router stays the
-    /// image's, for bindings made later.
+    /// image's, for bindings made later. Stack-install authority ends, while
+    /// the returned hart token authorizes local executor startup.
     ///
     /// Safe at any point after [`Handoff::adopt`]: adoption silenced every
     /// source and disabled every line, and a source is routed again only by
@@ -250,11 +251,13 @@ impl<C: oer_interrupt_table::Controller> Adopted<C> {
     /// [`BootError`] when vector CSRs, controller geometry, configuration,
     /// routes or lines disagree. Global interrupt enable stays disabled.
     #[cfg(target_arch = "riscv32")]
-    pub fn enable_interrupts(self) -> Result<oer_interrupt_table::Router<C>, BootError> {
+    pub fn enable_interrupts(
+        self,
+    ) -> Result<(oer_interrupt_table::Router<C>, Hart<BOOT_HART>), BootError> {
         stacks::verify_current_hart_vectors()?;
         self.router.verify()?;
         oer_riscv::enable_interrupts();
-        Ok(self.router)
+        Ok((self.router, self.admission.into_hart()))
     }
 }
 

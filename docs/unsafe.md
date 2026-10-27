@@ -148,13 +148,24 @@ Device ordering is `oer_riscv::fence`, including the host compiler fence;
 
 Interrupt stack install takes a local `&mut PreAdmission<H>` and is safe.
 The boot handoff wraps its unique entry proof with that token, retains it
-through adoption, and consumes it when enabling interrupts. `Hart<H>` and
+through adoption, and consumes it when enabling interrupts, returning the
+router and its existing `Hart<H>` together. `Adopted::parts` lends the hart
+and mutable router together before enable. Executor startup const-checks the
+entry's hart against this token; task wakers stay local to that hart. `Hart<H>` and
 `PreAdmission<H>` are neither Send nor Sync and have no public constructor.
 Installation checks the executing hart and masks local interrupts before
 painting the inactive allocation and installing its trap registers. Its
 memory operations remain in the private `stacks::watermark` module; the
 trap-register writes remain in `oer-riscv::install_trap_stack`, each with
 its narrow safety contract.
+
+The HAL publishes every hart's side-effect-free pending bank at root split.
+Its bank owners and exhaustive selection are generated from the same hart
+geometry as the vectors. Pending and debug reads take the PAC's checked `Hart`;
+they do not claim registers or grant execution authority. The executor validates
+the architectural ID before selecting its running-context slot or these reads.
+An invalid ID follows the retained `InvalidHart` reset path, releasing
+no owner. These selections use no unsafe code.
 
 The generated Rust MTVT is one immutable array of aligned per-hart rows.
 Its one unsafe attribute owns the SRAM section. The table and trap assembly

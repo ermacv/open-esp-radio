@@ -20,6 +20,7 @@ type RtcWatchdog =
 
 pub(crate) fn start<C: oer_interrupt_table::Controller>(
     executor: crate::Executor<0>,
+    hart: &oer_espressif_staged_runtime::Hart<{ oer_espressif_staged_runtime::BOOT_HART }>,
     router: &mut oer_interrupt_table::Router<C>,
     (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),
     (usb, _pads): (
@@ -31,7 +32,7 @@ pub(crate) fn start<C: oer_interrupt_table::Controller>(
 ) -> ! {
     let boot = u64::from_le_bytes(entropy.random_bytes()).max(1);
     CONSOLE.start(boot);
-    executor.run(router, wake, line, |spawner| {
+    executor.run(hart, router, wake, line, &[], |spawner| {
         PanicResetTasks::panic_on_request(spawner).expect("panic-reset task");
         PanicResetTasks::run(spawner, usb, boot).expect("system console task");
         if PanicResetTasks::rtc_watchdog(spawner, watchdog).is_err() {

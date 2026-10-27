@@ -46,6 +46,8 @@ mod doorbell;
 #[cfg(feature = "chip")]
 mod executor;
 pub mod hardware;
+#[cfg(feature = "chip")]
+mod hart_binding;
 #[cfg(any(feature = "chip", test))]
 mod poll_stamp;
 #[cfg(feature = "port-slots")]
@@ -62,6 +64,8 @@ pub mod task;
 mod time_driver;
 #[cfg(any(feature = "chip", test))]
 mod timer_queue;
+#[cfg(any(feature = "chip", test))]
+mod urgent_sources;
 
 #[cfg(feature = "chip")]
 pub use doorbell::{Doorbell, DoorbellAcknowledger, DoorbellLine, LineAcknowledger};

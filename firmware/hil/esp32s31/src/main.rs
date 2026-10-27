@@ -231,7 +231,7 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let console = usb::open(adopted.router(), interrupts.console_usb);
     let software = runtime.software_interrupts;
     let executor = Executor::<0>::new(software.line0);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
     };
@@ -241,6 +241,7 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     #[cfg(feature = "system-panic-reset")]
     system::panic_reset::start(
         executor,
+        &hart,
         &mut router,
         wake,
         console,
@@ -251,6 +252,7 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     #[cfg(feature = "system-watchdog")]
     system::console::start(
         executor,
+        &hart,
         &mut router,
         wake,
         console,
@@ -260,7 +262,7 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
 
     #[cfg(feature = "boot-smoke")]
-    executor.run(&mut router, wake.0, wake.1, move |spawner| {
+    executor.run(&hart, &mut router, wake.0, wake.1, &[], move |spawner| {
         let console = boot_smoke_console::BootSmokeConsole::new(console);
         if BootSmokeTasks::boot_smoke(spawner, console).is_err()
             || BootSmokeTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()

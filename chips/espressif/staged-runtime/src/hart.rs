@@ -62,6 +62,11 @@ impl<const H: u8> PreAdmission<H> {
     pub const fn hart(&self) -> &Hart<H> {
         &self.hart
     }
+
+    /// End stack-install authority while retaining the local execution identity.
+    pub(crate) const fn into_hart(self) -> Hart<H> {
+        self.hart
+    }
 }
 
 #[cfg(test)]
@@ -73,5 +78,7 @@ mod tests {
         let admission = PreAdmission::<{ crate::BOOT_HART }>::new();
         assert_eq!(admission.hart().id(), crate::BOOT_HART);
         assert_eq!(core::mem::size_of_val(&admission), 0);
+        let hart = admission.into_hart();
+        assert_eq!(hart.id(), crate::BOOT_HART);
     }
 }

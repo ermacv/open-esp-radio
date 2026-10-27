@@ -37,6 +37,8 @@ static CALIBRATION: static_cell::ConstStaticCell<oer_memory::StaticPlace<[u128; 
 oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+    const URGENT_SOURCES: &[u16] = &[];
+
     let Some(root) = Root::take() else {
         fail("root");
     };
@@ -73,12 +75,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
     let software = runtime.software_interrupts;
+    let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        URGENT_SOURCES,
     );
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(value) => value,
         Err(error) => fail(error.name()),
     };
@@ -91,9 +96,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         fail("radio-task");
     }
     Executor::<0>::new(software.line0).run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        URGENT_SOURCES,
         move |spawner| {
             if AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err() {
                 fail("watchdog-task");

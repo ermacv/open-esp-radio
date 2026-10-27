@@ -98,6 +98,10 @@ pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+    const URGENT_SOURCES: &[u16] = &[
+        <oer_esp32s31_hal::platform::FromCpu3Irq as oer_interrupt_table::InterruptSource>::SOURCE,
+    ];
+
     oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start(
         "lower-mac",
     ));
@@ -166,10 +170,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         fail("wifi-route");
     };
     let bell = irq::ImageDoorbell(Doorbell::new::<FromCpu3Irq>(line, &bound));
+    let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        URGENT_SOURCES,
     );
     let mut rng = Rng::new(runtime.entropy, EmbassyClock);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
@@ -204,15 +211,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         fail("console");
     };
     transport::CONSOLE.start(boot);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
     Executor::<0>::new(software.line0).run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        URGENT_SOURCES,
         move |spawner| {
             if AppTasks::console(spawner, usb, boot, chip).is_err()
                 || AppTasks::dispatch(spawner, poster).is_err()

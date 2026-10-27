@@ -47,6 +47,14 @@ facts at build time; the host checks read the same facts.
 - `zeroed_static!` provides an all-zero initializer for statics in regions
   the boot clears: [zeroed storage rustdoc](../portable/memory/src/zeroed.rs)
   in [`oer-memory`](../portable/memory/src/lib.rs).
+- Executor running-context storage has one slot for each facts-defined hart.
+  Executor identities remain global software-source identities; their packed
+  assignment/poll words derive hart-bit width and the unassigned sentinel
+  from `HARTS`, retaining the timestamp wrap bound in const checks.
+  Each executor publishes its composition's immutable urgent-source list before
+  polling; its list reference stays in zeroed critical SRAM. The runtime's
+  zero-sized hart token survives interrupt enable while stack-install authority
+  is consumed. Current images retain every task and waker on the boot hart.
 
 Memory shared with hardware has its own layout, placement and ownership
 contracts: [Hardware memory](hardware-memory.md).

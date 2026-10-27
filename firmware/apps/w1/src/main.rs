@@ -231,6 +231,10 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::r
 oer_espressif_staged_runtime::entry!(main);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+    const URGENT_SOURCES: &[u16] = &[
+        <oer_esp32s31_hal::platform::FromCpu3Irq as oer_interrupt_table::InterruptSource>::SOURCE,
+    ];
+
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
@@ -310,10 +314,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let doorbell = ImageDoorbell(Doorbell::new::<FromCpu3Irq>(bell, &wifi_bound));
     let (timer_sender, timer_lines) = TIMER_LINES.take().split();
+    let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        URGENT_SOURCES,
     );
     if RadioTasks::radio_actor(&radio, actor).is_err()
         || RadioTasks::p2_timers(&radio, timer_sender).is_err()
@@ -325,16 +332,18 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.reason()),
     };
     let executor = Executor::<0>::new(software.line0);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
     let rng = Rng::new(runtime.entropy, EmbassyClock);
     let rtc_watchdog = runtime.watchdogs.rtc;
     executor.run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        URGENT_SOURCES,
         move |spawner| {
             let boot = Boot {
                 console,
