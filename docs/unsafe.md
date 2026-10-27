@@ -638,9 +638,9 @@ needs:
   entries), with that code's C signatures, and keeps its fixtures in statics
   the verifier's serial calls reach one at a time.
 - The PAC-only facts image is entered at `_start` by the ROM RAM loader.
-  Its entry establishes the SRAM stack and clears BSS, includes the current
-  runtime's trap ABI, and preserves an atomic LP `.noinit` reason record across
-  system reset. Controlled interrupt-admission entry stubs delimit the
+  Its entry establishes the SRAM stack and clears BSS, owns its trap ABI
+  in `src/trap.rs`/`src/trap.s`, and preserves an atomic LP `.noinit` reason
+  record across system reset. Controlled interrupt-admission entry stubs delimit the
   threshold-write experiment; the installed trap ABI preserves their registers.
   Only the masked thread publishes the LP record before the reset fence.
   In `firmware/probes/esp32s31-facts/src/image.rs`, `SAR_CONTEXT` publishes
@@ -662,6 +662,11 @@ Direct dependencies on the PAC are restricted independently of unsafe
 syntax. The allowed consumers are the chip's `hal` under `esp32s31/` and the
 explicitly admitted PAC-only facts image `firmware/probes/esp32s31-facts`.
 Other `firmware/probes/*-facts` packages require a separate layer-test admission.
+The facts image's trap/vector ABI lives inside its own package: `global_asm!`
+uses offsets from its own Rust frame and a generated CPU-line table. All
+nonzero vectors enter the same register-preserving assembly entry and handler.
+It shares no private runtime source; its only trap-register installer is the
+public architectural API in `oer-riscv`.
 The facts image takes the PAC once, uses typed accessors, and has no HAL or
 production runtime dependency; production never depends on it. All other
 drivers and adapters reach registers through HAL owners. Check the executable

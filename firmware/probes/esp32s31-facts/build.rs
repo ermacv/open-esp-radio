@@ -50,24 +50,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "const LINE: usize = {first};\nconst LEVEL_BITS: u32 = {levels};\nconst CONTROLS: [u8; 3] = {controls:?};\n"
         ),
     )?;
-    let mut asm = String::from(".macro RUNTIME_IRQ_ENTRIES\n");
-    for line in 1..count {
-        asm.push_str(&format!("IRQ_ENTRY 0, {line}\n"));
-    }
-    asm.push_str(".endm\n.macro RUNTIME_VECTOR_TABLES\n");
+    let mut asm = String::from(".macro FACTS_VECTOR_TABLE\n");
     asm.push_str(&format!(
         ".balign {}\n.word 0\n",
         (count * 4).next_power_of_two()
     ));
-    for line in 1..count {
-        asm.push_str(&format!(".word _runtime_irq_h0_l{line}\n"));
+    for _ in 1..count {
+        asm.push_str(".word _facts_irq\n");
     }
-    asm.push_str(".endm\n.text\n");
-    for line in 1..count {
-        asm.push_str(&format!(
-            ".global __oer_interrupt_h0_l{line}\n.set __oer_interrupt_h0_l{line}, facts_irq\n"
-        ));
-    }
+    asm.push_str(".endm\n");
     std::fs::write(out.join("vectors.s"), asm)?;
     std::fs::write(
         out.join("facts.x"),
@@ -76,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 MEMORY {{ SRAM (rwx) : ORIGIN = {base:#x}, LENGTH = {length:#x}
 LP (rw) : ORIGIN = {lp:#x}, LENGTH = 0x100 }}
 SECTIONS {{
-.text : ALIGN(64) {{ KEEP(*(.text._start)) *(.text.facts_threshold_raise) *(.text .text.*) *(.trap.runtime) }} > SRAM
+.text : ALIGN(64) {{ KEEP(*(.text._start)) *(.text.facts_threshold_raise) *(.text .text.*) *(.trap.facts) }} > SRAM
 .trap.mtvt : ALIGN({align}) {{ KEEP(*(.trap.mtvt)) }} > SRAM
 .rodata : ALIGN(4) {{ *(.rodata .rodata.*) }} > SRAM
 .data : ALIGN(4) {{ __global_pointer$ = . + 0x800; *(.sdata .sdata.*) *(.data .data.*) }} > SRAM
@@ -93,11 +84,13 @@ SECTIONS {{
     if std::env::var("CARGO_CFG_TARGET_ARCH")? == "riscv32" {
         println!("cargo:rustc-link-arg=-T{}", out.join("facts.x").display());
     }
+    for file in ["src/trap.rs", "src/trap.s"] {
+        println!("cargo:rerun-if-changed={}", dir.join(file).display());
+    }
     for file in [
         "chips/esp32s31/platform/chip.toml",
         "chips/espressif/platform/family.toml",
         "chips/esp32s31/registers/types/clic.toml",
-        "chips/espressif/staged-runtime/src/vectors.s",
     ] {
         println!("cargo:rerun-if-changed={}", root.join(file).display());
     }
