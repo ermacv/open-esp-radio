@@ -4,16 +4,9 @@ use super::Ieee802154State;
 use crate::types::{Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation};
 use core::fmt::{self, Write};
 
-/// Impossible hardware input or malformed output from the ACK generator.
+/// Impossible hardware input; no selected event has been acknowledged or dispatched.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Fault {
-    /// The generator promised a secured ACK whose header cannot be admitted.
-    InvalidEnhancedAckSecurity {
-        /// Original PHR and both frame-control octets from the generated ACK.
-        header: [u8; 3],
-        /// Engine state before the ACK could be published to DMA.
-        state: Ieee802154State,
-    },
     /// A sample includes an unnamed lane or the unsupported clock-match event.
     UnhandledEvents {
         /// Complete sampled event set, including each unnamed lane separately.
@@ -58,10 +51,6 @@ const STATE_SHIFT: u32 = 14;
 const STATE_MASK: u32 = 0xf;
 const REASON: u32 = 1 << 18;
 const RECORD_BITS: u32 = (1 << 19) - 1;
-// Alternate diagnostic uses the same word: original header, state, reason.
-const ACK_REASON: u32 = 1 << 31;
-const ACK_STATE_SHIFT: u32 = 24;
-const ACK_RECORD_BITS: u32 = ACK_REASON | ((1 << 28) - 1);
 
 /// Twelve retained bytes: magic, packed diagnostic and checksum. The fourteen
 /// event flags, state and reason share one word; its bits are not MMIO encoding.
@@ -77,21 +66,13 @@ pub struct FaultRecord {
 impl FaultRecord {
     /// Retain a terminal fault before software reset, without releasing owners.
     pub fn record(&mut self, fault: Fault) {
+        let Fault::UnhandledEvents { observation, state } = fault;
         self.magic = 0;
-        self.raw = match fault {
-            Fault::InvalidEnhancedAckSecurity { header, state } => {
-                u32::from_le_bytes([header[0], header[1], header[2], 0])
-                    | ((state as u32) << ACK_STATE_SHIFT)
-                    | ACK_REASON
-            }
-            Fault::UnhandledEvents { observation, state } => {
-                NAMED.into_iter().enumerate().fold(0, |raw, (bit, event)| {
-                    raw | (u32::from(observation.contains(event)).wrapping_shl(bit as u32))
-                }) | (u32::from(observation.events_7()) << 12)
-                    | (u32::from(observation.events_13()) << 13)
-                    | ((state as u32) << STATE_SHIFT)
-            }
-        };
+        self.raw = NAMED.into_iter().enumerate().fold(0, |raw, (bit, event)| {
+            raw | (u32::from(observation.contains(event)).wrapping_shl(bit as u32))
+        }) | (u32::from(observation.events_7()) << 12)
+            | (u32::from(observation.events_13()) << 13)
+            | ((state as u32) << STATE_SHIFT);
         self.checksum = self.checksum();
         self.magic = MAGIC;
     }
@@ -103,19 +84,6 @@ impl FaultRecord {
     fn fault(&self) -> Option<Fault> {
         if self.magic != MAGIC || self.checksum != self.checksum() {
             return None;
-        }
-        if self.raw & ACK_REASON != 0 {
-            if self.raw & !ACK_RECORD_BITS != 0 {
-                return None;
-            }
-            let [phr, low, high, _] = self.raw.to_le_bytes();
-            let state = (self.raw >> ACK_STATE_SHIFT) & STATE_MASK;
-            return Some(Fault::InvalidEnhancedAckSecurity {
-                header: [phr, low, high],
-                state: STATES
-                    .into_iter()
-                    .find(|candidate| *candidate as u32 == state)?,
-            });
         }
         if self.raw & !RECORD_BITS != 0 || self.raw & REASON != 0 {
             return None;
@@ -210,24 +178,6 @@ mod tests {
     }
 
     #[test]
-    fn malformed_ack_header_round_trips_without_growing_retained_storage() {
-        for state in STATES {
-            let fault = Fault::InvalidEnhancedAckSecurity {
-                header: [3, 0x0a, 0x20],
-                state,
-            };
-            let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
-            record.record(fault);
-            assert_eq!(record.fault(), Some(fault));
-            assert!(record.report(|_| false).is_err());
-            assert_eq!(record.fault(), Some(fault));
-            record.report(|_| true).unwrap();
-            assert_eq!(record.fault(), None);
-        }
-        assert_eq!(core::mem::size_of::<FaultRecord>(), 12);
-    }
-
-    #[test]
     fn corrupt_record_is_not_reported() {
         let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
         record.record(Fault::UnhandledEvents {
@@ -274,7 +224,7 @@ mod tests {
             REASON,
             REASON | (1 << STATE_SHIFT),
             1 << 19,
-            ACK_REASON | (0xf << ACK_STATE_SHIFT),
+            1 << 31,
         ] {
             let mut record = FaultRecord {
                 magic: MAGIC,

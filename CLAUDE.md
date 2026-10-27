@@ -51,9 +51,10 @@ system these rules serve.
   consume affine samples;
   polling requires `Silent` after the same pre-bind discard.
   Transmit security validates PHR-bounded MAC fields through `oer-wire`
-  before every security setter. A malformed generated secured ACK is a
-  retained fault with its original PHR/FCF and engine state; the consuming
-  owner stays quarantined before the image records/resets.
+  before every security setter. A malformed generated secured ACK is handled
+  API input: STOP, report its typed security error to the environment, deliver
+  the received frame without an ACK and select the next operation. It neither
+  publishes the ACK to DMA nor records/resets.
   Owned PHY transactions preserve their registration and restore obligations;
   only consuming reunion with the exact affine return owner releases their
   quarantine guard. Dropping either half records its source observations and

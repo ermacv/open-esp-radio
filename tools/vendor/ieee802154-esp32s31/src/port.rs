@@ -18,7 +18,7 @@ use oer_espressif_ieee802154_engine::coex::{Ieee802154CoexPriorities, Ieee802154
 use oer_espressif_ieee802154_engine::engine::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
     Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot,
-    Ieee802154TxError,
+    Ieee802154SecurityFrameError, Ieee802154TxError,
 };
 use oer_espressif_ieee802154_engine::pib::{
     AutoPendingMode, Ieee802154MultipanIndex, Ieee802154PibDefaults,
@@ -631,6 +631,19 @@ impl Ieee802154LowLevel for PortLl {
 struct PortEnv(Rc<RefCell<Shared>>);
 
 impl Ieee802154Environment for PortEnv {
+    fn enhanced_ack_security_failed(&mut self, error: Ieee802154SecurityFrameError) {
+        let reason = match error {
+            Ieee802154SecurityFrameError::SecurityDisabled => 0,
+            Ieee802154SecurityFrameError::MalformedHeader => 1,
+        };
+        self.0.borrow_mut().event(
+            "enh_ack_security_failed",
+            vec![reason],
+            Vec::new(),
+            Vec::new(),
+        );
+    }
+
     fn coexistence_break(&mut self) {
         self.0.borrow_mut().records.push(Record::External {
             name: "esp_coex_ieee802154_coex_break_notify".to_owned(),
@@ -940,10 +953,18 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
                 key,
                 address,
             } => {
-                let result = engine.set_transmit_security(&mut ll, &frame, &key, &address);
+                // SOURCE: https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/ieee802154/driver/esp_ieee802154_sec.c#L19-L24
+                // SecurityDisabled violates a vendor assertion, not ESP_ERR_INVALID_ARG.
+                let value = match engine.set_transmit_security(&mut ll, &frame, &key, &address) {
+                    Ok(()) => 0,
+                    Err(Ieee802154SecurityFrameError::MalformedHeader) => 258,
+                    Err(Ieee802154SecurityFrameError::SecurityDisabled) => {
+                        return Err("the vendor requires a security-enabled frame (esp_ieee802154_sec.c:19)".to_owned());
+                    }
+                };
                 shared.borrow_mut().records.push(Record::Return {
                     name: "esp_ieee802154_set_transmit_security".to_owned(),
-                    value: if result.is_ok() { 0 } else { 258 },
+                    value,
                 });
             }
             Step::Transmit { frame, cca } => {

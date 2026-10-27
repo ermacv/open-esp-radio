@@ -11,8 +11,8 @@ use crate::pib::{Ieee802154MultipanIndex, Ieee802154PibDefaults};
 use super::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
     Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot,
-    Ieee802154SlotError, Ieee802154State, Ieee802154TxError, Ieee802154TxRxStatistics,
-    RX_BUFFER_COUNT,
+    Ieee802154SecurityFrameError, Ieee802154SlotError, Ieee802154State, Ieee802154TxError,
+    Ieee802154TxRxStatistics, RX_BUFFER_COUNT,
 };
 
 static LEVELS: [i8; 4] = [-9, -3, 4, 10];
@@ -403,6 +403,7 @@ impl Ieee802154LowLevel for Hw {
 /// Recorded upper-layer notification; frames are recorded as their PSDU.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Note {
+    EnhancedAckSecurityFailed(super::Ieee802154SecurityFrameError),
     CoexistenceBreak,
     ReceiveDone {
         slot: usize,
@@ -437,6 +438,10 @@ struct Env {
 }
 
 impl Ieee802154Environment for Env {
+    fn enhanced_ack_security_failed(&mut self, error: Ieee802154SecurityFrameError) {
+        self.notes.push(Note::EnhancedAckSecurityFailed(error));
+    }
+
     fn coexistence_break(&mut self) {
         self.notes.push(Note::CoexistenceBreak);
     }
@@ -1990,30 +1995,53 @@ fn ack_coexistence_break_notifies_once_before_receive_completion() {
 }
 
 #[test]
-fn malformed_generated_security_ack_faults_before_dma_publication() {
-    let mut bench = Bench::enabled();
-    bench.env.enhanced_ack = Some(vec![3, 0x0a, 0x20, 1, 0, 0]);
-    bench.env.enhanced_ack_key = Some([7; 16]);
-    bench.receive();
-    let mut image = DATA_WITH_ACK;
-    image[2] = 0xa8;
-    bench.deliver(&image);
-    bench.hw.calls.clear();
-    bench.hw.events = Ieee802154Event::RxDone.mask();
-    // The consuming owner retains the engine, MAC and buffers on refusal.
-    let owner = super::owner::Ieee802154EngineOwner::new(bench.engine, bench.hw);
-    let quarantine = match owner.isr(&mut bench.env) {
-        Ok(_) => panic!("invalid generated ACK must quarantine its owner"),
-        Err(quarantine) => quarantine,
-    };
-    assert_eq!(
-        quarantine.fault(),
-        super::Fault::InvalidEnhancedAckSecurity {
-            header: [3, 0x0a, 0x20],
-            state: Ieee802154State::Rx,
-        }
-    );
-    assert!(bench.env.notes.is_empty());
+fn malformed_generated_security_ack_is_refused_before_dma_publication() {
+    use super::Ieee802154SecurityFrameError;
+    for (ack, error) in [
+        (
+            vec![3, 0x0a, 0x20, 1, 0, 0],
+            Ieee802154SecurityFrameError::MalformedHeader,
+        ),
+        (
+            vec![5, 0x02, 0x20, 1, 0, 0],
+            Ieee802154SecurityFrameError::SecurityDisabled,
+        ),
+    ] {
+        let mut bench = Bench::enabled();
+        bench.env.enhanced_ack = Some(ack);
+        bench.env.enhanced_ack_key = Some([7; 16]);
+        bench.receive();
+        let mut image = DATA_WITH_ACK;
+        image[2] = 0xa8;
+        bench.deliver(&image);
+        bench.hw.calls.clear();
+        bench.hw.events = Ieee802154Event::RxDone.mask();
+        // Malformed callback output is handled input, never an engine fault.
+        bench
+            .engine
+            .isr(&mut bench.hw, &mut bench.env)
+            .expect("refused ACK is handled");
+        assert!(
+            bench
+                .hw
+                .calls
+                .contains(&Call::Command(Ieee802154LlCommand::Stop))
+        );
+        assert!(!bench.hw.calls.iter().any(|call| matches!(
+            call,
+            Call::SecurityAddress(_)
+                | Call::SecurityKey(_)
+                | Call::SecurityOffset(_)
+                | Call::SetTransmitSecurity(_)
+                | Call::TxAddress(_)
+                | Call::EnhancedAckNotify
+        )));
+        assert!(matches!(bench.take_notes().as_slice(),
+            [Note::EnhancedAckSecurityFailed(reason), Note::ReceiveDone { slot: 0, psdu, .. }]
+                if *reason == error && *psdu == image[1..]));
+        assert_eq!(bench.engine.state(), Ieee802154State::Sleep);
+        assert!(!bench.engine.needs_next_operation);
+    }
 }
 
 #[test]

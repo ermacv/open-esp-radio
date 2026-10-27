@@ -426,8 +426,7 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     /// [`Ieee802154Engine::isr`], using this owner's MAC.
     ///
     /// # Errors
-    /// Unsupported events or malformed secured output from the ACK generator
-    /// consume this owner into absorbing quarantine.
+    /// Unsupported events consume this owner into absorbing quarantine.
     #[allow(
         clippy::result_large_err,
         reason = "quarantine retains the complete affine owner"

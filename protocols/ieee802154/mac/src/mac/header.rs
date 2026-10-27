@@ -1,7 +1,8 @@
 //! MAC header inspection ported from the public ESP-IDF IEEE 802.15.4 driver
 //! (`components/ieee802154/driver/esp_ieee802154_frame.c`).
 //!
-//! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
+//! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe` and
+//! `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`
 //! `components/ieee802154/driver/esp_ieee802154_frame.c` (Copyright Espressif
 //! Systems (Shanghai) Co Ltd, Apache-2.0) and modified by Vladislav
 //! Ermachenkov; see `NOTICE`.

@@ -13,7 +13,7 @@ use oer_ieee802154_mac::FrameAddress;
 use super::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
     Ieee802154Environment, Ieee802154FrameInfo, Ieee802154Interfaces, Ieee802154ReceivedAck,
-    Ieee802154RxSlot, Ieee802154State, Ieee802154TxError,
+    Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154State, Ieee802154TxError,
 };
 
 static LEVELS: [i8; 1] = [0];
@@ -25,6 +25,8 @@ const IF1: Ieee802154MultipanIndex = Ieee802154MultipanIndex::CONTEXT1;
 struct Received(Vec<Ieee802154FrameInfo>);
 
 impl Ieee802154Environment for Received {
+    fn enhanced_ack_security_failed(&mut self, _error: Ieee802154SecurityFrameError) {}
+
     fn coexistence_break(&mut self) {}
 
     fn now_micros(&mut self) -> u64 {

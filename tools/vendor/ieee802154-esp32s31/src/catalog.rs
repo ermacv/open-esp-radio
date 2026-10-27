@@ -18,11 +18,21 @@ const PROMISCUOUS_MASK: &str = "Promiscuous masks configured ACK flags; C overwr
 const RETENTION: &str =
     "mac_init snapshots and republishes retained settings; C restores PIB defaults";
 
-// SOURCE: ESP-IDF 4d80c1b2 esp_ieee802154_dev.c `isr_handle_tx_done`,
-// `isr_handle_ack_rx_done`, `stop_current_operation`, `isr_handle_tx_abort`;
-// esp_ieee802154_timer.c `ieee802154_timer0_stop` and `timer0_fire_at`.
-// The production affine acknowledgement contract additionally consumes stale
-// timer0 before arming and acknowledges it while enabled before masking.
+// SOURCE: ESP-IDF 4d80c1b2:
+// esp_ieee802154_dev.c:175 receive_ack_timeout_timer_start;
+// esp_ieee802154_dev.c:400 stop_rx_ack; esp_ieee802154_dev.c:431 stop_current_operation;
+// esp_ieee802154_dev.c:526 isr_handle_tx_done; esp_ieee802154_dev.c:614 isr_handle_ack_rx_done;
+// esp_ieee802154_dev.c:741 isr_handle_tx_abort;
+// esp_ieee802154_timer.c:23 ieee802154_timer0_stop;
+// esp_ieee802154_timer.c:64 ieee802154_timer0_fire_at;
+// esp_ieee802154_timer.c:102 isr_handle_timer0_done.
+// https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/ieee802154/driver/esp_ieee802154_dev.c#L175
+// Production acknowledgement source: https://github.com/ermacv/open-esp-radio/pull/693
+// HW8_S31_IEEE_MASKED_STATUS_20261026, run hw8-20261026-radio-local-05,
+// ieee-timers.json, retained-snapshot/selective-W1C phases:
+// https://github.com/ermacv/open-esp-radio/pull/689
+// The affine contract consumes stale timer0 before arming and acknowledges
+// it while enabled before masking; vendor fingerprints stay unchanged.
 const ACK_WAIT: &str = "Retained initialization; stale timer0 is consumed before ACK wait starts";
 const ACK_COMPLETE: &str = "Retained initialization; ACK completion consumes timer0 before masking";
 const ACK_ABORT: &str = "Retained initialization; ACK abort consumes timer0 before masking";

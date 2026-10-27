@@ -445,14 +445,11 @@ without dropping its quarantined owners. The new record adds 12 bytes of
 retained data to the PHY HIL image: magic, a diagnostic word packing all fourteen
 event flags, state and reason, and checksum. It prints at the next boot and
 remains retained on output refusal.
-A malformed secured ACK returned by the environment is
-`InvalidEnhancedAckSecurity`: it retains the original PHR/FCF octets and
-engine state before DMA publication. Its complete generated image remains
-in the quarantined enhanced-ACK buffer. The consuming engine/MAC owner enters
-that same quarantine and the image records/resets through the same path.
-The alternate reason uses the existing twelve-byte retained slot, without
-increasing its allocation. Its next-boot diagnostic prints the original header
-and state; output refusal retains the record.
+Malformed secured ACK output from the environment is refused as API input.
+The engine issues STOP, reports the typed security error to its environment,
+delivers the received frame without an ACK and selects the next operation.
+It writes no security setter or TX DMA publication and returns no fault;
+no retained record is added or extended.
 During ACK reception the engine stops timer0, samples and clears its event
 while enabled, then masks
 it. A new ACK wait enables and clears old pending while timer0 is stopped,

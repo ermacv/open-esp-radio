@@ -215,6 +215,10 @@ pub trait Ieee802154Environment {
     /// `isr_handle_tx_ack_phase_rx_abort` and `isr_handle_tx_abort`.
     /// Only software coexistence calls it.
     fn coexistence_break(&mut self);
+    /// A secured ACK returned by the generator failed header validation.
+    /// The operation is stopped and the received frame is delivered without
+    /// an ACK; the environment owns this typed diagnostic, without reset.
+    fn enhanced_ack_security_failed(&mut self, error: Ieee802154SecurityFrameError);
     /// `esp_timer_get_time` in microseconds.
     fn now_micros(&mut self) -> u64;
     /// `esp_ieee802154_receive_done`.
@@ -1124,10 +1128,8 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     ///
     /// # Errors
     /// An unsupported event retains the complete observation and entry state.
-    /// No acknowledgement or dispatch occurs for unsupported events.
-    /// Malformed secured output from the ACK generator retains its PHR/FCF
-    /// and state before DMA publication. Either fault quarantines the MAC
-    /// and storage for the image's retained record/reset path.
+    /// No acknowledgement or dispatch occurs; quarantine the MAC and storage
+    /// and record/reset through the image's terminal fault path.
     pub fn isr<L, E>(&mut self, ll: &mut L, env: &mut E) -> Result<(), Fault>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
@@ -1197,7 +1199,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         }
         if events.contains(Ieee802154Event::RxDone) {
             vendor_assert!(self.state == Ieee802154State::Rx);
-            self.isr_rx_done(&mut cx)?;
+            self.isr_rx_done(&mut cx);
             events = events.difference(Ieee802154Event::RxDone.mask());
         }
         if events.contains(Ieee802154Event::AckTxDone) {
@@ -1765,7 +1767,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         }
     }
 
-    fn isr_rx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>) -> Result<(), Fault>
+    fn isr_rx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
@@ -1778,10 +1780,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             cx.ll.set_command(Ieee802154LlCommand::Stop);
             self.receive_done(cx);
             self.needs_next_operation = true;
-            return Ok(());
+            return;
         }
         if self.state != Ieee802154State::Rx {
-            return Ok(());
+            return;
         }
         let index = usize::from(self.rx_index);
         if frame.ack_required()
@@ -1800,22 +1802,20 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             let generated = cx
                 .env
                 .generate_enhanced_ack(&image, &self.rx_info[index], &mut ack);
-            if let Ieee802154EnhancedAck::Secured { key } = generated {
-                let address = cx
-                    .ll
-                    .multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0);
-                self.set_transmit_security(cx.ll, &ack, &key, &address)
-                    .map_err(|_| {
-                        // Keep the complete failed generator output in the
-                        // quarantined buffer, without publishing it to DMA.
-                        self.buffers.enhanced_ack.write(&ack);
-                        Fault::InvalidEnhancedAckSecurity {
-                            header: [ack[0], ack[1], ack[2]],
-                            state: self.state,
-                        }
-                    })?;
-            }
-            if generated != Ieee802154EnhancedAck::Refused {
+            let generated = match generated {
+                Ieee802154EnhancedAck::Secured { key } => {
+                    let address = cx
+                        .ll
+                        .multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0);
+                    self.set_transmit_security(cx.ll, &ack, &key, &address)
+                        .map(|()| generated)
+                }
+                other => Ok(other),
+            };
+            if matches!(
+                generated,
+                Ok(Ieee802154EnhancedAck::Generated | Ieee802154EnhancedAck::Secured { .. })
+            ) {
                 self.buffers.enhanced_ack.write(&ack);
                 cx.ll.set_tx_address(self.addresses.enhanced_ack);
                 self.tx = TxSource::EnhancedAck;
@@ -1823,7 +1823,11 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 self.set_state(Ieee802154State::TxEnhAck);
                 self.needs_next_operation = false;
             } else {
+                // SOURCE: ESP-IDF 4d80c1b2 esp_ieee802154_dev.c:593-597.
                 cx.ll.set_command(Ieee802154LlCommand::Stop);
+                if let Err(error) = generated {
+                    cx.env.enhanced_ack_security_failed(error);
+                }
                 self.receive_done(cx);
                 self.needs_next_operation = true;
             }
@@ -1831,7 +1835,6 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             self.receive_done(cx);
             self.needs_next_operation = true;
         }
-        Ok(())
     }
 
     /// `ieee802154_ack_config_pending_bit`.

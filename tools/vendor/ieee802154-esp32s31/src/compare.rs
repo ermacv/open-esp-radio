@@ -98,6 +98,9 @@ pub fn compare_scenario(
     vendor: &[Record],
     port: Result<Vec<Record>, String>,
 ) -> Verdict {
+    if vendor.iter().any(vendor_asserted) {
+        return compare(vendor, port);
+    }
     // These obligations are outside the ordinary LL trace, and cannot be
     // accepted by a complete-trace fingerprint that omits external calls.
     if let Ok(port) = &port {
@@ -210,6 +213,33 @@ mod tests {
                 port: None,
             }
         );
+    }
+
+    #[test]
+    fn vendor_assertion_precedes_mismatched_security_and_coex_obligations() {
+        let scenario = &crate::catalog::SCENARIOS[0];
+        let vendor = [
+            Record::Return {
+                name: "esp_ieee802154_set_transmit_security".to_owned(),
+                value: 258,
+            },
+            Record::External {
+                name: "esp_coex_ieee802154_coex_break_notify".to_owned(),
+                arguments: vec![],
+            },
+            Record::Event {
+                name: "assert_failed".to_owned(),
+                arguments: vec![],
+                first: vec![],
+                second: vec![],
+            },
+        ];
+        for port in [Ok(vec![]), Err("refused input".to_owned())] {
+            assert_eq!(
+                super::compare_scenario(scenario, &vendor, port),
+                Verdict::Incomplete("the vendor driver asserted".to_owned())
+            );
+        }
     }
 
     #[test]
