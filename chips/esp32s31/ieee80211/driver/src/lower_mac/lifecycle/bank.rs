@@ -185,7 +185,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -193,16 +192,16 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> VacantView<'view, LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+> VacantView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
 {
     /// Place newly acquired construction resources in this caller's bank.
     pub fn prepare(
         self,
         authority: CoreAuthority<'core, Path, TICKETS>,
-        tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
+        tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
         config: LowerMacConfig,
         coex: &'slot C,
-    ) -> DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+    ) -> DisabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
     {
         self.owner.core = LowerMacCore::new(authority, tx, config, coex).core;
         self.owner.phase = Phase::Disabled;
@@ -213,7 +212,6 @@ impl<
 impl<
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -221,7 +219,7 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> CoreOwner<LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+> CoreOwner<LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
 {
     // Each heavy step has one body regardless of the caller's gate marker.
     #[inline(never)]

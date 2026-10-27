@@ -250,9 +250,7 @@ async fn install(boot: Boot, config: RadioConfig) -> Result<PortParts<Device, TX
     }
     let transmitter = OrdinaryTxOwner::new(WifiTxResources {
         slot: slot!(TX0, SLOT0),
-        policy: WifiTxRuntimePolicy::<
-            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-        >::vendor_defaults(),
+        policy: WifiTxRuntimePolicy::vendor_defaults(),
         power: CappedTxPowerProfile::new(power, ceiling),
         entropy: Entropy(boot.entropy.max(1)),
         timer: EmbassyClock,
@@ -286,7 +284,6 @@ async fn install(boot: Boot, config: RadioConfig) -> Result<PortParts<Device, TX
 }
 
 impl port::Device<TX> for Device {
-    type Profile = <Inner as port::Device<TX>>::Profile;
     type Power = <Inner as port::Device<TX>>::Power;
     type Coex = <Inner as port::Device<TX>>::Coex;
     type Entropy = Entropy;

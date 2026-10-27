@@ -6,8 +6,12 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
 
 ## Rules
 
-- **Driver core.** The driver owns all four EDCA queues and executes each
-  attempt's retry plan; a protected MPDU is numbered at its first launch; DMA
+- **Driver core.** The driver owns all four EDCA queues. Its TX forms are a
+  caller-selected single attempt and a fixed-rate `ManagementTxPlan`. The
+  caller supplies RTS/CTS or CTS-to-self and its legacy control rate; the
+  driver retains no BSS protection or retry ladder. ESP-NOW protocol state
+  stays in softmac, with no dedicated driver TX entry point. A protected
+  MPDU is numbered at its first launch; DMA
   is reached only through its owner type, never alongside a quiescence proof.
 - **MAC ownership.** The channel switch writes only the MAC control word and
   the REGDMA link select. TBTT events from the power interrupt are lossy, so

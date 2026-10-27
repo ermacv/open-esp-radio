@@ -1,55 +1,5 @@
 use super::*;
-
-#[test]
-fn capability_surface_is_live_for_every_standard_phy_and_closed_for_lr() {
-    for mode in [
-        EspNowPhyMode::LegacyDsss1M,
-        EspNowPhyMode::StandardP2pOfdm(EspNowOfdmRate::Mbps6),
-        EspNowPhyMode::StandardP2pOfdm(EspNowOfdmRate::Mbps54),
-        EspNowPhyMode::StandardP2pHt20(oer_ieee80211_port::espressif::EspNowHt20Rate::new(
-            EspNowHtMcs::Mcs0,
-            EspNowHtGuardInterval::Short400Ns,
-        )),
-        EspNowPhyMode::StandardP2pHt20(oer_ieee80211_port::espressif::EspNowHt20Rate::new(
-            EspNowHtMcs::Mcs7,
-            EspNowHtGuardInterval::Long800Ns,
-        )),
-    ] {
-        assert_eq!(esp32s31_esp_now_phy_support(mode), EspNowPhySupport::Live);
-    }
-    for rate in [
-        oer_ieee80211_port::espressif::EspressifLongRangeRate::Kbps250,
-        oer_ieee80211_port::espressif::EspressifLongRangeRate::Kbps500,
-    ] {
-        assert_eq!(
-            esp32s31_esp_now_phy_support(EspNowPhyMode::LongRange(rate)),
-            EspNowPhySupport::LongRangeFailClosed {
-                tx_missing: EspNowLongRangeMissing::TxPlcpQueueVector,
-                rx_missing: EspNowLongRangeMissing::RxRateNormalization,
-            }
-        );
-    }
-}
-
-#[test]
-fn every_ht20_sgi_gap_rate_selects_its_same_mcs_lgi_record() {
-    for mcs in [
-        EspNowHtMcs::Mcs0,
-        EspNowHtMcs::Mcs1,
-        EspNowHtMcs::Mcs2,
-        EspNowHtMcs::Mcs3,
-        EspNowHtMcs::Mcs4,
-        EspNowHtMcs::Mcs5,
-        EspNowHtMcs::Mcs6,
-    ] {
-        let Ok(OrdinaryRetryRatePolicy::P2pHtSgiFallback(schedule)) = p2p_ht_sgi_retry_policy::<
-            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-        >(8 - mcs.index()) else {
-            panic!("SGI gap must use the typed fallback policy")
-        };
-        assert_eq!(schedule.schedule().index(), 8 - mcs.index());
-    }
-}
+use oer_ieee80211_port::espressif::EspNowOfdmRate;
 
 #[test]
 fn lr_rx_rate_is_quarantined_from_the_truncated_public_field() {
@@ -104,27 +54,5 @@ fn lr_rx_rate_is_quarantined_from_the_truncated_public_field() {
         EspNowRxRateNormalization::StandardUnavailable {
             observed: RxEvidence::HardwareObserved(non_standard_raw),
         }
-    );
-}
-
-#[test]
-fn a_missing_or_non_p2p_profile_record_is_refused_before_publication() {
-    use oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile as Profile;
-    for (kind, index) in [
-        (RateScheduleKind::P2pDot11G, 255),
-        (RateScheduleKind::P2pDot11N, 255),
-        (RateScheduleKind::Dot11B, 0),
-    ] {
-        assert_eq!(
-            p2p_retry_policy::<Profile>(kind, index),
-            Err(EspNowTxError::P2pRetryScheduleUnavailable { kind, index })
-        );
-    }
-    assert_eq!(
-        p2p_ht_sgi_retry_policy::<Profile>(255),
-        Err(EspNowTxError::P2pRetryScheduleUnavailable {
-            kind: RateScheduleKind::P2pDot11N,
-            index: 255
-        })
     );
 }

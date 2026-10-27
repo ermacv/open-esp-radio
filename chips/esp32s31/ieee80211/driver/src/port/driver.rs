@@ -149,7 +149,7 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
 impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> {
     pub(super) fn take_transmitter(
         &mut self,
-    ) -> OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B> {
+    ) -> OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B> {
         match self.core.view() {
             CoreView::Disabled(view) => view.dismantle().into_transmitter(),
             CoreView::DisabledClosing(view) => view.dismantle().into_transmitter(),
@@ -193,7 +193,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
     }
     pub(super) fn retire(
         &mut self,
-    ) -> OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B> {
+    ) -> OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B> {
         let transmitter = self.take_transmitter();
         for queue in &mut self.queues {
             queue.clear();

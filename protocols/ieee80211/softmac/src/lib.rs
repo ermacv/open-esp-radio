@@ -14,7 +14,6 @@
 //! bounded v2 reassembly above the wire codecs and lower-MAC port.
 
 pub mod extensions;
-mod handoff;
 
 pub use extensions::espressif::esp_now::protocol::{
     ESP_NOW_DEFAULT_PEER_CAPACITY, ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY, EspNowConfig,

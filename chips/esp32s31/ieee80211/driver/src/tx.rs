@@ -6,7 +6,6 @@
 //! Wi-Fi descriptor path without exposing the vendor parameter image.
 
 use core::pin::Pin;
-use oer_ieee80211_port::backend::BackendTxProfile;
 
 use oer_esp32s31_ieee80211_mac::{tx::TxSlot, tx::runtime::WifiTxRuntimePolicy};
 use oer_esp32s31_phy::PhyTxTargetPowerProfile;
@@ -80,9 +79,9 @@ pub struct ControlTxConfig {
 /// Protocol owners add their own finite configuration instead of exposing a
 /// growing positional constructor whenever another runtime or hardware port
 /// is introduced.
-pub struct WifiTxResources<'slot, X: BackendTxProfile, P, E, T, const BUFFER_SIZE: usize> {
+pub struct WifiTxResources<'slot, P, E, T, const BUFFER_SIZE: usize> {
     pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
-    pub policy: WifiTxRuntimePolicy<X>,
+    pub policy: WifiTxRuntimePolicy,
     pub power: P,
     pub entropy: E,
     pub timer: T,

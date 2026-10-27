@@ -136,13 +136,12 @@ receive reorder buffer is `block_ack::reorder::RxReorderBuffer`. Adaptive
 rate control, which chooses a frame's first rate from the reports, is the
 caller's.
 
-`backend_retry` owns ordinary retry state over a static port profile and
-portable rate/queue traits. `backend_aggregate` owns bounded aggregate retry
-state; `block_ack::batch` returns each retained MPDU exactly once, and
-`block_ack::banks` pools receive reorder state across interfaces. The
-Espressif profile implements `port::backend::BackendTxProfile` here and in
-`oer-espressif-ieee80211-policy`; the image/runtime composes it with the S31
-hardware backend. The chip crates consume only port/wire values.
+`retry` owns portable retry state and a detached rate-series selector over
+`RateLadder`; neither retains backend policy. `backend_aggregate` owns bounded
+aggregate retry state; `block_ack::batch` returns each retained MPDU exactly
+once, and `block_ack::banks` pools receive reorder state across interfaces.
+The family rate controller selects rates above the backend. Protection
+selection stays here and passes its exact control-frame rate to the port.
 
 ## Known defects
 

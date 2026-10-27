@@ -67,7 +67,6 @@ type Frames = FrameReceiver<'static, Q, B, crate::irq::RadioExecutor>;
 type Publisher = QueueSink<'static, EmbassyClock, Q, B>;
 type Tx = OrdinaryTxOwner<
     'static,
-    oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
     CappedTxPowerProfile<PhyTxTargetPowerProfile>,
     Entropy,
     EmbassyClock,
@@ -242,9 +241,7 @@ async fn run(
     let slot = irq::TX_SLOT.init(TxSlot::from_dma(dma));
     let mut tx = Some(OrdinaryTxOwner::new_legacy(WifiTxResources {
         slot: Pin::new(slot),
-        policy: WifiTxRuntimePolicy::<
-            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-        >::vendor_defaults(),
+        policy: WifiTxRuntimePolicy::vendor_defaults(),
         power: CappedTxPowerProfile::new(profile, ceiling(initial, config)),
         entropy: Entropy(rng),
         timer: EmbassyClock,

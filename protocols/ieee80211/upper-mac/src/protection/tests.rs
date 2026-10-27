@@ -95,7 +95,10 @@ fn erp_protection_sends_cts_to_self_at_a_dsss_rate_for_every_receiver() {
             TxProtection::CtsToSelf { rate: CCK11_SHORT }
         );
         assert_eq!(decision.reasons, TxProtectionReasons::ERP);
-        assert_eq!(decision.protection.port_protection(), Protection::CtsToSelf);
+        assert_eq!(
+            decision.protection.port_protection(),
+            Protection::CtsToSelf { rate: CCK11_SHORT }
+        );
     }
     let dsss = PhyRate::Legacy(CCK11_SHORT);
     assert_eq!(
@@ -141,7 +144,12 @@ fn ht_protection_uses_rts_for_individual_and_cts_to_self_for_group_receivers() {
             rate: LegacyRate::Ofdm24M
         }
     );
-    assert_eq!(unicast.protection.port_protection(), Protection::RtsCts);
+    assert_eq!(
+        unicast.protection.port_protection(),
+        Protection::RtsCts {
+            rate: LegacyRate::Ofdm24M
+        }
+    );
     assert_eq!(
         policy
             .select(mpdu(rate, TxReceiver::Group, 100), &ProtectEveryHeTxop)

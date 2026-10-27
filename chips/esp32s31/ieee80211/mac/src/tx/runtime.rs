@@ -1,19 +1,12 @@
-//! Hardware BSS, EDCA and WMM state with a statically selected transmit profile.
-//!
-//! The profile owns retry/protection algorithms above the backend. This adapter
-//! retains queue contention and installed BSS facts; detached completions apply
-//! the core's requested contention effects through the port.
+//! Hardware EDCA, WMM and negotiated HT/HE publication parameters.
 
 use oer_ieee80211_port::{EdcaParameterSet, VifRole};
 use oer_ieee80211_wire::qos::{
     WmmAccessCategory, WmmTrafficClass, WmmUserPriority, classify_ethernet_wmm,
 };
 
-use oer_ieee80211_port::backend::{BackendContention, BackendTxProfile};
-
 use crate::{
     edca::{EdcaAccessPolicy, EdcaContentionParameters, EdcaParametersError, EdcaQueues},
-    tx::protection::{BssProtection, RtsLengthThreshold, WifiTxProtectionPolicy},
     tx::{HeEdcaTxopLimit, HtPeerAmpduParameters, LegacyTxQueue},
 };
 
@@ -129,18 +122,17 @@ pub enum WmmHardwareMediumRequest {
 /// ad-hoc fields. Entropy is supplied by the platform at the point where a
 /// hardware queue is published.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WifiTxRuntimePolicy<X: BackendTxProfile> {
+pub struct WifiTxRuntimePolicy {
     ht_ampdu: HtPeerAmpduParameters,
     he_bss_color: u8,
     /// Parameter tables by VIF; contention belongs to the four AC queues.
     edca: [EdcaParameterSet; 2],
     queues: EdcaQueues,
     heads: [Option<VifRole>; 4],
-    protection: WifiTxProtectionPolicy<X>,
 }
 
-impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
-    /// Standard non-AP EDCA defaults with the profile's BSS protection.
+impl WifiTxRuntimePolicy {
+    /// Standard non-AP EDCA defaults.
     pub const fn vendor_defaults() -> Self {
         Self {
             ht_ampdu: HtPeerAmpduParameters::from_capability_byte(0),
@@ -148,9 +140,6 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
             edca: [EdcaParameterSet::STANDARD_DEFAULT; 2],
             queues: EdcaQueues::standard_defaults(),
             heads: [None; 4],
-            protection: WifiTxProtectionPolicy::new(Some(
-                crate::tx::protection::RtsLengthThreshold::new(X::RTS_THRESHOLD_BYTES),
-            )),
         }
     }
 
@@ -191,26 +180,6 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
 
     pub const fn he_bss_color(&self) -> u8 {
         self.he_bss_color
-    }
-
-    /// Replace the BSS protection facts. Every later publication, including
-    /// a retry of an active exchange, selects its protection from them.
-    pub fn install_bss_protection(&mut self, bss: BssProtection) {
-        self.protection.install_bss(bss);
-    }
-
-    /// Leave the BSS: only the local length threshold remains.
-    pub fn clear_bss_protection(&mut self) {
-        self.protection.clear_bss();
-    }
-
-    /// Replace the local dot11RTSThreshold; `None` disables the length rule.
-    pub fn set_rts_length_threshold(&mut self, threshold: Option<RtsLengthThreshold>) {
-        self.protection.set_rts_length_threshold(threshold);
-    }
-
-    pub const fn protection(&self) -> WifiTxProtectionPolicy<X> {
-        self.protection
     }
 
     /// Atomically validate and install all four WMM access categories of
@@ -349,20 +318,8 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
     }
 }
 
-impl<X: BackendTxProfile> Default for WifiTxRuntimePolicy<X> {
+impl Default for WifiTxRuntimePolicy {
     fn default() -> Self {
         Self::vendor_defaults()
-    }
-}
-
-impl<X: BackendTxProfile> BackendContention<LegacyTxQueue> for WifiTxRuntimePolicy<X> {
-    fn record_success(&mut self, role: VifRole, queue: LegacyTxQueue) {
-        self.record_success(role, queue)
-    }
-    fn reset_terminal_exchange(&mut self, role: VifRole, queue: LegacyTxQueue) {
-        self.reset_terminal_exchange(role, queue)
-    }
-    fn record_retry_failure(&mut self, role: VifRole, queue: LegacyTxQueue) {
-        self.record_retry_failure(role, queue)
     }
 }

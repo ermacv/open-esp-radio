@@ -128,7 +128,8 @@ back; its operations are synchronous and never wait:
   Every attempt keeps the selected rate. The S31 direct W2 path consumes
   this contract without parsing a BSS or using vendor control schedules.
 - **Retry plans.** An individual frame carries its `RetryPlan`, a sequence
-  of rates with their transmissions and protection, as mac80211's rate
+  of rates with their transmissions and protection (including each control
+  frame's legacy rate), as mac80211's rate
   table. The first stage is mandatory; the tail is a fixed array of
   `RETRY_STAGES - 1` cells whose occupied cells form a prefix, which every
   operation keeps, so mapping and filtering a plan are total and cannot
@@ -370,8 +371,8 @@ Hardware backends provide the same resource and terminal contract.
 The S31 driver implements this contract in its
 [`port` module](../../../chips/esp32s31/ieee80211/driver/src/port.rs).
 Its P2 owner drives `LowerMacCore`, cooperative registers and the RX ring;
-P3 posts only static typed signals. The image supplies the static TX profile,
-timer, entropy and opaque contexts. Ordinary MPDUs retain caller-supplied
+P3 posts only static typed signals. The image supplies the timer, entropy
+and opaque contexts. Ordinary MPDUs retain caller-supplied
 PNs and external bodies; a normal uninstall returns the stopped resources.
 
 `LowerMacEvent::Terminal(LowerMacTerminal)` carries TX, key, configuration,
@@ -389,14 +390,18 @@ pool proves that no group install or removal remains outstanding. Pending
 installation tokens carry the protocol key ID and connection epoch.
 
 
-`backend::BackendTxProfile` is selected statically by the image/runtime. Its
-associated retry owner and functions expose core algorithms without a trait
-object or a stored profile. Immutable rate records, retry/protection values
-and completion facts cross this boundary; rate ladders and vendor tables
-remain in the core profile. `backend_aggregate` carries detached BlockAck
-facts and aggregate retry commands. `espressif` contains LR and ESP-NOW PHY
-requests and static admitted-packet handoffs; ESP-NOW peer/protocol state
-remains in softmac.
+The backend TX forms are caller-selected single attempts and fixed-rate
+`ManagementTxPlan`s. A backend neither walks a vendor retry ladder nor
+selects BSS protection or a protection control-frame rate. The S31 queue
+adapter receives the exact control-frame rate through each `RetryPlan`
+stage's `Protection` value. EDCA backoff and MSDU age remain backend work.
+
+`backend` carries immutable rate-record identities and observation values
+used by the family rate controller, with no backend retry owner, static TX
+profile or protection selectors. `backend_aggregate` carries detached
+BlockAck facts and aggregate retry commands. `espressif` contains LR and ESP-NOW PHY requests;
+ESP-NOW preparation, peers and protocol state remain in softmac.
+
 
 
 ## Shared backend conformance

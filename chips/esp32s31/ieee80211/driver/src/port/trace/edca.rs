@@ -110,8 +110,8 @@ impl Event for EdcaDraw {
     }
 }
 #[inline(never)]
-pub(crate) fn contention<X: oer_ieee80211_port::backend::BackendTxProfile>(
-    policy: &WifiTxRuntimePolicy<X>,
+pub(crate) fn contention(
+    policy: &WifiTxRuntimePolicy,
     head: VifRole,
     ac: WmmAccessCategory,
     backoff: u16,

@@ -168,6 +168,4 @@ pub(crate) const fn seq(value: u16) -> oer_ieee80211_wire::sequence::SequenceNum
     }
 }
 
-pub mod backend_retry;
-
 pub mod backend_aggregate;

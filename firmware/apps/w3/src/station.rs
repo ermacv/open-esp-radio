@@ -40,7 +40,6 @@ pub type Epoch<Id> = Child<Root<Id>, 4>;
 pub struct ImageComposition;
 impl Composition for ImageComposition {
     type Coex = radio::Coex;
-    type Profile = oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
     type Entropy = radio::Entropy;
     type Body = Infallible;
     type OwnedContext<Id: SlotIdentity> = TxOwnedContext<Caps, port::BufferClass<TX>, Epoch<Id>>;

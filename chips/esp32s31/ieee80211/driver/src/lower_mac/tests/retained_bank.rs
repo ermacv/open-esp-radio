@@ -124,9 +124,7 @@ fn direct_owner_prepares_and_runs_the_complete_lifecycle_in_place_without_a_port
             pools.authority,
             OrdinaryTxOwner::new(WifiTxResources {
                 slot: slot(),
-                policy: WifiTxRuntimePolicy::<
-                    oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-                >::vendor_defaults(),
+                policy: WifiTxRuntimePolicy::vendor_defaults(),
                 power: Power,
                 entropy: entropy as fn() -> u32,
                 timer: Timer::default(),

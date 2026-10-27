@@ -14,7 +14,6 @@
 //! later entries borrow the session's owners ([`session`]).
 
 use oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf;
-use oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
 use oer_ieee80211_port::backend::RetryCounters;
 
 mod calibration_leaves;
@@ -242,10 +241,10 @@ oer_probe_macros::probe! {
         let Some(initial) = TxPhyRate::from_code(initial_rate as u8, HtChannelWidth::Mhz20) else {
             return;
         };
-        let Ok(selected) = oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
-            EspressifBackendTxProfile,
-            _,
-        >(initial, counters) else {
+        let Some(selected) = oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+            initial.phy_rate(), counters,
+            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder,
+        ).and_then(|rate| TxPhyRate::try_from(rate).ok()) else {
             return;
         };
         // SAFETY: the same descriptor object covers the selected-rate byte.

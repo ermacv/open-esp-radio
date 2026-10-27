@@ -1,10 +1,4 @@
-//! Espressif on-air rate requests and the static ESP-NOW handoff.
-
-use crate::interface::BoundVirtualInterface;
-use oer_ieee80211_wire::{
-    channel::WifiChannel,
-    extensions::espressif::esp_now::{EspNowV1WireError, EspNowV2WireError},
-};
+//! Espressif on-air PHY requests used by portable ESP-NOW protocol owners.
 
 /// Requested Espressif Long Range on-air rate, not a chip register value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -118,8 +112,8 @@ impl EspNowHt20Rate {
 
 /// PHY policy requested for one peer.
 ///
-/// The two `StandardP2p*` variants use the dedicated P2P retry arenas on
-/// backends which own them. A backend must reject `LongRange` unless it owns
+/// The caller selects the attempts for the requested standard peer PHY. A
+/// backend must reject `LongRange` unless it owns
 /// the complete LR enable, PLCP, rate and receive-status contract. Merely
 /// possessing recovered LR rate schedule bytes is not sufficient.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -134,43 +128,3 @@ pub enum EspNowPhyMode {
     /// Espressif LR; requires complete backend LR support.
     LongRange(EspressifLongRangeRate),
 }
-
-/// A protocol-admitted plaintext ESP-NOW v1 MPDU.
-pub trait EspNowV1Tx: Copy {
-    /// Channel admitted for this transmission.
-    fn transmit_channel(self) -> WifiChannel;
-    /// The virtual station binding admitted by the protocol.
-    fn station(self) -> BoundVirtualInterface;
-    /// The protocol-admitted PHY request.
-    fn phy_mode(self) -> EspNowPhyMode;
-    /// Whether the receiver address is broadcast.
-    fn is_broadcast(self) -> bool;
-    /// Encode the complete admitted MPDU, returning its used length or a bounded wire error.
-    fn encode(self, output: &mut [u8]) -> Result<usize, EspNowV1WireError>;
-}
-/// A protocol-admitted plaintext ESP-NOW v2 MPDU.
-pub trait EspNowV2Tx: Copy {
-    /// Channel admitted for this transmission.
-    fn transmit_channel(self) -> WifiChannel;
-    /// The virtual station binding admitted by the protocol.
-    fn station(self) -> BoundVirtualInterface;
-    /// The protocol-admitted PHY request.
-    fn phy_mode(self) -> EspNowPhyMode;
-    /// Whether the receiver address is broadcast.
-    fn is_broadcast(self) -> bool;
-    /// Complete encoded MPDU length required before publication.
-    fn encoded_len(self) -> usize;
-    /// Encode the complete admitted MPDU, returning its used length or a bounded wire error.
-    fn encode(self, output: &mut [u8]) -> Result<usize, EspNowV2WireError>;
-}
-/// An encrypted handoff's binding, checked before any hardware publication.
-pub trait EspNowEncryptedTx {
-    /// Home channel of the encrypted peer binding.
-    fn home_channel(&self) -> WifiChannel;
-    /// The virtual station binding admitted by the protocol.
-    fn station(&self) -> BoundVirtualInterface;
-}
-/// A protocol-owned ESP-NOW peer identity supplied for key installation.
-pub trait EspNowKeyPeer {}
-/// Protocol-owned ESP-NOW key material; this handoff never exposes its bytes.
-pub trait EspNowKeyMaterial {}

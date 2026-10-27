@@ -282,19 +282,8 @@ impl<'id> TestDriver<'id> {
     )]
     pub(super) fn dismantle(
         mut self,
-    ) -> Result<
-        LowerMacCoreParts<
-            'id,
-            'static,
-            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-            Power,
-            fn() -> u32,
-            Timer,
-            RadioNine,
-            512,
-        >,
-        Self,
-    > {
+    ) -> Result<LowerMacCoreParts<'id, 'static, Power, fn() -> u32, Timer, RadioNine, 512>, Self>
+    {
         match self.0.view() {
             CoreView::Disabled(view) => Ok(view.dismantle()),
             CoreView::DisabledClosing(view) => Ok(view.dismantle()),
