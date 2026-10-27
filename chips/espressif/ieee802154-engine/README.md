@@ -120,8 +120,8 @@ STOP and both timer-stop commands, samples, masks and acknowledges its saved
 sample. These commands and selected acknowledgements do not prove that every
 hardware producer drained.
 
-An event sample containing an unnamed lane (7 or 13) or the unsupported
-clock-match event (10) returns `Fault::UnhandledEvents` before acknowledgement
+Engine interrupt service rejects a sample containing an unnamed lane (7 or 13)
+or the unsupported clock-match event (10) with `Fault::UnhandledEvents` before acknowledgement
 or dispatch, preserving the complete event sample and entry state. The combined
 MAC/engine owner consumes itself into absorbing `Quarantined` storage with no
 recovery operations. The S31 PHY HIL image calls `fatal::reset_recording` with
