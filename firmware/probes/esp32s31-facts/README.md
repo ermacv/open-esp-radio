@@ -5,6 +5,12 @@ experiments on hart 0. Hart 1 is held in global reset with its CPU clock gated
 before a nonzero boot address is written. There is no HAL dependency and no
 production probe API. `src/image.rs::PROBES` is the single registration point.
 
+Selection 230 observes one natural BTLC period without PHY or timer-value
+seeding and holds the board for about 38 minutes. Selection 231 is its bounded
+120 ms readiness observation; 232–239 remain unassigned. Neither runs in
+request-zero batches. Project policy requires a separate decision for other
+long runs or repetitions. See [the observation contract](BTLC.md).
+
 Build with `cargo fw probe oer-firmware-probes-esp32s31-facts`. Load the ELF
 into SRAM with the ROM loader under a `cargo stand lease --board s31-a --air none`.
 The entry owns its stack, clears BSS and preserves its LP `.noinit` record.

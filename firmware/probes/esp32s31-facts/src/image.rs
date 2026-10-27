@@ -219,6 +219,14 @@ enum Action {
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
     Probe {
+        id: 231,
+        run: Action::Thread(ble_wave2::natural_ready),
+    },
+    Probe {
+        id: 230,
+        run: Action::Thread(ble_wave2::natural_wrap),
+    },
+    Probe {
         id: 220,
         run: Action::Thread(radio_local::wave2::wifi2),
     },

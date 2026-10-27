@@ -6,7 +6,7 @@ mod lp;
 mod mac;
 pub(super) use lp::{lp_clear, lp_masked, shutdown_soft, shutdown_wrap, sleep_other, sleep16};
 pub(super) use mac::{arrivals, controls, groups, mapping, masks};
-pub(super) use mac::{overflow_ack, overflow_rate, overflow_reset};
+pub(super) use mac::{natural_ready, natural_wrap, overflow_ack, overflow_rate, overflow_reset};
 
 const LIMIT: u32 = 200_000;
 
@@ -45,7 +45,7 @@ fn capture(s: &mut Session<'_>, tag: u32) -> Option<u32> {
     }
 }
 
-fn setup(s: &mut Session<'_>) {
+fn digital_setup(s: &mut Session<'_>) {
     oer_riscv::disable_interrupts();
     contain(s);
     ble::clocks(s);
@@ -113,6 +113,10 @@ fn setup(s: &mut Session<'_>) {
     s.ble.core.modify_hal_init_latch(|w| {
         w.set_enable_31(true);
     });
+}
+
+fn setup(s: &mut Session<'_>) {
+    digital_setup(s);
     // SOURCE: r_obd_update_btlc_timer +4/+8/+c/+1c. These are positional
     // seed values, not a declared physical time encoding.
     s.ble.core.modify_btlc_timer_value_0(|w| {
