@@ -35,6 +35,11 @@ pub fn set_calibration_clock<P: PhyPlacement>(clock: &mut ClockRegisters<P>, ena
     });
 }
 
+/// SOURCE: S31_MMIO_DECLARED_20100800; no electrical name beyond the existing gate use.
+pub fn calibration_clock_enabled<P: PhyPlacement>(clock: &ClockRegisters<P>) -> bool {
+    clock.fe.read_word_0800_opaque().bit_2_opaque()
+}
+
 /// Open the three undocumented front-end and baseband radio clock gates.
 ///
 /// SOURCE: ROM_REV0_PHY_OPEN_FE_BB_CLK; these are the first three

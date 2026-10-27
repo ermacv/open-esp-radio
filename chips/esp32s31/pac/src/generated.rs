@@ -63963,7 +63963,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn.
+            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67; read0 again returned0x67 after those address transitions plus clear/set issued from bit18=0. The clear was a no-op and set wrote0->1; address0x400->0 supplied1->0 edges. No separate reset pulse was established. Other-mode geometry and reset scope remain unresolved.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -64028,7 +64028,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn.
+            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67; read0 again returned0x67 after those address transitions plus clear/set issued from bit18=0. The clear was a no-op and set wrote0->1; address0x400->0 supplied1->0 edges. No separate reset pulse was established. Other-mode geometry and reset scope remain unresolved.
             #[inline]
             pub const fn bit_18_opaque(&self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -70710,7 +70710,7 @@ pub mod fe {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Sampled only while estimator READY is clear, for a diagnostic count; phy_check_rx_sat samples the same pair 100 times. RX saturation is a strong inference, generic activity a weak inference; these are not established estimator-busy or completion bits. Individual bit meanings remain unassigned.
+            /// Sampled only while estimator READY is clear, for a diagnostic count; phy_check_rx_sat samples the same pair 100 times. HW19 observed zero in 33 not-ready ordered reads within two completed calibrated internal-tone measurements: a nonzero pair is not a necessary busy indication in that epoch. RX saturation remains an inference; individual bit meanings and other RF conditions remain unassigned.
             #[inline]
             pub const fn bits_20_21_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 20)

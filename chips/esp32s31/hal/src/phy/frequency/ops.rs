@@ -7,6 +7,83 @@ use crate::phy::registers::{FrequencyRegisters, PhyPlacement};
 use oer_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam;
 use oer_mmio::{Bits, Index, Placement};
 
+/// Capture admission and the exact fields changed by ownership and read selection.
+pub fn capture_read_configuration<P: PhyPlacement>(
+    frequency: &FrequencyRegisters<P>,
+) -> Option<super::ReadConfiguration> {
+    let control = frequency.fe.read_frequency_control();
+    let read = frequency.fe.read_frequency_memory_read_control();
+    if control.channel_switch_pulse() || control.memory_write_pulse() || read.read_pulse() {
+        return None;
+    }
+    Some(super::ReadConfiguration {
+        control,
+        number: frequency.fe.read_i2c_number_control(),
+    })
+}
+
+/// Restore selection and ownership with fresh preserving RMWs; never pulse a writer.
+pub fn restore_read_configuration<P: PhyPlacement>(
+    frequency: &mut FrequencyRegisters<P>,
+    saved: super::ReadConfiguration,
+) {
+    frequency.fe.modify_i2c_number_control(|w| {
+        w.set_memory_read_mode(saved.number.memory_read_mode());
+    });
+    frequency.fe.modify_frequency_control(|w| {
+        w.set_bits_8_17_opaque(saved.control.bits_8_17_opaque())
+            .set_bit_18_opaque(saved.control.bit_18_opaque())
+            .set_hardware_frequency_disable(saved.control.hardware_frequency_disable_variant());
+    });
+}
+
+// This lookup is evaluated only in the inline const below; both offsets and
+// image geometry are generated from the register model, never a local address map.
+const fn image_index(offsets: &[u32], offset: usize) -> usize {
+    let mut index = 0;
+    while index < offsets.len() {
+        if offsets[index] as usize == offset {
+            return index;
+        }
+        index += 1;
+    }
+    panic!("frequency word must belong to its owner's diagnostic image")
+}
+
+/// Ordered, side-effect-free whole-word observations from the generated image.
+pub fn observe<P: PhyPlacement>(frequency: &FrequencyRegisters<P>) -> Option<super::Observation> {
+    use oer_esp32s31_pac::fe::{self, PhyFrequencyChannelOracleFe};
+    let control_image = frequency.fe.radio_phy_register_image(
+        const {
+            image_index(
+                &PhyFrequencyChannelOracleFe::<P::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS,
+                fe::frequency_control::OFFSET,
+            )
+        },
+    )?;
+    let parameter_image = frequency.fe.radio_phy_register_image(
+        const {
+            image_index(
+                &PhyFrequencyChannelOracleFe::<P::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS,
+                fe::frequency_parameter_1_status::OFFSET,
+            )
+        },
+    )?;
+    let result = frequency.fe.read_frequency_memory_read_result().value();
+    let control = frequency.fe.read_frequency_control();
+    let ready = frequency
+        .fe
+        .read_frequency_parameter_1_status()
+        .frequency_ready();
+    Some(super::Observation {
+        control_image,
+        parameter_image,
+        result,
+        high_address_or_reset: control.bit_18_opaque(),
+        ready,
+    })
+}
+
 /// Corrected capacitor word, retaining the ROM's signed spill into the mode.
 ///
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING. The word keeps bits 15 and 13:8

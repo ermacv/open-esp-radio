@@ -5,6 +5,40 @@
 use oer_esp32s31_pac::fe::PhyIqEstimatorOracle;
 use oer_mmio::{Bits, Placement};
 
+/// Capture only the software fields this engine changes.
+pub fn capture_configuration<P: Placement>(
+    estimator: &PhyIqEstimatorOracle<P>,
+) -> super::Configuration {
+    super::Configuration {
+        config: estimator.read_estimator_config(),
+        control: estimator.read_estimator_control(),
+    }
+}
+
+/// Restore the named fields; unrelated and unassigned lanes retain their current values.
+pub fn restore_configuration<P: Placement>(
+    estimator: &mut PhyIqEstimatorOracle<P>,
+    saved: super::Configuration,
+) {
+    estimator.modify_estimator_config(|w| {
+        w.set_bits_26_27_opaque(saved.config.bits_26_27_opaque());
+    });
+    estimator.modify_estimator_control(|w| {
+        w.set_bits_19_20_opaque(saved.control.bits_19_20_opaque())
+            .set_bits_2_16_opaque(saved.control.bits_2_16_opaque());
+    });
+    set_start_enabled(estimator, saved.control.start_enable());
+    set_measurement_enabled(estimator, saved.control.measurement_enable());
+}
+
+/// SOURCE: ROM_REV0_PHY_IQ_ESTIMATOR, BLOB_LIBPHY_PHY_CHECK_RX_SAT.
+/// Both observations are exposed without assigning an electrical identity to the pair.
+pub fn sample_indications<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> super::Indications {
+    let ready = estimator.read_estimator_ready_status().ready();
+    let opaque_pair = estimator.read_word_08d0_opaque().bits_20_21_opaque().get() as u8;
+    super::Indications { ready, opaque_pair }
+}
+
 /// Publish the complete rev0 ROM estimator configuration prefix.
 ///
 /// Complete `phy_iq_est_enable` performs three separate fresh-read RMW

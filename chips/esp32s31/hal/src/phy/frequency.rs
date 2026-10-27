@@ -13,6 +13,66 @@ use crate::{
 
 pub mod ops;
 
+/// Software fields modified by a held frequency-memory read transaction.
+#[derive(Debug)]
+pub struct ReadConfiguration {
+    control: oer_esp32s31_pac::fe::frequency_control::R,
+    number: oer_esp32s31_pac::fe::i2c_number_control::R,
+}
+
+/// Read selection and ownership, without assigning the dual-use high bit a role.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReadConfigurationFields {
+    pub address_low: u16,
+    pub high_address_or_reset: bool,
+    pub read_mode: u8,
+    pub hardware_disabled: bool,
+}
+
+impl ReadConfiguration {
+    pub fn fields(&self) -> ReadConfigurationFields {
+        ReadConfigurationFields {
+            address_low: self.control.bits_8_17_opaque().get() as u16,
+            high_address_or_reset: self.control.bit_18_opaque(),
+            read_mode: self.number.memory_read_mode().get() as u8,
+            hardware_disabled: self.control.hardware_frequency_disable(),
+        }
+    }
+}
+
+/// Ordered observations; READY is the only sourced completion indication here.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Observation {
+    pub control_image: u32,
+    pub parameter_image: u32,
+    pub result: u32,
+    pub high_address_or_reset: bool,
+    pub ready: bool,
+}
+
+/// Refuse capture while a read, write or channel-switch pulse is asserted.
+#[cfg(target_arch = "riscv32")]
+pub fn capture_read_configuration(
+    registers: &mut impl SharedPhyAccess,
+) -> Option<ReadConfiguration> {
+    ops::capture_read_configuration(&phy_blocks_mut(registers).phy_frequency_channel_oracle)
+}
+
+/// Restore only the changed fields, without a write or channel-switch pulse.
+#[cfg(target_arch = "riscv32")]
+pub fn restore_read_configuration(registers: &mut impl SharedPhyAccess, saved: ReadConfiguration) {
+    ops::restore_read_configuration(
+        &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
+        saved,
+    );
+}
+
+/// Observe control, parameter/status and read-result through the current owner.
+#[cfg(target_arch = "riscv32")]
+pub fn observe(registers: &mut impl SharedPhyAccess) -> Option<Observation> {
+    ops::observe(&phy_blocks_mut(registers).phy_frequency_channel_oracle)
+}
+
 pub use ops::{PhyFrequencyI2cNumberAddresses, frequency_cap_correction_word};
 
 /// Clear the shared Wi-Fi control state at the start of common PHY init.

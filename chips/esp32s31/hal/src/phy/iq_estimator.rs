@@ -9,6 +9,67 @@ use crate::{owner::SharedPhyAccess, phy_blocks_mut};
 
 pub mod ops;
 
+/// Saved software configuration; restoring it preserves all other lanes.
+#[derive(Debug)]
+pub struct Configuration {
+    config: oer_esp32s31_pac::fe::estimator_config::R,
+    control: oer_esp32s31_pac::fe::estimator_control::R,
+}
+
+/// The named software fields of an estimator configuration observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ConfigurationFields {
+    pub configuration_code: u8,
+    pub control_code: u8,
+    pub window: u16,
+    pub start_enabled: bool,
+    pub measurement_enabled: bool,
+}
+
+impl Configuration {
+    pub fn fields(&self) -> ConfigurationFields {
+        ConfigurationFields {
+            configuration_code: self.config.bits_26_27_opaque().get() as u8,
+            control_code: self.control.bits_19_20_opaque().get() as u8,
+            window: self.control.bits_2_16_opaque().get() as u16,
+            start_enabled: self.control.start_enable(),
+            measurement_enabled: self.control.measurement_enable(),
+        }
+    }
+    /// Whether either measurement phase was enabled at capture.
+    pub fn enabled(&self) -> bool {
+        self.control.start_enable() || self.control.measurement_enable()
+    }
+}
+
+/// Two ordered observations, with no inferred busy or saturation identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Indications {
+    pub ready: bool,
+    pub opaque_pair: u8,
+}
+
+/// Capture the fields changed by estimator configuration and enable operations.
+#[cfg(target_arch = "riscv32")]
+pub fn capture_configuration(registers: &mut impl SharedPhyAccess) -> Configuration {
+    ops::capture_configuration(&phy_blocks_mut(registers).phy_iq_estimator_oracle)
+}
+
+/// Restore the captured fields through fresh preserving RMWs.
+#[cfg(target_arch = "riscv32")]
+pub fn restore_configuration(registers: &mut impl SharedPhyAccess, saved: Configuration) {
+    ops::restore_configuration(
+        &mut phy_blocks_mut(registers).phy_iq_estimator_oracle,
+        saved,
+    );
+}
+
+/// Read READY, then the complete opaque pair, including when READY is set.
+#[cfg(target_arch = "riscv32")]
+pub fn sample_indications(registers: &mut impl SharedPhyAccess) -> Indications {
+    ops::sample_indications(&phy_blocks_mut(registers).phy_iq_estimator_oracle)
+}
+
 /// Estimator readiness and the separately sampled opaque indication pair.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReadinessSnapshot {

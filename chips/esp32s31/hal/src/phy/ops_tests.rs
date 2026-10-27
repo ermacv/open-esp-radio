@@ -28,6 +28,82 @@ use crate::phy::{
     temperature::ops as ts,
 };
 
+#[test]
+fn estimator_indications_keep_the_pair_even_when_ready() {
+    use oer_esp32s31_pac::fe;
+    for ready in [false, true] {
+        for pair in 0..4 {
+            let mut memory = vec![0; instances::fe::SIZE.div_ceil(4)];
+            memory[fe::estimator_ready_status::OFFSET / 4] = if ready {
+                fe::estimator_ready_status::READY_MASK
+            } else {
+                0
+            };
+            memory[fe::word_08d0_opaque::OFFSET / 4] =
+                pair << fe::word_08d0_opaque::BITS_20_21_OPAQUE_MASK.trailing_zeros();
+            let estimator = PhyIqEstimatorOracle::host(&mut memory).expect("host block");
+            let result = iq::sample_indications(&estimator);
+            assert_eq!(result.ready, ready);
+            assert_eq!(u32::from(result.opaque_pair), pair);
+        }
+    }
+}
+
+#[test]
+fn estimator_restoration_returns_saved_fields_and_enable_state() {
+    let mut memory = vec![0; instances::fe::SIZE.div_ceil(4)];
+    let mut estimator = PhyIqEstimatorOracle::host(&mut memory).expect("host block");
+    iq::configure(&mut estimator, 123);
+    let saved = iq::capture_configuration(&estimator);
+    assert!(!saved.enabled());
+    iq::configure(&mut estimator, 1000);
+    iq::set_start_enabled(&mut estimator, true);
+    iq::set_measurement_enabled(&mut estimator, true);
+    iq::restore_configuration(&mut estimator, saved);
+    assert_eq!(
+        estimator.read_estimator_control().bits_2_16_opaque().get(),
+        123
+    );
+    assert!(!estimator.read_estimator_control().start_enable());
+    assert!(!estimator.read_estimator_control().measurement_enable());
+}
+
+#[test]
+fn frequency_read_restore_preserves_other_owner_changes_and_never_pulses_writers() {
+    let mut memory = vec![0; 7994];
+    let mut frequency = FrequencyRegisters::host(&mut memory).expect("host block");
+    frequency.fe.modify_frequency_control(|w| {
+        w.set_channel_switch_pulse(true);
+    });
+    assert!(fr::capture_read_configuration(&frequency).is_none());
+    frequency.fe.modify_frequency_control(|w| {
+        w.set_channel_switch_pulse(false);
+    });
+    let saved = fr::capture_read_configuration(&frequency).expect("quiet engine");
+    fr::set_hardware_control(&mut frequency, false);
+    fr::read_memory(&mut frequency, 0x400, 2);
+    frequency.fe.modify_frequency_control(|w| {
+        w.set_channel_index(17);
+    });
+    fr::restore_read_configuration(&mut frequency, saved);
+    let control = frequency.fe.read_frequency_control();
+    assert_eq!(control.channel_index(), 17);
+    assert_eq!(control.bits_8_17_opaque().get(), 0);
+    assert!(!control.bit_18_opaque());
+    assert!(!control.hardware_frequency_disable());
+    assert!(!control.memory_write_pulse());
+    assert!(!control.channel_switch_pulse());
+    assert_eq!(
+        frequency
+            .fe
+            .read_i2c_number_control()
+            .memory_read_mode()
+            .get(),
+        0
+    );
+    assert!(fr::observe(&frequency).is_some());
+}
+
 /// Run `operation` over a block of `words` words filled with `fill` and
 /// compare the whole memory with the fill and `changed` words replaced.
 fn check(words: usize, fill: u32, changed: &[(usize, u32)], operation: impl FnOnce(&mut [u32])) {

@@ -14,12 +14,14 @@ use oer_esp32s31_hal::{
     power::ChipClocks,
     root::Root,
 };
+use oer_esp32s31_phy::concurrent::ConcurrentPhy;
 use oer_memory::ClaimCell;
 
 /// The owners the session's entries borrow.
 pub(crate) struct Session {
+    pub(crate) calibrated: bool,
     /// The shared radio domain.
-    pub(crate) radio: RadioDomain<ChipClocks>,
+    pub(crate) radio: RadioDomain<ChipClocks, ConcurrentPhy>,
     /// The running Wi-Fi register owner.
     pub(crate) wifi: RadioAccess,
     /// Wi-Fi's common power, held for the session.
@@ -54,23 +56,90 @@ pub(crate) fn init() -> u32 {
         return ROOT_INIT;
     };
     let clocks = runtime.clocks;
-    let (mut radio, partitions) = runtime.radio.split::<ChipClocks, _>(());
-    let Ok((powered, power)) =
-        WifiCold::from_partition(partitions.wifi).power_up(&mut radio, &clocks)
-    else {
-        return WIFI_POWER;
+    let (radio, partitions) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let session = match powered(radio, partitions.wifi, clocks) {
+        Ok(session) => session,
+        Err(reason) => return reason,
+    };
+    install(session)
+}
+
+fn powered(
+    mut radio: RadioDomain<ChipClocks, ConcurrentPhy>,
+    wifi: oer_esp32s31_hal::root::WifiPartition,
+    clocks: ChipClocks,
+) -> Result<Session, u32> {
+    let Ok((powered, power)) = WifiCold::from_partition(wifi).power_up(&mut radio, &clocks) else {
+        return Err(WIFI_POWER);
     };
     let Ok(clocked) = powered.enable_clocks(&mut radio, &clocks) else {
-        return WIFI_CLOCKS;
+        return Err(WIFI_CLOCKS);
     };
     let (wifi, clocks_on) = clocked.into_running();
-    let session = Session {
+    Ok(Session {
+        calibrated: false,
         radio,
         wifi,
         _power: power,
         _clocks_on: clocks_on,
         _clocks: clocks,
+    })
+}
+
+/// One production cold registration, before the Wi-Fi client enters its clocks.
+#[cfg(target_arch = "riscv32")]
+#[allow(
+    dead_code,
+    reason = "the staged companion calls this shared session path"
+)]
+pub(crate) async fn calibrated(
+    hardware: oer_esp32s31_hal::root::RadioHardware,
+    clocks: ChipClocks,
+    identity: oer_esp32s31_phy::PhyCalibrationIdentity,
+    timer: &impl oer_cooperate::CooperativeTimer,
+) -> u32 {
+    use oer_esp32s31_phy::{
+        NoopPhyTargetObserver, PhyRegisterConfig, RomShortDelay, register_concurrent_phy,
     };
+    let (mut radio, partitions) = hardware.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let registration = register_concurrent_phy::<_, (), RomShortDelay, _>(
+        timer,
+        &mut radio,
+        &mut (),
+        &clocks,
+        PhyRegisterConfig::new(identity),
+        NoopPhyTargetObserver,
+    )
+    .await;
+    if registration.is_err() {
+        return 6;
+    }
+    match powered(radio, partitions.wifi, clocks) {
+        Ok(mut session) => {
+            session.calibrated = true;
+            install(session)
+        }
+        Err(reason) => reason,
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+impl Session {
+    pub(crate) fn measurement_clocks(&mut self, enabled: bool) -> bool {
+        use oer_esp32s31_hal::domain::PhyClockModule;
+        if enabled {
+            self.radio
+                .enable_phy_modem_clocks(PhyClockModule::Calibration, &self._clocks)
+                .is_ok()
+        } else {
+            self.radio
+                .disable_phy_modem_clocks(PhyClockModule::Calibration)
+                .is_ok()
+        }
+    }
+}
+
+pub(crate) fn install(session: Session) -> u32 {
     match SESSION.install(session) {
         Ok(()) => STARTED,
         Err(_) => INSTALLED,

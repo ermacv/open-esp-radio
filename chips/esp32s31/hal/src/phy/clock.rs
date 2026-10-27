@@ -8,6 +8,12 @@ use crate::{owner::SharedPhyAccess, phy_blocks_mut};
 
 pub mod ops;
 
+/// Observe the FE calibration/capture gate without changing it.
+#[cfg(target_arch = "riscv32")]
+pub fn calibration_clock_enabled(registers: &mut impl crate::owner::SharedPhyAccess) -> bool {
+    ops::calibration_clock_enabled(&crate::phy_blocks_mut(registers).phy_clock_oracle)
+}
+
 /// Clear the shared Wi-Fi enable bit as RF shutdown does.
 ///
 /// SOURCE\[BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907]. This is one preserving

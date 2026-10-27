@@ -1,4 +1,5 @@
-#![no_std]
+#![cfg_attr(target_arch = "riscv32", no_std)]
+#![cfg(target_arch = "riscv32")]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 //! Link-time probes for compiled vendor/Rust MMIO comparison.
@@ -18,6 +19,7 @@ use oer_ieee80211_port::backend::RetryCounters;
 
 mod calibration_leaves;
 mod coex;
+mod est_freq;
 mod session;
 
 /// A vendor argument outside the reviewed domain, or a session that did not
