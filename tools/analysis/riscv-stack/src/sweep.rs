@@ -14,8 +14,8 @@ use std::collections::BTreeSet;
 pub enum TransferKind {
     /// A linking call: the callee runs below the caller's frame.
     Call,
-    /// A jump out of the function: a tail call, or an indirect jump whose
-    /// target is unknown.
+    /// A jump or taken conditional branch out of the function: a tail call,
+    /// or an indirect jump whose target is unknown.
     Tail,
 }
 
@@ -472,6 +472,23 @@ pub(crate) fn transfers(
             load: None,
         };
         match instruction {
+            Instruction::Base(
+                Inst::Beq { offset, .. }
+                | Inst::Bne { offset, .. }
+                | Inst::Blt { offset, .. }
+                | Inst::Bge { offset, .. }
+                | Inst::Bltu { offset, .. }
+                | Inst::Bgeu { offset, .. },
+            ) => {
+                let target = pc.wrapping_add(offset.as_u32());
+                if outside(target) {
+                    ledger.push(
+                        &mut transfers,
+                        resolved(target, TransferKind::Tail),
+                        control,
+                    )?;
+                }
+            }
             Instruction::Base(Inst::Jal {
                 offset: displacement,
                 dest,

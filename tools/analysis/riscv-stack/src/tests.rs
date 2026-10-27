@@ -138,6 +138,7 @@ const CALL_A5: u32 = 0x0007_80e7; // jalr ra, 0(a5)
 const TEXT: u32 = 0x1000;
 const BRANCH_NEXT: u32 = 0x0000_0263; // beq zero, zero, 4
 
+mod external_branches;
 mod irq_paths;
 
 /// `jal ra, target` at `site`.

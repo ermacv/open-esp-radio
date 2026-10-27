@@ -132,8 +132,8 @@ gaps, unknown outgoing jumps and dynamic `sp` prevent an observed frame.
 A sole open indirect exit whose value analysis
 proves every target external is fed back through `KnownJump` for one complete
 graph analysis; neither its frame nor its callees receive an assumed bound.
-Its transfers are every direct call and
-out-of-function jump of a linear sweep over its whole extent, which also
+Its transfers are every direct call, out-of-function jump and external taken
+conditional branch of a linear sweep over its whole extent, which also
 reaches code behind jump tables the graph does not expand, plus the indirect
 transfers whose target the value analysis resolves; an indirect jump whose
 targets the analysis finds inside the function is a jump table, not a
@@ -160,6 +160,9 @@ A function's bound is its frame or, if deeper, a callee's bound below the
 `sp` of the transfer that reaches it: the analysis's depth at that site, or the
 whole frame at a site it did not reach. The bound never underestimates the
 code it reaches.
+An external conditional branch is a tail transfer, like a direct jump out
+of the function: the destination's bound counts below the source's retained
+stack depth, while the fall-through path remains in the local graph.
 
 Bounds fail closed. A root has a number only when nothing it reaches is
 unresolved; otherwise `Bound::reasons` counts the unresolved sites and
