@@ -20260,7 +20260,7 @@ pub mod bt_mac {
 
     /// The `IRQ_CONTROL_1` register.
     ///
-    /// BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027.
+    /// BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Release writes this command before IRQ_CONTROL_2 and the baseline masks; sleep paths also write it. SOURCE: BLOB_S31_BLE_IRQ_COMMAND_CONTEXT_20261027. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027.
     pub mod irq_control_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -20325,7 +20325,7 @@ pub mod bt_mac {
 
     /// The `IRQ_CONTROL_2` register.
     ///
-    /// BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027.
+    /// BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Release writes this command after IRQ_CONTROL_1 and before the baseline masks. SOURCE: BLOB_S31_BLE_IRQ_COMMAND_CONTEXT_20261027. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027.
     pub mod irq_control_2 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -20486,7 +20486,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_0` register.
     ///
-    /// First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000. BT MAC reset preserved the tested 0x8000 image; subsequent APB reset made every modeled lane zero. No POR value follows. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
+    /// First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000. The baseline and dynamic mask leaves preserve all other enable bits in their stores. ISO coexistence separately masks bits 0/1/8/13/16 before acknowledging them; common masks do not cover that feature group. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. BT MAC reset preserved the tested 0x8000 image; subsequent APB reset made every modeled lane zero. No POR value follows. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
     pub mod irq_enable_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21267,7 +21267,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_1` register.
     ///
-    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking CONTROLLER_TIME_OVERFLOW retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026.
+    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. ISO coexistence separately masks bit 13 before acknowledgement; common baseline/dynamic masks preserve that enable and bits 4/5/6 in their stores. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking CONTROLLER_TIME_OVERFLOW retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026.
     pub mod irq_enable_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -29227,7 +29227,7 @@ pub mod bt_mac {
 
     /// The `INTERRUPT_ENABLE` register.
     ///
-    /// BLE base-stack interrupt enable bank. BLE PHY initialization preserves only source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here. All omitted source identities remain unknown.
+    /// BLE base-stack interrupt enable bank at +0x4b4, distinct from primary IRQ_ENABLE_0/1. BLE PHY initialization preserves only inherited source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here; its paired disable masks only 14 and preserves all other enables in that store. Common primary baseline/dynamic mask leaves do not write this word. No all-task-output-low effect follows. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027; BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. All omitted source identities remain unknown.
     pub mod interrupt_enable {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -29283,7 +29283,7 @@ pub mod bt_mac {
                 (self.0 & 0x00004000) != 0
             }
 
-            /// BLE PHY initialization preserves source 17 while disabling every other interrupt source. Its feature identity remains unknown.
+            /// BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask debug helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027.
             #[inline]
             pub const fn source_17(self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -29318,7 +29318,7 @@ pub mod bt_mac {
                 (self.0 & 0x00004000) != 0
             }
 
-            /// BLE PHY initialization preserves source 17 while disabling every other interrupt source. Its feature identity remains unknown.
+            /// BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask debug helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027.
             #[inline]
             pub const fn source_17(&self) -> bool {
                 (self.0 & 0x00020000) != 0

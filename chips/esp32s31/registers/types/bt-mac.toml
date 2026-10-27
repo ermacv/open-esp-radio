@@ -14,8 +14,8 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-outputs]]
 name = "NRT"
-description = "The second route: it samples a dedicated status snapshot; both routes acknowledge through the same clear banks."
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+description = "The second route: it samples a dedicated status snapshot; both routes acknowledge through the same clear banks. The inspected pinned controller composition has no NRT broker callback after acknowledgement. No individual hardware cause, positive producer or route-preserving output-low transaction is established. SOURCE: BLOB_S31_BLE_NRT_DISPOSITION_20261027."
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_S31_BLE_NRT_DISPOSITION_20261027"]
 
 [review]
 sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
@@ -52,14 +52,14 @@ completeness = "partial"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 
 [review.entity."IRQ_CONTROL_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT", "HW9_S31_MAC_RELEASE_20261027"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT", "HW9_S31_MAC_RELEASE_20261027", "BLOB_S31_BLE_IRQ_COMMAND_CONTEXT_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_CONTROL_1.COMMAND"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 
 [review.entity."IRQ_CONTROL_2"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT", "HW9_S31_MAC_RELEASE_20261027"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT", "HW9_S31_MAC_RELEASE_20261027", "BLOB_S31_BLE_IRQ_COMMAND_CONTEXT_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_CONTROL_2.COMMAND"]
@@ -84,7 +84,7 @@ sources = ["S31_MMIO_USE_20101048"]
 sources = ["S31_MMIO_USE_20101048", "S31_MMIO_DECLARED_20101048"]
 
 [review.entity."IRQ_ENABLE_0"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_APB_RESET_20261026"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_APB_RESET_20261026", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_ENABLE_0.SOURCE_0"]
@@ -198,7 +198,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."IRQ_ENABLE_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW12_S31_BLE_APB_RESET_20261026"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW12_S31_BLE_APB_RESET_20261026", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_ENABLE_1.SOURCE_3"]
@@ -1176,14 +1176,14 @@ sources = ["S31_MMIO_USE_201014B0", "S31_MMIO_DECLARED_201014B0"]
 sources = ["S31_MMIO_USE_201014B0", "S31_MMIO_DECLARED_201014B0"]
 
 [review.entity."INTERRUPT_ENABLE"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT", "BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027"]
 completeness = "partial"
 
 [review.entity."INTERRUPT_ENABLE.SCHEDULER_RUN"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
 
 [review.entity."INTERRUPT_ENABLE.SOURCE_17"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027"]
 
 [review.entity."INTERRUPT_ENABLE.BITS_0_13_OPAQUE"]
 sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
@@ -1744,7 +1744,7 @@ description = "Observed complete command image 1; internal action unknown. No NR
 [[registers]]
 name = "IRQ_CONTROL_1"
 offset = 0x10
-description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027."
+description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Release writes this command before IRQ_CONTROL_2 and the baseline masks; sleep paths also write it. SOURCE: BLOB_S31_BLE_IRQ_COMMAND_CONTEXT_20261027. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027."
 
 [[registers.fields]]
 name = "COMMAND"
@@ -1756,7 +1756,7 @@ description = "Observed complete command image 1; internal action unknown. No NR
 [[registers]]
 name = "IRQ_CONTROL_2"
 offset = 0x14
-description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027."
+description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Release writes this command after IRQ_CONTROL_1 and before the baseline masks. SOURCE: BLOB_S31_BLE_IRQ_COMMAND_CONTEXT_20261027. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027."
 
 [[registers.fields]]
 name = "COMMAND"
@@ -1801,7 +1801,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "IRQ_ENABLE_0"
 offset = 0x54
-description = "First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000. BT MAC reset preserved the tested 0x8000 image; subsequent APB reset made every modeled lane zero. No POR value follows. SOURCE: HW12_S31_BLE_APB_RESET_20261026."
+description = "First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000. The baseline and dynamic mask leaves preserve all other enable bits in their stores. ISO coexistence separately masks bits 0/1/8/13/16 before acknowledging them; common masks do not cover that feature group. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. BT MAC reset preserved the tested 0x8000 image; subsequent APB reset made every modeled lane zero. No POR value follows. SOURCE: HW12_S31_BLE_APB_RESET_20261026."
 
 [[registers.fields]]
 name = "SOURCE_0"
@@ -1973,7 +1973,7 @@ class = "read-only"
 [[registers]]
 name = "IRQ_ENABLE_1"
 offset = 0x60
-description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking CONTROLLER_TIME_OVERFLOW retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026."
+description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. ISO coexistence separately masks bit 13 before acknowledgement; common baseline/dynamic masks preserve that enable and bits 4/5/6 in their stores. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking CONTROLLER_TIME_OVERFLOW retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026."
 
 [[registers.fields]]
 name = "CONTROLLER_TIME_OVERFLOW"
@@ -3773,7 +3773,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "INTERRUPT_ENABLE"
 offset = 0x4b4
-description = "BLE base-stack interrupt enable bank. BLE PHY initialization preserves only source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here. All omitted source identities remain unknown."
+description = "BLE base-stack interrupt enable bank at +0x4b4, distinct from primary IRQ_ENABLE_0/1. BLE PHY initialization preserves only inherited source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here; its paired disable masks only 14 and preserves all other enables in that store. Common primary baseline/dynamic mask leaves do not write this word. No all-task-output-low effect follows. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027; BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. All omitted source identities remain unknown."
 
 [[registers.fields]]
 name = "SCHEDULER_RUN"
@@ -3785,7 +3785,7 @@ description = "The synchronous base-stack subscriber enables source 14 immediate
 name = "SOURCE_17"
 bits = "17"
 class = "plain"
-description = "BLE PHY initialization preserves source 17 while disabling every other interrupt source. Its feature identity remains unknown."
+description = "BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask debug helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027."
 
 [[registers.fields]]
 name = "BITS_0_13_OPAQUE"
