@@ -773,3 +773,126 @@ fn physical_duration_admission_enforces_the_retained_scales_half_range() {
         );
     }
 }
+
+#[test]
+fn counted_time_survives_n_overflows_without_live_samples_or_p2_dequeues() {
+    use crate::interrupt::{PrimaryInterruptCapture, SchedulerWakeCell};
+    use oer_interrupt_table::signal::host;
+    use oer_time::{Clock, Duration, Instant};
+    use oer_time_virtual::VirtualClock;
+    let clock = VirtualClock::<1>::starting_at(Instant::EPOCH);
+    let wake = SchedulerWakeCell::new(host::deferred_signal());
+    let scale = BluetoothControllerHalInitConfig::reviewed_standalone().controller_time_scale();
+    let start = ControllerTimeSample::for_host_test(1);
+    let count = wake.controller_time_overflows();
+    let (_, first) =
+        ControllerSchedulerEpoch::from_counted_live_update(&start, count, count, scale)
+            .unwrap()
+            .unwrap();
+    assert_eq!(first, 0);
+    for _ in 0..7 {
+        // SOURCE: HW12_S31_BTLC_RATE_20261026: nominal 2 ticks/us;
+        // one full 32-bit first-word period is 2^31 microseconds.
+        clock.advance(Duration::from_micros(1_u64 << 31)).unwrap();
+        wake.publish_from_interrupt(PrimaryInterruptCapture::controller_time_overflow_for_test())
+            .unwrap();
+    }
+    clock.advance(Duration::from_micros(1)).unwrap();
+    let sample = ControllerTimeSample::for_host_test(3);
+    let count = wake.controller_time_overflows();
+    let (epoch, total) =
+        ControllerSchedulerEpoch::from_counted_live_update(&sample, count, count, scale)
+            .unwrap()
+            .unwrap();
+    let elapsed = clock
+        .now()
+        .checked_duration_since(Instant::EPOCH)
+        .unwrap()
+        .as_micros();
+    assert_eq!(total, elapsed);
+    assert_eq!(epoch.project_without_reanchor(&sample), total as u32);
+    // Odd-tick remainder survives the next fractional update after the long gap.
+    assert_eq!(
+        epoch.project(ControllerTimeSample::for_host_test(4)),
+        (total + 1) as u32
+    );
+    let batch = wake.take().unwrap().unwrap().classify().unwrap();
+    assert!(!batch.has_scheduler_work());
+    assert_eq!(wake.controller_time_overflows(), count);
+}
+
+#[test]
+fn counted_time_allows_more_than_half_a_range_without_a_wrap() {
+    use crate::interrupt::ControllerTimeOverflowEpoch;
+    let scale = BluetoothControllerHalInitConfig::reviewed_standalone().controller_time_scale();
+    let count = ControllerTimeOverflowEpoch(0);
+    let sample = ControllerTimeSample::for_host_test(0xc0000001);
+    let (epoch, micros) =
+        ControllerSchedulerEpoch::from_counted_live_update(&sample, count, count, scale)
+            .unwrap()
+            .unwrap();
+    assert_eq!(micros, 0x60000000);
+    assert_eq!(epoch.project_without_reanchor(&sample), micros as u32);
+}
+
+#[test]
+fn a_wrap_during_latching_requires_a_new_sample_on_either_side_of_the_boundary() {
+    use crate::interrupt::ControllerTimeOverflowEpoch;
+    let scale = BluetoothControllerHalInitConfig::reviewed_standalone().controller_time_scale();
+    let before = ControllerTimeOverflowEpoch(3);
+    let after = ControllerTimeOverflowEpoch(4);
+    for raw in [u32::MAX, 0] {
+        let sample = ControllerTimeSample::for_host_test(raw);
+        assert_eq!(
+            ControllerSchedulerEpoch::from_counted_live_update(&sample, before, after, scale),
+            Ok(None)
+        );
+    }
+    let sample = ControllerTimeSample::for_host_test(0);
+    assert_eq!(
+        ControllerSchedulerEpoch::from_counted_live_update(&sample, after, after, scale)
+            .unwrap()
+            .unwrap()
+            .1,
+        4_u64 << 31
+    );
+}
+
+#[test]
+fn counted_projection_uses_the_configured_scale_and_retains_range_failure_inputs() {
+    use crate::interrupt::ControllerTimeOverflowEpoch;
+    let sample = ControllerTimeSample::for_host_test(u32::MAX);
+    for (period, expected) in [
+        (BluetoothHalInitPeriod::Image500, 0xbfffffffe_u64),
+        (BluetoothHalInitPeriod::Image1000, 0x5ffffffff),
+        (BluetoothHalInitPeriod::Image2000, 0x2ffffffff),
+    ] {
+        let scale =
+            BluetoothControllerHalInitConfig::new(BluetoothHalInitScale::Sixteen, 11, 33, period)
+                .controller_time_scale();
+        let count = ControllerTimeOverflowEpoch(5);
+        assert_eq!(
+            ControllerSchedulerEpoch::from_counted_live_update(&sample, count, count, scale)
+                .unwrap()
+                .unwrap()
+                .1,
+            expected
+        );
+    }
+    let scale = BluetoothControllerHalInitConfig::new(
+        BluetoothHalInitScale::Sixteen,
+        11,
+        33,
+        BluetoothHalInitPeriod::Image500,
+    )
+    .controller_time_scale();
+    let count = ControllerTimeOverflowEpoch(u32::MAX);
+    assert_eq!(
+        ControllerSchedulerEpoch::from_counted_live_update(&sample, count, count, scale),
+        Err(super::ControllerTimeRangeFault {
+            raw_ticks: u32::MAX,
+            overflows: u32::MAX,
+            scale,
+        })
+    );
+}

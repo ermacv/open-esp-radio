@@ -281,6 +281,24 @@ impl<M: ControllerMemory> Engine<M> {
     ) -> Result<(), bluetooth::BluetoothControllerTimeLatchBeginError> {
         self.controller().begin_controller_time_latch()
     }
+
+    /// Round-trip through the permanently installed interrupt handler without
+    /// issuing a register command. The composition finishes that handler's
+    /// status service before the lower-priority task can resume.
+    pub async fn interrupt_service_barrier(
+        &mut self,
+        bell: &impl scheduler::interrupt::SchedulerDoorbell,
+    ) -> Result<(), scheduler::interrupt::SchedulerInterruptError> {
+        use scheduler::interrupt::SchedulerInterruptError;
+        if self.faulted {
+            return Err(SchedulerInterruptError::Quarantined);
+        }
+        self.scheduler_interrupts
+            .as_mut()
+            .ok_or(SchedulerInterruptError::NotInstalled)?
+            .service_barrier(bell)
+            .await
+    }
     pub fn step_controller_time_latch(
         &mut self,
     ) -> Result<

@@ -127,7 +127,8 @@ pub trait GateHardware: 'static {
         clock: &C,
     ) -> PrimaryInterruptCapture;
     /// Sample and acknowledge the NRT snapshots; whether any was set.
-    fn capture_nrt(bank: &mut Self::Bank) -> bool;
+    /// An unexpected primary overflow clear lane faults before either clear.
+    fn capture_nrt(bank: &mut Self::Bank) -> Result<bool, bluetooth::BluetoothNrtInterruptFault>;
     /// One finite register step of the timer.
     fn step_timer(
         timer: Self::Timer,
@@ -219,6 +220,11 @@ pub enum GateFaultReason {
     StoppedTimer(bluetooth::BluetoothModemLpTimerStoppedInterruptFault),
     /// LP is pending while the handler has no timer owner.
     VacantTimer,
+    /// A captured BTLC wrap exhausted the software counter; retain its value.
+    ControllerTimeOverflow(super::ControllerTimeOverflowExhausted),
+    /// An exact NRT pair contained the primary overflow clear lane; neither
+    /// bank was acknowledged and both observations remain retained.
+    NrtControllerTimeOverflow(bluetooth::BluetoothNrtInterruptFault),
 }
 
 /// Why the gate refused a request or could not exchange it.
@@ -474,16 +480,30 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
             scheduler,
         } = &mut self.bank
         {
-            if H::serve_request(scheduler, registers, clock) {
-                self.signals.reply.raise(1);
-            }
+            let replied = H::serve_request(scheduler, registers, clock);
             let capture = H::capture_primary(registers, clock);
-            let _ = self
+            let published = self
                 .signals
                 .cells
                 .scheduler_wake()
                 .publish_from_interrupt(capture);
-            let _ = H::capture_nrt(registers);
+            if let Err(cause) = published {
+                self.fault(GateFaultReason::ControllerTimeOverflow(cause), observation);
+                return self.check_fault();
+            }
+            if let Err(cause) = H::capture_nrt(registers) {
+                self.fault(
+                    GateFaultReason::NrtControllerTimeOverflow(cause),
+                    observation,
+                );
+                return self.check_fault();
+            }
+            // A service barrier completes only after the entry's pending
+            // primary cause has reached the wrap counter. The table proves
+            // that this handler is above its requesting P2 executor.
+            if replied {
+                self.signals.reply.raise(1);
+            }
         }
         Ok(())
     }
@@ -892,8 +912,8 @@ impl GateHardware for ChipGate {
         super::primary::step_primary_interrupt(bank, clock)
     }
 
-    fn capture_nrt(bank: &mut Self::Bank) -> bool {
-        super::nrt::step_nrt_default_interrupt(bank).is_some()
+    fn capture_nrt(bank: &mut Self::Bank) -> Result<bool, bluetooth::BluetoothNrtInterruptFault> {
+        super::nrt::step_nrt_default_interrupt(bank).map(|epoch| epoch.is_some())
     }
 
     fn step_timer(

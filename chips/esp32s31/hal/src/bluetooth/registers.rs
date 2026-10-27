@@ -65,7 +65,7 @@ pub use device_table::BluetoothDeviceTablePublished;
 pub use direction_finding::BluetoothDirectionFindingDisabledBaselinePrepared;
 pub use interrupt::{
     BluetoothInterruptOutputPrepared, BluetoothNrtInterruptAcknowledged,
-    BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
+    BluetoothNrtInterruptFault, BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
     BluetoothSchedulerRunInterruptsPrepared, retirement::BluetoothControllerOutputReleaseError,
 };
 pub use memory_lists::{

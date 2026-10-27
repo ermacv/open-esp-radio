@@ -673,6 +673,28 @@ owners. MMIO outside the restricted PAC must use typed accessors. Missing
 register fields are reviewed in `chips/<chip>/registers/` and regenerated
 into the PAC, never reconstructed with local masks in a HAL or adapter.
 
+Bluetooth controller-time overflow stays with the primary IRQ bank owner.
+Preparation arms bank-one `CONTROLLER_TIME_OVERFLOW` in baseline `0x1302`;
+P3 acknowledges its saved snapshot and publishes a checked wrap count as a
+value to P2. This counter is independent of coalesced scheduler work and grants
+no MMIO authority. P2 requires an unchanged count throughout each latch, with
+a post-latch handler service barrier before the second read, so hardware-pending
+overflow cannot escape the comparison. Only then does it join the count and raw
+word into continuous time. Terminal release masks
+and clears overflow before the bank leaves the handler; CONTROL1/2 alone do
+not silence enabled pending (SOURCE: `HW12_S31_BLE_OVERFLOW_ACK_20261026` and
+`HW9_S31_MAC_RELEASE_20261027`). Exhaustion retains its original count or raw
+word in a named fault. B0 uses the same 44-byte retained slot for these reasons,
+without releasing owners, through `fatal::reset_recording`; the next boot
+prints the diagnostic. No additional unsafe sharing is involved.
+
+NRT acknowledgement checks the exact sampled pair against the shared primary
+overflow clear lane before either clear. A pair containing that lane returns a
+named fault preserving both words; the gate quarantines its owners and B0
+records the later pair separately from the entry observations in the same
+44-byte slot before `fatal::reset_recording`. NRT cannot consume a primary
+overflow observation without its count being published.
+
 The Bluetooth modem LP timer retains its register authority in the permanently
 bound handler throughout software queue work. P2 receives only a positional
 time/epoch snapshot and returns an unarmed plan through the gate's single-slot

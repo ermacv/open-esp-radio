@@ -113,7 +113,7 @@ fn enables(b: &Ble, tag: u32) {
     let e = b.bank.read_irq_enable_1();
     emit(
         tag,
-        u32::from(e.source_1()),
+        u32::from(e.controller_time_overflow()),
         u32::from(e.source_8()) + 2 * u32::from(e.source_9()) + 4 * u32::from(e.source_12()),
         u32::from(b.bank.read_irq_enable_0().source_15()),
     );
@@ -187,13 +187,13 @@ fn nrt_state(s: &Session<'_>, tag: u32) {
 pub(super) fn bit_one(s: &mut Session<'_>) {
     contain(s);
     clocks(s);
-    let inherited = s.ble.bank.read_irq_enable_1().source_1();
+    let inherited = s.ble.bank.read_irq_enable_1().controller_time_overflow();
     let e0 = s.ble.bank.read_irq_enable_0();
     s.ble.bank.modify_irq_enable_0(|w| {
         w.set_source_0(true).set_source_1(true);
     });
     s.ble.bank.modify_irq_enable_1(|w| {
-        w.set_source_1(true);
+        w.set_controller_time_overflow(true);
     });
     enables(&s.ble, 0x2700);
     timer_stimulus(&mut s.ble, false);
@@ -204,7 +204,7 @@ pub(super) fn bit_one(s: &mut Session<'_>) {
     nrt_state(s, 0x2703);
     clear(&mut s.ble);
     s.ble.bank.modify_irq_enable_1(|w| {
-        w.set_source_1(inherited);
+        w.set_controller_time_overflow(inherited);
     });
     s.ble.bank.modify_irq_enable_0(|w| {
         w.set_source_0(e0.source_0()).set_source_1(e0.source_1());
@@ -710,7 +710,7 @@ pub(super) fn btlc_prefix(s: &mut Session<'_>) {
     });
     baseline(b, true);
     b.bank.modify_irq_enable_1(|w| {
-        w.set_source_1(true);
+        w.set_controller_time_overflow(true);
     });
     b.bank.modify_irq_enable_0(|w| {
         w.set_source_0(true).set_source_1(true);
@@ -723,7 +723,7 @@ pub(super) fn btlc_prefix(s: &mut Session<'_>) {
     clear(&mut s.ble);
     nrt_state(s, 0x3101);
     s.ble.bank.modify_irq_enable_1(|w| {
-        w.set_source_1(false);
+        w.set_controller_time_overflow(false);
     });
     s.ble.bank.modify_irq_enable_0(|w| {
         w.set_source_0(false).set_source_1(false);

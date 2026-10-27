@@ -64,6 +64,7 @@ pub enum SchedulerInterruptError {
 }
 
 enum Command {
+    ServiceBarrier,
     Busy,
     LockModify,
     PrepareRun,
@@ -183,6 +184,7 @@ impl SchedulerInterruptHalf {
             let settle = oer_time::settle::Settle::new(super::DIAGNOSTIC_SETTLE, &clock);
             let unsettled = |_| SchedulerInterruptError::DiagnosticUnsettled;
             Ok(match command {
+                Command::ServiceBarrier => Reply::Done,
                 Command::Busy => Reply::Busy(
                     interrupts
                         .capture_scheduler_busy(settle)
@@ -396,6 +398,16 @@ impl SchedulerTaskHalf {
     ) -> Result<BluetoothSchedulerBusyObservation, SchedulerInterruptError> {
         match self.exchange(bell, Command::Busy).await? {
             (_, Reply::Busy(value)) => Ok(value),
+            _ => Err(SchedulerInterruptError::ForeignReply),
+        }
+    }
+
+    pub(crate) async fn service_barrier(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+    ) -> Result<(), SchedulerInterruptError> {
+        match self.exchange(bell, Command::ServiceBarrier).await? {
+            (_, Reply::Done) => Ok(()),
             _ => Err(SchedulerInterruptError::ForeignReply),
         }
     }

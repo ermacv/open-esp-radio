@@ -88,7 +88,9 @@ No producer of 133 is known without RF; the vendor's NRT handler has the same
 sample-and-acknowledge shape and no subscriber on this chip, so the NRT
 snapshots have no consumer here either. The part holds a gate for the bank and
 one for the timer, and touches a register owner only while
-its gate holds it.
+its gate holds it. An NRT pair containing the primary overflow clear lane
+faults before either acknowledgement; the gate retains both exact sampled
+words and quarantines its owners for the retained-record reset path.
 
 `interrupt::BluetoothInterruptGate` is the task's end. The part holds the
 doorbell line's lowering half from the start; the task's end exists only
@@ -145,6 +147,29 @@ Controller time uses the HAL period's software conversion selector. The
 standalone profile has two raw ticks per microsecond; its hardware divider is
 a separate setting. Scheduler epoch updates retain fractional raw ticks, and
 earlier fractional timestamps round down before deadline projection.
+
+Primary controller-time overflow is a typed event with an independent,
+checked `u32` count in `SchedulerWakeCell`. P3 acknowledges the saved primary
+snapshot, increments the count and pends P2; scheduler notifications may
+coalesce without losing wraps. An overflow-only batch grants no finished-list
+transfer. P2 brackets each hardware latch transaction with count reads. After latch
+completion it requests a handler service barrier through the existing scheduler
+channel; that entry captures primary and publishes the count before P2 resumes.
+Thus even an overflow still pending in hardware reaches the second count read.
+P2 retries within its original deadline if the counts differ. An equal pair joins the
+low raw word and counted epoch before conversion, preserving fractional ticks
+and continuous `u64` microseconds across long idle periods without live samples.
+The count is reset only after Controller reset and bank retirement.
+
+At the measured standalone rate, the natural first-word period is nominally
+2147.483648 s (rate-derived, not a full-period measurement; SOURCE:
+`HW12_S31_BTLC_RATE_20261026`). P3 must acknowledge each wrap before the next;
+hardware pending is not a multi-wrap counter. P2 may remain unserviced for
+multiple periods because the software count is independent of its dequeues.
+NRT does not count this measured primary-only cause and refuses a snapshot
+containing its clear lane. Counter or conversion
+range exhaustion is a named fault preserving the count and raw inputs; owners
+stay quarantined for the image's retained-record reset path.
 
 Physical event spans are non-empty and at most the signed raw-counter
 half-range. The duration projection accepts a `RadioDuration<LeRadio>`, checks the full

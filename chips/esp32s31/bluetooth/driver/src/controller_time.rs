@@ -30,6 +30,17 @@ pub enum ControllerDurationError {
     BeyondHalfRange,
 }
 
+/// Counted controller time exceeded the scheduler's microsecond range.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerTimeRangeFault {
+    /// Original low BTLC word.
+    pub raw_ticks: u32,
+    /// Original acknowledged wrap count.
+    pub overflows: u32,
+    /// Conversion selector applied to the counted raw value.
+    pub scale: BluetoothControllerTimeScale,
+}
+
 /// One ordered controller-time sample from the always-awake latch path.
 #[derive(Debug, Eq, PartialEq)]
 #[cfg(any(target_arch = "riscv32", test))]
@@ -575,6 +586,13 @@ pub fn drain_controller_time_orphan(
     owner.drain_orphan_controller_time()
 }
 
+/// Wrap the continuous time modulo the scheduler's 32-bit position domain.
+/// The independent u64 return value retains the full continuous epoch.
+#[cfg(any(target_arch = "riscv32", test))]
+const fn truncate_scheduler_micros(micros: u64) -> u32 {
+    micros as u32
+}
+
 /// Raw-tick anchor paired with the BLE scheduler's microsecond epoch.
 ///
 /// The projection exactly retains the current `r_sched_timer_convertTimeToUs`
@@ -590,6 +608,38 @@ pub struct ControllerSchedulerEpoch {
 
 #[cfg(any(target_arch = "riscv32", test))]
 impl ControllerSchedulerEpoch {
+    /// Project a live latch whose complete transaction had the same P3 wrap
+    /// epoch at both ends. Unlike signed-delta projection this admits arbitrary
+    /// sample gaps, provided P3 acknowledges each hardware wrap.
+    pub fn from_counted_live_update(
+        sample: &ControllerTimeSample,
+        before: crate::interrupt::ControllerTimeOverflowEpoch,
+        after: crate::interrupt::ControllerTimeOverflowEpoch,
+        scale: BluetoothControllerTimeScale,
+    ) -> Result<Option<(Self, u64)>, ControllerTimeRangeFault> {
+        if before != after {
+            return Ok(None);
+        }
+        let overflows = before;
+        let ticks = (u64::from(overflows.0) << u32::BITS) | u64::from(sample.raw_ticks());
+        let micros = scale.checked_micros_from_extended_raw_ticks(ticks).ok_or(
+            ControllerTimeRangeFault {
+                raw_ticks: sample.raw_ticks(),
+                overflows: overflows.0,
+                scale,
+            },
+        )?;
+        let remainder = scale.project_raw_ticks(sample.raw_ticks()).remainder_ticks;
+        Ok(Some((
+            Self {
+                raw_tick_anchor: sample.raw_ticks().wrapping_sub(u32::from(remainder)),
+                micros_anchor: truncate_scheduler_micros(micros),
+                scale,
+            },
+            micros,
+        )))
+    }
+
     /// Establish the source-owned epoch from its first live raw-tick update.
     ///
     /// Scheduler initialization starts both reference images at zero. The raw

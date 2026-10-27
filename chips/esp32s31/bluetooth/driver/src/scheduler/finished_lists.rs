@@ -87,8 +87,11 @@ impl SchedulerFinishedListWorker {
     fn capture_with(
         &mut self,
         backend: &mut impl SchedulerFinishedListBackend,
-        _wake: SchedulerWakeBatch,
+        wake: SchedulerWakeBatch,
     ) -> Result<(), SchedulerFinishedListCaptureError> {
+        if !wake.has_scheduler_work() {
+            return Ok(());
+        }
         self.transfer(backend)
     }
 

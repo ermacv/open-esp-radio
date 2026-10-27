@@ -35,7 +35,7 @@ fn all_mask(s: &mut Session<'_>) {
             .set_bits_29_31_opaque(Bits::constant::<0>());
     });
     s.ble.bank.modify_irq_enable_1(|w| {
-        w.set_source_1(false)
+        w.set_controller_time_overflow(false)
             .set_source_3(false)
             .set_source_4(false)
             .set_source_5(false)
@@ -86,7 +86,7 @@ pub(super) fn enable(s: &mut Session<'_>, cause: u32, on: bool) {
             w.set_source_5(on);
         }
         _ => {
-            w.set_source_1(on);
+            w.set_controller_time_overflow(on);
         }
     });
     oer_riscv::fence();
@@ -125,7 +125,7 @@ pub(super) fn state(s: &Session<'_>, tag: u32) {
     let f = b.read_irq_enable_0();
     emit(
         tag + 2,
-        u32::from(e.source_1()),
+        u32::from(e.controller_time_overflow()),
         u32::from(e.source_4()),
         u32::from(e.source_5()),
     );

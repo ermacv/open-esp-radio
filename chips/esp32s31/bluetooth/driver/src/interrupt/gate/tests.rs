@@ -46,6 +46,7 @@ struct Model {
     ops: Vec<Op>,
     primary: VecDeque<u32>,
     nrt: VecDeque<bool>,
+    nrt_fault: Option<bluetooth::BluetoothNrtInterruptFault>,
     channel: VecDeque<bool>,
     timer: VecDeque<Step>,
     lp_status: u32,
@@ -124,10 +125,13 @@ impl GateHardware for Fake {
         PrimaryInterruptCapture(model.primary.pop_front().unwrap_or(0))
     }
 
-    fn capture_nrt(bank: &mut FakeBank) -> bool {
+    fn capture_nrt(bank: &mut FakeBank) -> Result<bool, bluetooth::BluetoothNrtInterruptFault> {
         let mut model = bank.model.lock().expect("one test thread");
         model.ops.push(Op::Nrt);
-        model.nrt.pop_front().unwrap_or(false)
+        match model.nrt_fault.take() {
+            Some(fault) => Err(fault),
+            None => Ok(model.nrt.pop_front().unwrap_or(false)),
+        }
     }
 
     fn step_timer(timer: Timer) -> TimerEntry<Timer, TimerPending, Work> {
@@ -884,5 +888,150 @@ fn a_full_reply_slot_retains_its_reply_and_stopped_timer() {
     assert_eq!(
         harness.ops(),
         [Op::Acknowledge, Op::TimerStep, Op::StopTimer]
+    );
+}
+
+#[test]
+fn primary_overflow_is_counted_before_the_measured_empty_nrt_snapshot() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.script(|model| {
+        model.ops.clear();
+        model
+            .primary
+            .push_back(PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW);
+        // SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026: NRT=0/0 and 133 low
+        // while the overflow appears in primary. NRT acknowledges no overflow.
+        model.nrt.push_back(false);
+    });
+    harness.enter();
+    assert_eq!(
+        harness.cells.scheduler_wake().controller_time_overflows().0,
+        1
+    );
+    let ops = harness.ops();
+    assert!(
+        ops.iter().position(|op| *op == Op::Primary) < ops.iter().position(|op| *op == Op::Nrt)
+    );
+    let batch = harness
+        .cells
+        .scheduler_wake()
+        .take()
+        .unwrap()
+        .unwrap()
+        .classify()
+        .unwrap();
+    assert!(!batch.has_scheduler_work());
+}
+
+#[test]
+fn overflow_counter_exhaustion_quarantines_the_gate_with_the_original_observation() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness
+        .cells
+        .scheduler_wake()
+        .exhaust_controller_time_for_test();
+    harness.script(|model| {
+        model.ops.clear();
+        model
+            .primary
+            .push_back(PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW);
+    });
+    let fault = harness.part.service(&harness.clock).unwrap_err();
+    assert_eq!(
+        fault.reason,
+        GateFaultReason::ControllerTimeOverflow(super::super::ControllerTimeOverflowExhausted {
+            overflows: u32::MAX,
+            captured_inputs: PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW,
+        })
+    );
+    assert_eq!(fault.observation.timer, GateTimerState::Ready);
+    assert_eq!(fault.observation.nrt_status, Some([0, 0]));
+    let ops = harness.ops();
+    assert!(!ops.contains(&Op::Nrt));
+    assert!(
+        harness.part.is_open(),
+        "the bank remains quarantined in its handler"
+    );
+    assert_eq!(harness.part.service(&harness.clock), Err(fault));
+    assert_eq!(
+        harness.ops(),
+        [],
+        "absorbing fault performs no further register access"
+    );
+}
+
+#[test]
+fn the_latch_barrier_counts_hardware_pending_before_p2_chooses_the_samples_epoch() {
+    use crate::controller_time::{ControllerSchedulerEpoch, ControllerTimeSample};
+    use bluetooth::BluetoothControllerHalInitConfig;
+    let mut harness = Harness::new();
+    harness.open();
+    let wake = harness.cells.scheduler_wake();
+    let before = wake.controller_time_overflows();
+    // Hardware has wrapped and completed the latch, but P3 has not entered yet.
+    let sample = ControllerTimeSample::for_host_test(0);
+    assert_eq!(wake.controller_time_overflows(), before);
+    harness.script(|model| {
+        model.ops.clear();
+        model.channel.push_back(true); // the fresh barrier request
+        model
+            .primary
+            .push_back(PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW);
+    });
+    harness.enter();
+    let ops = harness.ops();
+    assert!(
+        ops.iter().position(|op| *op == Op::ChannelRequest)
+            < ops.iter().position(|op| *op == Op::Primary)
+    );
+    let after = wake.controller_time_overflows();
+    let scale = BluetoothControllerHalInitConfig::reviewed_standalone().controller_time_scale();
+    assert_eq!(
+        ControllerSchedulerEpoch::from_counted_live_update(&sample, before, after, scale),
+        Ok(None),
+        "a latch completed before the IRQ entry must be retried, not assigned the old epoch"
+    );
+    assert_eq!(
+        ControllerSchedulerEpoch::from_counted_live_update(&sample, after, after, scale)
+            .unwrap()
+            .unwrap()
+            .1,
+        1_u64 << 31
+    );
+}
+
+#[test]
+fn unexpected_nrt_overflow_quarantines_the_bank_and_retains_the_exact_later_pair() {
+    let mut harness = Harness::new();
+    harness.open();
+    let cause = bluetooth::BluetoothNrtInterruptFault {
+        snapshots: [0x87654321, 0xa5000002],
+    };
+    harness.script(|model| {
+        model.ops.clear();
+        model.nrt_fault = Some(cause);
+    });
+    let fault = harness.part.service(&harness.clock).unwrap_err();
+    assert_eq!(
+        fault.reason,
+        GateFaultReason::NrtControllerTimeOverflow(cause)
+    );
+    assert_eq!(
+        fault.observation.nrt_status,
+        Some([0, 0]),
+        "entry observation must not replace the later exact sample"
+    );
+    assert!(
+        harness.part.is_open(),
+        "the bank remains quarantined with its handler"
+    );
+    let ops = harness.ops();
+    assert!(ops.contains(&Op::Nrt));
+    assert_eq!(harness.part.service(&harness.clock), Err(fault));
+    assert!(
+        harness.ops().is_empty(),
+        "a retained fault permits no further hardware accesses"
     );
 }

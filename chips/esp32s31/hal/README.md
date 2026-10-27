@@ -79,22 +79,29 @@ clock owner and prevents installing it again with that root.
 
 ## Bluetooth register transactions
 
-The interrupt bank clears and enables baseline images `0x8000` / `0x1300`,
-then masks the same sources on release while preserving unrelated enables.
-The current vendor pin includes bank-one source 1 in baseline `0x1302`;
-its cause identity is unknown and the HAL does not arm it until B1 identifies
-the event and its handling. The modem LP timer
-samples the low bytes of its pending and rollover words, acknowledges each
-nonzero byte with a reviewed whole-word zero, and publishes software pending
-with a whole-word one. These stores include the unmodeled upper bytes.
-SOURCE: `BLOB_LIBBTDM_CONTROLLER_IRQ` (HAL baseline),
-`BLOB_LIBBTDM_BASELINE_IRQ_CURRENT` (N5, current vendor baseline) and
-`BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT` (L4/L6/L7) in the register evidence.
+The interrupt bank clears and enables baseline images `0x8000` / `0x1302`,
+including `CONTROLLER_TIME_OVERFLOW` in bank one. A primary status snapshot
+carries this normal event separately from fault and dynamic scheduler sources.
+CONTROL0 starts BTLC. CONTROL1/2 do not lower an enabled pending cause, so
+release masks and clears overflow before those commands and masks the remaining
+baseline sources, preserving unrelated enables. Masking alone retains pending.
+SOURCE: `BLOB_LIBBTDM_BASELINE_IRQ_CURRENT` (N5),
+`HW9_S31_BTLC_START_20261027`, `HW9_S31_MAC_RELEASE_20261027`,
+`HW9_S31_MAC_MASK_ACK_20261027` and
+`HW12_S31_BLE_OVERFLOW_ACK_20261026` in the register evidence.
+The measured overflow is visible in primary status/source 124 while the NRT
+snapshots/source 133 remain zero; their zero acknowledgement does not consume
+it. The exact sampled NRT pair is checked against the primary overflow clear
+lane before either acknowledgement. If that lane is present, a typed fault
+retains both words and neither bank is acknowledged. This does not identify
+other NRT producers or simultaneous set/clear priority.
 
-The IRQ control commands, LP command lanes and mode controls have unknown
-internal actions. The NRT snapshots do not establish an output-mask equation,
-and compare disable does not prove all-cause quiescence. The register model
-records those limits; the transactions supply no additional output-off proof.
+The modem LP timer samples the low bytes of its pending and rollover words,
+acknowledges each nonzero byte with a reviewed whole-word zero, and publishes
+software pending with a whole-word one. These stores include the unmodeled
+upper bytes. SOURCE: `BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT` (L4/L6/L7).
+LP command lanes and mode controls retain their measured scope; compare disable
+does not prove all-cause quiescence.
 
 Modem PLL source gating uses the pinned ESP-IDF 4d59230d whole-word sequence:
 open `0x15 → 0x1d`, close `0x2d → 0x25`. Platform source-clock readback

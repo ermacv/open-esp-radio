@@ -95,8 +95,6 @@ pub struct Runner<'pool, 'epoch, X: SignalExecutor, D, T, C> {
     pending: Option<PendingEvent>,
     payload: [u8; 255],
     count: PacketCount,
-    epoch: Option<ControllerSchedulerEpoch>,
-    last_time: Option<(u32, u64, Instant)>,
     faulted: bool,
     stop: BluetoothSchedulerStop,
 }
@@ -132,8 +130,6 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             pending: None,
             payload: [0; 255],
             count: PacketCount::default(),
-            epoch: None,
-            last_time: None,
             faulted: false,
             stop: BluetoothSchedulerStop::default(),
         }
@@ -209,7 +205,8 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
         deadline: Instant,
     ) -> Result<(ControllerSchedulerEpoch, ControllerTimeSample, u64), Fault> {
         self.check()?;
-        let request = match self.task.controller_time_access() {
+        let mut overflows = self.wake.controller_time_overflows();
+        let mut request = match self.task.controller_time_access() {
             ControllerTimeAccess::Idle(i) => i.request().map_err(|_| Fault::ClockBegin)?,
             _ => return Err(Fault::ClockBusy),
         };
@@ -224,34 +221,39 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                 .map_err(|_| Fault::ClockRead)?
             {
                 ControllerTimeEventStep::Sample { sample, .. } => {
-                    let epoch = self.epoch.unwrap_or_else(|| {
-                        ControllerSchedulerEpoch::from_first_live_update(
-                            &sample,
-                            self.task.controller_time_scale(),
-                        )
-                    });
-                    let micros = epoch.project_without_reanchor(&sample);
-                    let now = self.timer.now();
-                    let extended = match self.last_time {
-                        None => u64::from(micros),
-                        Some((old, total, at)) => {
-                            // Frequent maintenance/read samples disambiguate wrapping
-                            // raw time. A missed half-range fails closed until reset.
-                            let elapsed = now.checked_duration_since(at).ok_or(Fault::Hardware)?;
-                            epoch
-                                .raw_duration_ticks(oer_time::RadioDuration::from_micros(
-                                    elapsed.as_micros(),
-                                ))
-                                .map_err(|_| Fault::Hardware)?;
-                            let delta = micros.wrapping_sub(old);
-                            if delta > i32::MAX as u32 {
-                                return Err(Fault::Hardware);
+                    // Pending hardware overflow must reach the software count
+                    // even if source 124 has not caused a CPU entry yet. The
+                    // doorbell entry services primary before resuming this P2 task.
+                    guard(
+                        self.cancel,
+                        &self.timer,
+                        deadline,
+                        self.task
+                            .task_owner()
+                            .engine()
+                            .interrupt_service_barrier(&self.doorbell),
+                    )
+                    .await?
+                    .map_err(|_| Fault::ClockRead)?;
+                    let projected = ControllerSchedulerEpoch::from_counted_live_update(
+                        &sample,
+                        overflows,
+                        self.wake.controller_time_overflows(),
+                        self.task.controller_time_scale(),
+                    )
+                    .map_err(Fault::ControllerTimeRange)?;
+                    let Some((epoch, extended)) = projected else {
+                        // A wrap may precede or follow the hardware latch. Retry
+                        // under the original deadline instead of guessing its epoch.
+                        overflows = self.wake.controller_time_overflows();
+                        request = match self.task.controller_time_access() {
+                            ControllerTimeAccess::Idle(i) => {
+                                i.request().map_err(|_| Fault::ClockBegin)?
                             }
-                            total.checked_add(u64::from(delta)).ok_or(Fault::Hardware)?
-                        }
+                            _ => return Err(Fault::ClockBusy),
+                        };
+                        continue;
                     };
-                    self.last_time = Some((micros, extended, now));
-                    self.epoch = Some(epoch.reanchor(&sample));
                     return Ok((epoch, sample, extended));
                 }
                 ControllerTimeEventStep::Waiting => {}

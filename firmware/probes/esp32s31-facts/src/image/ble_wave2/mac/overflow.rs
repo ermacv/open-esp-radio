@@ -172,7 +172,7 @@ fn enables(s: &Session<'_>, tag: u32) {
     let b = s.ble.bank.read_irq_enable_1();
     emit(
         tag + 5,
-        u32::from(b.source_1()),
+        u32::from(b.controller_time_overflow()),
         u32::from(b.source_3()),
         u32::from(b.source_4()),
     );
