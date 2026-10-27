@@ -972,7 +972,7 @@ not use it as retirement or quiescence. SOURCE: `HW25_S31_BLE_LATCH_RESTART_2026
 
 ## PB-1 bank1 and divider399 LP facts
 
-Selections240–245 are explicit commands; request0 never runs them. They hold
+Selections240–246 are explicit commands; request0 never runs them. They hold
 hart1, mask CPU admission, publish no scheduler RUN or DMA and use no RF.
 LP commands use the existing advancing-BTLC prefix, positional ETM6/7
 (event46, tasks11/0f) and XTAL/divider399. CPU root0/divider0 with no
@@ -985,6 +985,7 @@ fractional numerator is required. They do not request PMU sleep.
 | 242 | Fresh low24 target68 crossing, sleep17 disable, then whole-zero20; no read of the WO target |
 | 243 | Sourced sleep0 enable/disable helper and separate CONTROL25 clear/set, counter/reference brackets |
 | 244 | Upper0, each bit24–31 and upperff with fresh low24 compares in sourced CONTROL0/4 clear/set pair states |
+| 246 | The CONTROL0/4=1/1 width conditions alone, after the source-qualified pair-clear/CONTROL1 preparation |
 | 245 | Software pending enabled/masked/unmasked and zero ack; exactly two natural LP wraps, with one zero ack between them; sleep0 reference observations near the first wrap |
 
 Selection245 requires explicit authorization for its two approximately167.8s
@@ -992,6 +993,8 @@ natural waits. Each wait stops at190 nominal CPU seconds, accumulates wrapping
 mcycle32 deltas into u64 and feeds the still-armed ROM watchdog once per
 nominal second. No LP counter seed is written. Other counter-crossing polls
 stop at4M CPU cycles (100ms at40MHz). Ordinary settles are4096 cycles.
+Width preparation clears the sourced CONTROL0/4 pair before CONTROL1, then
+restores the tested pair and requires old pending/latch zero.
 Completion alone never establishes a positive cause. Tag24ee is a refusal or
 failed precondition, independently of the completion marker.
 

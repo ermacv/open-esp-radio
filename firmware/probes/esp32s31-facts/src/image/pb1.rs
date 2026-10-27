@@ -353,15 +353,25 @@ pub(super) fn sleep0(s: &mut Session<'_>) {
     stop(s);
 }
 pub(super) fn width(s: &mut Session<'_>) {
+    width_modes(s, &[false, true]);
+}
+pub(super) fn width_set(s: &mut Session<'_>) {
+    width_modes(s, &[true]);
+}
+fn width_modes(s: &mut Session<'_>, modes: &[bool]) {
     if !init(s) {
         return;
     }
     const LOW_WIDTH: u32 = pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH;
     const UPPER_WIDTH: u32 = pac::modem_pwr::word_006c_opaque::BITS_24_31_OPAQUE_WIDTH;
-    for enabled in [false, true] {
-        mode(s, enabled);
+    for &enabled in modes {
         for trial in 0..UPPER_WIDTH + 2 {
+            // CONTROL4=1 retained latch2 in the first capture. Clear the
+            // sourced mode pair before its CONTROL1 trigger, then restore
+            // the tested pair before reading the independent precondition.
+            mode(s, false);
             park(s);
+            mode(s, enabled);
             let initial = s.ble.timer.read_word_0024_opaque().low_byte();
             let latch = s.ble.timer.read_word_0058_opaque().control_2();
             let upper = if trial == 0 {
