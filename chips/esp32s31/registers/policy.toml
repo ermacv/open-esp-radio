@@ -2073,12 +2073,6 @@ description = "Zero-or-one control image accepted only by the reviewed hal_set_i
 register = "MODEM_PWR.ITWT_CONTROL"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 
-[[opaque-domains]]
-name = "BluetoothModemLpTimerCompareImage"
-description = "Register-specific compare image produced only by the reviewed finite modem low-power timer deadline projection."
-register = "MODEM_PWR.WORD_006C_OPAQUE"
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
-
 [[bitwise-composed-domains]]
 name = "PbusForceTestInput"
 description = "Register-specific caller-controlled portion of one recovered PBus force-test command, composed in the complete ROM order before the final mask."
@@ -2323,12 +2317,6 @@ name = "publish_ieee802154_rx_dma_address"
 field = "IEEE802154.RX_DMA_ADDRESS.ADDRESS"
 pointer = true
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[full-register-writes]]
-name = "publish_bluetooth_modem_lp_timer_compare"
-field = "MODEM_PWR.WORD_006C_OPAQUE.BITS_0_31_OPAQUE"
-domain = "BluetoothModemLpTimerCompareImage"
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
 [[full-register-writes]]
 name = "publish_generated_receive_gain_data_0"

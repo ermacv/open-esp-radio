@@ -128101,7 +128101,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the probe's HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. A retained nonzero software-pending sample followed by a new near compare (independently witnessed by CONTROL2 changing 0 to1) then conditional whole-word zero removed byte24/cause/output; CONTROL2 remained1. A zero sample skips the store and preserves the arrival, and zero before expiry permits the later compare. The delayed phases establish loss of the newer coalesced pending indication, not coincident arbitration or an execution of the production handler. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027.
+    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the probe's HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, a retained nonzero software-pending sample followed by a new near compare (independently witnessed by CONTROL2 changing 0 to1) then conditional whole-word zero removed byte24/cause/output; CONTROL2 remained1. A zero sample skips the store and preserves the arrival, and zero before expiry permits the later compare. The delayed phases establish loss of the newer coalesced pending indication, not coincident arbitration or an execution of the production handler. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027.
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -128651,7 +128651,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Sampled on the conditional ISR path. In the near-compare test this latch sets with CONTROL_0=1, independently of CONTROL_4, and clears on CONTROL_1 without clearing byte24 or source127. A universal equation is unknown. SOURCE: HW16_S31_LP_MODE58_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+            /// Sampled on the conditional ISR path. In the near-compare test this latch sets with CONTROL_0=1, independently of CONTROL_4, and clears on CONTROL_1 without clearing byte24 or source127. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, the independently positive compare latch remains1 after a conditional whole-word zero to +0x24 clears byte24/cause/source127, including the following4096-cycle window. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027. A universal equation is unknown. SOURCE: HW16_S31_LP_MODE58_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_2(self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -128686,7 +128686,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Sampled on the conditional ISR path. In the near-compare test this latch sets with CONTROL_0=1, independently of CONTROL_4, and clears on CONTROL_1 without clearing byte24 or source127. A universal equation is unknown. SOURCE: HW16_S31_LP_MODE58_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+            /// Sampled on the conditional ISR path. In the near-compare test this latch sets with CONTROL_0=1, independently of CONTROL_4, and clears on CONTROL_1 without clearing byte24 or source127. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, the independently positive compare latch remains1 after a conditional whole-word zero to +0x24 clears byte24/cause/source127, including the following4096-cycle window. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027. A universal equation is unknown. SOURCE: HW16_S31_LP_MODE58_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_2(&self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -128824,7 +128824,7 @@ pub mod modem_pwr {
 
     /// The `WORD_006C_OPAQUE` register.
     ///
-    /// Complete word is read by one runtime path and receives either a complete runtime-derived image or a runtime-derived low-24-bit image. In the tested CONTROL0=1/CONTROL4=0, XTAL/divider1 setup, a positive software pending byte is conditionally zeroed before programming each target and issuing bit18. Future targets origin+2048 and origin+64 (still26 ticks ahead at the latter post-enable sample) produce byte24=1/CONTROL2=1/cause0x40000/source127 high. Target origin-64, already102 ticks behind at the post-enable sample, produces no indication through4096 counter ticks; a fresh future target subsequently delivers. This is a finite past-target observation, not a same-cycle priority or universal deadline-admission bound. SOURCE: HW22_S31_LP_REARM_20261027.
+    /// Low24 is the compare target; the upper byte remains opaque. Runtime paths read this word and publish complete or low24 images. With XTAL/divider1, CONTROL4=0 and either CONTROL0 state, each upper bit24-31 individually and all together read back0 after publication and do not suppress the positive future low24 compare. This qualifies the tested comparison as24-bit; no universal upper-byte meaning is assigned. SOURCE: HW22_S31_LP_COMPARE_WIDTH_20261027. In the tested CONTROL0=1/CONTROL4=0, XTAL/divider1 setup, a positive software pending byte is conditionally zeroed before programming each target and issuing bit18. Future targets origin+2048 and origin+64 (still26 ticks ahead at the latter post-enable sample) produce byte24=1/CONTROL2=1/cause0x40000/source127 high. Target origin-64, already102 ticks behind at the post-enable sample, produces no indication through4096 counter ticks; a fresh future target subsequently delivers. This is a finite past-target observation, not a same-cycle priority or universal deadline-admission bound. SOURCE: HW22_S31_LP_REARM_20261027.
     pub mod word_006c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -128834,22 +128834,35 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x6c;
 
-        /// Width of `BITS_0_31_OPAQUE` in bits.
-        pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
-        pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `BITS_0_31_OPAQUE`.
-        pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
+        /// Width of `COMPARE_TARGET` in bits.
+        pub const COMPARE_TARGET_WIDTH: u32 = 24;
+        /// Greatest unsigned image of `COMPARE_TARGET`.
+        pub const COMPARE_TARGET_MAX: u32 = 0xffffff;
+        /// Positioned bits of `COMPARE_TARGET`.
+        pub const COMPARE_TARGET_MASK: u32 = 0xffffff;
+
+        /// Width of `BITS_24_31_OPAQUE` in bits.
+        pub const BITS_24_31_OPAQUE_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `BITS_24_31_OPAQUE`.
+        pub const BITS_24_31_OPAQUE_MAX: u32 = 0xff;
+        /// Positioned bits of `BITS_24_31_OPAQUE`.
+        pub const BITS_24_31_OPAQUE_MASK: u32 = 0xff000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_31_OPAQUE` field.
+            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027.
             #[inline]
-            pub const fn bits_0_31_opaque(self) -> u32 {
-                self.0
+            pub const fn compare_target(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027.
+            #[inline]
+            pub const fn bits_24_31_opaque(self) -> u8 {
+                (self.0 >> 24) as u8
             }
         }
 
@@ -128857,16 +128870,29 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_31_OPAQUE` field.
+            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027.
             #[inline]
-            pub const fn bits_0_31_opaque(&self) -> u32 {
-                self.0
+            pub const fn compare_target(&self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set `BITS_0_31_OPAQUE`.
+            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027.
             #[inline]
-            pub fn set_bits_0_31_opaque(&mut self, value: u32) -> &mut Self {
-                self.0 = value;
+            pub const fn bits_24_31_opaque(&self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+
+            /// Set `COMPARE_TARGET`.
+            #[inline]
+            pub fn set_compare_target(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
+                self.0 = (self.0 & 0xff000000) | value.get();
+                self
+            }
+
+            /// Set `BITS_24_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_24_31_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0x00ffffff) | (u32::from(value) << 24);
                 self
             }
         }
