@@ -406,10 +406,10 @@ pair and needs the same explicit fixed-image proof as a named pair.
 Only after the final fence does `arm` return the bindable IRQ owner and an
 affine task owner without operational methods. `Router::bind` transfers the
 IRQ owner permanently into its handler. Consuming task activation with its
-`Bound` proof publishes the handled set plus timer0; it writes only task-owned
-enables and never borrows `HandlerCell`. Later session publication preserves
-the existing runtime set. A polled pair instead requires `Silent`; its startup
-discard has already completed. The pre-bind transaction enables no event lane.
+`Bound` proof publishes the same ten runtime events as later sessions; it
+writes only task-owned enables and never borrows `HandlerCell`. A polled pair
+instead requires `Silent`; its startup discard has already completed. The
+pre-bind transaction enables no event lane.
 Masked acknowledgement is measured for timers0/1 (HW8) and RX_ABORT reason26
 (HW26). Hidden pending and masked visibility on 7/10/13 remain unmeasured;
 neither a zero read nor the discard is an all-lane visibility or producer-drain

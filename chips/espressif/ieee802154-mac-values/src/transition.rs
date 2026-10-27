@@ -53,8 +53,10 @@ pub trait Ieee802154InterruptInitializationPort: Ieee802154InterruptTransitionPo
 }
 
 /// Mask delivery, install the abort baseline, issue STOP and both timer stops,
-/// then discard all fourteen event lanes without sampling. Pending hidden by
-/// the mask is discarded too. No lane is enabled and no handler cell is lent.
+/// then write W1C for all fourteen event lanes without sampling. Clearing
+/// pending under the mask is measured for timer0/1 and RX_ABORT reason26;
+/// masked visibility and clearing of lanes 7/10/13 remain unmeasured.
+/// No lane is enabled and no handler cell is lent.
 /// The HAL releases the bindable IRQ owner only after the final fence.
 /// SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026;
 /// HW26_S31_IEEE_ABORT_20261027 (masked ack qualification: timers and reason26).

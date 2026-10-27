@@ -122,9 +122,10 @@ and cannot be serviced. The fixed W1C image includes all fourteen lanes even
 when masked status reads zero; its read preserves undeclared bits only.
 The returned affine task owner has no operational methods. After the IRQ owner
 moves into its handler, task activation with `Bound` publishes the handled set
-plus timer0 without accessing the handler cell. Later session publication keeps
-the existing runtime selection. Polling instead requires `Silent` after the
-same pre-bind discard. Inherited timer1 pending cannot reach a new operation.
+without accessing the handler cell. Initial and later publication use the
+same ten runtime events; timer0 is enabled only for an ACK wait. Polling instead
+requires `Silent` after the same pre-bind discard. Inherited timer1 pending
+cannot reach a new operation.
 Masked ack is measured for timers0/1 and RX_ABORT reason26; masked visibility
 and hidden pending on 7/10/13 remain unmeasured. No zero read establishes their
 absence, and the startup discard does not prove producer drain.

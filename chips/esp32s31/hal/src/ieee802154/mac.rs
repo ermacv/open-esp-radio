@@ -19,7 +19,7 @@
 //! The armed interrupt owner has two homes. An interrupt table's handler
 //! holds it once `oer_interrupt_table::Router::bind` placed it, and the task
 //! activates its affine startup task owner with the binding's `Bound` proof,
-//! publishing the handled set plus timer0. Later sessions publish runtime events
+//! publishing the same ten runtime events as later sessions
 //! ([`Ieee802154TaskOwner::enable_events`]) and mask them again at the end
 //! of each session ([`Ieee802154TaskOwner::mask_events`]). Or the engine pair
 //! of the [`ll`](crate::ieee802154::ll) backend holds it with the router's
@@ -117,15 +117,14 @@ pub struct Ieee802154ArmedTaskOwner<
 }
 
 impl<P: Placement, E: Placement, B: Placement> Ieee802154ArmedTaskOwner<P, E, B> {
-    /// Publish the handled set plus timer0 after the IRQ owner has moved into
+    /// Publish the ten runtime events after the IRQ owner has moved into
     /// its permanent handler. This accesses only task-owned enable registers;
     /// it never borrows the handler cell or grants acknowledgement authority.
     pub fn activate<I: oer_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
         mut self,
         _bound: &Bound<I>,
     ) -> Ieee802154TaskOwner<P, E, B> {
-        self.task.enable_handled_events();
-        self.task.order_device_accesses();
+        self.task.publish_runtime_events();
         self.task
     }
 

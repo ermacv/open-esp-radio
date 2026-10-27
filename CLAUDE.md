@@ -46,8 +46,9 @@ system these rules serve.
   issue STOP and both timer stops, then write W1C for all fourteen event
   lanes without a sample through the existing IRQ part. All pre-bind
   pending is stale and cannot be serviced. Only then can the IRQ owner bind;
-  bound task activation publishes the handled set plus timer0. A task never
-  borrows its handler cell. Runtime acknowledgements consume affine samples;
+  bound task activation publishes the same ten runtime events as later
+  sessions. A task never borrows its handler cell. Runtime acknowledgements
+  consume affine samples;
   polling requires `Silent` after the same pre-bind discard.
   Owned PHY transactions preserve their registration and restore obligations;
   only consuming reunion with the exact affine return owner releases their

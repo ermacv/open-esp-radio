@@ -468,22 +468,44 @@ fn a_saved_timer_sample_is_acknowledged_after_masking_without_resampling() {
 }
 
 #[test]
-fn startup_exposes_only_handled_events_and_keeps_runtime_selection_unchanged() {
-    let mut memory = HostMemory::filled(0);
-    let (task, setup) = memory.owners();
-    let (mut startup, _interrupts) = setup.arm(task);
-    assert!(startup.task.foundation_snapshot().events_masked());
-    startup.task.enable_handled_events();
-    let events = startup.task.mac_part().read_event_enable();
-    assert!(events.tx_done() && events.rx_done() && events.ack_tx_done() && events.ack_rx_done());
-    assert!(events.rx_abort() && events.tx_abort() && events.ed_done());
-    assert!(events.timer0_overflow() && events.timer1_overflow());
-    assert!(events.rx_sfd_done() && events.tx_sfd_done());
-    assert!(!events.events_7() && !events.clock_count_match() && !events.events_13());
-    startup.task.publish_runtime_events();
-    let events = startup.task.mac_part().read_event_enable();
-    assert!(!events.timer0_overflow() && events.timer1_overflow());
-    assert!(!events.events_7() && !events.clock_count_match() && !events.events_13());
+fn activation_publication_matches_the_ten_event_runtime_baseline() {
+    for fill in [0, u32::MAX] {
+        let mut memory = HostMemory::filled(fill);
+        let (task, setup) = memory.owners();
+        let (startup, _interrupts) = setup.arm(task);
+        assert!(startup.task.foundation_snapshot().events_masked());
+        // Exercise the publication used by activate. Host placements are
+        // deliberately !Send and cannot enter a static interrupt table.
+        let mut task = startup.task;
+        task.publish_runtime_events();
+        let events = task.mac_part().read_event_enable();
+        // Explicit main baseline, independent of the production event array.
+        assert_eq!(
+            [
+                events.tx_done(),
+                events.rx_done(),
+                events.ack_tx_done(),
+                events.ack_rx_done(),
+                events.rx_abort(),
+                events.tx_abort(),
+                events.ed_done(),
+                events.events_7(),
+                events.timer0_overflow(),
+                events.timer1_overflow(),
+                events.clock_count_match(),
+                events.tx_sfd_done(),
+                events.rx_sfd_done(),
+                events.events_13(),
+            ],
+            [
+                true, true, true, true, true, true, true, false, false, true, false, true, true,
+                false
+            ]
+        );
+        task.mask_events();
+        task.publish_runtime_events();
+        assert_eq!(task.mac_part().read_event_enable(), events);
+    }
 }
 
 #[test]
