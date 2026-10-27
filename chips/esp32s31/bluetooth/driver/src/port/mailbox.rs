@@ -151,12 +151,11 @@ impl ClockState {
         self.retired = true;
         Poll::Ready(Ok(()))
     }
-    fn begin(&mut self, epoch: u64) -> Result<ClockRequest, ClockError> {
+    fn begin(&mut self, epoch: u64, cx: &mut Context<'_>) -> Result<ClockRequest, ClockError> {
         if epoch != self.epoch || self.retired {
             return Err(ClockError::Unavailable);
         }
-        let mut cx = Context::from_waker(core::task::Waker::noop());
-        if !self.discard_abandoned(&mut cx) {
+        if !self.discard_abandoned(cx) {
             return Err(ClockError::Unavailable);
         }
         if self.fault.is_some() || self.cancel.load(Ordering::Acquire) {
@@ -220,19 +219,23 @@ impl ClockClient for ClockEndpoint {
         .await
     }
     async fn now(&mut self) -> PortResult<LeInstant, ClockError, Fault> {
-        let Some(begin) = self.state.with(|state| {
-            if let Some(cause) = state.fault {
-                return Err(Poisoned { cause });
-            }
-            let begin = state.begin(self.epoch);
-            match state.fault {
-                Some(cause) => Err(Poisoned { cause }),
-                None if state.cancel.load(Ordering::Acquire) => Err(Poisoned {
-                    cause: Fault::Abandoned,
-                }),
-                None => Ok(begin),
-            }
-        }) else {
+        let Some(begin) = poll_fn(|cx| {
+            Poll::Ready(self.state.with(|state| {
+                if let Some(cause) = state.fault {
+                    return Err(Poisoned { cause });
+                }
+                let begin = state.begin(self.epoch, cx);
+                match state.fault {
+                    Some(cause) => Err(Poisoned { cause }),
+                    None if state.cancel.load(Ordering::Acquire) => Err(Poisoned {
+                        cause: Fault::Abandoned,
+                    }),
+                    None => Ok(begin),
+                }
+            }))
+        })
+        .await
+        else {
             return Ok(Err(ClockError::Unavailable));
         };
         let request = match begin? {
