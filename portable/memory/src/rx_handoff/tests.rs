@@ -73,3 +73,21 @@ fn protocol_owner_can_republish_an_initialized_subrange() {
     drop(network);
     assert_eq!(pool.claimed_slots(), 0);
 }
+
+#[test]
+fn a_rejected_transition_keeps_the_slot_and_reports_static_bytes() {
+    extern crate std;
+    let slot = super::RxHandoffSlot::<16>::new();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        slot.claim(super::SLOT_READY, super::SLOT_NETWORK);
+    }))
+    .expect_err("a free slot is not ready");
+    assert_eq!(
+        slot.state.load(core::sync::atomic::Ordering::Acquire),
+        super::SLOT_FREE
+    );
+    assert_eq!(
+        panic.downcast_ref::<&str>().map(|s| s.as_bytes()),
+        Some(b"RX handoff slot ownership transition".as_slice())
+    );
+}

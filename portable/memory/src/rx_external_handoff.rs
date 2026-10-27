@@ -99,10 +99,10 @@ impl ExternalRxReturn {
     }
 
     fn return_once(&self) {
-        assert_eq!(
+        assert!(
             self.0
-                .compare_exchange(1, 2, Ordering::Release, Ordering::Acquire),
-            Ok(1),
+                .compare_exchange(1, 2, Ordering::Release, Ordering::Acquire)
+                == Ok(1),
             "detached RX DMA buffer must be released exactly once"
         );
         #[cfg(test)]
@@ -267,23 +267,22 @@ impl ExternalRxHandoffSlot {
             *self.offset.get() = offset;
             *self.length.get() = length;
         }
-        assert_eq!(
+        assert!(
             self.state
-                .compare_exchange(owner, SLOT_READY, Ordering::Release, Ordering::Acquire,),
-            Ok(owner),
+                .compare_exchange(owner, SLOT_READY, Ordering::Release, Ordering::Acquire,)
+                == Ok(owner),
             "only the current external RX owner may publish"
         );
     }
 
     fn claim_network(&self) {
-        assert_eq!(
+        assert!(
             self.state.compare_exchange(
                 SLOT_READY,
                 SLOT_NETWORK,
                 Ordering::Acquire,
                 Ordering::Relaxed,
-            ),
-            Ok(SLOT_READY),
+            ) == Ok(SLOT_READY),
             "ready index did not name an external RX slot"
         );
     }
@@ -340,14 +339,13 @@ impl ExternalRxHandoffSlot {
     }
 
     fn release(&self, owner: u8) {
-        assert_eq!(
+        assert!(
             self.state.compare_exchange(
                 owner,
                 SLOT_RELEASING,
                 Ordering::Acquire,
                 Ordering::Acquire,
-            ),
-            Ok(owner),
+            ) == Ok(owner),
             "only the current external RX owner may release"
         );
         // SAFETY: the successful exchange to SLOT_RELEASING grants this call

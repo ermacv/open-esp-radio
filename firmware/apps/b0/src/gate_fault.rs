@@ -1,5 +1,6 @@
 //! B0's retained Bluetooth gate diagnostic. Owners stay on the interrupted
 //! stacks and in the gate until the fatal path resets the chip.
+#[cfg(test)]
 use core::fmt;
 use oer_esp32s31_bluetooth_driver::interrupt::gate::{GateFault, GateFaultReason, GateTimerState};
 use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerStoppedInterruptFault;
@@ -102,6 +103,147 @@ impl Record {
     }
 }
 
+impl Record {
+    /// Emit the complete early-console line with statically dispatched writes.
+    fn report(&self, mut write: impl FnMut(&[u8])) -> Result<(), ()> {
+        let reason = match self.reason {
+            1 => "plan-without-pending-timer",
+            2 => "reply-occupied",
+            3 => "work-occupied",
+            4 => "stopped-software-pending",
+            5 => "stopped-unexpected-status",
+            6 => "vacant-timer",
+            7 => "controller-time-overflow-exhausted",
+            8 => "controller-time-range-exhausted",
+            9 => "nrt-primary-fault",
+            10 => "foreign-enable",
+            11 => "release-not-quiet",
+            _ => return Err(()),
+        };
+        if matches!(self.reason, 10 | 11) {
+            let [ena0, ena1, status0, status1, nrt0, nrt1, task_enable, _] = self.payload;
+            write(b"OER-B0-FAULT: bluetooth-interrupt-policy reason=");
+            write(reason.as_bytes());
+            for (name, word) in [
+                (b" ena0=".as_slice(), ena0),
+                (b" ena1=".as_slice(), ena1),
+                (b" status0=".as_slice(), status0),
+                (b" status1=".as_slice(), status1),
+                (b" nrt0=".as_slice(), nrt0),
+                (b" nrt1=".as_slice(), nrt1),
+                (b" task-enable=".as_slice(), task_enable),
+            ] {
+                write(name);
+                hex(word, 8, &mut write);
+            }
+        } else if self.reason == 8 {
+            let [_, raw_ticks, _, _, _, overflows, scale_shift, _] = self.payload;
+            write(b"OER-B0-FAULT: bluetooth-controller-time reason=");
+            write(reason.as_bytes());
+            write(b" overflows=");
+            hex(overflows, 8, &mut write);
+            write(b" raw-ticks=");
+            hex(raw_ticks, 8, &mut write);
+            write(b" scale-shift=");
+            decimal(scale_shift, &mut write);
+        } else {
+            let [
+                timer,
+                lp,
+                nrt_present,
+                nrt0,
+                nrt1,
+                stopped_status,
+                pending_0024,
+                pending_002c,
+            ] = self.payload;
+            let timer = match timer {
+                0 => "vacant",
+                1 => "ready",
+                2 => "awaiting-plan",
+                3 => "stopped",
+                _ => return Err(()),
+            };
+            write(b"OER-B0-FAULT: bluetooth-gate reason=");
+            write(reason.as_bytes());
+            write(b" timer=");
+            write(timer.as_bytes());
+            write(b" lp=");
+            hex(lp, 8, &mut write);
+            if nrt_present == 1 {
+                write(b" nrt=");
+                hex(nrt0, 8, &mut write);
+                write(b",");
+                hex(nrt1, 8, &mut write);
+            } else {
+                write(b" nrt=unavailable");
+            }
+            if matches!(self.reason, 4 | 5) {
+                write(b" stopped-status=");
+                hex(stopped_status, 8, &mut write);
+                write(b" pending0024=");
+                hex(pending_0024, 2, &mut write);
+                write(b" pending002c=");
+                hex(pending_002c, 2, &mut write);
+            }
+            if self.reason == 7 {
+                write(b" overflows=");
+                hex(stopped_status, 8, &mut write);
+                write(b" captured-inputs=");
+                hex(pending_0024, 8, &mut write);
+            }
+            if self.reason == 9 {
+                write(b" nrt-captured=");
+                hex(stopped_status, 8, &mut write);
+                write(b",");
+                hex(pending_0024, 8, &mut write);
+            }
+        }
+        write(b"\r\n");
+        Ok(())
+    }
+}
+
+fn hex(mut word: u32, minimum_digits: usize, write: &mut impl FnMut(&[u8])) {
+    let mut digits = [b'0'; 8];
+    for digit in digits.iter_mut().rev() {
+        let nibble = (word & 0xf) as u8;
+        *digit = if nibble < 10 {
+            b'0'.wrapping_add(nibble)
+        } else {
+            b'a'.wrapping_add(nibble - 10)
+        };
+        word >>= 4;
+    }
+    let mut hex = digits.as_slice();
+    while let [b'0', rest @ ..] = hex {
+        if hex.len() <= minimum_digits {
+            break;
+        }
+        hex = rest;
+    }
+    write(b"0x");
+    write(hex);
+}
+
+fn decimal(mut word: u32, write: &mut impl FnMut(&[u8])) {
+    let mut digits = [b'0'; u32::MAX.ilog10() as usize + 1];
+    for digit in digits.iter_mut().rev() {
+        *digit = b'0'.wrapping_add((word % 10) as u8);
+        word /= 10;
+    }
+    let mut decimal = digits.as_slice();
+    while let [b'0', rest @ ..] = decimal {
+        if rest.is_empty() {
+            break;
+        }
+        decimal = rest;
+    }
+    write(decimal);
+}
+
+// The original formatter is a test-only byte oracle for direct output.
+#[cfg(test)]
 impl fmt::Display for Record {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let reason = match self.reason {
@@ -286,17 +428,11 @@ fn reset_record(record: Record) -> ! {
 /// Print before the early console is retired to the application.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn report_previous() {
-    use core::fmt::Write;
-    struct Early;
-    impl Write for Early {
-        fn write_str(&mut self, text: &str) -> fmt::Result {
-            let _ = oer_esp32s31_hal::usb_serial_jtag::early_text(text.as_bytes());
-            Ok(())
-        }
-    }
     let previous = RECORD.try_lock().and_then(|mut record| record.take());
     if let Some(previous) = previous {
-        let _ = writeln!(Early, "{previous}\r");
+        let _ = previous.report(|bytes| {
+            let _ = oer_esp32s31_hal::usb_serial_jtag::early_text(bytes);
+        });
     }
 }
 
@@ -505,6 +641,52 @@ mod interrupt_policy_tests {
             let text = record.to_string();
             assert!(text.contains("ena0=0x81234567 ena1=0xfedcba98 status0=0x12345678 status1=0x87654321 nrt0=0xdeadbeef nrt1=0xbadcaffe task-enable=0x80020000"));
             assert!(slot.take().is_none());
+        }
+    }
+}
+
+#[cfg(test)]
+mod direct_output_tests {
+    use super::*;
+
+    #[test]
+    fn every_record_shape_preserves_the_formatted_bytes_and_crlf() {
+        for reason in 1..=11 {
+            for timer in 0..=3 {
+                for nrt_present in 0..=1 {
+                    for word in [0, 1, 0xf, 0x10, 0xff, 0x100, 999_999_999, u32::MAX] {
+                        let record = Record {
+                            magic: MAGIC,
+                            reason,
+                            payload: [timer, word, nrt_present, word, word, word, word, word],
+                            checksum: 0,
+                        };
+                        let mut output = std::vec::Vec::new();
+                        record
+                            .report(|bytes| output.extend_from_slice(bytes))
+                            .unwrap();
+                        // The original test-only Display is the old wire-text contract.
+                        assert_eq!(output, std::format!("{record}\r\n").as_bytes());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_reason_or_timer_emits_nothing() {
+        for (reason, timer) in [(0, 0), (12, 0), (u32::MAX, 0), (1, 4), (9, u32::MAX)] {
+            let record = Record {
+                magic: MAGIC,
+                reason,
+                payload: [timer, 0, 0, 0, 0, 0, 0, 0],
+                checksum: 0,
+            };
+            assert!(
+                record
+                    .report(|_| panic!("invalid record emits no bytes"))
+                    .is_err()
+            );
         }
     }
 }

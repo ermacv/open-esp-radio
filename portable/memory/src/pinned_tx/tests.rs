@@ -234,3 +234,17 @@ fn pre_pin_locations_name_the_exact_regions_later_lent_to_radio() {
         drop(lease);
     }
 }
+
+#[test]
+fn a_rejected_transition_keeps_the_slot_and_reports_static_bytes() {
+    let slot = PinnedTxSlot::<16, 0, 0>::new();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        slot.claim(SLOT_READY, SLOT_RADIO);
+    }))
+    .expect_err("a free slot is not ready");
+    assert_eq!(slot.state.load(Ordering::Acquire), SLOT_FREE);
+    assert_eq!(
+        panic.downcast_ref::<&str>().map(|s| s.as_bytes()),
+        Some(b"pinned TX slot ownership transition".as_slice())
+    );
+}

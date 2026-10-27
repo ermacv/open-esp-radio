@@ -78,18 +78,14 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         }
     }
 
-    fn claim(&self, index: u8, from: u8, to: u8, message: &str) {
+    fn claim(&self, from: u8, to: u8) {
         let observed = self
             .state
             .compare_exchange(from, to, Ordering::AcqRel, Ordering::Acquire);
-        assert_eq!(
-            observed,
-            Ok(from),
-            "{message}; slot={index} expected={from} requested={to}"
-        );
+        assert!(observed == Ok(from), "pinned TX slot ownership transition");
     }
 
-    fn publish_ready(&self, index: u8, length: usize) {
+    fn publish_ready(&self, length: usize) {
         self.length.store(length, Ordering::Relaxed);
         let observed = self.state.compare_exchange(
             SLOT_NETWORK,
@@ -97,21 +93,15 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
             Ordering::Release,
             Ordering::Acquire,
         );
-        assert_eq!(
-            observed,
-            Ok(SLOT_NETWORK),
-            "only the network lease may publish a pinned TX slot; slot={index}"
+        assert!(
+            observed == Ok(SLOT_NETWORK),
+            "only the network lease may publish a pinned TX slot"
         );
     }
 
-    fn release_radio(&self, index: u8) {
+    fn release_radio(&self) {
         self.length.store(0, Ordering::Relaxed);
-        self.claim(
-            index,
-            SLOT_RADIO,
-            SLOT_FREE,
-            "only the radio lease may return a pinned TX slot",
-        );
+        self.claim(SLOT_RADIO, SLOT_FREE);
     }
 
     fn length(&self) -> usize {
@@ -127,10 +117,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         // byte-aligned repr(C) fields form one padding-free allocation.
         unsafe {
             let bytes = &*self.bytes.get();
-            debug_assert_eq!(
-                core::mem::size_of_val(bytes),
-                HEADROOM + FRAME_CAPACITY + TRAILER
-            );
+            debug_assert!(core::mem::size_of_val(bytes) == HEADROOM + FRAME_CAPACITY + TRAILER);
             core::slice::from_raw_parts(
                 ptr::addr_of!(bytes.headroom).cast::<u8>(),
                 HEADROOM + FRAME_CAPACITY + TRAILER,
@@ -286,12 +273,7 @@ impl<
         index: u8,
     ) -> PinnedDmaTxNetworkLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER> {
         let slot = self.slot_of(index);
-        slot.claim(
-            index,
-            SLOT_FREE,
-            SLOT_NETWORK,
-            "free-channel entry did not name a free pinned TX slot",
-        );
+        slot.claim(SLOT_FREE, SLOT_NETWORK);
         PinnedDmaTxNetworkLease {
             slot,
             index,
@@ -308,12 +290,7 @@ impl<
         index: u8,
     ) -> PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER> {
         let slot = self.slot_of(index);
-        slot.claim(
-            index,
-            SLOT_READY,
-            SLOT_RADIO,
-            "ready-channel entry did not name a ready pinned TX slot",
-        );
+        slot.claim(SLOT_READY, SLOT_RADIO);
         PinnedDmaTxRadioLease {
             slot,
             index,
@@ -381,7 +358,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
             )
         };
         let result = write(frame_mut::<HEADROOM>(storage, length));
-        self.slot.publish_ready(self.index, length);
+        self.slot.publish_ready(length);
         self.live = false;
         (self.index, result)
     }
@@ -414,18 +391,13 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
             Ok(result) => result,
             Err(error) => return Err((self, error)),
         };
-        self.slot.publish_ready(self.index, length);
+        self.slot.publish_ready(length);
         self.live = false;
         Ok((self.index, result))
     }
 
     pub fn release(mut self) -> u8 {
-        self.slot.claim(
-            self.index,
-            SLOT_NETWORK,
-            SLOT_FREE,
-            "only the network lease may return a pinned TX slot",
-        );
+        self.slot.claim(SLOT_NETWORK, SLOT_FREE);
         self.live = false;
         self.index
     }
@@ -436,12 +408,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> D
 {
     fn drop(&mut self) {
         if self.live {
-            self.slot.claim(
-                self.index,
-                SLOT_NETWORK,
-                SLOT_FREE,
-                "only the live network lease may return a pinned TX slot",
-            );
+            self.slot.claim(SLOT_NETWORK, SLOT_FREE);
         }
     }
 }
@@ -508,7 +475,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     }
 
     pub fn release(mut self) -> u8 {
-        self.slot.release_radio(self.index);
+        self.slot.release_radio();
         self.live = false;
         self.index
     }
@@ -702,7 +669,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> D
 {
     fn drop(&mut self) {
         if self.live {
-            self.slot.release_radio(self.index);
+            self.slot.release_radio();
         }
     }
 }

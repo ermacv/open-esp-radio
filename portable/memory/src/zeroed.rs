@@ -157,8 +157,8 @@ impl<T> ZeroedOnce<T> {
                 unsafe { (*self.value.get()).write(init()) };
                 self.state.store(ONCE_READY, Ordering::Release);
             }
-            Err(state) => assert_eq!(
-                state, ONCE_READY,
+            Err(state) => assert!(
+                state == ONCE_READY,
                 "a zeroed once cell is written by one context at a time"
             ),
         }
@@ -226,6 +226,21 @@ mod tests {
     use core::sync::atomic::AtomicU32;
 
     use super::*;
+
+    #[test]
+    fn a_nested_initializer_is_refused_with_static_panic_bytes() {
+        extern crate std;
+        let cell = ZeroedOnce::<u8>::new();
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            cell.get_or_init(|| *cell.get_or_init(|| 1));
+        }))
+        .expect_err("one context initializes the cell at a time");
+        assert_eq!(cell.state.load(Ordering::Acquire), ONCE_WRITING);
+        assert_eq!(
+            panic.downcast_ref::<&str>().map(|s| s.as_bytes()),
+            Some(b"a zeroed once cell is written by one context at a time".as_slice())
+        );
+    }
 
     #[test]
     fn a_zeroed_once_cell_is_empty_until_written_once() {
