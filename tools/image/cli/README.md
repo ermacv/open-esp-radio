@@ -8,6 +8,7 @@ cargo fw sizes <base-output-directory> <head-output-directory>
 cargo fw sizes <base-image> <new-composition> --add-base <second-base-image>
 cargo fw decode-console <console.raw.txt>
 cargo fw build <image>
+cargo fw build <probe-image> --bin <binary> --diagnostic
 cargo fw build <w0|w1|w2> --analysis
 cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout <duration>]
@@ -77,6 +78,7 @@ the runtime to the chip's `[placement]` contract (`placement.txt`).
 | --- | --- | --- |
 | `build`, including `--analysis` | Frames, interrupt stacks and panic budgets (`Enforced::Only({Frames, Interrupts, Panics})`) | Task stacks, bootstrap stack and placement |
 | `run` | None (`Enforced::Reported`) | All requested checks |
+| `build --diagnostic` (only `firmware/probes` packages) | None (`Enforced::Reported`, as already used by `run`) | All requested checks |
 | `flash` | Uses the existing bundle without rerunning checks | Uses its recorded results |
 
 An interrupt stack without a proven bound (`partial + ?`), above its budget,
@@ -85,6 +87,14 @@ A bound conditional only on the admitted executor invariant passes with a
 warning. A reported check that does not pass prints as a warning containing
 `reported only`. Stand `run` builds report every check; `flash` writes an
 already built bundle.
+
+`build --bin BINARY` selects a companion binary in the image package.
+`--diagnostic` is an explicit build option restricted to `firmware/probes`
+packages. It uses the same `Enforced::Reported` policy as `cargo fw run`: requested
+product checks still run and retain their results, but a failed reported check
+does not reject the diagnostic bundle. It changes no panic budget or stack/frame
+limit. Compiler errors and the mandatory bootstrap-placement audit below remain
+fatal. A diagnostic bundle is not product qualification.
 
 The bootstrap's cache-off code/constant placement is mandatory in every staged
 build, including `run`: all code and ordinary constants must be in internal

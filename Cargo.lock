@@ -2575,7 +2575,6 @@ dependencies = [
  "oer-espressif-staged-runtime",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
- "oer-interrupt-table",
  "oer-memory",
  "oer-probe-codegen",
  "oer-probe-macros",

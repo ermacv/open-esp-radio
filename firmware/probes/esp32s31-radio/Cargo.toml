@@ -28,7 +28,6 @@ oer-espressif-executor = { path = "../../../chips/espressif/executor", features 
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
 oer-cooperate = { path = "../../../portable/cooperate" }
-oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 static_cell.workspace = true
 
 [lib]

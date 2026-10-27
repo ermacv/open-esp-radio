@@ -63963,7 +63963,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67 and the low reference survived the separate clear/set pulse. Other-mode geometry and reset scope remain unresolved.
+            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67; read0 again returned0x67 after those address transitions plus clear/set issued from bit18=0. The clear was a no-op and set wrote0->1; address0x400->0 supplied1->0 edges. No separate reset pulse was established. Other-mode geometry and reset scope remain unresolved.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -64028,7 +64028,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67 and the low reference survived the separate clear/set pulse. Other-mode geometry and reset scope remain unresolved.
+            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67; read0 again returned0x67 after those address transitions plus clear/set issued from bit18=0. The clear was a no-op and set wrote0->1; address0x400->0 supplied1->0 edges. No separate reset pulse was established. Other-mode geometry and reset scope remain unresolved.
             #[inline]
             pub const fn bit_18_opaque(&self) -> bool {
                 (self.0 & 0x00040000) != 0

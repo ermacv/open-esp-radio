@@ -1,16 +1,32 @@
 //! P-EST/P-FREQ sheets. Preparation and sampling live here, outside production.
 #![cfg(target_arch = "riscv32")]
+#![deny(unsafe_code)]
 use core::sync::atomic::{AtomicU32, Ordering};
 use oer_esp32s31_hal::{
     owner::SharedPhyAccess,
     phy::{clock, delay::RomShortDelay, frequency as freq, iq_estimator as iq, pbus, rx_dco},
 };
 
-#[allow(unsafe_code)]
-// SAFETY: one exported SRAM journal; the session's serialized leaf is its only writer.
-#[unsafe(no_mangle)]
-#[unsafe(link_section = ".critical.bss.est_freq")]
-pub static EST_FREQ_OUTPUT: [AtomicU32; 2050] = [const { AtomicU32::new(0) }; 2050];
+oer_memory::zeroed_static! {
+    static EST_FREQ_OUTPUT: [AtomicU32; 2050] = zeroed in ".critical.bss.est_freq";
+    static EST_FREQ_REQUEST: AtomicU32 = zeroed in ".critical.bss.est_freq_request";
+}
+
+oer_probe_macros::probe! {
+    /// SRAM address for debugger access while halted: 0 journal, 1 request.
+    /// These are addresses of retained statics, not independently owned hardware.
+    pub fn open_phy_est_freq_buffer_address(buffer: u32) -> u32 {
+        match buffer {
+            0 => core::ptr::addr_of!(EST_FREQ_OUTPUT) as usize as u32,
+            1 => core::ptr::addr_of!(EST_FREQ_REQUEST) as usize as u32,
+            _ => 0,
+        }
+    }
+}
+
+pub(crate) fn take_request() -> u32 {
+    EST_FREQ_REQUEST.swap(u32::MAX, Ordering::AcqRel)
+}
 
 pub(crate) fn status(value: u32) {
     if let Some(word) = EST_FREQ_OUTPUT.first() {
@@ -258,8 +274,9 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
                 let expected = analog_i2c::bbtop::shared_rx_gain_calibration_enable::ADDRESS;
                 // SOURCE: hw19-20261027-est-freq-01, freq/freq-repeat, tag1624;
                 // oer-notes/research/hw-est-freq.md. Mode0 returned 0x67 from
-                // the initialized low entry, not the complete 24-bit command.
-                // This positive reference does not assign a general memory-bank geometry.
+                // the initialized low entry. It happened to match expected.block();
+                // the guard adopts that observed byte, without establishing its
+                // decoding or a general memory-bank geometry. Run03 matched again.
                 let reference = u32::from(expected.block());
                 emit(0x1530, value, reference, u32::from(value == reference));
                 if value != reference {

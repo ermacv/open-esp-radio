@@ -16,16 +16,33 @@ cargo fw build ../probes/esp32s31-radio --bin oer-firmware-probes-esp32s31-radio
 Build before leasing. Flash the built bundle with `cargo fw flash
 ../probes/esp32s31-radio --board s31-a` inside a held board/air lease. Select
 HP0 only in OpenOCD, suppress its automatic watchdog-MMIO hook, and write only
-the exported SRAM request word while halted. Read only the exported journal.
+the SRAM request word while halted. Read only the SRAM journal.
 Return the disposable session to ROM download before releasing the lease.
 
+`open_phy_est_freq_buffer_address(0)` returns the journal address and argument 1
+returns the request address (other arguments return 0). This C entry and the sheet
+entry use `oer_probe_macros::probe!`; the buffers use `oer_memory::zeroed_static!`
+in critical SRAM BSS. A debugger can also resolve their demangled Rust symbols,
+`est_freq::EST_FREQ_OUTPUT` and `est_freq::EST_FREQ_REQUEST`. The request starts at 0,
+which is ignored; only selection 150 starts calibration. The runtime's interrupt
+table supplies the handlers for the image linker's placement analysis.
+
 The companion is an unqualified diagnostic, like the existing staged RX-chain
-probe. `--diagnostic` explicitly reports the product checks and is restricted
-to probe packages; ordinary application builds retain their enforced checks.
+probe. `--diagnostic` selects `Enforced::Reported`, as `cargo fw run` already does:
+requested product checks run and report failures without rejecting the bundle.
+It is restricted to `firmware/probes` packages; ordinary application builds
+retain their enforced checks. Compiler and mandatory bootstrap-placement checks
+still reject failures.
 No panic budget or stack/frame limit is raised. The full production registration
 currently reaches inherited dependency panic sites and has an unresolved P2
 stack path through compiler division helpers. Its product qualification does
 not follow from completion of these finite fact sheets.
+
+The revised companion also reports `__oer_interrupt_h0_l16` outside SRAM when
+using the runtime table without a manual section attribute. The three other
+bound handlers and both buffers are in SRAM. This bundle is not admitted for
+another hardware run until automatic placement covers that P1 wake wrapper;
+the image keeps no handwritten unsafe placement attribute to bypass the gap.
 
 `EST_FREQ_REQUEST=150` admits exactly one cold calibration. Before that command
 the companion performs no radio work; rebooting does not repeat calibration.
@@ -55,7 +72,7 @@ selections and estimator window 1000 are decimal.
 | `152a/152c/152e` | after bit18 clear/set, after final read0, after restoration |
 | each frequency tag +1 | `(bit18,FREQUENCY_READY,mcycle)`; these are later reads, not an atomic snapshot |
 | `1624/1626/1628/162c` | `(requested address,returned result,mcycle)` |
-| `1530` | `(first low result,initializer's block-byte reference,match)`; the observed mode0 reference is `67`, rather than the full three-byte command |
+| `1530` | `(first low result,expected.block(),match)`; the empirical reference `67` was adopted from run01 after the original guard rejected it, and matched again in run03; this is no established decoding |
 
 P-EST reopens the internal tone, RX/TX clocks and ten forced PBus paths of
 `phy/src/analog/crystal_duty.rs::XtalDutyPrepareTransition`, using the default
@@ -72,10 +89,14 @@ and the retained power observation qualify the measurement separately from the
 opaque pair's value. No per-chain saturation identity is asserted.
 
 P-FREQ captures quiet control/read-mode state, holds hardware updates, reads
-addresses 0/400/0 in mode0, issues the separate two-fresh-RMW bit18 clear/set,
-then reads0 again. The first result must match the initialized BBTOP command's
-low-byte reference observed in `hw19-20261027-est-freq-01`; no universal read-mode
-or memory-bank geometry is inferred from that reference. Equal uninitialized values are
+addresses 0/400/0 in mode0, then issues two-fresh-RMW bit18 clear/set from bit18=0
+and reads0 again. Clear is a no-op and set writes 0→1; the address transitions
+0x400→0 supply 1→0 edges. This does not establish a separate reset pulse.
+The first result must match the empirical byte 0x67 adopted from
+`hw19-20261027-est-freq-01` after the original whole-command guard rejected it.
+It coincided with `expected.block()` in two calibrated epochs; that coincidence
+does not establish a BBTOP block-byte decoding, universal read mode or memory-bank
+geometry. Equal uninitialized values are
 not a positive control. Restoration changes only the saved selection and
 ownership lanes, preserving unrelated fields; it emits no write or
 channel-switch pulse. Only the sourced READY field is observed: no guessed

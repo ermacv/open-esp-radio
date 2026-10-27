@@ -1,5 +1,4 @@
 //! Staged, no-traffic executor for the comparison session's silicon sheets.
-use core::sync::atomic::{AtomicU32, Ordering};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     platform::{FactoryIdentity, FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1},
@@ -11,16 +10,7 @@ use oer_esp32s31_phy::{PhyCalibrationIdentity, phy_get_rf_cal_version};
 use oer_espressif_executor::{Executor, InterruptExecutor};
 use oer_time::{Clock, Duration, Timer};
 
-#[allow(unsafe_code)]
-// SAFETY: one exported command word, written by the debugger only while halted.
-#[unsafe(no_mangle)]
-#[unsafe(link_section = ".critical.data.est_freq_request")]
-pub static EST_FREQ_REQUEST: AtomicU32 = AtomicU32::new(u32::MAX);
-
-// SAFETY: production runtime places the generated trap wrappers in SRAM.
-oer_interrupt_table::interrupt_table! {
-    lines: oer_espressif_staged_runtime::interrupts::LINES,
-    handler_attributes: [#[unsafe(link_section = ".hot.text.est_freq_vectors")]];
+oer_espressif_staged_runtime::interrupt_table! {
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app, hart 0, Hardware;
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
@@ -128,7 +118,7 @@ async fn feed_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 async fn sheets(boot: Boot) {
     // Wait for selection 150 before any radio operation: a reset never repeats calibration.
     crate::est_freq::status(0x1950_0000);
-    while EST_FREQ_REQUEST.swap(u32::MAX, Ordering::AcqRel) != 150 {
+    while crate::est_freq::take_request() != 150 {
         EmbassyClock
             .wait_until(EmbassyClock.now().saturating_add(Duration::from_millis(1)))
             .await;
@@ -152,7 +142,7 @@ async fn sheets(boot: Boot) {
     crate::est_freq::emit(150, 0, oer_riscv::cycle32().wrapping_sub(started), 1);
     crate::est_freq::status(0x1950_0001);
     loop {
-        let request = EST_FREQ_REQUEST.swap(u32::MAX, Ordering::AcqRel);
+        let request = crate::est_freq::take_request();
         if request != u32::MAX {
             let _ = crate::est_freq::open_phy_est_freq_sheet(request);
         }
