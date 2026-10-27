@@ -1,8 +1,11 @@
 //! The internal coexistence timer bank, borrowed apart from the PHY.
 #![forbid(unsafe_code)]
 use super::values::{CoexTimerClientValue, CoexTimerPtiValue};
-use oer_esp32s31_pac::{coex::CoexHwTimer, instances};
-use oer_mmio::{Bits, Fixed, Index, Placement};
+use oer_esp32s31_pac::{
+    coex::{self, CoexPolicyTimers, PhyGrantProtectTimer},
+    instances,
+};
+use oer_mmio::{Bits, Fixed, Placement};
 
 pub const COEX_TIMER_COUNT: u8 = oer_esp32s31_pac::coex::configuration::COUNT as u8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -35,39 +38,75 @@ impl CoexTimerRegister {
             _ => None,
         }
     }
-    const fn index(self) -> Index<{ oer_esp32s31_pac::coex::configuration::COUNT }> {
-        match self {
-            Self::Timer0 => Index::constant::<0>(),
-            Self::Timer1 => Index::constant::<1>(),
-            Self::Timer2 => Index::constant::<2>(),
-            Self::Timer3 => Index::constant::<3>(),
-            Self::Timer4 => Index::constant::<4>(),
-            Self::Timer5 => Index::constant::<5>(),
-        }
-    }
 }
 pub struct CoexTimerBankRegisters<'a, P: Placement = Fixed<{ instances::coex::BASE }>> {
-    timers: &'a mut CoexHwTimer<P>,
+    policy: &'a mut CoexPolicyTimers<P>,
+    grant: &'a mut PhyGrantProtectTimer<P>,
+}
+// Each variant selects only the fixed word its PAC part owns.
+macro_rules! timer_word {
+    ($name:ident, $module:ident, $($variant:ident => $owner:ident.$method:ident),+ $(,)?) => {
+        fn $name(&mut self, timer: CoexTimerRegister, change: impl FnOnce(&mut coex::$module::W)) {
+            match timer {
+                $(CoexTimerRegister::$variant => self.$owner.$method(change),)+
+            }
+        }
+    };
 }
 impl<'a, P: Placement> CoexTimerBankRegisters<'a, P> {
-    pub(crate) fn new(timers: &'a mut CoexHwTimer<P>) -> Self {
-        Self { timers }
+    pub(crate) fn new(
+        policy: &'a mut CoexPolicyTimers<P>,
+        grant: &'a mut PhyGrantProtectTimer<P>,
+    ) -> Self {
+        Self { policy, grant }
+    }
+    timer_word! { modify_configuration, configuration,
+        Timer0 => policy.modify_configuration0,
+        Timer1 => policy.modify_configuration1,
+        Timer2 => policy.modify_configuration2,
+        Timer3 => policy.modify_configuration3,
+        Timer4 => policy.modify_configuration4,
+        Timer5 => grant.modify_configuration5,
+    }
+    timer_word! { modify_secondary_target, secondary_target,
+        Timer0 => policy.modify_secondary_target0,
+        Timer1 => policy.modify_secondary_target1,
+        Timer2 => policy.modify_secondary_target2,
+        Timer3 => policy.modify_secondary_target3,
+        Timer4 => policy.modify_secondary_target4,
+        Timer5 => grant.modify_secondary_target5,
+    }
+    timer_word! { modify_enable_control, enable_control,
+        Timer0 => policy.modify_enable_control0,
+        Timer1 => policy.modify_enable_control1,
+        Timer2 => policy.modify_enable_control2,
+        Timer3 => policy.modify_enable_control3,
+        Timer4 => policy.modify_enable_control4,
+        Timer5 => grant.modify_enable_control5,
+    }
+    timer_word! { modify_disable_control, disable_control,
+        Timer0 => policy.modify_disable_control0,
+        Timer1 => policy.modify_disable_control1,
+        Timer2 => policy.modify_disable_control2,
+        Timer3 => policy.modify_disable_control3,
+        Timer4 => policy.modify_disable_control4,
+        Timer5 => grant.modify_disable_control5,
     }
     // SOURCE: BLOB_LIBCOEX_HW_TIMER, S31_ESP_PACS_SVD. Fresh-read edges stay separate.
     pub fn enable(&mut self, timer: CoexTimerRegister) {
-        self.timers.modify_disable_control(timer.index(), |w| {
+        self.modify_disable_control(timer, |w| {
             w.set_disable(false);
         });
-        self.timers.modify_enable_control(timer.index(), |w| {
+        self.modify_enable_control(timer, |w| {
             w.set_enable(true);
         });
     }
     // SOURCE: BLOB_LIBCOEX_HW_TIMER, S31_ESP_PACS_SVD.
     pub fn disable(&mut self, timer: CoexTimerRegister) {
-        self.timers.modify_enable_control(timer.index(), |w| {
+        self.modify_enable_control(timer, |w| {
             w.set_enable(false);
         });
-        self.timers.modify_disable_control(timer.index(), |w| {
+        self.modify_disable_control(timer, |w| {
             w.set_disable(true);
         });
     }
@@ -86,21 +125,21 @@ impl<'a, P: Placement> CoexTimerBankRegisters<'a, P> {
         client: CoexTimerClientValue,
         pti: CoexTimerPtiValue,
     ) {
-        self.timers.modify_configuration(timer.index(), |w| {
+        self.modify_configuration(timer, |w| {
             w.set_parameter_1(Bits::<2>::truncate(client.get()));
         });
-        self.timers.modify_configuration(timer.index(), |w| {
+        self.modify_configuration(timer, |w| {
             w.set_parameter_2(Bits::<4>::truncate(pti.get()));
         });
     }
     // SOURCE: BLOB_LIBCOEX_HW_TIMER. The vendor narrows both targets to 24 bits.
     pub fn set_primary_target(&mut self, timer: CoexTimerRegister, tick_image: u32) {
-        self.timers.modify_configuration(timer.index(), |w| {
+        self.modify_configuration(timer, |w| {
             w.set_primary_tick_image(Bits::truncate(tick_image));
         });
     }
     pub fn set_secondary_target(&mut self, timer: CoexTimerRegister, tick_image: u32) {
-        self.timers.modify_secondary_target(timer.index(), |w| {
+        self.modify_secondary_target(timer, |w| {
             w.set_secondary_tick_image(Bits::truncate(tick_image));
         });
     }
@@ -119,8 +158,11 @@ mod tests {
             for (index, timer) in CoexTimerRegister::ALL.into_iter().enumerate() {
                 let mut memory = vec![fill; instances::coex::SIZE.div_ceil(4)];
                 let mut expected = memory.clone();
-                let mut registers = CoexHwTimer::host(&mut memory).expect("host bank fits");
-                let mut bank = CoexTimerBankRegisters::new(&mut registers);
+                let mut grant_memory = memory.clone();
+                let mut policy = CoexPolicyTimers::host(&mut memory).expect("host bank fits");
+                let mut grant =
+                    PhyGrantProtectTimer::host(&mut grant_memory).expect("host bank fits");
+                let mut bank = CoexTimerBankRegisters::new(&mut policy, &mut grant);
                 bank.configure(
                     timer,
                     CoexTimerClientValue::new(2).expect("two-bit client"),
@@ -133,8 +175,15 @@ mod tests {
                 expected[index * 4 + 1] = secondary;
                 expected[index * 4 + 2] = if fill == 0 { 1 } else { u32::MAX };
                 expected[index * 4 + 3] = if fill == 0 { 0 } else { 0xffff_fffe };
-                drop(registers);
-                assert_eq!(memory, expected);
+                drop((policy, grant));
+                let untouched = vec![fill; instances::coex::SIZE.div_ceil(4)];
+                if timer == CoexTimerRegister::Timer5 {
+                    assert_eq!(grant_memory, expected);
+                    assert_eq!(memory, untouched);
+                } else {
+                    assert_eq!(memory, expected);
+                    assert_eq!(grant_memory, untouched);
+                }
             }
         }
     }
@@ -142,14 +191,17 @@ mod tests {
     fn forcing_and_unforcing_a_timer_preserves_client_and_priority() {
         let mut memory = vec![u32::MAX; instances::coex::SIZE.div_ceil(4)];
         let mut expected = memory.clone();
-        let mut registers = CoexHwTimer::host(&mut memory).expect("host bank fits");
-        let mut bank = CoexTimerBankRegisters::new(&mut registers);
+        let mut grant_memory = memory.clone();
+        let mut policy = CoexPolicyTimers::host(&mut memory).expect("host bank fits");
+        let mut grant = PhyGrantProtectTimer::host(&mut grant_memory).expect("host bank fits");
+        let mut bank = CoexTimerBankRegisters::new(&mut policy, &mut grant);
         bank.force(CoexTimerRegister::Timer5);
         bank.unforce(CoexTimerRegister::Timer5);
         bank.disable(CoexTimerRegister::Timer5);
         expected[0x50 / 4] = 0xff00_03e8;
         expected[0x58 / 4] = 0xffff_fffe;
-        drop(registers);
-        assert_eq!(memory, expected);
+        drop((policy, grant));
+        assert_eq!(grant_memory, expected);
+        assert_eq!(memory, vec![u32::MAX; instances::coex::SIZE.div_ceil(4)]);
     }
 }

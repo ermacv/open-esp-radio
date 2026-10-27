@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_pac::modem_syscon::ModemSysconRadio;
+use oer_esp32s31_pac::modem_syscon::ModemSysconClockReset;
 use oer_mmio::Placement;
 
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
 
 /// The eighteen PHY-calibration clock gates of `CLK_CONF1`, from one read,
 /// in the order [`restore_calibration_clocks`] writes them.
-fn calibration_clocks<P: Placement>(registers: &ModemSysconRadio<P>) -> [bool; 18] {
+fn calibration_clocks<P: Placement>(registers: &ModemSysconClockReset<P>) -> [bool; 18] {
     let clk_conf1 = registers.read_clk_conf1();
     [
         clk_conf1.clk_wifibb_22m_en(),
@@ -46,7 +46,7 @@ fn calibration_clocks<P: Placement>(registers: &ModemSysconRadio<P>) -> [bool; 1
 /// One fresh-read RMW of the eighteen captured gates; every other bit of
 /// `CLK_CONF1` keeps the value read.
 fn restore_calibration_clocks<P: Placement>(
-    registers: &mut ModemSysconRadio<P>,
+    registers: &mut ModemSysconClockReset<P>,
     clocks: [bool; 18],
 ) {
     registers.modify_clk_conf1(|w| {
@@ -122,7 +122,7 @@ fn restore_calibration_clocks<P: Placement>(
 /// One fresh-read RMW of the five Bluetooth peripheral gates of
 /// `CLK_CONF`: modem security, ECB, CCM, BAH and the BLE timer.
 fn restore_bluetooth_peripheral_clocks<P: Placement>(
-    registers: &mut ModemSysconRadio<P>,
+    registers: &mut ModemSysconClockReset<P>,
     [security, ecb, ccm, bah, ble_timer]: [bool; 5],
 ) {
     registers.modify_clk_conf(|w| {
@@ -361,10 +361,10 @@ impl ModemSysconBluetoothClock {
 impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     pub(crate) fn modem_syscon_power_baseline(&self) -> ModemSysconPowerBaseline {
         ModemSysconPowerBaseline {
-            phy_calibration_clocks: calibration_clocks(&self.peripherals.modem_syscon_radio),
+            phy_calibration_clocks: calibration_clocks(&self.peripherals.modem_syscon_clock_reset),
             phy_i2c_160mhz_selected: self
                 .peripherals
-                .modem_syscon_radio
+                .modem_syscon_clock_reset
                 .read_clk_conf()
                 .clk_i2c_mst_sel_160m(),
         }
@@ -374,7 +374,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         &mut self,
         baseline: ModemSysconPowerBaseline,
     ) {
-        let registers = &mut self.peripherals.modem_syscon_radio;
+        let registers = &mut self.peripherals.modem_syscon_clock_reset;
         super::ops::restore_phy_i2c_160mhz_source(
             registers,
             modem_syscon_clock_gate_state(baseline.phy_i2c_160mhz_selected),
@@ -384,7 +384,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     #[doc(hidden)]
     pub fn prepare_modem_syscon_clock_map(&mut self) {
-        super::ops::prepare_modem_syscon_clock_map(&mut self.peripherals.modem_syscon_radio);
+        super::ops::prepare_modem_syscon_clock_map(&mut self.peripherals.modem_syscon_clock_reset);
     }
 
     #[doc(hidden)]
@@ -393,7 +393,10 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     fn modem_syscon_clock_map_configured(&self) -> bool {
-        let clk_conf_power_st = self.peripherals.modem_syscon_radio.read_clk_conf_power_st();
+        let clk_conf_power_st = self
+            .peripherals
+            .modem_syscon_clock_reset
+            .read_clk_conf_power_st();
         let (
             zb_map_bit_two,
             frontend_map_bit_one,
@@ -429,7 +432,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn set_wifi_baseband_and_mac_reset(&mut self, asserted: bool) {
         super::ops::set_wifi_baseband_and_mac_reset(
-            &mut self.peripherals.modem_syscon_radio,
+            &mut self.peripherals.modem_syscon_clock_reset,
             modem_syscon_reset_state(asserted),
         );
     }
@@ -437,27 +440,30 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn set_wifi_baseband_reset(&mut self, asserted: bool) {
         super::ops::set_wifi_baseband_reset(
-            &mut self.peripherals.modem_syscon_radio,
+            &mut self.peripherals.modem_syscon_clock_reset,
             modem_syscon_reset_state(asserted),
         );
     }
 
     #[doc(hidden)]
     pub fn enable_phy_calibration_clocks(&mut self) {
-        super::ops::enable_phy_calibration_clocks(&mut self.peripherals.modem_syscon_radio);
+        super::ops::enable_phy_calibration_clocks(&mut self.peripherals.modem_syscon_clock_reset);
     }
 
     #[doc(hidden)]
     pub fn select_phy_i2c_160mhz_source(&mut self) {
-        super::ops::select_phy_i2c_160mhz_source(&mut self.peripherals.modem_syscon_radio);
+        super::ops::select_phy_i2c_160mhz_source(&mut self.peripherals.modem_syscon_clock_reset);
     }
 
     #[doc(hidden)]
     pub fn modem_syscon_power_observation(&self) -> ModemSysconPowerObservation {
-        let modem_rst_conf = self.peripherals.modem_syscon_radio.read_modem_rst_conf();
+        let modem_rst_conf = self
+            .peripherals
+            .modem_syscon_clock_reset
+            .read_modem_rst_conf();
         let (wifi_baseband_reset, wifi_mac_reset) =
             (modem_rst_conf.rst_wifibb(), modem_rst_conf.rst_wifimac());
-        let clk_conf1 = self.peripherals.modem_syscon_radio.read_clk_conf1();
+        let clk_conf1 = self.peripherals.modem_syscon_clock_reset.read_clk_conf1();
         let (
             wifi_bb_22m,
             wifi_bb_40m,
@@ -520,7 +526,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
                 && frontend_dac,
             phy_i2c_160mhz_selected: self
                 .peripherals
-                .modem_syscon_radio
+                .modem_syscon_clock_reset
                 .read_clk_conf()
                 .clk_i2c_mst_sel_160m(),
         }
@@ -528,13 +534,13 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     #[doc(hidden)]
     pub fn enable_wifi_mac_clocks(&mut self) {
-        super::ops::enable_wifi_mac_clocks(&mut self.peripherals.modem_syscon_radio);
+        super::ops::enable_wifi_mac_clocks(&mut self.peripherals.modem_syscon_clock_reset);
     }
 
     #[doc(hidden)]
     pub fn set_wifi_mac_reset(&mut self, asserted: bool) {
         super::ops::set_wifi_mac_reset(
-            &mut self.peripherals.modem_syscon_radio,
+            &mut self.peripherals.modem_syscon_clock_reset,
             modem_syscon_reset_state(asserted),
         );
     }
@@ -595,7 +601,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn set_ieee802154_mac_reset(&mut self, asserted: bool) {
         super::ops::set_ieee802154_mac_reset(
-            &mut self.peripherals.modem_syscon_radio,
+            &mut self.peripherals.modem_syscon_clock_reset,
             modem_syscon_reset_state(asserted),
         );
     }
@@ -603,14 +609,17 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn set_ieee802154_apb_reset(&mut self, asserted: bool) {
         super::ops::set_ieee802154_apb_reset(
-            &mut self.peripherals.modem_syscon_radio,
+            &mut self.peripherals.modem_syscon_clock_reset,
             modem_syscon_reset_state(asserted),
         );
     }
 
     #[doc(hidden)]
     pub fn ieee802154_reset_observation(&self) -> ModemSysconIeee802154ResetObservation {
-        let modem_rst_conf = self.peripherals.modem_syscon_radio.read_modem_rst_conf();
+        let modem_rst_conf = self
+            .peripherals
+            .modem_syscon_clock_reset
+            .read_modem_rst_conf();
         let (mac_reset, apb_reset) = (modem_rst_conf.rst_zbmac(), modem_rst_conf.rst_zbmac_apb());
         ModemSysconIeee802154ResetObservation {
             mac_reset_released: !mac_reset,
@@ -621,7 +630,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// Sample every Bluetooth clock group in one readback.
     #[doc(hidden)]
     pub fn bluetooth_clock_baselines(&self) -> [BluetoothClockBaseline; BLUETOOTH_CLOCK_COUNT] {
-        let clk_conf = self.peripherals.modem_syscon_radio.read_clk_conf();
+        let clk_conf = self.peripherals.modem_syscon_clock_reset.read_clk_conf();
         let (
             etm_enabled,
             modem_security_enabled,
@@ -639,7 +648,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             clk_conf.clk_ble_timer_en(),
             clk_conf.clk_modem_sec_apb_en(),
         );
-        let clk_conf1 = self.peripherals.modem_syscon_radio.read_clk_conf1();
+        let clk_conf1 = self.peripherals.modem_syscon_clock_reset.read_clk_conf1();
         let (
             wifi_baseband_80x1_enabled,
             bluetooth_mac_enabled,
@@ -701,7 +710,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     fn set_bluetooth_clock_enabled(&mut self, device: ModemSysconBluetoothClock, enabled: bool) {
         let state = modem_syscon_clock_gate_state(enabled);
-        let registers = &mut self.peripherals.modem_syscon_radio;
+        let registers = &mut self.peripherals.modem_syscon_clock_reset;
         match device {
             ModemSysconBluetoothClock::WifiBaseband80x1 => {
                 super::ops::set_bluetooth_wifi_baseband_80x1_clock(registers, state);
@@ -735,7 +744,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         match device {
             ModemSysconBluetoothClock::BluetoothPeripheral => {
                 restore_bluetooth_peripheral_clocks(
-                    &mut self.peripherals.modem_syscon_radio,
+                    &mut self.peripherals.modem_syscon_clock_reset,
                     [
                         baseline.contains(BluetoothPhysicalClock::ModemSecurity),
                         baseline.contains(BluetoothPhysicalClock::ModemSecurityEcb),
@@ -747,13 +756,13 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             }
             ModemSysconBluetoothClock::BluetoothApb => {
                 super::ops::set_bluetooth_apb_clock(
-                    &mut self.peripherals.modem_syscon_radio,
+                    &mut self.peripherals.modem_syscon_clock_reset,
                     modem_syscon_clock_gate_state(
                         baseline.contains(BluetoothPhysicalClock::BluetoothApb),
                     ),
                 );
                 super::ops::set_bluetooth_modem_security_apb_clock(
-                    &mut self.peripherals.modem_syscon_radio,
+                    &mut self.peripherals.modem_syscon_clock_reset,
                     modem_syscon_clock_gate_state(
                         baseline.contains(BluetoothPhysicalClock::ModemSecurityApb),
                     ),
@@ -779,7 +788,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     #[doc(hidden)]
     pub fn reset_bluetooth_controller_domains(&mut self) {
-        let registers = &mut self.peripherals.modem_syscon_radio;
+        let registers = &mut self.peripherals.modem_syscon_clock_reset;
         super::ops::set_bluetooth_mac_reset(registers, ModemSysconResetState::Asserted);
         super::ops::set_bluetooth_mac_reset(registers, ModemSysconResetState::Released);
         super::ops::set_bluetooth_mac_apb_reset(registers, ModemSysconResetState::Asserted);
@@ -797,7 +806,10 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     pub(crate) fn bluetooth_controller_resets_released(&self) -> bool {
-        let modem_rst_conf = self.peripherals.modem_syscon_radio.read_modem_rst_conf();
+        let modem_rst_conf = self
+            .peripherals
+            .modem_syscon_clock_reset
+            .read_modem_rst_conf();
         let (
             bluetooth_mac_reset,
             bluetooth_mac_apb_reset,

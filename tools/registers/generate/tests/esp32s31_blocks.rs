@@ -303,8 +303,62 @@ fn the_esp32s31_policy_loads_over_the_root() {
     // A former header subfield modify sets bits of the header's fields.
     assert_eq!(
         owner("prepare_modem_syscon_clock_map"),
-        ("RadioPhyPeripherals", "ModemSysconRadio")
+        ("RadioPhyPeripherals", "ModemSysconClockReset")
     );
+    // Radio words are held whole by their distinct functional owners.
+    let word_owner = |word: &str| {
+        let Some(Claim::Whole(Holder::Part(id))) = policy.claim(word) else {
+            panic!("{word} has one whole-word owner");
+        };
+        policy.part(*id).expect("the owner is a part").name.as_str()
+    };
+    for (word, expected) in [
+        ("MODEM_SYSCON.CLK_CONF", "ModemSysconClockReset"),
+        ("MODEM_SYSCON.CLK_CONF1", "ModemSysconClockReset"),
+        ("MODEM_SYSCON.CLK_CONF_POWER_ST", "ModemSysconClockReset"),
+        ("MODEM_SYSCON.MODEM_RST_CONF", "ModemSysconClockReset"),
+        ("MODEM_SYSCON.WIFI_BB_CFG", "ModemSysconRadio"),
+        ("MODEM_LPCON.LP_TIMER_CONF", "BluetoothLpTimerClock"),
+        ("MODEM_LPCON.COEX_LP_CLK_CONF", "CoexLpClock"),
+        ("MODEM_LPCON.WIFI_LP_CLK_CONF", "ModemLpconPower"),
+        ("MODEM_LPCON.MODEM_32K_CLK_CONF", "ModemLpconPower"),
+        ("MODEM_LPCON.CLK_CONF_POWER_ST", "ModemLpconPower"),
+        (
+            "LP_AON_CLKRST.LP_AONCLKRST_ROOT_CLK_CONF",
+            "LpAonRadioClock",
+        ),
+        (
+            "LP_AON_CLKRST.LP_AONCLKRST_RTC_SAR2_PWDET_CCT",
+            "LpAonClkrst",
+        ),
+    ] {
+        assert_eq!(word_owner(word), expected, "{word}");
+    }
+    let timer_count = model
+        .registers()
+        .iter()
+        .filter(|register| register.instance == "COEX" && register.key == "CONFIGURATION%s")
+        .count();
+    for timer in 0..timer_count {
+        let expected = if timer == 5 {
+            "PhyGrantProtectTimer"
+        } else {
+            "CoexPolicyTimers"
+        };
+        for register in [
+            "CONFIGURATION",
+            "SECONDARY_TARGET",
+            "ENABLE_CONTROL",
+            "DISABLE_CONTROL",
+        ] {
+            let word = format!("COEX.{register}{timer}");
+            assert_eq!(word_owner(&word), expected, "{word}");
+        }
+        assert_eq!(
+            owner(&format!("configure_coex_timer_client_{timer}")).1,
+            expected
+        );
+    }
     // The split trigger word: each channel's owner holds its own bits.
     let Some(Claim::Fields(fields)) = policy.claim("MODEM_ETM.CHANNEL_ENABLE_SET") else {
         panic!("the channel-enable set word is split by field");

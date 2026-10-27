@@ -80,27 +80,24 @@ pub(super) fn clocks(s: &mut Session<'_>) {
     // no reset and no bank enable write precede the inherited observation.
     s.sar
         .radio
-        .modem_syscon_radio
+        .modem_syscon_clock_reset
         .modify_clk_conf_power_st(|w| {
             w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
             w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
             w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
         });
-    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
         w.set_clk_bt_apb_en(pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled);
         w.set_clk_btmac_en(pac::modem_syscon::clk_conf1::ClkBtmacEn::Enabled);
         w.set_clk_btbb_en(pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
     });
-    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
         w.set_clk_ble_timer_en(pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled);
     });
-    s.sar
-        .radio
-        .modem_lpcon_shared_clock
-        .modify_clk_conf_power_st(|w| {
-            w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
-            w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
-        });
+    s.sar.radio.modem_lpcon_power.modify_clk_conf_power_st(|w| {
+        w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
+        w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
+    });
     s.sar
         .clocks
         .modem_lpcon_chip_clocks
@@ -361,18 +358,24 @@ pub(super) fn init_lp(s: &mut Session<'_>) {
     contain(s);
     clocks(s);
     let b = &mut s.ble;
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Released);
+        });
     // SOURCE: HAL modem LP-clock selectors. Divider 1, selected by the
     // counter-controls silicon observation, advances the counter. Divider 0
     // does not: do not assume a divide-by-one interpretation for zero.
     s.sar
         .radio
-        .modem_lpcon_shared_clock
+        .bluetooth_lp_timer_clock
         .modify_lp_timer_conf(|w| {
             w.set_clk_lp_timer_sel_osc_slow(false)
                 .set_clk_lp_timer_sel_osc_fast(false)
@@ -381,7 +384,7 @@ pub(super) fn init_lp(s: &mut Session<'_>) {
                 .set_clk_lp_timer_div_num(Bits::constant::<1>());
         });
     // SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL / current L1 preparation prefix.
-    let conf = s.sar.radio.modem_lpcon_shared_clock.read_lp_timer_conf();
+    let conf = s.sar.radio.bluetooth_lp_timer_clock.read_lp_timer_conf();
     let gates = s.sar.clocks.modem_lpcon_chip_clocks.read_clk_conf();
     emit(
         0x2f00,
@@ -410,7 +413,7 @@ pub(super) fn init_lp(s: &mut Session<'_>) {
         u32::from(b.timer.read_word_0078_opaque().control_25()),
         s.sar
             .radio
-            .modem_lpcon_shared_clock
+            .modem_lpcon_power
             .read_clk_conf_power_st()
             .clk_lp_apb_st_map()
             .get(),
@@ -557,7 +560,7 @@ pub(super) fn counter_controls(s: &mut Session<'_>) {
     for (index, divider) in [399_u32, 1, 0].into_iter().enumerate() {
         s.sar
             .radio
-            .modem_lpcon_shared_clock
+            .bluetooth_lp_timer_clock
             .modify_lp_timer_conf(|w| {
                 w.set_clk_lp_timer_div_num(Bits::truncate(divider));
             });
@@ -681,12 +684,18 @@ pub(super) fn btlc_prefix(s: &mut Session<'_>) {
     contain(s);
     clocks(s);
     let b = &mut s.ble;
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
+        });
     // SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS and the HAL controller-init
     // latch prefix. These observed images do not imply a cause identity.
     b.positional.write_value(|w| {

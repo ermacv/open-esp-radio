@@ -18,7 +18,7 @@ fn state(s: &Session<'_>, tag: u32) {
         u32::from(
             s.sar
                 .radio
-                .modem_syscon_radio
+                .modem_syscon_clock_reset
                 .read_modem_rst_conf()
                 .rst_ble_timer(),
         ),
@@ -28,7 +28,7 @@ fn state(s: &Session<'_>, tag: u32) {
         u32::from(
             s.sar
                 .radio
-                .modem_syscon_radio
+                .modem_syscon_clock_reset
                 .read_clk_conf()
                 .clk_ble_timer_en(),
         ),
@@ -42,7 +42,7 @@ fn state(s: &Session<'_>, tag: u32) {
         u32::from(
             s.sar
                 .radio
-                .modem_lpcon_shared_clock
+                .bluetooth_lp_timer_clock
                 .read_lp_timer_conf()
                 .clk_lp_timer_sel_xtal(),
         ),
@@ -55,32 +55,32 @@ fn lp_clocks(s: &mut Session<'_>, on: bool) {
         // one fresh RMW per selector, in this order. Keep MODEM_PWR APB live.
         s.sar
             .radio
-            .modem_lpcon_shared_clock
+            .bluetooth_lp_timer_clock
             .modify_lp_timer_conf(|w| {
                 w.set_clk_lp_timer_sel_osc_slow(false);
             });
         s.sar
             .radio
-            .modem_lpcon_shared_clock
+            .bluetooth_lp_timer_clock
             .modify_lp_timer_conf(|w| {
                 w.set_clk_lp_timer_sel_osc_fast(false);
             });
         s.sar
             .radio
-            .modem_lpcon_shared_clock
+            .bluetooth_lp_timer_clock
             .modify_lp_timer_conf(|w| {
                 w.set_clk_lp_timer_sel_xtal32k(false);
             });
         s.sar
             .radio
-            .modem_lpcon_shared_clock
+            .bluetooth_lp_timer_clock
             .modify_lp_timer_conf(|w| {
                 w.set_clk_lp_timer_sel_xtal(false);
             });
     }
     // SOURCE: HAL restore_bluetooth_peripheral_clocks, BLE timer field;
     // chip-clock policy's already-sourced MODEM_PWR LP-timer gate.
-    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
         w.set_clk_ble_timer_en(if on {
             pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled
         } else {
@@ -94,7 +94,7 @@ fn lp_clocks(s: &mut Session<'_>, on: bool) {
     if on {
         s.sar
             .radio
-            .modem_lpcon_shared_clock
+            .bluetooth_lp_timer_clock
             .modify_lp_timer_conf(|w| {
                 w.set_clk_lp_timer_sel_xtal(true);
             });
@@ -107,50 +107,92 @@ fn reset(s: &mut Session<'_>, full: bool) {
     // SOURCE: HAL modem/syscon.rs::reset_bluetooth_controller_domains.
     // Each RMW and the final device fence retain the production ordering.
     if full {
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_btmac(r::RstBtmac::Asserted);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_btmac(r::RstBtmac::Released);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_btmac_apb(r::RstBtmacApb::Asserted);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_btmac_apb(r::RstBtmacApb::Released);
-        });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_btmac(r::RstBtmac::Asserted);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_btmac(r::RstBtmac::Released);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_btmac_apb(r::RstBtmacApb::Asserted);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_btmac_apb(r::RstBtmacApb::Released);
+            });
     }
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_ble_timer(r::RstBleTimer::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_ble_timer(r::RstBleTimer::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_ble_timer(r::RstBleTimer::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_ble_timer(r::RstBleTimer::Released);
+        });
     if full {
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_modem_ecb(r::RstModemEcb::Asserted);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_modem_ccm(r::RstModemCcm::Asserted);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_modem_bah(r::RstModemBah::Asserted);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_modem_sec(r::RstModemSec::Asserted);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_modem_ecb(r::RstModemEcb::Released);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_modem_ccm(r::RstModemCcm::Released);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_modem_bah(r::RstModemBah::Released);
-        });
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_modem_sec(r::RstModemSec::Released);
-        });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_modem_ecb(r::RstModemEcb::Asserted);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_modem_ccm(r::RstModemCcm::Asserted);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_modem_bah(r::RstModemBah::Asserted);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_modem_sec(r::RstModemSec::Asserted);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_modem_ecb(r::RstModemEcb::Released);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_modem_ccm(r::RstModemCcm::Released);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_modem_bah(r::RstModemBah::Released);
+            });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_modem_sec(r::RstModemSec::Released);
+            });
     }
     oer_riscv::fence();
 }

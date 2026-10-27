@@ -292,7 +292,10 @@ impl PhyTransaction {
         (
             &mut p.hardware,
             PhyGrantProtect::new(
-                crate::modem::CoexTimerBankRegisters::new(&mut p.coexistence.coex_hw_timer),
+                crate::modem::CoexTimerBankRegisters::new(
+                    &mut p.coexistence.coex_policy_timers,
+                    &mut p.coexistence.phy_grant_protect_timer,
+                ),
                 pti,
                 &mut p.grant_protected,
             ),

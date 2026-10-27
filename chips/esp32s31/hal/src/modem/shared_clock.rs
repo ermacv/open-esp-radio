@@ -68,7 +68,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     pub fn rtc_slow_clock_source(&self) -> RtcSlowClockSource {
         match super::field_byte(
             self.peripherals
-                .lp_aon_clkrst
+                .lp_aon_radio_clock
                 .read_root_clk_conf()
                 .slow_clk_sel(),
         ) {
@@ -91,7 +91,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// nothing clears it.
     #[doc(hidden)]
     pub fn select_wifi_low_power_clock(&mut self, source: WifiLowPowerClockSource) {
-        let registers = &mut self.peripherals.modem_lpcon_shared_clock;
+        let registers = &mut self.peripherals.modem_lpcon_power;
         super::ops::deselect_wifi_low_power_clock_slow_oscillator(registers);
         super::ops::deselect_wifi_low_power_clock_fast_oscillator(registers);
         super::ops::deselect_wifi_low_power_clock_crystal_32khz(registers);
@@ -113,10 +113,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     #[doc(hidden)]
     pub fn wifi_low_power_clock_observation(&self) -> WifiLowPowerClockObservation {
-        let wifi_lp_clk_conf = self
-            .peripherals
-            .modem_lpcon_shared_clock
-            .read_wifi_lp_clk_conf();
+        let wifi_lp_clk_conf = self.peripherals.modem_lpcon_power.read_wifi_lp_clk_conf();
         let (slow, fast, crystal, crystal_32khz, divider) = (
             wifi_lp_clk_conf.clk_wifipwr_lp_sel_osc_slow(),
             wifi_lp_clk_conf.clk_wifipwr_lp_sel_osc_fast(),
@@ -140,16 +137,13 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         // lease-owned state. It preserves the existing image and is therefore
         // intentionally not rolled back when an individual route is released.
         super::ops::initialize_shared_modem_power_state_map(
-            &mut self.peripherals.modem_lpcon_shared_clock,
+            &mut self.peripherals.modem_lpcon_power,
         );
     }
 
     #[doc(hidden)]
     pub fn shared_modem_clock_observation(&self) -> SharedModemClockObservation {
-        let clk_conf_power_st = self
-            .peripherals
-            .modem_lpcon_shared_clock
-            .read_clk_conf_power_st();
+        let clk_conf_power_st = self.peripherals.modem_lpcon_power.read_clk_conf_power_st();
         let (
             wifi_power_map_bit_one,
             wifi_power_map_bit_two,
@@ -190,7 +184,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         source: super::values::CoexTimerClockSource,
         divider_minus_one: super::values::CoexTimerClockDividerMinusOne,
     ) {
-        let registers = &mut self.peripherals.modem_lpcon_shared_clock;
+        let registers = &mut self.peripherals.coex_lp_clock;
         super::ops::select_coex_timer_clock_source(registers, source);
         super::ops::set_coex_timer_clock_divider(registers, divider_minus_one);
     }
@@ -201,7 +195,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     ) -> Option<CoexistenceLowPowerClockObservation> {
         // Two reads of the word, as the vendor samples the source and then
         // the divider.
-        let registers = &self.peripherals.modem_lpcon_shared_clock;
+        let registers = &self.peripherals.coex_lp_clock;
         let selected = registers.read_coex_lp_clk_conf();
         let source = match (
             selected.clk_coex_lp_sel_osc_slow(),
@@ -230,7 +224,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// 32-kHz crystal, main-crystal order. The divider is untouched.
     #[doc(hidden)]
     pub fn deselect_bluetooth_low_power_timer_sources(&mut self) {
-        let registers = &mut self.peripherals.modem_lpcon_shared_clock;
+        let registers = &mut self.peripherals.bluetooth_lp_timer_clock;
         super::ops::deselect_bluetooth_low_power_timer_slow_oscillator(registers);
         super::ops::deselect_bluetooth_low_power_timer_fast_oscillator(registers);
         super::ops::deselect_bluetooth_low_power_timer_crystal_32khz(registers);
@@ -250,7 +244,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         divider: ModemLowPowerClockDivider,
     ) {
         self.deselect_bluetooth_low_power_timer_sources();
-        let registers = &mut self.peripherals.modem_lpcon_shared_clock;
+        let registers = &mut self.peripherals.bluetooth_lp_timer_clock;
         super::ops::select_bluetooth_low_power_timer_crystal(registers);
         super::ops::set_bluetooth_low_power_timer_divider(registers, divider);
     }
@@ -259,7 +253,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     pub fn bluetooth_low_power_clock_observation(&self) -> BluetoothLowPowerClockObservation {
         let lp_timer_conf = self
             .peripherals
-            .modem_lpcon_shared_clock
+            .bluetooth_lp_timer_clock
             .read_lp_timer_conf();
         let (
             slow_oscillator_selected,

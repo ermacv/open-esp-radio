@@ -13,13 +13,13 @@ impl Sar {
         // SOURCE: hal/src/power.rs::execute_owned readback checkpoints.
         let p = &self.radio;
         let hp = p.hp_sys_clkrst_radio.read_modem_conf();
-        let clocks = p.modem_syscon_radio.read_clk_conf1();
-        let maps = p.modem_syscon_radio.read_clk_conf_power_st();
-        let shared = p.modem_lpcon_shared_clock.read_clk_conf_power_st();
+        let clocks = p.modem_syscon_clock_reset.read_clk_conf1();
+        let maps = p.modem_syscon_clock_reset.read_clk_conf_power_st();
+        let shared = p.modem_lpcon_power.read_clk_conf_power_st();
         let has = |bits: u32, expected: u32| bits & expected == expected;
         let observations = [
-            !p.modem_syscon_radio.read_modem_rst_conf().rst_wifibb()
-                && !p.modem_syscon_radio.read_modem_rst_conf().rst_wifimac(),
+            !p.modem_syscon_clock_reset.read_modem_rst_conf().rst_wifibb()
+                && !p.modem_syscon_clock_reset.read_modem_rst_conf().rst_wifimac(),
             p.pmu_radio
                 .read_hp_active_icg_modem()
                 .hp_active_dig_icg_modem_code_variant()
@@ -59,7 +59,7 @@ impl Sar {
                 && clocks.clk_fe_pwdet_adc_en()
                 && clocks.clk_fe_adc_en()
                 && clocks.clk_fe_dac_en(),
-            p.modem_syscon_radio.read_clk_conf().clk_i2c_mst_sel_160m(),
+            p.modem_syscon_clock_reset.read_clk_conf().clk_i2c_mst_sel_160m(),
         ];
         observations
             .into_iter()

@@ -43,7 +43,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
     });
     s.sar
         .radio
-        .modem_syscon_radio
+        .modem_syscon_clock_reset
         .modify_clk_conf_power_st(|w| {
             w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
             w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
@@ -52,15 +52,12 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
             w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
         });
-    s.sar
-        .radio
-        .modem_lpcon_shared_clock
-        .modify_clk_conf_power_st(|w| {
-            w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
-            w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
-            w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
-            w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
-        });
+    s.sar.radio.modem_lpcon_power.modify_clk_conf_power_st(|w| {
+        w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
+        w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
+        w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
+        w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
+    });
     s.sar
         .clocks
         .hp_sys_clkrst_pll160
@@ -79,11 +76,14 @@ pub(super) fn prepare(s: &mut Session<'_>) {
         pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted,
         pac::modem_syscon::modem_rst_conf::RstWifibb::Released,
     ] {
-        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-            w.set_rst_wifibb(reset);
-        });
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .modify_modem_rst_conf(|w| {
+                w.set_rst_wifibb(reset);
+            });
     }
-    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
         use pac::modem_syscon::clk_conf1::*;
         w.set_clk_wifibb_22m_en(ClkWifibb22mEn::Enabled)
             .set_clk_wifibb_40m_en(ClkWifibb40mEn::Enabled)
@@ -104,7 +104,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             .set_clk_fe_adc_en(true)
             .set_clk_fe_dac_en(true);
     });
-    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
         w.set_clk_i2c_mst_sel_160m(pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled);
     });
     s.sar
@@ -410,7 +410,7 @@ pub(super) fn i2c(s: &mut Session<'_>) {
         u32::from(
             s.sar
                 .radio
-                .modem_syscon_radio
+                .modem_syscon_clock_reset
                 .read_clk_conf()
                 .clk_i2c_mst_sel_160m(),
         ),

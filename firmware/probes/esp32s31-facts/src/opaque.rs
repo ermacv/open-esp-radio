@@ -46,22 +46,19 @@ pub(super) fn prepare(s: &mut Session<'_>) {
     });
     s.sar
         .radio
-        .modem_syscon_radio
+        .modem_syscon_clock_reset
         .modify_clk_conf_power_st(|w| {
             w.set_clk_modem_apb_st_map(Bits::constant::<6>())
                 .set_clk_modem_peri_st_map(Bits::constant::<4>())
                 .set_clk_wifi_st_map(Bits::constant::<6>())
                 .set_clk_bt_st_map(Bits::constant::<4>());
         });
-    s.sar
-        .radio
-        .modem_lpcon_shared_clock
-        .modify_clk_conf_power_st(|w| {
-            w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
-            w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
-            w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
-            w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
-        });
+    s.sar.radio.modem_lpcon_power.modify_clk_conf_power_st(|w| {
+        w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
+        w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
+        w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
+        w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
+    });
     s.sar
         .radio
         .pmu_radio
@@ -74,7 +71,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
         .radio
         .hp_sys_clkrst_radio
         .close_modem_pll_source_gate();
-    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
         use pac::modem_syscon::clk_conf1::*;
         w.set_clk_wifi_apb_en(ClkWifiApbEn::Enabled)
             .set_clk_wifimac_en(ClkWifimacEn::Enabled)
@@ -98,18 +95,18 @@ fn clock_snapshot(s: &Session<'_>, tag: u32) {
             .read_hp_active_icg_modem()
             .hp_active_dig_icg_modem_code()
             .get(),
-        syscon_map(s.sar.radio.modem_syscon_radio.read_clk_conf_power_st()),
+        syscon_map(
+            s.sar
+                .radio
+                .modem_syscon_clock_reset
+                .read_clk_conf_power_st(),
+        ),
     );
     emit(
         tag + 1,
-        lpcon_map(
-            s.sar
-                .radio
-                .modem_lpcon_shared_clock
-                .read_clk_conf_power_st(),
-        ),
-        syscon_clocks(s.sar.radio.modem_syscon_radio.read_clk_conf1()),
-        syscon_reset(s.sar.radio.modem_syscon_radio.read_modem_rst_conf()),
+        lpcon_map(s.sar.radio.modem_lpcon_power.read_clk_conf_power_st()),
+        syscon_clocks(s.sar.radio.modem_syscon_clock_reset.read_clk_conf1()),
+        syscon_reset(s.sar.radio.modem_syscon_clock_reset.read_modem_rst_conf()),
     );
 }
 
@@ -356,14 +353,20 @@ fn set_bb(s: &mut Session<'_>, irq: bool, clear: bool, reset: bool) {
 fn enable_baseband(s: &mut Session<'_>) {
     // SOURCE: HAL modem clock-device BB reset-before-enable sequence and
     // ROM phy_mac_enable_bb's digital interface / Wi-Fi-enable transition.
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Released);
+        });
     // SOURCE: ROM open_fe_bb clocks; enable digital BB clocks only, RF stays off.
-    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
         use pac::modem_syscon::clk_conf1::*;
         w.set_clk_wifibb_22m_en(ClkWifibb22mEn::Enabled)
             .set_clk_wifibb_40m_en(ClkWifibb40mEn::Enabled)

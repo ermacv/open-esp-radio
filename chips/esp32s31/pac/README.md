@@ -30,6 +30,13 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
   one place the claimed words are assumed exclusive; the generated
   `disjoint_blocks` check proves no two claimed blocks list one word.
 
+Radio words have separate parts for modem clocks/resets, PHY Wi-Fi baseband,
+modem power mapping, Bluetooth LP timer clocks, coexistence LP clocks, RTC
+slow-clock selection and PHY PWDET circuit mode. The coexistence policy
+owns timers 0–4 through `CoexPolicyTimers`; `PhyGrantProtectTimer` owns only
+timer 5. Partial arrays expose fixed-index accessors and their policy
+operations name individual elements, so no operation spans both owners.
+
 There are no handwritten register modules. The HAL's `root::Root::take`
 wraps this one claim; `into_bootstrap` and `into_runtime` compose the
 phase-specific owners. The PAC holds no boot or radio sequencing.

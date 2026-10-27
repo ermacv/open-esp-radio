@@ -219,20 +219,32 @@ pub(in crate::image) fn overflow_reset(s: &mut Session<'_>) {
     }
     boundary(s, 0xa410);
     // SOURCE: production Bluetooth shutdown reset order, MAC then APB.
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
+        });
     oer_riscv::fence();
     boundary(s, 0xa430);
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Released);
+        });
     oer_riscv::fence();
     boundary(s, 0xa450);
     // Re-enable before any clear/reseed: a retained pending cause would become
