@@ -14,6 +14,9 @@
 
 #[cfg(target_arch = "riscv32")]
 mod image;
+#[cfg(any(test, target_arch = "riscv32"))]
+#[allow(unsafe_code, reason = "the probe owns its trap entry/exit ABI")]
+mod trap;
 
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}

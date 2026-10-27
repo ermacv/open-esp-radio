@@ -30,18 +30,6 @@ const CPU_LINE: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
 const SOFTWARE_SOURCE: Index<{ pac::interrupt_core::route::COUNT }> =
     Index::constant::<{ pac::Interrupt::CPU_INTR_FROM_CPU_2 as usize }>();
 
-// SAFETY: the image owns entry/traps and the generated vectors; the included
-// production assembly uses its unchanged ABI and the linker-owned stacks.
-core::arch::global_asm!(
-    include_str!(concat!(env!("OUT_DIR"), "/vectors.s")),
-    include_str!("../../../../chips/espressif/staged-runtime/src/vectors.s"),
-    fs = const oer_riscv::machine::status::FS_MASK,
-    mie = const oer_riscv::machine::status::MIE,
-    mintthresh = const oer_riscv::clic::MINTTHRESH,
-    tcontrol = const oer_riscv::trigger::TCONTROL,
-    mte = const oer_riscv::trigger::TCONTROL_MTE,
-    mpte_shift = const (oer_riscv::trigger::TCONTROL_MPTE.trailing_zeros() - oer_riscv::trigger::TCONTROL_MTE.trailing_zeros()),
-);
 // SAFETY: the loader enters this symbol on hart 0 only. It establishes gp/sp,
 // zeroes the image's BSS (not retained RAM) before any Rust access, and never returns.
 core::arch::global_asm!(
@@ -77,8 +65,8 @@ core::arch::global_asm!(
 
 // SAFETY: addresses only; definitions and extents are supplied by facts.x.
 unsafe extern "C" {
-    safe static _start_trap: [u8; 0];
-    safe static _runtime_mtvt: [u8; 0];
+    safe static _facts_start_trap: [u8; 0];
+    safe static _facts_mtvt: [u8; 0];
     safe static __runtime_cpu0_irq_stack_top: [u8; 0];
 }
 
@@ -190,7 +178,7 @@ extern "C" fn facts_irq() {
 // SAFETY: the included trap entry calls this ABI with a pointer to its frame;
 // the probe only records architectural diagnostics and never returns.
 #[unsafe(no_mangle)]
-extern "C" fn oer_exception_handler(_frame: usize) -> ! {
+extern "C" fn facts_exception(_frame: usize) -> ! {
     emit(
         0xef,
         oer_riscv::read_mcause() as u32,
@@ -745,12 +733,12 @@ fn setup(s: &mut Session<'_>) {
     matrix.clic_observer.modify_int_config(|w| {
         w.set_mnlbits(Bits::constant::<LEVEL_BITS>());
     });
-    // SAFETY: unchanged runtime trap ABI; generated table and both exclusive
+    // SAFETY: the probe-owned trap ABI; generated table and both exclusive
     // stacks remain in SRAM for this whole image, with IRQ stack below task stack.
     unsafe {
         oer_riscv::install_trap_stack(
-            ptr::addr_of!(_start_trap) as usize | oer_riscv::machine::MTVEC_CLIC_MODE,
-            ptr::addr_of!(_runtime_mtvt) as usize,
+            ptr::addr_of!(_facts_start_trap) as usize | oer_riscv::machine::MTVEC_CLIC_MODE,
+            ptr::addr_of!(_facts_mtvt) as usize,
             ptr::addr_of!(__runtime_cpu0_irq_stack_top) as usize,
         );
     }
