@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         env::var("OER_B0_COUNTRY").ok(),
         env::var("OER_B0_POWER_CAP_DBM").ok(),
     ) {
-        (None, None) => "None".to_owned(),
+        (None, None) => String::new(),
         (Some(country), Some(cap)) => {
             assert!(
                 country.len() == 2 && country.bytes().all(|b| b.is_ascii_uppercase()),
@@ -19,13 +19,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             let cap = cap.parse::<i8>().expect("B0 cap is integer dBm");
             println!("cargo:rustc-cfg=oer_b0_configured");
-            format!("Some(crate::Profile {{country:*b\"{country}\",cap_dbm:{cap}}})")
+            format!(
+                "pub const PROFILE: crate::Profile = crate::Profile {{country:*b\"{country}\",cap_dbm:{cap}}};\n"
+            )
         }
         _ => panic!("B0 country and power cap are supplied together"),
     };
     fs::write(
         PathBuf::from(env::var_os("OUT_DIR").expect("Cargo output")).join("profile.rs"),
-        format!("pub const PROFILE: Option<crate::Profile> = {config};\n"),
+        config,
     )
     .expect("write B0 profile");
     Ok(())

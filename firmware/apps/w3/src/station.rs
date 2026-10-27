@@ -131,7 +131,8 @@ impl<Id: SlotIdentity> StationPort for StationComposition<Id> {
         }
         if let LowerMacEvent::Received { frame, .. } = &event {
             let bytes = frame.bytes();
-            if let (Some(local), Some(config)) = (TARGET.get(), crate::CONFIG)
+            let config = crate::CONFIG;
+            if let Some(local) = TARGET.get()
                 && oer_ieee80211_wire::station::parse_open_authentication_response(
                     bytes,
                     local,
@@ -141,9 +142,8 @@ impl<Id: SlotIdentity> StationPort for StationComposition<Id> {
             {
                 AUTHENTICATED.store(true, Ordering::Relaxed);
             }
-            if let Some(config) = crate::CONFIG
-                && oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
-                    .is_some_and(|h| h.control().subtype() == 8)
+            if oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
+                .is_some_and(|h| h.control().subtype() == 8)
                 && oer_ieee80211_wire::scan::parse_management(bytes, config.channel, 0)
                     .is_some_and(|record| record.bssid.get() == config.stand)
             {
