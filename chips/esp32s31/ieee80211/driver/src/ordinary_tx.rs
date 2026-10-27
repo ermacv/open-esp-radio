@@ -852,9 +852,12 @@ where
     /// retry ladder, rate fallback, Retry-bit rewrite or BSS protection
     /// selection is applied, and `plan.exchange.publication_limit` is not
     /// consulted. The queue counts down the supplied `backoff_slots`. In queued
-    /// mode the backend draws them from its per-AC EDCA state and widens that
-    /// contention window after a retryable failure. The single-attempt owner
-    /// does not draw another backoff or change that retained contention.
+    /// mode the lower-MAC core draws them from its per-AC EDCA state and
+    /// widens that window after a retryable failure. This owner resets the
+    /// window after success (including queued attempts) and a hardware
+    /// timeout. A classic single attempt also resets it after a failed
+    /// completion or collision; a queued retryable failure leaves widening
+    /// to the lower-MAC core.
     /// A power ceiling bounds the data and the protection control frame.
     fn start_idle_single_attempt<H: TxHardware>(
         &mut self,
@@ -1693,10 +1696,7 @@ where
             Some(SingleAttemptProtection::RtsCts { rate }) => TxProtection::RtsCts { rate },
             Some(SingleAttemptProtection::CtsToSelf { rate }) => TxProtection::CtsToSelf { rate },
         };
-        TxProtectionDecision {
-            protection,
-            ..TxProtectionDecision::UNPROTECTED
-        }
+        TxProtectionDecision { protection }
     }
 
     fn management_completion(

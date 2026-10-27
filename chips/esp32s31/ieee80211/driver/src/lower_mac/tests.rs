@@ -1023,15 +1023,29 @@ fn reserved_descriptor_never_lends_classic_idle_authority() {
     let _ = cookie;
 }
 
+/// Hardware observations fed to the actual retained management transmitter.
+#[derive(Clone, Copy)]
+enum ManagementObservation {
+    Delivered,
+    AckTimeout,
+    CtsTimeout,
+    CollisionCompletion,
+    Collision,
+    HardwareTimeout,
+}
+
 /// Drive the production management owner through modeled completions,
 /// inspecting semantic HAL publications rather than register images.
 fn check_management_transmissions(
     receiver: [u8; 6],
     management: oer_ieee80211_port::ManagementTxPlan,
-    completions: &[(u8, u8)],
+    completions: &[ManagementObservation],
 ) {
-    use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface};
+    use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface, OrdinaryTxRetryReport};
+    use ManagementObservation::*;
     use oer_esp32s31_ieee80211_mac::tx::LegacyRate as ChipLegacyRate;
+    use oer_ieee80211_port::backend::RetryCounters;
+    use oer_ieee80211_wire::frame::FrameControl;
 
     let mut owner = OrdinaryTxOwner::new(WifiTxResources {
         slot: slot(),
@@ -1073,11 +1087,28 @@ fn check_management_transmissions(
         WifiTxProgress::Pending
     );
     let rate = ChipLegacyRate::from_phy_rate(management.rate());
-    for (index, &(status, detail)) in completions.iter().enumerate() {
+    let mut expected_retries = OrdinaryTxRetryReport::default();
+    for (index, &observation) in completions.iter().enumerate() {
         let snapshot = owner.active_snapshot().unwrap();
         assert_eq!(snapshot.current_rate, TxPhyRate::Legacy(rate));
         assert_eq!(usize::from(snapshot.publications), index + 1);
         assert_eq!(hardware.publications(), index + 1);
+        assert_eq!(snapshot.retries, expected_retries);
+        assert_eq!(
+            snapshot.counters,
+            RetryCounters {
+                mpdu: expected_retries.ack_timeouts,
+                short: expected_retries.total(),
+                long: 0,
+            }
+        );
+        assert_eq!(snapshot.retry_bit_set, expected_retries.ack_timeouts != 0);
+        assert_eq!(
+            owner
+                .policy()
+                .contention_exponent(LegacyTxQueue::BestEffort),
+            4 + expected_retries.total().min(6)
+        );
         let program = hardware.legacy.last().unwrap().1;
         assert_eq!(program.rate(), rate.pac_rate());
         assert_eq!(
@@ -1088,48 +1119,155 @@ fn check_management_transmissions(
                 MacLegacyTxResponse::None
             }
         );
-        hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(status, detail));
+        let terminal = index + 1 == completions.len();
+        match observation {
+            HardwareTimeout => {
+                assert!(terminal, "a hardware timeout cannot republish management");
+                hardware.timeout_pending[BE] = true;
+            }
+            Collision => hardware.collision_pending[BE] = true,
+            _ => {
+                let (status, detail) = match observation {
+                    Delivered => (0, 0),
+                    AckTimeout => (5, 0),
+                    CtsTimeout => (2, 0),
+                    CollisionCompletion => (4, 1),
+                    _ => unreachable!("handled detached observations"),
+                };
+                hardware.completion[BE] =
+                    Some(MacTxCompletionObservation::new_model(status, detail));
+            }
+        }
         let OrdinaryTxAccess::Active(active) = owner.access() else {
             panic!("the management frame is still active");
         };
+        let progress = active
+            .service(
+                &mut hardware,
+                interrupt(if matches!(observation, HardwareTimeout) {
+                    EVENT_TX_TIMEOUT
+                } else {
+                    EVENT_TX_COMPLETE
+                }),
+            )
+            .unwrap();
+        let progress = if matches!(observation, HardwareTimeout) {
+            assert_eq!(progress, WifiTxProgress::Pending);
+            // The contention window is retained through the bounded abort settle.
+            assert_eq!(
+                owner
+                    .policy()
+                    .contention_exponent(LegacyTxQueue::BestEffort),
+                4 + expected_retries.total().min(6)
+            );
+            owner.timer.advance_to(owner.next_deadline().unwrap());
+            let OrdinaryTxAccess::Active(active) = owner.access() else {
+                panic!("the timeout settle retains its owner");
+            };
+            active.service(&mut hardware, WifiTxWake::Deadline).unwrap()
+        } else {
+            progress
+        };
         assert_eq!(
-            active
-                .service(&mut hardware, interrupt(EVENT_TX_COMPLETE))
-                .unwrap(),
-            if index + 1 == completions.len() {
+            progress,
+            if terminal {
                 WifiTxProgress::Complete
             } else {
                 WifiTxProgress::Pending
             }
         );
+        if !terminal {
+            match observation {
+                AckTimeout => expected_retries.ack_timeouts += 1,
+                CtsTimeout => expected_retries.cts_timeouts += 1,
+                CollisionCompletion | Collision => expected_retries.collisions += 1,
+                Delivered | HardwareTimeout => panic!("terminal observation cannot retry"),
+            }
+        }
     }
     let report = owner.take_last_outcome().unwrap().report();
     assert_eq!(usize::from(report.status.attempts), completions.len());
     assert_eq!(report.status.final_rate, TxPhyRate::Legacy(rate));
     assert_eq!(owner.slot_state(), TxDmaState::Free);
     assert_eq!(hardware.publications(), completions.len());
+    assert_eq!(report.retries, expected_retries);
+    assert_eq!(
+        owner
+            .policy()
+            .contention_exponent(LegacyTxQueue::BestEffort),
+        4
+    );
+    let OrdinaryTxAccess::Idle(mut idle) = owner.access() else {
+        panic!("a terminal management exchange returns its buffer");
+    };
+    let returned = &idle.buffer_mut()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()];
+    let control = FrameControl::new(u16::from_le_bytes(returned[..2].try_into().unwrap())).unwrap();
+    assert_eq!(control.retry(), expected_retries.ack_timeouts != 0);
+    assert_eq!(control.with_retry(false).get().to_le_bytes(), frame[..2]);
+    assert_eq!(returned[2..], frame[2..]);
 }
 
 #[test]
 fn management_unicast_keeps_its_rate_for_seven_attempts() {
+    use ManagementObservation::*;
     use oer_ieee80211_port::ManagementTxPlan;
     for rate in [LegacyRate::Ofdm6M, LegacyRate::Ofdm12M] {
-        // Both pure ACK failures and mixed failures consume seven attempts.
         for failures in [
-            [(5, 0); 7],
-            [(2, 0), (4, 1), (5, 0), (2, 0), (4, 1), (5, 0), (5, 0)],
+            [AckTimeout; 7],
+            [CtsTimeout; 7],
+            [Collision; 7],
+            [CollisionCompletion; 7],
+            [
+                CtsTimeout,
+                Collision,
+                AckTimeout,
+                CtsTimeout,
+                CollisionCompletion,
+                AckTimeout,
+                AckTimeout,
+            ],
         ] {
             check_management_transmissions(PEER, ManagementTxPlan::unicast(rate), &failures);
         }
-        check_management_transmissions(PEER, ManagementTxPlan::unicast(rate), &[(0, 0)]);
+        check_management_transmissions(PEER, ManagementTxPlan::unicast(rate), &[Delivered]);
+    }
+}
+
+#[test]
+fn management_retries_preserve_retry_bit_counters_and_reset_edca_at_success_or_timeout() {
+    use ManagementObservation::*;
+    use oer_ieee80211_port::ManagementTxPlan;
+    for observations in [
+        &[AckTimeout, Delivered][..],
+        &[CtsTimeout, Delivered],
+        &[Collision, Delivered],
+        &[CollisionCompletion, Delivered],
+        &[CtsTimeout, Collision, CtsTimeout, Delivered],
+        &[AckTimeout, CtsTimeout, Collision, Delivered],
+        &[AckTimeout, HardwareTimeout],
+        &[CtsTimeout, Collision, HardwareTimeout],
+    ] {
+        check_management_transmissions(
+            PEER,
+            ManagementTxPlan::unicast(LegacyRate::Ofdm12M),
+            observations,
+        );
     }
 }
 
 #[test]
 fn management_broadcast_never_retries() {
+    use ManagementObservation::*;
     use oer_ieee80211_port::ManagementTxPlan;
     for rate in [LegacyRate::Ofdm6M, LegacyRate::Ofdm12M] {
-        for completion in [(0, 0), (5, 0), (2, 0), (4, 1)] {
+        for completion in [
+            Delivered,
+            AckTimeout,
+            CtsTimeout,
+            Collision,
+            CollisionCompletion,
+            HardwareTimeout,
+        ] {
             check_management_transmissions(
                 [0xff; 6],
                 ManagementTxPlan::broadcast(rate),

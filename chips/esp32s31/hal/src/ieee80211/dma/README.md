@@ -7,13 +7,14 @@ The diagnostic PSRAM and aggregate paths have separate admission contracts.
 
 ## Ordinary TX handoff and reuse
 
-Every ordinary and aggregate publication carries one control frame selected by
-the [protection policy](../../../../ieee80211/mac/src/tx/protection.rs) for that PPDU's rate,
-Address 1 receiver and PSDU length: none, CTS-to-self or RTS/CTS, with the
-control-frame rate and its calibrated power. Selection happens again on every
-retry and every retained-aggregate republication; it never rejects a
-publication. The MAC generates the RTS or CTS frame and its Duration from the
-queue request and the programmed PPDU.
+Every ordinary and aggregate publication carries the caller's explicit
+protection exchange: none, CTS-to-self or RTS/CTS, together with the caller's
+legacy control-frame rate. Upper-MAC and the family policy make those choices;
+the driver supplies calibrated power for that rate. Each retry or retained
+aggregate republication uses its supplied attempt decisions. Direct
+`ManagementTxPlan` execution keeps its selected data rate and uses no protection.
+The MAC generates the RTS or CTS frame and its Duration from the queue request
+and the programmed PPDU.
 
 The reviewed queue control has separate software RTS and CTS requests. Ordinary
 descriptor-bound preparation replaces both requests with the PPDU's explicit
@@ -25,9 +26,13 @@ they have no native compiled vendor comparison. The pinned vendor never
 requests CTS-to-self, so that request has no vendor oracle; its on-air contract
 comes from hardware captures.
 
-A CTS timeout means the data PPDU was not transmitted. The ordinary owner
-republishes the MPDU without the Retry bit; an aggregate owner republishes the
-unchanged aggregate, also without Retry bits, until the short-retry limit.
+A CTS timeout means the data PPDU was not transmitted. A single-attempt owner
+reports that failure; the caller's retry plan decides whether to send again.
+Fixed-rate management retries within its supplied budget. A CTS timeout or
+collision never sets the MPDU Retry bit; an ACK timeout sets it before the next
+publication, and later retries preserve it. Aggregate retries likewise follow
+the caller's plan. Republication after protection failure retains every MPDU
+unchanged, including its Retry bit.
 
 Every arena is published by its DMA addresses in a [`DmaSpace`](space.rs):
 `ChipDma` on the chip, where a field's address is its DMA address, and the

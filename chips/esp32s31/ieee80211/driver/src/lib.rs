@@ -57,7 +57,6 @@ pub mod ampdu_tx;
 pub mod coex;
 pub mod cooperative_hardware;
 pub mod datapath;
-pub mod esp_now;
 pub mod irq;
 pub mod lower_mac;
 pub mod monitor_injection;

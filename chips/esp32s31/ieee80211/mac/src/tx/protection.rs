@@ -20,25 +20,6 @@ impl TxReceiver {
     }
 }
 
-/// Why one PPDU is protected; several sources can apply at once.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct TxProtectionReasons(u8);
-
-impl TxProtectionReasons {
-    pub const ERP: Self = Self(1 << 0);
-    pub const HT: Self = Self(1 << 1);
-    pub const HE_TXOP_DURATION: Self = Self(1 << 2);
-    pub const LENGTH: Self = Self(1 << 3);
-
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-
-    pub const fn is_empty(self) -> bool {
-        self.0 == 0
-    }
-}
-
 /// Control exchange that precedes one PPDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxProtection {
@@ -60,12 +41,10 @@ impl TxProtection {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TxProtectionDecision {
     pub protection: TxProtection,
-    pub reasons: TxProtectionReasons,
 }
 
 impl TxProtectionDecision {
     pub const UNPROTECTED: Self = Self {
         protection: TxProtection::None,
-        reasons: TxProtectionReasons(0),
     };
 }

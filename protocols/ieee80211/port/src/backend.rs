@@ -108,7 +108,7 @@ impl RetryCounters {
     }
 }
 
-/// Cold AIFS and contention exponents supplied by a transmit profile.
+/// Initial AIFS and contention exponents supplied by the family policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DefaultContention {
     /// AIFS in slot units after SIFS.

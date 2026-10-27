@@ -48,5 +48,8 @@ oer-esp32s31-layout = { workspace = true, features = ["build"] }
 [lints]
 workspace = true
 
+[dev-dependencies]
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+
 [package.metadata.open-radio]
 critical-section-hart = "boot"
