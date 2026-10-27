@@ -132884,7 +132884,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// RX-beacon-path raw observation; independent event identity unknown.
+            /// Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -132967,7 +132967,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// RX-beacon-path raw observation; independent event identity unknown.
+            /// Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(&self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -133246,7 +133246,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// RX-beacon-path raw observation; independent event identity unknown.
+            /// The vendor FIQ tests RAW17/18 jointly after acknowledging sampled power STATUS and RAW. With MAC STATUS14, either raw bit selects message32 and beacon-memory RX service; the weak consumer copies a 12-byte view from 0x20106000 and selects RX buffer address 0x20106010 and does not use the RAW argument. RAW alone is excluded from the FIQ nonempty test. This establishes neither an independent bit18 producer nor an ENABLE18 writer. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -133434,7 +133434,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// RX-beacon-path raw observation; independent event identity unknown.
+            /// Independent event identity unknown. The vendor FIQ acknowledges the full power STATUS image, but its beacon-memory RX selector tests RAW17/18 with MAC STATUS14, rather than separately dispatching STATUS18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -133622,7 +133622,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// RX-beacon-path raw observation; independent event identity unknown.
+            /// The vendor FIQ writes its complete sampled power STATUS and then RAW through this bank before selecting the RAW17/18 beacon-memory RX path. This includes sampled RAW18 even when absent from STATUS; it is an observed software acknowledgement, not a positive silicon-clear qualification. Independent cause unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -133802,7 +133802,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// RX-beacon-path raw observation; independent event identity unknown.
+            /// The vendor FIQ writes its complete sampled power STATUS and then RAW through this bank before selecting the RAW17/18 beacon-memory RX path. This includes sampled RAW18 even when absent from STATUS; it is an observed software acknowledgement, not a positive silicon-clear qualification. Independent cause unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(&self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -274672,7 +274672,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Interrupt-enable bits whose event identities remain unknown.
+            /// Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bits_0_4_opaque(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0)
@@ -274684,7 +274684,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_6_opaque(self) -> bool {
                 (self.0 & 0x00000040) != 0
@@ -274714,13 +274714,13 @@ pub mod wifi_mac {
                 (self.0 & 0x00000800) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_12_opaque(self) -> bool {
                 (self.0 & 0x00001000) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_13_opaque(self) -> bool {
                 (self.0 & 0x00002000) != 0
@@ -274768,7 +274768,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00400000) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_23_opaque(self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -274809,7 +274809,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Interrupt-enable bits whose event identities remain unknown.
+            /// Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bits_0_4_opaque(&self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0)
@@ -274821,7 +274821,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_6_opaque(&self) -> bool {
                 (self.0 & 0x00000040) != 0
@@ -274851,13 +274851,13 @@ pub mod wifi_mac {
                 (self.0 & 0x00000800) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_12_opaque(&self) -> bool {
                 (self.0 & 0x00001000) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_13_opaque(&self) -> bool {
                 (self.0 & 0x00002000) != 0
@@ -274905,7 +274905,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00400000) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_23_opaque(&self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -275135,7 +275135,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027.
+            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Vendor STATUS2/3 have RF-test polling/clear consumers and ENABLE2 has a sniffer accessor use, without established physical identities. These STATUS/ENABLE observations do not show a CPU store that sets RAW2/3/4. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027.
             #[inline]
             pub const fn bits_0_20_opaque(self) -> oer_mmio::Bits<21> {
                 oer_mmio::Bits::truncate(self.0)
@@ -275158,7 +275158,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027.
+            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Vendor STATUS2/3 have RF-test polling/clear consumers and ENABLE2 has a sniffer accessor use, without established physical identities. These STATUS/ENABLE observations do not show a CPU store that sets RAW2/3/4. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027.
             #[inline]
             pub const fn bits_0_20_opaque(&self) -> oer_mmio::Bits<21> {
                 oer_mmio::Bits::truncate(self.0)
@@ -275370,7 +275370,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Masked event bits whose identities remain unknown.
+            /// Masked event bits whose identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bits_0_4_opaque(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0)
@@ -275382,7 +275382,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_6_opaque(self) -> bool {
                 (self.0 & 0x00000040) != 0
@@ -275412,13 +275412,13 @@ pub mod wifi_mac {
                 (self.0 & 0x00000800) != 0
             }
 
-            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_12_opaque(self) -> bool {
                 (self.0 & 0x00001000) != 0
             }
 
-            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_13_opaque(self) -> bool {
                 (self.0 & 0x00002000) != 0
@@ -275466,13 +275466,13 @@ pub mod wifi_mac {
                 (self.0 & 0x00400000) != 0
             }
 
-            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn bit_23_opaque(self) -> bool {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer and independent clear/retention behavior remain unknown; software must not treat it as RX ownership or work multiplicity. Grouped pending-STATUS evidence alone cannot identify this lane. A bounded passive-beacon capture has no recorded positive lane24 sample, so it supplies no positive W1C24 or delivery-mask test. SOURCE: HW20_RX_AUXILIARY_OBSERVATION_20261027.
+            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer and independent clear/retention behavior remain unknown; software must not treat it as RX ownership or work multiplicity. Grouped pending-STATUS evidence alone cannot identify this lane. A bounded passive-beacon capture has no recorded positive lane24 sample, so it supplies no positive W1C24 or delivery-mask test. SOURCE: HW20_RX_AUXILIARY_OBSERVATION_20261027. The vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch; MAC STATUS14 with neither power RAW17 nor RAW18 selects lmacProcessRxSucData. No independent bit24 producer or task action is recovered from that FIQ. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn rx_associated_auxiliary_24(self) -> bool {
                 (self.0 & 0x01000000) != 0

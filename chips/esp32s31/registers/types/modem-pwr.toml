@@ -769,7 +769,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."ENABLE.BIT_18_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D8B4"]
+sources = ["S31_MMIO_DECLARED_2010D8B4", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -809,7 +809,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."RAW.BIT_18_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D8B8"]
+sources = ["S31_MMIO_DECLARED_2010D8B8", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -847,7 +847,7 @@ sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT",
 completeness = "unknown"
 
 [review.entity."POWER_INTERRUPT_STATUS.BIT_18_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 completeness = "unknown"
 
 [review.entity."POWER_INTERRUPT_STATUS.BEACON_MISS"]
@@ -882,7 +882,7 @@ sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT",
 completeness = "unknown"
 
 [review.entity."CLEAR.BIT_18_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 completeness = "unknown"
 
 [review.entity."CLEAR.BEACON_MISS"]
@@ -2132,7 +2132,7 @@ description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "plain"
-description = "RX-beacon-path raw observation; independent event identity unknown."
+description = "Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BEACON_MISS"
@@ -2216,7 +2216,7 @@ description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "read-only"
-description = "RX-beacon-path raw observation; independent event identity unknown."
+description = "The vendor FIQ tests RAW17/18 jointly after acknowledging sampled power STATUS and RAW. With MAC STATUS14, either raw bit selects message32 and beacon-memory RX service; the weak consumer copies a 12-byte view from 0x20106000 and selects RX buffer address 0x20106010 and does not use the RAW argument. RAW alone is excluded from the FIQ nonempty test. This establishes neither an independent bit18 producer nor an ENABLE18 writer. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BEACON_MISS"
@@ -2299,7 +2299,7 @@ description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "read-only"
-description = "RX-beacon-path raw observation; independent event identity unknown."
+description = "Independent event identity unknown. The vendor FIQ acknowledges the full power STATUS image, but its beacon-memory RX selector tests RAW17/18 with MAC STATUS14, rather than separately dispatching STATUS18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BEACON_MISS"
@@ -2382,7 +2382,7 @@ description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "write-one-to-clear"
-description = "RX-beacon-path raw observation; independent event identity unknown."
+description = "The vendor FIQ writes its complete sampled power STATUS and then RAW through this bank before selecting the RAW17/18 beacon-memory RX path. This includes sampled RAW18 even when absent from STATUS; it is an observed software acknowledgement, not a positive silicon-clear qualification. Independent cause unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BEACON_MISS"
