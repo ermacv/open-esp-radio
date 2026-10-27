@@ -275,4 +275,3 @@ name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "unknown"
 description = "Pinned phy_i2c_init1 initialization code 0x08, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical and pinned direct/encoded constants agree at this byte; no divider, loop-filter or charge-pump meaning is established. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."
-
