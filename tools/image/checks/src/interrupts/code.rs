@@ -96,6 +96,24 @@ pub struct CodePlacement {
 }
 
 impl CodePlacement {
+    /// The full code inventory of every declared interrupt handler, on every
+    /// hart. Include executor tasks as the handler audit did before; the
+    /// exception and panic entry paths have their own audits.
+    pub(super) fn handler_code(
+        &self,
+        analysis: &Analysis,
+        names: &BTreeMap<u32, String>,
+        memory: &Memory,
+    ) -> super::HandlerCode {
+        let reached = self
+            .contexts
+            .iter()
+            .filter(|context| context.level != 0)
+            .flat_map(|context| context.strict.union(&context.tasks).copied())
+            .collect();
+        super::handler_code(analysis, &reached, names, memory)
+    }
+
     /// The resolved strict functions still in cached memory, by address and size.
     /// The image linker consumes this same partition as the final check.
     pub fn strict_cached(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
@@ -128,11 +146,46 @@ impl CodePlacement {
                 // interrupt placement.
                 let executor = class == Some(Class::Executor);
                 let resolutions = inputs.resolutions_for(analysis, hart.core, level.level);
-                let cut = task_poll_sites(&resolutions);
-                let mut reached =
-                    analysis.reached_cut(level.bound.root, &resolutions, &cut, keep, control)?;
+                let cut = if executor {
+                    task_poll_sites(&resolutions)
+                } else {
+                    BTreeSet::new()
+                };
+                // A level's bound retains only its worst stack path. Placement
+                // must cover every declared handler, including shorter, disjoint
+                // paths; the exception still has its single bound root.
+                let roots: BTreeSet<_> = std::iter::once(level.bound.root)
+                    .chain(
+                        inputs
+                            .table
+                            .iter()
+                            .filter(|entry| {
+                                level.level != 0
+                                    && entry.core == hart.core
+                                    && entry.level == level.level
+                            })
+                            .filter_map(|entry| entry.handler),
+                    )
+                    .collect();
+                let mut full = level.bound.reached.clone();
+                let mut reached = BTreeSet::new();
+                for &root in &roots {
+                    let prefix = analysis.reached_cut(root, &resolutions, &cut, keep, control)?;
+                    if cut.is_empty() {
+                        full.extend(&prefix);
+                    } else if root != level.bound.root {
+                        full.extend(analysis.reached_cut(
+                            root,
+                            &resolutions,
+                            &BTreeSet::new(),
+                            keep,
+                            control,
+                        )?);
+                    }
+                    reached.extend(prefix);
+                }
                 if !executor {
-                    reached.extend(&level.bound.reached);
+                    reached.extend(&full);
                 }
                 let task_roots = if executor {
                     reached
@@ -145,8 +198,7 @@ impl CodePlacement {
                 } else {
                     BTreeSet::new()
                 };
-                let task_code: BTreeSet<_> =
-                    level.bound.reached.difference(&reached).copied().collect();
+                let task_code: BTreeSet<_> = full.difference(&reached).copied().collect();
                 let cached: BTreeSet<_> = reached
                     .iter()
                     .copied()
@@ -156,14 +208,7 @@ impl CodePlacement {
                         })
                     })
                     .collect();
-                let cached_paths = paths(
-                    analysis,
-                    level.bound.root,
-                    &resolutions,
-                    &if executor { cut } else { BTreeSet::new() },
-                    &reached,
-                    &cached,
-                );
+                let cached_paths = paths(analysis, &roots, &resolutions, &cut, &reached, &cached);
                 strict.extend(&reached);
                 tasks.extend(&task_code);
                 contexts.push(ContextCode {
@@ -349,7 +394,7 @@ pub(super) mod tests;
 /// Direct targets take precedence over supplemental resolutions, as in Walk.
 fn paths(
     analysis: &Analysis,
-    root: u32,
+    roots: &BTreeSet<u32>,
     resolutions: &Resolutions,
     cut: &BTreeSet<u32>,
     allowed: &BTreeSet<u32>,
@@ -358,8 +403,8 @@ fn paths(
     if wanted.is_empty() {
         return BTreeMap::new();
     }
-    let mut parents = BTreeMap::from([(root, root)]);
-    let mut queue = VecDeque::from([root]);
+    let mut parents: BTreeMap<_, _> = roots.iter().map(|&root| (root, root)).collect();
+    let mut queue: VecDeque<_> = roots.iter().copied().collect();
     while let Some(address) = queue.pop_front() {
         let Some(facts) = analysis.functions.get(&address) else {
             continue;
@@ -389,9 +434,13 @@ fn paths(
         .filter_map(|&address| {
             let mut path = vec![address];
             let mut at = address;
-            while at != root {
-                at = *parents.get(&at)?;
-                path.push(at);
+            loop {
+                let parent = *parents.get(&at)?;
+                if parent == at {
+                    break;
+                }
+                path.push(parent);
+                at = parent;
             }
             path.reverse();
             Some((address, path))

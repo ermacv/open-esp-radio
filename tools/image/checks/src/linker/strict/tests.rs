@@ -138,12 +138,12 @@ fn malformed_selection_metadata_is_not_silently_ignored() {
 
 /// Only the pinned compiler and its LLD run, each in this test's own directory.
 #[test]
-fn the_pinned_toolchain_moves_the_actual_input_section_from_psram_to_sram() {
+fn two_handlers_at_one_level_are_both_linked_into_sram() {
     let directory = tempfile::tempdir().unwrap();
     let directory = directory.path();
     let source = directory.join("fixture.rs");
     let object = directory.join("fixture.o");
-    std::fs::write(&source, "#![no_std]\n#[unsafe(no_mangle)]\n#[unsafe(link_section=\".text.unlikely.actual_section\")]\npub extern \"C\" fn strict_function() -> u32 { 42 }\n").unwrap();
+    std::fs::write(&source, "#![no_std]\n#[unsafe(no_mangle)]\n#[unsafe(link_section=\".text.unlikely.actual_section\")]\npub extern \"C\" fn worst_handler() -> u32 { 42 }\n#[unsafe(no_mangle)]\npub extern \"C\" fn other_handler() -> u32 { 43 }\n").unwrap();
     let result = oer_os_toolchain::command(oer_os_toolchain::Tool::Rustc)
         .unwrap()
         .args([
@@ -166,7 +166,7 @@ fn the_pinned_toolchain_moves_the_actual_input_section_from_psram_to_sram() {
         String::from_utf8_lossy(&result.stderr)
     );
     let script = directory.join("link.x");
-    std::fs::write(&script, "ENTRY(strict_function)\nSECTIONS { .isr.text 0x20000000 : { INCLUDE strict-text.x } .text 0x50000000 : { *(.text .text.*) } }\n").unwrap();
+    std::fs::write(&script, "ENTRY(worst_handler)\nSECTIONS { .isr.text 0x20000000 : { INCLUDE strict-text.x } .text 0x50000000 : { *(.text .text.*) } }\n").unwrap();
     let output = directory.join("image.elf");
     let link = |input: &Path| {
         let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
@@ -211,25 +211,49 @@ fn the_pinned_toolchain_moves_the_actual_input_section_from_psram_to_sram() {
         link(input);
         let first_bytes = std::fs::read(&output).unwrap();
         let first = oer_analysis_elf::Elf::parse(&first_bytes).unwrap();
-        let function = first.symbol("strict_function").unwrap();
-        assert_eq!(function.address, 0x50000000);
+        let handlers = ["worst_handler", "other_handler"].map(|name| {
+            let function = first.symbol(name).unwrap();
+            assert!(function.address >= 0x50000000);
+            oer_analysis_riscv_stack::Function {
+                address: u32::try_from(function.address).unwrap(),
+                size: u32::try_from(function.size).unwrap(),
+                names: vec![name.into()],
+                section: 0,
+            }
+        });
+        let code = crate::interrupts::same_level_handler_placement(handlers.clone());
         let (_, sections) = crate::linker::inspect_inputs(&[input.into()], &[]).unwrap();
-        let mut request = requested("strict_function");
-        request.size = function.size;
-        let mut plan = Placement::select(&[request], &sections, 4096).unwrap();
+        let requests: Vec<_> = code
+            .strict_cached()
+            .map(|(address, size)| {
+                let function = handlers
+                    .iter()
+                    .find(|function| function.address == address)
+                    .unwrap();
+                Requested {
+                    name: function.names[0].clone(),
+                    symbols: function.names.clone(),
+                    size: u64::from(size),
+                }
+            })
+            .collect();
+        let mut plan = Placement::select(&requests, &sections, 4096).unwrap();
         assert!(plan.fragment().contains(".text.unlikely.actual_section"));
         std::fs::write(directory.join(FRAGMENT), plan.fragment()).unwrap();
         link(input);
         let second_bytes = std::fs::read(&output).unwrap();
         let second = oer_analysis_elf::Elf::parse(&second_bytes).unwrap();
-        assert_eq!(
-            second.symbol("strict_function").unwrap().address,
-            0x20000000
-        );
+        for handler in &handlers {
+            let symbol = second.symbol(&handler.names[0]).unwrap();
+            assert!(
+                (0x20000000..0x20001000).contains(&symbol.address),
+                "{} was not placed in SRAM",
+                handler.names[0]
+            );
+        }
         plan.final_sizes(&output).unwrap();
-        assert_eq!(
-            plan.functions[0].size,
-            second.symbol("strict_function").unwrap().size
-        );
+        for function in &plan.functions {
+            assert_eq!(function.size, second.symbol(&function.symbol).unwrap().size);
+        }
     }
 }

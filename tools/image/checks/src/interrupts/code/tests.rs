@@ -17,6 +17,75 @@ fn transfer(site: u32, target: Option<u32>) -> Transfer {
     }
 }
 
+/// The first handler has the worst stack bound; the other is independent.
+/// Used by the linker's compiler-driven relocation regression.
+pub(crate) fn same_level_handler_placement(handlers: [Function; 2]) -> CodePlacement {
+    let mut stacks = partial(0);
+    let exception = stacks.contract.memory.sram.origin + 0x1000;
+    let mut functions = BTreeMap::from([(exception, facts(exception, 4))]);
+    for (index, handler) in handlers.iter().enumerate() {
+        let mut value = facts(handler.address, handler.size);
+        value.function = handler.clone();
+        value.frame = Some(if index == 0 { 32 } else { 0 });
+        functions.insert(handler.address, value);
+    }
+    let analysis = Analysis {
+        traps: Default::default(),
+        functions,
+        code: Vec::new(),
+        summaries: BTreeSet::new(),
+    };
+    let resolutions = Resolutions::new();
+    let mut level = stacks.harts[0].exception.clone();
+    level.level = 1;
+    level.bound = analysis
+        .bound_with(
+            handlers[0].address,
+            &resolutions,
+            &mut ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
+    stacks.harts[0].levels = vec![level];
+    stacks.harts[0].exception.bound = analysis
+        .bound_with(exception, &resolutions, &mut ledger(), &mut || Ok(()))
+        .unwrap();
+    let table: Vec<_> = handlers
+        .iter()
+        .enumerate()
+        .map(|(index, handler)| TableEntry {
+            source: index as u32,
+            line: 16 + index as u32,
+            level: 1,
+            class: Class::Hardware,
+            core: 0,
+            handler: Some(handler.address),
+        })
+        .collect();
+    let inputs = Stacks {
+        table: &table,
+        cores: &[0],
+        vectors: &[],
+        exception: TrapEntry {
+            entry: exception,
+            handler: exception,
+            frame: 0,
+        },
+        resolutions: &resolutions,
+    };
+    CodePlacement::of(
+        &analysis,
+        &handlers,
+        &stacks.harts,
+        &inputs,
+        BTreeSet::new(),
+        &stacks.contract.memory,
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap()
+}
+
 /// A real synthetic analysis: root calls dequeue and shared directly;
 /// dequeue polls task; task also calls shared. Exception is independent.
 /// The table's one entry, on hart 0 at `priority`, is of `class`.
@@ -109,8 +178,9 @@ pub(in crate::interrupts) fn fixture(
         &mut || Ok(()),
     )
     .unwrap();
-    let full = &stacks.harts[0].levels[0].bound.reached;
-    stacks.handler_code = handler_code(&analysis, full, &stacks.names, memory);
+    stacks.handler_code = stacks
+        .code_placement
+        .handler_code(&analysis, &stacks.names, memory);
     stacks.names.insert(shared, "sample::shared".into());
     stacks.names.insert(task, "sample::task".into());
     stacks.frames = analysis
@@ -266,4 +336,275 @@ fn diagnostic_warnings_group_functions_by_violation_and_context() {
             "hart 1 P1 (hardware): 1 strict functions, 16 bytes in cached memory (diagnostic image, reported only); see interrupt-placement.txt",
         ]
     );
+}
+
+/// A table-backed analysis, with stack maxima selected independently per hart/level.
+struct MultipleHandlers {
+    stacks: crate::interrupts::InterruptStacks,
+    analysis: Analysis,
+    resolutions: Resolutions,
+    exception: u32,
+}
+
+impl MultipleHandlers {
+    fn new() -> Self {
+        let stacks = partial(0);
+        let exception = stacks.contract.memory.sram.origin + 0x1000;
+        Self {
+            stacks,
+            analysis: Analysis {
+                traps: Default::default(),
+                functions: BTreeMap::from([(exception, facts(exception, 4))]),
+                code: Vec::new(),
+                summaries: BTreeSet::new(),
+            },
+            resolutions: Resolutions::new(),
+            exception,
+        }
+    }
+
+    fn function(&mut self, address: u32, frame: u64, callees: &[u32]) {
+        let mut value = facts(address, 32);
+        value.frame = Some(frame);
+        value.transfers = callees
+            .iter()
+            .enumerate()
+            .map(|(index, &callee)| transfer(address + index as u32 * 4, Some(callee)))
+            .collect();
+        self.analysis.functions.insert(address, value);
+    }
+
+    fn bind(&mut self, hart: u32, level: u32, class: Class, handler: u32) {
+        let index = self.stacks.table.len() as u32;
+        self.stacks.table.push(TableEntry {
+            source: index,
+            line: 16 + index,
+            level,
+            class,
+            core: hart,
+            handler: Some(handler),
+        });
+    }
+
+    fn finish(mut self) -> (crate::interrupts::InterruptStacks, Analysis) {
+        let cores: Vec<_> = self
+            .stacks
+            .table
+            .iter()
+            .map(|entry| entry.core)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let vectors: Vec<_> = self
+            .stacks
+            .table
+            .iter()
+            .filter_map(|entry| {
+                entry
+                    .handler
+                    .map(|handler| oer_analysis_riscv_stack::Vector {
+                        hart: entry.core,
+                        line: entry.line,
+                        entry: TrapEntry {
+                            entry: handler,
+                            handler,
+                            frame: 0,
+                        },
+                    })
+            })
+            .collect();
+        let inputs = Stacks {
+            table: &self.stacks.table,
+            cores: &cores,
+            vectors: &vectors,
+            exception: TrapEntry {
+                entry: self.exception,
+                handler: self.exception,
+                frame: 0,
+            },
+            resolutions: &self.resolutions,
+        };
+        self.stacks.harts = oer_analysis_riscv_stack::interrupt_stacks(
+            &self.analysis,
+            &inputs,
+            &mut ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
+        self.stacks.code_placement = CodePlacement::of(
+            &self.analysis,
+            &self
+                .analysis
+                .functions
+                .values()
+                .map(|value| value.function.clone())
+                .collect::<Vec<_>>(),
+            &self.stacks.harts,
+            &inputs,
+            BTreeSet::new(),
+            &self.stacks.contract.memory,
+            &mut ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
+        self.stacks.handler_code = self.stacks.code_placement.handler_code(
+            &self.analysis,
+            &self.stacks.names,
+            &self.stacks.contract.memory,
+        );
+        (self.stacks, self.analysis)
+    }
+}
+
+#[test]
+fn forbidden_operation_in_a_non_worst_handler_is_reported() {
+    let mut fixture = MultipleHandlers::new();
+    let worst = fixture.exception + 0x100;
+    let other = worst + 0x100;
+    let helper = fixture.stacks.contract.memory.psram.unwrap().origin + 0x2000;
+    let panic = worst + 0x200;
+    fixture.function(worst, 256, &[]);
+    fixture.function(other, 0, &[helper]);
+    fixture.function(helper, 0, &[panic]);
+    fixture.function(panic, 0, &[]);
+    fixture
+        .analysis
+        .functions
+        .get_mut(&helper)
+        .unwrap()
+        .float_sites
+        .push(helper + 4);
+    fixture
+        .stacks
+        .names
+        .insert(helper, "sample::non_worst_helper".into());
+    fixture
+        .stacks
+        .names
+        .insert(panic, "core::panicking::panic_fmt".into());
+    fixture.bind(0, 1, Class::Hardware, worst);
+    fixture.bind(0, 1, Class::Hardware, other);
+    let (stacks, analysis) = fixture.finish();
+    let bound = &stacks.harts[0].levels[0].bound;
+    assert_eq!(bound.root, worst);
+    assert!(!bound.reached.contains(&helper));
+    let old_inventory = handler_code(
+        &analysis,
+        &bound.reached,
+        &stacks.names,
+        &stacks.contract.memory,
+    );
+    assert!(old_inventory.float.is_empty());
+    assert!(old_inventory.cached.is_empty());
+    assert!(old_inventory.panics.is_empty());
+    assert_eq!(stacks.handler_code.float, [(helper, helper + 4)]);
+    assert_eq!(stacks.handler_code.cached, [helper]);
+    assert_eq!(stacks.handler_code.panics, [(helper, panic)]);
+    for policy in [Required::Product, Required::Diagnostic] {
+        let error = stacks.check(policy).unwrap_err().to_string();
+        assert!(error.contains("floating point"), "{error}");
+        assert!(error.contains("sample::non_worst_helper"), "{error}");
+    }
+}
+
+#[test]
+fn a_non_worst_executor_root_keeps_its_task_side_after_the_poll_cut() {
+    use oer_analysis_riscv_stack::Violation;
+    let mut fixture = MultipleHandlers::new();
+    let worst = fixture.exception + 0x100;
+    let executor = worst + 0x100;
+    let dispatch = worst + 0x200;
+    let shared = worst + 0x300;
+    let task = fixture.stacks.contract.memory.psram.unwrap().origin + 0x2000;
+    let leaf = task + 0x100;
+    fixture.function(worst, 256, &[]);
+    fixture.function(executor, 0, &[dispatch, shared]);
+    fixture.function(dispatch, 0, &[task]);
+    fixture.function(shared, 0, &[]);
+    fixture.function(task, 0, &[leaf, shared]);
+    fixture.function(leaf, 0, &[]);
+    fixture.resolutions.add_task_poll(dispatch);
+    fixture.bind(0, 2, Class::Exempt(Violation::ExecutorLevel), worst);
+    fixture.bind(0, 2, Class::Executor, executor);
+    let (stacks, _) = fixture.finish();
+    assert_eq!(stacks.harts[0].levels[0].bound.root, worst);
+    assert!(!stacks.harts[0].levels[0].bound.reached.contains(&task));
+    let context = &stacks.code_placement.contexts[0];
+    assert_eq!(
+        context.strict,
+        BTreeSet::from([worst, executor, dispatch, shared])
+    );
+    assert_eq!(context.tasks, BTreeSet::from([task, leaf]));
+    assert_eq!(context.task_roots, BTreeSet::from([task]));
+    assert_eq!(stacks.code_placement.functions[&task].role, Role::Task);
+    assert_eq!(stacks.code_placement.functions[&shared].role, Role::Strict);
+    assert!(!context.cached_paths.contains_key(&task));
+    assert_eq!(stacks.handler_code.cached, [task, leaf]);
+}
+
+#[test]
+fn every_hart_uses_its_own_complete_handler_roots() {
+    let mut fixture = MultipleHandlers::new();
+    let worst0 = fixture.exception + 0x100;
+    let other0 = worst0 + 0x100;
+    let worst1 = worst0 + 0x200;
+    let other1 = worst0 + 0x300;
+    let helper0 = fixture.stacks.contract.memory.psram.unwrap().origin + 0x2000;
+    let helper1 = helper0 + 0x100;
+    for root in [worst0, worst1] {
+        fixture.function(root, 256, &[]);
+    }
+    fixture.function(other0, 0, &[helper0]);
+    fixture.function(other1, 0, &[helper1]);
+    fixture.function(helper0, 0, &[]);
+    fixture.function(helper1, 0, &[]);
+    // The separate exception audit is not part of the interrupt-handler inventory.
+    fixture
+        .analysis
+        .functions
+        .get_mut(&fixture.exception)
+        .unwrap()
+        .float_sites
+        .push(fixture.exception);
+    fixture.bind(0, 1, Class::Hardware, worst0);
+    fixture.bind(0, 1, Class::Hardware, other0);
+    fixture.bind(1, 1, Class::Hardware, worst1);
+    fixture.bind(1, 1, Class::Hardware, other1);
+    let (stacks, _) = fixture.finish();
+    for (hart, roots) in [
+        (0, [worst0, other0, helper0]),
+        (1, [worst1, other1, helper1]),
+    ] {
+        let context = stacks
+            .code_placement
+            .contexts
+            .iter()
+            .find(|context| context.hart == hart && context.level == 1)
+            .unwrap();
+        assert_eq!(context.strict, BTreeSet::from(roots));
+    }
+    assert_eq!(stacks.handler_code.cached, [helper0, helper1]);
+    assert!(stacks.handler_code.float.is_empty());
+}
+
+#[test]
+fn cached_paths_start_at_either_root_and_choose_the_shortest_route() {
+    let mut fixture = MultipleHandlers::new();
+    let worst = fixture.exception + 0x100;
+    let other = worst + 0x100;
+    let long = fixture.stacks.contract.memory.psram.unwrap().origin + 0x2000;
+    let shared = long + 0x100;
+    let exclusive = long + 0x200;
+    fixture.function(worst, 256, &[long]);
+    fixture.function(other, 0, &[shared, exclusive]);
+    fixture.function(long, 0, &[shared]);
+    fixture.function(shared, 0, &[]);
+    fixture.function(exclusive, 0, &[]);
+    fixture.bind(0, 1, Class::Hardware, worst);
+    fixture.bind(0, 1, Class::Hardware, other);
+    let (stacks, _) = fixture.finish();
+    let paths = &stacks.code_placement.contexts[0].cached_paths;
+    assert_eq!(paths[&long], [worst, long]);
+    assert_eq!(paths[&shared], [other, shared]);
+    assert_eq!(paths[&exclusive], [other, exclusive]);
 }
