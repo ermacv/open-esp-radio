@@ -644,7 +644,6 @@ extern "C" fn facts_main() -> ! {
             positional: p.bluetooth.ble_hw_positional_word1ff0,
             etm: p.modem_etm.modem_etm_bluetooth,
             task_irq: p.bluetooth.btmac_ble_phy_init,
-            scheduler: p.bluetooth.btdm_scheduler_table,
         },
         opaque: opaque::Hardware {
             block_ack: p.wifi_mac.wifi_mac_block_ack,

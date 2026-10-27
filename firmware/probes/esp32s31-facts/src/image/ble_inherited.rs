@@ -1,7 +1,7 @@
 //! Bounded inherited-enable and saved-snapshot experiments; no RF or DMA.
 use super::{
-    Bits, FACTS_OUTPUT, Index, Ordering, RETAINED, SECONDARY, Session, ble, ble_wave2::mac,
-    contain, emit, halt, pac,
+    Bits, FACTS_OUTPUT, Ordering, RETAINED, SECONDARY, Session, ble, ble_wave2::mac, contain, emit,
+    halt, pac,
 };
 const MAGIC: u32 = 0xfac70007;
 const REASON: u32 = 0x687725;
