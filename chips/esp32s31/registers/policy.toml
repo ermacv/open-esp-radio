@@ -207,7 +207,9 @@ description = "The system timer: the comparators the time driver programs and th
 [[partitions.parts]]
 name = "Systimer"
 instance = "SYSTIMER"
-registers = ["CONF", "TARGET%s_HI", "TARGET%s_LO", "TARGET%s_CONF", "COMP%s_LOAD", "INT_ENA", "INT_RAW", "INT_ST"]
+registers = ["CONF", "UNIT0_LOAD_HI", "UNIT0_LOAD_LO", "UNIT0_LOAD", "TARGET%s_HI", "TARGET%s_LO", "TARGET%s_CONF", "COMP%s_LOAD", "INT_ENA", "INT_RAW", "INT_ST"]
+description = "Exclusive unit-zero programming and comparator owner; the shared counter part only latches and reads. SOURCE: ESP_IDF_4D59230D_S31_SYSTIMER_LL."
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER_LL"]
 
 [[partitions.parts]]
 name = "SystimerCounter"
@@ -1308,7 +1310,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "SYSTIMER"
-registers = ["UNIT1_OP", "UNIT0_LOAD_HI", "UNIT0_LOAD_LO", "UNIT1_LOAD_HI", "UNIT1_LOAD_LO", "UNIT1_VALUE_HI", "UNIT1_VALUE_LO", "UNIT0_LOAD", "UNIT1_LOAD", "REAL_TARGET0_LO", "REAL_TARGET0_HI", "REAL_TARGET1_LO", "REAL_TARGET1_HI", "REAL_TARGET2_LO", "REAL_TARGET2_HI", "DATE"]
+registers = ["UNIT1_OP", "UNIT1_LOAD_HI", "UNIT1_LOAD_LO", "UNIT1_VALUE_HI", "UNIT1_VALUE_LO", "UNIT1_LOAD", "REAL_TARGET0_LO", "REAL_TARGET0_HI", "REAL_TARGET1_LO", "REAL_TARGET1_HI", "REAL_TARGET2_LO", "REAL_TARGET2_HI", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]

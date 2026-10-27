@@ -235623,6 +235623,10 @@ pub mod systimer {
     }
 
     /// The `Systimer` part of `SYSTIMER`.
+    ///
+    /// Exclusive unit-zero programming and comparator owner; the shared counter part only latches and reads. SOURCE: ESP_IDF_4D59230D_S31_SYSTIMER_LL.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_SYSTIMER_LL.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct Systimer<P: oer_mmio::Placement = oer_mmio::Fixed<0x20399000>>(
         oer_mmio::Block<P, SystimerWords>,
@@ -235634,15 +235638,15 @@ pub mod systimer {
     impl oer_mmio::Registers for SystimerWords {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
-            0x0, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x50, 0x54, 0x58, 0x64,
-            0x68, 0x70,
+            0x0, 0xc, 0x10, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x50, 0x54, 0x58,
+            0x5c, 0x64, 0x68, 0x70,
         ];
     }
 
     impl oer_mmio::Words for SystimerWords {
         const OWNED: &'static [usize] = &[
-            0x0, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x50, 0x54, 0x58, 0x64,
-            0x68, 0x70,
+            0x0, 0xc, 0x10, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x50, 0x54, 0x58,
+            0x5c, 0x64, 0x68, 0x70,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -235679,6 +235683,36 @@ pub mod systimer {
             let mut value = conf::W(self.0.read::<0x0>());
             change(&mut value);
             self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `UNIT0_LOAD_HI`.
+        #[inline]
+        pub fn read_unit0_load_hi(&self) -> unit0_load_hi::R {
+            unit0_load_hi::R(self.0.read::<0xc>())
+        }
+
+        /// Read `UNIT0_LOAD_HI`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_unit0_load_hi(&mut self, change: impl FnOnce(&mut unit0_load_hi::W)) {
+            let mut value = unit0_load_hi::W(self.0.read::<0xc>());
+            change(&mut value);
+            self.0.write::<0xc>(value.0);
+        }
+
+        /// Read `UNIT0_LOAD_LO`.
+        #[inline]
+        pub fn read_unit0_load_lo(&self) -> unit0_load_lo::R {
+            unit0_load_lo::R(self.0.read::<0x10>())
+        }
+
+        /// Read `UNIT0_LOAD_LO`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_unit0_load_lo(&mut self, change: impl FnOnce(&mut unit0_load_lo::W)) {
+            let mut value = unit0_load_lo::W(self.0.read::<0x10>());
+            change(&mut value);
+            self.0.write::<0x10>(value.0);
         }
 
         /// Read `TARGET%s_HI`.
@@ -235743,6 +235777,13 @@ pub mod systimer {
         #[inline]
         pub fn trigger_comp_load_load(&mut self, index: oer_mmio::Index<3>) {
             self.0.write_indexed::<0x50, 0x4, 3>(index, 0x00000001);
+        }
+
+        /// Write to the write-trigger field `TIMER_UNIT0_LOAD` of `UNIT0_LOAD`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_unit0_load_timer_unit0_load(&mut self) {
+            self.0.write::<0x5c>(0x00000001);
         }
 
         /// Read `INT_ENA`.
