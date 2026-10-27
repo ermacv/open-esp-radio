@@ -1,6 +1,6 @@
 // Stage two does not return through the bootloader reset entry. It owns data,
 // BSS, the SRAM interrupt closure and vector registers, and initializes each
-// one before entering Rust or enabling interrupts. It runs on hart 0 only.
+// one before entering Rust or enabling interrupts. It runs on the facts-defined boot hart only.
 core::arch::global_asm!(
     r#"
     .section .text._start, "ax", @progbits
@@ -11,7 +11,8 @@ _runtime_start:
     .option push
     .option norelax
     csrr t0, mhartid
-    bnez t0, 99f
+    li t1, {boot_hart}
+    bne t0, t1, 99f
     la gp, __global_pointer$
     la a0, __runtime_data_load_start
     la a1, __runtime_data_start
@@ -102,7 +103,7 @@ _runtime_start:
     .option pop
     call _runtime_enable_fpu
     tail runtime_main
-    // Only hart 0 runs the runtime (`oer_espressif_staged_layout::BOOT_HART`):
+    // Only the facts-defined boot hart runs the runtime:
     // a stale boot address that ROM hands to another hart stops here, before
     // the hart touches data, the stacks or any peripheral. It spins: the
     // handoff scan decodes no `wfi`.
@@ -111,6 +112,7 @@ _runtime_start:
     .size _runtime_start, . - _runtime_start
 
 "#,
+    boot_hart = const crate::BOOT_HART,
     mtvt = const oer_riscv::clic::MTVT,
 );
 

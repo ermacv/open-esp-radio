@@ -2,9 +2,8 @@
     // hart and CPU line in the hart's vector table (`mtvt`), and their one
     // checked exit. The runtime's build generates, from the chip facts' lines
     // and harts, the macros `RUNTIME_IRQ_ENTRIES` (an `IRQ_ENTRY hart, line`
-    // for every line but 0 of every hart) and `RUNTIME_VECTOR_TABLES` (each
-    // hart's table); this text holds what every entry shares and invokes
-    // them. `stacks.rs` assembles the generated text and this one with the
+    // for every line but 0 of every hart), plus typed Rust vector tables.
+    // This text holds what every assembly entry shares and invokes the macro. `stacks.rs` assembles the generated text and this one with the
     // operands:
     //   {fs}               mstatus.FS
     //   {mie}              mstatus.MIE
@@ -27,9 +26,8 @@
     // then the registers and the stack, and returns. Nested traps thus keep
     // each level's trigger state: a trap overwrites MPTE, the frame does not.
     //
-    // Frame: ra, t0..t6, a0..a7 at 0..60, the outermost flag at 64,
-    // mstatus at 68, the interrupted sp at 72, mepc at 76, mcause at 80,
-    // the threshold at 84, tcontrol at 88; 92..96 unused.
+    // Frame size and every member offset come from TrapFrame through const
+    // operands; the assembly has no independent copy of its Rust layout.
     .section .trap.runtime, "ax", @progbits
     .option push
     .option norelax
@@ -74,71 +72,71 @@ _runtime_stack_bootstrap:
     xor sp, sp, t0
     xor t0, sp, t0
     xor sp, sp, t0
-    addi sp, sp, -96
-    sw t1, 8(sp)
-    sw zero, 64(sp)
+    addi sp, sp, -{frame_bytes}
+    sw t1, {frame_t1}(sp)
+    sw zero, {frame_outermost}(sp)
     // The interrupted handler's sp is just above this frame.
-    addi t1, sp, 96
-    sw t1, 72(sp)
+    addi t1, sp, {frame_bytes}
+    sw t1, {frame_sp}(sp)
     j 91f
 
 90:
-    addi sp, sp, -96
-    sw t1, 8(sp)
+    addi sp, sp, -{frame_bytes}
+    sw t1, {frame_t1}(sp)
     li t1, 1
-    sw t1, 64(sp)
-    sw t0, 72(sp)
+    sw t1, {frame_outermost}(sp)
+    sw t0, {frame_sp}(sp)
 
 91:
-    sw ra, 0(sp)
+    sw ra, {frame_ra}(sp)
     // Both paths saved t1 before using it to recover the interrupted t0.
     csrr t1, mscratch
-    sw t1, 4(sp)
-    sw t2, 12(sp)
-    sw t3, 16(sp)
-    sw t4, 20(sp)
-    sw t5, 24(sp)
-    sw t6, 28(sp)
-    sw a0, 32(sp)
-    sw a1, 36(sp)
-    sw a2, 40(sp)
-    sw a3, 44(sp)
-    sw a4, 48(sp)
-    sw a5, 52(sp)
-    sw a6, 56(sp)
-    sw a7, 60(sp)
+    sw t1, {frame_t0}(sp)
+    sw t2, {frame_t2}(sp)
+    sw t3, {frame_t3}(sp)
+    sw t4, {frame_t4}(sp)
+    sw t5, {frame_t5}(sp)
+    sw t6, {frame_t6}(sp)
+    sw a0, {frame_a0}(sp)
+    sw a1, {frame_a1}(sp)
+    sw a2, {frame_a2}(sp)
+    sw a3, {frame_a3}(sp)
+    sw a4, {frame_a4}(sp)
+    sw a5, {frame_a5}(sp)
+    sw a6, {frame_a6}(sp)
+    sw a7, {frame_a7}(sp)
     csrr t1, mstatus
-    sw t1, 68(sp)
+    sw t1, {frame_mstatus}(sp)
     csrr t1, mepc
-    sw t1, 76(sp)
+    sw t1, {frame_mepc}(sp)
     csrr t1, mcause
-    sw t1, 80(sp)
+    sw t1, {frame_mcause}(sp)
     csrr t1, {mintthresh}
-    sw t1, 84(sp)
+    sw t1, {frame_mintthresh}(sp)
     csrr t1, {tcontrol}
-    sw t1, 88(sp)
+    sw t1, {frame_tcontrol}(sp)
     li t1, {fs}
     csrc mstatus, t1
     csrw mscratch, t0
     .endm
 
     .macro TRAP_RESTORE_REGISTERS
-    lw ra, 0(sp)
-    lw t0, 4(sp)
-    lw t1, 8(sp)
-    lw t2, 12(sp)
-    lw t3, 16(sp)
-    lw t4, 20(sp)
-    lw t5, 24(sp)
-    lw t6, 28(sp)
-    lw a0, 32(sp)
-    lw a1, 36(sp)
-    lw a2, 40(sp)
-    lw a3, 44(sp)
-    lw a4, 48(sp)
-    lw a5, 52(sp)
-    lw a6, 56(sp)
-    lw a7, 60(sp)
+    lw ra, {frame_ra}(sp)
+    lw t0, {frame_t0}(sp)
+    lw t1, {frame_t1}(sp)
+    lw t2, {frame_t2}(sp)
+    lw t3, {frame_t3}(sp)
+    lw t4, {frame_t4}(sp)
+    lw t5, {frame_t5}(sp)
+    lw t6, {frame_t6}(sp)
+    lw a0, {frame_a0}(sp)
+    lw a1, {frame_a1}(sp)
+    lw a2, {frame_a2}(sp)
+    lw a3, {frame_a3}(sp)
+    lw a4, {frame_a4}(sp)
+    lw a5, {frame_a5}(sp)
+    lw a6, {frame_a6}(sp)
+    lw a7, {frame_a7}(sp)
     .endm
 
     // Exceptions enter at mtvec's base (CLIC mode: 64-byte aligned), as does
@@ -183,23 +181,23 @@ _runtime_irq_h\hart\()_l\line:
     .type _runtime_irq_exit, @function
 _runtime_irq_exit:
     csrci mstatus, {mie}
-    lw t0, 80(sp)
+    lw t0, {frame_mcause}(sp)
     csrw mcause, t0
-    lw t0, 76(sp)
+    lw t0, {frame_mepc}(sp)
     csrw mepc, t0
-    lw t0, 88(sp)
+    lw t0, {frame_tcontrol}(sp)
     csrw {tcontrol}, t0
-    lw t0, 68(sp)
+    lw t0, {frame_mstatus}(sp)
     csrw mstatus, t0
-    lw t0, 84(sp)
+    lw t0, {frame_mintthresh}(sp)
     csrw {mintthresh}, t0
-    lw t0, 64(sp)
+    lw t0, {frame_outermost}(sp)
     beqz t0, 92f
 
     // The outermost return restores the task stack and arms mscratch with
     // the IRQ stack top for the next first-level trap.
     TRAP_RESTORE_REGISTERS
-    addi sp, sp, 96
+    addi sp, sp, {frame_bytes}
     csrrw sp, mscratch, sp
     mret
 
@@ -207,20 +205,8 @@ _runtime_irq_exit:
     // A nested return resumes the interrupted handler on its SRAM stack;
     // mscratch stays the task sp.
     TRAP_RESTORE_REGISTERS
-    addi sp, sp, 96
+    addi sp, sp, {frame_bytes}
     mret
     .size _runtime_irq_exit, . - _runtime_irq_exit
-
-    // Each hart's hardware-vector table (generated): its words from a
-    // boundary of its size, the word of line n at 4n. Line zero has no entry
-    // (exceptions use mtvec), nor have the words past the chip's lines. The
-    // section holds the tables alone, so the first table's alignment is the
-    // section's and `_runtime_mtvt` its first word.
-    .section .trap.mtvt, "a", @progbits
-    .global _runtime_mtvt
-    .type _runtime_mtvt, @object
-_runtime_mtvt:
-    RUNTIME_VECTOR_TABLES
-    .size _runtime_mtvt, . - _runtime_mtvt
 
     .option pop

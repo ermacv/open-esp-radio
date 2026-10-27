@@ -5,6 +5,7 @@ use core::ops::Range;
 use core::ptr::addr_of;
 
 include!(concat!(env!("OUT_DIR"), "/stack-symbols.rs"));
+include!(concat!(env!("OUT_DIR"), "/vector-markers.rs"));
 
 #[allow(unsafe_code, reason = "the linker script symbols")]
 // SAFETY: the runtime linker script and generated vectors define these address
@@ -27,6 +28,7 @@ unsafe extern "C" {
     safe static __runtime_dma_bss_start: [u8; 0];
     safe static __runtime_dma_bss_end: [u8; 0];
     stack_markers!();
+    vector_markers!();
     pub(crate) safe static _runtime_mtvt: [u8; 0];
     pub(crate) safe static _start_trap: [u8; 0];
 }

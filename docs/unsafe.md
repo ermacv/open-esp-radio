@@ -146,6 +146,24 @@ decreases and no caller's count increases; runtime panic counts never increase.
 Device ordering is `oer_riscv::fence`, including the host compiler fence;
 `oer-mmio` contains no architectural instruction or barrier API.
 
+Interrupt stack install takes a local `&mut PreAdmission<H>` and is safe.
+The boot handoff wraps its unique entry proof with that token, retains it
+through adoption, and consumes it when enabling interrupts. `Hart<H>` and
+`PreAdmission<H>` are neither Send nor Sync and have no public constructor.
+Installation checks the executing hart and masks local interrupts before
+painting the inactive allocation and installing its trap registers. Its
+memory operations remain in the private `stacks::watermark` module; the
+trap-register writes remain in `oer-riscv::install_trap_stack`, each with
+its narrow safety contract.
+
+The generated Rust MTVT is one immutable array of aligned per-hart rows.
+Its two unsafe attributes own the unique exported symbol and SRAM section.
+Entries are optional references to opaque zero-sized address markers
+declared inside `layout`'s existing extern block: reading a marker touches
+no instruction memory and Rust cannot call it as a function. Compile-time
+checks enforce the RV32 slot width and row size. Machine entry/exit code
+remains in `global_asm!`, with frame operands derived from `TrapFrame`.
+
 Outside `oer-riscv`, firmware assembly is only `global_asm!`/`naked_asm!` for
 entry/trap ABI work: staged-bootstrap's `entry.rs`, staged-runtime's `entry.rs`
 and trap-frame/stack entries in `stacks.rs`, and bootstrap/probe images. The
