@@ -262,6 +262,12 @@ impl<B: oer_mmio::Placement> BluetoothPrimaryInterruptControl for HardwareInterr
 }
 
 fn execute_primary_prepare(control: &mut impl BluetoothInterruptControl) {
+    // Known release limitation: these baseline clears silently discard a
+    // retained fault that arrived after the previous epoch's last visible
+    // release check. Masked pending is unobservable; release never reopens
+    // enables to inspect it. SOURCE: HW32_S31_BT_MASKED_FIXED_W1C_20261027,
+    // HW32_S31_BT_OUTPUT_OBSERVER_20261027 (PR #757; measured timer lanes,
+    // not a positive fault-lane qualification).
     control.clear_primary_baseline_bank_0();
     control.clear_primary_baseline_bank_1();
     control.enable_primary_baseline_bank_0();

@@ -201,11 +201,23 @@ pub(super) fn render(
                 .fields
                 .iter()
                 .all(|field| field.class == FieldClass::WriteOneToClear);
+        let constant = format!("{}_IMAGE", names::snake(entity).to_ascii_uppercase());
+        doc(
+            output,
+            "The fixed policy image, before preservation of other lanes",
+            &image.register,
+            &image.sources,
+        );
+        let _ = writeln!(
+            output,
+            "pub const {constant}: u32 = 0x{:08x};\n",
+            image.value
+        );
         let value = if preserve_w1c_reserved {
             // The fixed W1C set does not come from a status sample. Read
             // only to preserve undeclared bits, as affine ack does.
             let read = target.read(entity, owner)?;
-            format!("({read} & 0x{:08x}) | 0x{:08x}", !declared, image.value)
+            format!("({read} & 0x{:08x}) | {constant}", !declared)
         } else if configuration {
             let mask = target
                 .template
@@ -219,9 +231,9 @@ pub(super) fn render(
                 })
                 .fold(0, |mask, field| mask | field.mask());
             let read = target.read(entity, owner)?;
-            format!("({read} & 0x{:08x}) | 0x{:08x}", !mask, image.value)
+            format!("({read} & 0x{:08x}) | {constant}", !mask)
         } else {
-            format!("0x{:08x}", image.value)
+            constant
         };
         let write = target.write(entity, owner, &value, image.value)?;
         // A masks proof disables the acknowledged sources first, whether or

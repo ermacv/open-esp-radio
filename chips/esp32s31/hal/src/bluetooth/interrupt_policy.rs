@@ -52,9 +52,8 @@ pub(super) const FAULTS_0: u32 = bt_mac::irq_enable_0::SOURCE_15_MASK;
 pub(super) const FAULTS_1: u32 = bt_mac::irq_enable_1::SOURCE_8_MASK
     | bt_mac::irq_enable_1::SOURCE_9_MASK
     | bt_mac::irq_enable_1::SOURCE_12_MASK;
-pub(super) const CLEANUP_0: u32 = PRODUCTION.dynamic_0.0 | FEATURES_0.0;
-pub(super) const CLEANUP_1: u32 =
-    PRODUCTION.dynamic_1.0 | FEATURES_1.0 | bt_mac::irq_enable_1::CONTROLLER_TIME_OVERFLOW_MASK;
+pub(super) const CLEANUP_0: u32 = bt_mac::CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_0_IMAGE;
+pub(super) const CLEANUP_1: u32 = bt_mac::CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_1_IMAGE;
 
 pub(super) const fn release_fault_visible(primary: BluetoothInterruptObservation) -> bool {
     unsupported_primary_pending(primary)

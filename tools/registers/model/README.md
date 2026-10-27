@@ -688,6 +688,11 @@ domain = "Channel"
 sources = ["IDF_IEEE802154_LL"]
 ```
 
+Each rendered fixed-register image also exposes `<NAME>_IMAGE: u32` in
+the block type's module, with its sources. The generated method uses that
+constant for its fixed payload; HAL policy can use the same image without
+reconstructing its lanes. Preserved bits remain outside the fixed payload.
+
 A part selects words of its `instance` by `registers` (element names
 below the instance, `STATUS`, `REGCLK_1`, `T1.CONFIG`, or a template key
 holding `%s`, `CH%s_EVENT`, which selects every element), `elements`

@@ -106,19 +106,27 @@ lanes. A visible fault returns its complete observation for quarantine.
 After RUN-disable, it writes fixed non-fault W1C images `0x18212103` / `0x207a`
 under the mask, issues CONTROL1/2 and verifies zero primary/task enables.
 Nonzero enables or residual visible status are `ReleaseNotQuiet`.
-The fixed images exclude bank0[15] and bank1[8/9/12]; a fault arriving after
-the last visible check remains retained rather than being blindly cleared.
+The fixed images exclude bank0[15] and bank1[8/9/12]. A fault arriving after
+the last visible check is hidden and retained through release, so release
+can succeed without reporting it. The next open's baseline W1C images
+`0x8000` / `0x1302` silently discard that retained fault before enabling
+its lane. This is a known limitation of the release/open transaction; there
+is no workaround in this policy.
 No enable is reopened and no matrix route is transferred. Masked pending is
 not observable, so this proves neither zero pending nor producer shutdown.
 
 SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`,
 `BLOB_LIBBTDM_CONTROLLER_IRQ`, `BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027`,
-`BLOB_LIBBLE_ISO_COEX_REGISTERS` and `BLOB_S31_BLE_NRT_DISPOSITION_20261027`.
+`BLOB_LIBBLE_ISO_COEX_REGISTERS`, `BLOB_S31_BLE_NRT_DISPOSITION_20261027`,
+`HW32_S31_BT_MASKED_FIXED_W1C_20261027` and
+`HW32_S31_BT_OUTPUT_OBSERVER_20261027` (PR #757).
 Masked W1C is hardware-confirmed only for bank1 CC0/CC1/overflow, run
 `hw32-20261027-ble-masked-01` (#757). Bank0/NRT and the other feature lanes
 have vendor coverage and are **not hardware-verified**. Opening a tested
 lane with CPU routes at MAP0 still raises matrix124 and modem wake vector
 `0x10`; terminal cleanup does not perform that transaction.
+The measured hidden/retained behavior covers those timer indications, not
+a positive fault-lane stimulus.
 
 The measured overflow is visible in primary status/source124 while the NRT
 snapshots/source133 remain zero. Before either runtime NRT acknowledgement,
