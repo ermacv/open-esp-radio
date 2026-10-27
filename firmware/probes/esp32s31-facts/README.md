@@ -861,7 +861,7 @@ BTLC limit. Commands remain serial under one board lease and one PAC claim.
 | Selection | Experiment |
 | --- | --- |
 | 210 | All modeled enable fields before writes and after access clocks only; HP reset cause |
-| 211 | Reserved; the attempted standalone production admission prefix made the hart unavailable to JTAG and has no callable leaf |
+| 211 | Reserved; no qualified standalone production-admission sequence or callable leaf |
 | 212 / 213 | Seed modeled feature/dynamic/task lanes, HP software reset / automatic next-ROM-entry observer before peripheral writes, then access clocks only |
 | 214 | Empty saved pair, then one witnessed CC0 crossing before saved-pair acknowledgement |
 | 215 | Saved CC0, then CC1 crossing before acknowledgement |
@@ -888,11 +888,10 @@ its `2160` enable triple in LP SRAM; 213 emits `2170` before writes, the
 retained record at `2180`–`2183`, validity/reset cause at `218f`, and `2190`
 after access clocks. The loader and access-clock prefix are explicit
 differences from a pristine POR read and the production platform/RF lifecycle.
-No complete production-admission result is established. The attempted
-controller-domain reset / 49-write HAL / list / ETM / primary-prepare sequence
-and both failed captures are recorded in the external report and measured
-commits; it is excluded from the callable registry. Full production parent
-prerequisites require separate investigation before another admission probe.
+No complete production-admission result is established. Selection 211 is
+excluded from the callable registry because its standalone parent prerequisites
+are unqualified. The external report records the admission boundary and
+observations; the measured source tag retains the exact trial implementation.
 
 214–217 emit `21a0` initial state, `21a8` initial CC0 crossing when applicable,
 `21b0` saved pair plus cycle stamp, `21b8` fresh crossing, `21c0` observed
