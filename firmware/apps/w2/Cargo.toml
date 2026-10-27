@@ -9,7 +9,7 @@ publish.workspace = true
 description = "W2: regulatory active scan and acknowledged unicast Probe Request"
 build = "build.rs"
 
-[dependencies]
+[target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }

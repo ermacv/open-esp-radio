@@ -1,3 +1,14 @@
+macro_rules! place_diagnostic_radio {
+    ($storage:expr, Self { $($fields:tt)* }) => {{
+        #[cfg(not(feature = "diagnostic-radio-health"))]
+        { oer_memory::init_in_place!($storage, Self { $($fields)* }) }
+        #[cfg(feature = "diagnostic-radio-health")]
+        { oer_memory::init_in_place!($storage, Self { $($fields)*
+            health => crate::health::Store::place, health_boot: 0,
+        }) }
+    }};
+}
+
 use crate::Rng;
 use crate::{Answer, WireRequest as Request, projection};
 use oer_diagnostics::{DiagPath, Note};
@@ -69,7 +80,7 @@ impl Radio {
         phy_pilot: crate::phy_pilot::Client,
     ) -> &'storage mut Self {
         let radio_fault = domain.fault_handle();
-        crate::place_diagnostic_radio!(
+        place_diagnostic_radio!(
             storage,
             Self {
                 ieee802154: ieee802154,
@@ -431,7 +442,7 @@ impl Radio {
                 &mut (),
                 &self.clocks,
                 registration_config,
-                crate::capture_observer!(self),
+                capture_observer!(self),
             )
             .await;
             self.domain = Some(domain);
@@ -742,7 +753,7 @@ impl Radio {
                     &crate::PHY_CLOCK,
                     require_radio(self.domain.take(), self.radio_fault),
                     &mut (),
-                    crate::capture_observer!(self),
+                    capture_observer!(self),
                     &mut self.phy_pilot,
                 )
                 .await;
@@ -784,7 +795,7 @@ impl Radio {
             u16::from(channel),
             0,
             port,
-            &mut crate::capture_observer!(self),
+            &mut capture_observer!(self),
         )
         .await;
         self.domain = Some(radio);
@@ -1190,18 +1201,6 @@ impl Radio {
         self.poisoned = true;
         Ok(window)
     }
-}
-
-#[macro_export]
-macro_rules! place_diagnostic_radio {
-    ($storage:expr, Self { $($fields:tt)* }) => {{
-        #[cfg(not(feature = "diagnostic-radio-health"))]
-        { oer_memory::init_in_place!($storage, Self { $($fields)* }) }
-        #[cfg(feature = "diagnostic-radio-health")]
-        { oer_memory::init_in_place!($storage, Self { $($fields)*
-            health => crate::health::Store::place, health_boot: 0,
-        }) }
-    }};
 }
 
 pub(crate) fn require_radio<T>(

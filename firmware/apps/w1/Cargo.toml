@@ -9,7 +9,7 @@ publish.workspace = true
 description = "W1: a passive scan on the product receive path, which measures the receive runner's provisional constants and checks the stand's beacons"
 build = "build.rs"
 
-[dependencies]
+[target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-sort = { path = "../../../portable/sort" }
 oer-sync = { path = "../../../portable/sync" }
@@ -37,6 +37,10 @@ oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
 oer-ieee80211-softmac = { path = "../../../protocols/ieee80211/softmac" }
+
+[target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
+crc = { version = "=3.4.0", default-features = false }
+oer-memory = { path = "../../../portable/memory" }
 
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }

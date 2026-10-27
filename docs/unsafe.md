@@ -158,6 +158,12 @@ decreases and no caller's count increases; runtime panic counts never increase.
 Device ordering is `oer_riscv::fence`, including the host compiler fence;
 `oer-mmio` contains no architectural instruction or barrier API.
 
+The instruction module and its exports exist only on RISC-V. Staged firmware
+binaries gate their entry composition and hardware dependencies on the same target;
+their build scripts emit image linker arguments only for that target.
+Host tests compile pure modules with explicit fixture inputs rather than
+providing synthetic CSR reads. Their host entry is empty, as in B0 and W3.
+
 Interrupt stack install takes a local `&mut PreAdmission<H>` and is safe.
 The boot handoff wraps its unique entry proof with that token, retains it
 through adoption, and consumes it when enabling interrupts, returning the
