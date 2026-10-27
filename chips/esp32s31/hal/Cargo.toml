@@ -47,6 +47,7 @@ oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-v
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 oer-mmio = { path = "../../../portable/mmio" }
+serde_json = "=1.0.151"
 tempfile = "=3.27.0"
 
 [lints]

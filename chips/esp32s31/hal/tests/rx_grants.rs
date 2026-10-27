@@ -1,6 +1,7 @@
 //! Compile the actual HAL with an internal caller. Private APIs stay private;
 //! pass/reject fixtures and weakened-bound controls run in isolated copies.
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     process::{Command, Output},
@@ -21,12 +22,6 @@ fn copy_tree(source: &Path, destination: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn directories(path: &Path) -> std::io::Result<Vec<PathBuf>> {
-    fs::read_dir(path)?
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect()
-}
-
 #[test]
 fn private_grants_follow_the_actual_ring_boundaries() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -43,6 +38,7 @@ fn private_grants_follow_the_actual_ring_boundaries() {
             "--offline",
             "--locked",
             "--lib",
+            "--message-format=json",
             "--manifest-path",
         ])
         .arg(manifest.join("Cargo.toml"))
@@ -59,14 +55,39 @@ fn private_grants_follow_the_actual_ring_boundaries() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let dependencies = build.join("debug/deps");
-    let artifacts = directories(&dependencies).unwrap();
-    let out = directories(&build.join("debug/build"))
-        .unwrap()
-        .into_iter()
-        .map(|path| path.join("out"))
-        .find(|path| path.join("interrupts.rs").is_file())
-        .unwrap();
+    // Cargo's configured build-dir may place intermediates outside target-dir.
+    // Its messages name the artifacts and build-script output actually used.
+    let mut artifacts: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
+    let mut out = None;
+    for line in output
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        let message: serde_json::Value = serde_json::from_slice(line).unwrap();
+        match message["reason"].as_str() {
+            Some("compiler-artifact") => {
+                let name = message["target"]["name"].as_str().unwrap();
+                for file in message["filenames"].as_array().unwrap() {
+                    let path = PathBuf::from(file.as_str().unwrap());
+                    if path
+                        .extension()
+                        .is_some_and(|extension| extension == "rmeta")
+                    {
+                        artifacts.entry(name.to_owned()).or_default().push(path);
+                    }
+                }
+            }
+            Some("build-script-executed") => {
+                let path = PathBuf::from(message["out_dir"].as_str().unwrap());
+                if path.join("interrupts.rs").is_file() {
+                    assert!(out.replace(path).is_none());
+                }
+            }
+            _ => {}
+        }
+    }
+    let out = out.expect("cargo reports the HAL build-script output");
     let source = scratch.path().join("src");
     copy_tree(&manifest.join("src"), &source).unwrap();
     let root = source.join("lib.rs");
@@ -93,26 +114,20 @@ fn private_grants_follow_the_actual_ring_boundaries() {
         .collect::<Vec<_>>();
     let mut externs = Vec::new();
     for name in dependency_names {
-        let prefix = format!("lib{name}-");
-        let matches = artifacts
-            .iter()
-            .filter(|path| {
-                path.file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .starts_with(&prefix)
-                    && path
-                        .extension()
-                        .is_some_and(|extension| extension == "rmeta")
-            })
-            .collect::<Vec<_>>();
+        let matches = artifacts.get(&name).expect("cargo reports each dependency");
         assert_eq!(
             matches.len(),
             1,
             "one metadata artifact for {name}: {matches:?}"
         );
-        externs.push(format!("{name}={}", matches[0].display()));
+        let artifact = &matches[0];
+        externs.push(format!("{name}={}", artifact.display()));
     }
+    let dependencies = artifacts
+        .values()
+        .flatten()
+        .map(|artifact| artifact.parent().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
     let compile = |mode: &str| -> Output {
         let mut rustc = Command::new("rustc");
         rustc
@@ -127,8 +142,6 @@ fn private_grants_follow_the_actual_ring_boundaries() {
             .arg(&root)
             .arg("-o")
             .arg(scratch.path().join(format!("{mode}.rmeta")))
-            .arg("-L")
-            .arg(format!("dependency={}", dependencies.display()))
             .arg("--cfg")
             .arg(mode)
             .env("OUT_DIR", &out)
@@ -138,6 +151,11 @@ fn private_grants_follow_the_actual_ring_boundaries() {
         }
         for dependency in &externs {
             rustc.arg("--extern").arg(dependency);
+        }
+        for dependency in &dependencies {
+            rustc
+                .arg("-L")
+                .arg(format!("dependency={}", dependency.display()));
         }
         let output = rustc.output().unwrap();
         fs::write(scratch.path().join(format!("{mode}.log")), &output.stderr).unwrap();

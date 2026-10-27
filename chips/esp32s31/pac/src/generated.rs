@@ -18286,6 +18286,21 @@ pub mod bt_bb {
         }
     }
 
+    /// The fixed policy image, before preservation of other lanes (`BT_BB.AGC_SAT_GAIN_CONFIG`).
+    ///
+    /// SOURCE: BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE, BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME.
+    pub const INITIALIZE_BLUETOOTH_RECEIVE_SATURATION_GAIN_CONFIG_IMAGE: u32 = 0x00000404;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_BB.AGC_SAT_GAIN_IMAGE_0`).
+    ///
+    /// SOURCE: BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE, BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME.
+    pub const INITIALIZE_BLUETOOTH_RECEIVE_SATURATION_GAIN_IMAGE_0_IMAGE: u32 = 0x0a1b272e;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_BB.AGC_SAT_GAIN_IMAGE_1`).
+    ///
+    /// SOURCE: BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE, BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME.
+    pub const INITIALIZE_BLUETOOTH_RECEIVE_SATURATION_GAIN_IMAGE_1_IMAGE: u32 = 0x0a1b272e;
+
     impl<P: oer_mmio::Placement> PhyBtagcRecovered<P> {
         /// Read `CTE_DC_SHIFT`.
         #[inline]
@@ -18829,7 +18844,8 @@ pub mod bt_bb {
         /// SOURCE: BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE, BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME.
         #[inline]
         pub fn initialize_bluetooth_receive_saturation_gain_config(&mut self) {
-            self.0.write::<0x864>(0x00000404);
+            self.0
+                .write::<0x864>(INITIALIZE_BLUETOOTH_RECEIVE_SATURATION_GAIN_CONFIG_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x0a1b272e`, undeclared bits included (`BT_BB.AGC_SAT_GAIN_IMAGE_0`).
@@ -18837,7 +18853,8 @@ pub mod bt_bb {
         /// SOURCE: BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE, BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME.
         #[inline]
         pub fn initialize_bluetooth_receive_saturation_gain_image_0(&mut self) {
-            self.0.write::<0x858>(0x0a1b272e);
+            self.0
+                .write::<0x858>(INITIALIZE_BLUETOOTH_RECEIVE_SATURATION_GAIN_IMAGE_0_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x0a1b272e`, undeclared bits included (`BT_BB.AGC_SAT_GAIN_IMAGE_1`).
@@ -18845,7 +18862,8 @@ pub mod bt_bb {
         /// SOURCE: BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE, BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME.
         #[inline]
         pub fn initialize_bluetooth_receive_saturation_gain_image_1(&mut self) {
-            self.0.write::<0x85c>(0x0a1b272e);
+            self.0
+                .write::<0x85c>(INITIALIZE_BLUETOOTH_RECEIVE_SATURATION_GAIN_IMAGE_1_IMAGE);
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -34648,6 +34666,16 @@ pub mod bt_mac {
         }
     }
 
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.CONNECTION_ABORT_CONTROL`).
+    ///
+    /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS, BLOB_BX16_LIBBLE_ABORT_IMAGE_20261027.
+    pub const PUBLISH_BLE_PHY_INIT_VALUE_04AC_IMAGE: u32 = 0x00ff0002;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.WORD_0940_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
+    pub const PUBLISH_BLE_PHY_INIT_CONFIGURATION_WORD_IMAGE: u32 = 0x000007d0;
+
     impl<P: oer_mmio::Placement> BtmacBlePhyInit<P> {
         /// Read `WORD_0474_OPAQUE`.
         #[inline]
@@ -35127,7 +35155,7 @@ pub mod bt_mac {
         /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS, BLOB_BX16_LIBBLE_ABORT_IMAGE_20261027.
         #[inline]
         pub fn publish_ble_phy_init_value_04ac(&mut self) {
-            self.0.write::<0x8ac>(0x00ff0002);
+            self.0.write::<0x8ac>(PUBLISH_BLE_PHY_INIT_VALUE_04AC_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x000007d0`, undeclared bits included (`BT_MAC.WORD_0940_OPAQUE`).
@@ -35135,7 +35163,8 @@ pub mod bt_mac {
         /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
         #[inline]
         pub fn publish_ble_phy_init_configuration_word(&mut self) {
-            self.0.write::<0x940>(0x000007d0);
+            self.0
+                .write::<0x940>(PUBLISH_BLE_PHY_INIT_CONFIGURATION_WORD_IMAGE);
         }
 
         /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`BT_MAC.WORD_04BC_OPAQUE`).
@@ -35196,6 +35225,61 @@ pub mod bt_mac {
     impl<P: oer_mmio::Placement> oer_mmio::InterruptSources for BluetoothInterruptBank<P> {
         const SOURCES: &'static [u16] = &[124, 133];
     }
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_0`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ.
+    pub const CLEAR_BLUETOOTH_PRIMARY_BASELINE_BANK_0_IMAGE: u32 = 0x00008000;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_1`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, BLOB_LIBBTDM_BASELINE_IRQ_CURRENT.
+    pub const CLEAR_BLUETOOTH_PRIMARY_BASELINE_BANK_1_IMAGE: u32 = 0x00001302;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_0`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, PUBLIC_ESP32S31_BT_SCHEDULER_ROLES.
+    pub const CLEAR_BLUETOOTH_SCHEDULER_RUN_INTERRUPTS_BANK_0_IMAGE: u32 = 0x18200000;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_1`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, PUBLIC_ESP32S31_BT_SCHEDULER_ROLES.
+    pub const CLEAR_BLUETOOTH_SCHEDULER_RUN_INTERRUPTS_BANK_1_IMAGE: u32 = 0x00000008;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_0`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, BLOB_LIBBTDM_SCHEDULER_CANCELLATION, PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES.
+    pub const ACKNOWLEDGE_BLUETOOTH_SCHEDULER_CANCELLATION_SOURCE_IMAGE: u32 = 0x00000080;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_1`).
+    ///
+    /// SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026, HW9_S31_MAC_MASK_ACK_20261027.
+    pub const CLEAR_BLUETOOTH_CONTROLLER_TIME_OVERFLOW_IMAGE: u32 = 0x00000002;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_1`).
+    ///
+    /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027, HW32_S31_BT_MASKED_FIXED_W1C_20261027.
+    pub const DISCARD_BLUETOOTH_COMPARE_0_INDICATION_IMAGE: u32 = 0x00000010;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_1`).
+    ///
+    /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027, HW32_S31_BT_MASKED_FIXED_W1C_20261027.
+    pub const DISCARD_BLUETOOTH_COMPARE_1_INDICATION_IMAGE: u32 = 0x00000020;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_1`).
+    ///
+    /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027, HW32_S31_BT_MASKED_FIXED_W1C_20261027.
+    pub const DISCARD_BLUETOOTH_CONTROLLER_TIME_OVERFLOW_INDICATION_IMAGE: u32 = 0x00000002;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_0`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027, POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027.
+    pub const CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_0_IMAGE: u32 = 0x18212103;
+
+    /// The fixed policy image, before preservation of other lanes (`BT_MAC.IRQ_CLEAR_1`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027, BLOB_LIBBLE_ISO_COEX_REGISTERS, HW32_S31_BT_MASKED_FIXED_W1C_20261027, POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027.
+    pub const CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_1_IMAGE: u32 = 0x0000207a;
 
     /// One sample of the `BT_MAC.IRQ_STATUS_SNAPSHOT_0` events `BT_MAC.IRQ_CLEAR_0` acknowledges, to acknowledge once.
     ///
@@ -35684,7 +35768,8 @@ pub mod bt_mac {
         pub fn clear_bluetooth_primary_baseline_bank_0(&mut self) {
             let bits = self.0.read::<0x54>();
             self.0.write::<0x54>(bits & 0xffff7fff);
-            self.0.write::<0x58>(0x00008000);
+            self.0
+                .write::<0x58>(CLEAR_BLUETOOTH_PRIMARY_BASELINE_BANK_0_IMAGE);
         }
 
         /// Mask the sources of `0x00001302` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
@@ -35694,7 +35779,8 @@ pub mod bt_mac {
         pub fn clear_bluetooth_primary_baseline_bank_1(&mut self) {
             let bits = self.0.read::<0x60>();
             self.0.write::<0x60>(bits & 0xffffecfd);
-            self.0.write::<0x64>(0x00001302);
+            self.0
+                .write::<0x64>(CLEAR_BLUETOOTH_PRIMARY_BASELINE_BANK_1_IMAGE);
         }
 
         /// Mask the sources of `0x18200000` in `BT_MAC.IRQ_ENABLE_0`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_0`).
@@ -35704,7 +35790,8 @@ pub mod bt_mac {
         pub fn clear_bluetooth_scheduler_run_interrupts_bank_0(&mut self) {
             let bits = self.0.read::<0x54>();
             self.0.write::<0x54>(bits & 0xe7dfffff);
-            self.0.write::<0x58>(0x18200000);
+            self.0
+                .write::<0x58>(CLEAR_BLUETOOTH_SCHEDULER_RUN_INTERRUPTS_BANK_0_IMAGE);
         }
 
         /// Mask the sources of `0x00000008` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
@@ -35714,7 +35801,8 @@ pub mod bt_mac {
         pub fn clear_bluetooth_scheduler_run_interrupts_bank_1(&mut self) {
             let bits = self.0.read::<0x60>();
             self.0.write::<0x60>(bits & 0xfffffff7);
-            self.0.write::<0x64>(0x00000008);
+            self.0
+                .write::<0x64>(CLEAR_BLUETOOTH_SCHEDULER_RUN_INTERRUPTS_BANK_1_IMAGE);
         }
 
         /// Acknowledge the consumed events `0x00000080` (`BT_MAC.IRQ_CLEAR_0`).
@@ -35725,7 +35813,8 @@ pub mod bt_mac {
         /// the indexed cancellation path is the one consumer of source 7 and acknowledges it once per cancellation.
         #[inline]
         pub fn acknowledge_bluetooth_scheduler_cancellation_source(&mut self) {
-            self.0.write::<0x58>(0x00000080);
+            self.0
+                .write::<0x58>(ACKNOWLEDGE_BLUETOOTH_SCHEDULER_CANCELLATION_SOURCE_IMAGE);
         }
 
         /// Mask the sources of `0x00000002` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
@@ -35735,7 +35824,8 @@ pub mod bt_mac {
         pub fn clear_bluetooth_controller_time_overflow(&mut self) {
             let bits = self.0.read::<0x60>();
             self.0.write::<0x60>(bits & 0xfffffffd);
-            self.0.write::<0x64>(0x00000002);
+            self.0
+                .write::<0x64>(CLEAR_BLUETOOTH_CONTROLLER_TIME_OVERFLOW_IMAGE);
         }
 
         /// Acknowledge the consumed events `0x00000010` (`BT_MAC.IRQ_CLEAR_1`).
@@ -35746,7 +35836,8 @@ pub mod bt_mac {
         /// The caller consumes the local BTLC compare0 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement.
         #[inline]
         pub fn discard_bluetooth_compare_0_indication(&mut self) {
-            self.0.write::<0x64>(0x00000010);
+            self.0
+                .write::<0x64>(DISCARD_BLUETOOTH_COMPARE_0_INDICATION_IMAGE);
         }
 
         /// Acknowledge the consumed events `0x00000020` (`BT_MAC.IRQ_CLEAR_1`).
@@ -35757,7 +35848,8 @@ pub mod bt_mac {
         /// The caller consumes the local BTLC compare1 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement.
         #[inline]
         pub fn discard_bluetooth_compare_1_indication(&mut self) {
-            self.0.write::<0x64>(0x00000020);
+            self.0
+                .write::<0x64>(DISCARD_BLUETOOTH_COMPARE_1_INDICATION_IMAGE);
         }
 
         /// Acknowledge the consumed events `0x00000002` (`BT_MAC.IRQ_CLEAR_1`).
@@ -35768,7 +35860,8 @@ pub mod bt_mac {
         /// The caller consumes the local BTLC first-word overflow indication itself; no handler or continuous-time reconstruction may require this indication. This is a discard, not a sampled runtime acknowledgement.
         #[inline]
         pub fn discard_bluetooth_controller_time_overflow_indication(&mut self) {
-            self.0.write::<0x64>(0x00000002);
+            self.0
+                .write::<0x64>(DISCARD_BLUETOOTH_CONTROLLER_TIME_OVERFLOW_INDICATION_IMAGE);
         }
 
         /// Mask the sources of `0x18212103` in `BT_MAC.IRQ_ENABLE_0`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_0`).
@@ -35778,7 +35871,8 @@ pub mod bt_mac {
         pub fn clear_bluetooth_terminal_non_fault_bank_0(&mut self) {
             let bits = self.0.read::<0x54>();
             self.0.write::<0x54>(bits & 0xe7dedefc);
-            self.0.write::<0x58>(0x18212103);
+            self.0
+                .write::<0x58>(CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_0_IMAGE);
         }
 
         /// Mask the sources of `0x0000207a` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
@@ -35788,7 +35882,8 @@ pub mod bt_mac {
         pub fn clear_bluetooth_terminal_non_fault_bank_1(&mut self) {
             let bits = self.0.read::<0x60>();
             self.0.write::<0x60>(bits & 0xffffdf85);
-            self.0.write::<0x64>(0x0000207a);
+            self.0
+                .write::<0x64>(CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_1_IMAGE);
         }
 
         /// Sample `BT_MAC.IRQ_STATUS_SNAPSHOT_0` once, keeping the events `BT_MAC.IRQ_CLEAR_0` acknowledges (`BT_MAC.IRQ_STATUS_SNAPSHOT_0`).
@@ -72594,6 +72689,16 @@ pub mod fe {
         }
     }
 
+    /// The fixed policy image, before preservation of other lanes (`FE.WORD_0810_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_POWER_DETECTOR.
+    pub const INITIALIZE_POWER_DETECTOR_TABLE_0_IMAGE: u32 = 0x0f0f0fff;
+
+    /// The fixed policy image, before preservation of other lanes (`FE.POWER_DETECTOR_TABLE_1`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_POWER_DETECTOR, BLOB_BX16_ROM_PWDET_IMAGE_20261027.
+    pub const INITIALIZE_POWER_DETECTOR_TABLE_1_IMAGE: u32 = 0x00ff0f64;
+
     impl<P: oer_mmio::Placement> PhyBasebandConfigOracleFe<P> {
         /// Read `FRONT_END_AND_TONE_STOP_CONTROL`.
         #[inline]
@@ -72986,7 +73091,8 @@ pub mod fe {
         /// SOURCE: ROM_REV0_PHY_POWER_DETECTOR.
         #[inline]
         pub fn initialize_power_detector_table_0(&mut self) {
-            self.0.write::<0x810>(0x0f0f0fff);
+            self.0
+                .write::<0x810>(INITIALIZE_POWER_DETECTOR_TABLE_0_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00ff0f64`, undeclared bits included (`FE.POWER_DETECTOR_TABLE_1`).
@@ -72994,7 +73100,8 @@ pub mod fe {
         /// SOURCE: ROM_REV0_PHY_POWER_DETECTOR, BLOB_BX16_ROM_PWDET_IMAGE_20261027.
         #[inline]
         pub fn initialize_power_detector_table_1(&mut self) {
-            self.0.write::<0x814>(0x00ff0f64);
+            self.0
+                .write::<0x814>(INITIALIZE_POWER_DETECTOR_TABLE_1_IMAGE);
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -73567,6 +73674,16 @@ pub mod fe {
         }
     }
 
+    /// The fixed policy image, before preservation of other lanes (`FE.WORD_0024_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027.
+    pub const FREQUENCY_PARAMETER_0_IMAGE: u32 = 0x19800249;
+
+    /// The fixed policy image, before preservation of other lanes (`FE.FREQUENCY_PARAMETER_1_STATUS`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027.
+    pub const FREQUENCY_PARAMETER_1_INITIALIZATION_IMAGE: u32 = 0x25824e58;
+
     impl<P: oer_mmio::Placement> PhyFrequencyChannelOracleFe<P> {
         /// Read `FREQUENCY_CONTROL`.
         #[inline]
@@ -73703,7 +73820,7 @@ pub mod fe {
         /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027.
         #[inline]
         pub fn frequency_parameter_0(&mut self) {
-            self.0.write::<0x24>(0x19800249);
+            self.0.write::<0x24>(FREQUENCY_PARAMETER_0_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x25824e58`, undeclared bits included (`FE.FREQUENCY_PARAMETER_1_STATUS`).
@@ -73711,7 +73828,8 @@ pub mod fe {
         /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027.
         #[inline]
         pub fn frequency_parameter_1_initialization(&mut self) {
-            self.0.write::<0x28>(0x25824e58);
+            self.0
+                .write::<0x28>(FREQUENCY_PARAMETER_1_INITIALIZATION_IMAGE);
         }
 
         /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`FE.FREQUENCY_CONTROL`).
@@ -104211,6 +104329,26 @@ pub mod hp_sys_clkrst {
         }
     }
 
+    /// The fixed policy image, before preservation of other lanes (`HP_SYS_CLKRST.MODEM_CONF`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
+    pub const PREPARE_OPEN_MODEM_PLL_SOURCE_GATE_IMAGE: u32 = 0x00000015;
+
+    /// The fixed policy image, before preservation of other lanes (`HP_SYS_CLKRST.MODEM_CONF`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
+    pub const PREPARE_CLOSE_MODEM_PLL_SOURCE_GATE_IMAGE: u32 = 0x0000002d;
+
+    /// The fixed policy image, before preservation of other lanes (`HP_SYS_CLKRST.MODEM_CONF`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
+    pub const OPEN_MODEM_PLL_SOURCE_GATE_IMAGE: u32 = 0x0000001d;
+
+    /// The fixed policy image, before preservation of other lanes (`HP_SYS_CLKRST.MODEM_CONF`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
+    pub const CLOSE_MODEM_PLL_SOURCE_GATE_IMAGE: u32 = 0x00000025;
+
     impl<P: oer_mmio::Placement> HpSysClkrstRadio<P> {
         /// Read `MODEM_CTRL0`.
         #[inline]
@@ -104247,7 +104385,8 @@ pub mod hp_sys_clkrst {
         /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
         #[inline]
         pub fn prepare_open_modem_pll_source_gate(&mut self) {
-            self.0.write::<0x1e0>(0x00000015);
+            self.0
+                .write::<0x1e0>(PREPARE_OPEN_MODEM_PLL_SOURCE_GATE_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x0000002d`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
@@ -104255,7 +104394,8 @@ pub mod hp_sys_clkrst {
         /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
         #[inline]
         pub fn prepare_close_modem_pll_source_gate(&mut self) {
-            self.0.write::<0x1e0>(0x0000002d);
+            self.0
+                .write::<0x1e0>(PREPARE_CLOSE_MODEM_PLL_SOURCE_GATE_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x0000001d`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
@@ -104263,7 +104403,7 @@ pub mod hp_sys_clkrst {
         /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
         #[inline]
         pub fn open_modem_pll_source_gate(&mut self) {
-            self.0.write::<0x1e0>(0x0000001d);
+            self.0.write::<0x1e0>(OPEN_MODEM_PLL_SOURCE_GATE_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000025`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
@@ -104271,7 +104411,7 @@ pub mod hp_sys_clkrst {
         /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
         #[inline]
         pub fn close_modem_pll_source_gate(&mut self) {
-            self.0.write::<0x1e0>(0x00000025);
+            self.0.write::<0x1e0>(CLOSE_MODEM_PLL_SOURCE_GATE_IMAGE);
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -113791,6 +113931,11 @@ pub mod ieee802154 {
         const SOURCE: u16 = 132;
     }
 
+    /// The fixed policy image, before preservation of other lanes (`IEEE802154.EVENT_STATUS`).
+    ///
+    /// SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT, esp-idf-7b9cc1ac-ieee802154-common-ll, HW8_S31_IEEE_MASKED_STATUS_20261026, HW26_S31_IEEE_ABORT_20261027.
+    pub const DISCARD_IEEE802154_STARTUP_EVENTS_IMAGE: u32 = 0x00003fff;
+
     impl<P: oer_mmio::Placement> Ieee802154MacIrq<P> {
         /// Read `ED_CONFIG`.
         #[inline]
@@ -113839,8 +113984,9 @@ pub mod ieee802154 {
         /// Before bind, every event is stale and cannot be serviced. With all event enables masked, the affine startup transaction issues STOP and both timer stops, then discards all fourteen event lanes without a status sample before handing the IRQ owner to its handler. Masked acknowledgement is measured for timer0/1 and RX_ABORT reason26 only; no all-lane masked visibility or producer-drain claim follows.
         #[inline]
         pub fn discard_ieee802154_startup_events(&mut self) {
-            self.0
-                .write::<0x64>((self.0.read::<0x64>() & 0xffffc000) | 0x00003fff);
+            self.0.write::<0x64>(
+                (self.0.read::<0x64>() & 0xffffc000) | DISCARD_IEEE802154_STARTUP_EVENTS_IMAGE,
+            );
         }
     }
 
@@ -125794,6 +125940,16 @@ pub mod modem_etm {
         const TRIGGERS: &'static [(usize, u32)] = &[(0x4, 0x000008f0), (0x8, 0x000000f0)];
     }
 
+    /// The fixed policy image, before preservation of other lanes (`MODEM_ETM.WORD_0110_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+    pub const PUBLISH_BLUETOOTH_LP_SLEEP_ETM_0110_IMAGE: u32 = 0x04000000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_ETM.WORD_0114_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+    pub const PUBLISH_BLUETOOTH_LP_SLEEP_ETM_0114_IMAGE: u32 = 0x04000000;
+
     impl<P: oer_mmio::Placement> ModemEtmBluetooth<P> {
         /// Write to the write-trigger field `CH4` of the split word `CHANNEL_ENABLE_SET`,
         /// starting its hardware action once; zero in every other bit, which
@@ -126018,7 +126174,8 @@ pub mod modem_etm {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
         #[inline]
         pub fn publish_bluetooth_lp_sleep_etm_0110(&mut self) {
-            self.0.write::<0x110>(0x04000000);
+            self.0
+                .write::<0x110>(PUBLISH_BLUETOOTH_LP_SLEEP_ETM_0110_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x04000000`, undeclared bits included (`MODEM_ETM.WORD_0114_OPAQUE`).
@@ -126026,7 +126183,8 @@ pub mod modem_etm {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
         #[inline]
         pub fn publish_bluetooth_lp_sleep_etm_0114(&mut self) {
-            self.0.write::<0x114>(0x04000000);
+            self.0
+                .write::<0x114>(PUBLISH_BLUETOOTH_LP_SLEEP_ETM_0114_IMAGE);
         }
     }
 
@@ -136883,6 +137041,11 @@ pub mod modem_pwr {
         const SOURCE: u16 = 122;
     }
 
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.CLEAR`).
+    ///
+    /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT, HW8_S31_WIFI_TSF_MASK_20261026, POLICY_S31_PWR_BANK_CLEAR_SCOPE_20261027, HW30_S31_TBTT_PERIODIC_POLICY_20261027.
+    pub const CLEAR_ALL_MAC_POWER_INTERRUPTS_IMAGE: u32 = 0xffffffff;
+
     /// One sample of the `MODEM_PWR.POWER_INTERRUPT_STATUS` events `MODEM_PWR.CLEAR` acknowledges, to acknowledge once.
     ///
     /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT.
@@ -137140,7 +137303,7 @@ pub mod modem_pwr {
         #[inline]
         pub fn clear_all_mac_power_interrupts(&mut self) {
             self.0.write::<0x8b4>(0);
-            self.0.write::<0x8c0>(0xffffffff);
+            self.0.write::<0x8c0>(CLEAR_ALL_MAC_POWER_INTERRUPTS_IMAGE);
         }
 
         /// Sample `MODEM_PWR.POWER_INTERRUPT_STATUS` once, keeping the events `MODEM_PWR.CLEAR` acknowledges (`MODEM_PWR.POWER_INTERRUPT_STATUS`).
@@ -137263,6 +137426,91 @@ pub mod modem_pwr {
     impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for BtdmRuntimeControl<P> {
         const SOURCE: u16 = 127;
     }
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0024_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
+    pub const CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_0024_IMAGE: u32 = 0x00000000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_002C_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
+    pub const CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_002C_IMAGE: u32 = 0x00000000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0004_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE, HW_BLE_LP_CAUSES_2026_10_26.
+    pub const PREPARE_BLUETOOTH_MODEM_LP_TIMER_COMMAND_0004_IMAGE: u32 = 0x00000001;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0008_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE.
+    pub const PREPARE_BLUETOOTH_MODEM_LP_TIMER_COMMAND_0008_IMAGE: u32 = 0x00000001;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0014_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE, HW_BLE_LP_CAUSES_2026_10_26.
+    pub const PREPARE_BLUETOOTH_MODEM_LP_TIMER_COMMAND_0014_IMAGE: u32 = 0xffffffff;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0034_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE, HW9_S31_LP_CLEAR34_20261027.
+    pub const PREPARE_BLUETOOTH_MODEM_LP_TIMER_COMMAND_0034_IMAGE: u32 = 0xffffffff;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0024_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
+    pub const PUBLISH_BLUETOOTH_MODEM_LP_TIMER_SOFTWARE_PENDING_IMAGE: u32 = 0x00000001;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0014_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_COMPARE_DISABLE_CURRENT.
+    pub const DISABLE_BLUETOOTH_MODEM_LP_TIMER_COMPARE_IMAGE: u32 = 0x00040000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0030_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030.
+    pub const CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_0030_IMAGE: u32 = 0x00000000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_001C_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS, BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027.
+    pub const CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_001C_IMAGE: u32 = 0x00000000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0020_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS, BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027.
+    pub const CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_0020_IMAGE: u32 = 0x00000000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0040_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+    pub const ENABLE_BLUETOOTH_LP_SLEEP_0_IMAGE: u32 = 0x00000001;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0040_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+    pub const ENABLE_BLUETOOTH_LP_SLEEP_16_IMAGE: u32 = 0x00010000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0040_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+    pub const ENABLE_BLUETOOTH_LP_SLEEP_17_IMAGE: u32 = 0x00020000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0044_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+    pub const DISABLE_BLUETOOTH_LP_SLEEP_0_IMAGE: u32 = 0x00000001;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0044_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+    pub const DISABLE_BLUETOOTH_LP_SLEEP_16_IMAGE: u32 = 0x00010000;
+
+    /// The fixed policy image, before preservation of other lanes (`MODEM_PWR.WORD_0044_OPAQUE`).
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+    pub const DISABLE_BLUETOOTH_LP_SLEEP_17_IMAGE: u32 = 0x00020000;
 
     impl<P: oer_mmio::Placement> BtdmRuntimeControl<P> {
         /// Write `RUNTIME_TIMER_START_COMMAND` from zero: the fields no write may leave zero (`COMMAND`) as given, the fields set, the reserved bits at
@@ -137518,7 +137766,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_0024(&mut self) {
-            self.0.write::<0x24>(0x00000000);
+            self.0
+                .write::<0x24>(CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_0024_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_002C_OPAQUE`).
@@ -137526,7 +137775,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_002c(&mut self) {
-            self.0.write::<0x2c>(0x00000000);
+            self.0
+                .write::<0x2c>(CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_002C_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0004_OPAQUE`).
@@ -137534,7 +137784,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE, HW_BLE_LP_CAUSES_2026_10_26.
         #[inline]
         pub fn prepare_bluetooth_modem_lp_timer_command_0004(&mut self) {
-            self.0.write::<0x4>(0x00000001);
+            self.0
+                .write::<0x4>(PREPARE_BLUETOOTH_MODEM_LP_TIMER_COMMAND_0004_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0008_OPAQUE`).
@@ -137542,7 +137793,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE.
         #[inline]
         pub fn prepare_bluetooth_modem_lp_timer_command_0008(&mut self) {
-            self.0.write::<0x8>(0x00000001);
+            self.0
+                .write::<0x8>(PREPARE_BLUETOOTH_MODEM_LP_TIMER_COMMAND_0008_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0xffffffff`, undeclared bits included (`MODEM_PWR.WORD_0014_OPAQUE`).
@@ -137550,7 +137802,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE, HW_BLE_LP_CAUSES_2026_10_26.
         #[inline]
         pub fn prepare_bluetooth_modem_lp_timer_command_0014(&mut self) {
-            self.0.write::<0x14>(0xffffffff);
+            self.0
+                .write::<0x14>(PREPARE_BLUETOOTH_MODEM_LP_TIMER_COMMAND_0014_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0xffffffff`, undeclared bits included (`MODEM_PWR.WORD_0034_OPAQUE`).
@@ -137558,7 +137811,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE, HW9_S31_LP_CLEAR34_20261027.
         #[inline]
         pub fn prepare_bluetooth_modem_lp_timer_command_0034(&mut self) {
-            self.0.write::<0x34>(0xffffffff);
+            self.0
+                .write::<0x34>(PREPARE_BLUETOOTH_MODEM_LP_TIMER_COMMAND_0034_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0024_OPAQUE`).
@@ -137566,7 +137820,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
         #[inline]
         pub fn publish_bluetooth_modem_lp_timer_software_pending(&mut self) {
-            self.0.write::<0x24>(0x00000001);
+            self.0
+                .write::<0x24>(PUBLISH_BLUETOOTH_MODEM_LP_TIMER_SOFTWARE_PENDING_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00040000`, undeclared bits included (`MODEM_PWR.WORD_0014_OPAQUE`).
@@ -137574,7 +137829,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_COMPARE_DISABLE_CURRENT.
         #[inline]
         pub fn disable_bluetooth_modem_lp_timer_compare(&mut self) {
-            self.0.write::<0x14>(0x00040000);
+            self.0
+                .write::<0x14>(DISABLE_BLUETOOTH_MODEM_LP_TIMER_COMPARE_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_0030_OPAQUE`).
@@ -137582,7 +137838,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_0030(&mut self) {
-            self.0.write::<0x30>(0x00000000);
+            self.0
+                .write::<0x30>(CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_0030_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_001C_OPAQUE`).
@@ -137590,7 +137847,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS, BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_001c(&mut self) {
-            self.0.write::<0x1c>(0x00000000);
+            self.0
+                .write::<0x1c>(CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_001C_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_0020_OPAQUE`).
@@ -137598,7 +137856,8 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS, BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_0020(&mut self) {
-            self.0.write::<0x20>(0x00000000);
+            self.0
+                .write::<0x20>(CLEAR_BLUETOOTH_MODEM_LP_TIMER_STATE_0020_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0040_OPAQUE`).
@@ -137606,7 +137865,7 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
         #[inline]
         pub fn enable_bluetooth_lp_sleep_0(&mut self) {
-            self.0.write::<0x40>(0x00000001);
+            self.0.write::<0x40>(ENABLE_BLUETOOTH_LP_SLEEP_0_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00010000`, undeclared bits included (`MODEM_PWR.WORD_0040_OPAQUE`).
@@ -137614,7 +137873,7 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
         #[inline]
         pub fn enable_bluetooth_lp_sleep_16(&mut self) {
-            self.0.write::<0x40>(0x00010000);
+            self.0.write::<0x40>(ENABLE_BLUETOOTH_LP_SLEEP_16_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00020000`, undeclared bits included (`MODEM_PWR.WORD_0040_OPAQUE`).
@@ -137622,7 +137881,7 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
         #[inline]
         pub fn enable_bluetooth_lp_sleep_17(&mut self) {
-            self.0.write::<0x40>(0x00020000);
+            self.0.write::<0x40>(ENABLE_BLUETOOTH_LP_SLEEP_17_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0044_OPAQUE`).
@@ -137630,7 +137889,7 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
         #[inline]
         pub fn disable_bluetooth_lp_sleep_0(&mut self) {
-            self.0.write::<0x44>(0x00000001);
+            self.0.write::<0x44>(DISABLE_BLUETOOTH_LP_SLEEP_0_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00010000`, undeclared bits included (`MODEM_PWR.WORD_0044_OPAQUE`).
@@ -137638,7 +137897,7 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
         #[inline]
         pub fn disable_bluetooth_lp_sleep_16(&mut self) {
-            self.0.write::<0x44>(0x00010000);
+            self.0.write::<0x44>(DISABLE_BLUETOOTH_LP_SLEEP_16_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00020000`, undeclared bits included (`MODEM_PWR.WORD_0044_OPAQUE`).
@@ -137646,7 +137905,7 @@ pub mod modem_pwr {
         /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
         #[inline]
         pub fn disable_bluetooth_lp_sleep_17(&mut self) {
-            self.0.write::<0x44>(0x00020000);
+            self.0.write::<0x44>(DISABLE_BLUETOOTH_LP_SLEEP_17_IMAGE);
         }
 
         /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_0024_OPAQUE`).
@@ -240771,6 +241030,31 @@ pub mod timg {
         }
     }
 
+    /// The fixed policy image, before preservation of other lanes (`TIMG0.T0CONFIG`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
+    pub const CONFIGURE_TIMG0_TIMER0_STOPPED_IMAGE: u32 = 0x40051000;
+
+    /// The fixed policy image, before preservation of other lanes (`TIMG0.T0CONFIG`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_COMPARATOR_20261027.
+    pub const CONFIGURE_TIMG0_TIMER0_STOPPED_ALARM_IMAGE: u32 = 0x40051400;
+
+    /// The fixed policy image, before preservation of other lanes (`TIMG0.T0CONFIG`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
+    pub const CONFIGURE_TIMG0_TIMER0_COUNTING_IMAGE: u32 = 0xc0051000;
+
+    /// The fixed policy image, before preservation of other lanes (`TIMG0.T0CONFIG`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
+    pub const CONFIGURE_TIMG0_TIMER0_ARMED_IMAGE: u32 = 0xc0051400;
+
+    /// The fixed policy image, before preservation of other lanes (`TIMG0.T0UPDATE`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
+    pub const CAPTURE_TIMG0_TIMER0_IMAGE: u32 = 0x80000000;
+
     impl<P: oer_mmio::Placement> Timg0Timer0<P> {
         /// Read `T0CONFIG`.
         #[inline]
@@ -240883,8 +241167,9 @@ pub mod timg {
         /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
         #[inline]
         pub fn configure_timg0_timer0_stopped(&mut self) {
-            self.0
-                .write::<0x0>((self.0.read::<0x0>() & 0x00000bff) | 0x40051000);
+            self.0.write::<0x0>(
+                (self.0.read::<0x0>() & 0x00000bff) | CONFIGURE_TIMG0_TIMER0_STOPPED_IMAGE,
+            );
         }
 
         /// Apply the fixed configuration `0x40051400`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
@@ -240892,8 +241177,9 @@ pub mod timg {
         /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_COMPARATOR_20261027.
         #[inline]
         pub fn configure_timg0_timer0_stopped_alarm(&mut self) {
-            self.0
-                .write::<0x0>((self.0.read::<0x0>() & 0x00000bff) | 0x40051400);
+            self.0.write::<0x0>(
+                (self.0.read::<0x0>() & 0x00000bff) | CONFIGURE_TIMG0_TIMER0_STOPPED_ALARM_IMAGE,
+            );
         }
 
         /// Apply the fixed configuration `0xc0051000`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
@@ -240901,8 +241187,9 @@ pub mod timg {
         /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
         #[inline]
         pub fn configure_timg0_timer0_counting(&mut self) {
-            self.0
-                .write::<0x0>((self.0.read::<0x0>() & 0x00000bff) | 0xc0051000);
+            self.0.write::<0x0>(
+                (self.0.read::<0x0>() & 0x00000bff) | CONFIGURE_TIMG0_TIMER0_COUNTING_IMAGE,
+            );
         }
 
         /// Apply the fixed configuration `0xc0051400`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
@@ -240910,8 +241197,9 @@ pub mod timg {
         /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
         #[inline]
         pub fn configure_timg0_timer0_armed(&mut self) {
-            self.0
-                .write::<0x0>((self.0.read::<0x0>() & 0x00000bff) | 0xc0051400);
+            self.0.write::<0x0>(
+                (self.0.read::<0x0>() & 0x00000bff) | CONFIGURE_TIMG0_TIMER0_ARMED_IMAGE,
+            );
         }
 
         /// Apply the fixed configuration `0x80000000`, preserving undeclared and read-only bits (`TIMG0.T0UPDATE`).
@@ -240920,7 +241208,7 @@ pub mod timg {
         #[inline]
         pub fn capture_timg0_timer0(&mut self) {
             self.0
-                .write::<0xc>((self.0.read::<0xc>() & 0x7fffffff) | 0x80000000);
+                .write::<0xc>((self.0.read::<0xc>() & 0x7fffffff) | CAPTURE_TIMG0_TIMER0_IMAGE);
         }
     }
 
@@ -259780,6 +260068,26 @@ pub mod wifi_bb {
         }
     }
 
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB.WORD_08A4_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_78A4_IMAGE: u32 = 0x0001721f;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB.WORD_0048_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_7048_IMAGE: u32 = 0xff7da4f3;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB.RX_11B_WINDOW_CONTROL`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC, BLOB_BX16_ROM_11B_WINDOW_IMAGE_20261027.
+    pub const INITIALIZE_RX_11B_WINDOW_CONTROL_IMAGE: u32 = 0x06acc7c8;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB.RF_RX_SATURATION_CONFIG`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_RF_RX_SATURATION_CONFIG_IMAGE: u32 = 0x00000404;
+
     impl<P: oer_mmio::Placement> PhyAgcOracleWifiBb<P> {
         /// Read `AGC_SHARED_CONTROL`.
         #[inline]
@@ -260121,7 +260429,7 @@ pub mod wifi_bb {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_78a4(&mut self) {
-            self.0.write::<0x8a4>(0x0001721f);
+            self.0.write::<0x8a4>(INITIALIZE_AGC_UPDATE_78A4_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0xff7da4f3`, undeclared bits included (`WIFI_BB.WORD_0048_OPAQUE`).
@@ -260129,7 +260437,7 @@ pub mod wifi_bb {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_7048(&mut self) {
-            self.0.write::<0x48>(0xff7da4f3);
+            self.0.write::<0x48>(INITIALIZE_AGC_UPDATE_7048_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x06acc7c8`, undeclared bits included (`WIFI_BB.RX_11B_WINDOW_CONTROL`).
@@ -260137,7 +260445,8 @@ pub mod wifi_bb {
         /// SOURCE: ROM_REV0_PHY_AGC, BLOB_BX16_ROM_11B_WINDOW_IMAGE_20261027.
         #[inline]
         pub fn initialize_rx_11b_window_control(&mut self) {
-            self.0.write::<0x104>(0x06acc7c8);
+            self.0
+                .write::<0x104>(INITIALIZE_RX_11B_WINDOW_CONTROL_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000404`, undeclared bits included (`WIFI_BB.RF_RX_SATURATION_CONFIG`).
@@ -260145,7 +260454,8 @@ pub mod wifi_bb {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_rf_rx_saturation_config(&mut self) {
-            self.0.write::<0x68>(0x00000404);
+            self.0
+                .write::<0x68>(INITIALIZE_RF_RX_SATURATION_CONFIG_IMAGE);
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -260465,6 +260775,11 @@ pub mod wifi_bb {
             oer_mmio::Block::host(words).map(Self)
         }
     }
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB.WORD_0C6C_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_REGISTER_INITIALIZATION.
+    pub const INITIALIZE_TX_PA_TABLE_IMAGE: u32 = 0x0661a45f;
 
     impl<P: oer_mmio::Placement> PhyBasebandConfigOracleWifiBb<P> {
         /// Read `NOISE_FLOOR_CONTROL`.
@@ -260950,7 +261265,7 @@ pub mod wifi_bb {
         /// SOURCE: ROM_REV0_PHY_REGISTER_INITIALIZATION.
         #[inline]
         pub fn initialize_tx_pa_table(&mut self) {
-            self.0.write::<0xc6c>(0x0661a45f);
+            self.0.write::<0xc6c>(INITIALIZE_TX_PA_TABLE_IMAGE);
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -262444,6 +262759,41 @@ pub mod wifi_bb_brx {
         }
     }
 
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB_BRX.WORD_0070_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_8070_IMAGE: u32 = 0x000008c7;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB_BRX.WORD_0010_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_8010_IMAGE: u32 = 0x000852a1;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB_BRX.WORD_0018_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_8018_IMAGE: u32 = 0x00600030;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB_BRX.WORD_001C_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_801C_IMAGE: u32 = 0x010000a0;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB_BRX.WORD_0020_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_8020_IMAGE: u32 = 0x00000180;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB_BRX.WORD_0028_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_8028_IMAGE: u32 = 0xc0403020;
+
+    /// The fixed policy image, before preservation of other lanes (`WIFI_BB_BRX.WORD_002C_OPAQUE`).
+    ///
+    /// SOURCE: ROM_REV0_PHY_AGC.
+    pub const INITIALIZE_AGC_UPDATE_802C_IMAGE: u32 = 0x01000080;
+
     impl<P: oer_mmio::Placement> PhyAgcOracleWifiBbBrx<P> {
         /// Read `RX_11B_MODE_CONTROL`.
         #[inline]
@@ -262556,7 +262906,7 @@ pub mod wifi_bb_brx {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_8070(&mut self) {
-            self.0.write::<0x70>(0x000008c7);
+            self.0.write::<0x70>(INITIALIZE_AGC_UPDATE_8070_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x000852a1`, undeclared bits included (`WIFI_BB_BRX.WORD_0010_OPAQUE`).
@@ -262564,7 +262914,7 @@ pub mod wifi_bb_brx {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_8010(&mut self) {
-            self.0.write::<0x10>(0x000852a1);
+            self.0.write::<0x10>(INITIALIZE_AGC_UPDATE_8010_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00600030`, undeclared bits included (`WIFI_BB_BRX.WORD_0018_OPAQUE`).
@@ -262572,7 +262922,7 @@ pub mod wifi_bb_brx {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_8018(&mut self) {
-            self.0.write::<0x18>(0x00600030);
+            self.0.write::<0x18>(INITIALIZE_AGC_UPDATE_8018_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x010000a0`, undeclared bits included (`WIFI_BB_BRX.WORD_001C_OPAQUE`).
@@ -262580,7 +262930,7 @@ pub mod wifi_bb_brx {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_801c(&mut self) {
-            self.0.write::<0x1c>(0x010000a0);
+            self.0.write::<0x1c>(INITIALIZE_AGC_UPDATE_801C_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x00000180`, undeclared bits included (`WIFI_BB_BRX.WORD_0020_OPAQUE`).
@@ -262588,7 +262938,7 @@ pub mod wifi_bb_brx {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_8020(&mut self) {
-            self.0.write::<0x20>(0x00000180);
+            self.0.write::<0x20>(INITIALIZE_AGC_UPDATE_8020_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0xc0403020`, undeclared bits included (`WIFI_BB_BRX.WORD_0028_OPAQUE`).
@@ -262596,7 +262946,7 @@ pub mod wifi_bb_brx {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_8028(&mut self) {
-            self.0.write::<0x28>(0xc0403020);
+            self.0.write::<0x28>(INITIALIZE_AGC_UPDATE_8028_IMAGE);
         }
 
         /// Write the vendor's whole-word image `0x01000080`, undeclared bits included (`WIFI_BB_BRX.WORD_002C_OPAQUE`).
@@ -262604,7 +262954,7 @@ pub mod wifi_bb_brx {
         /// SOURCE: ROM_REV0_PHY_AGC.
         #[inline]
         pub fn initialize_agc_update_802c(&mut self) {
-            self.0.write::<0x2c>(0x01000080);
+            self.0.write::<0x2c>(INITIALIZE_AGC_UPDATE_802C_IMAGE);
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -301973,6 +302323,11 @@ pub mod wifi_mac {
         const SOURCE: u16 = 120;
     }
 
+    /// The fixed policy image, before preservation of other lanes (`WIFI_MAC.CLEAR`).
+    ///
+    /// SOURCE: BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT.
+    pub const MAC_INTERRUPT_CLEAR_IMAGE: u32 = 0xffffffff;
+
     /// One sample of the `WIFI_MAC.STATUS` events `WIFI_MAC.CLEAR` acknowledges, to acknowledge once.
     ///
     /// SOURCE: BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT, BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT.
@@ -302434,7 +302789,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn mac_interrupt_clear(&mut self) {
             self.0.write::<0xc40>(0);
-            self.0.write::<0xc4c>(0xffffffff);
+            self.0.write::<0xc4c>(MAC_INTERRUPT_CLEAR_IMAGE);
         }
 
         /// Sample `WIFI_MAC.STATUS` once, keeping the events `WIFI_MAC.CLEAR` acknowledges (`WIFI_MAC.STATUS`).

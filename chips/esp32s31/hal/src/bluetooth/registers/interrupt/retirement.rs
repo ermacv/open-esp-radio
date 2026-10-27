@@ -107,8 +107,15 @@ fn mask(
     bank: &mut impl BankControl,
     task_enable: u32,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
-    // The last visible fault check precedes the mask. A later fault cannot
-    // be erased: neither fixed terminal image contains its W1C lane.
+    // The last visible fault check precedes the mask. Neither fixed terminal
+    // image clears a later fault, but release cannot report hidden pending.
+    // The next prepare_controller_output clears the baseline fault lanes
+    // before enabling them, silently discarding such a retained fault. This
+    // is a known limitation; release does not reopen enables to observe it.
+    // SOURCE: HW32_S31_BT_MASKED_FIXED_W1C_20261027 and
+    // HW32_S31_BT_OUTPUT_OBSERVER_20261027 (PR #757): tested pending is
+    // hidden/retained under the mask; reopening raises matrix124 and modem
+    // wake vector0x10 even at MAP0. Fault lanes are not hardware-qualified.
     check_visible_faults(bank, task_enable)?;
     if bank.fault_acknowledged() {
         return Err(BluetoothControllerOutputReleaseError::InterruptFault);

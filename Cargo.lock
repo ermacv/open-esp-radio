@@ -1952,6 +1952,7 @@ dependencies = [
  "oer-time",
  "oer-time-virtual",
  "pin-project",
+ "serde_json",
  "tempfile",
 ]
 

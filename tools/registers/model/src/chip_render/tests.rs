@@ -198,6 +198,38 @@ fn a_fixed_hardware_updated_configuration_preserves_undeclared_bits_and_pulses_i
 }
 
 #[test]
+fn fixed_policy_images_are_const_inputs_and_drive_their_writes() {
+    for image in [1, 2] {
+        let rust = rendered_with(&[(
+            "policy.toml",
+            "value = 0x00000003\nmasks = \"RADIO0.RAD_ENABLE\"",
+            &format!("value = {image}\nmasks = \"RADIO0.RAD_ENABLE\""),
+        )]);
+        let output = run(
+            &rust,
+            &format!(
+                r#"
+                const _: () = assert!(radio::MASK_AND_CLEAR_EVENTS_IMAGE == {image});
+                fn main() {{
+                    let mut memory = [u32::MAX; 0x40];
+                    {{
+                        let (_, mut irq) = radio::radio0_host(&mut memory).expect("host block");
+                        irq.mask_and_clear_events();
+                    }}
+                    // The policy change updates both the masked lanes and the
+                    // W1C payload, while unrelated enable bits survive.
+                    assert_eq!(memory[0x14 / 4], u32::MAX & !{image});
+                    assert_eq!(memory[0x10 / 4], radio::MASK_AND_CLEAR_EVENTS_IMAGE);
+                    println!("matched");
+                }}
+                "#,
+            ),
+        );
+        assert_eq!(output.trim(), "matched");
+    }
+}
+
+#[test]
 fn unsampled_w1c_discard_uses_its_owner_and_preserves_undeclared_bits() {
     let rust = rendered_with(&[(
         "policy.toml",
