@@ -19,6 +19,7 @@ mod opaque_wave2;
 mod analog_pmu;
 mod ble;
 mod ble_inherited;
+mod ble_masked;
 mod ble_wave2;
 mod generic;
 mod irq_observer;
@@ -822,6 +823,18 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 299,
         run: Action::Thread(analog_pmu::injection::<3, 4>),
+    },
+    Probe {
+        id: 300,
+        run: Action::Thread(ble_masked::compare0),
+    },
+    Probe {
+        id: 301,
+        run: Action::Thread(ble_masked::compare1),
+    },
+    Probe {
+        id: 302,
+        run: Action::Thread(ble_masked::overflow),
     },
 ];
 

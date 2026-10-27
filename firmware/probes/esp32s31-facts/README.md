@@ -1134,3 +1134,38 @@ runs `hw31-20261027-pb1e-02-registers` (lease#933),
 `hw31-20261027-pb1e-03-cold-240..243` (lease#938) and
 `hw31-20261027-pb1e-03-inject-250..264` (lease#940),
 [research report](/home/ermacv/dev/oer-notes/research/hw31-tsens-feest-pmuck.md).
+
+## BT_MAC hidden pending and diagnostic reads
+
+Selections 300/301/302 exercise local BTLC compare0/compare1/seeded overflow.
+Each leaf validates both disabled-delivery edge observers with FROM_CPU2,
+then uses the sourced digital BTLC setup, without RF, scheduler RUN or DMA.
+Both BLE matrix routes are parked at MAP=0 for the first two clear tests.
+MIE and both observer IE bits remain zero throughout.
+
+| Tags | Observation |
+| --- | --- |
+| `32fe` / `32ff` | Cause index and actual route124/133 MAP readback, parked / observer phase |
+| `3200`–`3240` | Initial state, fresh masked arrival, positive unmask, mask, retained redelivery |
+| `3250` / `3260` | Single fixed W1C while enabled, then quiet reopen |
+| `3270`–`3290` | Fresh masked arrival, fixed W1C without opening, then reopen |
+| `32a0` / `32b0` | Fresh positive after mapping124/133 to validated edge inputs with IE=0, before/after three diagnostic reads |
+| `32c0`–`32e0` | Mask, three more diagnostic reads while hidden, then reopen |
+| `3300` | Fixed clear and observer-IP clear after the read observations |
+
+Each state has six rows: primary bank0/1 and matrix3; NRT bank0/1 and
+matrix4; observer IP bitmap/IE bitmap/prior MIE (read-and-mask); modem wake
+vector/HP PMU RAW/wakeup cause; LP PMU RAW/selected PMU ST bits/ETM+10c[26];
+and compare0/compare1/overflow enables. PMU ST packs HP wake, HP reject and
+LP CPU wake in bits0–2. Only modeled RAW fields are reconstructed.
+`32a8`/`32c8` retain three complete +4bc words; the following row gives BTLC
+deltas before/across/after these reads. `32f0`–`32f2` retain each producer's
+origin/end/completed observations. `32ee` denotes a failed prerequisite.
+The fixed discards consume only this disposable session's timer indication
+without changing its enable; production consumers do not call them.
+
+Bank0 and NRT have no positive local producer here. The PMU and ETM rows
+are context, with no positive event control; neither their zeros nor ETM
+command-state readback establish absence of wake or event activity. A quiet
++4bc word does not qualify its own ungenerated task indications or all read
+effects. CPU-delivery masking alone is not a peripheral-output fence.
