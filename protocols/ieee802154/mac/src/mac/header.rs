@@ -9,9 +9,9 @@
 //! [`PhrFrame`](crate::PhrFrame) is the PHY-level image `[PHR, PSDU...]`: byte zero is the PSDU
 //! length and the MAC header starts at byte one. Offsets below keep that
 //! origin so each computation reads like the vendor source. For a malformed
-//! header the vendor may read past the image or add its `0xff` invalid
-//! sentinel to an offset; this port reports the field as absent instead.
-//! Well-formed headers produce identical results.
+//! header, fields outside the PHR-declared MAC bytes are absent. FCS (or
+//! RSSI/LQI on reception) is never parsed as a header.
+//! Bounds follow ESP-IDF `4d80c1b2`, `esp_ieee802154_frame.c`.
 
 const PHR_SIZE: u8 = 1;
 const FCF_SIZE: u8 = 2;
@@ -23,12 +23,46 @@ const EXT_ADDR_SIZE: u8 = 8;
 const SECURITY_HEADER_SIZE: u8 = 1;
 const FRAME_COUNTER_SIZE: u8 = 4;
 const COMMAND_ID_LEN: u8 = 1;
-const IE_HEADER_LEN: u8 = 2;
 
 const COMMAND_DATA_REQUEST: u8 = 0x04;
-const IE_HEADER_ID_MASK: u16 = 0x3f80;
-const IE_TYPE_HT2: u16 = 0x3f80;
-const IE_SUBFIELD_LEN_MASK: u16 = 0x007f;
+use oer_wire::Reader;
+
+oer_wire::bitfield! {
+    // SOURCE: IEEE Std 802.15.4-2020, 12.1.3 (PHR frame length).
+    struct Phr[1] (little) { length, with_length: u8 = 0..7; }
+}
+oer_wire::bitfield! {
+    // SOURCE: IEEE Std 802.15.4-2020, 7.2.2 (Frame Control field).
+    struct Control[2] (little) {
+        kind, with_kind: u8 = 0..3;
+        security, with_security: bool = 3..4;
+        ack, with_ack: bool = 5..6;
+        compression, with_compression: bool = 6..7;
+        suppress_dsn, with_suppress_dsn: bool = 8..9;
+        ie, with_ie: bool = 9..10;
+        destination, with_destination: u8 = 10..12;
+        version, with_version: u8 = 12..14;
+        source, with_source: u8 = 14..16;
+    }
+}
+oer_wire::bitfield! {
+    // SOURCE: IEEE Std 802.15.4-2020, 9.4.2 (Security Control field).
+    struct SecurityControl[1] (little) {
+        level, with_level: u8 = 0..3;
+        key_mode, with_key_mode: u8 = 3..5;
+        suppress_counter, with_suppress_counter: bool = 5..6;
+    }
+}
+oer_wire::bitfield! {
+    // SOURCE: IEEE Std 802.15.4-2020, 7.4.2.1 (Header IE descriptor).
+    struct HeaderIe[2] (little) {
+        length, with_length: u8 = 0..7;
+        id, with_id: u8 = 7..15;
+        // SOURCE: ESP-IDF 4d80c1b2 esp_ieee802154_frame.h
+        // IEEE802154_FRAME_IE_HEAD_ID_MASK: payload scanning ignores bit 14.
+        termination_id, with_termination_id: u8 = 7..14, view;
+    }
+}
 
 /// MAC frame type (frame-control bits 0..2).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -53,7 +87,7 @@ pub enum FrameType {
 
 impl FrameType {
     const fn from_bits(bits: u8) -> Self {
-        match bits & 0x07 {
+        match bits {
             0 => Self::Beacon,
             1 => Self::Data,
             2 => Self::Ack,
@@ -87,10 +121,10 @@ pub enum FrameVersion {
 
 impl FrameVersion {
     const fn from_bits(bits: u8) -> Self {
-        match bits & 0x30 {
-            0x00 => Self::V2003,
-            0x10 => Self::V2006,
-            0x20 => Self::V2015,
+        match bits {
+            0 => Self::V2003,
+            1 => Self::V2006,
+            2 => Self::V2015,
             _ => Self::Reserved,
         }
     }
@@ -111,7 +145,7 @@ pub enum AddressMode {
 
 impl AddressMode {
     const fn from_bits(bits: u8) -> Self {
-        match bits & 0x03 {
+        match bits {
             0 => Self::None,
             1 => Self::Reserved,
             2 => Self::Short,
@@ -153,11 +187,38 @@ impl<'image> PhrFrame<'image> {
         Self { image }
     }
 
+    /// A cursor restricted to declared MAC data, excluding both footer bytes.
+    const fn mac_bytes(self, offset: u8, count: u8) -> Option<&'image [u8]> {
+        let Some(length) = self.length().checked_sub(FCS_SIZE) else {
+            return None;
+        };
+        let Some(skip) = offset.checked_sub(PHR_SIZE) else {
+            return None;
+        };
+        let mut image = Reader::new(self.image);
+        if image.take(PHR_SIZE as usize).is_err() {
+            return None;
+        }
+        let Ok(mac) = image.take(length as usize) else {
+            return None;
+        };
+        let mut mac = Reader::new(mac);
+        if mac.take(skip as usize).is_err() {
+            return None;
+        }
+        match mac.take(count as usize) {
+            Ok(bytes) => Some(bytes),
+            Err(_) => None,
+        }
+    }
+
     const fn byte(self, offset: u8) -> Option<u8> {
-        if (offset as usize) < self.image.len() {
-            Some(self.image[offset as usize])
-        } else {
-            None
+        let Some(bytes) = self.mac_bytes(offset, 1) else {
+            return None;
+        };
+        match Reader::new(bytes).u8() {
+            Ok(byte) => Some(byte),
+            Err(_) => None,
         }
     }
 
@@ -168,52 +229,61 @@ impl<'image> PhrFrame<'image> {
         }
     }
 
-    /// The PHR length byte.
+    const fn control(self) -> Control {
+        Control::from_bytes([self.header_byte(1), self.header_byte(2)])
+    }
+
+    /// The seven-bit PHR length.
     pub const fn length(self) -> u8 {
-        self.header_byte(0)
+        match Reader::new(self.image).u8() {
+            Ok(byte) => Phr::from_bytes([byte]).length(),
+            Err(_) => 0,
+        }
     }
 
     /// `ieee802154_frame_get_type`.
     pub const fn frame_type(self) -> FrameType {
-        FrameType::from_bits(self.header_byte(1))
+        FrameType::from_bits(self.control().kind())
     }
 
     /// `ieee802154_frame_get_version`.
     pub const fn version(self) -> FrameVersion {
-        FrameVersion::from_bits(self.header_byte(2))
+        FrameVersion::from_bits(self.control().version())
     }
 
     /// `ieee802154_frame_is_security_enabled`.
     pub const fn security_enabled(self) -> bool {
-        self.header_byte(1) & 0x08 != 0
+        self.control().security()
     }
 
     /// `ieee802154_frame_is_ack_required`: only a supported frame type
     /// requests an acknowledgement.
     pub const fn ack_required(self) -> bool {
-        self.frame_type().is_supported() && self.header_byte(1) & 0x20 != 0
+        self.mac_bytes(PHR_SIZE, FCF_SIZE).is_some()
+            && self.frame_type().is_supported()
+            && self.control().ack()
     }
 
     const fn panid_compression(self) -> bool {
-        self.header_byte(1) & 0x40 != 0
+        self.control().compression()
     }
 
     const fn ie_present(self) -> bool {
-        self.header_byte(2) & 0x02 != 0
+        self.control().ie()
     }
 
     const fn dsn_present(self) -> bool {
-        !matches!(self.version(), FrameVersion::V2015) || self.header_byte(2) & 0x01 == 0
+        !matches!(self.version(), FrameVersion::V2015) || !self.control().suppress_dsn()
     }
 
     /// Destination addressing mode.
     pub const fn destination_mode(self) -> AddressMode {
-        AddressMode::from_bits(self.header_byte(2) >> 2)
+        AddressMode::from_bits(self.control().destination())
     }
 
     /// Source addressing mode.
     pub const fn source_mode(self) -> AddressMode {
-        AddressMode::from_bits(self.header_byte(2) >> 6)
+        AddressMode::from_bits(self.control().source())
     }
 
     const fn valid_modes(self) -> bool {
@@ -282,12 +352,14 @@ impl<'image> PhrFrame<'image> {
     /// The image offset of the auxiliary security header, whether or not
     /// security is enabled.
     pub const fn security_header_offset(self) -> Option<u8> {
-        if !self.frame_type().is_supported() {
+        if self.mac_bytes(PHR_SIZE, FCF_SIZE).is_none() || !self.frame_type().is_supported() {
             return None;
         }
         match self.address_size() {
-            Some(size) => Some(self.address_offset() + size),
-            None => None,
+            Some(size) if self.mac_bytes(self.address_offset(), size).is_some() => {
+                self.address_offset().checked_add(size)
+            }
+            _ => None,
         }
     }
 
@@ -298,70 +370,88 @@ impl<'image> PhrFrame<'image> {
         let Some(security_header) = self.byte(offset) else {
             return None;
         };
+        let security_header = SecurityControl::from_bytes([security_header]);
         let mut length = SECURITY_HEADER_SIZE;
-        if security_header & 0x20 == 0 {
+        if !security_header.suppress_counter() {
             length += FRAME_COUNTER_SIZE;
         }
-        length += match security_header & 0x18 {
-            0x08 => 1,
-            0x10 => 5,
-            0x18 => 9,
+        length += match security_header.key_mode() {
+            1 => 1,
+            2 => 5,
+            3 => 9,
             _ => 0,
         };
+        if self.mac_bytes(offset, length).is_none() {
+            return None;
+        }
         Some(length)
     }
 
     const fn ie_header_offset(self) -> Option<u8> {
-        match (self.security_header_offset(), self.security_field_len()) {
-            (Some(offset), Some(length)) => Some(offset + length),
-            _ => None,
+        let Some(offset) = self.security_header_offset() else {
+            return None;
+        };
+        if !self.security_enabled() {
+            return Some(offset);
+        }
+        match self.security_field_len() {
+            Some(length) => offset.checked_add(length),
+            None => None,
         }
     }
 
     const fn mic_len(self) -> u8 {
+        if !self.security_enabled() {
+            return 0;
+        }
         let Some(offset) = self.security_header_offset() else {
             return 0;
         };
-        match self.header_byte(offset) & 0x07 {
-            0x01 | 0x05 => 4,
-            0x02 | 0x06 => 8,
-            0x03 | 0x07 => 16,
+        match SecurityControl::from_bytes([self.header_byte(offset)]).level() {
+            1 | 5 => 4,
+            2 | 6 => 8,
+            3 | 7 => 16,
             _ => 0,
         }
     }
 
-    /// Header-IE length ending at the payload, `ieee802154_frame_get_ie_field_len`.
+    const fn ie_bytes(self, offset: u8) -> Option<&'image [u8]> {
+        let Some(end) = self.length().checked_add(PHR_SIZE) else {
+            return None;
+        };
+        let Some(end) = end.checked_sub(FCS_SIZE + self.mic_len()) else {
+            return None;
+        };
+        let Some(length) = end.checked_sub(offset) else {
+            return None;
+        };
+        self.mac_bytes(offset, length)
+    }
+
+    /// `ieee802154_frame_get_ie_field_len`: each complete descriptor and body
+    /// must fit before the MIC/FCS boundary; HT2 starts the payload.
     const fn ie_field_len(self) -> Option<u8> {
         let Some(offset) = self.ie_header_offset() else {
             return None;
         };
-        let footer = self.mic_len() + FCS_SIZE;
-        let frame_len = self.length() as u16;
-        let offset = offset as u16;
-        let footer = footer as u16;
-        let mut length: u16 = 0;
-        while frame_len > offset + length + footer {
-            if offset + length + 1 >= frame_len {
-                break;
-            }
-            let (Some(low), Some(high)) = (
-                self.byte((offset + length) as u8),
-                self.byte((offset + length + 1) as u8),
-            ) else {
+        let Some(bytes) = self.ie_bytes(offset) else {
+            return None;
+        };
+        let mut cursor = Reader::new(bytes);
+        while !cursor.is_empty() {
+            let Ok(bytes) = cursor.read() else {
                 return None;
             };
-            let header = (high as u16) << 8 | low as u16;
-            if header & IE_HEADER_ID_MASK == IE_TYPE_HT2 {
-                length += IE_HEADER_LEN as u16;
+            let descriptor = HeaderIe::from_bytes(bytes);
+            if descriptor.termination_id() == 0x7f {
                 break;
             }
-            length += IE_HEADER_LEN as u16 + (header & IE_SUBFIELD_LEN_MASK);
+            if cursor.take(descriptor.length() as usize).is_err() {
+                return None;
+            }
         }
-        if length > u8::MAX as u16 {
-            None
-        } else {
-            Some(length as u8)
-        }
+        // The cursor covers at most the seven-bit PHR extent.
+        Some((bytes.len().saturating_sub(cursor.remaining().len())) as u8)
     }
 
     /// The image offset of the descriptor of the first header IE with
@@ -372,32 +462,28 @@ impl<'image> PhrFrame<'image> {
         if !matches!(self.version(), FrameVersion::V2015) || !self.ie_present() {
             return None;
         }
-        let Some(mut offset) = self.security_header_offset() else {
+        let Some(offset) = self.ie_header_offset() else {
             return None;
         };
-        if self.security_enabled() {
-            match self.security_field_len() {
-                Some(length) => offset += length,
-                None => return None,
-            }
-        }
-        let end = self.length() as u16;
-        let mut index = offset as u16;
-        while index + IE_HEADER_LEN as u16 + FCS_SIZE as u16 <= end {
-            let (Some(low), Some(high)) = (self.byte(index as u8), self.byte(index as u8 + 1))
-            else {
+        let Some(bytes) = self.ie_bytes(offset) else {
+            return None;
+        };
+        let mut cursor = Reader::new(bytes);
+        while !cursor.is_empty() {
+            let index = (bytes.len().saturating_sub(cursor.remaining().len())) as u8;
+            let Ok(bytes) = cursor.read() else {
                 return None;
             };
-            let descriptor = (high as u16) << 8 | low as u16;
-            let element = ((descriptor & IE_HEADER_ID_MASK) >> 7) as u8;
-            if element == id {
-                return Some(index as u8);
-            }
-            // Header termination IEs end the header IEs.
-            if element == 0x7e || element == 0x7f {
+            let descriptor = HeaderIe::from_bytes(bytes);
+            if cursor.take(descriptor.length() as usize).is_err() {
                 return None;
             }
-            index += IE_HEADER_LEN as u16 + (descriptor & IE_SUBFIELD_LEN_MASK);
+            if descriptor.id() == id {
+                return offset.checked_add(index);
+            }
+            if descriptor.id() == 0x7e || descriptor.id() == 0x7f {
+                return None;
+            }
         }
         None
     }
@@ -435,6 +521,9 @@ impl<'image> PhrFrame<'image> {
         if matches!(self.version(), FrameVersion::V2003 | FrameVersion::V2006)
             && matches!(self.frame_type(), FrameType::Command)
         {
+            if self.mac_bytes(offset, COMMAND_ID_LEN).is_none() {
+                return None;
+            }
             match offset.checked_add(COMMAND_ID_LEN) {
                 Some(end) => offset = end,
                 None => return None,
@@ -482,14 +571,21 @@ impl<'image> PhrFrame<'image> {
     #[allow(clippy::result_unit_err)]
     pub const fn destination_address(self) -> Result<Option<FrameAddress>, ()> {
         let mode = self.destination_mode();
-        if !self.frame_type().is_supported() || !mode.is_valid() {
+        if self.mac_bytes(PHR_SIZE, FCF_SIZE).is_none()
+            || !self.frame_type().is_supported()
+            || !mode.is_valid()
+        {
             return Err(());
         }
         let mut offset = self.address_offset();
         if self.destination_panid_present() {
             offset += PANID_SIZE;
         }
-        Ok(self.copy_address(offset, mode))
+        match (mode, self.copy_address(offset, mode)) {
+            (AddressMode::None, _) => Ok(None),
+            (_, Some(address)) => Ok(Some(address)),
+            _ => Err(()),
+        }
     }
 
     /// `ieee802154_frame_get_src_addr`: `Err(())` for an unsupported frame
@@ -497,7 +593,10 @@ impl<'image> PhrFrame<'image> {
     #[allow(clippy::result_unit_err)]
     pub const fn source_address(self) -> Result<Option<FrameAddress>, ()> {
         let mode = self.source_mode();
-        if !self.frame_type().is_supported() || !self.valid_modes() {
+        if self.mac_bytes(PHR_SIZE, FCF_SIZE).is_none()
+            || !self.frame_type().is_supported()
+            || !self.valid_modes()
+        {
             return Err(());
         }
         let mut offset = self.address_offset();
@@ -508,7 +607,11 @@ impl<'image> PhrFrame<'image> {
         if self.source_panid_present() {
             offset += PANID_SIZE;
         }
-        Ok(self.copy_address(offset, mode))
+        match (mode, self.copy_address(offset, mode)) {
+            (AddressMode::None, _) => Ok(None),
+            (_, Some(address)) => Ok(Some(address)),
+            _ => Err(()),
+        }
     }
 
     /// `ieee802154_frame_get_dest_panid`.

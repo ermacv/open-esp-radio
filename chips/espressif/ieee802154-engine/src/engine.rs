@@ -210,6 +210,11 @@ pub struct Ieee802154ReceivedAck<'frame> {
 /// Upper-layer notifications and platform services, invoked inside the
 /// engine's critical section (`esp_ieee802154_event.c` and `esp_timer`).
 pub trait Ieee802154Environment {
+    /// Notify the coexistence owner that arbitration interrupted TX or its ACK.
+    /// SOURCE: ESP-IDF 4d80c1b2, esp_ieee802154_dev.c,
+    /// `isr_handle_tx_ack_phase_rx_abort` and `isr_handle_tx_abort`.
+    /// Only software coexistence calls it.
+    fn coexistence_break(&mut self);
     /// `esp_timer_get_time` in microseconds.
     fn now_micros(&mut self) -> u64;
     /// `esp_ieee802154_receive_done`.
@@ -270,6 +275,15 @@ pub enum Ieee802154EnhancedAck {
 /// image that fits one DMA frame.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ieee802154FrameImageError;
+
+/// A refused transmit-security configuration; no security register was written.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Ieee802154SecurityFrameError {
+    /// The frame does not enable security.
+    SecurityDisabled,
+    /// Address, auxiliary security, IE or command bytes exceed the MAC extent.
+    MalformedHeader,
+}
 
 /// A slot outside the receive ring (`ieee802154_receive_handle_done` failure).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -749,23 +763,28 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         u32::from(ll.ack_timeout()) * 16
     }
 
-    /// `esp_ieee802154_set_transmit_security`: arm transmit security for the
-    /// secured `frame` image the next transmission sends. The vendor asserts
-    /// that the frame enables security; an unparseable header programs its
-    /// invalid offset `0xff` truncated to the seven-bit field.
+    /// Arm security only after the complete secured header has been validated.
+    /// Refusal leaves every security register unchanged.
+    /// SOURCE: ESP-IDF 4d80c1b2, `ieee802154_transmit_security_config`.
     pub fn set_transmit_security<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         frame: &[u8],
         key: &[u8; 16],
         address: &[u8; 8],
-    ) {
+    ) -> Result<(), Ieee802154SecurityFrameError> {
         let frame = PhrFrame::new(frame);
-        vendor_assert!(frame.security_enabled());
+        let offset = frame
+            .security_payload_offset()
+            .ok_or(Ieee802154SecurityFrameError::MalformedHeader)?;
+        if !frame.security_enabled() {
+            return Err(Ieee802154SecurityFrameError::SecurityDisabled);
+        }
         ll.set_security_address(address);
         ll.set_security_key(key);
-        ll.set_security_offset(frame.security_payload_offset().unwrap_or(0xff));
+        ll.set_security_offset(offset);
         ll.set_transmit_security(true);
+        Ok(())
     }
 
     /// `ieee802154_get_recent_lqi`.
@@ -1105,8 +1124,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     ///
     /// # Errors
     /// An unsupported event retains the complete observation and entry state.
-    /// No acknowledgement or dispatch occurs; quarantine the MAC and storage
-    /// and record/reset through the image's terminal fault path.
+    /// No acknowledgement or dispatch occurs for unsupported events.
+    /// Malformed secured output from the ACK generator retains its PHR/FCF
+    /// and state before DMA publication. Either fault quarantines the MAC
+    /// and storage for the image's retained record/reset path.
     pub fn isr<L, E>(&mut self, ll: &mut L, env: &mut E) -> Result<(), Fault>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
@@ -1176,7 +1197,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         }
         if events.contains(Ieee802154Event::RxDone) {
             vendor_assert!(self.state == Ieee802154State::Rx);
-            self.isr_rx_done(&mut cx);
+            self.isr_rx_done(&mut cx)?;
             events = events.difference(Ieee802154Event::RxDone.mask());
         }
         if events.contains(Ieee802154Event::AckTxDone) {
@@ -1379,7 +1400,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         } else {
             frame.destination_panid()
         };
-        let destination = frame.destination_address().ok().flatten();
+        let Ok(destination) = frame.destination_address() else {
+            return None;
+        };
         let broadcast = match destination {
             Some(FrameAddress::Short(address)) => address == [0xff; 2],
             Some(FrameAddress::Extended(address)) => address == [0xff; 8],
@@ -1742,7 +1765,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         }
     }
 
-    fn isr_rx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    fn isr_rx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>) -> Result<(), Fault>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
@@ -1755,10 +1778,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             cx.ll.set_command(Ieee802154LlCommand::Stop);
             self.receive_done(cx);
             self.needs_next_operation = true;
-            return;
+            return Ok(());
         }
         if self.state != Ieee802154State::Rx {
-            return;
+            return Ok(());
         }
         let index = usize::from(self.rx_index);
         if frame.ack_required()
@@ -1781,7 +1804,16 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 let address = cx
                     .ll
                     .multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0);
-                self.set_transmit_security(cx.ll, &ack, &key, &address);
+                self.set_transmit_security(cx.ll, &ack, &key, &address)
+                    .map_err(|_| {
+                        // Keep the complete failed generator output in the
+                        // quarantined buffer, without publishing it to DMA.
+                        self.buffers.enhanced_ack.write(&ack);
+                        Fault::InvalidEnhancedAckSecurity {
+                            header: [ack[0], ack[1], ack[2]],
+                            state: self.state,
+                        }
+                    })?;
             }
             if generated != Ieee802154EnhancedAck::Refused {
                 self.buffers.enhanced_ack.write(&ack);
@@ -1799,6 +1831,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             self.receive_done(cx);
             self.needs_next_operation = true;
         }
+        Ok(())
     }
 
     /// `ieee802154_ack_config_pending_bit`.
@@ -1897,9 +1930,13 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             | Reason::CoexistenceBreak
             | Reason::EdAbort
             | Reason::EdCoexistenceReject => return,
-            Reason::TxAckTimeout
-            | Reason::TxAckCoexistenceBreak
-            | Reason::EnhancedAckSecurityError => self.receive_done(cx),
+            Reason::TxAckCoexistenceBreak => {
+                if matches!(self.coexistence, Ieee802154Coexistence::Software(_)) {
+                    cx.env.coexistence_break();
+                }
+                self.receive_done(cx);
+            }
+            Reason::TxAckTimeout | Reason::EnhancedAckSecurityError => self.receive_done(cx),
         }
         self.needs_next_operation = true;
     }
@@ -1946,6 +1983,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                     Ieee802154State::Tx | Ieee802154State::TxCca
                 ));
                 let error = if reason == Reason::TxCoexistenceBreak {
+                    if matches!(self.coexistence, Ieee802154Coexistence::Software(_)) {
+                        cx.env.coexistence_break();
+                    }
                     if let Some(statistics) = self.statistics.as_mut() {
                         statistics.tx.abort.tx_coex_break += 1;
                     }

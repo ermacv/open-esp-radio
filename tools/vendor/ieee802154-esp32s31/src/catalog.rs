@@ -18,6 +18,16 @@ const PROMISCUOUS_MASK: &str = "Promiscuous masks configured ACK flags; C overwr
 const RETENTION: &str =
     "mac_init snapshots and republishes retained settings; C restores PIB defaults";
 
+// SOURCE: ESP-IDF 4d80c1b2 esp_ieee802154_dev.c `isr_handle_tx_done`,
+// `isr_handle_ack_rx_done`, `stop_current_operation`, `isr_handle_tx_abort`;
+// esp_ieee802154_timer.c `ieee802154_timer0_stop` and `timer0_fire_at`.
+// The production affine acknowledgement contract additionally consumes stale
+// timer0 before arming and acknowledges it while enabled before masking.
+const ACK_WAIT: &str = "Retained initialization; stale timer0 is consumed before ACK wait starts";
+const ACK_COMPLETE: &str = "Retained initialization; ACK completion consumes timer0 before masking";
+const ACK_ABORT: &str = "Retained initialization; ACK abort consumes timer0 before masking";
+const ACK_STOP: &str = "Retained initialization; ACK stop samples stopped timer0 before masking";
+
 /// An expectation belongs to one scenario and its complete pair of traces,
 /// never to a first mismatch or a list of broadly allowed configuration calls.
 pub(crate) fn matches_expected(name: &str, vendor: u64, port: u64) -> bool {
@@ -384,6 +394,28 @@ fn transmit_with_security() -> Vec<Step> {
 fn malformed_security() -> Vec<Step> {
     let mut frame = vec![3];
     frame.extend(secured_frame().into_iter().skip(1));
+    vec![Step::SetTransmitSecurity {
+        frame,
+        key: [7; 16],
+        address: [9; 8],
+    }]
+}
+
+// A complete secured 2015 image, but its header IE claims bytes beyond
+// the declared MAC extent. SOURCE: 4d80c1b2 frame_get_ie_field_len.
+fn malformed_security_ie() -> Vec<Step> {
+    let frame = vec![15, 0x0b, 0x22, 1, 0x25, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    vec![Step::SetTransmitSecurity {
+        frame,
+        key: [7; 16],
+        address: [9; 8],
+    }]
+}
+
+fn truncated_security_header() -> Vec<Step> {
+    let mut frame = secured_frame();
+    frame[0] = 12;
+    frame[10] = 0x18; // frame counter plus nine key-ID bytes do not fit.
     vec![Step::SetTransmitSecurity {
         frame,
         key: [7; 16],
@@ -840,6 +872,18 @@ fn cca_busy() -> Vec<Step> {
 /// Every catalog scenario.
 pub const SCENARIOS: &[Scenario] = &[
     Scenario {
+        name: "malformed-security-ie",
+        inputs: no_inputs,
+        steps: malformed_security_ie,
+        expected_difference: None,
+    },
+    Scenario {
+        name: "truncated-security-header",
+        inputs: no_inputs,
+        steps: truncated_security_header,
+        expected_difference: None,
+    },
+    Scenario {
         name: "malformed-security",
         inputs: no_inputs,
         steps: malformed_security,
@@ -879,7 +923,7 @@ pub const SCENARIOS: &[Scenario] = &[
         name: "recent-rssi",
         inputs: no_inputs,
         steps: recent_rssi,
-        expected_difference: Some(RETENTION),
+        expected_difference: Some(ACK_STOP),
     },
     Scenario {
         name: "receive-abort-reasons",
@@ -897,7 +941,7 @@ pub const SCENARIOS: &[Scenario] = &[
         name: "transmit-abort-reasons",
         inputs: no_inputs,
         steps: transmit_abort_reasons,
-        expected_difference: Some(RETENTION),
+        expected_difference: Some(ACK_STOP),
     },
     Scenario {
         name: "energy-detection-abort-reasons",
@@ -921,7 +965,7 @@ pub const SCENARIOS: &[Scenario] = &[
         name: "transmit-with-ack",
         inputs: no_inputs,
         steps: transmit_with_ack,
-        expected_difference: Some(RETENTION),
+        expected_difference: Some(ACK_COMPLETE),
     },
     Scenario {
         name: "transmit-with-cca-busy",
@@ -957,13 +1001,13 @@ pub const SCENARIOS: &[Scenario] = &[
         name: "transmit-ack-timer-expires",
         inputs: no_inputs,
         steps: transmit_ack_timer_expires,
-        expected_difference: Some(RETENTION),
+        expected_difference: Some(ACK_WAIT),
     },
     Scenario {
         name: "transmit-ack-abort-timeout",
         inputs: no_inputs,
         steps: transmit_ack_abort_timeout,
-        expected_difference: Some(RETENTION),
+        expected_difference: Some(ACK_ABORT),
     },
     Scenario {
         name: "receive-with-enhanced-ack",

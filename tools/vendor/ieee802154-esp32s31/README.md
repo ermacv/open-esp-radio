@@ -91,8 +91,7 @@ are not compared. A vendor assertion, or a step the engine does not own, is
 content. Both sides resolve transmit power against the ESP32-S31 BTBB level
 set recovered from the vendor library (`TX_POWER_LEVELS_DBM`): the stand
 provides it as the driver's `bt_bb_get_tx_pwr_table`, and the engine uses the
-chip knowledge's `ESP32S31_TX_POWER_LEVELS` (`oer-esp32s31-knowledge`); the stand links no HAL. The tests require `MATCH` for every catalog
-scenario.
+chip knowledge's `ESP32S31_TX_POWER_LEVELS` (`oer-esp32s31-knowledge`); the stand links no HAL. The catalog requires `MATCH` or its exact documented `EXPECTED` trace pair.
 
 The `recent-rssi` scenario reads `esp_ieee802154_get_recent_rssi` disabled,
 idle, receiving, awaiting an ACK and asleep, over receive-information images
@@ -102,6 +101,27 @@ records nothing for it: `MATCH` means the vendor call leaves no
 register-layer access in any state either. The value is not compared; a test
 pins it to the signed low byte of one `bt_bb_get_cur_rx_info` call, the
 geometry the register model publishes for the PAC read.
+
+## ACK timer comparison expectations
+
+Each row keeps its complete vendor fingerprint. The production trace also
+retains configuration at initialization (`mac_init` snapshots/republication),
+where ESP-IDF `4d80c1b2` `ieee802154_mac_init`/`ieee802154_set_pib` restores
+PIB defaults. ACK timer differences follow the production affine event contract:
+stale timer0 is cleared while stopped before arming, and completion/stop
+acknowledges the enabled timer before masking. No frame or callback is lost.
+
+| Scenario | Source and complete-trace distinction |
+| --- | --- |
+| `recent-rssi` | `esp_ieee802154_dev.c::stop_current_operation` and `esp_ieee802154_timer.c::ieee802154_timer0_stop`: production stops before sampling and includes timer0 in the saved acknowledgement; C masks then clears the non-timer event set. RSSI calls add no LL operations. |
+| `transmit-abort-reasons` | The same stop path between attempts; `isr_handle_tx_done` starts each ACK wait. Production consumes stale timer0 before arming and the saved enabled timer0 on stop. All abort outcomes remain equal. |
+| `transmit-with-ack` | `isr_handle_tx_done` and `isr_handle_ack_rx_done`: production clears stale timer0 before arming, then acknowledges timer0 before masking on ACK completion. The received ACK and completion metadata remain equal. |
+| `transmit-ack-timer-expires` | `isr_handle_tx_done`, `ieee802154_timer0_fire_at_with_callback`, `isr_handle_timer0_done`: the extra acknowledgement clears stale timer0 before arming; expiry consumes the sampled overflow and reports the same missing ACK. |
+| `transmit-ack-abort-timeout` | `isr_handle_tx_abort` for `RX_ACK_TIMEOUT`: production acknowledges timer0 while enabled before masking it, after the same abort-event acknowledgement; the missing-ACK callback remains equal. |
+
+`malformed-security`, `truncated-security-header` and `malformed-security-ie`
+isolate rejection from initialization: each requires invalid-argument return
+and no security setters, with no accepted fingerprint difference.
 
 ## Multi-PAN
 

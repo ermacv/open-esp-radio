@@ -15,6 +15,7 @@ static LEVELS: [i8; 1] = [0];
 #[derive(Default)]
 struct Environment;
 impl Ieee802154Environment for Environment {
+    fn coexistence_break(&mut self) {}
     fn now_micros(&mut self) -> u64 {
         0
     }

@@ -413,6 +413,11 @@ struct Environment {
     failed: bool,
 }
 impl Ieee802154Environment for Environment {
+    fn coexistence_break(&mut self) {
+        // S31 libcoexist hal_ieee802154_coex_break_notify has no effects.
+        // SOURCE: BLOB_LIBCOEX_IEEE802154_HANDOFF; no RF grant is released.
+    }
+
     fn now_micros(&mut self) -> u64 {
         EmbassyClock.now().as_micros()
     }

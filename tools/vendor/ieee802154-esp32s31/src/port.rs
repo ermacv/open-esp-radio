@@ -631,6 +631,13 @@ impl Ieee802154LowLevel for PortLl {
 struct PortEnv(Rc<RefCell<Shared>>);
 
 impl Ieee802154Environment for PortEnv {
+    fn coexistence_break(&mut self) {
+        self.0.borrow_mut().records.push(Record::External {
+            name: "esp_coex_ieee802154_coex_break_notify".to_owned(),
+            arguments: Vec::new(),
+        });
+    }
+
     fn now_micros(&mut self) -> u64 {
         let shared = self.0.borrow();
         shared
@@ -932,7 +939,13 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
                 frame,
                 key,
                 address,
-            } => engine.set_transmit_security(&mut ll, &frame, &key, &address),
+            } => {
+                let result = engine.set_transmit_security(&mut ll, &frame, &key, &address);
+                shared.borrow_mut().records.push(Record::Return {
+                    name: "esp_ieee802154_set_transmit_security".to_owned(),
+                    value: if result.is_ok() { 0 } else { 258 },
+                });
+            }
             Step::Transmit { frame, cca } => {
                 shared.borrow_mut().transmits += 1;
                 engine
