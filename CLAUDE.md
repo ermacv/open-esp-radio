@@ -136,11 +136,6 @@ system these rules serve.
   time. The one exception is the pinned toolchain (`cargo`, `rustc`, `lld`)
   run into the test's own build directory for compile-fail and
   compiler-driven cases.
-  Staged firmware binaries keep RISC-V entry composition and its dependencies
-  behind `cfg(target_arch = "riscv32")`, and their build scripts emit image linker
-  arguments only for that target; host tests compile their pure modules with
-  explicit fixture inputs. Architectural CSR instructions remain target-only in
-  `oer-riscv`.
 - **Generated files.** `chips/*/pac/src/generated.rs`,
   `chips/*/vendor/facts/**/*.toml` (including TOML files directly in `facts/`)
   and `chips/*/vendor/phy-baselines/*/*.json` are never read whole or edited
