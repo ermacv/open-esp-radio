@@ -29,14 +29,16 @@ and a sampled nonfatal stale RAW acknowledgement, before outer RX starts.
 Phase203 publishes the reviewed station interrupt mask and records enabled
 reception for350ms, then204 masks every MAC enable without acknowledgement
 for the rest of the window. Both phases exercise real frozen-cursor
-`take_completed_unit`, byte reads and `recycle`, immediately completing each
+`take_completed_unit`, byte reads, `retain_discard` and affine recycle-credit
+`append` through frozen LAST, immediately completing each
 pending reload with the production20-µs settle. Recording errors retain the
 unit for deferred recycling and stop collection. No live payload is painted.
 
 Every scan copies all33 buffers by bounded volatile value reads **before**
 RAW and the exact pre-ack STATUS sample. The existing observation checks use
 the original pre-RX BUFFER bindings. The taken unit's complete segments are
-copied and compared against those earlier bytes, then reread before recycling.
+copied and compared against those earlier bytes and the preceding scan's
+retained byte copy, then read again through the completed view before recycling.
 A reserved-descriptor continuation is explicitly marked as an incomplete frame;
 it cannot qualify whole-frame payload ordering. A unit taken on a later scan
 than first positive14 also cannot qualify that earlier observation. Finite
@@ -62,9 +64,12 @@ At most256 rows are retained, with16 reserved for stopped checkpoints.
 
 `T` rows contain unit ID, then scan/phase/RAW/STATUS/head/count/length,
 reserved-continuation flag, copy begin/end, RAW/ST end, take begin/end,
-early-versus-taken mismatch count and taken-reread mismatch count.
-`P` rows contain unit ID, byte offset, up to16 early bytes then the same
-number of taken bytes. Packet dumps belong only in local evidence.
+early-versus-taken mismatch count, completed-view reread mismatch count,
+preceding scan ordinal, preceding copy begin/end and preceding-versus-taken
+mismatch count. The second completed view is not an independent volatile bus
+observation. `P` rows contain unit ID, byte offset, up to16 preceding-scan
+bytes, then the same number of early and taken bytes. Packet dumps belong
+only in local evidence.
 
 This image does not associate a STA, exchange keys or establish HE/A-MPDU
 stimulus delivery. A host must characterize and label actual peer traffic;

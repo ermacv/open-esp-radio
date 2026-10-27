@@ -76,6 +76,11 @@ fn scan(
         let d = node(storage, i).ok_or("traffic-node")?;
         let binding = *trace.bindings.get(i).ok_or("traffic-binding")?;
         for (w, out) in words.iter_mut().enumerate() {
+            *trace
+                .previous_pre
+                .get_mut(i)
+                .and_then(|words| words.get_mut(w))
+                .ok_or("traffic-previous-word")? = *out;
             *out = read_word(storage, d, binding, w * 4)?;
         }
     }
@@ -143,17 +148,27 @@ fn scan(
                 let reserved = unit.metadata().continues_reserved_landing();
                 let mut offset = 0usize;
                 let mut mismatch = 0u32;
+                let mut previous_mismatch = 0u32;
                 let mut unstable = 0u32;
                 for step in 0..count {
                     let index = head.wrapping_add(step) % COUNT;
                     let early = trace.pre.get(index).ok_or("traffic-pre")?;
+                    let previous = trace.previous_pre.get(index).ok_or("traffic-previous")?;
                     let bytes = unit.segment(step).ok_or("traffic-segment")?;
                     for (i, byte) in bytes.iter().copied().enumerate() {
                         let observed = early.get(i / 4).ok_or("traffic-word")?.to_le_bytes();
                         let before = *observed.get(i % 4).ok_or("traffic-byte")?;
+                        let old = previous
+                            .get(i / 4)
+                            .ok_or("traffic-previous-word")?
+                            .to_le_bytes();
+                        let old = *old.get(i % 4).ok_or("traffic-previous-byte")?;
+                        *saved.previous.get_mut(offset).ok_or("traffic-length")? = old;
                         *saved.early.get_mut(offset).ok_or("traffic-length")? = before;
                         *saved.taken.get_mut(offset).ok_or("traffic-length")? = byte;
                         mismatch = mismatch.saturating_add(u32::from(before != byte));
+                        previous_mismatch =
+                            previous_mismatch.saturating_add(u32::from(old != byte));
                         offset = offset.checked_add(1).ok_or("traffic-offset")?;
                     }
                 }
@@ -186,6 +201,10 @@ fn scan(
                     take_end,
                     mismatch,
                     unstable,
+                    trace.scans.saturating_sub(1),
+                    trace.previous_begin,
+                    trace.previous_end,
+                    previous_mismatch,
                 ];
                 trace.unit_used = trace.unit_used.saturating_add(1);
                 for (column, value) in [
@@ -206,10 +225,11 @@ fn scan(
                 unit.retain_for_deferred_recycle();
                 return Err(error);
             }
-            let appended = unit
-                .recycle(access.rx_dma())
+            let credit = unit.retain_discard().ok_or("traffic-recycle-frontier")?;
+            let _appended = credit
+                .append(access.rx_dma())
                 .map_err(|_| "traffic-recycle")?;
-            *row.get_mut(25).ok_or("row")? = u32::from(appended.is_some());
+            *row.get_mut(25).ok_or("row")? = 1;
         }
         ring.complete_pending_reload(
             access.rx_dma(),
@@ -224,6 +244,8 @@ fn scan(
     *row.get_mut(26).ok_or("row")? = irq.mac_interrupt_raw().bits();
     *row.get_mut(27).ok_or("row")? = irq.mac_interrupt_status().bits();
     *row.get_mut(28).ok_or("row")? = oer_riscv::cycle32();
+    trace.previous_begin = begin;
+    trace.previous_end = copy_end;
     trace.record(row, phase, false)
 }
 
@@ -334,7 +356,7 @@ pub(super) async fn dump(trace: &Trace, console: &mut usb::Console) -> Result<()
         for offset in (0..length).step_by(16) {
             line.clear();
             write!(&mut line, "P {id:x} {offset:x}").map_err(|_| "format")?;
-            for bytes in [&unit.early, &unit.taken] {
+            for bytes in [&unit.previous, &unit.early, &unit.taken] {
                 for byte in bytes
                     .get(offset..offset.saturating_add(16).min(length))
                     .ok_or("dump-range")?
