@@ -22693,7 +22693,7 @@ pub mod bt_mac {
 
     /// The `BTLC_TIMER_CONTROL` register.
     ///
-    /// BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027. At CLOCK_SHIFT=3/CONFIG_24=0 with CONTROL0=1 in the sourced digital clock setup, the first capture word advanced approximately 2 million ticks/s at the nominal 40 MHz CPU clock. This is a measured positional-word rate, not validation of a universal crystal/shift equation. SOURCE: HW12_S31_BTLC_RATE_20261026. Without VALUE writes or TIMER_ARM assertion after digital reset, CONTROL0=1 also started reset-origin progression; the natural first-word wrap matched the rate prediction after approximately 2147.48 nominal seconds. SOURCE: HW27_S31_BTLC_NATURAL_20261027. After the measured synthetic-enable release suffix, latch requests completed with a nonadvancing zero count; the subsequent crossing wait expired. Diagnostic CONTROL0=1 restored advancing captures and a fresh CC0/source124 positive. This is a controller-run dependence, not a latch timeout or a production-admission invariant. SOURCE: HW25_S31_BLE_LATCH_RESTART_20261027.
+    /// BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027. At CLOCK_SHIFT=3/CONFIG_24=0 with CONTROL0=1 in the sourced digital clock setup, the first capture word advanced approximately 2 million ticks/s at the nominal 40 MHz CPU clock. This is a measured positional-word rate, not validation of a universal crystal/shift equation. SOURCE: HW12_S31_BTLC_RATE_20261026. Without VALUE writes or TIMER_ARM assertion after digital reset, CONTROL0=1 also started reset-origin progression; the natural first-word wrap matched the rate prediction after approximately 2147.48 nominal seconds. SOURCE: HW27_S31_BTLC_NATURAL_20261027. After the measured synthetic-enable release suffix, latch requests completed with a zero count and the subsequent crossing wait expired. Advancing captures and a fresh CC0/source124 positive were restored by CONTROL0=1 in runs04/05. No internal stop or clock mechanism or production-admission invariant is established. SOURCE: HW25_S31_BLE_LATCH_RESTART_20261027.
     pub mod btlc_timer_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -29684,7 +29684,7 @@ pub mod bt_mac {
 
     /// The `WORD_04BC_OPAQUE` register.
     ///
-    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established.
+    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset, read side effect or hardware write effect is established. Read only by diagnostics; the cited sources establish use, not read safety. SOURCE: S31_MMIO_USE_201014BC; S31_MMIO_DECLARED_201014BC.
     pub mod word_04bc_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x013fffff;
@@ -34602,9 +34602,9 @@ pub mod bt_mac {
 
     /// The `BtmacBlePhyInit` part of `BT_MAC`.
     ///
-    /// BLE PHY/task registers, including the side-effect-free opaque task view at +0x4bc. This view grants no decoded cause or acknowledgement authority.
+    /// BLE PHY/task registers, including the diagnostic opaque task view at +0x4bc. Read side effects of this view are not established; it is read only by diagnostics. This view grants no decoded cause or acknowledgement authority.
     ///
-    /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS, S31_MMIO_DECLARED_201014BC.
+    /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS, S31_MMIO_USE_201014BC, S31_MMIO_DECLARED_201014BC.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct BtmacBlePhyInit<P: oer_mmio::Placement = oer_mmio::Fixed<0x20101000>>(
         oer_mmio::Block<P, BtmacBlePhyInitWords>,

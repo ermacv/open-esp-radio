@@ -1,4 +1,4 @@
-//! Side-effect-free observations borrowed from each register's owner.
+//! Diagnostic value observations borrowed from each register's owner.
 use super::*;
 use oer_esp32s31_pac as pac;
 
@@ -12,8 +12,9 @@ pub struct BluetoothInterruptObservation {
     pub nrt_0: u32,
     pub nrt_1: u32,
 }
-/// Task-bank enable and the modeled side-effect-free +0x4bc view.
-/// The latter is opaque; no cause or CPU-output equation is implied.
+/// Task-bank enable and the modeled opaque +0x4bc view.
+/// Read side effects of +0x4bc are not established; it is read only by diagnostics.
+/// No cause or CPU-output equation is implied.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothTaskInterruptObservation {
     pub enable: u32,
@@ -61,6 +62,11 @@ fn interrupt_enable(v: pac::bt_mac::interrupt_enable::R) -> u32 {
         | (v.bits_15_16_opaque().get() << r::BITS_15_16_OPAQUE_MASK.trailing_zeros())
         | (v.bits_18_31_opaque().get() << r::BITS_18_31_OPAQUE_MASK.trailing_zeros())
 }
+fn opaque_task_state(v: pac::bt_mac::word_04bc_opaque::R) -> u32 {
+    use pac::bt_mac::word_04bc_opaque as r;
+    (v.bits_0_21_opaque().get() << r::BITS_0_21_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.bit_24_opaque()) << r::BIT_24_OPAQUE_MASK.trailing_zeros())
+}
 fn primary(bank: &pac::bt_mac::BluetoothInterruptBank) -> BluetoothInterruptObservation {
     // SOURCE: BT_MAC IRQ_ENABLE/STATUS and NRT snapshot fields in the register
     // model; reads have no acknowledgement side effect. This is sequential,
@@ -103,18 +109,21 @@ impl InterruptOutputReleasedOwner {
     }
 }
 impl TaskOwner {
-    /// Read task enables and the modeled opaque +0x4bc lanes, without writes.
+    /// Read task enables and the modeled opaque +0x4bc lanes for diagnostics.
+    /// Read side effects of +0x4bc are not established. This diagnostic method
+    /// emits no writes and is not called by production.
     /// SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027 and
-    /// S31_MMIO_DECLARED_201014BC. Unmodeled lanes and event identity stay unknown.
+    /// S31_MMIO_USE_201014BC / S31_MMIO_DECLARED_201014BC (use, not read safety).
+    /// Unmodeled lanes and event identity stay unknown.
     pub fn interrupt_observation(&self) -> BluetoothTaskInterruptObservation {
         let b = &self.registers.bluetooth.btmac_ble_phy_init;
         let state = b.read_word_04bc_opaque();
-        use pac::bt_mac::word_04bc_opaque as f;
         BluetoothTaskInterruptObservation {
             enable: interrupt_enable(b.read_interrupt_enable()),
-            opaque_state: (state.bits_0_21_opaque().get()
-                << f::BITS_0_21_OPAQUE_MASK.trailing_zeros())
-                | (u32::from(state.bit_24_opaque()) << f::BIT_24_OPAQUE_MASK.trailing_zeros()),
+            opaque_state: opaque_task_state(state),
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
