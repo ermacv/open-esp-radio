@@ -120,7 +120,7 @@ pub trait GateHardware: 'static {
         scheduler: &mut Self::Scheduler,
         bank: &mut Self::Bank,
         clock: &C,
-    ) -> bool;
+    ) -> Result<bool, bluetooth::BluetoothInterruptPolicyFault>;
     /// Sample and acknowledge the primary status.
     fn capture_primary<C: oer_time::Clock>(
         bank: &mut Self::Bank,
@@ -198,13 +198,16 @@ pub struct GateObservation {
     pub timer: GateTimerState,
 }
 
-/// A broken gate invariant; every variant preserves its entry observation.
+/// A quarantining fault retaining its gate entry or controller bank observations.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GateFault {
-    /// The invariant that failed, including any stopped-timer payload.
-    pub reason: GateFaultReason,
-    /// The unacknowledged causes and timer phase at entry.
-    pub observation: GateObservation,
+pub enum GateFault {
+    /// A gate protocol invariant, with the exact handler entry observations.
+    Invariant {
+        reason: GateFaultReason,
+        observation: GateObservation,
+    },
+    /// Controller admission or release failed with all bank observations.
+    InterruptPolicy(bluetooth::BluetoothInterruptPolicyFault),
 }
 
 /// The precise invariant that quarantined the gate's owners.
@@ -222,9 +225,9 @@ pub enum GateFaultReason {
     VacantTimer,
     /// A captured BTLC wrap exhausted the software counter; retain its value.
     ControllerTimeOverflow(super::ControllerTimeOverflowExhausted),
-    /// An exact NRT pair contained the primary overflow clear lane; neither
+    /// An exact NRT pair contained a primary-owned fault or overflow clear lane; neither
     /// bank was acknowledged and both observations remain retained.
-    NrtControllerTimeOverflow(bluetooth::BluetoothNrtInterruptFault),
+    NrtPrimaryFault(bluetooth::BluetoothNrtInterruptFault),
 }
 
 /// Why the gate refused a request or could not exchange it.
@@ -360,6 +363,7 @@ impl<H: GateHardware> BluetoothInterruptStorage<H> {
                 plans,
                 pending,
                 reply: signals.reply,
+                fault: signals.fault,
             },
             BluetoothInterruptsOf {
                 _irq: irq,
@@ -390,6 +394,7 @@ pub struct BluetoothInterruptEnds<H: GateHardware, X: SignalExecutor + 'static> 
     plans: Sender<H::TimerPlan>,
     pending: Receiver<H::TimerWork>,
     reply: &'static IrqSignal<X>,
+    fault: &'static OnceValue<GateFault>,
 }
 
 impl<H: GateHardware, X: SignalExecutor + 'static> BluetoothInterruptEnds<H, X> {
@@ -403,6 +408,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static> BluetoothInterruptEnds<H, X> 
                 replies: self.replies,
                 ring: ring.clone(),
                 reply: self.reply,
+                fault: self.fault,
                 awaiting: false,
             },
             ModemLpTimerPort {
@@ -480,7 +486,13 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
             scheduler,
         } = &mut self.bank
         {
-            let replied = H::serve_request(scheduler, registers, clock);
+            let replied = match H::serve_request(scheduler, registers, clock) {
+                Ok(replied) => replied,
+                Err(cause) => {
+                    let _first = self.signals.fault.set(GateFault::InterruptPolicy(cause));
+                    return self.check_fault();
+                }
+            };
             let capture = H::capture_primary(registers, clock);
             let published = self
                 .signals
@@ -492,10 +504,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
                 return self.check_fault();
             }
             if let Err(cause) = H::capture_nrt(registers) {
-                self.fault(
-                    GateFaultReason::NrtControllerTimeOverflow(cause),
-                    observation,
-                );
+                self.fault(GateFaultReason::NrtPrimaryFault(cause), observation);
                 return self.check_fault();
             }
             // A service barrier completes only after the entry's pending
@@ -514,7 +523,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
     }
 
     fn fault(&self, reason: GateFaultReason, observation: GateObservation) {
-        let _first = self.signals.fault.set(GateFault {
+        let _first = self.signals.fault.set(GateFault::Invariant {
             reason,
             observation,
         });
@@ -690,6 +699,7 @@ pub struct BluetoothInterruptGate<H: GateHardware, X: SignalExecutor + 'static, 
     requests: Sender<Request<H>>,
     replies: Receiver<Reply<H>>,
     ring: R,
+    fault: &'static OnceValue<GateFault>,
     reply: &'static IrqSignal<X>,
     awaiting: bool,
 }
@@ -901,7 +911,7 @@ impl GateHardware for ChipGate {
         scheduler: &mut Self::Scheduler,
         bank: &mut Self::Bank,
         clock: &C,
-    ) -> bool {
+    ) -> Result<bool, bluetooth::BluetoothInterruptPolicyFault> {
         scheduler.service(bank, clock)
     }
 
@@ -1031,6 +1041,17 @@ impl core::fmt::Debug for GateOpenRefused {
 }
 
 impl<X: SignalExecutor + 'static, R: RadioDoorbell> BluetoothInterruptGate<ChipGate, X, R> {
+    /// Publish the first admission fault before initialization, retaining the
+    /// caller's owners. The handler returns it without any hardware access;
+    /// the image records and resets without dropping the interrupted owner.
+    pub(crate) fn quarantine_interrupt_policy(
+        &self,
+        cause: bluetooth::BluetoothInterruptPolicyFault,
+    ) {
+        let _first = self.fault.set(GateFault::InterruptPolicy(cause));
+        self.ring.ring();
+    }
+
     /// Open the gates with the epoch's owners: the handler prepares the
     /// bank's controller output, then starts the runtime timer. The gate
     /// exists only once its part is bound

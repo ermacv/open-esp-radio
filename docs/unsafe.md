@@ -894,6 +894,31 @@ owners. MMIO outside the restricted PAC must use typed accessors. Missing
 register fields are reviewed in `chips/<chip>/registers/` and regenerated
 into the PAC, never reconstructed with local masks in a HAL or adapter.
 
+Bluetooth admission checks primary and task enables before HAL/PHY
+initialization can mask inherited lanes. `ForeignEnable` retains primary
+enables, masked status, NRT words and task enables. The opaque task +0x4bc
+word is diagnostic-only; production never reads it. The typed production set
+covers baseline fault/overflow, dynamic scheduler and task14 lifecycle lanes.
+Terminal masking covers sourced primary feature lanes and all task enables,
+including unnamed task17. A fresh visible-fault check precedes masking;
+fixed non-fault W1C images are written under the mask after task RUN-disable,
+followed by CONTROL1/2 and zero-enable verification. No enable is reopened and
+no matrix route changes. Bank0[15] and bank1[8/9/12] are absent from the fixed
+images, so a late masked fault is never blindly erased. Task acknowledgement
+uses the sourced WT all-lane strobe. Masked pending is not observable; release
+establishes fixed acknowledgement writes and zero enables, not zero pending
+or producer shutdown. `ReleaseNotQuiet` retains nonzero enables or unexpected
+visible observations. SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`.
+Bank1 CC0/CC1/overflow have hardware coverage from
+`hw32-20261027-ble-masked-01` (#757); bank0/NRT and other feature lanes are
+vendor-covered and not hardware-verified. Both named faults quarantine the task/IRQ owners and reach safe
+`fatal::reset_recording`. The same 44-byte BLE gate slot has a reason-tagged
+eight-word payload: seven policy source words and one reserved zero word.
+Next-boot output reports the observed banks. Bank1[0,2] and task17 remain
+opaque with their existing SOURCEs. CTE +0x4c4/+0x4c8/+0x4cc is outside this
+policy; production has no enabled CTE interrupt consumer. Sequential readback
+is not a producer-drain proof.
+
 Bluetooth controller-time overflow stays with the primary IRQ bank owner.
 Preparation arms bank-one `CONTROLLER_TIME_OVERFLOW` in baseline `0x1302`;
 P3 acknowledges its saved snapshot and publishes a checked wrap count as a
@@ -909,12 +934,13 @@ word in a named fault. B0 uses the same 44-byte retained slot for these reasons,
 without releasing owners, through `fatal::reset_recording`; the next boot
 prints the diagnostic. No additional unsafe sharing is involved.
 
-NRT acknowledgement checks the exact sampled pair against the shared primary
-overflow clear lane before either clear. A pair containing that lane returns a
+NRT acknowledgement checks the exact sampled pair against shared primary
+fault and overflow clear lanes before either clear. A pair containing one returns a
 named fault preserving both words; the gate quarantines its owners and B0
 records the later pair separately from the entry observations in the same
 44-byte slot before `fatal::reset_recording`. NRT cannot consume a primary
-overflow observation without its count being published.
+overflow observation or blindly clear a primary fault. Arrivals absent from
+the affine sample are not included in its acknowledgement.
 
 The Bluetooth modem LP timer retains its register authority in the permanently
 bound handler throughout software queue work. P2 receives only a positional
@@ -943,7 +969,7 @@ B0 procedure logs them and includes them in its run report.
 The handler permanently retains a copyable, read-only `BtdmLpTimerStatus`
 capability for the side-effect-free LP cause word, independent of the timer's
 runtime-control owner. A vacant timer with nonzero LP status is an invariant
-failure. `GateFault` retains the full entry LP cause, both NRT cause words
+failure. `GateFault::Invariant` retains the full entry LP cause, both NRT cause words
 when the bank is present (explicitly unavailable otherwise), the timer phase,
 and the stopped-timer fault's pending bytes and raw unexpected status.
 The first fault is published once; subsequent service returns it without

@@ -13,6 +13,16 @@ use std::{
     vec::Vec,
 };
 
+fn invariant(fault: GateFault) -> (GateFaultReason, GateObservation) {
+    match fault {
+        GateFault::Invariant {
+            reason,
+            observation,
+        } => (reason, observation),
+        GateFault::InterruptPolicy(cause) => panic!("expected gate entry, got {cause:?}"),
+    }
+}
+
 /// What the handler did, in order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Op {
@@ -48,6 +58,7 @@ struct Model {
     nrt: VecDeque<bool>,
     nrt_fault: Option<bluetooth::BluetoothNrtInterruptFault>,
     channel: VecDeque<bool>,
+    policy_fault: Option<bluetooth::BluetoothInterruptPolicyFault>,
     timer: VecDeque<Step>,
     lp_status: u32,
     nrt_status: [u32; 2],
@@ -113,10 +124,17 @@ impl GateHardware for Fake {
         Timer(timer.0)
     }
 
-    fn serve_request<C: oer_time::Clock>(_: &mut Scheduler, bank: &mut FakeBank, _: &C) -> bool {
+    fn serve_request<C: oer_time::Clock>(
+        _: &mut Scheduler,
+        bank: &mut FakeBank,
+        _: &C,
+    ) -> Result<bool, bluetooth::BluetoothInterruptPolicyFault> {
         let mut model = bank.model.lock().expect("one test thread");
         model.ops.push(Op::ChannelRequest);
-        model.channel.pop_front().unwrap_or(false)
+        if let Some(cause) = model.policy_fault.take() {
+            return Err(cause);
+        }
+        Ok(model.channel.pop_front().unwrap_or(false))
     }
 
     fn capture_primary<C: oer_time::Clock>(bank: &mut FakeBank, _: &C) -> PrimaryInterruptCapture {
@@ -544,7 +562,7 @@ fn stopped_timer_work_is_retained_as_a_fault() {
     assert!(harness.fault.get().is_some());
     assert!(harness.port.take_work().is_none());
     assert_eq!(
-        harness.fault.get().map(|fault| fault.reason),
+        harness.fault.get().map(|fault| invariant(fault).0),
         Some(GateFaultReason::StoppedTimer(
             bluetooth::BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending {
                 status: 0,
@@ -724,7 +742,7 @@ fn stopped_unknown_status_uses_the_existing_fault_path() {
     assert!(harness.fault.get().is_some());
     assert!(harness.part.retained.stopped.is_some());
     assert_eq!(
-        harness.fault.get().map(|fault| fault.reason),
+        harness.fault.get().map(|fault| invariant(fault).0),
         Some(GateFaultReason::StoppedTimer(
             bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus {
                 status: u32::MAX,
@@ -734,7 +752,7 @@ fn stopped_unknown_status_uses_the_existing_fault_path() {
     );
     harness.enter();
     assert_eq!(
-        harness.fault.get().map(|fault| fault.reason),
+        harness.fault.get().map(|fault| invariant(fault).0),
         Some(GateFaultReason::StoppedTimer(
             bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus {
                 status: u32::MAX,
@@ -809,7 +827,7 @@ fn retirement_refuses_a_same_entry_dispatch_without_draining_its_work() {
 fn vacant_timer_with_lp_cause_faults_without_acknowledging_or_returning_owners() {
     let mut harness = Harness::new();
     harness.script(|model| model.lp_status = 0x38);
-    let expected = GateFault {
+    let expected = GateFault::Invariant {
         reason: GateFaultReason::VacantTimer,
         observation: GateObservation {
             lp_status: 0x38,
@@ -835,9 +853,9 @@ fn fault_preserves_raw_lp_and_both_nrt_causes_and_the_timer_phase() {
     });
     assert!(harness.port.submit_plan(Plan).is_ok());
     let fault = harness.part.service(&harness.clock).unwrap_err();
-    assert_eq!(fault.reason, GateFaultReason::PlanWithoutPendingTimer);
+    assert_eq!(invariant(fault).0, GateFaultReason::PlanWithoutPendingTimer);
     assert_eq!(
-        fault.observation,
+        invariant(fault).1,
         GateObservation {
             lp_status: 0x40002,
             nrt_status: Some([0x80001234, 0xfedcba98]),
@@ -858,7 +876,7 @@ fn a_full_work_slot_retains_its_work_and_timer_without_publishing_or_servicing_t
     assert!(harness.part.pending.try_send(Work).is_ok());
     harness.script(|model| model.timer.push_back(Step::Pending));
     let fault = harness.part.service(&harness.clock).unwrap_err();
-    assert_eq!(fault.reason, GateFaultReason::WorkOccupied);
+    assert_eq!(invariant(fault).0, GateFaultReason::WorkOccupied);
     assert!(harness.part.retained.work.is_some());
     assert!(matches!(harness.part.timer, super::Timer::AwaitingPlan(_)));
     assert_eq!(harness.ops(), [Op::Acknowledge, Op::TimerStep]);
@@ -879,7 +897,7 @@ fn a_full_reply_slot_retains_its_reply_and_stopped_timer() {
     );
     assert!(harness.gate.requests.try_send(Request::StopTimer).is_ok());
     let fault = harness.part.service(&harness.clock).unwrap_err();
-    assert_eq!(fault.reason, GateFaultReason::ReplyOccupied);
+    assert_eq!(invariant(fault).0, GateFaultReason::ReplyOccupied);
     assert!(matches!(
         harness.part.retained.reply,
         Some(Reply::TimerStopped(_))
@@ -940,14 +958,14 @@ fn overflow_counter_exhaustion_quarantines_the_gate_with_the_original_observatio
     });
     let fault = harness.part.service(&harness.clock).unwrap_err();
     assert_eq!(
-        fault.reason,
+        invariant(fault).0,
         GateFaultReason::ControllerTimeOverflow(super::super::ControllerTimeOverflowExhausted {
             overflows: u32::MAX,
             captured_inputs: PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW,
         })
     );
-    assert_eq!(fault.observation.timer, GateTimerState::Ready);
-    assert_eq!(fault.observation.nrt_status, Some([0, 0]));
+    assert_eq!(invariant(fault).1.timer, GateTimerState::Ready);
+    assert_eq!(invariant(fault).1.nrt_status, Some([0, 0]));
     let ops = harness.ops();
     assert!(!ops.contains(&Op::Nrt));
     assert!(
@@ -1014,12 +1032,9 @@ fn unexpected_nrt_overflow_quarantines_the_bank_and_retains_the_exact_later_pair
         model.nrt_fault = Some(cause);
     });
     let fault = harness.part.service(&harness.clock).unwrap_err();
+    assert_eq!(invariant(fault).0, GateFaultReason::NrtPrimaryFault(cause));
     assert_eq!(
-        fault.reason,
-        GateFaultReason::NrtControllerTimeOverflow(cause)
-    );
-    assert_eq!(
-        fault.observation.nrt_status,
+        invariant(fault).1.nrt_status,
         Some([0, 0]),
         "entry observation must not replace the later exact sample"
     );
@@ -1034,4 +1049,70 @@ fn unexpected_nrt_overflow_quarantines_the_bank_and_retains_the_exact_later_pair
         harness.ops().is_empty(),
         "a retained fault permits no further hardware accesses"
     );
+}
+
+#[test]
+fn an_admission_policy_fault_is_absorbing_before_any_handler_register_access() {
+    use bluetooth::{
+        BluetoothInterruptObservation, BluetoothInterruptPolicyFault,
+        BluetoothInterruptPolicyObservation,
+    };
+    let mut harness = Harness::new();
+    let observation = BluetoothInterruptPolicyObservation {
+        primary: BluetoothInterruptObservation {
+            enable_0: 0x01000000,
+            enable_1: 0x5,
+            status_0: 0x12345678,
+            status_1: 0x87654321,
+            nrt_0: 0xdeadbeef,
+            nrt_1: 0xbadcaffe,
+        },
+        task_enable: 0x20000,
+    };
+    let cause = observation.admit().unwrap_err();
+    assert_eq!(
+        cause,
+        BluetoothInterruptPolicyFault::ForeignEnable(observation)
+    );
+    let fault = GateFault::InterruptPolicy(cause);
+    assert!(harness.fault.set(fault).is_ok());
+    assert_eq!(harness.part.service(&harness.clock), Err(fault));
+    assert_eq!(harness.part.service(&harness.clock), Err(fault));
+    assert!(harness.ops().is_empty());
+    assert!(!harness.part.is_open());
+}
+
+#[test]
+fn a_release_policy_fault_keeps_the_open_bank_and_stops_primary_and_nrt_service() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.ops();
+    let cause = bluetooth::BluetoothInterruptPolicyFault::ReleaseNotQuiet(
+        bluetooth::BluetoothInterruptPolicyObservation {
+            primary: bluetooth::BluetoothInterruptObservation {
+                enable_0: 0,
+                enable_1: 0,
+                status_0: 0,
+                status_1: 0x10,
+                nrt_0: 0,
+                nrt_1: 0,
+            },
+            task_enable: 0,
+        },
+    );
+    harness.script(|model| model.policy_fault = Some(cause));
+    assert_eq!(
+        harness.part.service(&harness.clock),
+        Err(GateFault::InterruptPolicy(cause))
+    );
+    assert_eq!(
+        harness.ops(),
+        [Op::Acknowledge, Op::TimerStep, Op::ChannelRequest]
+    );
+    assert!(harness.part.is_open());
+    assert_eq!(
+        harness.part.service(&harness.clock),
+        Err(GateFault::InterruptPolicy(cause))
+    );
+    assert!(harness.ops().is_empty());
 }

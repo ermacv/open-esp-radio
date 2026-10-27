@@ -35771,6 +35771,26 @@ pub mod bt_mac {
             self.0.write::<0x64>(0x00000002);
         }
 
+        /// Mask the sources of `0x18212103` in `BT_MAC.IRQ_ENABLE_0`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_0`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027, POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027.
+        #[inline]
+        pub fn clear_bluetooth_terminal_non_fault_bank_0(&mut self) {
+            let bits = self.0.read::<0x54>();
+            self.0.write::<0x54>(bits & 0xe7dedefc);
+            self.0.write::<0x58>(0x18212103);
+        }
+
+        /// Mask the sources of `0x0000207a` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027, BLOB_LIBBLE_ISO_COEX_REGISTERS, HW32_S31_BT_MASKED_FIXED_W1C_20261027, POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027.
+        #[inline]
+        pub fn clear_bluetooth_terminal_non_fault_bank_1(&mut self) {
+            let bits = self.0.read::<0x60>();
+            self.0.write::<0x60>(bits & 0xffffdf85);
+            self.0.write::<0x64>(0x0000207a);
+        }
+
         /// Sample `BT_MAC.IRQ_STATUS_SNAPSHOT_0` once, keeping the events `BT_MAC.IRQ_CLEAR_0` acknowledges (`BT_MAC.IRQ_STATUS_SNAPSHOT_0`).
         ///
         /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ.

@@ -87,7 +87,7 @@ enum Reply {
     Done,
     Flag(bool),
     IdleSampled(Result<BluetoothOutputIdleSampled, BluetoothControllerOutputReleaseError>),
-    OutputMasked(BluetoothDynamicSourcesMasked),
+    OutputMasked(Result<BluetoothDynamicSourcesMasked, BluetoothControllerOutputReleaseError>),
     OutputReleased(Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError>),
 }
 
@@ -178,12 +178,13 @@ impl SchedulerInterruptHalf {
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         clock: &impl oer_time::Clock,
-    ) -> bool {
+    ) -> Result<bool, crate::bluetooth::BluetoothInterruptPolicyFault> {
         let clock = SchedulerInterruptClock::new(clock);
-        self.service_with(|command| {
+        let mut fault = None;
+        let replied = self.service_with(|command| {
             let settle = oer_time::settle::Settle::new(super::DIAGNOSTIC_SETTLE, &clock);
             let unsettled = |_| SchedulerInterruptError::DiagnosticUnsettled;
-            Ok(match command {
+            let reply = match command {
                 Command::ServiceBarrier => Reply::Done,
                 Command::Busy => Reply::Busy(
                     interrupts
@@ -236,8 +237,25 @@ impl SchedulerInterruptHalf {
                 Command::ReleaseOutput(run) => {
                     Reply::OutputReleased(interrupts.release_idle_output(run, settle))
                 }
-            })
-        })
+            };
+            if let Reply::IdleSampled(Err(
+                BluetoothControllerOutputReleaseError::InterruptPolicy(cause),
+            ))
+            | Reply::OutputMasked(Err(
+                BluetoothControllerOutputReleaseError::InterruptPolicy(cause),
+            ))
+            | Reply::OutputReleased(Err(
+                BluetoothControllerOutputReleaseError::InterruptPolicy(cause),
+            )) = &reply
+            {
+                fault = Some(*cause);
+            }
+            Ok(reply)
+        });
+        match fault {
+            Some(fault) => Err(fault),
+            None => Ok(replied),
+        }
     }
 
     fn service_with(
@@ -512,7 +530,10 @@ impl SchedulerTaskHalf {
         &mut self,
         bell: &impl SchedulerDoorbell,
         heads: BluetoothSchedulerHeadsAbsent,
-    ) -> Result<BluetoothDynamicSourcesMasked, SchedulerInterruptError> {
+    ) -> Result<
+        Result<BluetoothDynamicSourcesMasked, BluetoothControllerOutputReleaseError>,
+        SchedulerInterruptError,
+    > {
         match self.exchange(bell, Command::MaskOutput(heads)).await? {
             (_, Reply::OutputMasked(masked)) => Ok(masked),
             _ => Err(SchedulerInterruptError::ForeignReply),

@@ -88,7 +88,7 @@ No producer of 133 is known without RF; the vendor's NRT handler has the same
 sample-and-acknowledge shape and no subscriber on this chip, so the NRT
 snapshots have no consumer here either. The part holds a gate for the bank and
 one for the timer, and touches a register owner only while
-its gate holds it. An NRT pair containing the primary overflow clear lane
+its gate holds it. An NRT pair containing a primary-owned fault or overflow clear lane
 faults before either acknowledgement; the gate retains both exact sampled
 words and quarantines its owners for the retained-record reset path.
 
@@ -200,7 +200,9 @@ Start:
    first client registers/calibrates the PHY, later clients retain its RF epoch;
 2. settle due shared tracking, enter Bluetooth common power without Wi-Fi
    reset, then enable the Bluetooth clocks;
-3. bind the arena through the scoped factory, initialize Controller HAL,
+3. bind the arena through the scoped factory, admit all inherited interrupt
+   enables against the HAL's typed production set before any HAL/PHY enable
+   write, then initialize Controller HAL,
    scheduler and modem low-power hardware, and enter Bluetooth coexistence;
 4. join BTBB and the PHY client set, finish initial/due tracking, then consume
    `BluetoothRfReady` to initialize the BLE PHY and public address;
@@ -225,10 +227,14 @@ Stop:
 2. `shutdown::retire` checks the workers and the stopped scheduler, releases
    the Controller output in alternating steps (the handler's idle sample, the
    task's list heads, the handler's mask, the task's RUN disable, the
-   handler's release), closes the bank's gate (the released bank and the
-   channel endpoint leave the handler), reunites both quiet channel endpoints
-   and has the handler stop the counter and both measured LP delivery lanes. A fault the handler
-   acknowledged during the epoch refuses the release. Return the retired
+   handler's release). Those steps also mask the sourced feature lanes and
+   task17, check visible faults before masking, write the fixed non-fault
+   primary/NRT W1C images under the mask and acknowledge the task WT bank.
+   Before closing the bank's gate they verify zero enables and reject residual
+   visible status. The released bank and channel endpoint then leave the handler;
+   retirement reunites both quiet endpoints and has the handler stop the counter
+   and both measured LP delivery lanes. A fault acknowledged during the epoch
+   refuses release. Return the retired
    Controller to `ControllerLifecycle`; only the exact running installation
    is accepted;
 3. the actor leaves BTBB/PHY and resets the Controller; the lifecycle then
@@ -270,3 +276,30 @@ and serves correlated clock requests through the mailbox.
 `firmware/apps/b0` composes actor join/tracking, the interrupt gate, H4
 Reset/Rand and 1M DTM commands, End, leave/reset and arena return. Its
 two-boot RF/count gate is qualified; hardware port conformance is unqualified.
+
+The production interrupt set is bank0 baseline15 and dynamic21/27/28, bank1
+baseline1/8/9/12 and dynamic3, and task14's pre-RUN/terminal lifecycle.
+Task14 has no vendor scan-truncation runtime consumer here. Inherited enables
+outside that explicit set cause `ForeignEnable` before initialization can
+silently remove them. Terminal nonzero readback is `ReleaseNotQuiet`.
+Both faults retain primary enables/status/NRT and task enables. Production
+never reads the opaque task +0x4bc word; that view is diagnostic-only.
+The gate publishes the first fault once and serves no later hardware or queue
+operation; the HAL/driver owners remain quarantined. B0 calls safe
+`fatal::reset_recording`, reusing its 44-byte BLE gate record, and prints all
+banks on the next boot. Opaque bank1[0,2] and task17 retain their sourced
+positional names; this policy assigns them no event identity.
+
+Release never opens ENA to inspect hidden pending or changes matrix routing.
+The handler checks faults while visible, masks, then writes fixed non-fault
+W1C images after the task's RUN-disable step. Fault lanes bank0[15] and
+bank1[8/9/12] are excluded; late masked faults remain retained. Release checks
+zero primary/task enables and rejects residual visible status, without
+claiming zero hidden pending or producer shutdown. Masked W1C for bank1
+CC0/CC1/overflow is covered by `hw32-20261027-ble-masked-01` (#757).
+Bank0/NRT and other feature lanes use vendor SOURCEs and are **not
+hardware-verified** (`POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`).
+The separate CTE +0x4c4/+0x4c8/+0x4cc bank
+is outside admission/release: production publishes the disabled CTE baseline
+and has no CTE interrupt consumer (SOURCE: `BLOB_LIBBLE_PHY_INIT_REGISTERS`,
+`BLOB_LIBBLE_HW_CTE_RING_CONTROL`).

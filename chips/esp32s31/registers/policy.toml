@@ -8220,3 +8220,17 @@ sources = ["BX10_S31_FE_FREQ_ADDRESS_20261027"]
 name = "read_tx_control0_image"
 register = "WIFI_MAC.CONTROL0"
 sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+
+[[fixed-register-images]]
+name = "clear_bluetooth_terminal_non_fault_bank_0"
+register = "BT_MAC.IRQ_CLEAR_0"
+value = 0x18212103
+masks = "BT_MAC.IRQ_ENABLE_0"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027", "POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027"]
+
+[[fixed-register-images]]
+name = "clear_bluetooth_terminal_non_fault_bank_1"
+register = "BT_MAC.IRQ_CLEAR_1"
+value = 0x0000207a
+masks = "BT_MAC.IRQ_ENABLE_1"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW32_S31_BT_MASKED_FIXED_W1C_20261027", "POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027"]

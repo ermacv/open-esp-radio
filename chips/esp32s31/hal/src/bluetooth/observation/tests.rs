@@ -52,21 +52,37 @@ fn task_bank_preserves_the_complete_enable_image() {
             let mut memory = words(image);
             let task =
                 bt_mac::BtmacBlePhyInit::host(&mut memory).expect("memory holds the instance");
-            interrupt_enable(task.read_interrupt_enable())
+            task_enable(&task)
         },
         u32::MAX,
     );
 }
 
 #[test]
-fn opaque_task_state_retains_only_the_modeled_lanes() {
+fn opaque_task_state_retains_the_complete_sourced_word() {
     check_images(
         |image| {
             let mut memory = words(image);
             let task =
                 bt_mac::BtmacBlePhyInit::host(&mut memory).expect("memory holds the instance");
-            opaque_task_state(task.read_word_04bc_opaque())
+            task.read_bluetooth_task_diagnostic_image()
         },
-        bt_mac::word_04bc_opaque::FIELDS,
+        u32::MAX,
     );
+}
+
+#[test]
+fn production_task_enable_view_is_independent_of_the_diagnostic_word() {
+    let diagnostic = 0xa5a5_5a5a;
+    let mut memory = words(diagnostic);
+    let mut bank = bt_mac::BtmacBlePhyInit::host(&mut memory).expect("instance memory");
+    bank.modify_interrupt_enable(|w| {
+        w.set_scheduler_run(false);
+        w.set_source_17(false);
+        w.set_bits_0_13_opaque(oer_mmio::Bits::constant::<0>());
+        w.set_bits_15_16_opaque(oer_mmio::Bits::constant::<0>());
+        w.set_bits_18_31_opaque(oer_mmio::Bits::constant::<0>());
+    });
+    assert_eq!(task_enable(&bank), 0);
+    assert_eq!(task(&bank).opaque_state, diagnostic);
 }

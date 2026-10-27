@@ -363,7 +363,7 @@ impl<M: ControllerMemory> Engine<M> {
             .registers
             .confirm_scheduler_heads_absent(sampled)
             .map_err(EngineOutputReleaseError::Output)?;
-        let masked = channel.mask_output(bell, heads).await?;
+        let masked = channel.mask_output(bell, heads).await??;
         let run = self.registers.disable_scheduler_run(masked);
         Ok(channel.release_output(bell, run).await??)
     }

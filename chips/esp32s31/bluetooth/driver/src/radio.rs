@@ -234,6 +234,12 @@ where
         let hal = match ControllerHalInitialized::initialize(engine, interrupts) {
             Ok(hal) => hal,
             Err(error) => {
+                if let crate::controller_hal::ControllerHalInitializationError::InterruptPolicy(
+                    fault,
+                ) = error.error
+                {
+                    self.gate.quarantine_interrupt_policy(fault);
+                }
                 self.state = State::HalFailed(error);
                 return Err(PreparationFailure { returned: None });
             }

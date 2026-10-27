@@ -80,7 +80,8 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
         engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
         interrupts: InterruptSetupOwner,
     ) -> Result<Self, ControllerHalInitializationFailure<M>> {
-        Self::initialize_with(engine, interrupts, |task, config| {
+        let admission = interrupts.admit_interrupts(engine.task_owner());
+        Self::initialize_with(engine, interrupts, admission, |task, config| {
             task.initialize_controller_hal(config)
         })
     }
@@ -91,7 +92,7 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
         interrupts: InterruptSetupOwner,
         initialize: impl FnOnce(&mut TaskResources<M>, BluetoothControllerHalInitConfig),
     ) -> Self {
-        Self::initialize_with(engine, interrupts, |task, config| {
+        Self::initialize_with(engine, interrupts, Ok(()), |task, config| {
             task.engine().initialize_hal_for_host_test(config)?;
             initialize(task, config);
             Ok(())
@@ -103,6 +104,7 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
     fn initialize_with(
         engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
         interrupts: InterruptSetupOwner,
+        admission: Result<(), oer_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault>,
         initialize: impl FnOnce(
             &mut TaskResources<M>,
             BluetoothControllerHalInitConfig,
@@ -113,9 +115,16 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
         let standalone_dtm_profile = StandaloneAlwaysAwakeDtmProfile::mint();
         let time_scale = config.controller_time_scale();
         let (mut task, interrupts) = separate_interrupt_owner(engine, interrupts);
+        if let Err(fault) = admission {
+            return Err(ControllerHalInitializationFailure {
+                error: ControllerHalInitializationError::InterruptPolicy(fault),
+                _task: task,
+                _interrupts: interrupts,
+            });
+        }
         if let Err(error) = initialize(&mut task, config) {
             return Err(ControllerHalInitializationFailure {
-                error,
+                error: ControllerHalInitializationError::Engine(error),
                 _task: task,
                 _interrupts: interrupts,
             });
@@ -132,7 +141,63 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
 /// Rejected HAL initialization retains the complete owning engine and IRQ bank.
 #[must_use]
 pub struct ControllerHalInitializationFailure<M: ControllerMemory> {
-    pub error: oer_esp32s31_hal::bluetooth::engine::EngineInitError,
+    pub error: ControllerHalInitializationError,
     _task: TaskResources<M>,
     _interrupts: InterruptBankOwner,
+}
+
+/// A refusal before hardware initialization; the failure retains both owners.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerHalInitializationError {
+    Engine(oer_esp32s31_hal::bluetooth::engine::EngineInitError),
+    InterruptPolicy(oer_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_esp32s31_hal::{bluetooth::*, root::RadioHardware};
+    #[test]
+    fn foreign_enable_retains_the_original_owners_without_running_hal_initialization() {
+        let (_, partitions) = RadioHardware::for_host_test()
+            .split::<crate::test_clocks::TestClockBackend, _>(
+                (),
+                oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            );
+        let (engine, interrupts) =
+            crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
+        let installation = engine.installation();
+        let observation = BluetoothInterruptPolicyObservation {
+            primary: BluetoothInterruptObservation {
+                enable_0: 0,
+                enable_1: 0x5,
+                status_0: 0x1234,
+                status_1: 0x5678,
+                nrt_0: 0xdeadbeef,
+                nrt_1: 0xbadcaffe,
+            },
+            task_enable: 0x20000,
+        };
+        let mut writes = 0;
+        let result = ControllerHalInitialized::initialize_with(
+            engine,
+            interrupts,
+            observation.admit(),
+            |_, _| {
+                writes += 1;
+                Ok(())
+            },
+        );
+        let failure = result
+            .err()
+            .expect("foreign enables must refuse initialization");
+        assert_eq!(writes, 0);
+        assert_eq!(failure._task.installation(), installation);
+        assert_eq!(
+            failure.error,
+            ControllerHalInitializationError::InterruptPolicy(
+                BluetoothInterruptPolicyFault::ForeignEnable(observation)
+            )
+        );
+    }
 }

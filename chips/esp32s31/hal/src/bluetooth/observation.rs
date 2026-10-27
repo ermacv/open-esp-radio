@@ -12,8 +12,8 @@ pub struct BluetoothInterruptObservation {
     pub nrt_0: u32,
     pub nrt_1: u32,
 }
-/// Task-bank enable and the modeled opaque +0x4bc view.
-/// Read side effects of +0x4bc are not established; it is read only by diagnostics.
+/// Task-bank enable and complete opaque +0x4bc word.
+/// Diagnostic-only: read side effects of +0x4bc are not established.
 /// No cause or CPU-output equation is implied.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothTaskInterruptObservation {
@@ -62,24 +62,9 @@ fn interrupt_enable(v: pac::bt_mac::interrupt_enable::R) -> u32 {
         | (v.bits_15_16_opaque().get() << r::BITS_15_16_OPAQUE_MASK.trailing_zeros())
         | (v.bits_18_31_opaque().get() << r::BITS_18_31_OPAQUE_MASK.trailing_zeros())
 }
-fn opaque_task_state(v: pac::bt_mac::word_04bc_opaque::R) -> u32 {
-    use pac::bt_mac::word_04bc_opaque as r;
-    (u32::from(v.bit_0_opaque()) << r::BIT_0_OPAQUE_MASK.trailing_zeros())
-        | (v.bits_1_2_opaque().get() << r::BITS_1_2_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(v.bit_3_opaque()) << r::BIT_3_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(v.bit_4_opaque()) << r::BIT_4_OPAQUE_MASK.trailing_zeros())
-        | (v.bits_5_9_opaque().get() << r::BITS_5_9_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(v.bit_10_opaque()) << r::BIT_10_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(v.bit_11_opaque()) << r::BIT_11_OPAQUE_MASK.trailing_zeros())
-        | (v.bits_12_13_opaque().get() << r::BITS_12_13_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(v.scheduler_run()) << r::SCHEDULER_RUN_MASK.trailing_zeros())
-        | (u32::from(v.bit_15_opaque()) << r::BIT_15_OPAQUE_MASK.trailing_zeros())
-        | (v.bits_16_19_opaque().get() << r::BITS_16_19_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(v.bit_20_opaque()) << r::BIT_20_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(v.bit_21_opaque()) << r::BIT_21_OPAQUE_MASK.trailing_zeros())
-        | (u32::from(v.bit_24_opaque()) << r::BIT_24_OPAQUE_MASK.trailing_zeros())
-}
-fn primary(bank: &pac::bt_mac::BluetoothInterruptBank) -> BluetoothInterruptObservation {
+pub(super) fn primary<B: oer_mmio::Placement>(
+    bank: &pac::bt_mac::BluetoothInterruptBank<B>,
+) -> BluetoothInterruptObservation {
     // SOURCE: BT_MAC IRQ_ENABLE/STATUS and NRT snapshot fields in the register
     // model; reads have no acknowledgement side effect. This is sequential,
     // not an atomic cross-bank snapshot or a clear authority.
@@ -121,20 +106,34 @@ impl InterruptOutputReleasedOwner {
     }
 }
 impl TaskOwner {
-    /// Read task enables and the modeled opaque +0x4bc lanes for diagnostics.
-    /// Read side effects of +0x4bc are not established. This diagnostic method
-    /// emits no writes and is not called by production.
+    /// Read all modeled task enables without accessing the opaque +0x4bc word.
+    pub fn interrupt_enable_image(&self) -> u32 {
+        task_enable(&self.registers.bluetooth.btmac_ble_phy_init)
+    }
+
+    /// Read task enables and the complete opaque +0x4bc word.
+    /// Diagnostic-only: read side effects of +0x4bc are not established.
+    /// Production admission and release use only `interrupt_enable_image`.
     /// SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027 and
     /// S31_MMIO_USE_201014BC / S31_MMIO_DECLARED_201014BC (use, not read safety).
-    /// Unmodeled lanes and event identity stay unknown.
+    /// Unmodeled lanes and event identity stay unknown; the sourced whole-word
+    /// read retains those bits without adding field semantics.
     pub fn interrupt_observation(&self) -> BluetoothTaskInterruptObservation {
-        let b = &self.registers.bluetooth.btmac_ble_phy_init;
-        let state = b.read_word_04bc_opaque();
-        BluetoothTaskInterruptObservation {
-            enable: interrupt_enable(b.read_interrupt_enable()),
-            opaque_state: opaque_task_state(state),
-        }
+        task(&self.registers.bluetooth.btmac_ble_phy_init)
     }
+}
+
+pub(super) fn task<B: oer_mmio::Placement>(
+    b: &pac::bt_mac::BtmacBlePhyInit<B>,
+) -> BluetoothTaskInterruptObservation {
+    BluetoothTaskInterruptObservation {
+        enable: task_enable(b),
+        opaque_state: b.read_bluetooth_task_diagnostic_image(),
+    }
+}
+
+pub(super) fn task_enable<B: oer_mmio::Placement>(b: &pac::bt_mac::BtmacBlePhyInit<B>) -> u32 {
+    interrupt_enable(b.read_interrupt_enable())
 }
 
 #[cfg(test)]
