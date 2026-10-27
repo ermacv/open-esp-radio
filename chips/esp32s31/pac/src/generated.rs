@@ -30534,7 +30534,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Number of entries of the Controller-SRAM device table the filter accept list and the resolving list share, valid or not; hardware walks this many entries.
+            /// Number of entries of the Controller-SRAM eight-byte device table (filter accept list and periodic advertiser list entries; the IRK resolving list is a separate 64-byte table), valid or not; hardware walks this many entries.
             #[inline]
             pub const fn entry_count(self) -> u8 {
                 self.0 as u8
@@ -30557,7 +30557,7 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Number of entries of the Controller-SRAM device table the filter accept list and the resolving list share, valid or not; hardware walks this many entries.
+            /// Number of entries of the Controller-SRAM eight-byte device table (filter accept list and periodic advertiser list entries; the IRK resolving list is a separate 64-byte table), valid or not; hardware walks this many entries.
             #[inline]
             pub const fn entry_count(&self) -> u8 {
                 self.0 as u8

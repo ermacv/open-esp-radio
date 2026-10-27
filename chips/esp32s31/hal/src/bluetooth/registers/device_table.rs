@@ -1,7 +1,8 @@
 //! Hardware publication of the Controller-SRAM device table.
 //!
-//! The filter accept list and the resolving list share one table of 8-byte
-//! entries in Controller SRAM. Hardware walks it from the published first
+//! The filter accept list and the periodic advertiser list share one table
+//! of 8-byte entries in Controller SRAM; the IRK resolving list is a separate
+//! table of 64-byte entries. Hardware walks it from the published first
 //! entry for the published number of entries; every table change republishes
 //! both, the count first, as the vendor's `ble_hw.c` table writers do.
 

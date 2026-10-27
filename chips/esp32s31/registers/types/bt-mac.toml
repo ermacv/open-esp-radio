@@ -4080,7 +4080,7 @@ description = "Device-table control word. Every device-table change rewrites the
 name = "ENTRY_COUNT"
 bits = "7:0"
 class = "plain"
-description = "Number of entries of the Controller-SRAM device table the filter accept list and the resolving list share, valid or not; hardware walks this many entries."
+description = "Number of entries of the Controller-SRAM eight-byte device table (filter accept list and periodic advertiser list entries; the IRK resolving list is a separate 64-byte table), valid or not; hardware walks this many entries."
 value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBBLE_DEVICE_TABLE"] }
 
 [[registers.fields]]
