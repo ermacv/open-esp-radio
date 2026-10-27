@@ -92,6 +92,7 @@ async fn execute_maintain<B: PlatformClockBackend, P, D, O>(
     initial: RadioTransaction<B, ConcurrentPhy>,
     _: &mut P,
     _: O,
+    _: &mut impl crate::sar_pilot::Service,
 ) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ()>) {
     let _short_delay = core::marker::PhantomData::<D>;
     wait(timer, initial).await
@@ -100,6 +101,19 @@ async fn execute_maintain<B: PlatformClockBackend, P, D, O>(
 fn report(fault: Fault) -> ! {
     std::panic::panic_any(fault)
 }
+struct Pilot;
+impl crate::sar_pilot::Service for Pilot {
+    async fn sample(
+        &mut self,
+        phy: oer_esp32s31_hal::domain::transaction::PhyTransaction,
+        _: bool,
+    ) -> (
+        oer_esp32s31_hal::domain::transaction::PhyTransaction,
+        Result<crate::sar_pilot::Sample, crate::sar_pilot::Error>,
+    ) {
+        (phy, Err(crate::sar_pilot::Error::DeadlineOverflow))
+    }
+}
 type Domain = RadioDomain<TestClockBackend, ConcurrentPhy>;
 type Lifecycle<'a> = Pin<Box<dyn Future<Output = (Domain, Result<(), ()>)> + 'a>>;
 fn future<'a>(
@@ -107,6 +121,7 @@ fn future<'a>(
     radio: Domain,
     timer: &'a VirtualClock,
     platform: &'a mut (),
+    pilot: &'a mut Pilot,
 ) -> Lifecycle<'a> {
     match operation {
         Operation::Register => Box::pin(operations::register_concurrent_phy::<_, _, Delay, _>(
@@ -122,6 +137,7 @@ fn future<'a>(
             radio,
             platform,
             (),
+            pilot,
         )),
         Operation::Wake => Box::pin(operations::wake_concurrent_rf::<_, Delay>(
             timer, radio, &Clocks,
@@ -148,7 +164,8 @@ fn production_lifecycle_futures_record_the_operation_before_poll_and_while_waiti
             let handle = radio.fault_handle();
             let timer = VirtualClock::new();
             let mut platform = ();
-            let mut future = future(operation, radio, &timer, &mut platform);
+            let mut pilot = Pilot;
+            let mut future = future(operation, radio, &timer, &mut platform, &mut pilot);
             if polled {
                 assert!(
                     future
@@ -179,7 +196,8 @@ fn production_lifecycle_futures_reunite_after_virtual_time_without_a_cancellatio
         let handle = radio.fault_handle();
         let timer = VirtualClock::new();
         let mut platform = ();
-        let mut future = future(operation, radio, &timer, &mut platform);
+        let mut pilot = Pilot;
+        let mut future = future(operation, radio, &timer, &mut platform, &mut pilot);
         let mut cx = Context::from_waker(Waker::noop());
         assert!(future.as_mut().poll(&mut cx).is_pending());
         timer.advance(Duration::from_micros(100)).unwrap();

@@ -24,6 +24,7 @@ use oer_time::{Clock, Timer};
 type Result<T> = core::result::Result<T, RejectReason>;
 
 pub struct Radio {
+    phy_pilot: crate::phy_pilot::Client,
     domain: Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
     radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     clocks: ChipClocks,
@@ -65,6 +66,7 @@ impl Radio {
         station: [u8; 6],
         access_point: [u8; 6],
         rng: Rng,
+        phy_pilot: crate::phy_pilot::Client,
     ) -> &'storage mut Self {
         let radio_fault = domain.fault_handle();
         crate::place_diagnostic_radio!(
@@ -87,6 +89,7 @@ impl Radio {
                 station: station,
                 access_point: access_point,
                 rng: rng,
+                phy_pilot: phy_pilot,
                 ready: None,
                 projection: [0; projection::WORDS],
                 poisoned: false,
@@ -580,6 +583,7 @@ impl Radio {
                 &mut port,
                 &crate::PHY_CLOCK,
                 &mut observer,
+                &mut self.phy_pilot,
             ));
             crate::hold::metrics::observe(future.as_mut(), &crate::PHY_CLOCK, &metrics).await
         };
@@ -675,6 +679,7 @@ impl Radio {
             CaptureRadio::Ieee802154 { power_dbm } => {
                 self.ieee802154
                     .enter(
+                        &mut self.phy_pilot,
                         &mut self.domain,
                         self.radio_fault,
                         &self.clocks,
@@ -738,6 +743,7 @@ impl Radio {
                     require_radio(self.domain.take(), self.radio_fault),
                     &mut (),
                     crate::capture_observer!(self),
+                    &mut self.phy_pilot,
                 )
                 .await;
                 self.domain = Some(domain);
@@ -1068,6 +1074,7 @@ impl Radio {
                             Observer {
                                 store: &mut self.health,
                             },
+                            &mut self.phy_pilot,
                         )
                         .await;
                         self.domain = Some(domain);

@@ -47,6 +47,7 @@ type Backend = Esp32s31Radio<
     ChipClocks,
     oer_espressif_executor::Cooperative<EmbassyClock>,
     NoopPhyTargetObserver,
+    crate::phy_pilot::Client,
 >;
 static DIRECT_BACKEND: StaticCell<Backend> = StaticCell::new();
 struct DirectOutput {
@@ -57,17 +58,23 @@ static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
 static DIRECT_READY: oer_memory::ClaimCell<Result<&'static mut DirectOutput, &'static str>> =
     oer_memory::ClaimCell::new();
 oer_esp32s31_hal::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
+
+use crate::phy_pilot;
+
 // SAFETY: the production runtime script maps .hot.text.* to executable SRAM;
 // each generated wrapper retains the interrupt-table ABI and owned part.
 oer_interrupt_table::interrupt_table! {
     lines: oer_espressif_staged_runtime::interrupts::LINES,
     handler_attributes: [#[unsafe(link_section = ".hot.text.rx_chain_vectors")]];
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
+    // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:
+    // only P2 line17 before16 is measured on S31.
+    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
     radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
-    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 19, context app, hart 0, Hardware;
-    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 20, context app, hart 0, Hardware;
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
+    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
 }
 oer_espressif_executor::tasks! {
     RadioTasks: InterruptExecutor<2> {
@@ -123,6 +130,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(lp) = LpClock::<RcSlow>::claim() else {
         fail("claim");
     };
+    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
     let backend = Esp32s31Radio::new(
         domain,
         partitions.wifi_coex,
@@ -130,6 +138,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_espressif_executor::Cooperative::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
+        phy_pilot,
     );
     let Some(backend) = DIRECT_BACKEND.try_init(backend) else {
         fail("direct-backend");

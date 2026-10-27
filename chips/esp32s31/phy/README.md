@@ -297,8 +297,8 @@ Requests can postpone the tick; no one-period maximum deferral or shift counter
 is enforced. The actor serializes
 its own retunes but checks no granted hard-window calendar. `EmbassyClock`
 uses the executor's SYSTIMER timer service: Alarm0 at P3 acknowledges and pends
-P2, which dispatches timers and polls tasks. There is no dedicated PHY timer
-handler. Wi-Fi images declare an actor task; B0 polls the attached actor inside
+P2, which dispatches timers and polls tasks. The direct maintenance
+TXDC/PWDET path has a separate SAR/PWDET timer handler at P2. Wi-Fi images declare an actor task; B0 polls the attached actor inside
 its P2 driver task, and the PHY diagnostic image drives concurrent PHY calls
 directly from P2.
 
@@ -312,13 +312,46 @@ registration and common tracking. Borrowed typed step tokens carry each
 hardware command directly to one poll loop; consuming a completion updates
 that same cursor and coefficient bank. Short ready leaves share a bounded
 poll, while an incomplete DC/IQ observation waits on the caller's timer.
-Required 1–20 us hardware settles count machine cycles through `oer-riscv`,
+Other required 1–20 us hardware settles count machine cycles through `oer-riscv`,
 using the stable frequency adopted by the HAL clock owner at runtime handover.
 PBus/I2C leaves retain their bounded direct observation policy.
-TXDC/PWDET retains its direct execution inside the owned PHY transaction,
-without CPU-admission queries between its operations. Runtime SAR readiness
-uses [timer-backed retries](src/tx/sar.rs) under our 40 µs engineering deadline;
-the ROM reference supplies no readiness deadline. A sample that reads ready
+TXDC/PWDET retains its direct search/root interpreter inside the owned PHY
+transaction, without CPU-admission queries between its direct operations. Each runtime SAR/PWDET conversion uses the explicit [step machine](src/tx/sar.rs)
+and [affine timer service](src/sar_pilot.rs), with no future polled for its
+hardware progress. The actor submits `PhyTransaction`, TIMG0's program owner,
+the binding proof and machine through a one-slot queue. `DetachedRadioDomain`
+stays in the waiting future, retaining cancellation and clock obligations;
+calibration state is outside the transferred hardware half. Between events
+the handler retains the active bundle in its own cell. Completion returns it
+through a one-slot queue and a same-level `IrqSignal<InterruptExecutor<2>>`
+declared with `FromExecutorLevel`. The leaf still suspends asynchronously at
+its submission boundary: `Client::sample` has one `poll_fn` to validate/register
+the executor context and one to wait for the reply. The async leaf-step count
+is unchanged: the reply wait replaces the readiness-timer wait.
+The table permanently binds TIMG0's interrupt owner as `Exempt(ExecutorLevel)`.
+Startup masks and CLR-clears old RAW; the handler acknowledges each event
+before rearming. Rearm does not acknowledge old pending. The measured S31 P2
+pair assigns FROM_CPU2 line 17 ahead of TIMG0 line 16; other pairs/levels are
+unqualified by that measurement. P1 entries use 40–42, retaining their order.
+Each event performs one bounded I/O atom. The vendor's tone/trigger minima
+are 1/2 µs. The machine returns those fixed relative intervals after tone arm
+and SAR trigger; the handler reloads them after the edge without subtracting a
+second clock reading. Crossing a microsecond boundary between the edge and
+rearm cannot shorten either interval. Handler lateness and programming overhead
+lengthen the wait; no upper latency bound is claimed.
+An acknowledged event without a request or active bundle records
+`SarAlarmWithoutBundle` with the sampled RAW/ST and both queue lengths. All
+owners remain held while the image retains the reason and resets. Cancelling
+the waiting lifecycle future records its admitted operation; an in-flight
+alarm remains quarantined until reset, while completion already stopped/masked
+it before publishing the reply.
+Readiness retries rearm TIMG0 for 1 µs under our 40 µs engineering limit;
+the ROM reference supplies no readiness deadline. Other PHY children,
+including cold registration's existing graph bindings, remain async. The
+handler does not call cooperative admission or a task waker. The current P2
+executor round and P3 work can delay it; continuous higher-line P2 work can
+starve it. RF quality, SRAM/stack cost and service latency for this pilot are
+unqualified; the virtual-time tests establish ordering and minimum waits. A sample that reads ready
 succeeds at any time, even after a late wake-up; the deadline bounds only the
 not-ready case.
 Interrupts remain enabled and the physical owner remains held until terminal

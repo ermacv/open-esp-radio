@@ -316,7 +316,7 @@ pub(crate) fn configure_phy_front_end_update(registers: &mut impl SharedPhyAcces
     oer_esp32s31_hal::phy::baseband::update_front_end(registers);
 }
 
-/// Arm one PWDET tone sample before the async one-microsecond timer edge.
+/// Arm one PWDET tone sample before its one-microsecond minimum settle.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn arm_phy_power_detector_tone(registers: &mut impl SharedPhyAccess) {
     registers.set_power_detector_tone_armed(true);

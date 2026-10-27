@@ -15,10 +15,13 @@ oer-espressif-analog = { path = "../../espressif/analog" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-time = { path = "../../../portable/time" }
 oer-cooperate = { path = "../../../portable/cooperate" }
+oer-memory = { path = "../../../portable/memory" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 pin-project-lite = "0.2.17"
 oer-esp32s31-hal = { path = "../hal" }
 
 [dev-dependencies]
+oer-interrupt-table = { path = "../../../portable/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-esp32s31-hal = { path = "../hal", features = ["test-support"] }
 

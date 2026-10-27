@@ -9,5 +9,4 @@ pub mod power_detector;
 
 pub(crate) mod gain;
 
-#[cfg(any(target_arch = "riscv32", test))]
 pub(crate) mod sar;

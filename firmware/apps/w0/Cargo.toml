@@ -10,6 +10,7 @@ description = "W0: the radio system registers the PHY, joins, tracks and leaves 
 build = "build.rs"
 
 [dependencies]
+oer-memory = { path = "../../../portable/memory" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 static_cell = { workspace = true }

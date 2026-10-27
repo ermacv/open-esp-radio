@@ -1,70 +1,187 @@
-//! Timer-woken TX detector readiness while the caller retains its PHY owner.
-use oer_time::{Duration, Timer};
+//! One SAR/PWDET conversion, advanced by timer events with short I/O loans.
+use oer_time::{Clock, Duration, Instant};
 
 // MEASUREMENT: s31-a run 1792521908966-002e2465, 21,512 conversions,
-// 100 forced tracking ticks, post-2-us-settle ready observations <= 20 us;
-// none censored by the 100-ms acquisition watchdog. Keep twice that maximum.
-// The limit bounds only the not-ready case: a sample that reads ready succeeds
-// whenever it is taken (see [`wait`]).
+// 100 forced tracking ticks, post-2-us-settle ready observations <= 20 us.
+// Twice that maximum bounds only not-ready samples, never late ready samples.
 pub(crate) const READY_LIMIT: Duration = Duration::from_micros(40);
 const SAMPLE_INTERVAL: Duration = Duration::from_micros(1);
 
+pub(crate) trait Io {
+    fn arm_tone(&mut self);
+    fn trigger(&mut self);
+    fn ready(&mut self) -> bool;
+    fn clear_tone(&mut self);
+    fn sample(&mut self) -> u16;
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct Readiness {
+pub struct Readiness {
     pub elapsed_micros: u64,
     pub observations: u16,
     pub ready: bool,
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Sample {
+    pub value: u16,
+    pub readiness: Readiness,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Error {
+    NotReady(Readiness),
+    DeadlineOverflow,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum State {
+    Arm,
+    Trigger(Instant),
+    Observe {
+        at: Instant,
+        started: Instant,
+        deadline: Instant,
+    },
+    Complete(Result<Sample, Error>),
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Event {
+    Wait { at: Instant, delay: Duration },
+    Complete(Result<Sample, Error>),
+}
 
-/// SOURCE(esp32s31): complete rev0 ROM `phy_pwdet_tone_start` samples all
-/// three SAR-ready bits after its 1/2-us tone/trigger settles. It does not
-/// provide a readiness deadline. The Rust owner keeps both settling edges,
-/// and this phase retains its mutable physical borrow across timer waits.
-///
-/// Readiness is judged by the sample alone. A sample that reads ready
-/// succeeds whatever time has elapsed, including when the task woke late and
-/// the sample was taken after the limit: a completed conversion stayed
-/// unchanged through the tested 100 us after ready (longer retention is
-/// unqualified), reads did not consume it, and its data is valid only after a
-/// ready sample. `limit` bounds only the not-ready case: if no sample
-/// reads ready by the deadline, the result is a failure. `elapsed_micros` and
-/// `observations` report the wait either way.
-///
-/// SOURCE(esp32s31): stand run hw17-20261027-sar-isolated-03 (PR #705,
-/// `oer-notes/research/hw-sar-hold.md`): a completed `+0x81c` result is
-/// unchanged through at least 100 us after ready, with repeated reads and with
-/// the tone arm cleared; before ready the data changes.
-pub(crate) async fn wait(
-    timer: &impl Timer,
-    limit: Duration,
-    mut sample: impl FnMut() -> bool,
-) -> Readiness {
-    let started = timer.now();
-    let Some(deadline) = started.checked_add(limit) else {
-        return Readiness {
-            elapsed_micros: 0,
+/// SOURCE: rev0 ROM `phy_pwdet_tone_start`: tone arm, minimum 1 us,
+/// SAR trigger, minimum 2 us, ready observation, optional clear, result read.
+/// Each event executes at most one bounded atom. Edge events return a fresh
+/// relative minimum interval; the driver arms it without subtracting a clock.
+/// HW17 (`research/hw-sar-hold.md`) qualifies retained
+/// ready/result through 100 us. A ready sample succeeds even after the limit;
+/// an unready sample then fails without consuming invalid data.
+pub(crate) struct Engine {
+    state: State,
+    clear_tone: bool,
+    observations: u16,
+}
+impl Engine {
+    pub(crate) const fn new(clear_tone: bool) -> Self {
+        Self {
+            state: State::Arm,
+            clear_tone,
             observations: 0,
-            ready: false,
-        };
-    };
-    let mut observations = 0_u16;
-    loop {
-        let ready = sample();
-        let now = timer.now();
-        observations = observations.saturating_add(1);
-        let elapsed_micros = now.saturating_duration_since(started).as_micros();
-        if ready || now >= deadline {
-            return Readiness {
-                elapsed_micros,
-                observations,
-                ready,
-            };
         }
-        timer
-            .wait_until(now.saturating_add(SAMPLE_INTERVAL).min(deadline))
-            .await;
+    }
+    pub(crate) fn advance(&mut self, clock: &impl Clock, io: &mut impl Io) -> Event {
+        let now = clock.now();
+        match self.state {
+            State::Arm => {
+                let Some(_) = now.checked_add(SAMPLE_INTERVAL) else {
+                    return self.complete(Err(Error::DeadlineOverflow));
+                };
+                io.arm_tone();
+                let Some(at) = clock.now().checked_add(SAMPLE_INTERVAL) else {
+                    return self.complete(Err(Error::DeadlineOverflow));
+                };
+                self.state = State::Trigger(at);
+                Event::Wait {
+                    at,
+                    delay: SAMPLE_INTERVAL,
+                }
+            }
+            State::Trigger(at) if now < at => Event::Wait {
+                at,
+                delay: Duration::from_micros(
+                    at.saturating_duration_since(now)
+                        .as_micros()
+                        .saturating_add(1),
+                ),
+            },
+            State::Trigger(_) => {
+                let Some(at) = now.checked_add(Duration::from_micros(2)) else {
+                    return self.complete(Err(Error::DeadlineOverflow));
+                };
+                let Some(_) = at.checked_add(READY_LIMIT) else {
+                    return self.complete(Err(Error::DeadlineOverflow));
+                };
+                io.trigger();
+                let Some(at) = clock.now().checked_add(Duration::from_micros(2)) else {
+                    return self.complete(Err(Error::DeadlineOverflow));
+                };
+                let Some(deadline) = at.checked_add(READY_LIMIT) else {
+                    return self.complete(Err(Error::DeadlineOverflow));
+                };
+                self.state = State::Observe {
+                    at,
+                    started: at,
+                    deadline,
+                };
+                Event::Wait {
+                    at,
+                    delay: Duration::from_micros(2),
+                }
+            }
+            State::Observe { at, .. } if now < at => Event::Wait {
+                at,
+                delay: Duration::from_micros(
+                    at.saturating_duration_since(now)
+                        .as_micros()
+                        .saturating_add(1),
+                ),
+            },
+            State::Observe {
+                started, deadline, ..
+            } => {
+                let ready = io.ready();
+                self.observations = self.observations.saturating_add(1);
+                let readiness = Readiness {
+                    elapsed_micros: clock.now().saturating_duration_since(started).as_micros(),
+                    observations: self.observations,
+                    ready,
+                };
+                if ready {
+                    if self.clear_tone {
+                        io.clear_tone();
+                    }
+                    let value = io.sample();
+                    self.complete(Ok(Sample { value, readiness }))
+                } else if clock.now() >= deadline {
+                    self.complete(Err(Error::NotReady(readiness)))
+                } else {
+                    let at = clock.now().saturating_add(SAMPLE_INTERVAL).min(deadline);
+                    self.state = State::Observe {
+                        at,
+                        started,
+                        deadline,
+                    };
+                    Event::Wait {
+                        at,
+                        delay: SAMPLE_INTERVAL,
+                    }
+                }
+            }
+            State::Complete(result) => Event::Complete(result),
+        }
+    }
+    fn complete(&mut self, result: Result<Sample, Error>) -> Event {
+        self.state = State::Complete(result);
+        Event::Complete(result)
     }
 }
 
+#[cfg(target_arch = "riscv32")]
+impl Io for oer_esp32s31_hal::domain::transaction::PhyHardware {
+    fn arm_tone(&mut self) {
+        crate::hardware::arm_phy_power_detector_tone(self);
+    }
+    fn trigger(&mut self) {
+        oer_esp32s31_hal::phy::power_detector::trigger_sar(self);
+    }
+    fn ready(&mut self) -> bool {
+        oer_esp32s31_hal::phy::power_detector::sample_ready(self)
+    }
+    fn clear_tone(&mut self) {
+        crate::hardware::clear_phy_power_detector_tone_arm(self);
+    }
+    fn sample(&mut self) -> u16 {
+        oer_esp32s31_hal::phy::power_detector::sample_sar(self)
+    }
+}
 #[cfg(test)]
 mod tests;

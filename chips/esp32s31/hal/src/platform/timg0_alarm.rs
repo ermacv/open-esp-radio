@@ -4,7 +4,7 @@
 //!
 //! Runtime startup selects/enables XTAL through the watchdog's retained
 //! clock/reset word. Adopting these parts performs no hardware writes.
-//! No production image binds or arms them. The host composition fixture selects P2
+//! The SAR/PWDET pilot and the host composition fixture select P2
 //! `Exempt(ExecutorLevel)` and a lower line ID than FROM_CPU2. Its arbitration
 //! interpretation follows the family CLIC contract:
 //! SOURCE: chips/espressif/platform/family.toml [interrupts], RISC-V CLIC

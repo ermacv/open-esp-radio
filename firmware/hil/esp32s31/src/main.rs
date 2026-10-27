@@ -45,27 +45,40 @@ use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
 use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::Executor;
 
+#[cfg(feature = "wifi-station")]
+mod phy_pilot;
+
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
+    #[cfg(not(feature = "wifi-station"))]
     /// Wakes the core-0 executor.
     wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    #[cfg(feature = "wifi-station")]
+    wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     #[cfg(not(feature = "wifi-station"))]
     /// The Embassy time driver's alarm (system timer comparator 0).
     alarm: TimeAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
     /// The application executor's alarm (system timer comparator 1).
-    alarm: TimeAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 17, context app_wake, hart 0, Hardware;
+    alarm: TimeAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
     /// The radio executor's alarm (system timer comparator 0).
     radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
+    // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
+    // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
+    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    #[cfg(feature = "wifi-station")]
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<wifi_station::RadioTasks, FromCpu2Irq>, line 20, context radio_executor, hart 0, Executor;
+    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<wifi_station::RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     #[cfg(feature = "wifi-station")]
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = wifi_station::irq::WifiPart => crate::wifi_station::irq::on_wifi, line 21, context radio, hart 0, Hardware;
+    #[cfg(not(feature = "wifi-station"))]
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 18, context app_wake, hart 0, Hardware;
+    #[cfg(feature = "wifi-station")]
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 42, context app_wake, hart 0, Hardware;
 }
 
 #[cfg(feature = "boot-smoke")]

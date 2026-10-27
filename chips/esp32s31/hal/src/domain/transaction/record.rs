@@ -1,5 +1,5 @@
 //! Fixed-size retained diagnostic codec shared by image compositions.
-use super::{Fault, FaultReason, Operation};
+use super::{Fault, FaultReason, Operation, SarSetupFault, SarTransferFault};
 use core::fmt::{self, Write};
 const MAGIC: u32 = 0x5054_5802;
 
@@ -24,6 +24,21 @@ impl FaultRecord {
             FaultReason::Cancelled(Operation::Retune) => 6,
             FaultReason::IdentityClaimed => 7,
             FaultReason::OwnerUnavailable => 8,
+            FaultReason::SarTransfer { operation, fault } => {
+                let kind = match fault {
+                    SarTransferFault::RequestOccupied { .. } => 9,
+                    SarTransferFault::ProgramUnavailable => 10,
+                    SarTransferFault::InvalidDelay { .. } => 11,
+                    SarTransferFault::ReplyOccupied { .. } => 12,
+                    SarTransferFault::ResultUnavailable => 13,
+                    SarTransferFault::ForeignSignal => 14,
+                    SarTransferFault::ForeignReunion { .. } => 15,
+                };
+                kind | (operation_code(operation) << 8)
+            }
+            FaultReason::SarSetup(SarSetupFault::Storage(_)) => 16,
+            FaultReason::SarSetup(SarSetupFault::Binding(_)) => 17,
+            FaultReason::SarAlarmWithoutBundle(_) => 18,
         };
         self.registration = fault.registration.map_or(0, |epoch| epoch.get());
         self.checksum = self.checksum();
@@ -39,7 +54,7 @@ impl FaultRecord {
         if self.magic != MAGIC || self.checksum != self.checksum() {
             return Ok(());
         }
-        let (reason, operation) = match self.reason {
+        let (reason, mut operation) = match self.reason & 0xff {
             1 => ("Cancelled", "register"),
             2 => ("Cancelled", "maintain"),
             3 => ("Cancelled", "wake"),
@@ -48,8 +63,29 @@ impl FaultRecord {
             6 => ("Cancelled", "retune"),
             7 => ("IdentityClaimed", "none"),
             8 => ("OwnerUnavailable", "none"),
+            9 => ("SarRequestOccupied", "maintain"),
+            10 => ("SarProgramUnavailable", "maintain"),
+            11 => ("SarInvalidDelay", "maintain"),
+            12 => ("SarReplyOccupied", "maintain"),
+            13 => ("SarResultUnavailable", "maintain"),
+            14 => ("SarForeignSignal", "maintain"),
+            15 => ("SarForeignReunion", "maintain"),
+            16 => ("SarSetupStorage", "none"),
+            17 => ("SarSetupBinding", "none"),
+            18 => ("SarAlarmWithoutBundle", "none"),
             _ => return Ok(()),
         };
+        if (9..=15).contains(&(self.reason & 0xff)) {
+            operation = match self.reason >> 8 {
+                1 => "register",
+                2 => "maintain",
+                3 => "wake",
+                4 => "close",
+                5 => "channel",
+                6 => "retune",
+                _ => return Ok(()),
+            };
+        }
         struct Output<F>(F);
         impl<F: FnMut(&[u8]) -> bool> Write for Output<F> {
             fn write_str(&mut self, text: &str) -> fmt::Result {
@@ -67,6 +103,16 @@ impl FaultRecord {
         )?;
         self.magic = 0;
         Ok(())
+    }
+}
+const fn operation_code(operation: Operation) -> u32 {
+    match operation {
+        Operation::Register => 1,
+        Operation::Maintain => 2,
+        Operation::Wake => 3,
+        Operation::Close => 4,
+        Operation::Channel => 5,
+        Operation::Retune => 6,
     }
 }
 const _: () = assert!(core::mem::size_of::<FaultRecord>() == 16);
@@ -112,6 +158,71 @@ mod tests {
             assert_eq!(record.magic, 0);
             assert!(record.report(|_| panic!("reported once")).is_ok());
         }
+    }
+    #[test]
+    fn sar_transfer_keeps_the_admitted_operation_and_record_size() {
+        for operation in [
+            Operation::Register,
+            Operation::Maintain,
+            Operation::Wake,
+            Operation::Close,
+            Operation::Channel,
+            Operation::Retune,
+        ] {
+            let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
+            record.record(Fault {
+                reason: FaultReason::SarTransfer {
+                    operation,
+                    fault: SarTransferFault::RequestOccupied { queued: 1 },
+                },
+                registration: None,
+            });
+            let mut bytes = std::vec::Vec::new();
+            record
+                .report(|chunk| {
+                    bytes.extend_from_slice(chunk);
+                    true
+                })
+                .unwrap();
+            let text = std::string::String::from_utf8(bytes).unwrap();
+            assert!(text.contains("reason=SarRequestOccupied"));
+            let expected = match operation {
+                Operation::Register => "register",
+                Operation::Maintain => "maintain",
+                Operation::Wake => "wake",
+                Operation::Close => "close",
+                Operation::Channel => "channel",
+                Operation::Retune => "retune",
+            };
+            assert!(text.contains(&std::format!("operation={expected}")));
+            assert_eq!(core::mem::size_of::<FaultRecord>(), 16);
+        }
+    }
+    #[test]
+    fn alarm_without_bundle_survives_retained_output_in_four_words() {
+        let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
+        record.record(Fault {
+            reason: FaultReason::SarAlarmWithoutBundle(super::super::SarAlarmWithoutBundle {
+                observation: crate::platform::timg0_alarm::Observation {
+                    pending: true,
+                    asserted: false,
+                },
+                requests: 0,
+                replies: 1,
+            }),
+            registration: None,
+        });
+        assert!(record.report(|_| false).is_err());
+        let mut bytes = std::vec::Vec::new();
+        record
+            .report(|chunk| {
+                bytes.extend_from_slice(chunk);
+                true
+            })
+            .unwrap();
+        let text = std::string::String::from_utf8(bytes).unwrap();
+        assert!(text.contains("reason=SarAlarmWithoutBundle operation=none"));
+        assert_eq!(core::mem::size_of::<FaultRecord>(), 16);
     }
     #[test]
     fn corrupted_record_is_not_reported() {

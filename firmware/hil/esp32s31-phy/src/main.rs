@@ -43,18 +43,23 @@ use static_cell::StaticCell;
 // The IEEE 802.15.4 MAC's source has no entry: the radio task polls the
 // engine (`ieee802154::poll`), with the router's proof that no line
 // receives it.
+mod phy_pilot;
+
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
+    // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
+    // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
+    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's timer alarm; it only acknowledges and pends.
     radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, context radio, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 19, context app_wake, hart 0, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
-    console_usb: ConsoleUsb = ConsoleInterrupt => crate::transport::usb_interrupt, line 20, context app_wake, hart 0, Hardware;
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::transport::usb_interrupt, line 42, context app_wake, hart 0, Hardware;
 }
 
 oer_espressif_executor::tasks! {
@@ -169,6 +174,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     let mut rng = Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
+    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
     let radio = radio::Radio::place(
         RADIO.uninit(),
         domain,
@@ -180,6 +186,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         station,
         access_point,
         rng,
+        phy_pilot,
     );
     #[cfg(feature = "diagnostic-radio-health")]
     radio.set_health_boot(boot);

@@ -415,6 +415,7 @@ async fn execute_maintain<B: PlatformClockBackend, P, D, O>(
     initial: RadioTransaction<B, ConcurrentPhy>,
     platform: &mut P,
     observer: O,
+    pilot: &mut impl crate::sar_pilot::Service,
 ) -> (
     RadioDomain<B, ConcurrentPhy>,
     Result<PhyParamTrackingOutcome, ConcurrentPhyTrackingError>,
@@ -443,10 +444,10 @@ where
         }
     };
     let mut tracking = pending.begin_tracking(registered.tracking_policy());
+    let fault = radio.fault_handle();
     let mut transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
-    let (registers, phy, mut grant) = transaction.hardware_with_attachment_and_grant();
-    if !tracking.describes(registers) {
-        *phy.slot_mut() = Slot::Poisoned;
+    if !tracking.describes(transaction.hardware()) {
+        *transaction.attachment_mut().slot_mut() = Slot::Poisoned;
         return (
             transaction.reunite(),
             Err(ConcurrentPhyTrackingError::Failed(
@@ -454,10 +455,15 @@ where
             )),
         );
     }
+    let (mut returned, phy) = transaction.split();
+    let mut physical = crate::sar_pilot::Physical::new(phy, pilot, fault);
     let result = {
         let state = registered.target_state_mut();
-        let mut port = TargetPhyParamTrackingPort::<_, _, _, D, _, _>::new(
-            platform, registers, &mut grant, timer, observer,
+        let mut port = TargetPhyParamTrackingPort::<_, _, D, _, _>::new(
+            platform,
+            &mut physical,
+            timer,
+            observer,
         );
         run_phy_param_tracking(&mut tracking, state, &mut port)
             .await
@@ -465,23 +471,38 @@ where
     };
     let result = match result {
         Err(error) => {
-            *phy.slot_mut() = Slot::Poisoned;
+            *returned.attachment_mut().slot_mut() = Slot::Poisoned;
             Err(ConcurrentPhyTrackingError::Failed(error))
         }
         Ok(outcome) => match tracking.into_owner() {
             Ok(clients) => {
-                *phy.slot_mut() = Slot::Registered(PhyDomain::new(registered, clients));
+                *returned.attachment_mut().slot_mut() =
+                    Slot::Registered(PhyDomain::new(registered, clients));
                 Ok(outcome)
             }
             Err(_) => {
-                *phy.slot_mut() = Slot::Poisoned;
+                *returned.attachment_mut().slot_mut() = Slot::Poisoned;
                 Err(ConcurrentPhyTrackingError::Failed(
                     TargetPhyParamTrackingError::MissingCompletedOwner,
                 ))
             }
         },
     };
-    (transaction.reunite(), result)
+    let phy = physical.finish();
+    let radio = match returned.reunite(phy) {
+        Ok(radio) => radio,
+        Err(refused) => {
+            let held = core::mem::ManuallyDrop::new(refused.domain);
+            let _quarantined = held;
+            refused.transaction.quarantine_sar_transfer(
+                oer_esp32s31_hal::domain::transaction::SarTransferFault::ForeignReunion {
+                    expected_owner: refused.expected_owner,
+                    received_owner: refused.received_owner,
+                },
+            );
+        }
+    };
+    (radio, result)
 }
 
 /// Result of one periodic tracking tick of the shared domain.
@@ -535,6 +556,7 @@ pub fn track_concurrent_phy<B: PlatformClockBackend, P, D, O>(
     platform: &mut P,
     timer: &impl oer_cooperate::CooperativeTimer,
     observer: O,
+    pilot: &mut impl crate::sar_pilot::Service,
 ) -> impl core::future::Future<
     Output = (
         RadioDomain<B, ConcurrentPhy>,
@@ -565,7 +587,7 @@ where
             return (radio, Ok(ConcurrentTrackingTick::NotDue));
         }
         let (radio, result) =
-            maintain_concurrent_phy::<_, P, D, O>(timer, radio, platform, observer).await;
+            maintain_concurrent_phy::<_, P, D, O>(timer, radio, platform, observer, pilot).await;
         (radio, result.map(ConcurrentTrackingTick::Tracked))
     }
 }

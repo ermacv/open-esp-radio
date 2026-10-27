@@ -141,6 +141,7 @@ pub fn maintain_concurrent_phy<B: PlatformClockBackend, P, D, O>(
     radio: RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
     observer: O,
+    pilot: &mut impl crate::sar_pilot::Service,
 ) -> impl core::future::Future<
     Output = (
         RadioDomain<B, ConcurrentPhy>,
@@ -152,5 +153,5 @@ where
     O: PhyTargetObserver,
 {
     let initial = radio.detach(Operation::Maintain);
-    execute_maintain::<B, P, D, O>(timer, initial, platform, observer)
+    execute_maintain::<B, P, D, O>(timer, initial, platform, observer, pilot)
 }

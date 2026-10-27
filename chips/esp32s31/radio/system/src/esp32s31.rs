@@ -200,11 +200,12 @@ struct WifiShare {
 ///
 /// `C` provides the platform clocks, `T` is the PHY's time and `O` observes
 /// the PHY's target work.
-pub struct Esp32s31Radio<C: PlatformClockProvider, T, O> {
+pub struct Esp32s31Radio<C: PlatformClockProvider, T, O, S> {
     radio: Option<RadioDomain<C::Backend, ConcurrentPhy>>,
     radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     clocks: C,
     timer: T,
+    pilot: S,
     observer: O,
     /// The first registration's configuration, until it is used.
     registration: Option<PhyRegisterConfig>,
@@ -214,11 +215,12 @@ pub struct Esp32s31Radio<C: PlatformClockProvider, T, O> {
     bluetooth_attached: bool,
 }
 
-impl<C, T, O> Esp32s31Radio<C, T, O>
+impl<C, T, O, S> Esp32s31Radio<C, T, O, S>
 where
     C: PlatformClockProvider,
     T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
+    S: oer_esp32s31_phy::sar_pilot::Service,
 {
     /// The backend over the split radio domain and Wi-Fi's coexistence
     /// state; `registration` configures the first PHY registration.
@@ -229,6 +231,7 @@ where
         timer: T,
         observer: O,
         registration: PhyRegisterConfig,
+        pilot: S,
     ) -> Self {
         let radio_fault = radio.fault_handle();
         Self {
@@ -238,6 +241,7 @@ where
             timer,
             observer,
             registration: Some(registration),
+            pilot,
             rf: Rf::Unregistered,
             #[cfg(feature = "bluetooth")]
             bluetooth_attached: false,
@@ -337,11 +341,12 @@ const fn leave_poisoned(cause: PoisonCause) -> DomainHealth {
     ))
 }
 
-impl<C, T, O> PhyDomain for Esp32s31Radio<C, T, O>
+impl<C, T, O, S> PhyDomain for Esp32s31Radio<C, T, O, S>
 where
     C: PlatformClockProvider,
     T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
+    S: oer_esp32s31_phy::sar_pilot::Service,
 {
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
         let start = self.timer.now();
@@ -440,6 +445,7 @@ where
                 &mut (),
                 &self.timer,
                 self.observer.clone(),
+                &mut self.pilot,
             )
             .await;
             self.radio = Some(radio);
@@ -455,11 +461,12 @@ where
     }
 }
 
-impl<C, T, O> ClientBackend<Wifi, RcSlow> for Esp32s31Radio<C, T, O>
+impl<C, T, O, S> ClientBackend<Wifi, RcSlow> for Esp32s31Radio<C, T, O, S>
 where
     C: PlatformClockProvider,
     T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
+    S: oer_esp32s31_phy::sar_pilot::Service,
 {
     async fn enter(
         &mut self,
@@ -601,6 +608,7 @@ where
                 require_radio(self.radio.take(), self.radio_fault),
                 &mut (),
                 self.observer.clone(),
+                &mut self.pilot,
             )
             .await;
             self.radio = Some(radio);

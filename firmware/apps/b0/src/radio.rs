@@ -46,6 +46,7 @@ type Shared = Esp32s31Radio<
     ChipClocks,
     oer_espressif_executor::Cooperative<EmbassyClock>,
     NoopPhyTargetObserver,
+    crate::phy_pilot::Client,
 >;
 type Actor = RadioSystem<Wifi, RcSlow, Shared, EmbassyClock>;
 type Arena = BluetoothArena<0, 0, 0, 0, 0, 0>;
@@ -193,6 +194,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     ) else {
         crate::fail("claim")
     };
+    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), tokens.phy);
     let backend = Esp32s31Radio::new(
         domain,
         parts.wifi_coex,
@@ -200,6 +202,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_espressif_executor::Cooperative::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
+        phy_pilot,
     );
     let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
     let timer = runtime.system_timer;
