@@ -307345,7 +307345,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.CONTROL` word.
-    /// SOURCE: HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_OWNER_BARRIER_20261027, HW18_RX_COMMITTED_PREFIX_20261027, HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorControl(u32);
 
@@ -307488,10 +307488,10 @@ pub mod layouts {
         pub const OWNER_WIDTH: u32 = 1;
         /// Greatest unsigned image of `OWNER`.
         pub const OWNER_MAX: u32 = 0x1;
-        /// Project-assigned name. 1: the walker may fill this descriptor; it stops at one with 0 without writing it, and a reload doorbell after the bit is set again resumes it there. The hardware checks it and never clears it: completion is RX_DONE. It does not check the bit of LAST when a doorbell follows LAST's link.
+        /// Project-assigned name. 1: the walker may fill this descriptor; 0 is the CPU barrier. A bounded live-store experiment leaves every word at and beyond the first CPU-owned barrier unchanged while preceding buffers receive repeated writes and buffer-full/FCS counters rise. This supports the barrier in those conditions, not a universal prefetch or detach-release proof. A reload doorbell after the bit is set again resumes there. Hardware completion is RX_DONE, not OWNER clearing. It does not check the bit of LAST when a doorbell follows LAST's link.
         ///
         /// `OWNER`, bit 31; written by the CPU.
-        /// SOURCE: HW18_RX_CHAIN_20261027, HIL_W1_OWNER_BIT_2026_10_18.
+        /// SOURCE: HW18_RX_OWNER_BARRIER_20261027, HW18_RX_CHAIN_20261027, HIL_W1_OWNER_BIT_2026_10_18.
         pub const fn owner(self) -> bool {
             self.0 & 0x80000000 != 0
         }
@@ -307528,7 +307528,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.BUFFER` word.
-    /// SOURCE: HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_OWNER_BARRIER_20261027, HW18_RX_COMMITTED_PREFIX_20261027, HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorBuffer(u32);
 
@@ -307553,7 +307553,7 @@ pub mod layouts {
         /// Project-assigned name. The buffer's address.
         ///
         /// `ADDRESS`, bits 31:0; written by the CPU. The address lies in [`DMA_WINDOW`].
-        /// SOURCE: HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+        /// SOURCE: HW18_RX_OWNER_BARRIER_20261027, HW18_RX_COMMITTED_PREFIX_20261027, HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
         pub const fn address(self) -> u32 {
             self.0
         }
@@ -307586,7 +307586,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.NEXT` word.
-    /// SOURCE: HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_OWNER_BARRIER_20261027, HW18_RX_COMMITTED_PREFIX_20261027, HW18_RX_FCS_CORRELATION_20261027, HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorNext(u32);
 
@@ -307611,7 +307611,7 @@ pub mod layouts {
         /// Project-assigned name. The next descriptor's address, or zero at the end.
         ///
         /// `ADDRESS`, bits 31:0; written by the CPU. The address of a [`WifiRxDmaDescriptor`], or zero.
-        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27, HW18_RX_CHAIN_20261027.
+        /// SOURCE: HW18_RX_COMMITTED_PREFIX_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27, HW18_RX_CHAIN_20261027.
         pub const fn address(self) -> u32 {
             self.0
         }
