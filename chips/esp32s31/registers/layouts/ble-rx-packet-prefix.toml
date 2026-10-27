@@ -73,7 +73,7 @@ opaque = true
 bits = "0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "ISO sync error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
+description = "The named ISO sync-error helper returns this bit only after replacement of the low24 all-ones sentinel. Ordinary advertising rejects bit0 with bits9/10; connection rejects it with bits1/2/4. The physical identity in ordinary RX is unqualified."
 
 [[layout.bytes.fields]]
 name = "BIT_1_OPAQUE"
@@ -178,12 +178,11 @@ access = "owned"
 description = "Observed byte range; decoded only after ownership passes to the CPU."
 
 [[layout.bytes.fields]]
-name = "BITS_0_15_OPAQUE"
-opaque = true
+name = "ASSOCIATION_TAG"
 bits = "15:0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "The current helper, mapped to historical sm_num_match only by a similar correspondence (941176 ppm, about 94.12%; not exact-body), compares this halfword with a per-link configuration tag when configuration byte 23 enables matching; sm_num_set derives the tag from scheduler item +0x20 low 12 bits. The open RX owner arms 0xffff and checks the produced tag. This is a direct software association, not an established free-running time epoch. Hardware production, recycling retention and alias behavior after 4096 allocations remain unqualified. SOURCE: VENDOR_BLE_RX_AUXILIARY_TAG."
+description = "RX association halfword compared in full with the enabled per-link software tag. Current enable is configuration byte23; expected halfword +24 is supplied from scheduler-item +0x20 low12. CPU arms 0xffff before publication/reuse. Hardware production, upper four received bits, retention and stale reuse remain unqualified; this is not a time epoch."
 
 [[layout.bytes]]
 name = "PDU_HEADER"
@@ -220,7 +219,7 @@ completeness = "complete"
 
 [[review]]
 entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_0_OPAQUE"
-sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
+sources = ["VENDOR_BLE_ISO_RX_ERRORS", "BXB9_BLE_RX_RESULT_BIT0_CONTEXT"]
 provenance = "derived"
 accuracy = "positional"
 completeness = "unknown"
@@ -275,9 +274,9 @@ completeness = "unknown"
 naming = "opaque"
 
 [[review]]
-entity = "BLE_RX_PACKET_PREFIX.AUXILIARY.BITS_0_15_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX", "VENDOR_BLE_RX_AUXILIARY_TAG"]
+entity = "BLE_RX_PACKET_PREFIX.AUXILIARY.ASSOCIATION_TAG"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX", "VENDOR_BLE_RX_AUXILIARY_TAG", "BXB9_BLE_RX_ASSOCIATION_TAG", "BXB9_BLE_RX_PREFIX_REARM"]
 provenance = "derived"
-accuracy = "positional"
+accuracy = "exact"
 completeness = "partial"
-naming = "opaque"
+naming = "descriptive"

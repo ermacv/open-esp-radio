@@ -39,11 +39,17 @@ writer = "cpu"
 description = "Entry belongs to the filter accept list."
 
 [[layout.words.fields]]
-name = "BITS_2_13_OPAQUE"
+name = "BITS_2_12_OPAQUE"
 opaque = true
-bits = "13:2"
+bits = "12:2"
 writer = "cpu"
-description = "The vendor set_connected_dev helper replaces bit 13 from its third argument while preserving the other byte-one bits. The connected-device helper association is direct; its physical filtering effect is inference. Bits 12:2 remain unidentified. The open accept-list owner constructs this range as zero and has no connected-device setter. SOURCE: VENDOR_BLE_DEVICE_CONNECTED_TAG."
+description = "Observed remaining device-entry flags; meanings are unidentified."
+
+[[layout.words.fields]]
+name = "CONNECTED_DEVICE_TAG"
+bits = "13"
+writer = "cpu"
+description = "Marker replaced from argument2 bit0 by the connected-device helper; the other entry-byte bits are preserved. A hardware filtering effect is not established."
 
 [[layout.words.fields]]
 name = "RANDOM"
@@ -83,16 +89,24 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.BITS_2_13_OPAQUE"
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.BITS_2_12_OPAQUE"
 sources = ["BLOB_LIBBLE_DEVICE_TABLE", "VENDOR_BLE_DEVICE_CONNECTED_TAG"]
 provenance = "derived"
 accuracy = "positional"
-completeness = "partial"
+completeness = "unknown"
 naming = "opaque"
 
 [[review]]
 entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.PERIODIC_LIST_MEMBER"
 sources = ["BLOB_LIBBLE_DEVICE_TABLE", "VENDOR_BLE_DEVICE_LIST_FLAGS"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.CONNECTED_DEVICE_TAG"
+sources = ["VENDOR_BLE_DEVICE_CONNECTED_TAG", "BXB9_BLE_CONNECTED_DEVICE_TAG"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"

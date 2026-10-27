@@ -20412,7 +20412,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Polled by wait_link_end_int before task clear3; no general interrupt/output equation established.
             #[inline]
             pub const fn bit_0_opaque(self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -20444,7 +20444,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Polled by ble_wait_rxend_int before task clear28; no general interrupt/output equation established.
             #[inline]
             pub const fn bit_0_opaque(self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -21434,13 +21434,13 @@ pub mod bt_mac {
                 (self.0 & 0x00002000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands.
             #[inline]
             pub const fn bit_0_opaque(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands.
             #[inline]
             pub const fn bit_2_opaque(self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -21523,13 +21523,13 @@ pub mod bt_mac {
                 (self.0 & 0x00002000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands.
             #[inline]
             pub const fn bit_0_opaque(&self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands.
             #[inline]
             pub const fn bit_2_opaque(&self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -21740,7 +21740,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BIT_0_OPAQUE` field.
+            /// Selected by a saved primary or NRT bank1 image, or the DTM all-ones clear. No separately attributed event or lane-specific clear timing is established.
             #[inline]
             pub const fn bit_0_opaque(self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -21752,7 +21752,7 @@ pub mod bt_mac {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// The `BIT_2_OPAQUE` field.
+            /// Selected by a saved primary or NRT bank1 image, or the DTM all-ones clear. No separately attributed event or lane-specific clear timing is established.
             #[inline]
             pub const fn bit_2_opaque(self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -21812,7 +21812,7 @@ pub mod bt_mac {
                 self.0 == 0
             }
 
-            /// The `BIT_0_OPAQUE` field.
+            /// Selected by a saved primary or NRT bank1 image, or the DTM all-ones clear. No separately attributed event or lane-specific clear timing is established.
             #[inline]
             pub const fn bit_0_opaque(&self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -21842,7 +21842,7 @@ pub mod bt_mac {
                 }
             }
 
-            /// The `BIT_2_OPAQUE` field.
+            /// Selected by a saved primary or NRT bank1 image, or the DTM all-ones clear. No separately attributed event or lane-specific clear timing is established.
             #[inline]
             pub const fn bit_2_opaque(&self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -22051,7 +22051,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BIT_0_OPAQUE` field.
+            /// Event identity unknown. The primary source-124 snapshot carries this lane to shared acknowledgement/broker dispatch; no dedicated event consumer or physical producer is identified. Its relation to NRT133 is unknown.
             #[inline]
             pub const fn bit_0_opaque(self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -22063,7 +22063,7 @@ pub mod bt_mac {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// The `BIT_2_OPAQUE` field.
+            /// Event identity unknown. The primary source-124 snapshot carries this lane to shared acknowledgement/broker dispatch; no dedicated event consumer or physical producer is identified. Its relation to NRT133 is unknown.
             #[inline]
             pub const fn bit_2_opaque(self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -29277,13 +29277,13 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The synchronous base-stack subscriber enables source 14 immediately before the scheduler RUN command.
+            /// Task14 is cleared then enabled by scheduler entry1 before RUN; primary HAL entry0 later tests task status14, acknowledges it and performs scan capture/truncation/recycle service. The paired entry2 masks only14. The software order does not identify the physical trigger.
             #[inline]
             pub const fn scheduler_run(self) -> bool {
                 (self.0 & 0x00004000) != 0
             }
 
-            /// BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027.
+            /// BLE PHY initialization retains this inherited enable; scheduler entry2 masks only14. Generic PHY-info configuration selects an argument mask, with no fixed17 call recovered. Its observer gates on ENABLE, not task-status17; observer invocation is not a positive pending17 witness. Event identity, output124/133 relation and state after CONTROL1/2 remain unknown.
             #[inline]
             pub const fn source_17(self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -29312,13 +29312,13 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The synchronous base-stack subscriber enables source 14 immediately before the scheduler RUN command.
+            /// Task14 is cleared then enabled by scheduler entry1 before RUN; primary HAL entry0 later tests task status14, acknowledges it and performs scan capture/truncation/recycle service. The paired entry2 masks only14. The software order does not identify the physical trigger.
             #[inline]
             pub const fn scheduler_run(&self) -> bool {
                 (self.0 & 0x00004000) != 0
             }
 
-            /// BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027.
+            /// BLE PHY initialization retains this inherited enable; scheduler entry2 masks only14. Generic PHY-info configuration selects an argument mask, with no fixed17 call recovered. Its observer gates on ENABLE, not task-status17; observer invocation is not a positive pending17 witness. Event identity, output124/133 relation and state after CONTROL1/2 remain unknown.
             #[inline]
             pub const fn source_17(&self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -29381,7 +29381,7 @@ pub mod bt_mac {
 
     /// The `INTERRUPT_CLEAR` register.
     ///
-    /// Write-one-to-clear BLE base-stack interrupt bank. Initialization acknowledges every source with an all-ones image; the synchronous scheduler-run subscriber acknowledges source 14 before enabling it.
+    /// Task-side interrupt acknowledgement bank at +0x4b8, separate from primary CLEAR0/1. Vendor init/DTM publish all ones; individual consumers select0,3,4,10,14,21,28 and diagnostic11,15,20,24. Software stores do not establish complete readback or reassert semantics or a task-to124/133 equation.
     pub mod interrupt_clear {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -29402,19 +29402,138 @@ pub mod bt_mac {
         /// Positioned bits of `SCHEDULER_RUN`.
         pub const SCHEDULER_RUN_MASK: u32 = 0x4000;
 
-        /// Width of `BITS_0_13_OPAQUE` in bits.
-        pub const BITS_0_13_OPAQUE_WIDTH: u32 = 14;
-        /// Greatest unsigned image of `BITS_0_13_OPAQUE`.
-        pub const BITS_0_13_OPAQUE_MAX: u32 = 0x3fff;
-        /// Positioned bits of `BITS_0_13_OPAQUE`.
-        pub const BITS_0_13_OPAQUE_MASK: u32 = 0x3fff;
+        /// Width of `BIT_0_OPAQUE` in bits.
+        pub const BIT_0_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MASK: u32 = 0x1;
 
-        /// Width of `BITS_15_31_OPAQUE` in bits.
-        pub const BITS_15_31_OPAQUE_WIDTH: u32 = 17;
-        /// Greatest unsigned image of `BITS_15_31_OPAQUE`.
-        pub const BITS_15_31_OPAQUE_MAX: u32 = 0x1ffff;
-        /// Positioned bits of `BITS_15_31_OPAQUE`.
-        pub const BITS_15_31_OPAQUE_MASK: u32 = 0xffff8000;
+        /// Width of `BITS_1_2_OPAQUE` in bits.
+        pub const BITS_1_2_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_1_2_OPAQUE`.
+        pub const BITS_1_2_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_1_2_OPAQUE`.
+        pub const BITS_1_2_OPAQUE_MASK: u32 = 0x6;
+
+        /// Width of `BIT_3_OPAQUE` in bits.
+        pub const BIT_3_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_3_OPAQUE`.
+        pub const BIT_3_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_3_OPAQUE`.
+        pub const BIT_3_OPAQUE_MASK: u32 = 0x8;
+
+        /// Width of `BIT_4_OPAQUE` in bits.
+        pub const BIT_4_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_4_OPAQUE`.
+        pub const BIT_4_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_4_OPAQUE`.
+        pub const BIT_4_OPAQUE_MASK: u32 = 0x10;
+
+        /// Width of `BITS_5_9_OPAQUE` in bits.
+        pub const BITS_5_9_OPAQUE_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `BITS_5_9_OPAQUE`.
+        pub const BITS_5_9_OPAQUE_MAX: u32 = 0x1f;
+        /// Positioned bits of `BITS_5_9_OPAQUE`.
+        pub const BITS_5_9_OPAQUE_MASK: u32 = 0x3e0;
+
+        /// Width of `BIT_10_OPAQUE` in bits.
+        pub const BIT_10_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_10_OPAQUE`.
+        pub const BIT_10_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_10_OPAQUE`.
+        pub const BIT_10_OPAQUE_MASK: u32 = 0x400;
+
+        /// Width of `BIT_11_OPAQUE` in bits.
+        pub const BIT_11_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_11_OPAQUE`.
+        pub const BIT_11_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_11_OPAQUE`.
+        pub const BIT_11_OPAQUE_MASK: u32 = 0x800;
+
+        /// Width of `BITS_12_13_OPAQUE` in bits.
+        pub const BITS_12_13_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_12_13_OPAQUE`.
+        pub const BITS_12_13_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_12_13_OPAQUE`.
+        pub const BITS_12_13_OPAQUE_MASK: u32 = 0x3000;
+
+        /// Width of `BIT_15_OPAQUE` in bits.
+        pub const BIT_15_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_15_OPAQUE`.
+        pub const BIT_15_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_15_OPAQUE`.
+        pub const BIT_15_OPAQUE_MASK: u32 = 0x8000;
+
+        /// Width of `BIT_16_OPAQUE` in bits.
+        pub const BIT_16_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MASK: u32 = 0x10000;
+
+        /// Width of `BIT_17_OPAQUE` in bits.
+        pub const BIT_17_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_17_OPAQUE`.
+        pub const BIT_17_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_17_OPAQUE`.
+        pub const BIT_17_OPAQUE_MASK: u32 = 0x20000;
+
+        /// Width of `BITS_18_19_OPAQUE` in bits.
+        pub const BITS_18_19_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_18_19_OPAQUE`.
+        pub const BITS_18_19_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_18_19_OPAQUE`.
+        pub const BITS_18_19_OPAQUE_MASK: u32 = 0xc0000;
+
+        /// Width of `BIT_20_OPAQUE` in bits.
+        pub const BIT_20_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_20_OPAQUE`.
+        pub const BIT_20_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_20_OPAQUE`.
+        pub const BIT_20_OPAQUE_MASK: u32 = 0x100000;
+
+        /// Width of `BIT_21_OPAQUE` in bits.
+        pub const BIT_21_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_21_OPAQUE`.
+        pub const BIT_21_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_21_OPAQUE`.
+        pub const BIT_21_OPAQUE_MASK: u32 = 0x200000;
+
+        /// Width of `BITS_22_23_OPAQUE` in bits.
+        pub const BITS_22_23_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_22_23_OPAQUE`.
+        pub const BITS_22_23_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_22_23_OPAQUE`.
+        pub const BITS_22_23_OPAQUE_MASK: u32 = 0xc00000;
+
+        /// Width of `BIT_24_OPAQUE` in bits.
+        pub const BIT_24_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_24_OPAQUE`.
+        pub const BIT_24_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_24_OPAQUE`.
+        pub const BIT_24_OPAQUE_MASK: u32 = 0x1000000;
+
+        /// Width of `BITS_25_27_OPAQUE` in bits.
+        pub const BITS_25_27_OPAQUE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `BITS_25_27_OPAQUE`.
+        pub const BITS_25_27_OPAQUE_MAX: u32 = 0x7;
+        /// Positioned bits of `BITS_25_27_OPAQUE`.
+        pub const BITS_25_27_OPAQUE_MASK: u32 = 0xe000000;
+
+        /// Width of `BIT_28_OPAQUE` in bits.
+        pub const BIT_28_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_28_OPAQUE`.
+        pub const BIT_28_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_28_OPAQUE`.
+        pub const BIT_28_OPAQUE_MASK: u32 = 0x10000000;
+
+        /// Width of `BITS_29_31_OPAQUE` in bits.
+        pub const BITS_29_31_OPAQUE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `BITS_29_31_OPAQUE`.
+        pub const BITS_29_31_OPAQUE_MAX: u32 = 0x7;
+        /// Positioned bits of `BITS_29_31_OPAQUE`.
+        pub const BITS_29_31_OPAQUE_MASK: u32 = 0xe0000000;
 
         /// The write-trigger fields one write of the register sets together;
         /// every other bit of the write is zero or its fixed value.
@@ -29428,17 +29547,136 @@ pub mod bt_mac {
                 self
             }
 
-            /// Set the write-trigger field `BITS_0_13_OPAQUE` to `value`.
+            /// Set the write-trigger field `BIT_0_OPAQUE`.
             #[inline]
-            pub fn bits_0_13_opaque(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
-                self.0 = (self.0 & 0xffffc000) | value.get();
+            pub fn bit_0_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
                 self
             }
 
-            /// Set the write-trigger field `BITS_15_31_OPAQUE` to `value`.
+            /// Set the write-trigger field `BITS_1_2_OPAQUE` to `value`.
             #[inline]
-            pub fn bits_15_31_opaque(&mut self, value: oer_mmio::Bits<17>) -> &mut Self {
-                self.0 = (self.0 & 0x00007fff) | (value.get() << 15);
+            pub fn bits_1_2_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff9) | (value.get() << 1);
+                self
+            }
+
+            /// Set the write-trigger field `BIT_3_OPAQUE`.
+            #[inline]
+            pub fn bit_3_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `BIT_4_OPAQUE`.
+            #[inline]
+            pub fn bit_4_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_5_9_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_5_9_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & 0xfffffc1f) | (value.get() << 5);
+                self
+            }
+
+            /// Set the write-trigger field `BIT_10_OPAQUE`.
+            #[inline]
+            pub fn bit_10_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `BIT_11_OPAQUE`.
+            #[inline]
+            pub fn bit_11_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_12_13_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_12_13_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xffffcfff) | (value.get() << 12);
+                self
+            }
+
+            /// Set the write-trigger field `BIT_15_OPAQUE`.
+            #[inline]
+            pub fn bit_15_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `BIT_16_OPAQUE`.
+            #[inline]
+            pub fn bit_16_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `BIT_17_OPAQUE`.
+            #[inline]
+            pub fn bit_17_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_18_19_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_18_19_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xfff3ffff) | (value.get() << 18);
+                self
+            }
+
+            /// Set the write-trigger field `BIT_20_OPAQUE`.
+            #[inline]
+            pub fn bit_20_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `BIT_21_OPAQUE`.
+            #[inline]
+            pub fn bit_21_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_22_23_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_22_23_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xff3fffff) | (value.get() << 22);
+                self
+            }
+
+            /// Set the write-trigger field `BIT_24_OPAQUE`.
+            #[inline]
+            pub fn bit_24_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_25_27_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_25_27_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xf1ffffff) | (value.get() << 25);
+                self
+            }
+
+            /// Set the write-trigger field `BIT_28_OPAQUE`.
+            #[inline]
+            pub fn bit_28_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_29_31_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_29_31_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0x1fffffff) | (value.get() << 29);
                 self
             }
         }
@@ -29456,12 +29694,96 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x4bc;
 
-        /// Width of `BITS_0_21_OPAQUE` in bits.
-        pub const BITS_0_21_OPAQUE_WIDTH: u32 = 22;
-        /// Greatest unsigned image of `BITS_0_21_OPAQUE`.
-        pub const BITS_0_21_OPAQUE_MAX: u32 = 0x3fffff;
-        /// Positioned bits of `BITS_0_21_OPAQUE`.
-        pub const BITS_0_21_OPAQUE_MASK: u32 = 0x3fffff;
+        /// Width of `BIT_0_OPAQUE` in bits.
+        pub const BIT_0_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MASK: u32 = 0x1;
+
+        /// Width of `BITS_1_2_OPAQUE` in bits.
+        pub const BITS_1_2_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_1_2_OPAQUE`.
+        pub const BITS_1_2_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_1_2_OPAQUE`.
+        pub const BITS_1_2_OPAQUE_MASK: u32 = 0x6;
+
+        /// Width of `BIT_3_OPAQUE` in bits.
+        pub const BIT_3_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_3_OPAQUE`.
+        pub const BIT_3_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_3_OPAQUE`.
+        pub const BIT_3_OPAQUE_MASK: u32 = 0x8;
+
+        /// Width of `BIT_4_OPAQUE` in bits.
+        pub const BIT_4_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_4_OPAQUE`.
+        pub const BIT_4_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_4_OPAQUE`.
+        pub const BIT_4_OPAQUE_MASK: u32 = 0x10;
+
+        /// Width of `BITS_5_9_OPAQUE` in bits.
+        pub const BITS_5_9_OPAQUE_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `BITS_5_9_OPAQUE`.
+        pub const BITS_5_9_OPAQUE_MAX: u32 = 0x1f;
+        /// Positioned bits of `BITS_5_9_OPAQUE`.
+        pub const BITS_5_9_OPAQUE_MASK: u32 = 0x3e0;
+
+        /// Width of `BIT_10_OPAQUE` in bits.
+        pub const BIT_10_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_10_OPAQUE`.
+        pub const BIT_10_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_10_OPAQUE`.
+        pub const BIT_10_OPAQUE_MASK: u32 = 0x400;
+
+        /// Width of `BIT_11_OPAQUE` in bits.
+        pub const BIT_11_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_11_OPAQUE`.
+        pub const BIT_11_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_11_OPAQUE`.
+        pub const BIT_11_OPAQUE_MASK: u32 = 0x800;
+
+        /// Width of `BITS_12_13_OPAQUE` in bits.
+        pub const BITS_12_13_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_12_13_OPAQUE`.
+        pub const BITS_12_13_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_12_13_OPAQUE`.
+        pub const BITS_12_13_OPAQUE_MASK: u32 = 0x3000;
+
+        /// Width of `SCHEDULER_RUN` in bits.
+        pub const SCHEDULER_RUN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SCHEDULER_RUN`.
+        pub const SCHEDULER_RUN_MAX: u32 = 0x1;
+        /// Positioned bits of `SCHEDULER_RUN`.
+        pub const SCHEDULER_RUN_MASK: u32 = 0x4000;
+
+        /// Width of `BIT_15_OPAQUE` in bits.
+        pub const BIT_15_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_15_OPAQUE`.
+        pub const BIT_15_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_15_OPAQUE`.
+        pub const BIT_15_OPAQUE_MASK: u32 = 0x8000;
+
+        /// Width of `BITS_16_19_OPAQUE` in bits.
+        pub const BITS_16_19_OPAQUE_WIDTH: u32 = 4;
+        /// Greatest unsigned image of `BITS_16_19_OPAQUE`.
+        pub const BITS_16_19_OPAQUE_MAX: u32 = 0xf;
+        /// Positioned bits of `BITS_16_19_OPAQUE`.
+        pub const BITS_16_19_OPAQUE_MASK: u32 = 0xf0000;
+
+        /// Width of `BIT_20_OPAQUE` in bits.
+        pub const BIT_20_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_20_OPAQUE`.
+        pub const BIT_20_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_20_OPAQUE`.
+        pub const BIT_20_OPAQUE_MASK: u32 = 0x100000;
+
+        /// Width of `BIT_21_OPAQUE` in bits.
+        pub const BIT_21_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_21_OPAQUE`.
+        pub const BIT_21_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_21_OPAQUE`.
+        pub const BIT_21_OPAQUE_MASK: u32 = 0x200000;
 
         /// Width of `BIT_24_OPAQUE` in bits.
         pub const BIT_24_OPAQUE_WIDTH: u32 = 1;
@@ -29475,13 +29797,85 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Selected by the registered PHY callback; physical event and output relation unknown.
             #[inline]
-            pub const fn bits_0_21_opaque(self) -> oer_mmio::Bits<22> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Observed task-status positions; individual event identities unknown.
+            #[inline]
+            pub const fn bits_1_2_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 1)
+            }
+
+            /// Read and tested as task status3 by the registered PHY callback ble_11.o::sym_ble_Qun3D1WqLBkiv6VJO9QH. The physical event and output relation remain unknown.
+            #[inline]
+            pub const fn bit_3_opaque(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Selected by the alternate CTE/source124 consumer when secondary status10 is clear; task4-only output causality unknown.
+            #[inline]
+            pub const fn bit_4_opaque(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Observed task-status positions; individual event identities unknown.
+            #[inline]
+            pub const fn bits_5_9_opaque(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// Selected by the registered PHY callback; physical event and output relation unknown.
+            #[inline]
+            pub const fn bit_10_opaque(self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Part of the primary broker's selected diagnostic image; physical fault unknown.
+            #[inline]
+            pub const fn bit_11_opaque(self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Observed task-status positions; individual event identities unknown.
+            #[inline]
+            pub const fn bits_12_13_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// Task14 is cleared then enabled by scheduler entry1 before RUN; primary HAL entry0 later tests task status14, acknowledges it and performs scan capture/truncation/recycle service. The paired entry2 masks only14. The software order does not identify the physical trigger.
+            #[inline]
+            pub const fn scheduler_run(self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// Part of the primary broker's selected diagnostic image; physical fault unknown.
+            #[inline]
+            pub const fn bit_15_opaque(self) -> bool {
+                (self.0 & 0x00008000) != 0
+            }
+
+            /// Observed task-status positions; individual event identities unknown.
+            #[inline]
+            pub const fn bits_16_19_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Part of the primary broker's selected diagnostic image; physical fault unknown.
+            #[inline]
+            pub const fn bit_20_opaque(self) -> bool {
+                (self.0 & 0x00100000) != 0
+            }
+
+            /// Read and tested as task status21 by ble_52.o::r_sym_ble_05WbVoys6tQqUYKk2rt0, reached from primary HAL entry0 through iso_2.o::brk_sym_iso_6SFIpEwXw1SsCdgfyN88. The exact physical condition and output relation remain unknown.
+            #[inline]
+            pub const fn bit_21_opaque(self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Part of the primary broker's selected diagnostic image; physical fault unknown.
             #[inline]
             pub const fn bit_24_opaque(self) -> bool {
                 (self.0 & 0x01000000) != 0
@@ -34288,18 +34682,137 @@ pub mod bt_mac {
             self.0.write::<0x4b8>(0x00004000);
         }
 
-        /// Write to the write-trigger field `BITS_0_13_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// Write to the write-trigger field `BIT_0_OPAQUE` of `INTERRUPT_CLEAR`, starting its
         /// hardware action once; every other bit is zero or its fixed value.
         #[inline]
-        pub fn trigger_interrupt_clear_bits_0_13_opaque(&mut self, value: oer_mmio::Bits<14>) {
-            self.0.write::<0x4b8>(value.get());
+        pub fn trigger_interrupt_clear_bit_0_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00000001);
         }
 
-        /// Write to the write-trigger field `BITS_15_31_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// Write to the write-trigger field `BITS_1_2_OPAQUE` of `INTERRUPT_CLEAR`, starting its
         /// hardware action once; every other bit is zero or its fixed value.
         #[inline]
-        pub fn trigger_interrupt_clear_bits_15_31_opaque(&mut self, value: oer_mmio::Bits<17>) {
-            self.0.write::<0x4b8>(value.get() << 15);
+        pub fn trigger_interrupt_clear_bits_1_2_opaque(&mut self, value: oer_mmio::Bits<2>) {
+            self.0.write::<0x4b8>(value.get() << 1);
+        }
+
+        /// Write to the write-trigger field `BIT_3_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_3_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00000008);
+        }
+
+        /// Write to the write-trigger field `BIT_4_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_4_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00000010);
+        }
+
+        /// Write to the write-trigger field `BITS_5_9_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bits_5_9_opaque(&mut self, value: oer_mmio::Bits<5>) {
+            self.0.write::<0x4b8>(value.get() << 5);
+        }
+
+        /// Write to the write-trigger field `BIT_10_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_10_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00000400);
+        }
+
+        /// Write to the write-trigger field `BIT_11_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_11_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00000800);
+        }
+
+        /// Write to the write-trigger field `BITS_12_13_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bits_12_13_opaque(&mut self, value: oer_mmio::Bits<2>) {
+            self.0.write::<0x4b8>(value.get() << 12);
+        }
+
+        /// Write to the write-trigger field `BIT_15_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_15_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00008000);
+        }
+
+        /// Write to the write-trigger field `BIT_16_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_16_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00010000);
+        }
+
+        /// Write to the write-trigger field `BIT_17_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_17_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00020000);
+        }
+
+        /// Write to the write-trigger field `BITS_18_19_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bits_18_19_opaque(&mut self, value: oer_mmio::Bits<2>) {
+            self.0.write::<0x4b8>(value.get() << 18);
+        }
+
+        /// Write to the write-trigger field `BIT_20_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_20_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00100000);
+        }
+
+        /// Write to the write-trigger field `BIT_21_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_21_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x00200000);
+        }
+
+        /// Write to the write-trigger field `BITS_22_23_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bits_22_23_opaque(&mut self, value: oer_mmio::Bits<2>) {
+            self.0.write::<0x4b8>(value.get() << 22);
+        }
+
+        /// Write to the write-trigger field `BIT_24_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_24_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x01000000);
+        }
+
+        /// Write to the write-trigger field `BITS_25_27_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bits_25_27_opaque(&mut self, value: oer_mmio::Bits<3>) {
+            self.0.write::<0x4b8>(value.get() << 25);
+        }
+
+        /// Write to the write-trigger field `BIT_28_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bit_28_opaque(&mut self) {
+            self.0.write::<0x4b8>(0x10000000);
+        }
+
+        /// Write to the write-trigger field `BITS_29_31_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear_bits_29_31_opaque(&mut self, value: oer_mmio::Bits<3>) {
+            self.0.write::<0x4b8>(value.get() << 29);
         }
 
         /// Write to the write-trigger fields of `INTERRUPT_CLEAR` the change sets, in one
@@ -310411,10 +310924,10 @@ pub mod layouts {
         pub const BIT_0_OPAQUE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `BIT_0_OPAQUE`.
         pub const BIT_0_OPAQUE_MAX: u32 = 0x1;
-        /// Opaque: meaning not established. ISO sync error. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
+        /// Opaque: meaning not established. The named ISO sync-error helper returns this bit only after replacement of the low24 all-ones sentinel. Ordinary advertising rejects bit0 with bits9/10; connection rejects it with bits1/2/4. The physical identity in ordinary RX is unqualified.
         ///
         /// `BIT_0_OPAQUE`, bit 0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
+        /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS, BXB9_BLE_RX_RESULT_BIT0_CONTEXT.
         pub const fn bit_0_opaque(self) -> bool {
             self.0 & 0x1 != 0
         }
@@ -310688,20 +311201,20 @@ pub mod layouts {
             Self(bits)
         }
 
-        /// Width of `BITS_0_15_OPAQUE` in bits.
-        pub const BITS_0_15_OPAQUE_WIDTH: u32 = 16;
-        /// Greatest unsigned image of `BITS_0_15_OPAQUE`.
-        pub const BITS_0_15_OPAQUE_MAX: u32 = 0xffff;
-        /// Opaque: meaning not established. The current helper, mapped to historical sm_num_match only by a similar correspondence (941176 ppm, about 94.12%; not exact-body), compares this halfword with a per-link configuration tag when configuration byte 23 enables matching; sm_num_set derives the tag from scheduler item +0x20 low 12 bits. The open RX owner arms 0xffff and checks the produced tag. This is a direct software association, not an established free-running time epoch. Hardware production, recycling retention and alias behavior after 4096 allocations remain unqualified. SOURCE: VENDOR_BLE_RX_AUXILIARY_TAG.
+        /// Width of `ASSOCIATION_TAG` in bits.
+        pub const ASSOCIATION_TAG_WIDTH: u32 = 16;
+        /// Greatest unsigned image of `ASSOCIATION_TAG`.
+        pub const ASSOCIATION_TAG_MAX: u32 = 0xffff;
+        /// Project-assigned name. RX association halfword compared in full with the enabled per-link software tag. Current enable is configuration byte23; expected halfword +24 is supplied from scheduler-item +0x20 low12. CPU arms 0xffff before publication/reuse. Hardware production, upper four received bits, retention and stale reuse remain unqualified; this is not a time epoch.
         ///
-        /// `BITS_0_15_OPAQUE`, bits 15:0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX, VENDOR_BLE_RX_AUXILIARY_TAG.
-        pub const fn bits_0_15_opaque(self) -> u16 {
+        /// `ASSOCIATION_TAG`, bits 15:0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
+        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX, VENDOR_BLE_RX_AUXILIARY_TAG, BXB9_BLE_RX_ASSOCIATION_TAG, BXB9_BLE_RX_PREFIX_REARM.
+        pub const fn association_tag(self) -> u16 {
             (self.0 & 0xffff) as u16
         }
 
-        /// This value with `BITS_0_15_OPAQUE` set to `value`.
-        pub const fn with_bits_0_15_opaque(self, value: u16) -> Self {
+        /// This value with `ASSOCIATION_TAG` set to `value`.
+        pub const fn with_association_tag(self, value: u16) -> Self {
             Self((self.0 & 0xffff0000) | value as u32)
         }
     }
@@ -314116,10 +314629,10 @@ pub mod layouts {
         pub const BITS_28_31_OPAQUE_WIDTH: u32 = 4;
         /// Greatest unsigned image of `BITS_28_31_OPAQUE`.
         pub const BITS_28_31_OPAQUE_MAX: u32 = 0xf;
-        /// Opaque: meaning not established. Direct (D) role reset images: advertising 0xe, passive scanning 0x4, DTM and connection 0x0. These are role-dependent nibble images retained around RX-header publication; individual bit meanings remain unknown. SOURCE: VENDOR_BLE_ROLE_RX_PATH_IMAGES.
+        /// Opaque: meaning not established. Current direct advertising reset write selects 0xe. Scanner branches explicitly select 0x4 and 0xc. The cited connection/DTM direct stores preserve incoming bits31:28; zero describes their fresh profile image, not a proved unconditional reset value. Individual bit meanings and callee/hardware effects remain unknown.
         ///
         /// `BITS_28_31_OPAQUE`, bits 31:28; written by the CPU.
-        /// SOURCE: VENDOR_BLE_ROLE_RX_PATH_IMAGES.
+        /// SOURCE: VENDOR_BLE_ROLE_RX_PATH_IMAGES, BLOB_LIBBLE_MEMORY_LINK_STATE, BXB9_BLE_RX_PATH_TRANSFORMS.
         pub const fn bits_28_31_opaque(self) -> u8 {
             (self.0 >> 28) as u8
         }
@@ -321007,33 +321520,54 @@ pub mod layouts {
             }
         }
 
-        /// Width of `BITS_2_13_OPAQUE` in bits.
-        pub const BITS_2_13_OPAQUE_WIDTH: u32 = 12;
-        /// Greatest unsigned image of `BITS_2_13_OPAQUE`.
-        pub const BITS_2_13_OPAQUE_MAX: u32 = 0xfff;
-        /// Opaque: meaning not established. The vendor set_connected_dev helper replaces bit 13 from its third argument while preserving the other byte-one bits. The connected-device helper association is direct; its physical filtering effect is inference. Bits 12:2 remain unidentified. The open accept-list owner constructs this range as zero and has no connected-device setter. SOURCE: VENDOR_BLE_DEVICE_CONNECTED_TAG.
+        /// Width of `BITS_2_12_OPAQUE` in bits.
+        pub const BITS_2_12_OPAQUE_WIDTH: u32 = 11;
+        /// Greatest unsigned image of `BITS_2_12_OPAQUE`.
+        pub const BITS_2_12_OPAQUE_MAX: u32 = 0x7ff;
+        /// Opaque: meaning not established. Observed remaining device-entry flags; meanings are unidentified.
         ///
-        /// `BITS_2_13_OPAQUE`, bits 13:2; written by the CPU.
+        /// `BITS_2_12_OPAQUE`, bits 12:2; written by the CPU.
         /// SOURCE: BLOB_LIBBLE_DEVICE_TABLE, VENDOR_BLE_DEVICE_CONNECTED_TAG.
-        pub const fn bits_2_13_opaque(self) -> u16 {
-            ((self.0 >> 2) & 0xfff) as u16
+        pub const fn bits_2_12_opaque(self) -> u16 {
+            ((self.0 >> 2) & 0x7ff) as u16
         }
 
-        /// This value with `BITS_2_13_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 12 bits.
-        pub const fn with_bits_2_13_opaque(self, value: u16) -> Option<Self> {
-            if value > 0xfff {
+        /// This value with `BITS_2_12_OPAQUE` set to `value`, or `None` when `value` does not
+        /// fit its 11 bits.
+        pub const fn with_bits_2_12_opaque(self, value: u16) -> Option<Self> {
+            if value > 0x7ff {
                 None
             } else {
-                Some(Self((self.0 & 0xffffc003) | (value as u32) << 2))
+                Some(Self((self.0 & 0xffffe003) | (value as u32) << 2))
             }
         }
 
-        /// This value with `BITS_2_13_OPAQUE` set to `VALUE`, checked at compile time.
-        pub const fn with_bits_2_13_opaque_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0xfff, "the constant fits the layout field") };
+        /// This value with `BITS_2_12_OPAQUE` set to `VALUE`, checked at compile time.
+        pub const fn with_bits_2_12_opaque_constant<const VALUE: u16>(self) -> Self {
+            const { assert!(VALUE <= 0x7ff, "the constant fits the layout field") };
             let value = VALUE;
-            Self((self.0 & 0xffffc003) | (value as u32) << 2)
+            Self((self.0 & 0xffffe003) | (value as u32) << 2)
+        }
+
+        /// Width of `CONNECTED_DEVICE_TAG` in bits.
+        pub const CONNECTED_DEVICE_TAG_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CONNECTED_DEVICE_TAG`.
+        pub const CONNECTED_DEVICE_TAG_MAX: u32 = 0x1;
+        /// Project-assigned name. Marker replaced from argument2 bit0 by the connected-device helper; the other entry-byte bits are preserved. A hardware filtering effect is not established.
+        ///
+        /// `CONNECTED_DEVICE_TAG`, bit 13; written by the CPU.
+        /// SOURCE: VENDOR_BLE_DEVICE_CONNECTED_TAG, BXB9_BLE_CONNECTED_DEVICE_TAG.
+        pub const fn connected_device_tag(self) -> bool {
+            self.0 & 0x2000 != 0
+        }
+
+        /// This value with `CONNECTED_DEVICE_TAG` set to `value`.
+        pub const fn with_connected_device_tag(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x2000)
+            } else {
+                Self(self.0 & 0xffffdfff)
+            }
         }
 
         /// Width of `RANDOM` in bits.

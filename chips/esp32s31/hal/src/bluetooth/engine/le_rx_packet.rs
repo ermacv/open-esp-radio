@@ -308,7 +308,7 @@ impl LeRxPacketStorage {
     fn copy_dispatchable_pdu(&self) -> Result<LeReceivedPdu, LeRxPacketError> {
         let prefix_bytes = self.bytes.prefix();
         let prefix = BleRxPacketPrefix::new(&prefix_bytes);
-        if prefix.auxiliary().bits_0_15_opaque() == u16::MAX {
+        if prefix.auxiliary().association_tag() == u16::MAX {
             return Err(LeRxPacketError::EpochSentinelRetained);
         }
         let payload_length = usize::from(prefix.payload_length().value());
@@ -346,7 +346,7 @@ impl LeRxPacketStorage {
             original.byte_0014_opaque().bits().to_le_bytes(),
             original
                 .auxiliary()
-                .with_bits_0_15_opaque(0)
+                .with_association_tag(0)
                 .bits()
                 .to_le_bytes(),
         ];
@@ -371,7 +371,7 @@ impl LeRxPacketStorage {
     pub(crate) fn receive_tag(&self) -> u16 {
         BleRxPacketPrefix::new(&self.bytes.prefix())
             .auxiliary()
-            .bits_0_15_opaque()
+            .association_tag()
     }
     pub(crate) fn received(&self, connection: bool) -> Result<LeRxOutcome, LeRxError> {
         Ok(match self.disposition(connection)? {
@@ -384,7 +384,7 @@ impl LeRxPacketStorage {
     #[cfg(test)]
     pub(crate) fn emulate_receive_tag(&self, tag: u16) {
         self.bytes.update_prefix(|prefix| {
-            prefix.set_auxiliary(prefix.auxiliary().with_bits_0_15_opaque(tag))
+            prefix.set_auxiliary(prefix.auxiliary().with_association_tag(tag))
         });
     }
 }
