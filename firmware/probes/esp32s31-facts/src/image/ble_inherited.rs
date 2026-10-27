@@ -123,6 +123,20 @@ pub(super) fn admission(s: &mut Session<'_>) {
     state(s, 0x2120);
     admission::run(s);
     state(s, 0x2150);
+    // The complete prefix enables the controller watchdog. Its isolated
+    // no-RF session must not keep that production monitor running through
+    // debugger dwell. Quench only after the admission observation.
+    // SOURCE: BLOB_LIBBTDM_HAL_CONTROLLER_INIT, WDT_CONFIG_0.ENABLE.
+    s.ble.core.modify_wdt_config_0(|w| {
+        w.set_enable(false);
+    });
+    oer_riscv::fence();
+    emit(
+        0x215f,
+        u32::from(s.ble.core.read_wdt_config_0().enable()),
+        0,
+        0,
+    );
 }
 fn seed_enables(s: &mut Session<'_>) {
     // SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027 and
