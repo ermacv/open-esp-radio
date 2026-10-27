@@ -316,8 +316,20 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
   The default period is 1 s, with eligibility at `previous + period + 1 µs`.
   SYSTIMER Alarm0 at P3 acknowledges and pends P2; the P2 executor dispatches
   timers and polls the actor. There is no dedicated PHY timer handler.
-  The exclusive mutable domain borrow serializes tracking with the actor's
-  retunes. `admit_maintenance` checks pending tracking state; it has no hard
+  Registration, tracking, RF close and retained wake consume the domain and
+  return it with their typed result. `RadioDomain::detach` owns a PHY
+  transaction containing the registers, restore slots, registration epoch
+  and grant-protect state. Its return owner retains the attachment and
+  common power/clock obligations, without register access. Splitting that
+  pair permits transfer; reunion accepts only the exact affine domain
+  identity, independently of registration-epoch equality. Cancellation,
+  including before the first poll, retains both payloads in quarantine and
+  resets through a named retained fault; the next boot prints the reason.
+  Channel selection and retune also hold an owned transaction across every
+  wait; their future owns `ChannelTransaction`, whose channel HAL lends
+  its registers within that custody. The retained
+  cancellation record is 16 bytes and names the operation and epoch. The
+  actor cannot retune while its domain is transferred. `admit_maintenance` checks pending tracking state; it has no hard
   RF-window calendar. The actor enforces no one-period maximum deferral or
   shift counter, and queued requests can postpone a tick. Grant-protect
   requests bracket RF-sensitive work without proving an exclusive RF grant.

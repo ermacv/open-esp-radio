@@ -85,7 +85,7 @@ pub(super) enum I2cBoundary {
 /// completion edge; transaction callers finish the complete retained RMW.
 #[inline(never)]
 pub(super) fn direct_i2c<C: Clock + ?Sized>(
-    io: &mut Io<'_, '_>,
+    io: &mut Io<'_>,
     clock: &C,
     transaction: &mut PhyColdI2cTransaction,
     command: Option<crate::tracking::observation::RfpllCommand>,

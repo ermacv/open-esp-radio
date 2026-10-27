@@ -21,7 +21,7 @@
 //! without granting PAC access. Protocol policy and executor waits belong to
 //! their respective protocol and runtime crates.
 
-#[cfg(test)]
+#[cfg(any(test, all(feature = "test-support", not(target_arch = "riscv32"))))]
 extern crate std;
 
 use core::future::Future;

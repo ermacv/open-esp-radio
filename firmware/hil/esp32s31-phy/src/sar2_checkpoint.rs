@@ -32,30 +32,38 @@ impl Point {
 /// Registration and wake retain PHY clocks; the pre-close call precedes their
 /// release. There is deliberately no read after close with those clocks off.
 pub async fn observe<B: PlatformClockBackend, T>(
-    domain: &mut RadioDomain<B, T>,
+    domain: &mut Option<RadioDomain<B, T>>,
+    fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     point: Point,
 ) -> Result<(), RejectReason> {
     let field = ADC_SAR2_INITIAL_CODE_HIGH_ADDR;
     let address = field.address();
-    let mut registers = domain.phy_hal();
-    let mut started = false;
-    for _ in 0..oer_esp32s31_phy::HARDWARE_EDGE_LIMIT {
-        if !started {
-            started = i2c::try_start_read(&mut registers, address).is_ok();
-        }
-        if started && let Ok(raw) = i2c::try_finish_read(&registers, address) {
-            crate::transport::CONSOLE
-                .note_reliably(&Note::sar2_checkpoint(
-                    point.name(),
-                    raw.into(),
-                    field.extract(raw).into(),
-                ))
+    let mut transaction = crate::radio::require_radio(domain.take(), fault)
+        .detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
+    let result = async {
+        let registers = transaction.hardware_mut();
+        let mut started = false;
+        for _ in 0..oer_esp32s31_phy::HARDWARE_EDGE_LIMIT {
+            if !started {
+                started = i2c::try_start_read(registers, address).is_ok();
+            }
+            if started && let Ok(raw) = i2c::try_finish_read(registers, address) {
+                crate::transport::CONSOLE
+                    .note_reliably(&Note::sar2_checkpoint(
+                        point.name(),
+                        raw.into(),
+                        field.extract(raw).into(),
+                    ))
+                    .await;
+                return Ok(());
+            }
+            EmbassyClock
+                .wait_until(EmbassyClock.now().saturating_add(Duration::from_micros(1)))
                 .await;
-            return Ok(());
         }
-        EmbassyClock
-            .wait_until(EmbassyClock.now().saturating_add(Duration::from_micros(1)))
-            .await;
+        Err(RejectReason::Internal)
     }
-    Err(RejectReason::Internal)
+    .await;
+    *domain = Some(transaction.reunite());
+    result
 }

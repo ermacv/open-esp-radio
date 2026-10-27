@@ -1,12 +1,11 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
 use crate::power::PlatformClockBackend;
+#[cfg(test)]
+use crate::{domain::RadioDomain, ieee80211::channel};
 
 use crate::{
-    domain::RadioDomain,
-    ieee80211::{
-        channel, dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState,
-    },
+    ieee80211::{dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState},
     phy::i2c::PhyAdcRate,
     types::{
         MacInterruptEnableState, MacInterruptMask, MacInterruptRawSnapshot, MacInterruptSnapshot,
@@ -44,56 +43,7 @@ impl WifiBasebandEnableObservation {
     }
 }
 
-/// Protocol routes that can lend the shared radio PHY.
-///
-/// The route is part of every [`SharedPhyHal`] type, so an operation that is
-/// valid only for one route cannot accept a borrow minted by another.
-pub mod route {
-    mod sealed {
-        pub trait Route {}
-    }
-
-    /// Closed set of routes; downstream crates cannot add a lender.
-    pub trait Route: sealed::Route {}
-
-    /// Borrowed from the shared radio domain.
-    pub enum Shared {}
-
-    impl sealed::Route for Shared {}
-    impl Route for Shared {}
-}
-
-/// Narrow borrowed HAL capability for the protocol-neutral radio PHY.
-///
-/// This value cannot acquire, release, or recover the underlying PAC owner.
-/// Its lifetime is bounded by the active route `R` that lent it.
-///
-/// A borrow keeps its route through ordinary moves:
-///
-/// ```
-/// use oer_esp32s31_hal::owner::{SharedPhyHal, route};
-/// fn keep(phy: SharedPhyHal<'_, route::Shared>) -> SharedPhyHal<'_, route::Shared> {
-///     phy
-/// }
-/// ```
-pub struct SharedPhyHal<'owner, R: route::Route> {
-    pub(crate) registers: &'owner mut RadioPhyRegisters,
-    pub(crate) restore: &'owner mut PhyRouteState,
-    route: core::marker::PhantomData<fn() -> R>,
-}
-
-impl<'owner, R: route::Route> SharedPhyHal<'owner, R> {
-    pub(crate) fn new(
-        registers: &'owner mut RadioPhyRegisters,
-        restore: &'owner mut PhyRouteState,
-    ) -> Self {
-        Self {
-            registers,
-            restore,
-            route: core::marker::PhantomData,
-        }
-    }
-}
+use crate::domain::transaction::PhyHardware;
 
 pub(crate) mod sealed {
 
@@ -119,7 +69,7 @@ pub(crate) mod sealed {
 
 /// Sealed protocol-neutral port accepted by named PHY HAL operations.
 ///
-/// External crates can use an acquired [`SharedPhyHal`] or channel borrow but cannot implement this trait for an arbitrary owner or recover
+/// External crates can borrow an owned [`PhyHardware`] or channel transaction but cannot implement this trait for an arbitrary owner or recover
 /// the underlying PAC.
 pub trait SharedPhyAccess: sealed::SharedPhyAccess {
     /// The registration that currently describes this PHY partition.
@@ -343,32 +293,32 @@ pub trait PhyInitializationAccess: SharedPhyContext + sealed::PhyInitializationA
     }
 }
 
-impl<R: route::Route> sealed::SharedPhyAccess for SharedPhyHal<'_, R> {
+impl sealed::SharedPhyAccess for PhyHardware {
     fn pac(&self) -> &RadioPhyRegisters {
-        self.registers
+        &self.registers
     }
 
     fn route_state(&self) -> &PhyRouteState {
-        self.restore
+        &self.restore
     }
 
     fn parts_mut(&mut self) -> (&mut RadioPhyRegisters, &mut PhyRouteState) {
-        (self.registers, self.restore)
+        (&mut self.registers, &mut self.restore)
     }
 }
 
-impl<R: route::Route> sealed::SharedPhyContext for SharedPhyHal<'_, R> {
+impl sealed::SharedPhyContext for PhyHardware {
     fn wifi_baseband_enable_observation(&self) -> WifiBasebandEnableObservation {
         WifiBasebandEnableObservation::from_pac_readback(self.registers.wifi_baseband_is_enabled())
     }
 }
 
-impl<R: route::Route> SharedPhyAccess for SharedPhyHal<'_, R> {}
-impl<R: route::Route> SharedPhyContext for SharedPhyHal<'_, R> {}
+impl SharedPhyAccess for PhyHardware {}
+impl SharedPhyContext for PhyHardware {}
 
-impl<R: route::Route> sealed::PhyInitializationAccess for SharedPhyHal<'_, R> {}
+impl sealed::PhyInitializationAccess for PhyHardware {}
 
-impl<R: route::Route> PhyInitializationAccess for SharedPhyHal<'_, R> {}
+impl PhyInitializationAccess for PhyHardware {}
 
 pub(crate) fn phy_pac(access: &(impl SharedPhyAccess + ?Sized)) -> &RadioPhyRegisters {
     sealed::SharedPhyAccess::pac(access)
@@ -436,7 +386,10 @@ impl RadioAccess {
     #[doc(hidden)]
     pub fn claim_for_host_test() -> Self {
         let (_shared, partitions) = crate::root::RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend, _>(());
+            .split::<crate::power::test_clocks::CountingBackend, _>(
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        );
         let clocked = crate::ieee80211::client::WifiClocked::for_host_test(
             crate::ieee80211::client::WifiCold::from_partition(partitions.wifi),
         );
@@ -509,18 +462,13 @@ impl RadioAccess {
         channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore)
     }
 
-    /// Borrow the channel HAL together with the domain's attachment, for a
-    /// PHY channel operation that updates the shared domain's state.
-    pub fn channel_hal_with_attachment<'hal, B: PlatformClockBackend, P, T>(
+    /// Consume PHY custody for one channel operation, borrowing its MAC and platform.
+    pub fn channel_transaction<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<B, T>,
-    ) -> (channel::RadioChannelHal<'hal, P>, &'hal mut T) {
-        let (phy, restore, attachment) = radio.phy_parts_with_attachment();
-        (
-            channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore),
-            attachment,
-        )
+        radio: crate::domain::transaction::RadioTransaction<B, T>,
+    ) -> crate::ieee80211::channel::ChannelTransaction<'hal, B, P, T> {
+        crate::ieee80211::channel::ChannelTransaction::new(radio, &mut self.registers, platform)
     }
 
     /// Read the calibrated baseband observation without exposing the PAC

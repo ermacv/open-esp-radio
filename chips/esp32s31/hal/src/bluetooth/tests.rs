@@ -26,8 +26,11 @@ fn clocked() -> (
     Others,
     ClockedOwner,
 ) {
-    let (shared, partitions) =
-        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (shared, partitions) = RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     let ProtocolPartitions {
         wifi,
         wifi_coex,
@@ -338,7 +341,10 @@ fn stopping_a_planning_timer_preserves_original_and_deferred_dispatch_on_refusal
         [(true, None), (false, Some(true)), (true, Some(false))]
     {
         let (_, partitions) = crate::root::RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend, _>(());
+            .split::<crate::power::test_clocks::CountingBackend, _>(
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        );
         let (mut task, _) =
             ClockedOwner::for_host_test(partitions.bluetooth).separate_interrupt_owner();
         let pending = ModemLpTimerSoftwarePendingOwner {

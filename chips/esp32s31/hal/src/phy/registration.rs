@@ -17,6 +17,13 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyRegistrationEpoch(core::num::NonZeroU32);
 
+impl PhyRegistrationEpoch {
+    /// Opaque epoch observation for retained fault diagnostics.
+    pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+}
+
 /// The one owner's right over one PHY registration: [`begin`] gives it, and
 /// it is neither `Clone` nor `Copy`, so only the owner that began the
 /// registration (the registered PHY domain) holds it. A BTBB gain is

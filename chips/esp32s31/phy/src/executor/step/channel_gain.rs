@@ -18,7 +18,7 @@ impl Cursor {
     #[inline(never)]
     pub(super) fn advance(
         &mut self,
-        io: &mut Io<'_, '_>,
+        io: &mut Io<'_>,
         image: &PhyWifiTxGainImage,
     ) -> Result<bool, Failure> {
         if self.next == 0 {

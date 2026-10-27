@@ -19,11 +19,7 @@ impl<'a> Counted<'a> {
         }
     }
     #[inline(never)]
-    pub(super) fn advance_one(
-        &mut self,
-        io: &mut Io<'_, '_>,
-        now: Instant,
-    ) -> Result<Step, Failure> {
+    pub(super) fn advance_one(&mut self, io: &mut Io<'_>, now: Instant) -> Result<Step, Failure> {
         if self.remaining == 0 {
             return Err(Failure::TimedOut);
         }

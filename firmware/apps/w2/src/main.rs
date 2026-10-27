@@ -93,6 +93,7 @@ type Actor = RadioSystem<
 /// The image's entropy owner.
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 
+oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
@@ -128,7 +129,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         base_mac_address: factory.base_mac(),
         mac_extension: factory.mac_extension(),
     };
-    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(
+        ConcurrentPhy::new(),
+        oer_espressif_staged_runtime::phy_fault::identity(),
+    );
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         fail("claim")
     };

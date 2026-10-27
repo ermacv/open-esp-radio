@@ -369,11 +369,7 @@ impl Registers for Io {
         clock: &C,
         now: Instant,
     ) -> Step {
-        job.advance_one::<D, _>(
-            super::io::Io::Test(self, core::marker::PhantomData),
-            clock,
-            now,
-        )
+        job.advance_one::<D, _>(super::io::Io::Test(self), clock, now)
     }
     fn advance_power<D: crate::executor::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
@@ -384,7 +380,7 @@ impl Registers for Io {
         measured: bool,
     ) -> Step {
         super::power::advance::<D, _>(
-            &mut super::io::Io::Test(self, core::marker::PhantomData),
+            &mut super::io::Io::Test(self),
             child,
             gain,
             action,
@@ -1638,7 +1634,7 @@ fn cold_rfpll_keeps_the_first_sample_wait_and_the_native_attempt_budget() {
     let mut transaction = read();
     let mut cursor = i2c::Counted::new(&mut transaction);
     cursor.remaining = 2;
-    let mut hw = super::io::Io::Test(&mut io, core::marker::PhantomData);
+    let mut hw = super::io::Io::Test(&mut io);
     assert_eq!(cursor.advance_one(&mut hw, clock.now()), Ok(Step::Runnable));
     assert!(matches!(
         cursor.advance_one(&mut hw, clock.now()),
@@ -1670,7 +1666,7 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
     };
     let mut direct_binding = RfpllFrequencyI2cBinding::new(action).expect("valid RFPLL write");
     rfpll::direct_i2c(
-        &mut super::io::Io::Test(&mut direct, core::marker::PhantomData),
+        &mut super::io::Io::Test(&mut direct),
         &clock,
         direct_binding.transaction_mut(),
         None,
@@ -1718,7 +1714,7 @@ fn cold_rfpll_waits_between_busy_retries_and_fails_overflow_before_publishing() 
     let mut transaction = read();
     let mut cursor = i2c::Counted::new(&mut transaction);
     cursor.remaining = 2;
-    let mut hw = super::io::Io::Test(&mut io, core::marker::PhantomData);
+    let mut hw = super::io::Io::Test(&mut io);
     for _ in 0..2 {
         assert!(matches!(
             cursor.advance_one(&mut hw, clock.now()),

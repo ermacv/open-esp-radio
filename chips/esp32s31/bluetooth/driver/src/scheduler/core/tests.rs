@@ -12,8 +12,11 @@ use oer_esp32s31_hal::{
 
 #[test]
 fn controller_hal_precedes_complete_scheduler_init() {
-    let (_shared, partitions) =
-        RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
+    let (_shared, partitions) = RadioHardware::for_host_test()
+        .split::<crate::test_clocks::TestClockBackend, _>(
+            (),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        );
     let clocked = ClockedOwner::for_host_test(partitions.bluetooth);
     let operations = Rc::new(RefCell::new(Vec::new()));
     let hal_operations = Rc::clone(&operations);
@@ -58,8 +61,11 @@ fn controller_hal_precedes_complete_scheduler_init() {
 }
 
 fn initialized_for_rejection_test() -> ControllerHalInitialized<crate::test_clocks::ModelMemory> {
-    let (_, partitions) =
-        RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
+    let (_, partitions) = RadioHardware::for_host_test()
+        .split::<crate::test_clocks::TestClockBackend, _>(
+            (),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        );
     let (engine, interrupts) =
         crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
     ControllerHalInitialized::initialize_for_validation(engine, interrupts, |_, _| {})

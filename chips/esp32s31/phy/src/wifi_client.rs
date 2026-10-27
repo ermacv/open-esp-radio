@@ -88,7 +88,7 @@ pub fn set_wifi_rx<B: PlatformClockBackend>(
     (radio.attachment().permission_key() == membership.key)
         .then_some(())
         .expect("PHY registration mismatch");
-    oer_esp32s31_hal::phy::frequency::set_wifi_enabled(&mut radio.phy_hal(), enabled);
+    radio.set_wifi_rx_enabled(enabled);
 }
 
 /// Failed leave retaining the membership.

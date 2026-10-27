@@ -31,24 +31,14 @@ pub(crate) trait Registers {
     ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure>;
     fn i2c_status(&mut self) -> u8;
 }
-pub(super) enum Io<'a, 'owner> {
+pub(super) enum Io<'a> {
     #[cfg(target_arch = "riscv32")]
-    Shared(
-        &'a mut oer_esp32s31_hal::owner::SharedPhyHal<
-            'owner,
-            oer_esp32s31_hal::owner::route::Shared,
-        >,
-    ),
+    Shared(&'a mut oer_esp32s31_hal::domain::transaction::PhyHardware),
     #[cfg(test)]
-    Test(
-        &'a mut super::tests::Io,
-        core::marker::PhantomData<&'owner ()>,
-    ),
+    Test(&'a mut super::tests::Io),
 }
 #[cfg(target_arch = "riscv32")]
-impl Registers
-    for oer_esp32s31_hal::owner::SharedPhyHal<'_, oer_esp32s31_hal::owner::route::Shared>
-{
+impl Registers for oer_esp32s31_hal::domain::transaction::PhyHardware {
     fn advance<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         job: &mut Job<'_>,
@@ -80,7 +70,7 @@ impl Registers
     }
 }
 
-impl Io<'_, '_> {
+impl Io<'_> {
     /// Keep channel's large command/completion values out of the shared dispatcher.
     #[inline(never)]
     pub(super) fn channel<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
@@ -164,7 +154,7 @@ impl Io<'_, '_> {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(_) => self.rfpll_frequency::<D, _>(clock, binding),
             #[cfg(test)]
-            Self::Test(io, _) => io.frequency::<D>(binding),
+            Self::Test(io) => io.frequency::<D>(binding),
         }
     }
     pub(super) fn gain_base(
@@ -179,7 +169,7 @@ impl Io<'_, '_> {
                 oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
             ),
             #[cfg(test)]
-            Self::Test(io, _) => io.power_gain_base(action),
+            Self::Test(io) => io.power_gain_base(action),
         }
     }
 
@@ -190,7 +180,7 @@ impl Io<'_, '_> {
                 oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
             ),
             #[cfg(test)]
-            Self::Test(io, _) => io.channel_gain_base(),
+            Self::Test(io) => io.channel_gain_base(),
         }
     }
 
@@ -205,7 +195,7 @@ impl Io<'_, '_> {
                 Ok(())
             }
             #[cfg(test)]
-            Self::Test(io, _) => io.power_gain_entry(entry),
+            Self::Test(io) => io.power_gain_entry(entry),
         }
     }
 
@@ -217,7 +207,7 @@ impl Io<'_, '_> {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => Ok(binding.execute_target(*registers)),
             #[cfg(test)]
-            Self::Test(io, _) => io.power(binding),
+            Self::Test(io) => io.power(binding),
         }
     }
 
@@ -301,7 +291,7 @@ impl Io<'_, '_> {
                     return Err(Failure::Binding);
                 }
                 #[cfg(test)]
-                if let Self::Test(io, _) = self {
+                if let Self::Test(io) = self {
                     io.rfpll::<D>(Action::Search(search::Action::DelayMicros(
                         remaining as u32,
                     )))?;
@@ -365,7 +355,7 @@ impl Io<'_, '_> {
                     _ => return Err(Failure::Binding),
                 };
                 #[cfg(test)]
-                if let Self::Test(io, _) = self {
+                if let Self::Test(io) = self {
                     io.prepare_rfpll_command(kind);
                 }
                 sample = super::rfpll::direct_i2c(
@@ -417,7 +407,7 @@ impl Io<'_, '_> {
                     _ => return Err(Failure::Binding),
                 };
                 #[cfg(test)]
-                if let Self::Test(io, _) = self {
+                if let Self::Test(io) = self {
                     io.rfpll::<D>(action)?;
                 }
                 Completion::Search(done)
@@ -473,7 +463,7 @@ impl Io<'_, '_> {
                     .map_err(Failure::Target)
             }
             #[cfg(test)]
-            Self::Test(io, _) => {
+            Self::Test(io) => {
                 let crate::tracking::rfpll::Completion::Memory(done) = io
                     .rfpll::<super::tests::TestDelay>(crate::tracking::rfpll::Action::Memory(
                         action,
@@ -497,7 +487,7 @@ impl Io<'_, '_> {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => sample(*registers),
             #[cfg(test)]
-            Self::Test(io, _) => Registers::i2c_status(*io),
+            Self::Test(io) => Registers::i2c_status(*io),
         }
     }
     #[inline(never)]
@@ -528,7 +518,7 @@ impl Io<'_, '_> {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => apply(*registers, transaction, start),
             #[cfg(test)]
-            Self::Test(io, _) => {
+            Self::Test(io) => {
                 if start {
                     io.start_i2c(transaction).map(|started| {
                         if started {
@@ -569,7 +559,7 @@ impl Io<'_, '_> {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => apply(*registers, binding, start),
             #[cfg(test)]
-            Self::Test(io, _) => {
+            Self::Test(io) => {
                 if start {
                     io.start_pbus(binding)
                         .map(|()| PhyPbusHardwareObservation::EdgeConsumed)
@@ -584,7 +574,7 @@ impl Io<'_, '_> {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => oer_esp32s31_hal::phy::temperature::read_code(*registers),
             #[cfg(test)]
-            Self::Test(io, _) => io.temperature_code(),
+            Self::Test(io) => io.temperature_code(),
         }
     }
     pub(super) fn pbus_control(&mut self, work_mode: bool) -> Result<bool, Failure> {
@@ -615,7 +605,7 @@ impl Io<'_, '_> {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => apply(*registers, work_mode),
             #[cfg(test)]
-            Self::Test(io, _) => io.clear_pbus_control(work_mode),
+            Self::Test(io) => io.clear_pbus_control(work_mode),
         }
     }
 }

@@ -141,7 +141,10 @@ where
             .cold
             .take()
             .ok_or_else(|| failed(PoisonCause::Custody))?;
-        let (powered, power) = match cold.power_up(&mut shared.radio, &shared.clocks) {
+        let (powered, power) = match cold.power_up(
+            super::require_radio(shared.radio.as_mut(), shared.radio_fault),
+            &shared.clocks,
+        ) {
             Ok(owners) => owners,
             Err(error) => {
                 let cause = PoisonCause::CommonPower(error.error());
@@ -150,7 +153,10 @@ where
             }
         };
         self.power = Some(power);
-        let clocked = match powered.enable_clocks(&mut shared.radio, &shared.clocks) {
+        let clocked = match powered.enable_clocks(
+            super::require_radio(shared.radio.as_mut(), shared.radio_fault),
+            &shared.clocks,
+        ) {
             Ok(clocked) => clocked,
             Err(error) => {
                 self.powered = Some(error.into_owner());
@@ -174,14 +180,18 @@ where
             self.coex = Some(coex);
             return Err(failed(PoisonCause::Custody));
         };
-        let (present, _) = shared.radio.enter_coex(absent);
+        let (present, _) =
+            super::require_radio(shared.radio.as_mut(), shared.radio_fault).enter_coex(absent);
         self.coex = Some(Coex::Present(present));
         let task = self
             .controller
             .task_owner()
             .ok_or_else(|| failed(PoisonCause::Custody))?;
-        let ready =
-            phy_ready(&mut shared.radio).map_err(|error| failed(PoisonCause::Domain(error)))?;
+        let ready = phy_ready(super::require_radio(
+            shared.radio.as_mut(),
+            shared.radio_fault,
+        ))
+        .map_err(|error| failed(PoisonCause::Domain(error)))?;
         let PhyClientAccess::Available(ready) = ready.client::<BluetoothPhyMembership>() else {
             return Err(failed(PoisonCause::Custody));
         };
@@ -212,8 +222,11 @@ where
             .membership
             .as_ref()
             .ok_or_else(|| failed(PoisonCause::Custody))?;
-        let ready = bluetooth_rf_ready(&mut shared.radio, member)
-            .map_err(|error| failed(PoisonCause::Domain(error)))?;
+        let ready = bluetooth_rf_ready(
+            super::require_radio(shared.radio.as_mut(), shared.radio_fault),
+            member,
+        )
+        .map_err(|error| failed(PoisonCause::Domain(error)))?;
         self.controller
             .initialize_phy(ready)
             .map_err(|_| failed(PoisonCause::Controller))?;
@@ -246,18 +259,32 @@ where
         let Some(member) = self.membership.take() else {
             return poisoned(PoisonCause::Custody);
         };
-        let last = match leave_bluetooth(&mut shared.radio, task, member) {
+        let last = match leave_bluetooth(
+            super::require_radio(shared.radio.as_mut(), shared.radio_fault),
+            task,
+            member,
+        ) {
             Ok(last) => last,
             Err(error) => {
                 self.membership = Some(error.into_membership());
                 return poisoned(PoisonCause::Controller);
             }
         };
-        let clocked = match self.controller.reset(&mut shared.radio).await {
+        let clocked = match self
+            .controller
+            .reset(super::require_radio(
+                shared.radio.as_mut(),
+                shared.radio_fault,
+            ))
+            .await
+        {
             Ok(clocked) => clocked,
             Err(_) => return poisoned(PoisonCause::Controller),
         };
-        let powered = match clocked.disable_clocks(&mut shared.radio) {
+        let powered = match clocked.disable_clocks(super::require_radio(
+            shared.radio.as_mut(),
+            shared.radio_fault,
+        )) {
             Ok(powered) => powered,
             Err(error) => {
                 self.clocked = Some(error.into_owner());
@@ -268,13 +295,18 @@ where
             self.powered = Some(powered);
             return poisoned(PoisonCause::Custody);
         };
-        let (absent, _) = shared.radio.leave_coex(present);
+        let (absent, _) =
+            super::require_radio(shared.radio.as_mut(), shared.radio_fault).leave_coex(present);
         let Some(power) = self.power.take() else {
             self.coex = Some(Coex::Absent(absent));
             self.powered = Some(powered);
             return poisoned(PoisonCause::Custody);
         };
-        match powered.power_down(&mut shared.radio, power, &absent) {
+        match powered.power_down(
+            super::require_radio(shared.radio.as_mut(), shared.radio_fault),
+            power,
+            &absent,
+        ) {
             Ok(cold) => {
                 self.cold = Some(cold);
                 self.coex = Some(Coex::Absent(absent));

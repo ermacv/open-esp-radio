@@ -12,6 +12,9 @@ description = "Isolated ESP32-S31 PAC/HAL register conformance probes, and the l
 oer-probe-macros = { path = "../../../tools/probe/macros" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-memory = { path = "../../../portable/memory" }
+[target.'cfg(not(target_arch = "riscv32"))'.dependencies]
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", features = ["test-support"] }
+
 [lib]
 crate-type = ["rlib", "staticlib"]
 

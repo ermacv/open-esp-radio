@@ -9,7 +9,10 @@ type Memory = ArenaMemory<'static, 'static, 0, 1, 2, 1, 4, 4, 8>;
 
 fn clocked() -> bluetooth::ClockedOwner {
     let (_, partitions) = crate::root::RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend, _>(());
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     bluetooth::ClockedOwner::for_host_test(partitions.bluetooth)
 }
 fn config() -> SchedulerAllocationConfig {

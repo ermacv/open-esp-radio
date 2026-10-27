@@ -47,6 +47,8 @@ mod default_handlers;
 pub mod diagnostics;
 #[cfg(feature = "esp32s31")]
 pub mod fatal;
+#[cfg(feature = "esp32s31")]
+pub mod phy_fault;
 /// Shared retained/reset path selected only by staged Wi-Fi images.
 #[cfg(feature = "wifi-fault")]
 pub mod wifi_fault;
@@ -192,6 +194,7 @@ impl Handoff {
         board: B,
     ) -> Result<(B::Mapping, Adopted<C>), BootError> {
         panic::report_previous_fault();
+        phy_fault::report_previous();
         let mapping = board.adopt(&self.proof);
         let actual = usize::from(controller.hart());
         let expected = oer_esp32s31_hal::platform::BOOT_HART.get();

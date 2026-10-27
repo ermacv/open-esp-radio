@@ -8,26 +8,7 @@
 use super::*;
 use crate::domain::PhyDomain;
 
-// The constructor writes its async block directly into the caller's future.
-// A fixed poll boundary keeps registration temporaries out of enclosing radio
-// polls without an allocation or another copy of the retained transition.
-pin_project_lite::pin_project! {
-    pub(super) struct RegisterFuture<F> {
-        #[pin]
-        pub(super) future: F,
-    }
-}
-impl<F: core::future::Future> core::future::Future for RegisterFuture<F> {
-    type Output = F::Output;
-
-    #[inline(never)]
-    fn poll(
-        self: core::pin::Pin<&mut Self>,
-        cx: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<Self::Output> {
-        self.project().future.poll(cx)
-    }
-}
+use super::concurrent::operations::RegisterFuture;
 
 /// Caller-owned inputs for one production common-PHY registration.
 ///

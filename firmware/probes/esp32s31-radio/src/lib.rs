@@ -26,17 +26,6 @@ mod session;
 /// start: no write.
 const REJECTED: u32 = u32::MAX;
 
-#[panic_handler]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "isolated verification image has no executor; panic is a terminal probe failure"
-)]
-fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
-}
-
 /// Harness-only delay edge intercepted by the Blobray verifier before this body runs.
 // SAFETY: the probe image links no ROM, so this is the one `ets_delay_us`,
 // with the ROM function's C signature the vendor code calls.
@@ -51,7 +40,7 @@ oer_probe_macros::probe! {
     /// Wi-Fi up through its public client path. Zero, or why the session
     /// did not start; nothing of it is compared.
     pub fn open_probe_session_init() -> u32 {
-        session::init()
+        session::init(phy_identity)
     }
 }
 
@@ -362,12 +351,9 @@ oer_probe_macros::probe! {
 
 oer_probe_macros::probe! {
     pub fn open_phy_trace_dis_hw_set_freq() {
-        let _ = session::with(|session| {
-            oer_esp32s31_hal::phy::frequency::set_hardware_control(
-                &mut session.radio.phy_hal(),
-                false,
-            )
-        });
+        let _ = session::with(|session| session.phy(|phy| {
+            oer_esp32s31_hal::phy::frequency::set_hardware_control(phy, false)
+        }));
         ets_delay_us(2);
         // Keep the delay as a non-tail edge so the executor sees the named
         // harness symbol independently of linker tail-call relaxation.
@@ -388,9 +374,9 @@ oer_probe_macros::probe! {
             parameters[4],
             parameters[5],
         );
-        let _ = session::with(|session| {
-            oer_esp32s31_hal::phy::i2c::configure_command_memory(&mut session.radio.phy_hal(), inputs)
-        });
+        let _ = session::with(|session| session.phy(|phy| {
+            oer_esp32s31_hal::phy::i2c::configure_command_memory(phy, inputs)
+        }));
     }
 }
 
@@ -406,4 +392,43 @@ oer_probe_macros::probe! {
     /// shared PHY. This also exposes the preserved ordinary delay-call boundary.
     pub fn open_phy_trace_owned_software_frequency_control() =>
         open_phy_trace_dis_hw_set_freq();
+}
+
+#[cfg(target_arch = "riscv32")]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "isolated verification image terminal failure"
+)]
+fn probe_halt() -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}
+#[cfg(target_arch = "riscv32")]
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+    probe_halt()
+}
+#[cfg(target_arch = "riscv32")]
+static PHY_FAULT: oer_memory::OnceValue<oer_esp32s31_hal::domain::transaction::Fault> =
+    oer_memory::OnceValue::new();
+#[cfg(target_arch = "riscv32")]
+fn report_phy_fault(fault: oer_esp32s31_hal::domain::transaction::Fault) -> ! {
+    let _first = PHY_FAULT.set(fault);
+    probe_halt()
+}
+#[cfg(target_arch = "riscv32")]
+oer_esp32s31_hal::phy_fault_reporter!(report_phy_fault);
+#[cfg(target_arch = "riscv32")]
+static PHY_SEAT: oer_esp32s31_hal::domain::transaction::TransactionSeat =
+    oer_esp32s31_hal::domain::transaction::TransactionSeat::new();
+#[cfg(target_arch = "riscv32")]
+fn phy_identity() -> oer_esp32s31_hal::domain::transaction::PhyIdentity {
+    match PHY_SEAT.claim() {
+        Some(identity) => identity,
+        None => report_phy_fault(oer_esp32s31_hal::domain::transaction::Fault {
+            reason: oer_esp32s31_hal::domain::transaction::FaultReason::IdentityClaimed,
+            registration: None,
+        }),
+    }
 }

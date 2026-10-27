@@ -421,6 +421,35 @@ upper owner. Its caller lends the arena's live ring shared:
 completed-descriptor views borrow that ring mutably, and the ring is not
 `Sync`, so no CPU view of the bytes is live meanwhile.
 
+The HAL's owned PHY transaction adds no unsafe code. A permanently claimed
+`TransactionSeat` supplies one affine domain identity. `RadioTransaction`
+keeps its PHY and inert return owner paired; after a consuming split,
+`DetachedRadioDomain::reunite` checks the exact seat identity and returns
+foreign inputs unchanged. Registration-epoch equality grants no reunion.
+`PhyHardware` owns its registers and restore state; shared accessors lend
+short borrows of that owner, without extending a lifetime. The transaction's
+grant-protect words remain with the movable PHY half. Neither half exposes
+register ownership from the other. Channel and retune futures own
+`ChannelTransaction`, containing the PHY custody and exclusive MAC/platform
+loans, and return the domain with their result.
+Both payloads stay in `ManuallyDrop` until consuming reunion. Both guards
+record `Cancelled(Operation)` with the registration observation, independently
+of field drop order. The operation names register, maintain, wake, close,
+channel or retune. `FaultHandle::require_owner` reports only a missing owner;
+a diagnostic handle cannot select another fault reason.
+The HAL declares the direct `link_fn!` binding and exports
+`phy_fault_reporter!` to define that exact signature. Staged images bind it
+to `fatal::reset_recording`. Their four-word (16-byte), versioned/checksummed
+record retains reason/operation and epoch and is cleared only after successful
+next-boot output. The address of the image's owner is not stored.
+Isolated comparison probes supply their own reporter through the same HAL
+macro, preserve their first named fault in session RAM and terminate through
+their own probe halt/panic path. They use verifier linker scripts and
+no staged runtime; the radio probe's staged hardware companion uses the
+normal runtime record/reset path. Host tests use separate seats and catch
+their own reporter's unwind; both payloads remain quarantined there too.
+No new unsafe block or sharing implementation is introduced.
+
 `oer-memory` holds the shared proofs for executor-crossing storage.
 `ContextCell<T, P: ContextProof>` holds executor-owned signal state, signal
 list links and timer slots. The owner's private unsafe `ContextProof`

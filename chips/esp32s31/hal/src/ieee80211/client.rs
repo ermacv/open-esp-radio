@@ -10,13 +10,15 @@
 //! readiness are later stages.
 //!
 //! A clocked client borrows its capabilities with the radio domain: the
-//! cold MAC HAL and the channel HAL take the shared registers from the radio domain
-//! for one transaction, the MAC reset pulses through it, and the runtime MAC
+//! cold MAC HAL borrows the shared registers, while channel operations consume
+//! owned PHY custody. The MAC reset pulses through the domain, and the runtime MAC
 //! HAL needs no radio domain because the Wi-Fi hot path touches Wi-Fi registers
 //! only. After cold MAC setup [`WifiClocked::into_running`] hands out the
 //! task-side [`RadioAccess`]; [`WifiClocked::from_running`] takes a stopped
 //! runtime epoch back.
 
+#[cfg(test)]
+use crate::ieee80211::channel::RadioChannelHal;
 use crate::power::PlatformClockBackend;
 
 use core::fmt;
@@ -30,7 +32,6 @@ use crate::{
         PlatformClockProvider, RadioDomain, WifiClient,
     },
     ieee80211::{
-        channel::RadioChannelHal,
         mac::{WifiMacColdHal, WifiMacHal},
         station_wake::StationWakeState,
     },
@@ -335,18 +336,13 @@ impl WifiClocked {
         RadioChannelHal::from_leased(platform, &mut self.registers.mac, phy, restore)
     }
 
-    /// Borrow the channel HAL together with the domain's attachment, for a
-    /// PHY channel operation that updates the shared domain's state.
-    pub fn channel_hal_with_attachment<'hal, B: PlatformClockBackend, P, T>(
+    /// Consume PHY custody for one channel operation, borrowing its MAC and platform.
+    pub fn channel_transaction<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<B, T>,
-    ) -> (RadioChannelHal<'hal, P>, &'hal mut T) {
-        let (phy, restore, attachment) = radio.phy_parts_with_attachment();
-        (
-            RadioChannelHal::from_leased(platform, &mut self.registers.mac, phy, restore),
-            attachment,
-        )
+        radio: crate::domain::transaction::RadioTransaction<B, T>,
+    ) -> crate::ieee80211::channel::ChannelTransaction<'hal, B, P, T> {
+        crate::ieee80211::channel::ChannelTransaction::new(radio, &mut self.registers.mac, platform)
     }
 
     /// Complete the one-way transition after cold MAC setup: the task-side

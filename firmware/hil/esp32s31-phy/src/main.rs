@@ -131,6 +131,7 @@ static REQUESTS: embassy_sync::channel::Channel<
 /// The image's entropy owner.
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::EmbassyClock>;
 
+oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start("phy"));
@@ -162,7 +163,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let station = factory.address(oer_esp32s31_hal::platform::Interface::Station);
     let access_point = factory.address(oer_esp32s31_hal::platform::Interface::AccessPoint);
-    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(
+        ConcurrentPhy::new(),
+        oer_espressif_staged_runtime::phy_fault::identity(),
+    );
     let mut rng = Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
     let radio = radio::Radio::place(

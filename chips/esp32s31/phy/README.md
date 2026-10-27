@@ -4,7 +4,7 @@ This crate owns S31 RF algorithms, calibration state and finite hardware
 transitions. It consumes typed HAL operations; it does not link the vendor PHY
 library. Protocol runtimes own their MAC, descriptors, interrupt routes and
 connection state. The radio system owns the shared radio domain and serializes
-PHY lifecycle, retune and tracking calls through its exclusive mutable borrow.
+PHY lifecycle, retune and tracking calls through exclusive ownership.
 
 The [capability matrix](FEATURES.md) distinguishes implemented primitives from
 composed services. The [tracking contract](src/tracking/README.md) is the
@@ -66,11 +66,11 @@ reset or retained-sleep wakeup replay.
 | [PHY state](src/state.rs) | Configuration, calibration results, temperature references and cache values | Values do not grant register access |
 | [Client state](src/state/client.rs) and [tracking schedule](src/tracking/schedule.rs) | Active clients, source intervals and read-only demand | Wi-Fi and BT/154 are scheduling classes; BT and 154 remain distinct clients |
 | [Registered domain](src/domain.rs) | One `PhyDomain` per registration: calibration state and the shared client set | A domain cannot be cloned, rebuilt or paired with another epoch; operations check the registration epoch before hardware access |
-| [Concurrent domain](src/concurrent.rs) and its [target port](src/target_port/concurrent.rs) | The shared domain in the HAL radio domain; Wi-Fi, Bluetooth and IEEE 802.15.4 join it as clients | Every operation borrows the radio domain mutably |
+| [Concurrent domain](src/concurrent.rs) and its [target port](src/target_port/concurrent.rs) | The shared domain in the HAL radio domain; Wi-Fi, Bluetooth and IEEE 802.15.4 join it as clients | Lifecycle and tracking consume the radio domain and return it with their typed result |
 | [Tracking graphs](src/tracking.rs) and [executor](src/executor.rs) | Execute selected children and validate their completions | No independent RF arbitration |
 | [Target port](src/target_port.rs) and [HAL PHY](../hal/src/phy.rs) | Typed MMIO, analog buses, hardware completion and bounded waits | Hardware access is borrowed from the admitted owner |
 | [Analog register bus](../../espressif/analog/README.md) | Field, configuration and parallel transitions of the vendor analog-I2C leaves | The transitions touch no bus; the target port and HAL drive them |
-| [Radio system](../radio/system/README.md) | The radio domain, platform resources, first-join registration and deadline-driven periodic tracking | The P2 actor runs tracking on the borrowed domain with grant-protect brackets; it pauses no protocol |
+| [Radio system](../radio/system/README.md) | The radio domain, platform resources, first-join registration and deadline-driven periodic tracking | The P2 actor transfers an owned PHY transaction for tracking with grant-protect brackets; it pauses no protocol |
 | [HAL stopped-MAC check](../hal/src/owner/maintenance.rs) | The stopped Wi-Fi MAC check at the final-client boundary | A CPU mutex does not stop MAC or DMA |
 | [Hardware coex control](../../espressif/coex/README.md) | Recovered timer requests, PTI, clock conversion and withdrawal accounting | Programmed timer identity is not an RF grant |
 
@@ -89,8 +89,8 @@ flowchart TD
 
 PHY supplies the algorithms, demand and the concurrent domain. The radio
 system owns that domain and runs registration and tracking in its P2 actor;
-coex supplies the hardware arbitration mechanism. The exclusive mutable domain
-borrow is the PHY lock. Tracking brackets RF-sensitive regions with a
+coex supplies the hardware arbitration mechanism. Exclusive ownership of the
+PHY transaction serializes its register access. Tracking brackets RF-sensitive regions with a
 grant-protect request instead of pausing protocols. `admit_maintenance` checks
 pending tracking state, without a hard-window calendar or grant acknowledgement.
 A coex timer reply, client bit or PTI is never an ownership proof for the shared
@@ -134,12 +134,36 @@ started failure poisons the domain.
 ### Concurrent clients
 
 For concurrently running protocols the registered domain lives beside the
-shared registers in the HAL radio domain, as `RadioDomain<ConcurrentPhy>`.
-Every operation borrows the domain mutably, so the PHY state and the shared PHY are
-serialized by one mechanism:
+shared registers in `RadioDomain<B, ConcurrentPhy>`. Registration, tracking,
+RF close and retained wake consume that domain and return `(domain, result)`.
+`RadioDomain::detach(operation)` produces one owned `RadioTransaction`; its explicit
+reunion preserves registration epochs and pending restore obligations. The
+transaction can split into an inert return owner and a movable
+`PhyTransaction` carrying the hardware and grant-protect state. A split
+reunion rejects another domain's transaction without consuming either
+payload. The domain identity is affine and permanently claimed: equal
+registration epochs do not authorize a foreign return. Successful reunion
+consumes both halves, so a stale return token cannot remain live.
+
+Dropping either half, or a pending lifecycle/tracking future even before
+its first poll, quarantines all payloads without dropping their owners or
+restoring registers. Its named fault retains the cancelled operation
+and registration observation. Both halves report the same operation,
+independently of drop order. Firmware binds the fault directly at link
+time through the HAL's `phy_fault_reporter!` macro to `fatal::reset_recording`;
+a 16-byte record naming the operation and epoch is printed on the next
+boot and cleared only after successful output. Host tests use an independent
+seat and catch their own never-returning reporter. There is no lock, unsafe
+borrow extension or automatic rollback.
+
+Client membership uses short exclusive borrows. Channel capabilities borrow
+from an owned transaction: selection and retune retain its cancellation guard
+across every await.
+
+The production operations are:
 
 - `register_concurrent_phy` registers the domain once through the domain's
-  shared-PHY borrow. As ESP-IDF's calibrating first `esp_phy_enable`, it
+  owned PHY transaction. As ESP-IDF's calibrating first `esp_phy_enable`, it
   enables the `PHY` and `PHY_CALIBRATION` modem clock modules through the
   domain and releases `PHY_CALIBRATION` after calibration;
 - `close_concurrent_rf` runs `phy_close_rf` after the last client left and
@@ -163,7 +187,7 @@ serialized by one mechanism:
   pending, and `maintain_concurrent_phy` then runs the tracking transaction;
   a started failure poisons the domain. The one admission follows ESP-IDF's
   `phy_common.c`: the periodic timer runs `phy_param_track_tot` under the PHY
-  lock alone, without pausing any protocol. The exclusive domain borrow is that lock,
+  lock alone, without pausing any protocol. The owned PHY transaction is that lock,
   and the tracking graph brackets its RF-sensitive regions with the
   grant-protect request. A protocol operation that loses RF to it ends with
   its ordinary outcome.
@@ -291,7 +315,7 @@ poll, while an incomplete DC/IQ observation waits on the caller's timer.
 Required 1–20 us hardware settles count machine cycles through `oer-riscv`,
 using the stable frequency adopted by the HAL clock owner at runtime handover.
 PBus/I2C leaves retain their bounded direct observation policy.
-TXDC/PWDET retains its direct transaction on the borrowed radio domain,
+TXDC/PWDET retains its direct execution inside the owned PHY transaction,
 without CPU-admission queries between its operations. Runtime SAR readiness
 uses [timer-backed retries](src/tx/sar.rs) under our 40 µs engineering deadline;
 the ROM reference supplies no readiness deadline. A sample that reads ready
@@ -367,7 +391,7 @@ The timing mechanisms have different scopes:
 | Vendor minimum settle | Wait at least the required time after a hardware action | Named 1–20 µs settles use `mcycle`; longer settles use the caller's timer. Preemption can lengthen them. |
 | Readiness deadline | Our bound for observing completion or giving up on busy hardware | Direct observations use 20 µs; T7 accepts a completed answer after its 100 µs busy window; SAR gives up after 40 µs without a ready sample and accepts any ready sample. These are not vendor maximum delays. |
 | CPU admission | Decide whether another complete atom may run | Stop at a ready peer or 900 µs admission threshold, reserving 100 µs toward the 1 ms contract. No universal atom/poll elapsed-time cutoff. |
-| RF admission | Decide whether the shared RF transaction may start | Pending tracking state and the exclusive domain borrow; grant-protect brackets request hardware arbitration. No hard-window calendar, grant proof or one-period deferral bound. |
+| RF admission | Decide whether the shared RF transaction may start | Pending tracking state and the owned PHY transaction; grant-protect brackets request hardware arbitration. No hard-window calendar, grant proof or one-period deferral bound. |
 
 Finite execution limits are separate from those timing mechanisms:
 
@@ -481,8 +505,9 @@ baseband writes inside calibration cannot manufacture a resumable protocol
 epoch. Release checks and the exact RX/IRQ handoff establish that boundary.
 
 A pending demand wait is cancellable without starting hardware work. An
-abandoned or failed consuming execution is not automatically rolled back;
-it exposes no ready owner. Restoration failure also requires reset. Holding
+abandoned consuming execution quarantines its owners and records a named
+fault before reset. A failed execution returns its poisoned domain and
+typed failure, without automatic rollback. Restoration failure also requires reset. Holding
 a CPU critical section across async waits is not the exclusion model.
 
 Calibration completion, restoration completion and measured RF quality are

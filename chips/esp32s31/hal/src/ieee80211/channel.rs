@@ -35,6 +35,44 @@ impl ChannelRegisters<'_> {
     }
 }
 
+/// A channel operation's owned PHY custody and exclusive MAC/platform loans.
+/// Its guard remains owned by the operation future, including before polling.
+#[must_use = "a channel operation must return its exact radio domain"]
+pub struct ChannelTransaction<'a, B: crate::power::PlatformClockBackend, P, T> {
+    radio: crate::domain::transaction::RadioTransaction<B, T>,
+    mac: &'a mut WifiRadioRegisters,
+    platform: &'a mut P,
+}
+impl<'a, B: crate::power::PlatformClockBackend, P, T> ChannelTransaction<'a, B, P, T> {
+    pub(crate) fn new(
+        radio: crate::domain::transaction::RadioTransaction<B, T>,
+        mac: &'a mut WifiRadioRegisters,
+        platform: &'a mut P,
+    ) -> Self {
+        Self {
+            radio,
+            mac,
+            platform,
+        }
+    }
+    /// Lend the channel port only while this operation retains its owned guard.
+    pub fn parts_mut(&mut self) -> (RadioChannelHal<'_, P>, &mut T) {
+        let (hardware, attachment) = self.radio.hardware_with_attachment();
+        (
+            RadioChannelHal::from_leased(
+                self.platform,
+                self.mac,
+                &mut hardware.registers,
+                &mut hardware.restore,
+            ),
+            attachment,
+        )
+    }
+    pub fn reunite(self) -> crate::domain::RadioDomain<B, T> {
+        self.radio.reunite()
+    }
+}
+
 pub struct RadioChannelHal<'radio, P> {
     #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
     pub(crate) platform: &'radio mut P,

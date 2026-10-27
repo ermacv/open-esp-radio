@@ -21,7 +21,8 @@ use oer_memory::ClaimCell;
 pub(crate) struct Session {
     pub(crate) calibrated: bool,
     /// The shared radio domain.
-    pub(crate) radio: RadioDomain<ChipClocks, ConcurrentPhy>,
+    pub(crate) radio: Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
+    radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     /// The running Wi-Fi register owner.
     pub(crate) wifi: RadioAccess,
     /// Wi-Fi's common power, held for the session.
@@ -48,15 +49,20 @@ pub(crate) const INSTALLED: u32 = 4;
 pub(crate) const ROOT_INIT: u32 = 5;
 
 /// Start the session: [`STARTED`] or why it did not.
-pub(crate) fn init() -> u32 {
+pub(crate) fn init(
+    identity: impl FnOnce() -> oer_esp32s31_hal::domain::transaction::PhyIdentity,
+) -> u32 {
     let Some(root) = Root::take() else {
         return ROOT_TAKEN;
     };
     let Ok(runtime) = root.into_runtime() else {
         return ROOT_INIT;
     };
+    let transaction_identity = identity();
     let clocks = runtime.clocks;
-    let (radio, partitions) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let (radio, partitions) = runtime
+        .radio
+        .split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity);
     let session = match powered(radio, partitions.wifi, clocks) {
         Ok(session) => session,
         Err(reason) => return reason,
@@ -76,9 +82,11 @@ fn powered(
         return Err(WIFI_CLOCKS);
     };
     let (wifi, clocks_on) = clocked.into_running();
+    let radio_fault = radio.fault_handle();
     Ok(Session {
         calibrated: false,
-        radio,
+        radio: Some(radio),
+        radio_fault,
         wifi,
         _power: power,
         _clocks_on: clocks_on,
@@ -97,14 +105,16 @@ pub(crate) async fn calibrated(
     clocks: ChipClocks,
     identity: oer_esp32s31_phy::PhyCalibrationIdentity,
     timer: &impl oer_cooperate::CooperativeTimer,
+    transaction_identity: oer_esp32s31_hal::domain::transaction::PhyIdentity,
 ) -> u32 {
     use oer_esp32s31_phy::{
         NoopPhyTargetObserver, PhyRegisterConfig, RomShortDelay, register_concurrent_phy,
     };
-    let (mut radio, partitions) = hardware.split::<ChipClocks, _>(ConcurrentPhy::new());
-    let registration = register_concurrent_phy::<_, (), RomShortDelay, _>(
+    let (radio, partitions) =
+        hardware.split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity);
+    let (radio, registration) = register_concurrent_phy::<_, (), RomShortDelay, _>(
         timer,
-        &mut radio,
+        radio,
         &mut (),
         &clocks,
         PhyRegisterConfig::new(identity),
@@ -127,12 +137,13 @@ pub(crate) async fn calibrated(
 impl Session {
     pub(crate) fn measurement_clocks(&mut self, enabled: bool) -> bool {
         use oer_esp32s31_hal::domain::PhyClockModule;
+        let radio = self.radio_fault.require_owner(self.radio.as_mut());
         if enabled {
-            self.radio
+            radio
                 .enable_phy_modem_clocks(PhyClockModule::Calibration, &self._clocks)
                 .is_ok()
         } else {
-            self.radio
+            radio
                 .disable_phy_modem_clocks(PhyClockModule::Calibration)
                 .is_ok()
         }
@@ -150,4 +161,21 @@ pub(crate) fn install(session: Session) -> u32 {
 /// start.
 pub(crate) fn with<R>(entry: impl FnOnce(&mut Session) -> R) -> Option<R> {
     SESSION.lend(entry).ok()
+}
+
+impl Session {
+    pub(crate) fn radio_mut(&mut self) -> &mut RadioDomain<ChipClocks, ConcurrentPhy> {
+        self.radio_fault.require_owner(self.radio.as_mut())
+    }
+    pub(crate) fn phy<R>(
+        &mut self,
+        operation: impl FnOnce(&mut oer_esp32s31_hal::domain::transaction::PhyHardware) -> R,
+    ) -> R {
+        let radio = self.radio_fault.require_owner(self.radio.take());
+        let mut transaction =
+            radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
+        let result = operation(transaction.hardware_mut());
+        self.radio = Some(transaction.reunite());
+        result
+    }
 }

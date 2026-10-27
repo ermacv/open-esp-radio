@@ -227,6 +227,7 @@ struct Boot {
 /// The image's entropy owner.
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 
+oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
@@ -264,9 +265,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let access_point = factory.address(Interface::AccessPoint);
 
     // The image times the root's platform clock owner.
-    let (domain, partitions) = runtime
-        .radio
-        .split::<TimedChipClocks, _>(ConcurrentPhy::new());
+    let (domain, partitions) = runtime.radio.split::<TimedChipClocks, _>(
+        ConcurrentPhy::new(),
+        oer_espressif_staged_runtime::phy_fault::identity(),
+    );
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         fail("claim")
     };

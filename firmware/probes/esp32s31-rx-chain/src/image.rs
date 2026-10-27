@@ -129,6 +129,7 @@ struct Boot {
     station: [u8; 6],
     ap: [u8; 6],
 }
+oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(root) = Root::take() else {
@@ -158,7 +159,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
-    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(
+        ConcurrentPhy::new(),
+        oer_espressif_staged_runtime::phy_fault::identity(),
+    );
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         fail("claim");
     };

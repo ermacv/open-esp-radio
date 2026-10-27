@@ -453,9 +453,9 @@ impl RadioPartitions {
 /// ```compile_fail
 /// use oer_esp32s31_hal::root::RadioHardware;
 ///
-/// # fn split_twice<B: oer_esp32s31_hal::power::PlatformClockBackend>(hardware: RadioHardware) {
-/// let _first = hardware.split::<B, _>(());
-/// let _second = hardware.split::<B, _>(());
+/// # fn split_twice<B: oer_esp32s31_hal::power::PlatformClockBackend>(hardware: RadioHardware, identity: oer_esp32s31_hal::domain::transaction::PhyIdentity) {
+/// let _first = hardware.split::<B, _>((), identity);
+/// let _second = hardware.split::<B, _>((), identity);
 /// # }
 /// ```
 #[must_use = "dropping the radio root permanently loses the unique hardware capability"]
@@ -634,6 +634,7 @@ impl RadioHardware {
     pub fn split<B: PlatformClockBackend, T>(
         self,
         attachment: T,
+        identity: crate::domain::transaction::PhyIdentity,
     ) -> (RadioDomain<B, T>, ProtocolPartitions) {
         let RadioPartitions {
             shared,
@@ -646,6 +647,7 @@ impl RadioHardware {
                 shared,
                 PhyRouteState::new(self.phy_registration),
                 attachment,
+                identity,
             ),
             ProtocolPartitions {
                 wifi,

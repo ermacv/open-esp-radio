@@ -34,6 +34,7 @@ struct Boot {
 static CALIBRATION: static_cell::ConstStaticCell<oer_memory::StaticPlace<[u128; 512]>> =
     static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
 
+oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(root) = Root::take() else {
@@ -132,7 +133,15 @@ async fn sheets(boot: Boot) {
         fail("calibration-place");
     };
     let reason = place
-        .future(|| crate::session::calibrated(boot.hardware, boot.clocks, boot.identity, &timer))
+        .future(|| {
+            crate::session::calibrated(
+                boot.hardware,
+                boot.clocks,
+                boot.identity,
+                &timer,
+                oer_espressif_staged_runtime::phy_fault::identity(),
+            )
+        })
         .await;
     if reason != 0 {
         crate::est_freq::emit(150, reason, oer_riscv::cycle32().wrapping_sub(started), 0);

@@ -21,7 +21,11 @@ contain no Bluetooth state.
   versus the backend's tracking deadline. A timer win runs the tick. Requests
   can postpone it; there is no hard-window calendar, one-period deferral bound
   or shift counter. The actor serializes its own retunes with tracking through
-  the exclusive mutable domain borrow.
+  the consuming owned PHY transaction. Registration, tracking, RF close and
+  retained wake return the domain with their typed result. Channel selection
+  and retune hold the same owned custody across waits. Cancellation
+  quarantines its owners and records the operation and registration epoch
+  in a 16-byte retained fault before reset.
 - A failure that touched shared state poisons the domain; every later answer
   hands back what was lent. The client contract's `Failure` table defines the
   classification.

@@ -4,7 +4,12 @@ use crate::root::RadioPartitions;
 
 fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
     let RadioPartitions { shared, .. } = RadioPartitions::for_host_test();
-    RadioDomain::new(shared, PhyRouteState::new(PhyRegistration::new()), ())
+    RadioDomain::new(
+        shared,
+        PhyRouteState::new(PhyRegistration::new()),
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    )
 }
 
 #[test]
@@ -16,7 +21,7 @@ fn registration_epoch_persists_in_the_domain() {
         assert_eq!(domain.registration_epoch(), None);
         // Protocol transactions and PHY operations borrow the same owner.
         let _shared = domain.registers_mut().radio_phy();
-        domain.phy_hal().begin_registration().epoch()
+        domain.begin_registration_for_host_test().epoch()
     };
     let domain = &mut radio;
     assert_eq!(domain.registration_epoch(), Some(epoch));
@@ -41,7 +46,7 @@ fn btbb_joins_an_initialized_baseband_without_register_access() {
     let domain = &mut radio;
 
     assert_eq!(domain.btbb_release(&bluetooth), Err(BtbbError::NotAcquired));
-    let grant = domain.phy_hal().begin_registration();
+    let grant = domain.begin_registration_for_host_test();
     let gain = domain.btbb_publisher().1.publish(&grant, 0x4f).unwrap();
     assert_eq!(gain.value(), 0x4f);
     drop(domain);
@@ -70,7 +75,7 @@ fn only_the_latest_gain_of_the_current_registration_admits_btbb() {
     let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
     let (ieee802154, _interrupts) = crate::ieee802154::mac::split(ieee802154.into_mac());
     let mut radio = radio_domain();
-    let first = radio.phy_hal().begin_registration();
+    let first = radio.begin_registration_for_host_test();
     let earlier = radio.btbb_publisher().1.publish(&first, 0x4e).unwrap();
     let latest = radio.btbb_publisher().1.publish(&first, 0x4f).unwrap();
     // A later publication replaces an earlier one, before any register access.
@@ -80,7 +85,7 @@ fn only_the_latest_gain_of_the_current_registration_admits_btbb() {
     );
     // A new registration replaces every gain of the earlier one, and the
     // earlier registration's grant publishes nothing.
-    let _second = radio.phy_hal().begin_registration();
+    let _second = radio.begin_registration_for_host_test();
     assert_eq!(
         radio.btbb_acquire(&ieee802154, &latest),
         Err(BtbbError::Stale)

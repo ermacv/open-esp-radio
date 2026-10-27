@@ -38,10 +38,10 @@
 //! Registration, tracking, RF close, and retained wake are hardware
 //! transactions. Preparation errors that expose an owner are retryable only
 //! through that returned owner. Failures after a physical transition retain a
-//! poisoned/fail-stop owner instead of claiming recovery. Once an async close,
-//! wake, or maintenance future has been polled across its hardware edge, the
-//! caller must drive it to a terminal result; dropping it does not reconstruct
-//! the preceding typestate.
+//! poisoned/fail-stop owner instead of claiming recovery. Concurrent lifecycle
+//! and tracking futures consume the radio domain and return it with their
+//! typed result. Dropping them, including before the first poll, quarantines
+//! the owned transaction and records a named fault before reset.
 //!
 //! Timing types identify raw ticks, microseconds, or absolute deadlines at
 //! their owning API. [`HARDWARE_EDGE_LIMIT`] is an observation-attempt limit,

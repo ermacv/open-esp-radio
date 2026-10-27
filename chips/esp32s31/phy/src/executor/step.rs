@@ -255,7 +255,7 @@ impl<'a> Job<'a> {
     #[inline(never)]
     fn advance_one<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
-        io: Io<'_, '_>,
+        io: Io<'_>,
         clock: &C,
         now: Instant,
     ) -> Step {
@@ -274,7 +274,7 @@ impl<'a> Job<'a> {
     }
     fn advance<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
-        mut io: Io<'_, '_>,
+        mut io: Io<'_>,
         clock: &C,
         now: Instant,
     ) -> Result<Step, Failure> {
