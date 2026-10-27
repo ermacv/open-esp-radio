@@ -342,12 +342,60 @@ pub(super) fn retention(s: &mut Session<'_>) {
     oer_riscv::fence();
     state(s, 0x2220);
     mac::clear(s);
+    latch_state(s, 0x2250);
+    let started = oer_riscv::cycle32();
     if mac::produce(s, 0, 0x223f) {
         state(s, 0x2230);
     } else {
-        emit(0x21ee, 3, 218, 0);
+        // Retain the failed post-release latch as a measured diagnostic,
+        // then discriminate it from an APB/reset or permanent latch failure.
+        emit(0x225f, 218, oer_riscv::cycle32().wrapping_sub(started), 0);
+        latch_state(s, 0x2260);
+        // SOURCE: HW9_S31_BTLC_START_20261027: CONTROL0=1 starts BTLC.
+        // This is a diagnostic reopening after the release observation,
+        // never part of production retirement or an output-low proof.
+        mac::command(s, 0);
+        let start = oer_riscv::cycle32();
+        while s.ble.core.read_btlc_timer_control().latch_request()
+            && oer_riscv::cycle32().wrapping_sub(start) < 200_000
+        {}
+        latch_state(s, 0x2270);
+        emit(
+            0x227f,
+            oer_riscv::cycle32().wrapping_sub(start),
+            u32::from(!s.ble.core.read_btlc_timer_control().latch_request()),
+            0,
+        );
+        if mac::produce(s, 0, 0x228f) {
+            state(s, 0x2280);
+        } else {
+            emit(0x21ee, 5, 218, 0);
+        }
     }
     mac::finish(s);
+}
+fn latch_state(s: &Session<'_>, tag: u32) {
+    let c = s.ble.core.read_btlc_timer_control();
+    emit(
+        tag,
+        u32::from(c.latch_request()),
+        u32::from(c.timer_arm()),
+        c.clock_shift().get(),
+    );
+    emit(
+        tag + 1,
+        s.ble.core.read_btlc_timer_capture_0().value(),
+        u32::from(c.config_24()),
+        u32::from(c.compare_0_enable()) + 2 * u32::from(c.compare_1_enable()),
+    );
+    let g = s.sar.radio.modem_syscon_radio.read_clk_conf1();
+    let r = s.sar.radio.modem_syscon_radio.read_modem_rst_conf();
+    emit(
+        tag + 2,
+        u32::from(g.clk_bt_apb_en()),
+        u32::from(g.clk_btmac_en()),
+        u32::from(r.rst_btmac()) + 2 * u32::from(r.rst_btmac_apb()),
+    );
 }
 pub(super) fn finish(s: &mut Session<'_>) {
     mac::finish(s);
