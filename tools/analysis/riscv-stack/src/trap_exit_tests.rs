@@ -27,25 +27,69 @@ fn runtime(vectors: &str, chip: &Vectors) -> Vec<u8> {
         .prefix("vectors")
         .tempdir()
         .unwrap();
-    let generated = build.path().join("generated.s");
-    std::fs::write(&generated, chip.assembly()).unwrap();
+    for (name, text) in [
+        ("generated.s", chip.assembly()),
+        ("vector-markers.rs", chip.vector_markers()),
+        ("stack-symbols.rs", chip.stack_symbols()),
+    ] {
+        std::fs::write(build.path().join(name), text).unwrap();
+    }
     let path = build.path().join("vectors.s");
     std::fs::write(&path, vectors).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let riscv = root.join("portable/riscv/src/lib.rs");
+    let tcontrol = root.join("chips/espressif/staged-runtime/src/stacks/tcontrol.rs");
+    // Compile the runtime's frame declaration and assembly invocation verbatim:
+    // adding or changing an operand must affect this fixture as well. Only the
+    // include paths change to select this test's generated files and mutations.
+    let trap = include_str!("../../../../chips/espressif/staged-runtime/src/trap.rs")
+        .split_once("\n/// Vectors of a hart's CLIC")
+        .unwrap()
+        .0;
+    let layout = include_str!("../../../../chips/espressif/staged-runtime/src/layout.rs")
+        .split_once("\n/// The linked image's sections and stacks")
+        .unwrap()
+        .0;
+    let (_, assembly) = include_str!("../../../../chips/espressif/staged-runtime/src/stacks.rs")
+        .split_once("core::arch::global_asm!(")
+        .unwrap();
+    let assembly = format!("core::arch::global_asm!({assembly}")
+        .replace("env!(\"OUT_DIR\")", &format!("{:?}", build.path()))
+        .replace("\"/vectors.s\"", "\"/generated.s\"")
+        .replace(
+            "include_str!(\"vectors.s\")",
+            &format!("include_str!({path:?})"),
+        );
+    let layout = layout.replace("env!(\"OUT_DIR\")", &format!("{:?}", build.path()));
+    let tables = chip.vector_tables();
+    let harts = chip.harts;
+    let slots = chip.slots;
     let source = format!(
         r#"
 #![no_std]
 #![no_main]
+#![allow(dead_code, unused_imports, unused_macros)]
 
-core::arch::global_asm!(
-    include_str!({generated:?}),
-    include_str!({path:?}),
-    fs = const 0x6000,
-    mie = const 8,
-    mintthresh = const 0x347,
-    tcontrol = const 0x7a5,
-    mte = const 8,
-    mpte_shift = const 4,
-);
+extern crate self as oer_riscv;
+#[allow(unused_attributes, reason = "oer-riscv's crate root is a fixture module")]
+#[path = {riscv:?}]
+mod architecture;
+pub use architecture::*;
+#[path = {tcontrol:?}]
+mod tcontrol;
+mod trap {{
+    {trap}
+}}
+mod layout {{
+    {layout}
+}}
+mod stacks {{
+    use crate::{{clic, machine::status, tcontrol, trigger}};
+    const HARTS: usize = {harts};
+    const VECTOR_TABLE_WORDS: usize = {slots};
+    {tables}
+    {assembly}
+}}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn handler() {{}}
@@ -72,10 +116,17 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {{
     let mut link = vec![
         "--undefined=_runtime_mtvt".to_owned(),
         "--undefined=_start_trap".to_owned(),
-        "--defsym=__runtime_cpu0_task_stack_bottom=0x48000000".to_owned(),
-        "--defsym=__runtime_cpu0_task_stack_top=0x48010000".to_owned(),
-        "--defsym=__runtime_cpu0_irq_stack_top=0x2f008000".to_owned(),
     ];
+    for (symbol, value) in [
+        ("task_stack_bottom", "0x48000000"),
+        ("task_stack_top", "0x48010000"),
+        ("irq_stack_top", "0x2f008000"),
+    ] {
+        link.push(format!(
+            "--defsym=__runtime_cpu{}_{symbol}={value}",
+            chip.boot_hart
+        ));
+    }
     for hart in 0..chip.harts {
         for line in 1..chip.lines {
             link.push(format!("--defsym={}=handler", Vectors::handler(hart, line)));
@@ -157,17 +208,20 @@ fn failure(vectors: &str) -> String {
 
 #[test]
 fn an_exit_that_loses_mepc_or_mcause_or_reads_a_stale_slot_fails() {
-    let lost = broken("    lw t0, 76(sp)\n    csrw mepc, t0\n", "");
+    let lost = broken("    lw t0, {frame_mepc}(sp)\n    csrw mepc, t0\n", "");
     assert!(failure(&lost).contains("without the trap's mepc"));
-    let lost = broken("    lw t0, 80(sp)\n    csrw mcause, t0\n", "");
+    let lost = broken("    lw t0, {frame_mcause}(sp)\n    csrw mcause, t0\n", "");
     assert!(failure(&lost).contains("without the trap's mcause"));
     // mepc from the interrupted sp's slot.
     let stale = broken(
-        "    lw t0, 76(sp)\n    csrw mepc, t0\n",
-        "    lw t0, 72(sp)\n    csrw mepc, t0\n",
+        "    lw t0, {frame_mepc}(sp)\n    csrw mepc, t0\n",
+        "    lw t0, {frame_sp}(sp)\n    csrw mepc, t0\n",
     );
     assert!(failure(&stale).contains("without the trap's mepc"));
-    let lost = broken("    lw t0, 84(sp)\n    csrw {mintthresh}, t0\n", "");
+    let lost = broken(
+        "    lw t0, {frame_mintthresh}(sp)\n    csrw {mintthresh}, t0\n",
+        "",
+    );
     assert!(failure(&lost).contains("interrupt threshold"));
 }
 
@@ -175,16 +229,16 @@ fn an_exit_that_loses_mepc_or_mcause_or_reads_a_stale_slot_fails() {
 fn an_exit_that_unmasks_early_or_returns_unmasked_fails() {
     // MIE cleared only after mepc and mcause are back.
     let late = broken(
-        "    csrci mstatus, {mie}\n    lw t0, 80(sp)",
-        "    lw t0, 80(sp)",
+        "    csrci mstatus, {mie}\n    lw t0, {frame_mcause}(sp)",
+        "    lw t0, {frame_mcause}(sp)",
     );
     assert!(failure(&late).contains("with interrupts enabled"));
     let unmasked = broken(
-        "    addi sp, sp, 96\n    mret",
-        "    addi sp, sp, 96\n    csrsi mstatus, {mie}\n    mret",
+        "    addi sp, sp, {frame_bytes}\n    mret",
+        "    addi sp, sp, {frame_bytes}\n    csrsi mstatus, {mie}\n    mret",
     );
     assert!(failure(&unmasked).contains("enables interrupts again"));
-    let lost = broken("    lw t0, 68(sp)\n    csrw mstatus, t0\n", "");
+    let lost = broken("    lw t0, {frame_mstatus}(sp)\n    csrw mstatus, t0\n", "");
     assert!(failure(&lost).contains("mstatus"));
 }
 
@@ -192,17 +246,17 @@ fn an_exit_that_unmasks_early_or_returns_unmasked_fails() {
 fn an_exit_on_another_stack_or_without_a_register_fails() {
     // The nested return leaves sp below the interrupted handler's.
     let wrong = broken(
-        "    addi sp, sp, 96\n    mret",
-        "    addi sp, sp, 80\n    mret",
+        "    addi sp, sp, {frame_bytes}\n    mret",
+        "    addi sp, sp, ({frame_bytes} - 16)\n    mret",
     );
     assert!(failure(&wrong).contains("another stack"));
-    let lost = broken("    lw a5, 52(sp)\n", "");
+    let lost = broken("    lw a5, {frame_a5}(sp)\n", "");
     assert!(failure(&lost).contains("without restoring a register"));
 }
 
 #[test]
 fn an_entry_that_nests_before_saving_or_keeps_the_fpu_on_fails() {
-    let unsaved = broken("    csrr t1, mepc\n    sw t1, 76(sp)\n", "");
+    let unsaved = broken("    csrr t1, mepc\n    sw t1, {frame_mepc}(sp)\n", "");
     assert!(failure(&unsaved).contains("admits nesting before its frame holds"));
     let fpu = broken("    li t1, {fs}\n    csrc mstatus, t1\n", "");
     assert!(failure(&fpu).contains("with the FPU on"));
@@ -214,8 +268,8 @@ fn an_exit_that_lets_interrupts_in_after_masking_fails() {
     // `mret`: a higher level taken in it overwrites the restored mepc and
     // mcause.
     let window = broken(
-        "    lw t0, 64(sp)\n",
-        "    csrsi mstatus, {mie}\n    nop\n    nop\n    nop\n    csrci mstatus, {mie}\n    lw t0, 64(sp)\n",
+        "    lw t0, {frame_outermost}(sp)\n",
+        "    csrsi mstatus, {mie}\n    nop\n    nop\n    nop\n    csrci mstatus, {mie}\n    lw t0, {frame_outermost}(sp)\n",
     );
     assert!(failure(&window).contains("enables interrupts again on its way out"));
 }
@@ -251,13 +305,13 @@ fn a_trap_that_touches_the_floating_point_state_or_another_csr_fails() {
     assert!(failure(&ft0).contains("floating-point instruction"));
     // `fcsr` after the exit restored mstatus.
     let fcsr = broken(
-        "    lw t0, 64(sp)\n",
-        "    csrw 0x003, zero\n    lw t0, 64(sp)\n",
+        "    lw t0, {frame_outermost}(sp)\n",
+        "    csrw 0x003, zero\n    lw t0, {frame_outermost}(sp)\n",
     );
     assert!(failure(&fcsr).contains("a CSR the trap check does not model"));
     let mtvec = broken(
-        "    lw t0, 64(sp)\n",
-        "    csrw mtvec, zero\n    lw t0, 64(sp)\n",
+        "    lw t0, {frame_outermost}(sp)\n",
+        "    csrw mtvec, zero\n    lw t0, {frame_outermost}(sp)\n",
     );
     assert!(failure(&mtvec).contains("a CSR the trap check does not model"));
 }
@@ -266,14 +320,20 @@ fn a_trap_that_touches_the_floating_point_state_or_another_csr_fails() {
 fn a_trap_that_loses_tcontrol_or_changes_it_unsaved_fails() {
     // Without the restore a nested return leaves MPTE as the nested trap
     // set it.
-    let lost = broken("    lw t0, 88(sp)\n    csrw {tcontrol}, t0\n", "");
+    let lost = broken(
+        "    lw t0, {frame_tcontrol}(sp)\n    csrw {tcontrol}, t0\n",
+        "",
+    );
     assert!(failure(&lost).contains("without the trap's tcontrol"));
-    let unsaved = broken("    csrr t1, {tcontrol}\n    sw t1, 88(sp)\n", "");
+    let unsaved = broken(
+        "    csrr t1, {tcontrol}\n    sw t1, {frame_tcontrol}(sp)\n",
+        "",
+    );
     assert!(failure(&unsaved).contains("changes tcontrol before its frame holds it"));
     // Restored before the exit masks.
     let early = broken(
-        "    csrci mstatus, {mie}\n    lw t0, 80(sp)",
-        "    lw t0, 88(sp)\n    csrw {tcontrol}, t0\n    csrci mstatus, {mie}\n    lw t0, 80(sp)",
+        "    csrci mstatus, {mie}\n    lw t0, {frame_mcause}(sp)",
+        "    lw t0, {frame_tcontrol}(sp)\n    csrw {tcontrol}, t0\n    csrci mstatus, {mie}\n    lw t0, {frame_mcause}(sp)",
     );
     assert!(failure(&early).contains("tcontrol with interrupts enabled"));
 }
