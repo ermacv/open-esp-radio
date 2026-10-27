@@ -14,6 +14,7 @@ toml = { version = "=1.1.4", default-features = false, features = ["parse", "ser
 
 [dev-dependencies]
 syn = { version = "=2.0.119", features = ["full", "visit"] }
+tempfile = "=3.27.0"
 
 [lints]
 workspace = true

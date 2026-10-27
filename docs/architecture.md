@@ -257,6 +257,13 @@ moves; ownership, orchestration and wiring are rebuilt.
   control owners and requests reset; it never takes a lent or held owner.
   The next boot reports the retained fault before clearing it; console
   refusal retains the record.
+  The runtime's `Hart<H>` execution token and `PreAdmission<H>` stack-install
+  authority are local, affine values minted from the boot entry's unique
+  handoff proof. Adoption retains that authority until interrupt enable
+  consumes it. Facts generate one typed, aligned Rust vector-table row per
+  hart, with assembly entry/exit and compiler-derived frame offsets.
+  Generated secondary entry stubs admit no Rust code or interrupts and have
+  no linked launcher.
 - **Register model.** The chip is block types (one hardware block each,
   offsets from its base) placed by a root at their addresses, with its
   interrupt sources, analog-I2C bytes (a separate space addressed by block

@@ -55,7 +55,13 @@ pub use fatal::{fatal_halt, reset, reset_recording};
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;
+#[cfg(feature = "esp32s31")]
+mod hart;
 pub mod interrupts;
+#[cfg(feature = "esp32s31")]
+pub use hart::{Hart, PreAdmission};
+#[cfg(feature = "esp32s31")]
+pub use vectors::BOOT_HART;
 /// The chip's CPU lines, harts and vector-table words, which the build
 /// generates from its facts.
 #[cfg(feature = "esp32s31")]
@@ -142,13 +148,25 @@ impl From<oer_interrupt_table::Error> for BootError {
 #[must_use = "the handoff adopts the bootstrap's mapping"]
 pub struct Handoff {
     proof: oer_espressif_staged_layout::handoff::StageTwoHandoff,
+    #[cfg(feature = "esp32s31")]
+    admission: PreAdmission<BOOT_HART>,
 }
 
 impl Handoff {
     #[doc(hidden)]
     /// Wrap the proof minted by [`entry!`].
     pub const fn from_proof(proof: oer_espressif_staged_layout::handoff::StageTwoHandoff) -> Self {
-        Self { proof }
+        Self {
+            proof,
+            #[cfg(feature = "esp32s31")]
+            admission: PreAdmission::new(),
+        }
+    }
+
+    /// Borrow the boot hart's stack-install authority before adoption.
+    #[cfg(feature = "esp32s31")]
+    pub fn pre_admission(&mut self) -> &mut PreAdmission<BOOT_HART> {
+        &mut self.admission
     }
 
     /// Adopt the bootstrap's PSRAM mapping through `board` and install the
@@ -167,12 +185,8 @@ impl Handoff {
     /// A wrong hart, missing interrupt stack, invalid stack guard, or controller
     /// disagreement with its chip facts or the image's table returns [`BootError`].
     #[cfg(target_arch = "riscv32")]
-    #[allow(
-        unsafe_code,
-        reason = "installs the interrupt stack, the vectors and the stack watchpoint"
-    )]
     pub fn adopt<B: AdoptsBootstrapMapping, C: oer_interrupt_table::Controller>(
-        self,
+        mut self,
         interrupt_table: &'static InterruptTable,
         controller: C,
         board: B,
@@ -184,15 +198,19 @@ impl Handoff {
         if actual != expected {
             return Err(BootError::WrongHart { actual, expected });
         }
-        // SAFETY: the handoff proves interrupts are disabled on the only
-        // running hart, which has not admitted one.
-        unsafe { stacks::install_current_hart_interrupt_stack() }?;
+        stacks::install_interrupt_stack(&mut self.admission)?;
         let router = oer_interrupt_table::Router::install(controller, interrupt_table)?;
         // Interrupts are disabled and trigger 0 is the runtime's;
         // the generated table names this checked hart's word-aligned task bottom.
         let hart = oer_esp32s31_hal::platform::BOOT_HART;
         stacks::watch_task_stack(hart.at(&layout::stack_symbols()).task.start)?;
-        Ok((mapping, Adopted { router }))
+        Ok((
+            mapping,
+            Adopted {
+                router,
+                admission: self.admission,
+            },
+        ))
     }
 }
 
@@ -201,9 +219,17 @@ impl Handoff {
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
 pub struct Adopted<C: oer_interrupt_table::Controller> {
     router: oer_interrupt_table::Router<C>,
+    #[cfg(feature = "esp32s31")]
+    admission: PreAdmission<BOOT_HART>,
 }
 
 impl<C: oer_interrupt_table::Controller> Adopted<C> {
+    /// The local identity whose pre-admission authority this value retains.
+    #[cfg(feature = "esp32s31")]
+    pub fn hart(&self) -> &Hart<BOOT_HART> {
+        self.admission.hart()
+    }
+
     /// The hart's router: bind entries before interrupts are enabled.
     pub fn router(&mut self) -> &mut oer_interrupt_table::Router<C> {
         &mut self.router

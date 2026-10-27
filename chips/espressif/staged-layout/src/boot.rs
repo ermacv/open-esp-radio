@@ -6,9 +6,10 @@
 //!
 //! [`chips/esp32s31/notes/core1-boot.md`]: https://github.com/ermacv/open-esp-radio/blob/main/chips/esp32s31/notes/core1-boot.md
 
-/// The one hart that runs the bootstrap and the runtime. The runtime's entry
-/// assembly (`chips/espressif/staged-runtime/src/entry.rs`) compares `mhartid`
-/// with zero.
+/// The bootstrap's admitted boot hart. Every facts-generated layout const-checks
+/// this value against its boot-hart fact; a disagreement fails compilation.
+/// Bootstrap entry compares `mhartid` with this value, while runtime entry uses
+/// the same checked fact through its generated `BOOT_HART`.
 pub const BOOT_HART: usize = 0;
 
 /// Whether `hart` may run the staged boot.

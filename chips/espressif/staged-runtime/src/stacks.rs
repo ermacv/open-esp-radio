@@ -129,27 +129,34 @@ fn vectors_of(hart: usize) -> (usize, usize) {
     (mtvec, mtvt)
 }
 
-/// Install the current hart's interrupt stack and vectors: paint the stack
-/// once, guard its bottom, point `mtvec` at the exception entry and `mtvt`
-/// at the hart's table, and arm `mscratch` with the stack's top.
+/// Install this pre-admission hart's interrupt stack and vectors. The token
+/// cannot cross harts or survive interrupt admission. Reinstallation before
+/// admission preserves the original paint. Interrupts remain disabled.
 ///
-/// # Safety
-///
-/// Global interrupts must be disabled. The caller must execute on a hart with
-/// an interrupt stack (a hart of the chip's facts) in thread mode and must
-/// not enable interrupts until this function returns. The first installation
-/// must precede the hart's first interrupt admission. Reinstallation
-/// preserves the original paint.
+/// # Errors
+/// A different current hart, missing allocation or invalid guard is a boot error.
 #[cfg(target_arch = "riscv32")]
-pub unsafe fn install_current_hart_interrupt_stack() -> Result<(), crate::BootError> {
-    let hart = current_hart();
+pub fn install_interrupt_stack<const H: u8>(
+    admission: &mut crate::PreAdmission<H>,
+) -> Result<(), crate::BootError> {
+    let hart = usize::from(admission.hart().id());
+    let actual = current_hart();
+    if actual != hart {
+        return Err(crate::BootError::WrongHart {
+            actual,
+            expected: hart,
+        });
+    }
+    // Safe architectural APIs can change MIE even while a token is held.
+    // Mask here as well; the local token excludes an interrupt-context caller.
+    oer_riscv::disable_interrupts();
     let (Some(stack), Some(painted)) = (interrupt_stack(hart), IRQ_PAINTED.get(hart)) else {
         return Err(crate::BootError::NoInterruptStack { hart });
     };
     let (bottom, top) = (stack.start, stack.end);
     if !painted.load(Ordering::Acquire) {
-        // SAFETY: the caller owns this hart's inactive IRQ stack before
-        // admission; the linker script reserved `bottom..top` for it alone.
+        // SAFETY: the local pre-admission token owns this inactive IRQ stack;
+        // interrupts are masked above; the linker script reserved `bottom..top` for it alone.
         unsafe { watermark::paint(bottom as *mut u32, stack.len() / 4) };
         painted.store(true, Ordering::Release);
     }
@@ -256,10 +263,40 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
     })
 }
 
+// The static and its assembly export share this module/codegen unit: an ELF
+// assembler cannot export a .set alias of a symbol defined in another unit.
+#[cfg(target_arch = "riscv32")]
+include!(concat!(env!("OUT_DIR"), "/vector-tables.rs"));
+
 #[cfg(target_arch = "riscv32")]
 core::arch::global_asm!(
     include_str!(concat!(env!("OUT_DIR"), "/vectors.s")),
     include_str!("vectors.s"),
+    mtvt = sym MTVT,
+    frame_bytes = const crate::trap::TRAP_FRAME_BYTES,
+    frame_ra = const core::mem::offset_of!(crate::trap::TrapFrame, ra),
+    frame_t0 = const core::mem::offset_of!(crate::trap::TrapFrame, t0),
+    frame_t1 = const core::mem::offset_of!(crate::trap::TrapFrame, t1),
+    frame_t2 = const core::mem::offset_of!(crate::trap::TrapFrame, t2),
+    frame_t3 = const core::mem::offset_of!(crate::trap::TrapFrame, t3),
+    frame_t4 = const core::mem::offset_of!(crate::trap::TrapFrame, t4),
+    frame_t5 = const core::mem::offset_of!(crate::trap::TrapFrame, t5),
+    frame_t6 = const core::mem::offset_of!(crate::trap::TrapFrame, t6),
+    frame_a0 = const core::mem::offset_of!(crate::trap::TrapFrame, a0),
+    frame_a1 = const core::mem::offset_of!(crate::trap::TrapFrame, a1),
+    frame_a2 = const core::mem::offset_of!(crate::trap::TrapFrame, a2),
+    frame_a3 = const core::mem::offset_of!(crate::trap::TrapFrame, a3),
+    frame_a4 = const core::mem::offset_of!(crate::trap::TrapFrame, a4),
+    frame_a5 = const core::mem::offset_of!(crate::trap::TrapFrame, a5),
+    frame_a6 = const core::mem::offset_of!(crate::trap::TrapFrame, a6),
+    frame_a7 = const core::mem::offset_of!(crate::trap::TrapFrame, a7),
+    frame_outermost = const core::mem::offset_of!(crate::trap::TrapFrame, outermost),
+    frame_mstatus = const core::mem::offset_of!(crate::trap::TrapFrame, mstatus),
+    frame_sp = const core::mem::offset_of!(crate::trap::TrapFrame, sp),
+    frame_mepc = const core::mem::offset_of!(crate::trap::TrapFrame, mepc),
+    frame_mcause = const core::mem::offset_of!(crate::trap::TrapFrame, mcause),
+    frame_mintthresh = const core::mem::offset_of!(crate::trap::TrapFrame, mintthresh),
+    frame_tcontrol = const core::mem::offset_of!(crate::trap::TrapFrame, tcontrol),
     fs = const status::FS_MASK,
     mie = const status::MIE,
     mintthresh = const clic::MINTTHRESH,

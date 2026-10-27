@@ -43,21 +43,9 @@ pub struct TrapFrame {
 }
 
 /// The bytes of a [`TrapFrame`], a multiple of the stack's 16-byte alignment.
-pub const TRAP_FRAME_BYTES: usize = 96;
+pub const TRAP_FRAME_BYTES: usize = core::mem::size_of::<TrapFrame>();
 
-// `vectors.s` stores the frame by these offsets.
-const _: () = {
-    use core::mem::{offset_of, size_of};
-    assert!(size_of::<TrapFrame>() == TRAP_FRAME_BYTES);
-    assert!(offset_of!(TrapFrame, a0) == 32 && offset_of!(TrapFrame, a7) == 60);
-    assert!(offset_of!(TrapFrame, outermost) == 64);
-    assert!(offset_of!(TrapFrame, mstatus) == 68);
-    assert!(offset_of!(TrapFrame, sp) == 72);
-    assert!(offset_of!(TrapFrame, mepc) == 76);
-    assert!(offset_of!(TrapFrame, mcause) == 80);
-    assert!(offset_of!(TrapFrame, mintthresh) == 84);
-    assert!(offset_of!(TrapFrame, tcontrol) == 88);
-};
+const _: () = assert!(TRAP_FRAME_BYTES.is_multiple_of(16));
 
 /// Vectors of a hart's CLIC vector table (MTVT) that hold an entry.
 #[cfg(feature = "esp32s31")]
