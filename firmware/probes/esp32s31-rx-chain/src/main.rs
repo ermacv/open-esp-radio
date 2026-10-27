@@ -21,9 +21,6 @@ mod usb;
 #[cfg(target_arch = "riscv32")]
 use image::*;
 #[cfg(all(test, not(target_arch = "riscv32")))]
-#[path = "irq120/journal.rs"]
-mod irq120_journal;
-#[cfg(all(test, not(target_arch = "riscv32")))]
 #[path = "traffic/journal.rs"]
 mod traffic_journal;
 #[cfg(not(target_arch = "riscv32"))]

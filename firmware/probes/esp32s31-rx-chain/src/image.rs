@@ -1,6 +1,5 @@
-//! One finite RX publication with CPU-owned barriers. No live CPU buffer write.
+//! One bounded RX traffic capture with real take/recycle. No live CPU buffer write.
 use crate::usb;
-use core::fmt::Write as _;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{
@@ -19,67 +18,36 @@ use oer_esp32s31_hal::{
     usb_serial_jtag::ConsoleInterrupt,
     watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
 };
-use oer_esp32s31_ieee80211_driver::startup::{
-    RadioStartConfig, WifiColdStartConfig, WifiMacPlatform, WifiMacStartConfig,
-    start_esp32s31_radio,
-};
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
-    PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
+    concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
-use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
-use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
+use oer_esp32s31_radio_client::{LpClock, RcSlow};
+use oer_esp32s31_radio_system::Esp32s31Radio;
 use oer_espressif_executor::{Executor, InterruptExecutor};
-use oer_ieee80211_wire::{
-    address::IndividualAddress,
-    channel::{WifiChannel, WifiChannelWidth},
-};
-use oer_memory::zeroed::ZeroedStatic;
+use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 use oer_radio_regulatory::{Country, RegulatoryDomain};
 use oer_time::{Clock, Duration, Timer};
 use static_cell::StaticCell;
 
-#[path = "irq120.rs"]
-mod irq120;
 #[path = "traffic.rs"]
 mod traffic;
-// The current finite capture; selection 4 retains the barrier observer below.
-const SELECTION: u16 = if cfg!(feature = "legacy-observer") {
-    160
-} else {
-    200
-};
 
 const COUNT: usize = 32;
 const BUFFER: usize = 128;
 const NODES: usize = COUNT + 1;
-const RECORDS: usize = 512;
-const FRAME_LIMIT: usize = 3;
-const CORRELATIONS: usize = 192;
-const CAPTURE_MS: u32 = 700;
 const CHANNEL: u8 = 13;
-const CPU_NODES: [usize; 3] = [12, 20, 28];
+// The active 200–209 profile keeps full patterns in these three buffers.
+const FULL_PATTERN_NODES: [usize; 3] = [12, 20, 28];
 const WORDS: usize = BUFFER / 4;
-const GUARD_RECORDS: usize = 64;
 const _: () = assert!(BUFFER >= 4 && BUFFER.is_multiple_of(4) && COUNT <= u32::BITS as usize);
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
 type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
-type Actor = RadioSystem<
-    oer_esp32s31_radio_client::wifi::Wifi,
-    RcSlow,
-    Esp32s31Radio<
-        ChipClocks,
-        oer_espressif_executor::Cooperative<EmbassyClock>,
-        NoopPhyTargetObserver,
-    >,
-    EmbassyClock,
->;
 type Backend = Esp32s31Radio<
     ChipClocks,
     oer_espressif_executor::Cooperative<EmbassyClock>,
     NoopPhyTargetObserver,
 >;
-static ACTOR: StaticCell<Actor> = StaticCell::new();
 static DIRECT_BACKEND: StaticCell<Backend> = StaticCell::new();
 struct DirectOutput {
     access: oer_esp32s31_hal::owner::RadioAccess,
@@ -89,34 +57,6 @@ static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
 static DIRECT_READY: oer_memory::ClaimCell<Result<&'static mut DirectOutput, &'static str>> =
     oer_memory::ClaimCell::new();
 oer_esp32s31_hal::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
-#[derive(bytemuck::Zeroable)]
-struct Trace {
-    previous: [[u32; 5]; NODES],
-    cursor: [u32; 4],
-    expected: [u32; NODES],
-    rows: [[u32; 16]; RECORDS],
-    used: usize,
-    correlations: [[u32; 44]; CORRELATIONS],
-    correlation_used: usize,
-    diagnostic_previous: [u32; 20],
-    scans: u32,
-    max_scan_cycles: u32,
-    max_gap_cycles: u32,
-    previous_end: u32,
-    guard_previous: [u32; CPU_NODES.len()],
-    guards: [[u32; 10]; GUARD_RECORDS],
-    guard_used: usize,
-    commits: [Commit; FRAME_LIMIT],
-    commit_used: usize,
-    terminal_previous: usize,
-}
-#[derive(bytemuck::Zeroable)]
-struct Commit {
-    header: [u32; 9],
-    nodes: [[u32; WORDS + 2]; NODES],
-}
-static TRACE: ZeroedStatic<Trace> = ZeroedStatic::new();
-
 // SAFETY: the production runtime script maps .hot.text.* to executable SRAM;
 // each generated wrapper retains the interrupt-table ABI and owned part.
 oer_interrupt_table::interrupt_table! {
@@ -131,9 +71,6 @@ oer_interrupt_table::interrupt_table! {
 }
 oer_espressif_executor::tasks! {
     RadioTasks: InterruptExecutor<2> {
-        #[cfg(feature = "legacy-observer")]
-        actor(actor: &'static mut Actor) = radio_actor;
-        #[cfg(not(feature = "legacy-observer"))]
         direct(backend: &'static mut Backend, lp: LpClock<RcSlow>, wifi: oer_esp32s31_hal::root::WifiPartition, rng: Rng, station: [u8;6], ap: [u8;6]) = direct_start;
     }
 }
@@ -146,13 +83,8 @@ oer_espressif_executor::tasks! {
 struct Boot {
     console: usb::Console,
     _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
-    cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
-    wifi: Option<oer_esp32s31_hal::root::WifiPartition>,
     mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
-    rng: Option<Rng>,
-    traffic: Option<&'static mut traffic::Trace>,
-    station: [u8; 6],
-    ap: [u8; 6],
+    traffic: &'static mut traffic::Trace,
 }
 oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
@@ -188,7 +120,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ConcurrentPhy::new(),
         oer_espressif_staged_runtime::phy_fault::identity(),
     );
-    let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
+    let Some(lp) = LpClock::<RcSlow>::claim() else {
         fail("claim");
     };
     let backend = Esp32s31Radio::new(
@@ -199,16 +131,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     );
-    let (actor, direct) = if SELECTION == 200 {
-        let Some(backend) = DIRECT_BACKEND.try_init(backend) else {
-            fail("direct-backend");
-        };
-        (None, Some((backend, lp)))
-    } else {
-        (
-            Some(ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp))),
-            None,
-        )
+    let Some(backend) = DIRECT_BACKEND.try_init(backend) else {
+        fail("direct-backend");
     };
     let timer = runtime.system_timer;
     oer_espressif_executor::init::<2, _, _>(
@@ -226,15 +150,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let mut wifi_irqs = runtime.wifi_interrupts;
     wifi_irqs.mac.mask_all_mac_interrupts();
     wifi_irqs.power.mask_all_power_interrupts();
-    let traffic = if SELECTION == 200 {
-        let trace = traffic::take().unwrap_or_else(|reason| fail(reason));
-        if let Err(reason) = traffic::checkpoint(trace, 200, 0, &wifi_irqs.mac) {
-            fail(reason);
-        }
-        Some(trace)
-    } else {
-        None
-    };
+    let traffic = traffic::take().unwrap_or_else(|reason| fail(reason));
+    if let Err(reason) = traffic::checkpoint(traffic, 200, 0, &wifi_irqs.mac) {
+        fail(reason);
+    }
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
@@ -244,25 +163,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         software.irq2,
         (),
     );
-    #[cfg(feature = "legacy-observer")]
-    if let Some(actor) = actor {
-        if RadioTasks::actor(&radio, actor).is_err() {
-            fail("actor-task");
-        }
-    }
-    let mut wifi = Some(partitions.wifi);
-    let mut rng = Some(Rng::new(runtime.entropy, EmbassyClock));
-    #[cfg(not(feature = "legacy-observer"))]
-    if let Some((backend, lp)) = direct {
-        let Some(wifi) = wifi.take() else {
-            fail("direct-wifi");
-        };
-        let Some(rng) = rng.take() else {
-            fail("direct-rng");
-        };
-        if RadioTasks::direct(&radio, backend, lp, wifi, rng, station, ap).is_err() {
-            fail("direct-task");
-        }
+    let rng = Rng::new(runtime.entropy, EmbassyClock);
+    if RadioTasks::direct(&radio, backend, lp, partitions.wifi, rng, station, ap).is_err() {
+        fail("direct-task");
     }
     let (console, pads) = match usb::open(adopted.router(), interrupts.console_usb) {
         Ok(value) => value,
@@ -275,13 +178,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let boot = Boot {
         console,
         _pads: pads,
-        cell: cells.wifi,
-        wifi,
         mac_irq: wifi_irqs.mac,
-        rng,
         traffic,
-        station,
-        ap,
     };
     Executor::<0>::new(software.line0).run(
         &hart,
@@ -304,24 +202,6 @@ fn fail(reason: &'static str) -> ! {
             &oer_diagnostics::Note::runtime_fail(reason),
         );
     })
-}
-type ActorRun = impl core::future::Future<Output = core::convert::Infallible>;
-static ACTOR_RUN: static_cell::ConstStaticCell<oer_memory::StaticPlace<ActorRun>> =
-    static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
-#[define_opaque(ActorRun)]
-#[inline(never)]
-fn actor_run(actor: &'static mut Actor) -> ActorRun {
-    actor.run()
-}
-#[inline(never)]
-fn placed_actor(actor: &'static mut Actor) -> oer_memory::PlacedFuture<'static, ActorRun> {
-    let Some(place) = ACTOR_RUN.try_take() else {
-        fail("actor-future-claimed");
-    };
-    place.future(|| actor_run(actor))
-}
-async fn radio_actor(actor: &'static mut Actor) {
-    match placed_actor(actor).await {}
 }
 type DirectRun = impl core::future::Future<Output = Result<DirectOutput, &'static str>>;
 type DirectPrepare<'a> = impl core::future::Future<
@@ -483,9 +363,6 @@ impl MacSlowClockCalibrationSource for Platform {
         MacSlowClockCalibration::Unavailable
     }
 }
-impl WifiMacPlatform for Platform {
-    fn install_phy_tx_power_profile(&mut self, _: PhyTxTargetPowerProfile) {}
-}
 
 fn node(storage: &Storage, index: usize) -> Option<&RxDescriptor> {
     if index == COUNT {
@@ -530,9 +407,9 @@ fn read_word(
 }
 
 fn pattern(index: usize, word: usize) -> u32 {
-    if word == 0 && !CPU_NODES.contains(&index) {
-        // SOURCE[HW18_RX_OWNER_BARRIER_20261027]: this diagnostic's initial
-        // leading pattern, independent of production ring preparation.
+    if word == 0 && !FULL_PATTERN_NODES.contains(&index) {
+        // Diagnostic initialization before BASE publication; retain the
+        // same byte profile as the recorded 200–209 observations.
         0xdead_beef
     } else {
         0xa500_0000 | ((index as u32) << 12) | (word as u32)
@@ -566,325 +443,15 @@ fn prepare_patterns(storage: &Storage) -> Result<(), &'static str> {
     Ok(())
 }
 
-#[allow(
-    unsafe_code,
-    reason = "probe-only OWNER barriers before outer RX starts"
-)]
-fn install_barriers(storage: &Storage) -> Result<(), &'static str> {
-    for index in CPU_NODES {
-        let descriptor = node(storage, index).ok_or("node")?;
-        // SAFETY: RxDescriptor is repr(transparent) over this generated
-        // layout. Its interior-mutable word is accessed through the
-        // original descriptor, with no second owner or mutable reference.
-        // Outer MAC RX is still stopped and no air frame has been admitted;
-        // only typed OWNER is changed, as the detach path also does live.
-        let layout = unsafe {
-            &*core::ptr::from_ref(descriptor)
-                .cast::<oer_esp32s31_hal::layouts::WifiRxDmaDescriptor>()
-        };
-        layout.control().write(descriptor.word0().with_owner(false));
-    }
-    oer_riscv::fence();
-    Ok(())
-}
-// These tags encode software semantic observations, not register bit images.
-fn enable_tag(state: oer_esp32s31_hal::ieee80211::registers::MacInterruptEnableState) -> u32 {
-    use oer_esp32s31_hal::ieee80211::registers::MacInterruptEnableState;
-    match state {
-        MacInterruptEnableState::Disabled => 0,
-        MacInterruptEnableState::Station => 1,
-        MacInterruptEnableState::Unknown => 2,
-    }
-}
-fn diagnostic(
-    access: &oer_esp32s31_hal::owner::RadioAccess,
-    irq: &oer_esp32s31_hal::owner::MacInterruptRegisters,
-) -> (
-    [u32; 20],
-    oer_esp32s31_hal::ieee80211::registers::MacInterruptSnapshot,
-) {
-    let start = oer_riscv::cycle32();
-    let enable = enable_tag(irq.mac_interrupt_enable());
-    let sample = irq.mac_interrupt_status();
-    let observation = sample.observation();
-    let work = observation.work_events();
-    let semantic = u32::from(work.tx_complete())
-        | (u32::from(work.rx_success()) << 1)
-        | (u32::from(work.tx_timeout()) << 2)
-        | (u32::from(work.bss_color_collision()) << 3)
-        | (u32::from(observation.has_auxiliary_event()) << 4)
-        | (u32::from(observation.has_unhandled_event()) << 5);
-    let stats = access.receive_statistics_snapshot();
-    let p = stats.primary;
-    let d = stats.decode_errors;
-    (
-        [
-            start,
-            oer_riscv::cycle32(),
-            enable,
-            semantic,
-            u32::from(p.mpdu_count),
-            u32::from(p.end),
-            u32::from(p.fcs_error),
-            u32::from(p.abort),
-            u32::from(p.abort_fcs_pass),
-            u32::from(p.power_drop_error),
-            u32::from(p.same_bm_error),
-            u32::from(p.other_unicast),
-            u32::from(p.last_unmatched_error),
-            u32::from(p.buffer_full),
-            u32::from(p.fifo_overflow),
-            u32::from(d.nrx_abort),
-            u32::from(d.nrx_restart),
-            u32::from(d.nrx_ht_sig),
-            u32::from(d.nrx_he_sig_a_crc),
-            u32::from(p.data_success),
-        ],
-        sample,
-    )
-}
-impl Trace {
-    fn observe_guards(
-        &mut self,
-        storage: &Storage,
-        access: &oer_esp32s31_hal::owner::RadioAccess,
-        force: bool,
-    ) -> Result<(), &'static str> {
-        for (slot, index) in CPU_NODES.into_iter().enumerate() {
-            let descriptor = node(storage, index).ok_or("node")?;
-            let expected = *self.expected.get(index).ok_or("expected")?;
-            let start = oer_riscv::cycle32();
-            let before = descriptor.word0();
-            let mut different = 0_u32;
-            for word in 0..WORDS {
-                if read_word(storage, descriptor, expected, word * 4)? != pattern(index, word) {
-                    different |= 1_u32.checked_shl(word as u32).ok_or("guard-word")?;
-                }
-            }
-            let after = descriptor.word0();
-            let cursor = access.receive_dma_snapshot();
-            let previous = self.guard_previous.get_mut(slot).ok_or("guard-slot")?;
-            if force || *previous != different {
-                let row = self.guards.get_mut(self.guard_used).ok_or("guard-full")?;
-                *row = [
-                    self.scans,
-                    index as u32,
-                    start,
-                    oer_riscv::cycle32(),
-                    before.bits(),
-                    after.bits(),
-                    different,
-                    cursor.descriptor_base,
-                    cursor.last_descriptor_low,
-                    cursor.next_descriptor_low,
-                ];
-                self.guard_used = self.guard_used.saturating_add(1);
-            }
-            *previous = different;
-        }
-        Ok(())
-    }
-    fn commit(
-        &mut self,
-        storage: &Storage,
-        access: &oer_esp32s31_hal::owner::RadioAccess,
-        terminals: usize,
-    ) -> Result<(), &'static str> {
-        let out = self
-            .commits
-            .get_mut(self.commit_used)
-            .ok_or("commit-full")?;
-        let before = access.receive_dma_snapshot();
-        let start = oer_riscv::cycle32();
-        for (index, words) in out.nodes.iter_mut().enumerate() {
-            let descriptor = node(storage, index).ok_or("node")?;
-            let expected = *self.expected.get(index).ok_or("expected")?;
-            let (first, rest) = words.split_first_mut().ok_or("commit-shape")?;
-            *first = descriptor.word0().bits();
-            for (word, output) in rest.iter_mut().take(WORDS).enumerate() {
-                *output = read_word(storage, descriptor, expected, word * 4)?;
-            }
-            *rest.last_mut().ok_or("commit-shape")? = descriptor.word0().bits();
-        }
-        let after = access.receive_dma_snapshot();
-        out.header = [
-            self.scans,
-            terminals as u32,
-            start,
-            oer_riscv::cycle32(),
-            before.descriptor_base,
-            before.last_descriptor_low,
-            before.next_descriptor_low,
-            after.last_descriptor_low,
-            after.next_descriptor_low,
-        ];
-        self.commit_used = self.commit_used.saturating_add(1);
-        Ok(())
-    }
-    fn push(&mut self, row: [u32; 16]) -> Result<(), &'static str> {
-        let out = self.rows.get_mut(self.used).ok_or("trace-full")?;
-        *out = row;
-        self.used = self.used.saturating_add(1);
-        Ok(())
-    }
-    fn scan(
-        &mut self,
-        storage: &Storage,
-        access: &mut oer_esp32s31_hal::owner::RadioAccess,
-        force: bool,
-        irq: &mut oer_esp32s31_hal::owner::MacInterruptRegisters,
-    ) -> Result<usize, &'static str> {
-        let begin = oer_riscv::cycle32();
-        if self.scans != 0 {
-            self.max_gap_cycles = self
-                .max_gap_cycles
-                .max(begin.wrapping_sub(self.previous_end));
-        }
-        let (diagnostic_before, _before_sample) = diagnostic(access, irq);
-        let mut leading_changed = 0_u32;
-        let mut reserved_changed = false;
-        let mut terminals = 0_usize;
-        for index in 0..NODES {
-            let descriptor = node(storage, index).ok_or("node")?;
-            let before = access.receive_dma_snapshot();
-            let t0 = oer_riscv::cycle32();
-            let w0 = descriptor.word0();
-            let address = descriptor.buffer_address();
-            let next = descriptor.next_address();
-            let expected = *self.expected.get(index).ok_or("expected")?;
-            let lead = read_word(storage, descriptor, expected, 0)?;
-            let w1 = descriptor.word0();
-            let t1 = oer_riscv::cycle32();
-            let after = access.receive_dma_snapshot();
-            terminals += usize::from(w1.rx_done());
-            let state = [w0.bits(), w1.bits(), lead, address, next];
-            let previous = self.previous.get_mut(index).ok_or("previous")?;
-            let changed = *previous != state;
-            let [_, _, previous_lead, _, _] = *previous;
-            if self.scans != 0 && previous_lead != lead {
-                if index == COUNT {
-                    reserved_changed = true;
-                } else {
-                    leading_changed |=
-                        1_u32.checked_shl(index as u32).ok_or("correlation-index")?;
-                }
-            }
-            *previous = state;
-            let cursor = [
-                after.descriptor_base,
-                after.last_descriptor_low,
-                after.next_descriptor_low,
-                u32::from(after.next_descriptor_upper_unknown),
-            ];
-            let cursor_changed = self.cursor != cursor;
-            self.cursor = cursor;
-            if changed
-                || force
-                || cursor_changed
-                || before.last_descriptor_low != after.last_descriptor_low
-                || before.next_descriptor_low != after.next_descriptor_low
-            {
-                self.push([
-                    index as u32,
-                    t0,
-                    t1,
-                    w0.bits(),
-                    w1.bits(),
-                    lead,
-                    address,
-                    next,
-                    before.descriptor_base,
-                    before.last_descriptor_low,
-                    before.next_descriptor_low,
-                    after.last_descriptor_low,
-                    after.next_descriptor_low,
-                    u32::from(before.next_descriptor_upper_unknown),
-                    u32::from(after.next_descriptor_upper_unknown),
-                    self.scans,
-                ])?;
-            }
-        }
-        let guards_before = self.guard_used;
-        self.observe_guards(storage, access, force)?;
-        if terminals > self.terminal_previous {
-            self.commit(storage, access, terminals)?;
-        }
-        self.terminal_previous = terminals;
-        let (diagnostic_after, after_sample) = diagnostic(access, irq);
-        let counters_changed = diagnostic_before
-            .iter()
-            .skip(4)
-            .ne(diagnostic_after.iter().skip(4))
-            || self
-                .diagnostic_previous
-                .iter()
-                .skip(4)
-                .ne(diagnostic_before.iter().skip(4));
-        self.diagnostic_previous = diagnostic_after;
-        if force
-            || counters_changed
-            || self.guard_used != guards_before
-            || leading_changed != 0
-            || reserved_changed
-            || diagnostic_before
-                .get(3)
-                .copied()
-                .ok_or("diagnostic-shape")?
-                != 0
-            || diagnostic_after.get(3).copied().ok_or("diagnostic-shape")? != 0
-        {
-            let row = self
-                .correlations
-                .get_mut(self.correlation_used)
-                .ok_or("correlation-full")?;
-            let mut words = [
-                self.scans,
-                leading_changed,
-                u32::from(reserved_changed),
-                terminals as u32,
-            ]
-            .into_iter()
-            .chain(diagnostic_before)
-            .chain(diagnostic_after);
-            for word in row {
-                *word = words.next().ok_or("correlation-shape")?;
-            }
-            self.correlation_used = self.correlation_used.saturating_add(1);
-        }
-        // Only RX group 5/14/24 is enabled. This acknowledges exactly the
-        // sampled STATUS; disabled fatal/opaque RAW causes are never selected.
-        irq.acknowledge_mac_interrupts(after_sample);
-        self.previous_end = oer_riscv::cycle32();
-        self.max_scan_cycles = self
-            .max_scan_cycles
-            .max(self.previous_end.wrapping_sub(begin));
-        self.scans = self.scans.saturating_add(1);
-        Ok(terminals)
-    }
-}
 async fn capture(boot: Boot) {
     let Boot {
         mut console,
         _pads,
-        cell,
-        wifi,
         mac_irq,
-        rng,
         traffic,
-        station,
-        ap,
     } = boot;
     usb::text(&mut console, b"RXCHAIN boot\n").await;
-    let result = if let Some(trace) = traffic {
-        run_direct(&mut console, trace, mac_irq).await
-    } else {
-        match (wifi, rng) {
-            (Some(wifi), Some(rng)) => {
-                run(&mut console, cell, wifi, mac_irq, rng, station, ap).await
-            }
-            _ => Err("legacy-inputs"),
-        }
-    };
+    let result = run_direct(&mut console, traffic, mac_irq).await;
     if let Err(reason) = result {
         usb::text(&mut console, reason.as_bytes()).await;
         usb::text(&mut console, b"\nOER-RESULT: fail rx-chain\n").await;
@@ -972,292 +539,5 @@ async fn run_direct(
     clear?;
     // Static backend/output retain every power/clock/register owner until the
     // leased host reset; this diagnostic returns no reusable radio/storage.
-    Ok(())
-}
-async fn run(
-    console: &mut usb::Console,
-    cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
-    wifi: oer_esp32s31_hal::root::WifiPartition,
-    mut mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
-    rng: Rng,
-    station: [u8; 6],
-    ap: [u8; 6],
-) -> Result<(), &'static str> {
-    let station = IndividualAddress::for_interface(station).map_err(|_| "station")?;
-    let ap = IndividualAddress::for_interface(ap).map_err(|_| "ap")?;
-    let channel =
-        WifiChannel::new_2_4_ghz(CHANNEL, WifiChannelWidth::Mhz20).map_err(|_| "channel")?;
-    let domain = Country::new(*b"DE")
-        .ok()
-        .and_then(RegulatoryDomain::of)
-        .ok_or("domain")?;
-    let channel = domain.permit(channel).map_err(|_| "permit")?;
-    let ceiling = channel.tx_ceiling(board::wifi_power_limits(
-        i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
-        Some(1000),
-    ));
-    let config = RadioStartConfig::new(
-        WifiColdStartConfig::new(channel, ceiling),
-        WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, ap)
-            .map_err(|_| "mac-config")?,
-    );
-    usb::text(console, b"RXCHAIN radio-start\n").await;
-    crate::diagnostic::phase(2);
-    let (cell, started) = start_esp32s31_radio(cell, wifi, Platform { rng }, config).await;
-    crate::diagnostic::phase(3);
-    let stopped = started.map_err(|_| "radio-start")?;
-    let parts = stopped.into_runtime_parts();
-    let mut access = parts.registers;
-    let placed = RxDmaStorage::place(RX.take().ok_or("rx-claimed")?).map_err(|_| "rx-place")?;
-    let storage = placed.storage();
-    let prepared = placed
-        .prepare_ring(access.rx_dma())
-        .map_err(|_| "rx-prepare")?;
-    prepare_patterns(storage)?;
-    let ready = access.wifi_mac_hal().prepare_mac_runtime(prepared);
-    let stopped_ring = ready.publish(access.rx_dma()).map_err(|_| "rx-publish")?;
-    let ring = stopped_ring
-        .try_start(access.rx_dma())
-        .map_err(|_| "rx-start")?;
-    if SELECTION == 160 {
-        let trace = irq120::take()?;
-        let raw = mac_irq.mac_interrupt_raw();
-        if raw.fatal_assertion_raw().is_some() {
-            return Err("fatal-before-rx");
-        }
-        mac_irq.acknowledge_mac_interrupt_raw(raw);
-        access.wifi_mac_hal().configure_open_promiscuous_receive();
-        mac_irq.mask_all_mac_interrupts();
-        irq120::checkpoint(trace, 160, storage, &access, &mac_irq)?;
-        usb::text(
-            console,
-            b"IRQ120 begin v=1 selection=160 channel=13 cap_ms=700 mask_ms=250 barriers=none\n",
-        )
-        .await;
-        mac_irq.unmask_rx_delivery_interrupts();
-        access.wifi_mac_hal().start_mac_runtime(&ring);
-        let observation = irq120::collect(trace, storage, &access, &mut mac_irq);
-        access.wifi_mac_hal().request_channel_stop();
-        let stop_deadline = EmbassyClock
-            .now()
-            .checked_add(Duration::from_millis(50))
-            .ok_or("stop-deadline")?;
-        while access.wifi_mac_hal().channel_active_state() != 0 {
-            if EmbassyClock.now() >= stop_deadline {
-                return Err("mac-stop");
-            }
-            EmbassyClock
-                .wait_until(
-                    EmbassyClock
-                        .now()
-                        .checked_add(Duration::from_millis(1))
-                        .ok_or("wait")?,
-                )
-                .await;
-        }
-        let _halted = ring.try_stop(access.rx_dma()).map_err(|_| "walker-stop")?;
-        irq120::finish(trace, storage, &access, &mut mac_irq, console).await?;
-        let stopped = parts.context.into_stopped(parts.platform, access);
-        let (_cell, release) = stopped.release(cell).await;
-        release.map_err(|_| "radio-release")?;
-        return observation;
-    }
-    // Production start validates an entirely armed topology. Install the
-    // deliberately CPU-owned barriers after that edge, but before outer RX.
-    // Whether a walker prefetch can defeat this live OWNER store is part of
-    // the detach premise under test, not an assumed quiescence guarantee.
-    install_barriers(storage)?;
-    let trace = TRACE.try_take().ok_or("trace-claimed")?;
-    for index in 0..NODES {
-        *trace.expected.get_mut(index).ok_or("expected")? =
-            node(storage, index).ok_or("node")?.buffer_address();
-    }
-    trace.scan(storage, &mut access, true, &mut mac_irq)?;
-    // Clear stale events under the mask, then read its classified state.
-    // This capture enables only RX delivery and acknowledges each sampled
-    // STATUS to correlate later write clusters with fresh events/counters.
-    let initial_raw = mac_irq.mac_interrupt_raw();
-    if initial_raw.fatal_assertion_raw().is_some() {
-        return Err("fatal-before-rx");
-    }
-    mac_irq.acknowledge_mac_interrupt_raw(initial_raw);
-    let initial_status = mac_irq.mac_interrupt_status().observation();
-    let initial_enable = enable_tag(mac_irq.mac_interrupt_enable());
-    access.wifi_mac_hal().configure_open_promiscuous_receive();
-    usb::text(
-        console,
-        b"RXCHAIN begin v=4 channel=13 buffer=128 count=32 frames=3 cap_ms=700 cpu_nodes=12,20,28 full_guard=1\n",
-    )
-    .await;
-    let deadline = EmbassyClock
-        .now()
-        .checked_add(Duration::from_millis(CAPTURE_MS))
-        .ok_or("deadline")?;
-    mac_irq.unmask_rx_delivery_interrupts();
-    let capture_enable = enable_tag(mac_irq.mac_interrupt_enable());
-    access.wifi_mac_hal().start_mac_runtime(&ring);
-    let mut terminals = 0;
-    let mut observation = Ok(());
-    while EmbassyClock.now() < deadline && terminals < FRAME_LIMIT {
-        match trace.scan(storage, &mut access, false, &mut mac_irq) {
-            Ok(count) => terminals = count,
-            Err(reason) => {
-                observation = Err(reason);
-                break;
-            }
-        }
-    }
-    // Stop outer RX before withdrawing walker credit. No descriptor is ever
-    // rearmed or taken: all observed words retain their original generation.
-    access.wifi_mac_hal().request_channel_stop();
-    let stop_deadline = EmbassyClock
-        .now()
-        .checked_add(Duration::from_millis(50))
-        .ok_or("stop-deadline")?;
-    while access.wifi_mac_hal().channel_active_state() != 0 {
-        if EmbassyClock.now() >= stop_deadline {
-            return Err("mac-stop");
-        }
-        EmbassyClock
-            .wait_until(
-                EmbassyClock
-                    .now()
-                    .checked_add(Duration::from_millis(1))
-                    .ok_or("wait")?,
-            )
-            .await;
-    }
-    let halted = ring.try_stop(access.rx_dma()).map_err(|_| "walker-stop")?;
-    if let Err(reason) = trace.scan(storage, &mut access, true, &mut mac_irq) {
-        observation = Err(reason);
-    }
-    // No take/recycle is performed. STATUS is acknowledged during RX.
-    // These final phases read enable state and any remaining pending STATUS;
-    // a zero sample does not establish retention of an unacknowledged event.
-    mac_irq.mask_all_mac_interrupts();
-    let masked_status = mac_irq.mac_interrupt_status().observation();
-    let masked_enable = enable_tag(mac_irq.mac_interrupt_enable());
-    mac_irq.unmask_rx_delivery_interrupts();
-    let first_unmask = mac_irq.mac_interrupt_status().observation();
-    let first_enable = enable_tag(mac_irq.mac_interrupt_enable());
-    mac_irq.mask_rx_delivery_interrupts();
-    let remasked = mac_irq.mac_interrupt_status().observation();
-    let remasked_enable = enable_tag(mac_irq.mac_interrupt_enable());
-    mac_irq.unmask_rx_delivery_interrupts();
-    let pending = mac_irq.mac_interrupt_status();
-    let second_unmask = pending.observation();
-    let second_enable = enable_tag(mac_irq.mac_interrupt_enable());
-    mac_irq.acknowledge_mac_interrupts(pending);
-    let acknowledged = mac_irq.mac_interrupt_status().observation();
-    let acknowledged_enable = enable_tag(mac_irq.mac_interrupt_enable());
-    mac_irq.mask_all_mac_interrupts();
-    let snapshot = access.receive_dma_snapshot();
-    let mut line = heapless::String::<768>::new();
-    writeln!(&mut line, "RXCHAIN end terminals={} records={} scans={} max_scan={} max_gap={} base={:08x} last={:x} next={:x}",
-        terminals, trace.used, trace.scans, trace.max_scan_cycles, trace.max_gap_cycles,
-        snapshot.descriptor_base, snapshot.last_descriptor_low, snapshot.next_descriptor_low).map_err(|_| "format")?;
-    usb::text(console, line.as_bytes()).await;
-    for row in trace.guards.iter().take(trace.guard_used) {
-        line.clear();
-        line.push_str("G").map_err(|_| "format")?;
-        for value in row {
-            write!(&mut line, " {value:x}").map_err(|_| "format")?;
-        }
-        line.push('\n').map_err(|_| "format")?;
-        usb::text(console, line.as_bytes()).await;
-    }
-    for (ordinal, commit) in trace.commits.iter().take(trace.commit_used).enumerate() {
-        line.clear();
-        write!(&mut line, "K {ordinal:x}").map_err(|_| "format")?;
-        for value in commit.header {
-            write!(&mut line, " {value:x}").map_err(|_| "format")?;
-        }
-        line.push('\n').map_err(|_| "format")?;
-        usb::text(console, line.as_bytes()).await;
-        for (index, words) in commit.nodes.iter().enumerate() {
-            line.clear();
-            write!(&mut line, "F {ordinal:x} {index:x}").map_err(|_| "format")?;
-            for value in words {
-                write!(&mut line, " {value:08x}").map_err(|_| "format")?;
-            }
-            line.push('\n').map_err(|_| "format")?;
-            usb::text(console, line.as_bytes()).await;
-        }
-    }
-    line.clear();
-    writeln!(
-        &mut line,
-        "RXCHAIN correlation records={} capture_enable={}",
-        trace.correlation_used, capture_enable
-    )
-    .map_err(|_| "format")?;
-    usb::text(console, line.as_bytes()).await;
-    for row in trace.correlations.iter().take(trace.correlation_used) {
-        line.clear();
-        line.push_str("C").map_err(|_| "format")?;
-        for value in row {
-            write!(&mut line, " {value:x}").map_err(|_| "format")?;
-        }
-        line.push('\n').map_err(|_| "format")?;
-        usb::text(console, line.as_bytes()).await;
-    }
-    for (phase, status, enable) in [
-        ("initial", initial_status, initial_enable),
-        ("masked", masked_status, masked_enable),
-        ("unmask", first_unmask, first_enable),
-        ("remask", remasked, remasked_enable),
-        ("unmask-again", second_unmask, second_enable),
-        ("ack", acknowledged, acknowledged_enable),
-    ] {
-        line.clear();
-        let work = status.work_events();
-        writeln!(
-            &mut line,
-            "Q phase={} enable={} tx={} rx={} timeout={} color={} aux={} unhandled={}",
-            phase,
-            enable,
-            u8::from(work.tx_complete()),
-            u8::from(work.rx_success()),
-            u8::from(work.tx_timeout()),
-            u8::from(work.bss_color_collision()),
-            u8::from(status.has_auxiliary_event()),
-            u8::from(status.has_unhandled_event()),
-        )
-        .map_err(|_| "format")?;
-        usb::text(console, line.as_bytes()).await;
-    }
-    for row in trace.rows.iter().take(trace.used) {
-        line.clear();
-        line.push_str("E").map_err(|_| "format")?;
-        for value in row {
-            write!(&mut line, " {value:x}").map_err(|_| "format")?;
-        }
-        line.push('\n').map_err(|_| "format")?;
-        usb::text(console, line.as_bytes()).await;
-    }
-    for index in 0..NODES {
-        let descriptor = node(storage, index).ok_or("node")?;
-        let expected = *trace.expected.get(index).ok_or("expected")?;
-        line.clear();
-        write!(&mut line, "D {index:x}").map_err(|_| "format")?;
-        for offset in (0..BUFFER).step_by(4) {
-            write!(
-                &mut line,
-                " {:08x}",
-                read_word(storage, descriptor, expected, offset)?
-            )
-            .map_err(|_| "format")?;
-        }
-        line.push('\n').map_err(|_| "format")?;
-        usb::text(console, line.as_bytes()).await;
-    }
-    // The stopped ring keeps its arena retained; only the radio owner closes RF.
-    let _halted = halted;
-    let stopped = parts.context.into_stopped(parts.platform, access);
-    let (_cell, release) = stopped.release(cell).await;
-    release.map_err(|_| "radio-release")?;
-    observation?;
-    // A CPU barrier may legitimately prevent every terminal. The result
-    // denotes completed collection; the host separately checks air coverage.
     Ok(())
 }
