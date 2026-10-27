@@ -276622,7 +276622,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00002000) != 0
             }
 
-            /// RX success event used to schedule descriptor service; it does not by itself establish payload durability or IRQ-to-DMA ordering. In a bounded capture, each of three first observed enabled RAW14/STATUS14 positives follows a read of the corresponding new terminal RX_DONE and advanced NEXT; this is observed register-read order, not a universal hardware assertion-order guarantee. SOURCE: HW20_RX_IRQ_DMA_BRACKETS_20261027.
+            /// RX success event used to schedule descriptor service; it does not by itself establish payload durability or IRQ-to-DMA ordering. In a bounded capture, each of three first observed enabled RAW14/STATUS14 positives follows a read of the corresponding new terminal RX_DONE and advanced NEXT; this is observed register-read order, not a universal hardware assertion-order guarantee. SOURCE: HW20_RX_IRQ_DMA_BRACKETS_20261027. During real take and recycle, seven whole units with a first recorded14 in their scan have post-RAW/STATUS volatile byte copies equal to their later taken bytes, including one independently matched1200-byte UDP payload. Those copies take time after the sample and do not establish that all bytes were already complete at first14. SOURCE: HW24_RX_POST_IRQ_BYTES_20261027.
             #[inline]
             pub const fn rx_success(self) -> bool {
                 (self.0 & 0x00004000) != 0

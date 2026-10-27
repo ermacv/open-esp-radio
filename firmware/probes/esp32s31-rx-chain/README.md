@@ -234,9 +234,10 @@ covers public radio startup, and phase 3 follows its return. No handler takes
 hardware from the console's live owner. These records diagnose pre-RX failure;
 they do not observe MAC DMA completion.
 
-The staged product-style stack check reports an unresolved P2 stack path.
-This is a diagnostic, unqualified image; no panic budget or memory profile is
-raised to make a product check pass.
+The legacy actor composition has an unresolved P2 stack path. The default
+direct-backend composition passes the mandatory image gates with the same
+interrupt-stack allocation. This remains a diagnostic image; no panic budget
+or memory profile is raised to make a product check pass.
 
 `G` rows compare every word of each CPU-owned buffer on every scan, and
 retain a row when its mismatch bitmap changes or a full scan is forced. The
