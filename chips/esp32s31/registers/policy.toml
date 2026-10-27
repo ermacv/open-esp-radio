@@ -2941,9 +2941,12 @@ name = "clear_all_mac_power_interrupts"
 register = "MODEM_PWR.CLEAR"
 value = 0xffffffff
 masks = "MODEM_PWR.ENABLE"
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "HW8_S31_WIFI_TSF_MASK_20261026", "POLICY_S31_PWR_BANK_CLEAR_SCOPE_20261027"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "HW8_S31_WIFI_TSF_MASK_20261026", "POLICY_S31_PWR_BANK_CLEAR_SCOPE_20261027", "HW30_S31_TBTT_PERIODIC_POLICY_20261027"]
 # Whole-bank values are project policy; HW8 qualifies timer0/1 masking
 # and timer0 masked all-clear only, not all-producer shutdown.
+
+# SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027. This masks/clears
+# the bank, but a running local TBTT domain produces RAW at its next interval.
 
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_0"

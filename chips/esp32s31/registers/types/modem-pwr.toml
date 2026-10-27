@@ -607,7 +607,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"
 completeness = "partial"
 
 [review.entity."CONTROL%s.TIMER_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 completeness = "partial"
 
 [review.entity."TARGET%s"]
@@ -683,10 +683,10 @@ completeness = "partial"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
@@ -723,10 +723,10 @@ completeness = "unknown"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 
 [review.entity."RAW.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."RAW.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."RAW.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
@@ -763,10 +763,10 @@ completeness = "unknown"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
@@ -798,10 +798,10 @@ completeness = "unknown"
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027", "BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027", "HW30_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
@@ -884,7 +884,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTR
 completeness = "partial"
 
 [review.entity."STA_TSF_CONTROL.STA_TBTT_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_PERIODIC_POLICY_20261027"]
 completeness = "partial"
 
 [review.entity."SOFTAP_CONTROL.TBTT_AHEAD_TIME"]
@@ -900,7 +900,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMI
 completeness = "partial"
 
 [review.entity."SOFTAP_CONTROL.TBTT_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_PERIODIC_POLICY_20261027"]
 completeness = "partial"
 
 [review.entity."SOFTAP_CONTROL.BIT_27_OPAQUE"]
@@ -932,7 +932,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMI
 completeness = "partial"
 
 [review.entity."NAN_CONTROL.TBTT_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_PERIODIC_POLICY_20261027"]
 completeness = "partial"
 
 [review.entity."NAN_CONTROL.TBTT_MODEM_WAKEUP_ENABLE"]
@@ -964,7 +964,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMI
 completeness = "partial"
 
 [review.entity."BTWT_CONTROL.TBTT_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_PERIODIC_POLICY_20261027"]
 completeness = "partial"
 
 [review.entity."BTWT_CONTROL.TBTT_MODEM_WAKEUP_ENABLE"]
@@ -980,15 +980,15 @@ sources = ["S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
 completeness = "partial"
 
 [review.entity."SOFTAP_TBTT_INTERVAL.INTERVAL_TSF_BITS_35_10"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D864", "S31_MMIO_DECLARED_2010D864", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D864_TWO_DOMAIN"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D864", "S31_MMIO_DECLARED_2010D864", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D864_TWO_DOMAIN", "HW30_S31_TBTT_PERIODIC_POLICY_20261027"]
 completeness = "partial"
 
 [review.entity."NAN_TBTT_INTERVAL.INTERVAL_TSF_BITS_35_10"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D86C", "S31_MMIO_DECLARED_2010D86C", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D86C_TWO_DOMAIN"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D86C", "S31_MMIO_DECLARED_2010D86C", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D86C_TWO_DOMAIN", "HW30_S31_TBTT_PERIODIC_POLICY_20261027"]
 completeness = "partial"
 
 [review.entity."BTWT_TBTT_INTERVAL.INTERVAL_TSF_BITS_35_10"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D874", "S31_MMIO_DECLARED_2010D874", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D874_TWO_DOMAIN"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D874", "S31_MMIO_DECLARED_2010D874", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D874_TWO_DOMAIN", "HW30_S31_TBTT_PERIODIC_POLICY_20261027"]
 completeness = "partial"
 
 [review.entity."SOC_WAKEUP_CLEAR.BITS_22_24_OPAQUE"]
@@ -1008,52 +1008,52 @@ sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D834", "S31_MMI
 completeness = "partial"
 
 [review.entity."ENABLE.TBTT_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."ENABLE.TBTT_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."ENABLE.TBTT_1"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."ENABLE.TBTT_0"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."RAW.TBTT_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."RAW.TBTT_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."RAW.TBTT_1"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."RAW.TBTT_0"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TBTT_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TBTT_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TBTT_1"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TBTT_0"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."CLEAR.TBTT_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."CLEAR.TBTT_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."CLEAR.TBTT_1"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [review.entity."CLEAR.TBTT_0"]
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
 
 [[registers]]
 name = "RUNTIME_TIMER_START_COMMAND"
@@ -1907,7 +1907,7 @@ description = "libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_enab
 name = "STA_TBTT_ENABLE"
 bits = "26"
 class = "plain"
-description = "hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit."
+description = "hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027."
 
 [[registers.fields]]
 name = "STA_TSF_ENABLE_LOW"
@@ -1966,7 +1966,7 @@ description = "Complete hal_set_sta_tbtt_interval replaces bits 25:0 with its 32
 name = "INTERVAL_TSF_BITS_35_10"
 bits = "25:0"
 class = "plain"
-description = "The TBTT interval in station TSF units of 1024 µs."
+description = "The TBTT interval in station TSF units of 1024 µs. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027."
 write-range = { min = 0x0, max = 0x3ffffff }
 
 [[registers.fields]]
@@ -2013,7 +2013,7 @@ description = "Project-assigned name. TSF-domain1 TBTT RF-control gate independe
 name = "TBTT_ENABLE"
 bits = "26"
 class = "plain"
-description = "Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal."
+description = "Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027."
 
 [[registers.fields]]
 name = "BIT_27_OPAQUE"
@@ -2042,7 +2042,7 @@ description = "Project-assigned name. Per-domain TBTT interval for TSF domain1. 
 name = "INTERVAL_TSF_BITS_35_10"
 bits = "25:0"
 class = "plain"
-description = "Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished."
+description = "Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027."
 
 [[registers.fields]]
 name = "BITS_30_31_OPAQUE"
@@ -2102,7 +2102,7 @@ description = "Project-assigned name. TSF-domain2 TBTT RF-control gate independe
 name = "TBTT_ENABLE"
 bits = "26"
 class = "plain"
-description = "Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal."
+description = "Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027."
 
 [[registers.fields]]
 name = "TBTT_MODEM_WAKEUP_ENABLE"
@@ -2131,7 +2131,7 @@ description = "Project-assigned name. Per-domain TBTT interval for TSF domain2. 
 name = "INTERVAL_TSF_BITS_35_10"
 bits = "25:0"
 class = "plain"
-description = "Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished."
+description = "Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027."
 
 [[registers.fields]]
 name = "BITS_30_31_OPAQUE"
@@ -2191,7 +2191,7 @@ description = "Project-assigned name. TSF-domain3 TBTT RF-control gate independe
 name = "TBTT_ENABLE"
 bits = "26"
 class = "plain"
-description = "Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal."
+description = "Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027."
 
 [[registers.fields]]
 name = "TBTT_MODEM_WAKEUP_ENABLE"
@@ -2220,7 +2220,7 @@ description = "Project-assigned name. Per-domain TBTT interval for TSF domain3. 
 name = "INTERVAL_TSF_BITS_35_10"
 bits = "25:0"
 class = "plain"
-description = "Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished."
+description = "Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027."
 
 [[registers.fields]]
 name = "BITS_30_31_OPAQUE"
@@ -2269,7 +2269,7 @@ description = "Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf
 name = "TIMER_ENABLE"
 bits = "31"
 class = "plain"
-description = "Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal."
+description = "Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal. For indices2/3, run31 reads one after arm and zero after a witnessed positive expiry, before any explicit stop or bank-clear policy. Explicitly setting run again gives a fresh masked expiry. This observation does not qualify automatic clearing for indices0/1 or every control bit. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "RF_CONTROL_ENABLE"
@@ -2388,37 +2388,37 @@ description = "WDEVPWR_ENABLE diagnostic snapshot and writable event mask. Compl
 name = "TBTT_3"
 bits = "0"
 class = "plain"
-description = "Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_2"
 bits = "1"
 class = "plain"
-description = "Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_1"
 bits = "2"
 class = "plain"
-description = "Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_0"
 bits = "3"
 class = "plain"
-description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
 bits = "4"
 class = "plain"
-description = "Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "plain"
-description = "Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
@@ -2473,37 +2473,37 @@ description = "WDEVPWR_RAW diagnostic snapshot with the same event geometry as E
 name = "TBTT_3"
 bits = "0"
 class = "read-only"
-description = "Raw TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Raw TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_2"
 bits = "1"
 class = "read-only"
-description = "Raw TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Raw TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_1"
 bits = "2"
 class = "read-only"
-description = "Raw TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Raw TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_0"
 bits = "3"
 class = "read-only"
-description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
 bits = "4"
 class = "read-only"
-description = "Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "read-only"
-description = "Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
@@ -2556,37 +2556,37 @@ description = "Masked WDEVPWR event image returned by complete hal_pwr_interrupt
 name = "TBTT_3"
 bits = "0"
 class = "read-only"
-description = "Masked TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Masked TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_2"
 bits = "1"
 class = "read-only"
-description = "Masked TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Masked TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_1"
 bits = "2"
 class = "read-only"
-description = "Masked TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Masked TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_0"
 bits = "3"
 class = "read-only"
-description = "Masked TSF-0 TBTT event. TSF 0 is the station TSF. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Masked TSF-0 TBTT event. TSF 0 is the station TSF. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
 bits = "4"
 class = "read-only"
-description = "Masked guarded TSF timer-three event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Masked guarded TSF timer-three event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "read-only"
-description = "Masked guarded TSF timer-two event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Masked guarded TSF timer-two event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
@@ -2639,37 +2639,37 @@ description = "Write-one-to-clear event bank used by complete hal_pwr_interrupt_
 name = "TBTT_3"
 bits = "0"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_2"
 bits = "1"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_1"
 bits = "2"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TBTT_0"
 bits = "3"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
 bits = "4"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
+description = "Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
@@ -2792,3 +2792,6 @@ completeness = "unknown"
 
 [review.entity."WORD_006C_OPAQUE"]
 sources = ["BX4_S31_LP_COMPARE_PUBLICATIONS_20261027", "HW22_S31_LP_COMPARE_WIDTH_20261027", "HW29_S31_LP_WIDTH_20261027"]
+
+[review.entity."STA_TBTT_INTERVAL.INTERVAL_TSF_BITS_35_10"]
+sources = ["HW30_S31_TBTT_PERIODIC_POLICY_20261027"]

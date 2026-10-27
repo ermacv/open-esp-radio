@@ -82,7 +82,7 @@ completeness = "unknown"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD", "BX12_S31_I2C_HOST_PUBLICATION_20261027"]
 
 [review.entity."I2C1_CTRL.START_OR_RESET"]
-sources = ["ROM_REV0_PHY_I2C", "BX12_S31_I2C_HOST_PUBLICATION_20261027"]
+sources = ["ROM_REV0_PHY_I2C", "BX12_S31_I2C_HOST_PUBLICATION_20261027", "HW30_S31_I2C_BUSY26_20261027"]
 provenance = "observed"
 completeness = "partial"
 naming = "descriptive"
@@ -352,7 +352,7 @@ description = "Host bit polled by the ROM command and conditional-reset paths be
 name = "START_OR_RESET"
 bits = "26"
 class = "write-only"
-description = "Bit included in ordinary ROM host-command publications and written alone to a busy host by the conditional master-reset path. The public header marks it reserved. Its independent trigger mechanism, readback and interrupt-acknowledgement semantics remain unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027."
+description = "Bit included in ordinary ROM host-command publications and written alone to a busy host by the conditional master-reset path. The public header marks it reserved. Its independent trigger mechanism, readback and interrupt-acknowledgement semantics remain unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027. A fresh positive BUSY observation admitted a bit26-only publication during one ordinary read; BUSY later fell and another normal read completed. Matrix131 and the validated edge observer were quiet before/after, so this does not establish IRQ acknowledgement or independent reset extent. SOURCE: HW30_S31_I2C_BUSY26_20261027."
 
 [[registers.fields]]
 name = "BITS_27_31_OPAQUE"
@@ -374,6 +374,7 @@ class = "plain"
 name = "I2C0_STATUS"
 bits = "31:24"
 class = "read-only"
+description = "Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027."
 
 [[registers]]
 name = "I2C1_CONF"
@@ -389,6 +390,7 @@ class = "plain"
 name = "I2C1_STATUS"
 bits = "31:24"
 class = "read-only"
+description = "Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027."
 
 [[registers]]
 name = "I2C_BURST_CONF"
@@ -410,6 +412,7 @@ reserved = { mask = 0xffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_M
 name = "I2C_MST_BURST_DONE"
 bits = "0"
 class = "read-only"
+description = "This bit is already one before the short ordinary serial/parallel host reads and stays one afterwards; it is not a fresh burst-completion witness for those commands and establishes no source131 relationship. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027."
 
 [[registers.fields]]
 name = "I2C_MST0_BURST_ERR_FLAG"
@@ -705,3 +708,12 @@ class = "plain"
 name = "CLK_EN"
 bits = "28"
 class = "plain"
+
+[review.entity."I2C0_CONF.I2C0_STATUS"]
+sources = ["HW30_S31_I2C_READ_OBSERVER_20261027"]
+
+[review.entity."I2C1_CONF.I2C1_STATUS"]
+sources = ["HW30_S31_I2C_READ_OBSERVER_20261027"]
+
+[review.entity."I2C_BURST_STATUS.I2C_MST_BURST_DONE"]
+sources = ["HW30_S31_I2C_READ_OBSERVER_20261027"]

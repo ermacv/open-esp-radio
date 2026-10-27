@@ -121,7 +121,7 @@ sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE8
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25", "BX14_IEEE132_UNCLASSIFIED_4D59230D"]
 
 [review.entity."EVENT_STATUS.TIMER0_OVERFLOW"]
-sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25", "HW8_S31_IEEE_MASKED_STATUS_20261026"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25", "HW8_S31_IEEE_MASKED_STATUS_20261026", "HW30_S31_IEEE132_ROUTE_20261027"]
 
 [review.entity."EVENT_STATUS.TIMER1_OVERFLOW"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25", "HW8_S31_IEEE_MASKED_STATUS_20261026"]
@@ -950,6 +950,7 @@ description = "Partition of the open vendor events field, bits 7:7; no individua
 name = "TIMER0_OVERFLOW"
 bits = "8"
 class = "write-one-to-clear"
+description = "A fresh threshold32 control also raises matrix source132 bank4 bit4 with its CPU route parked at zero; masked pending is revealed on unmask and a saved positive sample clears under mask. No ED6 qualification follows. SOURCE: HW30_S31_IEEE132_ROUTE_20261027."
 
 [[registers.fields]]
 name = "TIMER1_OVERFLOW"
