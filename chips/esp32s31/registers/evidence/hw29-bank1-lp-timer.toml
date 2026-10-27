@@ -1,0 +1,21 @@
+schema = 1
+
+[[sources]]
+id = "HW29_S31_BANK1_RETENTION_20261027"
+description = "SOURCE: s31-a rev0, run hw29-20261027-pb1-01, lease929, measured commit90304837, bank1.json. Separately seeded ENABLE1[0]/[2] remain1 through reviewed baseline clear/enable/mask, dynamic clear/enable/mask and classic unchanged-image init/deinit stores; the opposite lane remains0. Baseline/dynamic control enables positively change to compact0x1d/0x1f then0. This establishes only retention for those stores, no event producer, reset retention, clear action or124/133 equation. Report: oer-notes/research/hw29-bank1-lp-timer.md."
+
+[[sources]]
+id = "HW29_S31_LP_SLEEP_20261027"
+description = "SOURCE: s31-a rev0, run hw29-20261027-pb1-01, lease929, measured commit90304837, sleep16/sleep17/sleep0.json. XTAL/divider399, CPU admission masked, advancing completed BTLC captures after CONTROL0 command1, sourced digital/ETM6/7 prefix. Fresh target64/68=origin+2048, observation after4096 ticks: sleep16-disabled flag1c0 versus fresh enabled1; enabled sleep17 flag20 goes0->1, remains1 after disable17 and clears on separate whole-zero20. These local flags leave cause38/matrix127/LPCON vector0 in the tested awake state. Sleep0 helper changes ETM10c[26]0->1->0 and inherited78[26]1->1->0. Reference78-low24 tracks bracketed counter59/70/198 while enabled, freezes198 after disable while counter209/338 advances, and stays frozen under CONTROL25 clear/set with26=0. No reset image, standalone capture producer, DONE or PMU wake contract. Report: oer-notes/research/hw29-bank1-lp-timer.md."
+
+[[sources]]
+id = "HW29_S31_LP_WIDTH_20261027"
+description = "SOURCE: s31-a rev0, XTAL/divider399, runs hw29-20261027-pb1-01/02/04, leases929/931/936, measured commits90304837/bf62804b/f65d7aa6, width.json/width-set.json/width-remaining.json. CONTROL0/4=0/0: upper0, each bit24-31 and upperff; pair1/1: upper0/bit24 from run02 and bits25-31/upperff from run04. All20 distinct conditions read upper0 and preserve their fresh positive low24 compare, witnessed by initial byte24=0 then byte1/cause0x40000/matrix127 high. Latch2 may already be1 in pair1/1; it is recorded without a new-edge claim. Runs01/02 stop on an overly strict old-latch precondition, not a missing compare or negative upper-bit result. No other-mode, storage or reserved-bit meaning follows. Report: oer-notes/research/hw29-bank1-lp-timer.md."
+
+[[sources]]
+id = "HW29_S31_LP_WHOLE_20261027"
+description = "SOURCE: s31-a rev0, run hw29-20261027-pb1-03, lease934, measured commitbf62804b, whole.json,78 records. XTAL/divider399: complete software image1 produces pending24=1/cause0x40000/matrix127 high/LPCON vector0x80 with delivery18 enabled; masked publication retains byte1 with outputs0, unmask delivers, whole-zero24 clears. Compare disabled: exactly two natural counter decreases0xffffff->0 produce byte2c=1/cause2/source127/LPCON0x80, with one whole-zero2c after each returning all to0. First/second waits consume6710839742/6710881546 running CPU cycles against nominal40MHz; host briefly halts once per second to inspect command SRAM, so these are not calibrated wall periods or an uninterrupted CPU interval. All sampled complete24/2c upper31:8 images are0; zeros establish no upper-lane semantics. No multi-period service/latency qualification. Report: oer-notes/research/hw29-bank1-lp-timer.md."
+
+[[sources]]
+id = "HW29_S31_LP_REFERENCE_20261027"
+description = "SOURCE: s31-a rev0, run hw29-20261027-pb1-05, lease941, measured commit775e26a4, reference-wrap.json,58 records. XTAL/divider399, one additional natural LP wrap solely for F10 post-wrap/CONTROL25 observations, not a WHOLE or width repetition. Disabled-helper reference0xffffcb survives counter0xffffff->0; fresh enable leaves the immediate sample old but the4096-cycle settled reference12 matches counter12. With bit26 held1, CONTROL25clear freezes reference12 while the counter reaches141; CONTROL25set initially still reads12 but subsequently reference270 matches counter270 after another128-tick advance. The natural wait consumed6710862702 nominal40MHz running CPU cycles with once-per-second host halt/SRAM-read/resume. This establishes the bounded tracking/freeze relation in this awake configuration, no instantaneous capture edge, PMU sleep completion or universal field identity. Report: oer-notes/research/hw29-bank1-lp-timer.md."

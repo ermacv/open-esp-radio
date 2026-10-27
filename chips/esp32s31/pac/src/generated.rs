@@ -21434,13 +21434,13 @@ pub mod bt_mac {
                 (self.0 & 0x00002000) != 0
             }
 
-            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands.
+            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands. On s31-a, a separately seeded enable survived the reviewed primary baseline/dynamic clear, enable and mask stores and the classic unchanged-image init/deinit stores. This proves retention for these stores only, without a producer, reset or output equation SOURCE: HW29_S31_BANK1_RETENTION_20261027.
             #[inline]
             pub const fn bit_0_opaque(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands.
+            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands. On s31-a, a separately seeded enable survived the reviewed primary baseline/dynamic clear, enable and mask stores and the classic unchanged-image init/deinit stores. This proves retention for these stores only, without a producer, reset or output equation SOURCE: HW29_S31_BANK1_RETENTION_20261027.
             #[inline]
             pub const fn bit_2_opaque(self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -21523,13 +21523,13 @@ pub mod bt_mac {
                 (self.0 & 0x00002000) != 0
             }
 
-            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands.
+            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands. On s31-a, a separately seeded enable survived the reviewed primary baseline/dynamic clear, enable and mask stores and the classic unchanged-image init/deinit stores. This proves retention for these stores only, without a producer, reset or output equation SOURCE: HW29_S31_BANK1_RETENTION_20261027.
             #[inline]
             pub const fn bit_0_opaque(&self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands.
+            /// Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands. On s31-a, a separately seeded enable survived the reviewed primary baseline/dynamic clear, enable and mask stores and the classic unchanged-image init/deinit stores. This proves retention for these stores only, without a producer, reset or output equation SOURCE: HW29_S31_BANK1_RETENTION_20261027.
             #[inline]
             pub const fn bit_2_opaque(&self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -124651,6 +124651,38 @@ pub mod modem_etm {
         }
     }
 
+    /// The `WORD_010C_OPAQUE` register.
+    ///
+    /// Sleep-disable checks bit26 before the sleep0 disable helper. No completion or read-side-effect contract is established. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+    pub mod word_010c_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x04000000;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10c;
+
+        /// Width of `BIT_26_OPAQUE` in bits.
+        pub const BIT_26_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_26_OPAQUE`.
+        pub const BIT_26_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_26_OPAQUE`.
+        pub const BIT_26_OPAQUE_MASK: u32 = 0x4000000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Selected assertion input in the sleep-disable path; physical meaning unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027. At divider399, sourced sleep0 enable/disable command pairs changed this input0->1->0, qualifying commanded state only, not completion SOURCE: HW29_S31_LP_SLEEP_20261027.
+            #[inline]
+            pub const fn bit_26_opaque(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+        }
+    }
+
     /// The `WORD_0110_OPAQUE` register.
     ///
     /// One complete bit26 image in the boolean LP sleep helper. Action and readability unknown. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
@@ -125037,7 +125069,7 @@ pub mod modem_etm {
     ///
     /// The Bluetooth runtime's event channels four through seven and their bits of the write-trigger set and clear words.
     ///
-    /// SOURCE: ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM, ESP_IDF_7B9CC1AC_S31_SOC_ETM, BLOB_LIBBLE_PHY_INIT_REGISTERS, BLOB_LIBBTDM_RUNTIME_CONTROL.
+    /// SOURCE: ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM, ESP_IDF_7B9CC1AC_S31_SOC_ETM, BLOB_LIBBLE_PHY_INIT_REGISTERS, BLOB_LIBBTDM_RUNTIME_CONTROL, BX4_S31_LP_SLEEP0_OBSERVERS_20261027, HW29_S31_LP_SLEEP_20261027.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct ModemEtmBluetooth<P: oer_mmio::Placement = oer_mmio::Fixed<0x20108800>>(
         oer_mmio::Part<P, ModemEtmDivision, ModemEtmBluetoothWords>,
@@ -125047,8 +125079,9 @@ pub mod modem_etm {
     pub struct ModemEtmBluetoothWords;
 
     impl oer_mmio::Words for ModemEtmBluetoothWords {
-        const OWNED: &'static [usize] =
-            &[0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44, 0x48, 0x110, 0x114];
+        const OWNED: &'static [usize] = &[
+            0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44, 0x48, 0x10c, 0x110, 0x114,
+        ];
         const OBSERVED: &'static [usize] = &[];
         const TRIGGERS: &'static [(usize, u32)] = &[(0x4, 0x000008f0), (0x8, 0x000000f0)];
     }
@@ -125246,6 +125279,12 @@ pub mod modem_etm {
             self.0.write::<0x48>(value.0);
         }
 
+        /// Read `WORD_010C_OPAQUE`.
+        #[inline]
+        pub fn read_word_010c_opaque(&self) -> word_010c_opaque::R {
+            word_010c_opaque::R(self.0.read::<0x10c>())
+        }
+
         /// Write `WORD_0110_OPAQUE` from zero: the fields set, the reserved bits at
         /// their reset value, every high field at its prefix, zero in every
         /// other bit.
@@ -125291,7 +125330,7 @@ pub mod modem_etm {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40,
-            0x44, 0x48, 0x110, 0x114,
+            0x44, 0x48, 0x10c, 0x110, 0x114,
         ];
     }
 
@@ -128556,7 +128595,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
+            /// Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026. At XTAL/divider399 and CONTROL0/4=0/0, a fresh target64=origin+2048 crossed by4096 ticks left this byte0 while sleep16 was disabled; a fresh enabled control produced1 SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn sleep16_flag_byte(self) -> u8 {
                 self.0 as u8
@@ -128567,7 +128606,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
+            /// Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026. At XTAL/divider399 and CONTROL0/4=0/0, a fresh target64=origin+2048 crossed by4096 ticks left this byte0 while sleep16 was disabled; a fresh enabled control produced1 SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn sleep16_flag_byte(&self) -> u8 {
                 self.0 as u8
@@ -128606,7 +128645,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
+            /// Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026. At XTAL/divider399 with the advancing BTLC/ETM prefix, a fresh target68 crossing produced1; the separate disable17 retained1 and whole-zero20 cleared it. Cause38/source127/LPCON vector stayed0 in this awake condition; no PMU wake equation follows SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn sleep17_flag_byte(self) -> u8 {
                 self.0 as u8
@@ -128617,7 +128656,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
+            /// Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026. At XTAL/divider399 with the advancing BTLC/ETM prefix, a fresh target68 crossing produced1; the separate disable17 retained1 and whole-zero20 cleared it. Cause38/source127/LPCON vector stayed0 in this awake condition; no PMU wake equation follows SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn sleep17_flag_byte(&self) -> u8 {
                 self.0 as u8
@@ -128634,7 +128673,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the probe's HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, a retained nonzero software-pending sample followed by a new near compare (independently witnessed by CONTROL2 changing 0 to1) then conditional whole-word zero removed byte24/cause/output; CONTROL2 remained1. A zero sample skips the store and preserves the arrival, and zero before expiry permits the later compare. The delayed phases establish loss of the newer coalesced pending indication, not coincident arbitration or an execution of the production handler. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027. The pinned handler acknowledges with a complete zero store at +0x10; the immediate-deadline publisher stores complete one at +0x38. Both write bits 31:8 as zero. No meaning, reset value or per-bit side effect is established for those upper lanes. SOURCE: BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
+    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the probe's HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, a retained nonzero software-pending sample followed by a new near compare (independently witnessed by CONTROL2 changing 0 to1) then conditional whole-word zero removed byte24/cause/output; CONTROL2 remained1. A zero sample skips the store and preserves the arrival, and zero before expiry permits the later compare. The delayed phases establish loss of the newer coalesced pending indication, not coincident arbitration or an execution of the production handler. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027. The pinned handler acknowledges with a complete zero store at +0x10; the immediate-deadline publisher stores complete one at +0x38. Both write bits 31:8 as zero. No meaning, reset value or per-bit side effect is established for those upper lanes. SOURCE: BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027. At XTAL/divider399 on s31-a, complete software image1 produced byte1/cause0x40000/source127 with delivery18 enabled; masking retained byte1 and unmasking delivered it. Whole-zero24 cleared the positive byte/cause/output. All sampled complete24 images had upper31:8 zero, without establishing upper-lane semantics SOURCE: HW29_S31_LP_WHOLE_20261027.
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -128689,7 +128728,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `LOW_BYTE` field.
+            /// At XTAL/divider399 on s31-a, complete software image1 produced byte1/cause0x40000/source127 with delivery18 enabled; masking retained byte1 and unmasking delivered it. Whole-zero24 cleared the positive byte/cause/output. All sampled complete24 images had upper31:8 zero, without establishing upper-lane semantics SOURCE: HW29_S31_LP_WHOLE_20261027.
             #[inline]
             pub const fn low_byte(self) -> u8 {
                 self.0 as u8
@@ -128706,7 +128745,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `LOW_BYTE` field.
+            /// At XTAL/divider399 on s31-a, complete software image1 produced byte1/cause0x40000/source127 with delivery18 enabled; masking retained byte1 and unmasking delivered it. Whole-zero24 cleared the positive byte/cause/output. All sampled complete24 images had upper31:8 zero, without establishing upper-lane semantics SOURCE: HW29_S31_LP_WHOLE_20261027.
             #[inline]
             pub const fn low_byte(&self) -> u8 {
                 self.0 as u8
@@ -128729,7 +128768,7 @@ pub mod modem_pwr {
 
     /// The `WORD_002C_OPAQUE` register.
     ///
-    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. One positively pending natural rollover, alone and with compare, read zero at the next ROM-loader entry after the probe's HP system reset and after clock-only access restoration, while the LP source selector/divider stayed zero. That first experiment acknowledged pending before source-clock restoration. A separate both-pending/quiet follow-up restored the LP XTAL/divider before any acknowledge, prepare or start; pending/cause/counter/output still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is distinct from the earlier BLE-timer/controller reset retention; no immediate reset-edge or POR value is established. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. On s31-c, exactly two natural wraps without intermediate acknowledgement again leave byte2c=1/cause2/source127 high. A retained nonzero first-wrap sample conditionally triggers one whole-word zero after the independently observed second crossing; byte/cause/output remain0 through4096 further cycles. No visible second credit or arbitrary wrap-capacity guarantee follows. SOURCE: HW22_S31_LP_TWO_WRAPS_20261027. The pinned handler stores complete zero at +0x20 and +0x52; the counter helper also stores complete zero at +0x32. These stores write bits 31:8 as zero without establishing their individual meaning or clearing behavior. SOURCE: BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
+    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. One positively pending natural rollover, alone and with compare, read zero at the next ROM-loader entry after the probe's HP system reset and after clock-only access restoration, while the LP source selector/divider stayed zero. That first experiment acknowledged pending before source-clock restoration. A separate both-pending/quiet follow-up restored the LP XTAL/divider before any acknowledge, prepare or start; pending/cause/counter/output still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is distinct from the earlier BLE-timer/controller reset retention; no immediate reset-edge or POR value is established. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. On s31-c, exactly two natural wraps without intermediate acknowledgement again leave byte2c=1/cause2/source127 high. A retained nonzero first-wrap sample conditionally triggers one whole-word zero after the independently observed second crossing; byte/cause/output remain0 through4096 further cycles. No visible second credit or arbitrary wrap-capacity guarantee follows. SOURCE: HW22_S31_LP_TWO_WRAPS_20261027. The pinned handler stores complete zero at +0x20 and +0x52; the counter helper also stores complete zero at +0x32. These stores write bits 31:8 as zero without establishing their individual meaning or clearing behavior. SOURCE: BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027. At XTAL/divider399 on s31-a with compare disabled, two natural LP wraps produced rollover byte1/cause2/source127; one whole-zero2c acknowledgement cleared each episode. All sampled complete2c images had upper31:8 zero, without establishing upper-lane semantics or multi-period service capacity SOURCE: HW29_S31_LP_WHOLE_20261027.
     pub mod word_002c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -128751,7 +128790,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `LOW_BYTE` field.
+            /// At XTAL/divider399 on s31-a with compare disabled, two natural LP wraps produced rollover byte1/cause2/source127; one whole-zero2c acknowledgement cleared each episode. All sampled complete2c images had upper31:8 zero, without establishing upper-lane semantics or multi-period service capacity SOURCE: HW29_S31_LP_WHOLE_20261027.
             #[inline]
             pub const fn low_byte(self) -> u8 {
                 self.0 as u8
@@ -128762,7 +128801,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `LOW_BYTE` field.
+            /// At XTAL/divider399 on s31-a with compare disabled, two natural LP wraps produced rollover byte1/cause2/source127; one whole-zero2c acknowledgement cleared each episode. All sampled complete2c images had upper31:8 zero, without establishing upper-lane semantics or multi-period service capacity SOURCE: HW29_S31_LP_WHOLE_20261027.
             #[inline]
             pub const fn low_byte(&self) -> u8 {
                 self.0 as u8
@@ -129364,7 +129403,7 @@ pub mod modem_pwr {
 
     /// The `WORD_006C_OPAQUE` register.
     ///
-    /// Low24 is the compare target; the upper byte remains opaque. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. With XTAL/divider1, CONTROL4=0 and either CONTROL0 state, each upper bit24-31 individually and all together read back0 after publication and do not suppress the positive future low24 compare. This qualifies the tested comparison as24-bit; no universal upper-byte meaning is assigned. SOURCE: HW22_S31_LP_COMPARE_WIDTH_20261027. In the tested CONTROL0=1/CONTROL4=0, XTAL/divider1 setup, a positive software pending byte is conditionally zeroed before programming each target and issuing bit18. Future targets origin+2048 and origin+64 (still26 ticks ahead at the latter post-enable sample) produce byte24=1/CONTROL2=1/cause0x40000/source127 high. Target origin-64, already102 ticks behind at the post-enable sample, produces no indication through4096 counter ticks; a fresh future target subsequently delivers. This is a finite past-target observation, not a same-cycle priority or universal deadline-admission bound. SOURCE: HW22_S31_LP_REARM_20261027.
+    /// Low24 is the compare target; the upper byte remains opaque. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. With XTAL/divider1, CONTROL4=0 and either CONTROL0 state, each upper bit24-31 individually and all together read back0 after publication and do not suppress the positive future low24 compare. This qualifies the tested comparison as24-bit; no universal upper-byte meaning is assigned. SOURCE: HW22_S31_LP_COMPARE_WIDTH_20261027. In the tested CONTROL0=1/CONTROL4=0, XTAL/divider1 setup, a positive software pending byte is conditionally zeroed before programming each target and issuing bit18. Future targets origin+2048 and origin+64 (still26 ticks ahead at the latter post-enable sample) produce byte24=1/CONTROL2=1/cause0x40000/source127 high. Target origin-64, already102 ticks behind at the post-enable sample, produces no indication through4096 counter ticks; a fresh future target subsequently delivers. This is a finite past-target observation, not a same-cycle priority or universal deadline-admission bound. SOURCE: HW22_S31_LP_REARM_20261027. On s31-a at XTAL/divider399 in the sourced CONTROL0/4=0/0 and1/1 states, upper0, each upper bit24-31 and upperff read back0 with20 fresh positive low24 compares. Each trial began byte24=0 and reached byte24=1/cause0x40000/source127 high. Latch2 may already be1 in the1/1 state and is not a new-edge witness. No other-mode or reserved/storage meaning follows SOURCE: HW29_S31_LP_WIDTH_20261027.
     pub mod word_006c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -129393,13 +129432,13 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027.
+            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. On s31-a at XTAL/divider399 in the sourced CONTROL0/4=0/0 and1/1 states, upper0, each upper bit24-31 and upperff read back0 with20 fresh positive low24 compares. Each trial began byte24=0 and reached byte24=1/cause0x40000/source127 high. Latch2 may already be1 in the1/1 state and is not a new-edge witness. No other-mode or reserved/storage meaning follows SOURCE: HW29_S31_LP_WIDTH_20261027.
             #[inline]
             pub const fn compare_target(self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027.
+            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. On s31-a at XTAL/divider399 in the sourced CONTROL0/4=0/0 and1/1 states, upper0, each upper bit24-31 and upperff read back0 with20 fresh positive low24 compares. Each trial began byte24=0 and reached byte24=1/cause0x40000/source127 high. Latch2 may already be1 in the1/1 state and is not a new-edge witness. No other-mode or reserved/storage meaning follows SOURCE: HW29_S31_LP_WIDTH_20261027.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
                 (self.0 >> 24) as u8
@@ -129410,13 +129449,13 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027.
+            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. On s31-a at XTAL/divider399 in the sourced CONTROL0/4=0/0 and1/1 states, upper0, each upper bit24-31 and upperff read back0 with20 fresh positive low24 compares. Each trial began byte24=0 and reached byte24=1/cause0x40000/source127 high. Latch2 may already be1 in the1/1 state and is not a new-edge witness. No other-mode or reserved/storage meaning follows SOURCE: HW29_S31_LP_WIDTH_20261027.
             #[inline]
             pub const fn compare_target(&self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027.
+            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. On s31-a at XTAL/divider399 in the sourced CONTROL0/4=0/0 and1/1 states, upper0, each upper bit24-31 and upperff read back0 with20 fresh positive low24 compares. Each trial began byte24=0 and reached byte24=1/cause0x40000/source127 high. Latch2 may already be1 in the1/1 state and is not a new-edge witness. No other-mode or reserved/storage meaning follows SOURCE: HW29_S31_LP_WIDTH_20261027.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
                 (self.0 >> 24) as u8
@@ -129476,19 +129515,19 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Set after each sleep0 branch zeroes +0x30; cleared first on its disable branch. The updates do not identify a BUSY, DONE or capture-trigger function. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+            /// Set after each sleep0 branch zeroes +0x30; cleared first on its disable branch. The updates do not identify a BUSY, DONE or capture-trigger function. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027. With bit26 held1 at divider399 after one natural wrap, clearing CONTROL25 froze reference12 while the counter advanced to141; setting it allowed a fresh reference270 matching the later counter. The first immediate post-set read still held12, so no instantaneous capture or completion contract is established SOURCE: HW29_S31_LP_REFERENCE_20261027.
             #[inline]
             pub const fn control_25(self) -> bool {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Consumed as the low part of a runtime LP-time reference reconstructed with the sampled counter epoch and an epoch correction when the low counter precedes it. The capture producer and any completion relation are unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+            /// Consumed as the low part of a runtime LP-time reference reconstructed with the sampled counter epoch and an epoch correction when the low counter precedes it. The capture producer and any completion relation are unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027. At divider399, this reference tracked the bracketed advancing counter under the enabled sleep0 helper and froze after the disable helper; toggling CONTROL25 with bit26=0 left it frozen. The combined helper does not isolate the electrical capture producer SOURCE: HW29_S31_LP_SLEEP_20261027. In a separate divider399 natural-wrap observation, disabled-helper reference0xffffcb survived counter0xffffff->0; re-enabling produced fresh reference12. With bit26 held1, CONTROL25clear retained12 through counter141, then CONTROL25set allowed reference270 at counter270. This is a bounded tracking/freeze observation, not a PMU completion timestamp SOURCE: HW29_S31_LP_REFERENCE_20261027.
             #[inline]
             pub const fn bits_0_23_opaque(self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set by the sleep0 enable branch and cleared by its disable branch. Sleep-disable tests this bit for an assertion before invoking the disable helper; this is no completion polling loop. Individual electrical effect is unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+            /// Set by the sleep0 enable branch and cleared by its disable branch. Sleep-disable tests this bit for an assertion before invoking the disable helper; this is no completion polling loop. Individual electrical effect is unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027. The sourced sleep0 helper retained an inherited1 on enable and cleared it on disable while ETM10c[26] followed0->1->0. No reset value is established SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn bit_26_opaque(self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -129499,19 +129538,19 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Set after each sleep0 branch zeroes +0x30; cleared first on its disable branch. The updates do not identify a BUSY, DONE or capture-trigger function. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+            /// Set after each sleep0 branch zeroes +0x30; cleared first on its disable branch. The updates do not identify a BUSY, DONE or capture-trigger function. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027. With bit26 held1 at divider399 after one natural wrap, clearing CONTROL25 froze reference12 while the counter advanced to141; setting it allowed a fresh reference270 matching the later counter. The first immediate post-set read still held12, so no instantaneous capture or completion contract is established SOURCE: HW29_S31_LP_REFERENCE_20261027.
             #[inline]
             pub const fn control_25(&self) -> bool {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Consumed as the low part of a runtime LP-time reference reconstructed with the sampled counter epoch and an epoch correction when the low counter precedes it. The capture producer and any completion relation are unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+            /// Consumed as the low part of a runtime LP-time reference reconstructed with the sampled counter epoch and an epoch correction when the low counter precedes it. The capture producer and any completion relation are unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027. At divider399, this reference tracked the bracketed advancing counter under the enabled sleep0 helper and froze after the disable helper; toggling CONTROL25 with bit26=0 left it frozen. The combined helper does not isolate the electrical capture producer SOURCE: HW29_S31_LP_SLEEP_20261027. In a separate divider399 natural-wrap observation, disabled-helper reference0xffffcb survived counter0xffffff->0; re-enabling produced fresh reference12. With bit26 held1, CONTROL25clear retained12 through counter141, then CONTROL25set allowed reference270 at counter270. This is a bounded tracking/freeze observation, not a PMU completion timestamp SOURCE: HW29_S31_LP_REFERENCE_20261027.
             #[inline]
             pub const fn bits_0_23_opaque(&self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set by the sleep0 enable branch and cleared by its disable branch. Sleep-disable tests this bit for an assertion before invoking the disable helper; this is no completion polling loop. Individual electrical effect is unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+            /// Set by the sleep0 enable branch and cleared by its disable branch. Sleep-disable tests this bit for an assertion before invoking the disable helper; this is no completion polling loop. Individual electrical effect is unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027. The sourced sleep0 helper retained an inherited1 on enable and cleared it on disable while ETM10c[26] followed0->1->0. No reset value is established SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn bit_26_opaque(&self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -136728,6 +136767,22 @@ pub mod modem_pwr {
         #[inline]
         pub fn disable_bluetooth_lp_sleep_17(&mut self) {
             self.0.write::<0x44>(0x00020000);
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_0024_OPAQUE`).
+        ///
+        /// SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027.
+        #[inline]
+        pub fn read_bluetooth_modem_lp_pending_image(&self) -> u32 {
+            self.0.read::<0x24>()
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_002C_OPAQUE`).
+        ///
+        /// SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027.
+        #[inline]
+        pub fn read_bluetooth_modem_lp_rollover_image(&self) -> u32 {
+            self.0.read::<0x2c>()
         }
     }
 

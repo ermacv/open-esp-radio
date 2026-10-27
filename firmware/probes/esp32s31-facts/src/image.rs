@@ -23,6 +23,7 @@ mod generic;
 mod lp_ack_race;
 mod lp_lanes;
 mod lp_softreset;
+mod pb1;
 mod radio_local;
 #[path = "sar.rs"]
 mod sar;
@@ -219,6 +220,42 @@ enum Action {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 240,
+        run: Action::Thread(pb1::bank1),
+    },
+    Probe {
+        id: 241,
+        run: Action::Thread(pb1::sleep16),
+    },
+    Probe {
+        id: 242,
+        run: Action::Thread(pb1::sleep17),
+    },
+    Probe {
+        id: 243,
+        run: Action::Thread(pb1::sleep0),
+    },
+    Probe {
+        id: 244,
+        run: Action::Thread(pb1::width),
+    },
+    Probe {
+        id: 248,
+        run: Action::Thread(pb1::reference_wrap),
+    },
+    Probe {
+        id: 247,
+        run: Action::Thread(pb1::width_remaining),
+    },
+    Probe {
+        id: 246,
+        run: Action::Thread(pb1::width_set),
+    },
+    Probe {
+        id: 245,
+        run: Action::Thread(pb1::whole),
+    },
     Probe {
         id: 231,
         run: Action::Thread(ble_wave2::natural_ready),
