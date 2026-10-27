@@ -192,7 +192,7 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                 let stopped = tx::fail_stop(
                     || owner.fail_stop(),
                     &mut self.io.console,
-                    &HardwareError([0x10, 1, fault as u8]),
+                    &HardwareError([0x10, 1, fault.reason_code()]),
                 )
                 .await;
                 rp::Ended::fail_stop(stopped, Err(fault))
@@ -247,7 +247,7 @@ pub async fn serve(
                 tx::fail_stop(
                     || (),
                     &mut io.console,
-                    &HardwareError([0x10, 1, fault as u8]),
+                    &HardwareError([0x10, 1, fault.reason_code()]),
                 )
                 .await;
                 core::future::pending::<()>().await;
@@ -293,7 +293,7 @@ async fn report_shutdown(io: &mut Io, reports: &bridge::StopReports) {
             tx::fail_stop(
                 || (),
                 &mut io.console,
-                &HardwareError([0x10, 1, Fault::Accounting as u8]),
+                &HardwareError([0x10, 1, Fault::Accounting.reason_code()]),
             )
             .await;
             oer_firmware_apps_b0::handoff::park_failure((), || ()).await

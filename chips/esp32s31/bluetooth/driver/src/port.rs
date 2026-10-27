@@ -85,6 +85,40 @@ pub enum Fault {
     SubmitTimeout,
     WakeTimeout,
 }
+impl Fault {
+    /// Stable backend reason byte for the HCI Hardware Error diagnostic.
+    /// Payload observations remain in the fault; they do not change its code.
+    pub const fn reason_code(self) -> u8 {
+        match self {
+            Self::Disabled => 0,
+            Self::Hardware => 1,
+            Self::Accounting => 2,
+            Self::Abandoned => 3,
+            Self::RejectedTerminal => 4,
+            Self::ClockBusy => 5,
+            Self::ClockBegin => 6,
+            Self::ClockTimeout => 7,
+            Self::ClockRead => 8,
+            Self::Deadline => 9,
+            Self::SchedulerStop => 10,
+            Self::SchedulerResume => 11,
+            Self::SchedulerSubmit => 12,
+            Self::SchedulerWake => 13,
+            Self::SchedulerComplete => 14,
+            Self::DtmFinish => 15,
+            Self::DtmStatus => 16,
+            Self::TimerInterrupt => 17,
+            Self::TimerBegin => 18,
+            Self::TimerStep => 19,
+            Self::TimerRearm => 20,
+            Self::StopTimeout => 21,
+            Self::ResumeTimeout => 22,
+            Self::SubmitTimeout => 23,
+            Self::WakeTimeout => 24,
+            Self::ControllerTimeRange(_) => 25,
+        }
+    }
+}
 /// Notification from P1 to P2. The image uses its priority-safe static signal.
 pub trait Notify {
     const NEW: Self;
