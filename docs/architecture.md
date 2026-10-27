@@ -390,8 +390,11 @@ its model and conformance case.
 for an image declaring it. Comparison probe images (`cargo fw probe`) are built
 over the production crates' public API alone. The separately admitted
 `firmware/probes/esp32s31-facts` image takes the PAC once for short hardware
-facts experiments, without HAL or production runtime dependencies. Production
-has no item, module or `cfg(oer_probe)` only a probe uses.
+facts experiments, without HAL or production runtime dependencies. The HAL may
+expose typed access to registers that production does not use, on the owner
+that already holds them, so a comparison probe reaches them through the public
+API. Such access grants nothing the owner's partition does not hold, and
+production has no `cfg(oer_probe)`, probe constructor or probe module.
 
 ## Tools
 
