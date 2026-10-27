@@ -65,6 +65,11 @@ and the platform interrupt-table crate `oer-interrupt-table`. They also
 cover the following Espressif crates: their ordinary dependency closures
 contain no PAC, HAL, mmio or riscv crate, and their roots forbid unsafe code.
 Build and development dependencies do not determine this membership.
+Explicit crate-root `deny` of both `clippy::disallowed_methods` and
+`clippy::disallowed_macros` marks a cleaned sans-IO crate whose local
+`clippy.toml` contains the complete catalogue in
+`tools/test/layers/sans-io-lints.toml`, the common root entries and its
+existing local entries.
 
 | Package | Directory |
 | --- | --- |

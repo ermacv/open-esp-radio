@@ -507,6 +507,31 @@ fn every_clippy_config_retains_all_common_method_bans() {
     );
 }
 
+fn requires_sans_io_catalogue(source: &str) -> bool {
+    ["clippy::disallowed_methods", "clippy::disallowed_macros"]
+        .iter()
+        .all(|lint| root_lint(source, "deny", lint))
+}
+
+#[test]
+fn both_explicit_root_denies_mark_a_cleaned_sans_io_crate() {
+    for source in [
+        "#![deny(clippy::disallowed_methods, clippy::disallowed_macros)]",
+        "#![deny(clippy::disallowed_methods)] #![deny(clippy::disallowed_macros)]",
+    ] {
+        assert!(requires_sans_io_catalogue(source));
+    }
+    for source in [
+        "",
+        "#![deny(clippy::disallowed_methods)]",
+        "#![deny(clippy::disallowed_macros)]",
+        "#![deny(clippy::disallowed_macros)] // #![deny(clippy::disallowed_methods)]",
+        "#![deny(clippy::disallowed_macros)] mod nested { #![deny(clippy::disallowed_methods)] }",
+    ] {
+        assert!(!requires_sans_io_catalogue(source));
+    }
+}
+
 #[test]
 fn sans_io_crate_root_denies_require_the_complete_canonical_catalogue() {
     let root = root();
@@ -521,11 +546,7 @@ fn sans_io_crate_root_denies_require_the_complete_canonical_catalogue() {
             .into_iter()
             .any(|path| {
                 let source = std::fs::read_to_string(path).expect("crate root");
-                ["deny", "forbid"].iter().any(|level| {
-                    ["clippy::disallowed_methods", "clippy::disallowed_macros"]
-                        .iter()
-                        .any(|lint| root_lint(&source, level, lint))
-                })
+                requires_sans_io_catalogue(&source)
             });
         if !opted_in {
             continue;

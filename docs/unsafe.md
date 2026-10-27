@@ -35,8 +35,8 @@ it:
   the crate is cleaned, then move each clean lint to `deny`.
   `tools/test/layers/sans-io-lints.toml` is the canonical sans-IO catalogue:
   assertion macros (including `vendor_assert!`), panicking core methods and
-  `core::task::Waker::noop`. A sans-IO crate with a crate-root deny of
-  `disallowed_methods` or `disallowed_macros` has a local `clippy.toml`
+  `core::task::Waker::noop`. A sans-IO crate with explicit crate-root deny of
+  both `disallowed_methods` and `disallowed_macros` has a local `clippy.toml`
   containing that entire catalogue, all common root bans and its existing
   local entries. Layer tests enforce catalogue membership; they do not
   replace Clippy or prove transitive absence of panics.

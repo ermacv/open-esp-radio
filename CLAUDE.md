@@ -90,7 +90,8 @@ system these rules serve.
   stays `deny`; `disallowed_macros` keeps its default level. A cleaned sans-IO
   crate's `clippy.toml` contains the union of the root's common entries,
   `tools/test/layers/sans-io-lints.toml` and its existing local entries before
-  it denies `disallowed_methods` or `disallowed_macros` at the crate root.
+  it explicitly denies both `disallowed_methods` and `disallowed_macros`
+  at the crate root.
   Every local Clippy configuration retains all common method bans.
   `debug_assert!` is not a guard.
   Arithmetic on peer values names its overflow behavior with `checked_`,
