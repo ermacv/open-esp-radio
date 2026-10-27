@@ -1139,8 +1139,8 @@ sources = ["S31_MMIO_USE_20101470"]
 sources = ["S31_MMIO_USE_20101470", "S31_MMIO_DECLARED_20101470"]
 
 [review.entity."WORD_0474_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_20101474"]
-completeness = "complete"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_20101474", "VENDOR_BLE_CRC_DIAGNOSTIC_STATE"]
+completeness = "unknown"
 
 [review.entity."WORD_047C_OPAQUE"]
 sources = ["S31_MMIO_USE_2010147C"]
@@ -1683,6 +1683,11 @@ completeness = "partial"
 sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
 provenance = "derived"
 completeness = "partial"
+
+[review.entity."WORD_0474_OPAQUE"]
+sources = ["VENDOR_BLE_CRC_DIAGNOSTIC_STATE"]
+provenance = "derived"
+accuracy = "positional"
 
 [[registers]]
 name = "SCHEDULER_CONTROL"
@@ -3686,12 +3691,13 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0474_OPAQUE"
 offset = 0x474
-description = "BLE PHY register initialization writes the complete zero image. Inner hardware semantics remain unknown."
+description = "The exact-body-matched ble_radio_crc_state helper reads this word after +0x470 and prints nonzero values; its return derives from +0x470. The exact-body-matched ble_radio_events_clear helper stores whole-word zero. Current root r_sym_ble_D7WjPzItc9OF8YS067Wq also stores zero at +0x26; its historical r_ble_phy_monitor_bb_sync name is only a dominant correspondence (745098 ppm, about 74.51%), not an exact match. CRC diagnostic/event state is an inference; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE."
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
 bits = "31:0"
 class = "plain"
+description = "The exact-body-matched ble_radio_crc_state helper reads this word after +0x470 and prints nonzero values; its return derives from +0x470. The exact-body-matched ble_radio_events_clear helper stores whole-word zero. Current root r_sym_ble_D7WjPzItc9OF8YS067Wq also stores zero at +0x26; its historical r_ble_phy_monitor_bb_sync name is only a dominant correspondence (745098 ppm, about 74.51%), not an exact match. CRC diagnostic/event state is an inference; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE."
 
 [[registers]]
 name = "WORD_047C_OPAQUE"
@@ -4074,7 +4080,7 @@ description = "Device-table control word. Every device-table change rewrites the
 name = "ENTRY_COUNT"
 bits = "7:0"
 class = "plain"
-description = "Number of entries of the Controller-SRAM device table the filter accept list and the resolving list share, valid or not; hardware walks this many entries."
+description = "Number of entries of the Controller-SRAM eight-byte device table (filter accept list and periodic advertiser list entries; the IRK resolving list is a separate 64-byte table), valid or not; hardware walks this many entries."
 value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBBLE_DEVICE_TABLE"] }
 
 [[registers.fields]]

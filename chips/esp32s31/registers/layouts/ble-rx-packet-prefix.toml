@@ -2,12 +2,12 @@ schema = 1
 
 [layout]
 name = "BLE_RX_PACKET_PREFIX"
-description = "RX packet prefix, common to ordinary RX and DTM: opaque producer metadata, result/RSSI and auxiliary epoch data, then the two-byte PDU header. Access only after the header completion handover."
+description = "RX packet prefix, common to ordinary RX and DTM: producer metadata, result/RSSI, captured controller time and an auxiliary association tag, then the two-byte PDU header. Access only after the header completion handover."
 size = 30
 align = 1
 
 [layout.review]
-sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX", "VENDOR_BLE_RX_AUXILIARY_TAG"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -183,7 +183,7 @@ opaque = true
 bits = "15:0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
+description = "The current helper, mapped to historical sm_num_match only by a similar correspondence (941176 ppm, about 94.12%; not exact-body), compares this halfword with a per-link configuration tag when configuration byte 23 enables matching; sm_num_set derives the tag from scheduler item +0x20 low 12 bits. The open RX owner arms 0xffff and checks the produced tag. This is a direct software association, not an established free-running time epoch. Hardware production, recycling retention and alias behavior after 4096 allocations remain unqualified. SOURCE: VENDOR_BLE_RX_AUXILIARY_TAG."
 
 [[layout.bytes]]
 name = "PDU_HEADER"
@@ -213,7 +213,7 @@ description = "Received Link Layer payload length in octets."
 
 [[review]]
 entity = "BLE_RX_PACKET_PREFIX"
-sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX", "VENDOR_BLE_RX_AUXILIARY_TAG"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -272,4 +272,12 @@ sources = ["VENDOR_BLE_ISO_RX_ERRORS"]
 provenance = "derived"
 accuracy = "positional"
 completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.AUXILIARY.BITS_0_15_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX", "VENDOR_BLE_RX_AUXILIARY_TAG"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "partial"
 naming = "opaque"

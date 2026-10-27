@@ -31,9 +31,11 @@ fn published_entries_retain_device_identity_and_address_type() {
     assert_eq!(entry(&table, 0), PUBLIC.image());
     assert!(entry(&table, 0).flags_and_address.valid());
     assert!(entry(&table, 0).flags_and_address.accept_list_member());
+    assert!(!entry(&table, 0).flags_and_address.periodic_list_member());
     assert!(!entry(&table, 0).flags_and_address.random());
     assert_eq!(entry(&table, 1), RANDOM_DEVICE.image());
     assert!(entry(&table, 1).flags_and_address.random());
+    assert!(!entry(&table, 1).flags_and_address.periodic_list_member());
     let publication = table.publication();
     assert_eq!(publication.first_entry().bits(), 0x2f07_e508);
     assert_eq!(publication.count(), 2);

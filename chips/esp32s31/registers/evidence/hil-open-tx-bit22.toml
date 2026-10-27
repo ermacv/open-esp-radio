@@ -1,0 +1,7 @@
+# Secondary record; raw-run attribution is unavailable in the examined corpus.
+schema = 1
+
+[[sources]]
+id = "RECORDED_OPEN_TX_CONTROL_BIT22_20260729"
+kind = "unattested-hil-observation"
+description = "Recorded 2026-07-29 open HIL A/B observation in the curated WIFI_MAC.CONTROL%s.BIT_22_OPAQUE description, present in git ead5b0e424b886e555de319e7b322a3a5e3f4b65 (chips/esp32s31/registers/types/wifi-mac.toml) and retained by 9b4f035a36cb6a0eb931930ed021475759325ccc: roughly 28 percent raw ACK timeouts with bit22 set; 1395/2325 attempts (60 percent) with it clear. This is secondary provenance for the existing record, not a fresh measurement; its raw log/run identifier was not recovered in the examined model/evidence and oer-notes corpus. It establishes neither a per-cipher mapping nor physical meaning or reserved-TXOP-slot air behavior."

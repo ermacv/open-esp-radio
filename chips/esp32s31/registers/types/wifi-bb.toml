@@ -538,52 +538,52 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."TX_POWER_TRACK_CONTROL_0.BITS_1_4_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107454"]
+sources = ["S31_MMIO_DECLARED_20107454", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_0.BITS_5_9_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107454"]
+sources = ["S31_MMIO_DECLARED_20107454", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_1"]
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_1.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107458"]
+sources = ["S31_MMIO_DECLARED_20107458", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_1.BIT_1_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107458"]
+sources = ["S31_MMIO_DECLARED_20107458", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_1.BITS_7_14_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107458"]
+sources = ["S31_MMIO_DECLARED_20107458", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_1.BITS_15_22_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107458"]
+sources = ["S31_MMIO_DECLARED_20107458", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_1.BITS_23_30_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107458"]
+sources = ["S31_MMIO_DECLARED_20107458", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_2"]
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_2.BITS_0_7_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010745C"]
+sources = ["S31_MMIO_DECLARED_2010745C", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_2.BITS_8_15_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010745C"]
+sources = ["S31_MMIO_DECLARED_2010745C", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_2.BITS_16_23_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010745C"]
+sources = ["S31_MMIO_DECLARED_2010745C", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_2.BITS_24_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010745C"]
+sources = ["S31_MMIO_DECLARED_2010745C", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_3"]
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_3.BITS_0_7_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107460"]
+sources = ["S31_MMIO_DECLARED_20107460", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_3.BITS_8_15_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107460"]
+sources = ["S31_MMIO_DECLARED_20107460", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."HCCFR_CONTROL.BITS_0_21_OPAQUE"]
 sources = ["S31_MMIO_USE_20107468", "S31_MMIO_DECLARED_20107468"]
@@ -657,7 +657,7 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 completeness = "partial"
 
 [review.entity."NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107848"]
+sources = ["S31_MMIO_DECLARED_20107848", "VENDOR_NRX_QUOTIENT_SHIFT"]
 
 [review.entity."NRX_FREQUENCY_CONTROL.FREQUENCY_NUMERATOR_SHIFT"]
 sources = ["VENDOR_NRX_QUOTIENT_SHIFT"]
@@ -665,7 +665,7 @@ provenance = "derived"
 completeness = "partial"
 
 [review.entity."NRX_FREQUENCY_CONTROL.BITS_29_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20107848"]
+sources = ["S31_MMIO_DECLARED_20107848", "VENDOR_NRX_QUOTIENT_SHIFT"]
 
 [review.entity."WORD_0890_OPAQUE"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
@@ -1830,18 +1830,21 @@ bits = "0"
 class = "plain"
 values = [{ name = "DISABLED", value = 0x0, description = "Disable PHY baseband TX-power tracking.", sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable PHY baseband TX-power tracking.", sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "S31_ESP_PACS_SVD"] }]
 write-values-only = true
+description = "Enable argument published by phy_bb_txpwr_track at bit 0; it is independent of the opaque initialization and curve lanes. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_1_4_OPAQUE"
 bits = "4:1"
 class = "plain"
 write-range = { min = 0x0, max = 0xf }
+description = "phy_bb_txpwr_track clears this configuration lane independently of TRACK_ENABLE. Its individual hardware meaning and units are unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_5_9_OPAQUE"
 bits = "9:5"
 class = "plain"
 write-range = { min = 0x0, max = 0x1f }
+description = "phy_bb_txpwr_track selects the five-bit initialization image 0x1f. Threshold/curve configuration is an inference; physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers]]
 name = "TX_POWER_TRACK_CONTROL_1"
@@ -1852,29 +1855,34 @@ description = "Complete phy_bb_txpwr_track clears bits 1:0 and publishes three e
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "plain"
+description = "phy_bb_txpwr_track clears this bit before publishing the packed tracking curve. It is not established as an independent power gate. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BIT_1_OPAQUE"
 bits = "1"
 class = "plain"
+description = "phy_bb_txpwr_track clears this bit before publishing the packed tracking curve. It is not established as an independent power gate. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_7_14_OPAQUE"
 bits = "14:7"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_15_22_OPAQUE"
 bits = "22:15"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_23_30_OPAQUE"
 bits = "30:23"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers]]
 name = "TX_POWER_TRACK_CONTROL_2"
@@ -1886,24 +1894,28 @@ name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_8_15_OPAQUE"
 bits = "15:8"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_16_23_OPAQUE"
 bits = "23:16"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_24_31_OPAQUE"
 bits = "31:24"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers]]
 name = "TX_POWER_TRACK_CONTROL_3"
@@ -1915,12 +1927,14 @@ name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers.fields]]
 name = "BITS_8_15_OPAQUE"
 bits = "15:8"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG."
 
 [[registers]]
 name = "HCCFR_CONTROL"
@@ -2089,6 +2103,7 @@ name = "BITS_0_23_OPAQUE"
 bits = "23:0"
 class = "plain"
 write-range = { min = 0x0, max = 0xffffff }
+description = "phy_nrx_freq_set stores the masked low 24 bits of the signed quotient (80 << FREQUENCY_NUMERATOR_SHIFT) / frequency, preserving the second sample of the high byte. The numerical use is direct; NRX hardware units remain unqualified. SOURCE: VENDOR_NRX_QUOTIENT_SHIFT."
 
 [[registers.fields]]
 name = "FREQUENCY_NUMERATOR_SHIFT"
@@ -2102,6 +2117,7 @@ name = "BITS_29_31_OPAQUE"
 bits = "31:29"
 class = "plain"
 write-range = { min = 0x0, max = 0x7 }
+description = "Preserved from the second sampled high byte during phy_nrx_freq_set. These three bits do not affect the RV32 variable shift used for the quotient, which consumes only bits 28:24. Their physical role remains unknown. SOURCE: VENDOR_NRX_QUOTIENT_SHIFT."
 
 [[registers]]
 name = "WORD_0890_OPAQUE"

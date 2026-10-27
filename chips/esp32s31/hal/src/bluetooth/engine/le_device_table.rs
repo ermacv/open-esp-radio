@@ -1,12 +1,13 @@
 //! Controller-SRAM device table of the ESP32-S31 Bluetooth LE Controller.
 //!
-//! The filter accept list and the resolving list share one table of 8-byte
+//! The filter accept list and the periodic list share one table of 8-byte
 //! entries that hardware walks when it filters advertising. Byte 0 marks the
 //! lists an entry belongs to (bit 1 the filter accept list, bit 0 the
-//! resolving list), byte 1 bit 7 a valid entry and bit 6 a random address,
+//! periodic list), byte 1 bit 7 a valid entry and bit 6 a random address,
 //! and bytes 2 to 7 hold the address, least significant octet first
-//! (`ble_hw.c` of the pinned `libble_app`). This owner implements the filter
-//! accept list only. Entries stay packed from the first: a removal moves the
+//! (SOURCE: BLOB_LIBBLE_DEVICE_TABLE, VENDOR_BLE_DEVICE_LIST_FLAGS). The
+//! separate IRK resolving list has 64-byte entries. This owner implements
+//! the filter accept list only. Entries stay packed from the first: a removal moves the
 //! last entry into the freed slot, so the published count is the number of
 //! members. The owner publishes nothing itself; the caller publishes the
 //! [`LeDeviceTable::publication`] after every change.

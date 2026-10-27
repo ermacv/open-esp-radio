@@ -21,7 +21,16 @@ accuracy = "positional"
 completeness = "unknown"
 
 [review.entity."BYTE_08_OPAQUE"]
-sources = ["BLOB_LIBPHY_PHY_I2C", "HW15_S31_I2C_20261027"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "HW15_S31_I2C_20261027", "VENDOR_PHY_ANALOG_INITIALIZATION_CODES"]
+
+[review.entity."BYTE_08_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["VENDOR_PHY_ANALOG_INITIALIZATION_CODES"]
+
+[review.entity."BYTE_0D_OPAQUE"]
+sources = ["VENDOR_PHY_ANALOG_INITIALIZATION_CODES"]
+
+[review.entity."BYTE_0D_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["VENDOR_PHY_ANALOG_INITIALIZATION_CODES"]
 
 [review.entity."BYTE_0A_OPAQUE.PHY_SET_RATE_CLASS"]
 sources = ["BLOB_LIBPHY_PHY_SET_RATE_CLASS"]
@@ -175,12 +184,13 @@ class = "unknown"
 name = "BYTE_08_OPAQUE"
 offset = 0x8
 width = 8
-description = "Observed 0x00 in s31-b run hw15-20261027-opaque-07 after the documented probe-specific modem/I2C power-reset, six-map OR and timing/register-mode prefix, without analog byte writes or PHY calibration. Serial, combined parallel and final serial reads replace distinct nonzero command DATA seeds with this value. This is a conditional observation, not a reset value, general read-safe epoch or physical bit meaning."
+description = "Observed 0x00 in s31-b run hw15-20261027-opaque-07 after the documented probe-specific modem/I2C power-reset, six-map OR and timing/register-mode prefix, without analog byte writes or PHY calibration. Serial, combined parallel and final serial reads replace distinct nonzero command DATA seeds with this value. This is a conditional observation, not a reset value, general read-safe epoch or physical bit meaning. Pinned phy_i2c_init1 initialization code 0xbf, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical PHY uses 0xbb; the directly observed byte-value change is 0xbb to 0xbf, without an established electrical interpretation. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "unknown"
+description = "Pinned phy_i2c_init1 initialization code 0xbf, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical PHY uses 0xbb; the directly observed byte-value change is 0xbb to 0xbf, without an established electrical interpretation. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."
 
 [[registers]]
 name = "BYTE_09_OPAQUE"
@@ -239,11 +249,13 @@ class = "unknown"
 name = "BYTE_0D_OPAQUE"
 offset = 0xd
 width = 8
+description = "Pinned phy_i2c_init1 initialization code 0x77, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical PHY uses 0x7a; the directly observed byte-value change is 0x7a to 0x77, without an established electrical interpretation. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "unknown"
+description = "Pinned phy_i2c_init1 initialization code 0x77, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical PHY uses 0x7a; the directly observed byte-value change is 0x7a to 0x77, without an established electrical interpretation. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."
 
 [[registers]]
 name = "BYTE_0E_OPAQUE"

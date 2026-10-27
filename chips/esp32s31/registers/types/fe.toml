@@ -517,32 +517,32 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_CONTROL.BIT_1_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100808"]
+sources = ["S31_MMIO_DECLARED_20100808", "ROM_REV0_PHY_POWER_DETECTOR"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_CONTROL.BIT_2_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100808"]
+sources = ["S31_MMIO_DECLARED_20100808", "ROM_REV0_PHY_POWER_DETECTOR"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_CONTROL.BIT_3_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100808"]
+sources = ["S31_MMIO_DECLARED_20100808", "ROM_REV0_PHY_POWER_DETECTOR"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_CONTROL.BITS_4_11_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100808"]
+sources = ["S31_MMIO_DECLARED_20100808", "ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_CONTROL.BIT_16_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100808"]
+sources = ["S31_MMIO_DECLARED_20100808", "ROM_REV0_PHY_POWER_DETECTOR"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_CONTROL.BITS_20_22_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100808"]
+sources = ["S31_MMIO_DECLARED_20100808", "ROM_REV0_PHY_POWER_DETECTOR"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -550,12 +550,12 @@ completeness = "unknown"
 sources = ["ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET"]
 
 [review.entity."POWER_DETECTOR_SAR_CONTROL_STATUS.BIT_9_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010080C"]
+sources = ["S31_MMIO_DECLARED_2010080C", "ROM_REV0_PHY_POWER_DETECTOR"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_12_13_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010080C"]
+sources = ["S31_MMIO_DECLARED_2010080C", "ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -890,12 +890,12 @@ sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FE_REG_INIT"]
 completeness = "partial"
 
 [review.entity."READ_RESULT_0.RESULT_WINDOW_0_RX_DCO"]
-sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FE_REG_INIT"]
+sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FE_REG_INIT", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."READ_RESULT_0.BITS_9_17_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100894"]
+sources = ["S31_MMIO_DECLARED_20100894", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -913,7 +913,7 @@ sources = ["S31_MMIO_USE_20100894", "S31_MMIO_DECLARED_20100894"]
 sources = ["ROM_REV0_PHY_PBUS"]
 
 [review.entity."READ_RESULT_1.BITS_0_8_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100898"]
+sources = ["S31_MMIO_DECLARED_20100898", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -924,17 +924,17 @@ sources = ["S31_MMIO_USE_20100898", "S31_MMIO_DECLARED_20100898"]
 sources = ["ROM_REV0_PHY_PBUS"]
 
 [review.entity."READ_RESULT_2.BITS_0_8_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010089C"]
+sources = ["S31_MMIO_DECLARED_2010089C", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."READ_RESULT_2.BITS_9_17_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010089C"]
+sources = ["S31_MMIO_DECLARED_2010089C", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."READ_RESULT_2.BITS_18_26_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010089C"]
+sources = ["S31_MMIO_DECLARED_2010089C", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -945,17 +945,17 @@ sources = ["S31_MMIO_USE_2010089C", "S31_MMIO_DECLARED_2010089C"]
 sources = ["ROM_REV0_PHY_PBUS"]
 
 [review.entity."READ_RESULT_3.BITS_0_8_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_201008A0"]
+sources = ["S31_MMIO_DECLARED_201008A0", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."READ_RESULT_3.BITS_9_17_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_201008A0"]
+sources = ["S31_MMIO_DECLARED_201008A0", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."READ_RESULT_3.BITS_18_26_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_201008A0"]
+sources = ["S31_MMIO_DECLARED_201008A0", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -966,17 +966,17 @@ sources = ["S31_MMIO_USE_201008A0", "S31_MMIO_DECLARED_201008A0"]
 sources = ["ROM_REV0_PHY_PBUS"]
 
 [review.entity."READ_RESULT_4.BITS_0_8_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_201008A4"]
+sources = ["S31_MMIO_DECLARED_201008A4", "ROM_REV0_PHY_PBUS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."READ_RESULT_4.BITS_9_17_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_201008A4"]
+sources = ["S31_MMIO_DECLARED_201008A4", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."READ_RESULT_4.BITS_18_26_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_201008A4"]
+sources = ["S31_MMIO_DECLARED_201008A4", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "VENDOR_PHY_PBUS_GROUPS"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -1024,12 +1024,12 @@ completeness = "unknown"
 sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_DAC_SCALE_SET"]
 
 [review.entity."DAC_SCALE_CONTROL.BITS_8_15_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100C04"]
+sources = ["S31_MMIO_DECLARED_20100C04", "ROM_REV0_PHY_START_STOP_TX_TONE", "VENDOR_PHY_DAC_SCALE"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."DAC_SCALE_CONTROL.BITS_16_23_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20100C04"]
+sources = ["S31_MMIO_DECLARED_20100C04", "ROM_REV0_PHY_START_STOP_TX_TONE", "VENDOR_PHY_DAC_SCALE"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -2010,33 +2010,39 @@ class = "plain"
 name = "BIT_1_OPAQUE"
 bits = "1"
 class = "plain"
+description = "phy_en_pwdet clears this bit second before SAR setup. This establishes a PWDET enable-sequence use, without identifying an individual power-down, bypass or clock function. SOURCE: ROM_REV0_PHY_POWER_DETECTOR."
 
 [[registers.fields]]
 name = "BIT_2_OPAQUE"
 bits = "2"
 class = "plain"
+description = "phy_en_pwdet clears this bit first before SAR setup. This establishes a PWDET enable-sequence use, without identifying an individual power-down, bypass or clock function. SOURCE: ROM_REV0_PHY_POWER_DETECTOR."
 
 [[registers.fields]]
 name = "BIT_3_OPAQUE"
 bits = "3"
 class = "plain"
+description = "phy_en_pwdet clears this bit third before SAR setup. This establishes a PWDET enable-sequence use, without identifying an individual power-down, bypass or clock function. SOURCE: ROM_REV0_PHY_POWER_DETECTOR."
 
 [[registers.fields]]
 name = "BITS_4_11_OPAQUE"
 bits = "11:4"
 class = "plain"
 value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_POWER_DETECTOR"] }
+description = "PWDET initialization selects 0x50. phy_txdc_cal_pwdet_init saves this byte, selects temporary 0x78 and restores the saved image after calibration. Electrical units remain unknown. SOURCE: ROM_REV0_PHY_POWER_DETECTOR, BLOB_LIBPHY_PHY_TXDC_PWDET."
 
 [[registers.fields]]
 name = "BIT_16_OPAQUE"
 bits = "16"
 class = "plain"
+description = "phy_tx_pwctrl_bg_init sets this bit after PWDET setup. Background power-control context is established; the individual electrical function is unknown. SOURCE: ROM_REV0_PHY_POWER_DETECTOR."
 
 [[registers.fields]]
 name = "BITS_20_22_OPAQUE"
 bits = "22:20"
 class = "plain"
 write-range = { min = 0x0, max = 0x7 }
+description = "phy_pwdet_reg_init selects image two in this PWDET configuration lane. Individual meanings and electrical units are not established. SOURCE: ROM_REV0_PHY_POWER_DETECTOR."
 
 [[registers]]
 name = "POWER_DETECTOR_SAR_CONTROL_STATUS"
@@ -2047,12 +2053,14 @@ description = "PWDET SAR configuration and three-bit ready status."
 name = "BIT_9_OPAQUE"
 bits = "9"
 class = "plain"
+description = "phy_pwdet_sar2_init clears this bit after selecting SAR mode three. Its individual electrical function remains unknown. SOURCE: ROM_REV0_PHY_POWER_DETECTOR."
 
 [[registers.fields]]
 name = "BITS_12_13_OPAQUE"
 bits = "13:12"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
+description = "PWDET SAR configuration image: phy_pwdet_sar2_init selects three; phy_txdc_cal_pwdet_init selects one for calibration then restores mode three. These are configuration writes, not a readiness indication; individual mode effects remain unknown. SOURCE: ROM_REV0_PHY_POWER_DETECTOR, BLOB_LIBPHY_PHY_TXDC_PWDET."
 
 [[registers.fields]]
 name = "SAR_READY"
@@ -2521,11 +2529,13 @@ description = "Shared PBus/FE word. Selector 1 reads result window 0 for non-pat
 name = "RESULT_WINDOW_0_RX_DCO"
 bits = "8:0"
 class = "read-only"
+description = "Project-assigned name. It reflects use by our RX-DCO calibration. The vendor phy_pbus_print group is BB; phy_pbus_rd selects this nine-bit window for selector 1, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_9_17_OPAQUE"
 bits = "17:9"
 class = "read-only"
+description = "Nine-bit BB group image in phy_pbus_print; phy_pbus_rd selects this window for selector 1, path 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BIT_20_OPAQUE"
@@ -2554,6 +2564,7 @@ description = "Selector 2 path 1 reads window 0; other bits are not presently ev
 name = "BITS_0_8_OPAQUE"
 bits = "8:0"
 class = "read-only"
+description = "Nine-bit DCO group image in phy_pbus_print; phy_pbus_rd selects this window for selector 2, path 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_9_31_OPAQUE"
@@ -2570,16 +2581,19 @@ description = "Selector 3 reads windows 0/1; selector 2 non-path-1 reads window 
 name = "BITS_0_8_OPAQUE"
 bits = "8:0"
 class = "read-only"
+description = "Nine-bit DCO group image in phy_pbus_print; phy_pbus_rd selects this window for selector 3, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_9_17_OPAQUE"
 bits = "17:9"
 class = "read-only"
+description = "Nine-bit DCO group image in phy_pbus_print; phy_pbus_rd selects this window for selector 3, path 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_18_26_OPAQUE"
 bits = "26:18"
 class = "read-only"
+description = "Nine-bit DCO group image in phy_pbus_print; phy_pbus_rd selects this window for selector 2, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_27_31_OPAQUE"
@@ -2596,16 +2610,19 @@ description = "Selector 4 path 1 reads window 0; selector 0 non-path-one reads w
 name = "BITS_0_8_OPAQUE"
 bits = "8:0"
 class = "read-only"
+description = "Nine-bit RFTX group image in phy_pbus_print; phy_pbus_rd selects this window for selector 4, path 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_9_17_OPAQUE"
 bits = "17:9"
 class = "read-only"
+description = "Nine-bit RFRX group image in phy_pbus_print; phy_pbus_rd selects this window for selector 0, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_18_26_OPAQUE"
 bits = "26:18"
 class = "read-only"
+description = "Nine-bit RFRX group image in phy_pbus_print; phy_pbus_rd selects this window for selector 0, path 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_27_31_OPAQUE"
@@ -2622,16 +2639,19 @@ description = "Selectors above five fall back to window 0, selector 5 reads wind
 name = "BITS_0_8_OPAQUE"
 bits = "8:0"
 class = "read-only"
+description = "Nine-bit fallback window selected by phy_pbus_rd for selectors outside 0..5. No diagnostic group name or physical interpretation was recovered for this default. SOURCE: ROM_REV0_PHY_PBUS."
 
 [[registers.fields]]
 name = "BITS_9_17_OPAQUE"
 bits = "17:9"
 class = "read-only"
+description = "Nine-bit RFTX group image in phy_pbus_print; phy_pbus_rd selects this window for selector 5, path either. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_18_26_OPAQUE"
 bits = "26:18"
 class = "read-only"
+description = "Nine-bit RFTX group image in phy_pbus_print; phy_pbus_rd selects this window for selector 4, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_27_31_OPAQUE"
@@ -2702,12 +2722,14 @@ name = "BITS_8_15_OPAQUE"
 bits = "15:8"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "One byte-wide DAC-scale lane controlled by phy_dac_scale_set. ROM tone start clears it in the power-control path; phy_stop_tx_tone(1) restores 0xff through a fresh-read update. Physical units and relative path assignment remain unknown. SOURCE: ROM_REV0_PHY_START_STOP_TX_TONE, VENDOR_PHY_DAC_SCALE."
 
 [[registers.fields]]
 name = "BITS_16_23_OPAQUE"
 bits = "23:16"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "One byte-wide DAC-scale lane controlled by phy_dac_scale_set. ROM tone start clears it in the power-control path; phy_stop_tx_tone(1) restores 0xff through a fresh-read update. Physical units and relative path assignment remain unknown. SOURCE: ROM_REV0_PHY_START_STOP_TX_TONE, VENDOR_PHY_DAC_SCALE."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"

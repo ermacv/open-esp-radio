@@ -336,7 +336,7 @@ completeness = "complete"
 sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 
 [review.entity."RX_NEXT_DESCRIPTOR.BITS_20_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20104088"]
+sources = ["S31_MMIO_DECLARED_20104088", "ROM_REV0_WDEV_APPEND_RX_BLOCKS"]
 
 [review.entity."RX_LAST_DESCRIPTOR"]
 sources = ["ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
@@ -3446,7 +3446,7 @@ completeness = "complete"
 sources = ["S31_MMIO_DECLARED_20104D40"]
 
 [review.entity."CONTROL%s.BIT_22_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX", "S31_MMIO_DECLARED_20104D40", "VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS"]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "S31_MMIO_DECLARED_20104D40", "VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS", "RECORDED_OPEN_TX_CONTROL_BIT22_20260729"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -5557,7 +5557,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_TX", "HIL_VENDOR_CONNECTED_VECTOR_2026_07_29", "H
 sources = ["BLOB_LIBPP_HAL_MAC_TX", "HIL_VENDOR_CONNECTED_VECTOR_2026_07_29", "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29", "HIL_OPEN_HT_AMPDU_32_RETRY_2026_07_29"]
 
 [review.entity."HT_DESCRIPTOR_COUNTS%s.BIT_21_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20105390"]
+sources = ["S31_MMIO_MANUAL_20105390", "VENDOR_WIFI_DESCRIPTOR_COUNT_PACKING"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -6727,7 +6727,7 @@ pointer = { points-to = "WIFI_RX_DMA_DESCRIPTOR", placement = "dma-window", enco
 name = "BITS_20_31_OPAQUE"
 bits = "31:20"
 class = "read-only"
-description = "Unassigned upper state retained by the complete-word zero predicate in rom[]::wDev_AppendRxBlocks. This is deliberately exposed separately from ADDRESS_LOW so production code never reconstructs or masks a register image."
+description = "wDev_AppendRxBlocks compares the entire RX_NEXT_DESCRIPTOR word with zero after reload completion, before the path that samples LAST and may repair RX_DESCRIPTOR_BASE. The compared image includes this upper range. No separate upper-state or additional-address-bit identity is established. SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS."
 
 [[registers]]
 name = "RX_LAST_DESCRIPTOR"
@@ -11023,7 +11023,7 @@ write-range = { min = 0x0, max = 0x3 }
 name = "BIT_22_OPAQUE"
 bits = "22"
 class = "plain"
-description = "PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The open legacy/HT/HE formatter sets bit 22 unconditionally; its missing reserved-slot adjustment is a known vendor difference. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS."
+description = "PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The open legacy/HT/HE formatter sets bit 22 unconditionally; its missing reserved-slot adjustment is a known vendor difference. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729."
 
 [[registers.fields]]
 name = "BIT_23_OPAQUE"
@@ -13659,7 +13659,7 @@ write-range = { min = 0x0, max = 0x7f }
 name = "BIT_21_OPAQUE"
 bits = "21"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "The HE mac_tx_set_hesig packed count image can copy software count bit 7 here through n | n<<7 | n<<14; it is zero for the admitted seven-bit counts. HT mac_tx_set_htsig updates the three seven-bit lanes separately and preserves this bit. No independent enable or physical overflow meaning is established. SOURCE: VENDOR_WIFI_DESCRIPTOR_COUNT_PACKING."
 
 [[registers]]
 name = "DATA_LENGTH%s"

@@ -2,7 +2,7 @@ schema = 1
 
 [layout]
 name = "BLE_DEVICE_TABLE_ENTRY"
-description = "One eight-byte device-table entry shared by the filter accept list and resolving list. Address bytes are least significant first."
+description = "One eight-byte device-table entry shared by the filter accept list and periodic list; the separate 64-byte IRK resolving-list allocation has another format. Address bytes are least significant first."
 size = 8
 align = 4
 
@@ -27,10 +27,10 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "RESOLVING_LIST_MEMBER"
+name = "PERIODIC_LIST_MEMBER"
 bits = "0"
 writer = "cpu"
-description = "Entry belongs to the resolving list."
+description = "Membership flag used by the vendor periodic-list add/remove/clear helpers. This is distinct from the separate IRK resolving list; the physical filtering effect remains unqualified. SOURCE: VENDOR_BLE_DEVICE_LIST_FLAGS."
 
 [[layout.words.fields]]
 name = "ACCEPT_LIST_MEMBER"
@@ -43,7 +43,7 @@ name = "BITS_2_13_OPAQUE"
 opaque = true
 bits = "13:2"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "The vendor set_connected_dev helper replaces bit 13 from its third argument while preserving the other byte-one bits. The connected-device helper association is direct; its physical filtering effect is inference. Bits 12:2 remain unidentified. The open accept-list owner constructs this range as zero and has no connected-device setter. SOURCE: VENDOR_BLE_DEVICE_CONNECTED_TAG."
 
 [[layout.words.fields]]
 name = "RANDOM"
@@ -81,3 +81,19 @@ sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.BITS_2_13_OPAQUE"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE", "VENDOR_BLE_DEVICE_CONNECTED_TAG"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "partial"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.PERIODIC_LIST_MEMBER"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE", "VENDOR_BLE_DEVICE_LIST_FLAGS"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"

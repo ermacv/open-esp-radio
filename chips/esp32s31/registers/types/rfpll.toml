@@ -20,6 +20,18 @@ provenance = "reviewed"
 accuracy = "positional"
 completeness = "unknown"
 
+[review.entity."BYTE_0D_OPAQUE"]
+sources = ["VENDOR_PHY_ANALOG_INITIALIZATION_CODES"]
+
+[review.entity."BYTE_0D_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["VENDOR_PHY_ANALOG_INITIALIZATION_CODES"]
+
+[review.entity."BYTE_15_OPAQUE"]
+sources = ["VENDOR_PHY_ANALOG_INITIALIZATION_CODES"]
+
+[review.entity."BYTE_15_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["VENDOR_PHY_ANALOG_INITIALIZATION_CODES"]
+
 [[registers]]
 name = "RFPLL_RESTART_HIGH"
 offset = 0x0
@@ -244,18 +256,22 @@ description = "Second RFPLL DCODE source-select bit."
 name = "BYTE_0D_OPAQUE"
 offset = 0xd
 width = 8
+description = "Pinned phy_i2c_init1 initialization code 0x0a, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical and pinned direct/encoded constants agree at this byte; no divider, loop-filter or charge-pump meaning is established. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "unknown"
+description = "Pinned phy_i2c_init1 initialization code 0x0a, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical and pinned direct/encoded constants agree at this byte; no divider, loop-filter or charge-pump meaning is established. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."
 
 [[registers]]
 name = "BYTE_15_OPAQUE"
 offset = 0x15
 width = 8
+description = "Pinned phy_i2c_init1 initialization code 0x08, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical and pinned direct/encoded constants agree at this byte; no divider, loop-filter or charge-pump meaning is established. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "unknown"
+description = "Pinned phy_i2c_init1 initialization code 0x08, also published through phy_i2c_init2 parallel initialization and phy_i2c_master_cmd_mem_init encoding. The inspected historical and pinned direct/encoded constants agree at this byte; no divider, loop-filter or charge-pump meaning is established. SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES."

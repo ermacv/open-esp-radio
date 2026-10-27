@@ -66,7 +66,7 @@ opaque = true
 offset = 0x0c
 size = 4
 access = "owned"
-description = "Observed byte range; decoded only after ownership passes to the CPU."
+description = "Named ISO TX helpers use the low 15 bits at +0x0c as a result with unproduced sentinel 0x7fff; they decode configured-length error at bit 1 and maximum-length error at bit 2 only after sentinel replacement. ISO reset clears +0x08..+0x0b and arms the sentinel while preserving bit 15. These identities are direct for the matched ISO format; transfer to ordinary TX is inference. The open ordinary TX owner clears/reuses this storage and does not decode these results; zero alone does not prove an armed ISO result was produced. SOURCE: VENDOR_BLE_ISO_TX_RESULT."
 
 [[layout.bytes]]
 name = "PDU_HEADER"
@@ -100,3 +100,11 @@ sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLE_TX_PACKET_PREFIX.BYTE_000C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX", "VENDOR_BLE_ISO_TX_RESULT"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "partial"
+naming = "opaque"

@@ -248,7 +248,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."WIFI_BB_CFG.BIT_28_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20109C18"]
+sources = ["S31_MMIO_DECLARED_20109C18", "ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 provenance = "observed"
 accuracy = "unknown"
 completeness = "unknown"
@@ -937,6 +937,7 @@ bits = "28"
 class = "plain"
 values = [{ name = "DISABLED", value = 0x0, description = "The selected MODEM_SYSCON function is disabled.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "The selected MODEM_SYSCON function is enabled.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }]
 write-values-only = true
+description = "Direct operation: ROM phy_mac_enable_bb performs a fresh-read RMW of bit 28 before its operations on WIFI_ENABLE (bit 1). MAC/BB interface enable is an inference (I) from that named sequence, not a proved electrical identity. SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL."
 
 [[registers.fields]]
 name = "BITS_29_31_OPAQUE"
