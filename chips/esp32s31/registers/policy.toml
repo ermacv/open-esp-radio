@@ -7762,3 +7762,28 @@ sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027"]
 name = "read_bluetooth_modem_lp_rollover_image"
 register = "MODEM_PWR.WORD_002C_OPAQUE"
 sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027"]
+
+[[register-image-reads]]
+name = "read_hp_active_clock_power_image"
+register = "PMU.HP_ACTIVE_HP_CK_POWER"
+sources = ["BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4"]
+
+[[register-image-reads]]
+name = "read_tsens_control_image"
+register = "LP_TSENS.CTRL"
+sources = ["ROM_REV0_PHY_TSENS"]
+
+[[register-image-reads]]
+name = "read_tsens_clock_image"
+register = "LP_TSENS.CLK_CONF"
+sources = ["BLOB_S31_TSENS_CLK_CONF_WRITES_20261027"]
+
+[[register-image-reads]]
+name = "read_frequency_control_image"
+register = "FE.FREQUENCY_CONTROL"
+sources = ["BX10_S31_FE_FREQ_ADDRESS_20261027"]
+
+[[register-image-reads]]
+name = "read_tx_control0_image"
+register = "WIFI_MAC.CONTROL0"
+sources = ["BLOB_LIBPP_HAL_MAC_TX"]

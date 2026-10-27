@@ -73142,6 +73142,14 @@ pub mod fe {
             self.0.write::<0x28>(0x25824e58);
         }
 
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`FE.FREQUENCY_CONTROL`).
+        ///
+        /// SOURCE: BX10_S31_FE_FREQ_ADDRESS_20261027.
+        #[inline]
+        pub fn read_frequency_control_image(&self) -> u32 {
+            self.0.read::<0x1c>()
+        }
+
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
         /// image, ascending.
         pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 6] =
@@ -158607,6 +158615,14 @@ pub mod pmu {
             self.0.write::<0x208>(value.0);
         }
 
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`PMU.HP_ACTIVE_HP_CK_POWER`).
+        ///
+        /// SOURCE: BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4.
+        #[inline]
+        pub fn read_hp_active_clock_power_image(&self) -> u32 {
+            self.0.read::<0x1c>()
+        }
+
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
         /// image, ascending.
         pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 4] = [0x14, 0x1c, 0x184, 0x208];
@@ -242788,6 +242804,22 @@ pub mod tsens {
             self.0.write::<0x18>(value.0);
         }
 
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`LP_TSENS.CTRL`).
+        ///
+        /// SOURCE: ROM_REV0_PHY_TSENS.
+        #[inline]
+        pub fn read_tsens_control_image(&self) -> u32 {
+            self.0.read::<0x0>()
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`LP_TSENS.CLK_CONF`).
+        ///
+        /// SOURCE: BLOB_S31_TSENS_CLK_CONF_WRITES_20261027.
+        #[inline]
+        pub fn read_tsens_clock_image(&self) -> u32 {
+            self.0.read::<0x18>()
+        }
+
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
         /// image, ascending.
         pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 2] = [0x0, 0x18];
@@ -300426,6 +300458,14 @@ pub mod wifi_mac {
             let mut value = control_n::W(self.0.read_indexed::<0xd40, 0x10, 4>(index));
             change(&mut value);
             self.0.write_indexed::<0xd40, 0x10, 4>(index, value.0);
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`WIFI_MAC.CONTROL0`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_MAC_TX.
+        #[inline]
+        pub fn read_tx_control0_image(&self) -> u32 {
+            self.0.read::<0xd40>()
         }
     }
 
