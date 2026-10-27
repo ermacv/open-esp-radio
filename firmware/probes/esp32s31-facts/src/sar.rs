@@ -110,7 +110,7 @@ impl Sar {
             );
         });
 
-        p.modem_syscon_radio.modify_clk_conf_power_st(|w| {
+        p.modem_syscon_clock_reset.modify_clk_conf_power_st(|w| {
             w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
             w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
             w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
@@ -119,7 +119,7 @@ impl Sar {
             w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
         });
 
-        p.modem_lpcon_shared_clock.modify_clk_conf_power_st(|w| {
+        p.modem_lpcon_power.modify_clk_conf_power_st(|w| {
             w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
             w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
             w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
@@ -135,14 +135,14 @@ impl Sar {
         p.hp_sys_clkrst_radio.prepare_open_modem_pll_source_gate();
         p.hp_sys_clkrst_radio.open_modem_pll_source_gate();
 
-        p.modem_syscon_radio.modify_modem_rst_conf(|w| {
+        p.modem_syscon_clock_reset.modify_modem_rst_conf(|w| {
             w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted);
         });
-        p.modem_syscon_radio.modify_modem_rst_conf(|w| {
+        p.modem_syscon_clock_reset.modify_modem_rst_conf(|w| {
             w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Released);
         });
 
-        p.modem_syscon_radio.modify_clk_conf1(|w| {
+        p.modem_syscon_clock_reset.modify_clk_conf1(|w| {
             w.set_clk_wifibb_22m_en(
                 oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled,
             );
@@ -181,7 +181,7 @@ impl Sar {
             w.set_clk_fe_dac_en(true);
         });
 
-        p.modem_syscon_radio.modify_clk_conf(|w| {
+        p.modem_syscon_clock_reset.modify_clk_conf(|w| {
             w.set_clk_i2c_mst_sel_160m(
                 oer_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled,
             );

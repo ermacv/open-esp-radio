@@ -5,7 +5,7 @@ use oer_mmio::{Bits, Placement};
 
 // SOURCE: ESP_RADIO_7F914782_S31_WIFI_CLOCKS, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_wifi_baseband_and_mac_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -30,7 +30,7 @@ pub(crate) fn set_wifi_baseband_and_mac_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_wifi_baseband_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -47,7 +47,7 @@ pub(crate) fn set_wifi_baseband_reset<P: Placement>(
 
 // SOURCE: ROM_REV0_PHY_OPEN_FE_BB_CLK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_phy_calibration_clocks<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_wifibb_22m_en(oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled);
@@ -79,7 +79,7 @@ pub(crate) fn enable_phy_calibration_clocks<P: Placement>(
 
 // SOURCE: ROM_REV0_PHY_I2C, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn select_phy_i2c_160mhz_source<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_i2c_mst_sel_160m(
@@ -90,7 +90,7 @@ pub(crate) fn select_phy_i2c_160mhz_source<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, ROM_REV0_PHY_I2C, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn restore_phy_i2c_160mhz_source<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf(|w| {
@@ -107,7 +107,7 @@ pub(crate) fn restore_phy_i2c_160mhz_source<P: Placement>(
 
 // SOURCE: ESP_RADIO_7F914782_S31_WIFI_CLOCKS, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_wifi_mac_clocks<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_wifibb_22m_en(oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled);
@@ -132,7 +132,7 @@ pub(crate) fn enable_wifi_mac_clocks<P: Placement>(
 
 // SOURCE: ESP_RADIO_7F914782_S31_WIFI_CLOCKS, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_wifi_mac_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -231,7 +231,7 @@ pub(crate) fn set_mac_baseband_enable<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_ieee802154_modem_apb_clock_map<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
@@ -240,7 +240,7 @@ pub(crate) fn prepare_ieee802154_modem_apb_clock_map<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_ieee802154_modem_peripheral_clock_map<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
@@ -249,7 +249,7 @@ pub(crate) fn prepare_ieee802154_modem_peripheral_clock_map<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_ieee802154_wifi_clock_map<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
@@ -258,7 +258,7 @@ pub(crate) fn prepare_ieee802154_wifi_clock_map<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_ieee802154_bluetooth_clock_map<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
@@ -267,7 +267,7 @@ pub(crate) fn prepare_ieee802154_bluetooth_clock_map<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_ieee802154_frontend_clock_map<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
@@ -276,7 +276,7 @@ pub(crate) fn prepare_ieee802154_frontend_clock_map<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_ieee802154_clock_map<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
@@ -285,7 +285,7 @@ pub(crate) fn prepare_ieee802154_clock_map<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_ieee802154_wifi_baseband_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_wifibb_80x1_en(
@@ -296,7 +296,7 @@ pub(crate) fn enable_ieee802154_wifi_baseband_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_ieee802154_etm_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_etm_en(oer_esp32s31_pac::modem_syscon::clk_conf::ClkEtmEn::Enabled);
@@ -305,7 +305,7 @@ pub(crate) fn enable_ieee802154_etm_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_ieee802154_bluetooth_apb_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_bt_apb_en(oer_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled);
@@ -314,7 +314,7 @@ pub(crate) fn enable_ieee802154_bluetooth_apb_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_ieee802154_modem_security_apb_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_modem_sec_apb_en(
@@ -325,7 +325,7 @@ pub(crate) fn enable_ieee802154_modem_security_apb_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_ieee802154_common_baseband_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_btbb_en(oer_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
@@ -334,7 +334,7 @@ pub(crate) fn enable_ieee802154_common_baseband_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_ieee802154_apb_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_zb_apb_en(oer_esp32s31_pac::modem_syscon::clk_conf::ClkZbApbEn::Enabled);
@@ -343,7 +343,7 @@ pub(crate) fn enable_ieee802154_apb_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_ieee802154_mac_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_zbmac_en(oer_esp32s31_pac::modem_syscon::clk_conf::ClkZbmacEn::Enabled);
@@ -352,7 +352,7 @@ pub(crate) fn enable_ieee802154_mac_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_ieee802154_mac_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -369,7 +369,7 @@ pub(crate) fn set_ieee802154_mac_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_ieee802154_apb_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -386,7 +386,7 @@ pub(crate) fn set_ieee802154_apb_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_modem_syscon_clock_map<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
@@ -400,7 +400,7 @@ pub(crate) fn prepare_modem_syscon_clock_map<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_wifi_mac_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf1(|w| {
@@ -417,7 +417,7 @@ pub(crate) fn set_modem_wifi_mac_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_wifi_baseband_clocks<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf1(|w| {
@@ -482,7 +482,7 @@ pub(crate) fn set_modem_wifi_baseband_clocks<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_wifi_apb_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf1(|w| {
@@ -499,7 +499,7 @@ pub(crate) fn set_modem_wifi_apb_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_wifi_baseband_44m_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf1(|w| {
@@ -516,7 +516,7 @@ pub(crate) fn set_modem_wifi_baseband_44m_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_ieee802154_apb_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf(|w| {
@@ -533,7 +533,7 @@ pub(crate) fn set_modem_ieee802154_apb_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_ieee802154_mac_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf(|w| {
@@ -550,7 +550,7 @@ pub(crate) fn set_modem_ieee802154_mac_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_modem_frontend_apb_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_fe_apb_en(true);
@@ -559,7 +559,7 @@ pub(crate) fn enable_modem_frontend_apb_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_modem_frontend_80m_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_fe_80m_en(true);
@@ -568,7 +568,7 @@ pub(crate) fn enable_modem_frontend_80m_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_modem_frontend_160m_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_fe_160m_en(true);
@@ -577,7 +577,7 @@ pub(crate) fn enable_modem_frontend_160m_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_modem_frontend_dac_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_fe_dac_en(true);
@@ -586,7 +586,7 @@ pub(crate) fn enable_modem_frontend_dac_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_modem_frontend_pwdet_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_fe_pwdet_adc_en(true);
@@ -595,7 +595,7 @@ pub(crate) fn enable_modem_frontend_pwdet_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn enable_modem_frontend_adc_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_fe_adc_en(true);
@@ -604,7 +604,7 @@ pub(crate) fn enable_modem_frontend_adc_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_wifi_baseband_80x1_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf1(|w| {
@@ -621,7 +621,7 @@ pub(crate) fn set_bluetooth_wifi_baseband_80x1_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_etm_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf(|w| {
@@ -638,7 +638,7 @@ pub(crate) fn set_bluetooth_etm_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_mac_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf1(|w| {
@@ -655,7 +655,7 @@ pub(crate) fn set_bluetooth_mac_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_peripheral_clocks<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf(|w| {
@@ -704,7 +704,7 @@ pub(crate) fn set_bluetooth_peripheral_clocks<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_apb_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf1(|w| {
@@ -721,7 +721,7 @@ pub(crate) fn set_bluetooth_apb_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_security_apb_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf(|w| {
@@ -738,7 +738,7 @@ pub(crate) fn set_bluetooth_modem_security_apb_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_baseband_clock<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconClockGateState,
 ) {
     registers.modify_clk_conf1(|w| {
@@ -755,7 +755,7 @@ pub(crate) fn set_bluetooth_baseband_clock<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_mac_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -772,7 +772,7 @@ pub(crate) fn set_bluetooth_mac_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_mac_apb_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -789,7 +789,7 @@ pub(crate) fn set_bluetooth_mac_apb_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_timer_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -806,7 +806,7 @@ pub(crate) fn set_bluetooth_timer_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_ecb_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -823,7 +823,7 @@ pub(crate) fn set_bluetooth_modem_ecb_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_ccm_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -840,7 +840,7 @@ pub(crate) fn set_bluetooth_modem_ccm_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_bah_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -857,7 +857,7 @@ pub(crate) fn set_bluetooth_modem_bah_reset<P: Placement>(
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_security_reset<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    registers: &mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
     value: ModemSysconResetState,
 ) {
     registers.modify_modem_rst_conf(|w| {
@@ -1009,7 +1009,7 @@ pub(crate) fn enable_frontend_baseband_power<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP.
 pub(crate) fn initialize_shared_modem_power_state_map<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
@@ -1021,7 +1021,7 @@ pub(crate) fn initialize_shared_modem_power_state_map<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
 pub(crate) fn deselect_bluetooth_low_power_timer_slow_oscillator<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
 ) {
     registers.modify_lp_timer_conf(|w| {
         w.set_clk_lp_timer_sel_osc_slow(false);
@@ -1030,7 +1030,7 @@ pub(crate) fn deselect_bluetooth_low_power_timer_slow_oscillator<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
 pub(crate) fn deselect_bluetooth_low_power_timer_fast_oscillator<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
 ) {
     registers.modify_lp_timer_conf(|w| {
         w.set_clk_lp_timer_sel_osc_fast(false);
@@ -1039,7 +1039,7 @@ pub(crate) fn deselect_bluetooth_low_power_timer_fast_oscillator<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
 pub(crate) fn deselect_bluetooth_low_power_timer_crystal_32khz<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
 ) {
     registers.modify_lp_timer_conf(|w| {
         w.set_clk_lp_timer_sel_xtal32k(false);
@@ -1048,7 +1048,7 @@ pub(crate) fn deselect_bluetooth_low_power_timer_crystal_32khz<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
 pub(crate) fn deselect_bluetooth_low_power_timer_crystal<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
 ) {
     registers.modify_lp_timer_conf(|w| {
         w.set_clk_lp_timer_sel_xtal(false);
@@ -1057,7 +1057,7 @@ pub(crate) fn deselect_bluetooth_low_power_timer_crystal<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
 pub(crate) fn select_bluetooth_low_power_timer_crystal<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
 ) {
     registers.modify_lp_timer_conf(|w| {
         w.set_clk_lp_timer_sel_xtal(true);
@@ -1066,7 +1066,7 @@ pub(crate) fn select_bluetooth_low_power_timer_crystal<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
 pub(crate) fn set_bluetooth_low_power_timer_divider<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
     value: ModemLowPowerClockDivider,
 ) {
     registers.modify_lp_timer_conf(|w| {
@@ -1076,7 +1076,7 @@ pub(crate) fn set_bluetooth_low_power_timer_divider<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn deselect_wifi_low_power_clock_slow_oscillator<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_wifi_lp_clk_conf(|w| {
         w.set_clk_wifipwr_lp_sel_osc_slow(false);
@@ -1085,7 +1085,7 @@ pub(crate) fn deselect_wifi_low_power_clock_slow_oscillator<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn deselect_wifi_low_power_clock_fast_oscillator<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_wifi_lp_clk_conf(|w| {
         w.set_clk_wifipwr_lp_sel_osc_fast(false);
@@ -1094,7 +1094,7 @@ pub(crate) fn deselect_wifi_low_power_clock_fast_oscillator<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn deselect_wifi_low_power_clock_crystal_32khz<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_wifi_lp_clk_conf(|w| {
         w.set_clk_wifipwr_lp_sel_xtal32k(false);
@@ -1103,7 +1103,7 @@ pub(crate) fn deselect_wifi_low_power_clock_crystal_32khz<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn deselect_wifi_low_power_clock_crystal<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_wifi_lp_clk_conf(|w| {
         w.set_clk_wifipwr_lp_sel_xtal(false);
@@ -1112,7 +1112,7 @@ pub(crate) fn deselect_wifi_low_power_clock_crystal<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn select_wifi_low_power_clock_slow_oscillator<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_wifi_lp_clk_conf(|w| {
         w.set_clk_wifipwr_lp_sel_osc_slow(true);
@@ -1121,7 +1121,7 @@ pub(crate) fn select_wifi_low_power_clock_slow_oscillator<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn select_wifi_low_power_clock_crystal_32khz<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_wifi_lp_clk_conf(|w| {
         w.set_clk_wifipwr_lp_sel_xtal32k(true);
@@ -1130,7 +1130,7 @@ pub(crate) fn select_wifi_low_power_clock_crystal_32khz<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn select_modem_32khz_clock_crystal<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_modem_32k_clk_conf(|w| {
         w.set_clk_modem_32k_sel(Bits::constant::<0>());
@@ -1139,7 +1139,7 @@ pub(crate) fn select_modem_32khz_clock_crystal<P: Placement>(
 
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn set_wifi_low_power_clock_divider<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
     value: ModemLowPowerClockDivider,
 ) {
     registers.modify_wifi_lp_clk_conf(|w| {
@@ -1149,7 +1149,7 @@ pub(crate) fn set_wifi_low_power_clock_divider<P: Placement>(
 
 // SOURCE: BLOB_LIBCOEX_TIMER_CLOCK, S31_MODEM_LPCON_STRUCT.
 pub(crate) fn select_coex_timer_clock_source<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::CoexLpClock<P>,
     value: CoexTimerClockSource,
 ) {
     registers.modify_coex_lp_clk_conf(|w| {
@@ -1182,7 +1182,7 @@ pub(crate) fn select_coex_timer_clock_source<P: Placement>(
 
 // SOURCE: BLOB_LIBCOEX_TIMER_CLOCK, S31_MODEM_LPCON_STRUCT.
 pub(crate) fn set_coex_timer_clock_divider<P: Placement>(
-    registers: &mut oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P>,
+    registers: &mut oer_esp32s31_pac::modem_lpcon::CoexLpClock<P>,
     value: CoexTimerClockDividerMinusOne,
 ) {
     registers.modify_coex_lp_clk_conf(|w| {

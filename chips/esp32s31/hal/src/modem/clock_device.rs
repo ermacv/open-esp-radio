@@ -59,7 +59,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// devices perform no register access when disabled, as in the vendor.
     #[doc(hidden)]
     pub fn configure_modem_clock_device(&mut self, device: ModemClockDevice, enable: bool) {
-        let syscon = &mut self.peripherals.modem_syscon_radio;
+        let syscon = &mut self.peripherals.modem_syscon_clock_reset;
         match device {
             ModemClockDevice::ModemAdcCommonFe => {
                 if enable {
@@ -153,7 +153,7 @@ trait BasebandClockPort {
     fn clock(&mut self, enabled: bool);
 }
 struct BasebandClock<'a, P: oer_mmio::Placement>(
-    &'a mut oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
+    &'a mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 );
 impl<P: oer_mmio::Placement> BasebandClockPort for BasebandClock<'_, P> {
     fn reset(&mut self, asserted: bool) {

@@ -733,9 +733,16 @@ instance = "PMU"
 registers = ["HP_ACTIVE_ICG_MODEM", "HP_ACTIVE_HP_CK_POWER", "IMM_HP_CK_POWER_0", "IMM_SLEEP_SYSCLK", "IMM_MODEM_ICG", "RF_PWC", "ANA_PERI_PWR_CTRL"]
 
 [[partitions.parts]]
+name = "ModemSysconClockReset"
+instance = "MODEM_SYSCON"
+registers = ["CLK_CONF", "CLK_CONF_POWER_ST", "MODEM_RST_CONF", "CLK_CONF1"]
+description = "Modem power, module clocks and client resets."
+
+[[partitions.parts]]
 name = "ModemSysconRadio"
 instance = "MODEM_SYSCON"
-registers = ["CLK_CONF", "CLK_CONF_POWER_ST", "MODEM_RST_CONF", "CLK_CONF1", "WIFI_BB_CFG"]
+registers = ["WIFI_BB_CFG"]
+description = "PHY-owned Wi-Fi baseband configuration."
 
 [[partitions.parts]]
 name = "PhyAgcOracleFe"
@@ -853,9 +860,22 @@ instance = "FE"
 registers = ["ESTIMATOR_CONFIG", "ESTIMATOR_CONTROL", "SIGNAL_POWER_SUM_I", "SIGNAL_POWER_DIFFERENCE_I", "SIGNAL_POWER_DIFFERENCE_Q", "SIGNAL_POWER_SUM_Q", "DC_I_ACCUMULATOR", "DC_Q_ACCUMULATOR", "POWER_ACCUMULATOR", "ESTIMATOR_READY_STATUS", "WORD_08D0_OPAQUE"]
 
 [[partitions.parts]]
-name = "ModemLpconSharedClock"
+name = "BluetoothLpTimerClock"
 instance = "MODEM_LPCON"
-registers = ["LP_TIMER_CONF", "COEX_LP_CLK_CONF", "WIFI_LP_CLK_CONF", "MODEM_32K_CLK_CONF", "CLK_CONF_POWER_ST"]
+registers = ["LP_TIMER_CONF"]
+description = "Bluetooth low-power timer clock selection."
+
+[[partitions.parts]]
+name = "CoexLpClock"
+instance = "MODEM_LPCON"
+registers = ["COEX_LP_CLK_CONF"]
+description = "Coexistence timer clock selection."
+
+[[partitions.parts]]
+name = "ModemLpconPower"
+instance = "MODEM_LPCON"
+registers = ["WIFI_LP_CLK_CONF", "MODEM_32K_CLK_CONF", "CLK_CONF_POWER_ST"]
+description = "Modem power-state mapping and Wi-Fi power clock selection."
 
 [[partitions.parts]]
 name = "ModemLpconPhyTick"
@@ -863,9 +883,16 @@ instance = "MODEM_LPCON"
 registers = ["TICK_CONF"]
 
 [[partitions.parts]]
+name = "LpAonRadioClock"
+instance = "LP_AON_CLKRST"
+registers = ["LP_AONCLKRST_ROOT_CLK_CONF"]
+description = "RTC slow-clock source used by modem power."
+
+[[partitions.parts]]
 name = "LpAonClkrst"
 instance = "LP_AON_CLKRST"
-registers = ["LP_AONCLKRST_ROOT_CLK_CONF", "LP_AONCLKRST_RTC_SAR2_PWDET_CCT"]
+registers = ["LP_AONCLKRST_RTC_SAR2_PWDET_CCT"]
+description = "PHY power-detector circuit mode."
 
 [[partitions.parts]]
 name = "LpPericlkrst"
@@ -903,9 +930,26 @@ member = "coexistence"
 description = "Shared coexistence arbitration register views owned by the radio arbitration service rather than any protocol role; per-protocol priority configuration belongs to that protocol's partition."
 
 [[partitions.parts]]
-name = "CoexHwTimer"
+name = "CoexPolicyTimers"
 instance = "COEX"
-registers = ["CONFIGURATION%s", "SECONDARY_TARGET%s", "ENABLE_CONTROL%s", "DISABLE_CONTROL%s"]
+elements = [
+    { register = "CONFIGURATION%s", first = 0, count = 5 },
+    { register = "SECONDARY_TARGET%s", first = 0, count = 5 },
+    { register = "ENABLE_CONTROL%s", first = 0, count = 5 },
+    { register = "DISABLE_CONTROL%s", first = 0, count = 5 },
+]
+description = "Timers zero through four owned by coexistence policy."
+
+[[partitions.parts]]
+name = "PhyGrantProtectTimer"
+instance = "COEX"
+elements = [
+    { register = "CONFIGURATION%s", first = 5, count = 1 },
+    { register = "SECONDARY_TARGET%s", first = 5, count = 1 },
+    { register = "ENABLE_CONTROL%s", first = 5, count = 1 },
+    { register = "DISABLE_CONTROL%s", first = 5, count = 1 },
+]
+description = "Timer five owned by PHY grant protection."
 
 [[partitions.parts]]
 name = "CoexExternal"
@@ -2452,13 +2496,63 @@ field = "BT_MAC.PHY_ENVIRONMENT_TAIL_POINTER.ADDRESS"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[zero-based-field-writes]]
-name = "coex_timer_configuration"
-fields = ["COEX.CONFIGURATION%s.PRIMARY_TICK_IMAGE", "COEX.CONFIGURATION%s.PARAMETER_2", "COEX.CONFIGURATION%s.PARAMETER_1"]
+name = "coex_timer_configuration_0"
+fields = ["COEX.CONFIGURATION0.PRIMARY_TICK_IMAGE", "COEX.CONFIGURATION0.PARAMETER_2", "COEX.CONFIGURATION0.PARAMETER_1"]
 sources = ["BLOB_LIBCOEX_HW_TIMER"]
 
 [[zero-based-field-writes]]
-name = "coex_timer_secondary_target"
-fields = ["COEX.SECONDARY_TARGET%s.SECONDARY_TICK_IMAGE"]
+name = "coex_timer_configuration_1"
+fields = ["COEX.CONFIGURATION1.PRIMARY_TICK_IMAGE", "COEX.CONFIGURATION1.PARAMETER_2", "COEX.CONFIGURATION1.PARAMETER_1"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_configuration_2"
+fields = ["COEX.CONFIGURATION2.PRIMARY_TICK_IMAGE", "COEX.CONFIGURATION2.PARAMETER_2", "COEX.CONFIGURATION2.PARAMETER_1"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_configuration_3"
+fields = ["COEX.CONFIGURATION3.PRIMARY_TICK_IMAGE", "COEX.CONFIGURATION3.PARAMETER_2", "COEX.CONFIGURATION3.PARAMETER_1"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_configuration_4"
+fields = ["COEX.CONFIGURATION4.PRIMARY_TICK_IMAGE", "COEX.CONFIGURATION4.PARAMETER_2", "COEX.CONFIGURATION4.PARAMETER_1"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_configuration_5"
+fields = ["COEX.CONFIGURATION5.PRIMARY_TICK_IMAGE", "COEX.CONFIGURATION5.PARAMETER_2", "COEX.CONFIGURATION5.PARAMETER_1"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_secondary_target_0"
+fields = ["COEX.SECONDARY_TARGET0.SECONDARY_TICK_IMAGE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_secondary_target_1"
+fields = ["COEX.SECONDARY_TARGET1.SECONDARY_TICK_IMAGE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_secondary_target_2"
+fields = ["COEX.SECONDARY_TARGET2.SECONDARY_TICK_IMAGE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_secondary_target_3"
+fields = ["COEX.SECONDARY_TARGET3.SECONDARY_TICK_IMAGE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_secondary_target_4"
+fields = ["COEX.SECONDARY_TARGET4.SECONDARY_TICK_IMAGE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[zero-based-field-writes]]
+name = "coex_timer_secondary_target_5"
+fields = ["COEX.SECONDARY_TARGET5.SECONDARY_TICK_IMAGE"]
 sources = ["BLOB_LIBCOEX_HW_TIMER"]
 
 [[zero-based-field-writes]]
@@ -6177,38 +6271,218 @@ input-transform = { wrapping-subtract = 0, retain-mask = 0x00000fff }
 sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "clear_coex_timer_disable"
-fields = [{ field = "COEX.DISABLE_CONTROL%s.DISABLE", source-bit-offset = 0 }]
+name = "clear_coex_timer_disable_0"
+fields = [{ field = "COEX.DISABLE_CONTROL0.DISABLE", source-bit-offset = 0 }]
 value = 0
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "set_coex_timer_enable"
-fields = [{ field = "COEX.ENABLE_CONTROL%s.ENABLE", source-bit-offset = 0 }]
+name = "clear_coex_timer_disable_1"
+fields = [{ field = "COEX.DISABLE_CONTROL1.DISABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_disable_2"
+fields = [{ field = "COEX.DISABLE_CONTROL2.DISABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_disable_3"
+fields = [{ field = "COEX.DISABLE_CONTROL3.DISABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_disable_4"
+fields = [{ field = "COEX.DISABLE_CONTROL4.DISABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_disable_5"
+fields = [{ field = "COEX.DISABLE_CONTROL5.DISABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_enable_0"
+fields = [{ field = "COEX.ENABLE_CONTROL0.ENABLE", source-bit-offset = 0 }]
 value = 1
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "clear_coex_timer_enable"
-fields = [{ field = "COEX.ENABLE_CONTROL%s.ENABLE", source-bit-offset = 0 }]
-value = 0
-sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
-
-[[field-replace-modifies]]
-name = "set_coex_timer_disable"
-fields = [{ field = "COEX.DISABLE_CONTROL%s.DISABLE", source-bit-offset = 0 }]
+name = "set_coex_timer_enable_1"
+fields = [{ field = "COEX.ENABLE_CONTROL1.ENABLE", source-bit-offset = 0 }]
 value = 1
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "force_coex_timer"
-fields = [{ field = "COEX.CONFIGURATION%s.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+name = "set_coex_timer_enable_2"
+fields = [{ field = "COEX.ENABLE_CONTROL2.ENABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_enable_3"
+fields = [{ field = "COEX.ENABLE_CONTROL3.ENABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_enable_4"
+fields = [{ field = "COEX.ENABLE_CONTROL4.ENABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_enable_5"
+fields = [{ field = "COEX.ENABLE_CONTROL5.ENABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_enable_0"
+fields = [{ field = "COEX.ENABLE_CONTROL0.ENABLE", source-bit-offset = 0 }]
 value = 0
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "unforce_coex_timer"
-fields = [{ field = "COEX.CONFIGURATION%s.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+name = "clear_coex_timer_enable_1"
+fields = [{ field = "COEX.ENABLE_CONTROL1.ENABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_enable_2"
+fields = [{ field = "COEX.ENABLE_CONTROL2.ENABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_enable_3"
+fields = [{ field = "COEX.ENABLE_CONTROL3.ENABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_enable_4"
+fields = [{ field = "COEX.ENABLE_CONTROL4.ENABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "clear_coex_timer_enable_5"
+fields = [{ field = "COEX.ENABLE_CONTROL5.ENABLE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_disable_0"
+fields = [{ field = "COEX.DISABLE_CONTROL0.DISABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_disable_1"
+fields = [{ field = "COEX.DISABLE_CONTROL1.DISABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_disable_2"
+fields = [{ field = "COEX.DISABLE_CONTROL2.DISABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_disable_3"
+fields = [{ field = "COEX.DISABLE_CONTROL3.DISABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_disable_4"
+fields = [{ field = "COEX.DISABLE_CONTROL4.DISABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "set_coex_timer_disable_5"
+fields = [{ field = "COEX.DISABLE_CONTROL5.DISABLE", source-bit-offset = 0 }]
+value = 1
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "force_coex_timer_0"
+fields = [{ field = "COEX.CONFIGURATION0.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "force_coex_timer_1"
+fields = [{ field = "COEX.CONFIGURATION1.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "force_coex_timer_2"
+fields = [{ field = "COEX.CONFIGURATION2.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "force_coex_timer_3"
+fields = [{ field = "COEX.CONFIGURATION3.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "force_coex_timer_4"
+fields = [{ field = "COEX.CONFIGURATION4.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "force_coex_timer_5"
+fields = [{ field = "COEX.CONFIGURATION5.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "unforce_coex_timer_0"
+fields = [{ field = "COEX.CONFIGURATION0.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0x000003e8
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "unforce_coex_timer_1"
+fields = [{ field = "COEX.CONFIGURATION1.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0x000003e8
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "unforce_coex_timer_2"
+fields = [{ field = "COEX.CONFIGURATION2.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0x000003e8
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "unforce_coex_timer_3"
+fields = [{ field = "COEX.CONFIGURATION3.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0x000003e8
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "unforce_coex_timer_4"
+fields = [{ field = "COEX.CONFIGURATION4.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+value = 0x000003e8
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "unforce_coex_timer_5"
+fields = [{ field = "COEX.CONFIGURATION5.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
 value = 0x000003e8
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
 
@@ -6225,27 +6499,157 @@ domain = "CoexTimerClockDividerMinusOne"
 sources = ["BLOB_LIBCOEX_TIMER_CLOCK", "S31_MODEM_LPCON_STRUCT"]
 
 [[field-replace-modifies]]
-name = "configure_coex_timer_client"
-fields = [{ field = "COEX.CONFIGURATION%s.PARAMETER_1", source-bit-offset = 0 }]
+name = "configure_coex_timer_client_0"
+fields = [{ field = "COEX.CONFIGURATION0.PARAMETER_1", source-bit-offset = 0 }]
 domain = "CoexTimerClientValue"
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "configure_coex_timer_pti"
-fields = [{ field = "COEX.CONFIGURATION%s.PARAMETER_2", source-bit-offset = 0 }]
+name = "configure_coex_timer_client_1"
+fields = [{ field = "COEX.CONFIGURATION1.PARAMETER_1", source-bit-offset = 0 }]
+domain = "CoexTimerClientValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_client_2"
+fields = [{ field = "COEX.CONFIGURATION2.PARAMETER_1", source-bit-offset = 0 }]
+domain = "CoexTimerClientValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_client_3"
+fields = [{ field = "COEX.CONFIGURATION3.PARAMETER_1", source-bit-offset = 0 }]
+domain = "CoexTimerClientValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_client_4"
+fields = [{ field = "COEX.CONFIGURATION4.PARAMETER_1", source-bit-offset = 0 }]
+domain = "CoexTimerClientValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_client_5"
+fields = [{ field = "COEX.CONFIGURATION5.PARAMETER_1", source-bit-offset = 0 }]
+domain = "CoexTimerClientValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_pti_0"
+fields = [{ field = "COEX.CONFIGURATION0.PARAMETER_2", source-bit-offset = 0 }]
 domain = "CoexTimerPtiValue"
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "configure_coex_timer_primary_target"
-fields = [{ field = "COEX.CONFIGURATION%s.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+name = "configure_coex_timer_pti_1"
+fields = [{ field = "COEX.CONFIGURATION1.PARAMETER_2", source-bit-offset = 0 }]
+domain = "CoexTimerPtiValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_pti_2"
+fields = [{ field = "COEX.CONFIGURATION2.PARAMETER_2", source-bit-offset = 0 }]
+domain = "CoexTimerPtiValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_pti_3"
+fields = [{ field = "COEX.CONFIGURATION3.PARAMETER_2", source-bit-offset = 0 }]
+domain = "CoexTimerPtiValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_pti_4"
+fields = [{ field = "COEX.CONFIGURATION4.PARAMETER_2", source-bit-offset = 0 }]
+domain = "CoexTimerPtiValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_pti_5"
+fields = [{ field = "COEX.CONFIGURATION5.PARAMETER_2", source-bit-offset = 0 }]
+domain = "CoexTimerPtiValue"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_primary_target_0"
+fields = [{ field = "COEX.CONFIGURATION0.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
 domain = "CoexTimerTickInput"
 input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "configure_coex_timer_secondary_target"
-fields = [{ field = "COEX.SECONDARY_TARGET%s.SECONDARY_TICK_IMAGE", source-bit-offset = 0 }]
+name = "configure_coex_timer_primary_target_1"
+fields = [{ field = "COEX.CONFIGURATION1.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_primary_target_2"
+fields = [{ field = "COEX.CONFIGURATION2.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_primary_target_3"
+fields = [{ field = "COEX.CONFIGURATION3.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_primary_target_4"
+fields = [{ field = "COEX.CONFIGURATION4.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_primary_target_5"
+fields = [{ field = "COEX.CONFIGURATION5.PRIMARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_secondary_target_0"
+fields = [{ field = "COEX.SECONDARY_TARGET0.SECONDARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_secondary_target_1"
+fields = [{ field = "COEX.SECONDARY_TARGET1.SECONDARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_secondary_target_2"
+fields = [{ field = "COEX.SECONDARY_TARGET2.SECONDARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_secondary_target_3"
+fields = [{ field = "COEX.SECONDARY_TARGET3.SECONDARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_secondary_target_4"
+fields = [{ field = "COEX.SECONDARY_TARGET4.SECONDARY_TICK_IMAGE", source-bit-offset = 0 }]
+domain = "CoexTimerTickInput"
+input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]
+
+[[field-replace-modifies]]
+name = "configure_coex_timer_secondary_target_5"
+fields = [{ field = "COEX.SECONDARY_TARGET5.SECONDARY_TICK_IMAGE", source-bit-offset = 0 }]
 domain = "CoexTimerTickInput"
 input-transform = { wrapping-subtract = 0, retain-mask = 0x00ffffff }
 sources = ["BLOB_LIBCOEX_HW_TIMER", "S31_ESP_PACS_SVD"]

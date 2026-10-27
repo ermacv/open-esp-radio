@@ -214,6 +214,8 @@ pub(crate) struct RadioPhyParts<P: RadioPlacement = ChipPlacement> {
     pub(crate) hp_sys_clkrst_radio: oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P::HpClock>,
     pub(crate) pmu_radio: oer_esp32s31_pac::pmu::PmuRadio<P::Pmu>,
     pub(crate) modem_syscon_radio: oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P::ModemSyscon>,
+    pub(crate) modem_syscon_clock_reset:
+        oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P::ModemSyscon>,
     pub(crate) phy_agc_recovered_gaps: oer_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps<P::WifiBb>,
     pub(crate) phy_bb_recovered_gaps: oer_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps<P::WifiBb>,
     pub(crate) phy_brx_recovered_gaps:
@@ -231,10 +233,13 @@ pub(crate) struct RadioPhyParts<P: RadioPlacement = ChipPlacement> {
     pub(crate) phy_fedata_wifi_recovered: oer_esp32s31_pac::fe::PhyFedataWifiRecovered<P::Fe>,
     pub(crate) phy_i2c_command_ram: oer_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam<P::I2cRam>,
     pub(crate) phy_iq_estimator_oracle: oer_esp32s31_pac::fe::PhyIqEstimatorOracle<P::Fe>,
-    pub(crate) modem_lpcon_shared_clock:
-        oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock<P::ModemLpcon>,
+    pub(crate) bluetooth_lp_timer_clock:
+        oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P::ModemLpcon>,
+    pub(crate) coex_lp_clock: oer_esp32s31_pac::modem_lpcon::CoexLpClock<P::ModemLpcon>,
+    pub(crate) modem_lpcon_power: oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P::ModemLpcon>,
     pub(crate) modem_lpcon_phy_tick:
         oer_esp32s31_pac::modem_lpcon::ModemLpconPhyTick<P::ModemLpcon>,
+    pub(crate) lp_aon_radio_clock: oer_esp32s31_pac::lp_aonclkrst::LpAonRadioClock<P::LpAon>,
     pub(crate) lp_aon_clkrst: oer_esp32s31_pac::lp_aonclkrst::LpAonClkrst<P::LpAon>,
     pub(crate) lp_periclkrst: oer_esp32s31_pac::lp_peri_clkrst::LpPericlkrst<P::LpPeri>,
     pub(crate) lp_tsens: oer_esp32s31_pac::tsens::LpTsens<P::Tsens>,
@@ -283,6 +288,7 @@ impl RadioPhyRegisters {
                 hp_sys_clkrst_radio: parts.hp_sys_clkrst_radio,
                 pmu_radio: parts.pmu_radio,
                 modem_syscon_radio: parts.modem_syscon_radio,
+                modem_syscon_clock_reset: parts.modem_syscon_clock_reset,
                 phy_agc_recovered_gaps: parts.phy_agc_recovered_gaps,
                 phy_bb_recovered_gaps: parts.phy_bb_recovered_gaps,
                 phy_brx_recovered_gaps: parts.phy_brx_recovered_gaps,
@@ -296,8 +302,11 @@ impl RadioPhyRegisters {
                 phy_fedata_wifi_recovered: parts.phy_fedata_wifi_recovered,
                 phy_i2c_command_ram: analog_bus.phy_i2c_command_ram,
                 phy_iq_estimator_oracle: parts.phy_iq_estimator_oracle,
-                modem_lpcon_shared_clock: parts.modem_lpcon_shared_clock,
+                bluetooth_lp_timer_clock: parts.bluetooth_lp_timer_clock,
+                coex_lp_clock: parts.coex_lp_clock,
+                modem_lpcon_power: parts.modem_lpcon_power,
                 modem_lpcon_phy_tick: parts.modem_lpcon_phy_tick,
+                lp_aon_radio_clock: parts.lp_aon_radio_clock,
                 lp_aon_clkrst: parts.lp_aon_clkrst,
                 lp_periclkrst: parts.lp_periclkrst,
                 lp_tsens: parts.lp_tsens,
@@ -338,6 +347,7 @@ impl RadioPhyRegisters {
     /// reads.
     pub const REGISTER_IMAGE_LEN: usize = oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio::<<ChipPlacement as RadioPlacement>::HpClock>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + oer_esp32s31_pac::pmu::PmuRadio::<<ChipPlacement as RadioPlacement>::Pmu>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_esp32s31_pac::modem_syscon::ModemSysconClockReset::<<ChipPlacement as RadioPlacement>::ModemSyscon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + oer_esp32s31_pac::modem_syscon::ModemSysconRadio::<<ChipPlacement as RadioPlacement>::ModemSyscon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + fe::PhyAgcOracleFe::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_bb::PhyAgcOracleWifiBb::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
@@ -362,9 +372,12 @@ impl RadioPhyRegisters {
             + wifi_mac::PhyFrequencyChannelOracleWifiMac::<<ChipPlacement as PhyPlacement>::WifiMac>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_bb::PhyFrequencyChannelOracleWifiBb::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + oer_esp32s31_pac::fe::PhyIqEstimatorOracle::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_esp32s31_pac::modem_lpcon::ModemLpconPower::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_esp32s31_pac::modem_lpcon::CoexLpClock::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + oer_esp32s31_pac::modem_lpcon::ModemLpconPhyTick::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + oer_esp32s31_pac::lp_aonclkrst::LpAonClkrst::<<ChipPlacement as RadioPlacement>::LpAon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_esp32s31_pac::lp_aonclkrst::LpAonRadioClock::<<ChipPlacement as RadioPlacement>::LpAon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + oer_esp32s31_pac::lp_peri_clkrst::LpPericlkrst::<<ChipPlacement as RadioPlacement>::LpPeri>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + oer_esp32s31_pac::tsens::LpTsens::<<ChipPlacement as RadioPlacement>::Tsens>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + oer_esp32s31_pac::fe::PhyMemory::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
@@ -398,6 +411,10 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
         image_word!(
             self.peripherals.pmu_radio,
             oer_esp32s31_pac::pmu::PmuRadio::<P::Pmu>
+        );
+        image_word!(
+            self.peripherals.modem_syscon_clock_reset,
+            oer_esp32s31_pac::modem_syscon::ModemSysconClockReset::<P::ModemSyscon>
         );
         image_word!(
             self.peripherals.modem_syscon_radio,
@@ -496,12 +513,24 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
             oer_esp32s31_pac::fe::PhyIqEstimatorOracle::<P::Fe>
         );
         image_word!(
-            self.peripherals.modem_lpcon_shared_clock,
-            oer_esp32s31_pac::modem_lpcon::ModemLpconSharedClock::<P::ModemLpcon>
+            self.peripherals.bluetooth_lp_timer_clock,
+            oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock::<P::ModemLpcon>
+        );
+        image_word!(
+            self.peripherals.coex_lp_clock,
+            oer_esp32s31_pac::modem_lpcon::CoexLpClock::<P::ModemLpcon>
+        );
+        image_word!(
+            self.peripherals.modem_lpcon_power,
+            oer_esp32s31_pac::modem_lpcon::ModemLpconPower::<P::ModemLpcon>
         );
         image_word!(
             self.peripherals.modem_lpcon_phy_tick,
             oer_esp32s31_pac::modem_lpcon::ModemLpconPhyTick::<P::ModemLpcon>
+        );
+        image_word!(
+            self.peripherals.lp_aon_radio_clock,
+            oer_esp32s31_pac::lp_aonclkrst::LpAonRadioClock::<P::LpAon>
         );
         image_word!(
             self.peripherals.lp_aon_clkrst,

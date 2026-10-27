@@ -43,7 +43,7 @@ fn state(s: &Session<'_>, tag: u32) -> [u32; 5] {
 fn clocks(s: &Session<'_>, tag: u32) {
     let m = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
     let c = s.sar.clocks.modem_lpcon_chip_clocks.read_clk_conf();
-    let l = s.sar.radio.modem_lpcon_shared_clock.read_lp_timer_conf();
+    let l = s.sar.radio.bluetooth_lp_timer_clock.read_lp_timer_conf();
     emit(
         tag + 2,
         u32::from(s.ble.timer.read_word_0078_opaque().control_25()),
@@ -63,7 +63,7 @@ fn clocks(s: &Session<'_>, tag: u32) {
         u32::from(
             s.sar
                 .radio
-                .modem_syscon_radio
+                .modem_syscon_clock_reset
                 .read_clk_conf()
                 .clk_ble_timer_en(),
         ),
@@ -282,7 +282,7 @@ pub(super) fn observe(s: &mut Session<'_>) {
 fn source_clocks(s: &mut Session<'_>) {
     s.sar
         .radio
-        .modem_lpcon_shared_clock
+        .bluetooth_lp_timer_clock
         .modify_lp_timer_conf(|w| {
             w.set_clk_lp_timer_sel_osc_slow(false)
                 .set_clk_lp_timer_sel_osc_fast(false)

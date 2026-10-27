@@ -90,7 +90,7 @@ pub(super) fn state(s: &Session<'_>, tag: u32) {
             .int_status_4(),
     );
     let c = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
-    let r = s.sar.radio.modem_syscon_radio.read_modem_rst_conf();
+    let r = s.sar.radio.modem_syscon_clock_reset.read_modem_rst_conf();
     emit(
         tag + 4,
         u32::from(c.modem_apb_clk_en()),
@@ -406,8 +406,8 @@ fn latch_state(s: &Session<'_>, tag: u32) {
         u32::from(c.config_24()),
         u32::from(c.compare_0_enable()) + 2 * u32::from(c.compare_1_enable()),
     );
-    let g = s.sar.radio.modem_syscon_radio.read_clk_conf1();
-    let r = s.sar.radio.modem_syscon_radio.read_modem_rst_conf();
+    let g = s.sar.radio.modem_syscon_clock_reset.read_clk_conf1();
+    let r = s.sar.radio.modem_syscon_clock_reset.read_modem_rst_conf();
     emit(
         tag + 2,
         u32::from(g.clk_bt_apb_en()),

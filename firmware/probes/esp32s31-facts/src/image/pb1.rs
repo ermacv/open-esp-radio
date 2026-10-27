@@ -80,7 +80,7 @@ fn init(s: &mut Session<'_>) -> bool {
     ble::init_lp(s);
     s.sar
         .radio
-        .modem_lpcon_shared_clock
+        .bluetooth_lp_timer_clock
         .modify_lp_timer_conf(|w| {
             w.set_clk_lp_timer_div_num(Bits::constant::<399>());
         });
@@ -119,7 +119,7 @@ fn init(s: &mut Session<'_>) -> bool {
         cpu.reg_cpu_clk_div_num().into(),
         cpu.reg_cpu_clk_div_numerator().get(),
     );
-    let conf = s.sar.radio.modem_lpcon_shared_clock.read_lp_timer_conf();
+    let conf = s.sar.radio.bluetooth_lp_timer_clock.read_lp_timer_conf();
     emit(
         0x240f1,
         conf.clk_lp_timer_div_num().get(),

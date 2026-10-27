@@ -82,14 +82,20 @@ impl SharedRadioRegisters {
     }
 
     pub fn coex_timers_mut(&mut self) -> CoexTimerBankRegisters<'_> {
-        CoexTimerBankRegisters::new(&mut self.coexistence.coex_hw_timer)
+        CoexTimerBankRegisters::new(
+            &mut self.coexistence.coex_policy_timers,
+            &mut self.coexistence.phy_grant_protect_timer,
+        )
     }
     pub fn radio_phy_and_coex_timers_mut(
         &mut self,
     ) -> (&mut RadioPhyRegisters, CoexTimerBankRegisters<'_>) {
         (
             &mut self.radio_phy,
-            CoexTimerBankRegisters::new(&mut self.coexistence.coex_hw_timer),
+            CoexTimerBankRegisters::new(
+                &mut self.coexistence.coex_policy_timers,
+                &mut self.coexistence.phy_grant_protect_timer,
+            ),
         )
     }
     pub fn configure_coex_timer(

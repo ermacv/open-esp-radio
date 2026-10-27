@@ -226,52 +226,94 @@ pub(in crate::image) fn sleep_other(s: &mut Session<'_>) {
 fn reset(s: &mut Session<'_>, tag: u32) {
     use pac::modem_syscon::modem_rst_conf as r;
     // SOURCE: production reset_bluetooth_controller_domains, unchanged order.
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac(r::RstBtmac::Asserted);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac(r::RstBtmac::Asserted);
+        });
     state(s, tag);
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac(r::RstBtmac::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac(r::RstBtmac::Released);
+        });
     state(s, tag + 8);
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac_apb(r::RstBtmacApb::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac_apb(r::RstBtmacApb::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac_apb(r::RstBtmacApb::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_btmac_apb(r::RstBtmacApb::Released);
+        });
     state(s, tag + 16);
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_ble_timer(r::RstBleTimer::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_ble_timer(r::RstBleTimer::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_ble_timer(r::RstBleTimer::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_ble_timer(r::RstBleTimer::Released);
+        });
     state(s, tag + 24);
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_ecb(r::RstModemEcb::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_ccm(r::RstModemCcm::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_bah(r::RstModemBah::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_sec(r::RstModemSec::Asserted);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_ecb(r::RstModemEcb::Released);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_ccm(r::RstModemCcm::Released);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_bah(r::RstModemBah::Released);
-    });
-    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_sec(r::RstModemSec::Released);
-    });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_modem_ecb(r::RstModemEcb::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_modem_ccm(r::RstModemCcm::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_modem_bah(r::RstModemBah::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_modem_sec(r::RstModemSec::Asserted);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_modem_ecb(r::RstModemEcb::Released);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_modem_ccm(r::RstModemCcm::Released);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_modem_bah(r::RstModemBah::Released);
+        });
+    s.sar
+        .radio
+        .modem_syscon_clock_reset
+        .modify_modem_rst_conf(|w| {
+            w.set_rst_modem_sec(r::RstModemSec::Released);
+        });
     oer_riscv::fence();
     state(s, tag + 32);
 }
@@ -337,18 +379,18 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
     state(s, 0x9a40);
     // Digital clock release/restoration diagnostic. No gated MAC reads and
     // no START, publication or enable command accompany restoration.
-    let saved0 = s.sar.radio.modem_syscon_radio.read_clk_conf();
-    let saved1 = s.sar.radio.modem_syscon_radio.read_clk_conf1();
+    let saved0 = s.sar.radio.modem_syscon_clock_reset.read_clk_conf();
+    let saved1 = s.sar.radio.modem_syscon_clock_reset.read_clk_conf1();
     s.sar
         .radio
-        .modem_lpcon_shared_clock
+        .bluetooth_lp_timer_clock
         .modify_lp_timer_conf(|w| {
             w.set_clk_lp_timer_sel_osc_slow(false)
                 .set_clk_lp_timer_sel_osc_fast(false)
                 .set_clk_lp_timer_sel_xtal32k(false)
                 .set_clk_lp_timer_sel_xtal(false);
         });
-    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
         w.set_clk_ble_timer_en(pac::modem_syscon::clk_conf::ClkBleTimerEn::Disabled);
     });
     s.sar
@@ -358,13 +400,13 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
     // SOURCE: production Bluetooth module clock-device release actions; this
     // isolated image has no other radio client. Observe the matrix only until
     // its APB clock is restored. No RF front-end gate is touched.
-    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
         w.set_clk_etm_en(pac::modem_syscon::clk_conf::ClkEtmEn::Disabled)
             .set_clk_modem_sec_apb_en(pac::modem_syscon::clk_conf::ClkModemSecApbEn::Disabled)
             .set_clk_modem_sec_ecb_en(pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Disabled)
             .set_clk_modem_sec_ccm_en(pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Disabled);
     });
-    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
         w.set_clk_btmac_en(pac::modem_syscon::clk_conf1::ClkBtmacEn::Disabled)
             .set_clk_bt_apb_en(pac::modem_syscon::clk_conf1::ClkBtApbEn::Disabled)
             .set_clk_btbb_en(pac::modem_syscon::clk_conf1::ClkBtbbEn::Disabled)
@@ -389,7 +431,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
             .int_status_4(),
     );
     s.sar.radio.hp_sys_clkrst_radio.open_modem_pll_source_gate();
-    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
         w.set_clk_btmac_en(if saved1.clk_btmac_en() {
             pac::modem_syscon::clk_conf1::ClkBtmacEn::Enabled
         } else {
@@ -411,7 +453,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
             pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Disabled
         });
     });
-    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
         w.set_clk_etm_en(if saved0.clk_etm_en() {
             pac::modem_syscon::clk_conf::ClkEtmEn::Enabled
         } else {
@@ -433,7 +475,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
             pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Disabled
         });
     });
-    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
         w.set_clk_ble_timer_en(pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled);
     });
     s.sar
@@ -442,7 +484,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
         .set_modem_pwr_lp_timer_clock(true);
     s.sar
         .radio
-        .modem_lpcon_shared_clock
+        .bluetooth_lp_timer_clock
         .modify_lp_timer_conf(|w| {
             w.set_clk_lp_timer_sel_xtal(true);
         });
