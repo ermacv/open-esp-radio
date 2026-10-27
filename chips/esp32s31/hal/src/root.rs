@@ -46,6 +46,7 @@ use crate::{
         SystemTimer,
         core_control::{CoreControlRegisters, Uart0ClockRegisters},
         system_timer::{Monotonic, MonotonicStuck, open_clock},
+        timg0_alarm::Timg0AlarmParts,
     },
     power::{ChipClocks, PlatformClockBackend, PsramMpll},
     usb_serial_jtag::{self, ConsoleRegisters},
@@ -232,7 +233,7 @@ impl Root {
             analog_bus,
             debug,
             chip_clocks,
-            timer_group0: _,
+            timer_group0,
         } = self.partitions;
         #[cfg(target_arch = "riscv32")]
         ClockRegisters::new(
@@ -256,6 +257,7 @@ impl Root {
         Ok(Runtime {
             watchdogs: Watchdogs::new(WatchdogRegisters::new(watchdog)),
             system_timer: SystemTimer::new(system_timer),
+            timg0_alarm: Timg0AlarmParts::new(timer_group0),
             software_interrupts: SoftwareInterrupts::new(
                 software_interrupt_0,
                 software_interrupt_1,
@@ -327,6 +329,8 @@ pub struct Runtime {
     pub watchdogs: Watchdogs,
     /// The system timer's comparators, counter and alarm parts.
     pub system_timer: SystemTimer,
+    /// TIMG0 T0 program and permanent IRQ owners, adopted without writes.
+    pub timg0_alarm: Timg0AlarmParts,
     /// The four software interrupt lines and their interrupt parts.
     pub software_interrupts: SoftwareInterrupts,
     /// Hart 0's interrupt controller and hart 1's bank.

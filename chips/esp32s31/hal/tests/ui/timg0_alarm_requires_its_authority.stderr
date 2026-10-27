@@ -1,0 +1,23 @@
+error[E0277]: the trait bound `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>>: EventAuthority<Timg0AlarmInterrupt<oer_mmio::Fixed<542638080>>>` is not satisfied
+  --> tests/ui/timg0_alarm_requires_its_authority.rs:12:56
+   |
+12 |     let _ = timer.arm_after(Duration::from_micros(40), _other); // ui-error: E0277
+   |                   ---------                            ^^^^^^ unsatisfied trait bound
+   |                   |
+   |                   required by a bound introduced by this call
+   |
+help: the trait `EventAuthority<Timg0AlarmInterrupt<oer_mmio::Fixed<542638080>>>` is not implemented for `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>>`
+      but trait `EventAuthority<SystimerAlarm0<oer_mmio::Fixed<540643328>>>` is implemented for it
+  --> $WORKSPACE/portable/interrupt-table/src/router.rs
+   |
+   | impl<P: InterruptSources> EventAuthority<P> for Silent<P> {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for that trait implementation, expected `SystimerAlarm0<oer_mmio::Fixed<540643328>>`, found `Timg0AlarmInterrupt<oer_mmio::Fixed<542638080>>`
+note: required by a bound in `Timg0AlarmProgram::<P>::arm_after`
+  --> src/platform/timg0_alarm.rs
+   |
+   |     pub fn arm_after(
+   |            --------- required by a bound in this associated function
+...
+   |         _authority: &impl EventAuthority<Timg0AlarmInterrupt<P>>,
+   |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Timg0AlarmProgram::<P>::arm_after`

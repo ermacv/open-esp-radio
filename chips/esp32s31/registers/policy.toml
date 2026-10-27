@@ -161,6 +161,7 @@ registers = ["WDTCONFIG0", "WDTCONFIG1", "WDTCONFIG2", "WDTFEED", "WDTWPROTECT"]
 name = "HpSysClkrstTimg0"
 instance = "HP_SYS_CLKRST"
 registers = ["TIMERGRP0_CTRL0"]
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
 
 [[partitions.parts]]
 name = "HpSysClkrstTimg1"
@@ -180,21 +181,22 @@ registers = ["SWD_CONFIG", "SWD_WPROTECT"]
 [[partitions]]
 name = "TimerGroup0Peripherals"
 member = "timer_group0"
-description = "Timer group zero's T0 counter and alarm, and the group's interrupt bank for the PHY timer consumer. Each ENA/RAW/ST word has one bank owner; only T0's CLR strobe is claimed. WatchdogPeripherals retains the group clock/reset word."
+description = "Timer group zero's movable T0 program owner (counter, alarm, load and whole ENA word) and permanent interrupt owner (whole RAW/ST words and only T0 CLR). Each word has one owner. WatchdogPeripherals retains the group clock/reset word."
 
 [[partitions.parts]]
 name = "Timg0Timer0"
 instance = "TIMG0"
-registers = ["T0CONFIG", "T0LO", "T0HI", "T0UPDATE", "T0ALARMLO", "T0ALARMHI", "T0LOADLO", "T0LOADHI", "T0LOAD"]
+registers = ["T0CONFIG", "T0LO", "T0HI", "T0UPDATE", "T0ALARMLO", "T0ALARMHI", "T0LOADLO", "T0LOADHI", "T0LOAD", "INT_ENA_TIMERS"]
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW7_S31_TIMG0_20261026"]
 
 [[partitions.parts]]
 name = "Timg0InterruptBank"
 instance = "TIMG0"
-registers = ["INT_ENA_TIMERS", "INT_RAW_TIMERS", "INT_ST_TIMERS"]
+registers = ["INT_RAW_TIMERS", "INT_ST_TIMERS"]
 triggers = [{ register = "INT_CLR_TIMERS", fields = ["T0_INT_CLR"] }]
 interrupt = "TIMERGRP0_T0"
 irq-side = true
-description = "The group's whole interrupt enable and status words and T0's acknowledgement strobe. T0 is the only interrupt consumer; the watchdog uses reset actions, and T1/WDT CLR strobes remain unclaimed."
+description = "The group's whole raw/masked status words and T0's acknowledgement strobe; the program owner holds the enable word. T0 is the only interrupt consumer; the watchdog uses reset actions, and T1/WDT CLR strobes remain unclaimed."
 sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW7_S31_TIMG0_20261026"]
 
 [[partitions]]

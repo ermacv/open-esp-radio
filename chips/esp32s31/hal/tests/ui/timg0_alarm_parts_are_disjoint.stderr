@@ -1,0 +1,23 @@
+error[E0599]: no method named `acknowledge` found for mutable reference `&mut Timg0AlarmProgram<oer_mmio::Fixed<542638080>>` in the current scope
+ --> tests/ui/timg0_alarm_parts_are_disjoint.rs:6:21
+  |
+6 |     let _ = program.acknowledge(); // ui-error: E0599
+  |                     ^^^^^^^^^^^ method not found in `&mut Timg0AlarmProgram<oer_mmio::Fixed<542638080>>`
+
+error[E0599]: no method named `disarm` found for mutable reference `&mut Timg0AlarmInterrupt<oer_mmio::Fixed<542638080>>` in the current scope
+  --> tests/ui/timg0_alarm_parts_are_disjoint.rs:13:15
+   |
+13 |     interrupt.disarm(); // ui-error: E0599
+   |               ^^^^^^ method not found in `&mut Timg0AlarmInterrupt<oer_mmio::Fixed<542638080>>`
+
+error[E0382]: borrow of moved value: `program`
+  --> tests/ui/timg0_alarm_parts_are_disjoint.rs:27:5
+   |
+22 | pub fn actor_to_bundle(mut program: Timg0AlarmProgram) -> Bundle {
+   |                        ----------- move occurs because `program` has type `Timg0AlarmProgram<oer_mmio::Fixed<542638080>>`, which does not implement the `Copy` trait
+...
+25 |     let bundle = Bundle { program };
+   |                           ------- value moved here
+26 |     #[cfg(all())]
+27 |     program.disarm(); // ui-error: E0382
+   |     ^^^^^^^ value borrowed here after move

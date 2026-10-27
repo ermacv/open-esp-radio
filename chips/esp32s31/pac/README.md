@@ -36,9 +36,10 @@ phase-specific owners. The PAC holds no boot or radio sequencing.
 
 The USB endpoint owns its raw interrupt observation alongside its enables and
 masked status. The system timer owner holds RAW/ST observation alongside the
-comparator configuration. Timer group zero's T0 counter and alarm are separate
-from its interrupt-bank owner. The bank owns each entire ENA/RAW/ST word and
-only T0's WT CLR field; T1/WDT CLR fields are unclaimed. There are no other
+comparator configuration. Timer group zero's movable program part owns T0
+counter/configuration, alarm, load and the entire ENA word. Its separate
+permanent interrupt part owns the entire RAW/ST words and only T0's WT CLR
+field; T1/WDT CLR fields are unclaimed. There are no other
 TIMG0 interrupt consumers: the watchdog uses reset actions. Plain and status
 words have one owner; the schema does not split their fields.
 
@@ -46,8 +47,8 @@ The watchdog partition owns each group's clock/reset word. Runtime startup
 selects XTAL and enables T0 through the watchdog owner's narrow operation,
 which changes only T0's source and gate. MWDT0 retains the clock/reset owner inside
 `StoppedMainWatchdog`, so T0 cannot reset the group and restore flash-boot
-watchdog enable. The HAL discards the T0 counter and IRQ partition without
-exposing a timer API.
+watchdog enable. The HAL exposes the two disjoint parts through
+`Runtime::timg0_alarm`, without arming or acknowledging during adoption.
 
 `tests/` exercises the generated layouts over host memory; the renderer's
 own tests prove the accessors' behaviour and what they refuse.

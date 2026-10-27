@@ -13,8 +13,42 @@ The watchdog owners retain both timer groups' clock/reset words. Runtime
 startup selects XTAL and enables TIMG0 T0 through a private watchdog operation
 that changes only `T0_SRC_SEL/T0_CLK_EN`; it preserves group reset, APB, T1 and
 watchdog clocks. MWDT0 keeps that authority inside `StoppedMainWatchdog`.
-The separate T0 counter and interrupt-bank parts have no group-reset access;
-the HAL exposes no T0 timer API.
+`Runtime::timg0_alarm` adopts two disjoint owners without writes:
+`Timg0AlarmProgram` owns T0 configuration, alarm, load and the whole ENA word;
+`Timg0AlarmInterrupt` owns the whole RAW/ST words and only T0 CLR. Both lack
+group-reset access. The program owner can travel in the actor's transaction
+bundle: the actor can arm before depositing it, and the handler can rearm
+while holding it.
+Only the interrupt owner is bound permanently to the handler. They share no
+software state or lock; each transition takes its own owner's `&mut`.
+
+`arm_after` requires the IRQ owner's router `Bound` or `Silent` proof and a
+positive relative microsecond interval within generated counter geometry.
+It stops and masks T0, reloads zero, starts an increasing XTAL/divider40 one-shot
+and unmasks delivery. It does not acknowledge an existing cause. `disarm`
+only stops and masks; RAW remains for the handler's IRQ owner to observe and
+acknowledge separately. The IRQ owner's `acknowledge` samples RAW/ST and
+strobes only T0 CLR, leaving sibling causes, programming and ENA unchanged.
+Zero and out-of-range input return `InvalidDelay` before MMIO; equality against
+a freshly reloaded zero is not qualified by the bounded facts.
+
+SOURCE for stop/load-zero/T0LOAD-strobe/start: ESP-IDF 4d59230d,
+`components/esp_hal_timg/esp32s31/include/hal/timer_ll.h:236-239` (counter),
+`:293-297` (reload value), `:319-322` (software reload). This sequence is
+**unverified on S31**; HW7 run03's past-target arming does not qualify it.
+`HW7_S31_TIMG0_20261026` in the register evidence supports one-shot expiry,
+RAW retention under stop/mask, ENA redelivery and CLR at ENA=0/1, without a
+clear/arrival collision or exact IRQ-latency guarantee.
+
+The host fixture selects `Exempt(ExecutorLevel)` at P2 with a lower line ID
+than FROM_CPU2. SOURCE: `chips/espressif/platform/family.toml` [interrupts],
+RISC-V CLIC specification 3f8ee744, "Specifying Interrupt Priority";
+ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/clic_reg.h` supplies the
+CLIC geometry. SOURCE for priority/ID arbitration:
+[ESP32-C5 TRM v1.1](https://www.espressif.com/sites/default/files/documentation/esp32-c5_technical_reference_manual_en.pdf),
+section 2.8.2.5, p.86. Applying that family contract's highest-ID tie-break at
+equal level is **unverified on S31 (probe P3)**. No image binds or arms T0;
+PHY uses the existing P2 executor.
 
 ## Platform clocks
 
