@@ -10,7 +10,7 @@ use oer_esp32s31_pac::{cache::CacheBoot, instances};
 
 /// The caches a sync command acts on (`SYNC_MAP`).
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:160-166`
 /// (data cache BIT(4), both instruction caches BIT(0) | BIT(1)) and
 /// `components/soc/esp32s31/register/soc/cache_reg.h:1630-1640`.
@@ -44,7 +44,7 @@ impl CacheRegisters {
 /// 0, instruction cache 0's autoload, preload and freeze, the sync and lock
 /// engines' idle flags.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/register/soc/cache_reg.h:16-22`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/register/soc/cache_reg.h:16-22`
 /// (`L1_ICACHE_SHUT_IBUS0`), `:805-829` (`L1_ICACHE0_FREEZE_EN`, `_MODE`,
 /// `_DONE`), `:1496-1520` (`LOCK_DONE`), `:1574-1620` (`SYNC_DONE`),
 /// `:1672-1684` (`L1_ICACHE0_PRELOAD_DONE`), `:2049-2061`
@@ -110,7 +110,7 @@ impl<P: Placement> FetchSuspendRegisters for CacheRegisters<P> {
 /// The sync engine: the map, the line-aligned range, one command alone and
 /// its completion.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/register/soc/cache_reg.h:1574-1660`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/register/soc/cache_reg.h:1574-1660`
 /// (`SYNC_CTRL` commands self-clear, `SYNC_DONE`, `SYNC_MAP`, `SYNC_ADDR`,
 /// `SYNC_SIZE`); esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cache.rs:13-61`.
 impl<P: Placement> CacheSyncRegisters for CacheRegisters<P> {

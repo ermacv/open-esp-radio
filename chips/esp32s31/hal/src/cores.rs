@@ -213,7 +213,7 @@ fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placeme
 /// boot address is cleared before the reset pulse, so a running hart 1
 /// that the pulse sends into the ROM finds no entry of this image.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_system/port/soc/esp32s31/system_internal.c:61-100`
 /// (`esp_restart_noos_inner`: clear the APP CPU boot address before
 /// resetting the cores, with the APP CPU stalled on the core-0 path).

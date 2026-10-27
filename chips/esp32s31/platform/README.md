@@ -15,7 +15,7 @@ The linker scripts are in `chips/esp32s31/layout/linker` and
 [the board's README](../board/README.md).
 
 `chip.toml` `[interrupts] harts` is the sole HP-hart cardinality, with
-`boot-hart` naming primary initialization. SOURCE: ESP-IDF 4d59230d
+`boot-hart` naming primary initialization. SOURCE: ESP-IDF 4d80c1b2
 `soc/esp32s31/include/soc/soc_caps.h`, `SOC_CPU_CORES_NUM`.
 The facts derive `properties.cores` for host consumers; an explicitly supplied
 counter must agree with the list. Guards cover every listed hart exactly once.

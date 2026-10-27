@@ -9,12 +9,12 @@
 //! number, loads `0x20701030` (`LP_AON_CLKRST.HPCORE0_RESET_CAUSE`) for core 0
 //! and `0x20701034` (`HPCORE1_RESET_CAUSE`) for any other value, and returns
 //! bits 6:1 of the word (`srli 1`, `andi 63`); no other bit reaches the result.
-//! ESP-IDF 4d59230d `components/soc/esp32s31/register/soc/lp_clkrst_reg.h`
+//! ESP-IDF 4d80c1b2 `components/soc/esp32s31/register/soc/lp_clkrst_reg.h`
 //! places the same two words at `DR_REG_LP_AONCLKRST_BASE` + 0x30 and + 0x34.
 
 /// A reset-cause code, as the cause field holds it.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/soc/esp32s31/include/soc/reset_reasons.h:29-51`
 /// (`soc_reset_reason_t`). The levels in the names follow its terminology
 /// (lines 9-19): a CPU reset resets one core only; a core reset the digital

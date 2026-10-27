@@ -1,6 +1,6 @@
 //! The console's parts over host memory from the block's base.
 //!
-//! Word offsets are ESP-IDF 4d59230d `usb_serial_jtag_reg.h`'s (`EP1` 0x0,
+//! Word offsets are ESP-IDF 4d80c1b2 `usb_serial_jtag_reg.h`'s (`EP1` 0x0,
 //! `EP1_CONF` 0x4, `INT_ST` 0xc, `INT_ENA` 0x10, `INT_CLR` 0x14, `CONF0`
 //! 0x18).
 
@@ -35,7 +35,7 @@ fn the_console_parts_read_what_the_block_shows() {
 #[test]
 fn the_handler_acknowledges_exactly_the_events_it_sampled() {
     let (mut words, mut pads) = (memory(0), memory(0));
-    // SOURCE: ESP-IDF 4d59230d `usb_serial_jtag_reg.h`: `SERIAL_IN_EMPTY`
+    // SOURCE: ESP-IDF 4d80c1b2 `usb_serial_jtag_reg.h`: `SERIAL_IN_EMPTY`
     // bit 3, `SERIAL_OUT_RECV_PKT` bit 2; every other status bit set too.
     words[0xc / 4] = !(1 << 2);
     let registers =
@@ -74,7 +74,7 @@ fn disconnecting_drops_the_pull_ups_and_the_pads() {
         ConsoleRegisters::host(&mut words, &mut pads).expect("host memory holds the blocks");
     let (_endpoint, _interrupt, usb_pads) = parts(registers);
     usb_pads.disconnect();
-    // SOURCE: ESP-IDF 4d59230d `usb_serial_jtag_reg.h` (`CONF0`):
+    // SOURCE: ESP-IDF 4d80c1b2 `usb_serial_jtag_reg.h` (`CONF0`):
     // `PAD_PULL_OVERRIDE` bit 8, `DP_PULLUP` bit 9, `DM_PULLUP` bit 11,
     // `USB_PAD_ENABLE` bit 14 (lines 541-625).
     assert_eq!(pads[0x18 / 4], !((1 << 9) | (1 << 11) | (1 << 14)));

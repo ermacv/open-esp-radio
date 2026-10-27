@@ -180,7 +180,7 @@ impl ResetCauses {
 /// The shortest time between two reads of the generator's output, as `C`
 /// measures it.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/esp_hw_support/hw_random.c:43,89`: consecutive
+/// SOURCE: ESP-IDF 4d80c1b2 `components/esp_hw_support/hw_random.c:43,89`: consecutive
 /// reads are at least 16 APB clock cycles apart (`apb_cycle_wait_num`).
 /// That is under one microsecond at every APB frequency of at least
 /// 16 MHz; two microseconds of a clock counting whole microseconds
@@ -255,7 +255,7 @@ impl<C: Clock, P: Placement, Q: Placement> Entropy<C, P, Q> {
 
     /// The generator's clock, sampling and health-test state.
     ///
-    /// SOURCE: ESP-IDF 4d59230d
+    /// SOURCE: ESP-IDF 4d80c1b2
     /// `components/hal/esp32s31/include/hal/rng_ll.h:163-178`
     /// (`rng_ll_enable`: clocks, reset, sampling and health-test configuration).
     pub fn status(&self) -> EntropyStatus {

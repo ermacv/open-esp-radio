@@ -19,7 +19,7 @@ mod tests;
 
 /// The system timer's ticks per microsecond: it counts at 16 MHz.
 ///
-/// SOURCE: ESP-IDF 4d59230d `esp_hw_support/port/esp32s31/systimer.c`
+/// SOURCE: ESP-IDF 4d80c1b2 `esp_hw_support/port/esp32s31/systimer.c`
 /// (`systimer_ticks_to_us`: `ticks / 16`).
 pub const TICKS_PER_MICROSECOND: u64 = 16;
 
@@ -143,7 +143,7 @@ impl SystemTimer {
 impl<P: Placement> SystimerCounter<P> {
     /// Latch the counter's current value.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `systimer_ll.h:120`
+    /// SOURCE: ESP-IDF 4d80c1b2 `systimer_ll.h:120`
     /// (`systimer_ll_counter_snapshot`).
     #[inline(always)]
     pub fn update(&self) {
@@ -152,7 +152,7 @@ impl<P: Placement> SystimerCounter<P> {
 
     /// Whether the latched words hold the value of the last update.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `systimer_ll.h:125`
+    /// SOURCE: ESP-IDF 4d80c1b2 `systimer_ll.h:125`
     /// (`systimer_ll_is_counter_value_valid`).
     #[inline(always)]
     pub fn valid(&self) -> bool {
@@ -178,7 +178,7 @@ impl<P: Placement> SystimerCounter<P> {
 /// reset).
 ///
 /// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/mod.rs:77-85` (the
-/// S31 ROM leaves both gates closed) and ESP-IDF 4d59230d
+/// S31 ROM leaves both gates closed) and ESP-IDF 4d80c1b2
 /// `components/esp_hal_systimer/esp32s31/include/hal/systimer_ll.h:24-89`
 /// (`systimer_ll_enable_bus_clock`, `systimer_ll_reset_register`,
 /// `systimer_ll_enable_clock`).
@@ -268,7 +268,7 @@ impl<P: Placement> SystimerComparators<P> {
     /// load, then enable it. `None` only disables the comparator. The
     /// target's bits above the counter's 52 are dropped.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `esp_hal_systimer/systimer_hal.c`
+    /// SOURCE: ESP-IDF 4d80c1b2 `esp_hal_systimer/systimer_hal.c`
     /// (`systimer_hal_set_alarm_target`).
     pub fn program(&mut self, comparator: Comparator, ticks: Option<u64>) {
         self.set_enabled(comparator, false);

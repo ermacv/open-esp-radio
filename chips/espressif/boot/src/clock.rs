@@ -20,7 +20,7 @@
 //! When the root and the dividers already read as the profile's, nothing is
 //! written.
 //!
-//! SOURCE: ESP-IDF 4d59230d
+//! SOURCE: ESP-IDF 4d80c1b2
 //! `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:175-195,422-478,599-605`
 //! (CPLL power, dividers, calibration and the bus update);
 //! `components/esp_hw_support/port/esp32s31/rtc_clk.c:133-148,404-432`

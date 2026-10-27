@@ -37,5 +37,10 @@ sw-coex = []
 cc = "=1.4.3"
 oer-tool-pins = { path = "../../pins" }
 
+[dev-dependencies]
+cc = "=1.4.3"
+oer-tool-pins = { path = "../../pins" }
+tempfile = "=3.27.0"
+
 [lints]
 workspace = true

@@ -2025,13 +2025,13 @@ description = "SPI LDO 1.8 V multiplier"
 name = "ADC1_WEIGHT_BIT16"
 bits = "26:17"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 16 weight fragment."
 
 [[registers.fields]]
 name = "ADC1_WEIGHT_BIT15"
 bits = "31:27"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 15 weight fragment."
 
 [[registers]]
 name = "RD_SYS_PART1_DATA5"
@@ -2043,31 +2043,31 @@ reset = { value = 0x0 }
 name = "ADC1_WEIGHT_BIT15_1"
 bits = "3:0"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 15 weight fragment."
 
 [[registers.fields]]
 name = "ADC1_WEIGHT_BIT14"
 bits = "11:4"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 14 weight fragment."
 
 [[registers.fields]]
 name = "ADC1_WEIGHT_BIT13"
 bits = "19:12"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 13 weight fragment."
 
 [[registers.fields]]
 name = "ADC1_WEIGHT_BIT12"
 bits = "27:20"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 12 weight fragment."
 
 [[registers.fields]]
 name = "ADC1_WEIGHT_BIT11"
 bits = "31:28"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 11 weight fragment."
 
 [[registers]]
 name = "RD_SYS_PART1_DATA6"
@@ -2079,31 +2079,31 @@ reset = { value = 0x0 }
 name = "ADC1_WEIGHT_BIT11_1"
 bits = "1:0"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 11 weight fragment."
 
 [[registers.fields]]
 name = "ADC1_WEIGHT_BIT10"
 bits = "6:2"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC1 bit 10 weight fragment."
 
 [[registers.fields]]
 name = "ADC2_WEIGHT_BIT16"
 bits = "16:7"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC2 bit 16 weight fragment."
 
 [[registers.fields]]
 name = "ADC2_WEIGHT_BIT15"
 bits = "25:17"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC2 bit 15 weight fragment."
 
 [[registers.fields]]
 name = "ADC2_WEIGHT_BIT14"
 bits = "31:26"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC2 bit 14 weight fragment."
 
 [[registers]]
 name = "RD_SYS_PART1_DATA7"
@@ -2117,31 +2117,31 @@ reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "ADC2_WEIGHT_BIT14_1"
 bits = "1:0"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC2 bit 14 weight fragment."
 
 [[registers.fields]]
 name = "ADC2_WEIGHT_BIT13"
 bits = "9:2"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC2 bit 13 weight fragment."
 
 [[registers.fields]]
 name = "ADC2_WEIGHT_BIT12"
 bits = "17:10"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC2 bit 12 weight fragment."
 
 [[registers.fields]]
 name = "ADC2_WEIGHT_BIT11"
 bits = "23:18"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC2 bit 11 weight fragment."
 
 [[registers.fields]]
 name = "ADC2_WEIGHT_BIT10"
 bits = "28:24"
 class = "read-only"
-description = "ADC calibration weight fragment from the eFuse read-back word."
+description = "ADC2 bit 10 weight fragment."
 
 [[registers]]
 name = "RD_USR_DATA0"

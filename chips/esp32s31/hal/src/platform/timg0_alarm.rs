@@ -8,7 +8,7 @@
 //! `Exempt(ExecutorLevel)` and a lower line ID than FROM_CPU2. Its arbitration
 //! interpretation follows the family CLIC contract:
 //! SOURCE: chips/espressif/platform/family.toml [interrupts], RISC-V CLIC
-//! specification 3f8ee744, "Specifying Interrupt Priority"; ESP-IDF 4d59230d
+//! specification 3f8ee744, "Specifying Interrupt Priority"; ESP-IDF 4d80c1b2
 //! components/soc/esp32s31/include/soc/clic_reg.h (NLBITS/INT_INFO geometry).
 //! SOURCE for same-level priority/ID arbitration: ESP32-C5 TRM v1.1,
 //! documentation/esp32-c5_technical_reference_manual_en.pdf, section 2.8.2.5,
@@ -75,7 +75,7 @@ pub struct Timg0AlarmProgram<P: Placement = TimerPlacement>(timg::Timg0Timer0<P>
 pub struct Timg0AlarmInterrupt<P: Placement = TimerPlacement>(timg::Timg0InterruptBank<P>);
 
 impl<P: Placement> InterruptSource for Timg0AlarmInterrupt<P> {
-    // SOURCE: generated TIMERGRP0_T0/source25, ESP-IDF 4d59230d interrupt
+    // SOURCE: generated TIMERGRP0_T0/source25, ESP-IDF 4d80c1b2 interrupt
     // facts and HW7_S31_TIMG0_20261026 in the register model.
     const SOURCE: u16 = <timg::Timg0InterruptBank<P> as InterruptSource>::SOURCE;
 }
@@ -87,7 +87,7 @@ impl<P: Placement> Timg0AlarmProgram<P> {
     /// The actor can arm before depositing the bundle; the handler can rearm
     /// after acknowledging its event, without lending its permanent IRQ owner.
     ///
-    /// SOURCE: ESP-IDF 4d59230d
+    /// SOURCE: ESP-IDF 4d80c1b2
     /// components/esp_hal_timg/esp32s31/include/hal/timer_ll.h:293-321
     /// (reload value and software reload), :236-239 (counter enable), :279-283
     /// (alarm value). SOURCE: HW23_S31_TIMG0_RELOAD_20261027 confirms the
@@ -208,7 +208,7 @@ impl<P: Placement> ProgramRegisters for Timg0AlarmProgram<P> {
         self.0.modify_t0loadhi(|w| {
             w.set_t_load_hi(Bits::constant::<0>());
         });
-        // SOURCE: ESP-IDF 4d59230d components/esp_hal_timg/esp32s31/include/
+        // SOURCE: ESP-IDF 4d80c1b2 components/esp_hal_timg/esp32s31/include/
         // hal/timer_ll.h:293-321 (set_reload_value / trigger_soft_reload).
         // SOURCE: HW23_S31_TIMG0_RELOAD_20261027 observes both counter halves
         // reload to zero and 10/100/1000-us expiry after this sequence on S31.

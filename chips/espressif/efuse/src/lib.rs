@@ -36,7 +36,7 @@ pub type MacAddress = [u8; 6];
 
 /// The factory MAC fields of eFuse block 1, as the chip PAC reads them.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/soc/esp32s31/register/soc/efuse_reg.h:1239-1268`:
 /// `RD_MAC_SYS0` bits 31:0 are the low 32 bits of the MAC (`MAC_0`),
 /// `RD_MAC_SYS1` bits 15:0 its high 16 bits (`MAC_1`) and bits 31:16 the
@@ -98,7 +98,7 @@ impl Interface {
 /// octet gains the U/L bit (0x02); when that bit is already set, bit 0x04 of
 /// the first octet flips instead. The other five octets are unchanged.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/esp_hw_support/mac_addr.c:303-321`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/esp_hw_support/mac_addr.c:303-321`
 /// (`esp_derive_local_mac`), which esp-hal 1f646c5
 /// `esp-hal/src/efuse/mod.rs:468-480` reproduces for the access point.
 pub const fn locally_administered(universal: MacAddress) -> MacAddress {

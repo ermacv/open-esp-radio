@@ -23,7 +23,7 @@ use oer_esp32s31_pac::{
 static RUNTIME_CPU_HZ: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 /// The chip's supported crystal, used by the clock owner's divider calculation.
-/// SOURCE: ESP-IDF 4d59230d `soc/esp32s31/include/soc/clk_tree_defs.h:125-127`.
+/// SOURCE: ESP-IDF 4d80c1b2 `soc/esp32s31/include/soc/clk_tree_defs.h:125-127`.
 #[cfg(any(target_arch = "riscv32", test))]
 const XTAL_HZ: u32 = 40_000_000;
 
@@ -55,7 +55,7 @@ impl CpuFrequency {
 
 /// The CPU's root clocks (`SOC_CLK_SEL`).
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:613-632`
 /// (`clk_ll_cpu_set_src`: 0 XTAL, 1 CPLL, 2 RC_FAST, 3 PLL_F240M).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -100,7 +100,7 @@ pub enum MemDivider {
 /// The integer divider of every branch the CPU root feeds: each branch
 /// divides its source by its code plus one, with the fractional parts zero.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:664-762`
 /// (CPU from the root, memory/system from CPU, APB from system; divider
 /// fields hold the integer divisor minus one).
@@ -115,7 +115,7 @@ pub struct BusDividers {
 /// The CPU PLL's divider pair (`LP_AONCLKRST_CPLL_DIV`): 320 MHz is the
 /// 40 MHz XTAL times the feedback divider over the reference divider.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:410-453`
 /// (feedback 8, reference 1 for 320 MHz) and
 /// `components/soc/esp32s31/register/soc/lp_clkrst_reg.h` (`CPLL_DIV`: reset 15/2).
@@ -243,7 +243,7 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement> CpuClockRegisters
 
 /// The CPU PLL's divider pair and calibration.
 ///
-/// SOURCE: ESP-IDF 4d59230d `clk_tree_ll.h:458-479` (calibration started by
+/// SOURCE: ESP-IDF 4d80c1b2 `clk_tree_ll.h:458-479` (calibration started by
 /// clearing `CPU_PLL_CAL_STOP`, ended when `CPU_PLL_CAL_END` reads 1,
 /// stopped by setting `CPU_PLL_CAL_STOP`).
 impl<P: Placement, Q: Placement, R: Placement, S: Placement> PllRegisters
@@ -288,7 +288,7 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement> PllRegisters
 /// The SOC clock update (`ROOT_CLK_CTRL0.SOC_CLK_UPDATE`): it latches the
 /// staged root and every divider at once, and clears when done.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:602-606`.
 impl<P: Placement, Q: Placement, R: Placement, S: Placement> ClockUpdate
     for ClockRegisters<P, Q, R, S>
@@ -307,7 +307,7 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement> ClockUpdate
 /// A PLL's lane in the PMU's immediate tie fields (`IMM_HP_CK_POWER_1`):
 /// each 4-bit tie field holds one bit per PLL.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/soc/esp32s31/register/soc/pmu_reg.h:1964-2133` (the
 /// per-PLL bits: CPLL the lowest, MPLL the highest of each field).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -328,7 +328,7 @@ impl PllLane {
 /// The CPU PLL powered: its power and analog-I2C ties, its clock gate tie,
 /// then its 300-MHz clock gate.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:93-99`
 /// (`clk_ll_cpll_enable`; its active-state power belongs to the radio PMU
 /// block's owner).
@@ -401,7 +401,7 @@ pub struct PsramSupplyLevel {
     pub mul: Bits<3>,
 }
 
-/// SOURCE: ESP-IDF 4d59230d `psram_ctrlr_ll.h:414-433`: source 1 is MPLL.
+/// SOURCE: ESP-IDF 4d80c1b2 `psram_ctrlr_ll.h:414-433`: source 1 is MPLL.
 const PSRAM_MEMORY_PLL_SOURCE: Bits<2> = Bits::constant::<1>();
 /// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:283-351`.
 const REFERENCE_25M_DIVIDER: u8 = 19;
@@ -411,7 +411,7 @@ const REFERENCE_50M_DIVIDER: u8 = 9;
 /// The memory PLL (MPLL), the PSRAM PHY's supply and the PSRAM
 /// controller's clocks and reset (`PSRAM_CTRL0`).
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:414-433`
 /// (the source code 1, MPLL) and
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:200-208`

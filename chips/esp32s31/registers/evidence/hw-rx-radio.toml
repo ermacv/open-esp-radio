@@ -13,7 +13,7 @@ description = "SOURCE: the same unpushed local composition 1f5309321f000c0fe7e81
 
 [[sources]]
 id = "BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES"
-description = "SOURCE: pinned esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21 libpp.a, hal_debug.o::dbg_dump_rx_links: control load +0x3e; bit29 extraction at +0x5e/+0x76 is printed as sosf at +0x8a. Adjacent diagnostic arguments name bit28 offset and bit30 EOF (the model RX_DONE field). These are RX-list diagnostic names, not physical definitions or evidence of hardware writes. The complete wDev_AppendRxBlocks clears sosf on rearm. Blobray direct-name evidence and limits: /home/ermacv/dev/oer-notes/research/opaque-blobray-wifi.md, WIFI_RX_DMA_DESCRIPTOR L1."
+description = "SOURCE: pinned esp32-wifi-lib f856b5db55cb18e2d1826044430f3f4089e47cf9 libpp.a, pp_debug.o::dbg_dump_rx_links: control load +0x3e; bit29 extraction at +0x5e/+0x76 is printed as sosf at +0x8a. Adjacent diagnostic arguments name bit28 offset and bit30 EOF (the model RX_DONE field). These are RX-list diagnostic names, not physical definitions or evidence of hardware writes. The complete wDev_AppendRxBlocks clears sosf on rearm. Blobray direct-name evidence and limits: /home/ermacv/dev/oer-notes/research/opaque-blobray-wifi.md, WIFI_RX_DMA_DESCRIPTOR L1."
 
 [[sources]]
 id = "HW18_RX_UNCOMMITTED_WRITES_20261027"

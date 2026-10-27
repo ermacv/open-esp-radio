@@ -56372,13 +56372,13 @@ pub mod efuse {
                 oer_mmio::Bits::truncate(self.0 >> 14)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 16 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit16(self) -> oer_mmio::Bits<10> {
                 oer_mmio::Bits::truncate(self.0 >> 17)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 15 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit15(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 27)
@@ -56438,31 +56438,31 @@ pub mod efuse {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 15 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit15_1(self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 14 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit14(self) -> u8 {
                 (self.0 >> 4) as u8
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 13 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit13(self) -> u8 {
                 (self.0 >> 12) as u8
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 12 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit12(self) -> u8 {
                 (self.0 >> 20) as u8
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 11 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit11(self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0 >> 28)
@@ -56522,31 +56522,31 @@ pub mod efuse {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 11 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit11_1(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC1 bit 10 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit10(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 2)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC2 bit 16 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit16(self) -> oer_mmio::Bits<10> {
                 oer_mmio::Bits::truncate(self.0 >> 7)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC2 bit 15 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit15(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 17)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC2 bit 14 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit14(self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0 >> 26)
@@ -56610,31 +56610,31 @@ pub mod efuse {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC2 bit 14 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit14_1(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC2 bit 13 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit13(self) -> u8 {
                 (self.0 >> 2) as u8
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC2 bit 12 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit12(self) -> u8 {
                 (self.0 >> 10) as u8
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC2 bit 11 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit11(self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0 >> 18)
             }
 
-            /// ADC calibration weight fragment from the eFuse read-back word.
+            /// ADC2 bit 10 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit10(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 24)

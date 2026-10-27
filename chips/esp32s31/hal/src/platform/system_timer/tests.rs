@@ -1,6 +1,6 @@
 //! The system timer's owners over host memory from SYSTIMER's base.
 //!
-//! Word offsets are ESP-IDF 4d59230d `systimer_reg.h`'s: `CONF` 0x0,
+//! Word offsets are ESP-IDF 4d80c1b2 `systimer_reg.h`'s: `CONF` 0x0,
 //! `UNIT0_OP` 0x4, `TARGETn_HI/LO` 0x1c + 8n / 0x20 + 8n, `TARGETn_CONF`
 //! 0x34 + 4n, `UNIT0_VALUE_HI/LO` 0x40/0x44, `COMPn_LOAD` 0x50 + 4n,
 //! `INT_ENA` 0x64, `INT_CLR` 0x6c.
@@ -34,7 +34,7 @@ fn programming_comparator_one_loads_its_target_and_enables_it() {
     expected[0x24 / 4] = 0x000a_bcde;
     expected[0x28 / 4] = 0x1234_5678;
     expected[0x54 / 4] = 1;
-    // SOURCE: ESP-IDF 4d59230d `systimer_reg.h`: `TARGET1_WORK_EN` bit 23.
+    // SOURCE: ESP-IDF 4d80c1b2 `systimer_reg.h`: `TARGET1_WORK_EN` bit 23.
     expected[0] = 1 << 23;
     assert_eq!(words, expected);
 }
@@ -47,7 +47,7 @@ fn no_deadline_only_disables_the_comparator() {
     comparators.program(Comparator::Two, None);
     drop(comparators);
     let mut expected = memory();
-    // SOURCE: ESP-IDF 4d59230d `systimer_reg.h`: `TARGET2_WORK_EN` bit 22.
+    // SOURCE: ESP-IDF 4d80c1b2 `systimer_reg.h`: `TARGET2_WORK_EN` bit 22.
     expected[0] = !(1 << 22);
     assert_eq!(words, expected);
 }
@@ -65,7 +65,7 @@ fn binding_sets_one_shot_mode_acknowledges_then_enables_the_interrupt() {
         let (mut zero, _, _) = alarms_host(&mut alarm_words).expect("memory holds the block");
         comparators.bind(&mut zero);
         drop(zero);
-        // SOURCE: ESP-IDF 4d59230d `systimer_reg.h`: `TARGET0_INT_CLR` bit 0.
+        // SOURCE: ESP-IDF 4d80c1b2 `systimer_reg.h`: `TARGET0_INT_CLR` bit 0.
         assert_eq!(
             word(&alarm_words, 0x6c),
             1,
@@ -73,7 +73,7 @@ fn binding_sets_one_shot_mode_acknowledges_then_enables_the_interrupt() {
         );
     }
     let conf = word(&words, 0x34);
-    // SOURCE: ESP-IDF 4d59230d `systimer_reg.h`: `TARGET0_PERIOD_MODE` bit
+    // SOURCE: ESP-IDF 4d80c1b2 `systimer_reg.h`: `TARGET0_PERIOD_MODE` bit
     // 30, `TARGET0_TIMER_UNIT_SEL` bit 31.
     assert_eq!(conf, !(0b11 << 30), "one shot on unit zero");
     assert_eq!(word(&words, 0), before[0] & !(1 << 24), "disabled");
@@ -112,7 +112,7 @@ fn each_alarm_part_strobes_its_own_bit_and_names_its_comparator() {
 #[test]
 fn the_counter_reads_its_latched_words_and_strobes_its_update() {
     let mut words = memory();
-    // SOURCE: ESP-IDF 4d59230d `systimer_reg.h`: `TIMER_UNIT0_VALUE_VALID`
+    // SOURCE: ESP-IDF 4d80c1b2 `systimer_reg.h`: `TIMER_UNIT0_VALUE_VALID`
     // bit 29, `TIMER_UNIT0_UPDATE` bit 30.
     words[0x4 / 4] = 1 << 29;
     words[0x40 / 4] = 0x000f_ffff;

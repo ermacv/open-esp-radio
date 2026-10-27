@@ -21,21 +21,21 @@ mod tests;
 
 /// The stall request code that stalls a core.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/hal/esp32s31/include/hal/cpu_utility_ll.h`
 /// (`cpu_utility_ll_stall_cpu`).
 const STALL: u8 = 0x86;
 
 /// The stall request code that lets a core run.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/hal/esp32s31/include/hal/cpu_utility_ll.h`
 /// (`cpu_utility_ll_unstall_cpu`).
 const RUN: u8 = 0xff;
 
-/// SOURCE: ESP-IDF 4d59230d `uart_ll.h` (`uart_ll_set_sclk`): XTAL undivided.
+/// SOURCE: ESP-IDF 4d80c1b2 `uart_ll.h` (`uart_ll_set_sclk`): XTAL undivided.
 const UART0_XTAL: Bits<2> = Bits::constant::<0>();
-/// SOURCE: ESP-IDF 4d59230d `hp_sys_clkrst_reg.h:1408-1446`: zero integer and fractional codes.
+/// SOURCE: ESP-IDF 4d80c1b2 `hp_sys_clkrst_reg.h:1408-1446`: zero integer and fractional codes.
 const UART0_UNDIVIDED: u8 = 0;
 
 /// The core-control words.
@@ -105,7 +105,7 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     /// SOURCE: pinned rev0 ROM `software_reset` (Blobray function-records)
     /// reads SYS_CTRL, sets SYS_SW_RST and writes it back. Unlike that ROM
     /// write, this trigger writes zero to the WTC wakeup flag, preserving
-    /// the event rather than acknowledging it. ESP-IDF 4d59230d
+    /// the event rather than acknowledging it. ESP-IDF 4d80c1b2
     /// `components/soc/esp32s31/register/soc/lp_system_reg.h:47-120` defines
     /// the WT, WTC and R/W lanes; ordinary fields keep the value read.
     pub(crate) fn request_system_reset(&mut self) {
@@ -152,7 +152,7 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     /// Hold the selected secondary HP core: gate its CPU and CLIC clocks and
     /// assert its global reset, keeping every other bit.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `components/esp_system/port/cpu_start.c`
+    /// SOURCE: ESP-IDF 4d80c1b2 `components/esp_system/port/cpu_start.c`
     /// (the single-core start) and
     /// `components/hal/esp32s31/include/hal/cpu_utility_ll.h`.
     pub fn hold(&mut self, core: SecondaryHart) {
@@ -178,7 +178,7 @@ impl<P: Placement> Uart0ClockRegisters<P> {
     /// ROM prints through UART0 after a software reset, and the source the
     /// firmware chose may not run any more.
     ///
-    /// SOURCE: ESP-IDF 4d59230d
+    /// SOURCE: ESP-IDF 4d80c1b2
     /// `components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:1408-1446`
     /// (UART0 source, gate and divider fields) and
     /// `components/esp_hal_uart/esp32s31/include/hal/uart_ll.h`

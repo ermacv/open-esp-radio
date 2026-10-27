@@ -93,7 +93,9 @@ configured for `IDF_TARGET=esp32s31` with the pinned ESP-IDF and the project's
 without building firmware. Keep its build directory and `SDKCONFIG` under
 the worktree's `target/`. The configuration hash is recorded, and another
 configuration may expose a different set of declarations. A RISC-V capable
-Clang and the SDK's picolibc headers are required.
+Clang and the SDK's picolibc headers are required. The checked-in facts use
+picolibc from the `riscv32-esp-elf` toolchain release `esp-16.1.0_20260609`
+(ESP toolchain version `esp-16.1.0`).
 
 The ELF facade supplies global name candidates from every pinned binary;
 Blobray `call-arguments --call-summaries --abi riscv-integer` selects actual

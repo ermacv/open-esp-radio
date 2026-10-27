@@ -10,7 +10,7 @@
 //! entry that already maps something else, and reads every entry it wrote
 //! back.
 //!
-//! SOURCE: ESP-IDF 4d59230d
+//! SOURCE: ESP-IDF 4d80c1b2
 //! `components/esp_hal_cache/esp32s31/include/hal/mmu_ll.h:309-366`
 //! (index then content, for a read and a write; the valid and target
 //! flags), `components/soc/esp32s31/include/soc/ext_mem_defs.h:57-94`

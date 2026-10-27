@@ -12,7 +12,7 @@ extends = "chip.toml"
 [rom]
 revision = "rev0"
 elf = "rom"
-# SOURCE: ESP-IDF 4d59230d `components/esp_rom/esp32s31/ld/esp32s31.rom.ld`
+# SOURCE: ESP-IDF 4d80c1b2 `components/esp_rom/esp32s31/ld/esp32s31.rom.ld`
 # (the ECO0 ROM of the board's revision 0 chip).
 linker-script = "rom/esp32s31-eco0.x"
 summaries = "chips/esp32s31/platform/rom-functions.toml"
@@ -30,7 +30,7 @@ forbidden = [
 # `rom[]::g_shared_buffers` 0x2f068d00, 0x11900 bytes (`.bss_shared_bufs`);
 # `rom[]::s_is_rsa` 0x2f07e600 (`.data_ets`), the lowest `.data`/`.bss`
 # symbol; `rom[]::g_saved_pc` 0x2f07fff8, 8 bytes (`.bss.interface.common`),
-# the highest. ESP-IDF 4d59230d
+# the highest. ESP-IDF 4d80c1b2
 # `components/bootloader/subproject/main/ld/esp32s31/bootloader.memory.ld.in:12-15,57-90`
 # (shared buffers, PRO and APP CPU startup stacks, ROM `.bss` and `.data`).
 sram = [

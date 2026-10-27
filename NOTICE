@@ -39,11 +39,14 @@ PAC, cited by SOURCE lines and evidence identifiers.
 Native analog-I2C geometry facts in the analog-I2C block types of
 chips/esp32s31/registers/types/ and in
 chips/esp32c5/registers/model/analog/phy.toml, from the pinned
-4d59230d regi2c headers (Apache-2.0 OR MIT), and the S31 regi2c_impl.c block
-identifiers (Apache-2.0). The evidence catalogs cite exact paths and hashes;
+ESP-IDF regi2c headers: S31 at 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d
+and C5 at 4d59230ddff16327812782151ef0afef202dc6d7 (Apache-2.0 OR MIT),
+and the S31 regi2c_impl.c block identifiers (Apache-2.0). The evidence
+catalogs cite exact paths and hashes;
 no source code is copied. Generated PAC vocabulary retains those SOURCE IDs.
 
-Generated function ABI facts (Apache-2.0), from open ESP-IDF headers at
+Generated function ABI facts (Apache-2.0), from open ESP-IDF headers:
+S31 at 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d and C5 at
 4d59230ddff16327812782151ef0afef202dc6d7; no implementation code copied:
 
 - chips/esp32s31/vendor/facts/idf-function-signatures.toml

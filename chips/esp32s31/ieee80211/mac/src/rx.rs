@@ -169,7 +169,7 @@ impl HtSignal {
 
 /// PHY format published in the S31 RX-control prefix.
 ///
-/// SOURCE\[ESP_WIFI_SYS_S31_RX_BB_FORMAT]: ESP-IDF 4d59230d
+/// SOURCE\[ESP_WIFI_SYS_S31_RX_BB_FORMAT]: ESP-IDF 4d80c1b2
 /// `components/esp_wifi/include/esp_wifi_he_types.h::wifi_rx_bb_format_t`.
 /// The explicit `Unknown` case preserves forward compatibility instead of
 /// interpreting a new hardware value as one of the currently named formats.
@@ -323,7 +323,7 @@ impl HeGuardIntervalAndLtf {
 
 /// Typed HE SU signal fields captured from the S31 RX metadata.
 ///
-/// SOURCE\[ESP_WIFI_SYS_S31_HE_SU_SIG]: ESP-IDF 4d59230d
+/// SOURCE\[ESP_WIFI_SYS_S31_HE_SU_SIG]: ESP-IDF 4d80c1b2
 /// `components/esp_wifi/include/esp_private/esp_wifi_he_types_private.h`: complete
 /// `esp_wifi_su_siga1_t` and packed `esp_wifi_su_siga2_t` layouts. The same
 /// MCS/BW/GI bit positions are independently used by the qualified vendor
@@ -475,7 +475,7 @@ impl HeMuBandwidth {
 
 /// Typed HE MU common signal fields captured from S31 RX metadata.
 ///
-/// SOURCE\[ESP_WIFI_SYS_S31_HE_MU_SIG]: ESP-IDF 4d59230d
+/// SOURCE\[ESP_WIFI_SYS_S31_HE_MU_SIG]: ESP-IDF 4d80c1b2
 /// `components/esp_wifi/include/esp_private/esp_wifi_he_types_private.h`, complete
 /// `esp_wifi_mu_siga1_t` and packed `esp_wifi_mu_siga2_t` layouts.
 ///
@@ -555,7 +555,7 @@ impl HeMuSignal {
 
 /// Typed HE trigger-based common signal fields captured from RX metadata.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_wifi/include/esp_private/esp_wifi_he_types_private.h:55-65,93-96`,
 /// `esp_wifi_tb_siga1_t` and packed `esp_wifi_tb_siga2_t` layouts.
 /// SOURCE\[BLOB_LIBPP_DBG_DUMP_RX_PPDU]: complete

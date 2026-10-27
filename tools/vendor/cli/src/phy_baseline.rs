@@ -83,10 +83,12 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
         } => {
             let checked = (|| -> Result<Check> {
                 let signature = Signature::current(&ctx.root)?;
-                let reference = read_reference(
-                    &reference.unwrap_or_else(|| signature.path(&ctx.root)),
-                    &signature.idf_revision,
-                )?;
+                let reference = match reference {
+                    Some(path) => read_reference(&path, None),
+                    None => {
+                        read_reference(&signature.path(&ctx.root), Some(&signature.idf_revision))
+                    }
+                }?;
                 let (identity, production) =
                     baseline::runs::production(&run, &board, reference.channel)?;
                 Ok(reference.check(
@@ -112,16 +114,22 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
     }
 }
 
-fn read_reference(path: &Path, revision: &str) -> Result<Reference> {
+fn read_reference(path: &Path, current_revision: Option<&str>) -> Result<Reference> {
     Reference::read(path).map_err(|error| {
         if error
             .downcast_ref::<std::io::Error>()
             .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
         {
-            format!(
-                "no PHY baseline for current ESP-IDF revision {revision}: {}",
-                path.display()
-            )
+            match current_revision {
+                Some(revision) => format!(
+                    "no PHY baseline for current ESP-IDF revision {revision}: {}",
+                    path.display()
+                ),
+                None => format!(
+                    "PHY baseline reference path does not exist: {}",
+                    path.display()
+                ),
+            }
             .into()
         } else {
             error
@@ -141,12 +149,28 @@ mod tests {
         let directory = tempfile::tempdir().expect("own directory");
         let revision = "current-revision";
         let path = directory.path().join(revision).join("wifi-cold.json");
-        let error = read_reference(&path, revision).expect_err("no reference exists");
+        let error = read_reference(&path, Some(revision)).expect_err("no reference exists");
         let checked = Check::incomplete(error);
         assert_eq!(checked.verdict, Verdict::Incomplete);
         assert!(checked.reasons[0].contains("no PHY baseline for current ESP-IDF revision"));
         assert!(checked.reasons[0].contains(revision));
     }
+    #[test]
+    fn absent_explicit_reference_names_the_requested_path() {
+        let directory = tempfile::tempdir().expect("own directory");
+        let path = directory.path().join("selected-reference.json");
+        let error = read_reference(&path, None).expect_err("explicit path is absent");
+        let checked = Check::incomplete(error);
+        assert_eq!(checked.verdict, Verdict::Incomplete);
+        assert_eq!(
+            checked.reasons,
+            vec![format!(
+                "PHY baseline reference path does not exist: {}",
+                path.display()
+            )],
+        );
+    }
+
     #[test]
     fn explicit_sources_and_offline_check_are_distinct_commands() {
         use clap::Parser;

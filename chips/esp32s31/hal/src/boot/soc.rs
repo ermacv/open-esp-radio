@@ -8,7 +8,7 @@
 //! (`riscv_preinit`: the TRNG enable), `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`
 //! (hart 1 stalled and held), `esp-hal/src/soc/mod.rs:81-565` (`init`: the
 //! APM filters), `esp-hal/src/soc/esp32s31/trng.rs` (`rng_ll_enable`) and
-//! ESP-IDF 4d59230d
+//! ESP-IDF 4d80c1b2
 //! `components/soc/esp32s31/register/soc/{lp_apm,hp_apm,hp_mem_apm}_reg.h`
 //! (`FUNC_CTRL`: the masters' filter enables) and
 //! `components/hal/esp32s31/include/hal/rng_ll.h:163-178`. The research
@@ -29,16 +29,16 @@ use crate::{cores, platform::core_control::CoreControlRegisters};
 mod tests;
 
 /// The TRNG's noise source and position selectors.
-/// SOURCE: ESP-IDF 4d59230d `rng_ll.h:163-178` (`rng_ll_enable`: 0x10, 0x10).
+/// SOURCE: ESP-IDF 4d80c1b2 `rng_ll.h:163-178` (`rng_ll_enable`: 0x10, 0x10).
 const NOISE_SELECT: Bits<5> = Bits::constant::<0x10>();
 /// The repetition-count health test's cutoff.
-/// SOURCE: ESP-IDF 4d59230d `rng_ll.h:163-178` (0x1f).
+/// SOURCE: ESP-IDF 4d80c1b2 `rng_ll.h:163-178` (0x1f).
 const REPETITION_CUTOFF: Bits<9> = Bits::constant::<0x1f>();
 /// The adaptive-proportion health test's cutoff.
-/// SOURCE: ESP-IDF 4d59230d `rng_ll.h:163-178` (0x12).
+/// SOURCE: ESP-IDF 4d80c1b2 `rng_ll.h:163-178` (0x12).
 const ADAPTIVE_CUTOFF: Bits<9> = Bits::constant::<0x12>();
 /// The startup health test's sample count.
-/// SOURCE: ESP-IDF 4d59230d `rng_ll.h:163-178` (1024).
+/// SOURCE: ESP-IDF 4d80c1b2 `rng_ll.h:163-178` (1024).
 const STARTUP_TEST_LIMIT: u16 = 1024;
 
 /// Why the SoC initialization stopped: a typed boot failure.
@@ -121,7 +121,7 @@ impl Soc {
 /// its ROM boot address, so the ROM it may wait in finds no stale entry.
 ///
 /// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`;
-/// ESP-IDF 4d59230d `components/esp_system/port/soc/esp32s31/system_internal.c:61-100`.
+/// ESP-IDF 4d80c1b2 `components/esp_system/port/soc/esp32s31/system_internal.c:61-100`.
 fn contain_secondaries<U: Placement, V: Placement, W: Placement, X: Placement, Y: Placement>(
     cores: &mut CoreControlRegisters<U, V, W, X, Y>,
 ) {
@@ -134,7 +134,7 @@ fn contain_secondaries<U: Placement, V: Placement, W: Placement, X: Placement, Y
 /// Open the APM access-path filters of every master: each enable written
 /// zero, the other bits kept.
 ///
-/// SOURCE: ESP-IDF 4d59230d `hp_apm_reg.h:1947-2013`, `lp_apm_reg.h:987-1026`,
+/// SOURCE: ESP-IDF 4d80c1b2 `hp_apm_reg.h:1947-2013`, `lp_apm_reg.h:987-1026`,
 /// `hp_mem_apm_reg.h:1211-1269` (`FUNC_CTRL`: M0..M6, M0..M3, M0..M5,
 /// read-write, reset one); esp-hal 1f646c5 `esp-hal/src/soc/mod.rs:81-565`.
 fn open_apm_filters<P: Placement, Q: Placement, R: Placement>(
@@ -172,7 +172,7 @@ fn open_apm_filters<P: Placement, Q: Placement, R: Placement>(
 /// sampling and conditioning on, then the startup test started. Nothing
 /// waits for the startup test: the entropy owner reads its status.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/hal/esp32s31/include/hal/rng_ll.h:163-178`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/hal/esp32s31/include/hal/rng_ll.h:163-178`
 /// (`rng_ll_enable`), esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/trng.rs`.
 fn start_trng<S: Placement, T: Placement>(
     trng: &mut TrngInit<S>,
