@@ -1117,3 +1117,15 @@ cycle marks/CLK_CONF. `0x3120` CK_POWER before/after/XOR; `0x3121` saved
 CONTROL0/ENABLE/VALID; `0x3122` case/request/readback; `0x3123` saved/restored;
 `0x3124/25` address or channel/full FE image; `0x3126` final FE image;
 `0x3127` RX fixture case/control word/decoded OFFSET+2*SOSF.
+
+On s31-c rev0, the four cold forced-power arms have a positive DAC response
+with READY0 and both opaque CLK_CONF lanes reading0. Fifteen cold injection
+arms establish no distinct command, gate or lasting-latch effect. CK_POWER's
+requested low4 image15 reads0, while the full enable readback preserves lanes
+outside the sourced mask. FE/CONTROL0 and RXDESC results qualify only the
+composition, disabled readback and CPU-owned representation described above.
+SOURCE: `HW31_S31_*_20261027` in `registers/evidence/hw-analog-pmu.toml`;
+runs `hw31-20261027-pb1e-02-registers` (lease#933),
+`hw31-20261027-pb1e-03-cold-240..243` (lease#938) and
+`hw31-20261027-pb1e-03-inject-250..264` (lease#940),
+[research report](/home/ermacv/dev/oer-notes/research/hw31-tsens-feest-pmuck.md).
