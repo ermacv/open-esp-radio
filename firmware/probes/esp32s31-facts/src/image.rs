@@ -744,83 +744,83 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(threshold_raising),
     },
     Probe {
-        id: 240,
+        id: 280,
         run: Action::Thread(analog_pmu::cold_none),
     },
     Probe {
-        id: 241,
+        id: 281,
         run: Action::Thread(analog_pmu::cold_23),
     },
     Probe {
-        id: 242,
+        id: 282,
         run: Action::Thread(analog_pmu::cold_9),
     },
     Probe {
-        id: 243,
+        id: 283,
         run: Action::Thread(analog_pmu::cold_pair),
     },
     Probe {
-        id: 244,
+        id: 284,
         run: Action::Thread(analog_pmu::registers),
     },
     Probe {
-        id: 250,
+        id: 285,
         run: Action::Thread(analog_pmu::injection::<1, 0>),
     },
     Probe {
-        id: 251,
+        id: 286,
         run: Action::Thread(analog_pmu::injection::<1, 1>),
     },
     Probe {
-        id: 252,
+        id: 287,
         run: Action::Thread(analog_pmu::injection::<1, 2>),
     },
     Probe {
-        id: 253,
+        id: 288,
         run: Action::Thread(analog_pmu::injection::<1, 3>),
     },
     Probe {
-        id: 254,
+        id: 289,
         run: Action::Thread(analog_pmu::injection::<1, 4>),
     },
     Probe {
-        id: 255,
+        id: 290,
         run: Action::Thread(analog_pmu::injection::<2, 0>),
     },
     Probe {
-        id: 256,
+        id: 291,
         run: Action::Thread(analog_pmu::injection::<2, 1>),
     },
     Probe {
-        id: 257,
+        id: 292,
         run: Action::Thread(analog_pmu::injection::<2, 2>),
     },
     Probe {
-        id: 258,
+        id: 293,
         run: Action::Thread(analog_pmu::injection::<2, 3>),
     },
     Probe {
-        id: 259,
+        id: 294,
         run: Action::Thread(analog_pmu::injection::<2, 4>),
     },
     Probe {
-        id: 260,
+        id: 295,
         run: Action::Thread(analog_pmu::injection::<3, 0>),
     },
     Probe {
-        id: 261,
+        id: 296,
         run: Action::Thread(analog_pmu::injection::<3, 1>),
     },
     Probe {
-        id: 262,
+        id: 297,
         run: Action::Thread(analog_pmu::injection::<3, 2>),
     },
     Probe {
-        id: 263,
+        id: 298,
         run: Action::Thread(analog_pmu::injection::<3, 3>),
     },
     Probe {
-        id: 264,
+        id: 299,
         run: Action::Thread(analog_pmu::injection::<3, 4>),
     },
 ];
