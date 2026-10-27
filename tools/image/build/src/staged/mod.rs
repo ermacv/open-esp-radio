@@ -29,6 +29,7 @@ pub(crate) struct CompileInput<'a> {
     instrumentation: &'a Instrumentation,
     policy: &'a StackPolicy,
     task_stack_proven: bool,
+    critical_section_hart: u32,
     panics: &'a oer_image_checks::panics::Contract,
     output: &'a Path,
     log: &'a BuildLog,
@@ -51,6 +52,7 @@ pub(crate) fn build(
     profile: &oer_chip_profile::Profile,
     instrumentation: &Instrumentation,
     task_stack_proven: bool,
+    critical_section_hart: u32,
     panics: &oer_image_checks::panics::Contract,
     compile: impl FnOnce(&CompileInput<'_>, &mut ImageBundle) -> Result<Compiled>,
 ) -> Result<ImageBundle> {
@@ -82,6 +84,7 @@ pub(crate) fn build(
             instrumentation,
             policy: &policy,
             task_stack_proven,
+            critical_section_hart,
             panics,
             output: &output,
             log: &log,
@@ -123,6 +126,7 @@ pub(crate) fn build(
                 flat: None,
                 output: &output,
                 task_stack_proven: false,
+                critical_section_hart,
                 stage_two_elf: Some(&runtime_elf),
                 panics: Some(panics),
             })

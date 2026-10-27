@@ -16,6 +16,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
         instrumentation,
         policy,
         task_stack_proven,
+        critical_section_hart,
         panics,
         output,
         log,
@@ -128,8 +129,14 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
     let crc = pack_runtime(&staged.stage_two, &runtime_bin)
         .map_err(|error| log.failed("runtime packing", error))?;
     eprintln!("runtime_crc32={crc:08x}");
-    if let Some(checks) = &spec.checks {
-        let outcome = checks
+    {
+        let checks = spec.checks.as_ref();
+        let prerequisites = crate::Gates::default();
+        let gates = match checks {
+            Some(checks) => checks,
+            None => &prerequisites,
+        };
+        let outcome = gates
             .runtime(&crate::CheckInput {
                 root,
                 profile,
@@ -138,6 +145,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
                 flat: Some(&runtime_bin),
                 output,
                 task_stack_proven,
+                critical_section_hart,
                 stage_two_elf: None,
                 panics: Some(panics),
             })
@@ -146,7 +154,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
             sizes.elfs.insert("runtime".into(), measured.clone());
         }
         crate::apply_outcome(
-            checks,
+            gates,
             crate::CheckedElf::Runtime,
             outcome,
             bundle,

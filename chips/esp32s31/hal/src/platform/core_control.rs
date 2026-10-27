@@ -170,7 +170,6 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     ///
     /// SOURCE: ESP-IDF 4d59230d `components/esp_system/port/cpu_start.c`
     /// (`start_other_core`).
-    #[cfg(any(test, feature = "cpu1-runs"))]
     pub fn release(&mut self, core: SecondaryHart) {
         self.clocks
             .modify_hpcore_ctrl0(core.hart().index(), |control| {

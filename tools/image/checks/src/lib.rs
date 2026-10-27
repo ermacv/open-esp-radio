@@ -16,6 +16,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod critical_section;
 pub mod interrupts;
 pub mod linker;
 pub mod panics;
@@ -99,6 +100,8 @@ pub struct CheckInput<'a> {
     /// The image declares its task stacks proven: an unresolved path in one
     /// fails the stack check.
     pub task_stack_proven: bool,
+    /// The only hart whose reachable code may enter the critical section.
+    pub critical_section_hart: u32,
     /// The stage-two ELF the bootstrap enters, for the bootstrap's `handoff`.
     pub stage_two_elf: Option<&'a Path>,
     /// The crate layers and the image's panic budget, for the panic check.
@@ -360,10 +363,29 @@ impl Gates {
                 .results
                 .push((FRAMES.to_owned(), missing(chip("[rom] ELF"))));
         }
-        if stack_runs || interrupts_run || frames_run {
+        {
             // One analysis serves the frame, task-stack and interrupt checks.
             match crate::stack::Image::read(input.root, profile, input.elf) {
                 Ok(image) => {
+                    // These are memory-safety prerequisites, independent of optional
+                    // product/diagnostic checks and their reporting policy.
+                    let cores = crate::stack::cores::audit_runtime(&image, input.policy, profile)?;
+                    let interrupt_stacks = crate::interrupts::interrupt_stacks_of(&image)?;
+                    let critical_section = crate::critical_section::audit_runtime(
+                        &image,
+                        input.policy,
+                        &interrupt_stacks,
+                        input.critical_section_hart,
+                    )?;
+                    std::fs::write(
+                        input.output.join(crate::critical_section::REPORT),
+                        critical_section,
+                    )?;
+                    std::fs::write(input.output.join(crate::stack::cores::REPORT), cores)?;
+                    outcome.reports.extend(
+                        [crate::critical_section::REPORT, crate::stack::cores::REPORT]
+                            .map(str::to_owned),
+                    );
                     outcome.sizes = Some(sizes::Measurements::of(&image, profile)?);
                     outcome
                         .rom_summaries
@@ -376,7 +398,7 @@ impl Gates {
                     let mut stack_roots = None;
                     if let Some(required) = self.interrupts.filter(|_| interrupts_run) {
                         let result = ran((|| -> Result<()> {
-                            let stacks = crate::interrupts::interrupt_stacks_of(&image)?;
+                            let stacks = interrupt_stacks;
                             interrupt_roots = Some(panics::interrupt_roots(&image, &stacks));
                             if let Some(sizes) = &mut outcome.sizes {
                                 sizes.interrupts(&image, &stacks)?;
@@ -470,15 +492,6 @@ impl Gates {
                     if stack_runs {
                         let result = ran((|| -> Result<()> {
                             let warnings = (|| -> Result<Vec<String>> {
-                                std::fs::write(
-                                    input.output.join(crate::stack::cores::REPORT),
-                                    crate::stack::cores::audit_runtime(
-                                        &image,
-                                        input.policy,
-                                        input.profile,
-                                    )?,
-                                )?;
-                                outcome.reports.push(crate::stack::cores::REPORT.to_owned());
                                 let mut audit = crate::stack::StackAudit::of(
                                     &image,
                                     input.policy,
@@ -575,22 +588,10 @@ impl Gates {
                     }
                 }
                 Err(error) => {
-                    // The analysis both checks share did not run.
-                    let failed = CheckResult::Failed(format!("the image analysis failed: {error}"));
-                    if frames_run {
-                        outcome.results.push((FRAMES.to_owned(), failed.clone()));
-                    }
-                    if stack_runs {
-                        outcome.results.push((STACK.to_owned(), failed.clone()));
-                    }
-                    if interrupts_run {
-                        outcome
-                            .results
-                            .push((INTERRUPTS.to_owned(), failed.clone()));
-                    }
-                    if self.panics {
-                        outcome.results.push((PANICS.to_owned(), failed));
-                    }
+                    return Err(format!(
+                        "critical-section prerequisite: image analysis failed: {error}"
+                    )
+                    .into());
                 }
             }
         }

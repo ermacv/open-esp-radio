@@ -117,3 +117,6 @@ oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout", features = ["bu
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
 runtime = { pac = 11, hal = 39, chips = 489, portable = 122, protocols = 191, firmware = 69, core = 20, embassy = 66, third-party = 63, unnamed = 13, hardware = 11 }
 bootstrap = { unnamed = 2 }
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"

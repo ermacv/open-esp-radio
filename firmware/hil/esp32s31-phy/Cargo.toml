@@ -10,6 +10,7 @@ description = "Diagnostic PHY capture through public state and typed register re
 build = "build.rs"
 
 [package.metadata.open-radio]
+critical-section-hart = "boot"
 instrumentation = ["profile", "debug-control"]
 
 [features]

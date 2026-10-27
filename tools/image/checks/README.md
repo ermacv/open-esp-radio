@@ -54,6 +54,18 @@ core's task stack and interrupt stack, used with its linked bytes or `unused`
 to its core; a used secondary core runs only with a proven bound. The
 bootstrap links no starter.
 
+Every staged image declares `[package.metadata.open-radio] critical-section-hart`.
+`"boot"` selects the boot hart from chip facts; an explicit hart ID must belong
+to those facts and have used stacks. The runtime's critical section masks only
+that hart. `critical-section.txt` records a mandatory safety prerequisite,
+including diagnostic builds: every other used hart's task entry, every handler
+(including shorter handlers at the same level) and exception must have complete
+resolved paths excluding both critical-section entry points. Task polls and
+start payload callees follow their owning entry or handler's existing call
+resolutions. Linked aliases and DWARF inline copies are checked. Partial bounds
+on the declared hart remain permitted. Unused harts' containment is also required
+independently of the optional stack gate. No second hart is started by this check.
+
 An image's `stack.toml` (schema 6) may name exact exceptions:
 
 ```toml

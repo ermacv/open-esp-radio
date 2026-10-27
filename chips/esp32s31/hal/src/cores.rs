@@ -62,11 +62,6 @@ pub use crate::platform::{BOOT_HART, HARTS, Hart, SecondaryHart};
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "cpu1-runs")]
-compile_error!(
-    "the runtime's critical-section masks only the current hart; an image whose hart 1 runs code needs a cross-hart lock without spinning"
-);
-
 /// Reads of the stall status that a stall or run request waits for its
 /// confirmation; a hart the status does not confirm within them is
 /// reported, not waited for. The budget counts completed reads, not time:
@@ -309,7 +304,6 @@ impl Cores {
     /// # Errors
     /// No words are installed, a fatal path holds them, or the hardware did
     /// not confirm the run within [`STALL_POLLS`].
-    #[cfg(feature = "cpu1-runs")]
     pub fn start(
         &mut self,
         hart: SecondaryHart,

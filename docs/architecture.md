@@ -64,6 +64,8 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 ## Execution
 
+The critical section is hart-local; the image check confines it to one declared hart.
+
 | Context | Runs | Rule |
 | --- | --- | --- |
 | P3, boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
@@ -262,8 +264,7 @@ moves; ownership, orchestration and wiring are rebuilt.
   its explicit boot role. Typed indices connect their geometry to HAL reads
   and writes. Fixed indices
   and list/count mismatches fail during the build. Every current image keeps
-  secondary harts contained. HAL and runtime reject the `cpu1-runs` feature
-  at compile time. The HAL holds secondary harts, and the image gate rejects
+  secondary harts contained. The HAL holds secondary harts, and the image gate rejects
   starters, routes or storage for harts declared unused
   ([secondary boot](../chips/esp32s31/notes/core1-boot.md)).
   An architectural ID outside this list is `InvalidHart { raw }`, never a

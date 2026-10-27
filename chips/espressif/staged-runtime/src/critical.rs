@@ -9,22 +9,14 @@
 //! never rebuilt from the running level. The three instructions after the
 //! release give a pending interrupt its window.
 //!
-//! The section is hart-local and takes no lock, so only one hart may run
-//! code: an image whose hart 1 runs (`cpu1-runs`) does not build until a
-//! cross-hart lock without spinning exists. A second hart of the chip's
-//! facts alone has its interrupt stack and vectors and starts nothing.
+//! The section is hart-local and takes no lock. Each image declares its
+//! `critical-section-hart`; the image check proves that no entry, task or
+//! interrupt handler of another hart can reach this implementation.
 //!
 //! SOURCE: esp-hal 1f646c5 `esp-sync/src/raw.rs` (`SingleCoreInterruptLock`:
 //! the raised threshold, the token's layout, the order of release and the
 //! three `nop`s); ESP-IDF 4d59230d `riscv/include/esp_private/interrupt_clic.h`
 //! (`rv_utils_set_intlevel_regval`).
-
-// Hart-local masking excludes nothing on a second running hart: two harts
-// could borrow one `critical_section::Mutex<RefCell<_>>` at once.
-#[cfg(feature = "cpu1-runs")]
-compile_error!(
-    "the runtime's critical-section masks only the current hart; an image whose hart 1 runs code needs a cross-hart lock without spinning"
-);
 
 /// The hart's interrupt mask, as a section changes it.
 pub(crate) trait Mask {
@@ -91,8 +83,8 @@ pub(crate) mod hart {
 
     // SAFETY: `acquire` masks every interrupt of the hart and returns the
     // state `release` restores; `critical-section` releases in reverse order
-    // on the acquiring hart, and no other hart runs code (`cpu1-runs` does
-    // not build).
+    // on the acquiring hart. The image check confines all reachable callers
+    // to the image's declared `critical-section-hart`.
     unsafe impl critical_section::Impl for Section {
         unsafe fn acquire() -> critical_section::RawRestoreState {
             let token = super::acquire(&mut Csrs);

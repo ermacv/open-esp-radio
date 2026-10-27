@@ -1,7 +1,7 @@
 # How core 1 starts
 
-Every current image keeps the secondary HP hart contained. HAL and runtime
-reject `cpu1-runs` at compile time; an image root alone cannot enable it.
+Every current image keeps the secondary HP hart contained. The image check
+confines the hart-local critical section to the image's declared hart.
 The platform HP-hart list defines the geometry and the boot role.
 
 ## 1. The mask ROM starts core 1 only at an explicit boot address
@@ -41,8 +41,8 @@ which the bootstrap runs first, iterates the generated secondary identities,
 requests their stalls, gates their core and CLIC clocks, holds their global
 resets and clears their indexed ROM boot addresses
 (SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`,
-ESP-IDF `system_internal.c:61-100`). Only `Cores::start` undoes it; it
-exists under the HAL's `cpu1-runs` feature, which the crate refuses.
+ESP-IDF `system_internal.c:61-100`). `Cores::start` undoes it; no current image
+links a starter.
 
 ## 3. Nothing in an image reaches the starter
 
