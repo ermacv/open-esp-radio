@@ -117,8 +117,13 @@ release a secondary hart.
   interrupt banks and its doorbell) routes them all to its one line, and its
   handler learns which fired from the peripherals' status. A part is bound
   once and its handler holds it for the image's life: a task asks the
-  handler for each bank transition, and the CPU route never changes. The
-  table fails to compile when two entries share a line, or two entries or
+  handler for each bank transition, and the CPU route never changes.
+  IEEE 802.15.4 admits one typed post-bind initialization through `Bound`:
+  the part's defining crate selects its opaque context and retains the IRQ
+  owner in the handler cell. This consumes startup pending before releasing
+  the affine task owner for new operations; it grants no general task-side
+  acknowledgement. A polling pair performs the same transaction with `Silent`.
+  The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
 - A signal's constructor declares its receiving executor entry and all its

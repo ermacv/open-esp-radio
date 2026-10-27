@@ -17,7 +17,8 @@
 //!
 //! The armed interrupt owner has two homes. An interrupt table's handler
 //! holds it once `oer_interrupt_table::Router::bind` placed it, and the task
-//! then enables the runtime events with the binding's `Bound` proof
+//! consumes its affine startup owner through typed post-bind initialization,
+//! then enables runtime events with the binding's `Bound` proof
 //! ([`Ieee802154TaskOwner::enable_events`]) and masks them again at the end
 //! of each session ([`Ieee802154TaskOwner::mask_events`]). Or the engine pair
 //! of the [`ll`](crate::ieee802154::ll) backend holds it with the router's
@@ -32,17 +33,20 @@
 
 #![forbid(unsafe_code)]
 
+use core::mem::ManuallyDrop;
 use oer_esp32s31_pac::{
     bt_bb::BtV32BasebandRxInfo,
     ieee802154,
     ieee802154::{Ieee802154MacIrq, Ieee802154MacTask},
     modem_etm::ModemEtmIeee802154,
 };
+use oer_espressif_ieee802154_engine::{engine::Fault, types::Ieee802154Event};
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort, execute_interrupt_arming,
-    execute_interrupt_deactivation,
+    Ieee802154InterruptActivationPlan, Ieee802154InterruptInitializationPort,
+    Ieee802154InterruptTransitionPort, execute_interrupt_arming, execute_interrupt_deactivation,
+    execute_interrupt_initialization,
 };
-use oer_interrupt_table::Bound;
+use oer_interrupt_table::{Bound, PostBindInitialization, Silent};
 use oer_mmio::{Fixed, Placement};
 
 mod etm;
@@ -79,6 +83,165 @@ pub struct Ieee802154TaskOwner<
     rx_info: BtV32BasebandRxInfo<B>,
 }
 
+/// Affine startup task ownership. New operations are unavailable until its
+/// bound or silent-route initialization consumed retained pending.
+///
+/// ```compile_fail,E0599
+/// use oer_esp32s31_hal::ieee802154::mac::Ieee802154ArmedTaskOwner;
+/// fn too_early(mut startup: Ieee802154ArmedTaskOwner) {
+///     startup.enable_events();
+/// }
+/// ```
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_hal::ieee802154::mac::{Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner};
+/// use oer_interrupt_table::{Bound, Entry};
+/// fn twice<I: Entry<Part = Ieee802154InterruptOwner>>(startup: Ieee802154ArmedTaskOwner, bound: &Bound<I>) {
+///     let _first = startup.initialize(bound);
+///     let _second = startup.initialize(bound);
+/// }
+/// ```
+///
+/// ```compile_fail,E0308
+/// use oer_esp32s31_hal::ieee802154::mac::{Ieee802154TaskOwner, Ieee802154InterruptOwner};
+/// use oer_interrupt_table::{Bound, Entry};
+/// fn no_general_ack<I: Entry<Part = Ieee802154InterruptOwner>>(bound: &Bound<I>, task: &mut Ieee802154TaskOwner) {
+///     bound.initialize(task);
+/// }
+/// ```
+#[must_use = "initialize startup pending before constructing an operational MAC"]
+pub struct Ieee802154ArmedTaskOwner<
+    P: Placement = MacPlacement,
+    E: Placement = EtmPlacement,
+    B: Placement = RxInfoPlacement,
+> {
+    task: Ieee802154TaskOwner<P, E, B>,
+}
+
+/// Startup failure retains all movable owners; a bound IRQ owner stays in its
+/// handler. No recovery or register access is available from this quarantine.
+#[must_use = "record the startup fault and reset without releasing owners"]
+pub struct Ieee802154StartupFault<T> {
+    fault: Fault,
+    _owners: ManuallyDrop<T>,
+}
+impl<T> Ieee802154StartupFault<T> {
+    /// Original observations, without ownership or acknowledgement authority.
+    pub const fn fault(&self) -> Fault {
+        self.fault
+    }
+}
+impl<T> core::fmt::Debug for Ieee802154StartupFault<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.fault.fmt(f)
+    }
+}
+
+/// A refused cell loan returns the unchanged affine startup owner. Hardware
+/// faults instead retain it in absorbing quarantine.
+pub enum Ieee802154InitializationFailure<T> {
+    /// The handler cell was already lent; no startup register was accessed.
+    Unavailable(T),
+    /// Unexpected hardware events, left masked and unacknowledged.
+    Fault(Ieee802154StartupFault<T>),
+}
+impl<T> core::fmt::Debug for Ieee802154InitializationFailure<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Unavailable(_) => f.write_str("InitializationUnavailable"),
+            Self::Fault(fault) => fault.fmt(f),
+        }
+    }
+}
+
+// Only consuming the affine ArmedTaskOwner creates this context. Bound never
+// lends the IRQ part to arbitrary task code or grants a general ack operation.
+/// Opaque one-step context created only while consuming an armed task owner.
+/// It grants no public register access and cannot be constructed by callers.
+pub struct Ieee802154Startup<'a, P: Placement = MacPlacement> {
+    task: &'a mut Ieee802154TaskOwner<P>,
+}
+
+impl<P: Placement, E: Placement, B: Placement> Ieee802154ArmedTaskOwner<P, E, B> {
+    #[allow(
+        clippy::result_large_err,
+        clippy::type_complexity,
+        reason = "failure retains both MAC owners and route authority"
+    )]
+    pub(crate) fn initialize_polled(
+        mut self,
+        mut interrupts: Ieee802154InterruptOwner<P>,
+        silent: Silent<Ieee802154InterruptOwner<P>>,
+    ) -> Result<
+        super::ll::Ieee802154MacParts<P, E, B>,
+        Ieee802154StartupFault<(
+            Self,
+            Ieee802154InterruptOwner<P>,
+            Silent<Ieee802154InterruptOwner<P>>,
+        )>,
+    > {
+        let result = execute_interrupt_initialization(&mut TransitionPort {
+            task: &mut self.task,
+            interrupt: &mut interrupts.mac,
+        });
+        match result {
+            Ok(()) => Ok((self.task, interrupts, silent)),
+            Err(fault) => Err(Ieee802154StartupFault {
+                fault,
+                _owners: ManuallyDrop::new((self, interrupts, silent)),
+            }),
+        }
+    }
+}
+
+impl<P: Placement> Ieee802154ArmedTaskOwner<P> {
+    /// Consume startup pending after the handler is installed and routed.
+    /// Events remain masked until the returned task publishes its runtime set.
+    ///
+    /// # Errors
+    /// A refused handler loan returns this unchanged owner; unexpected events
+    /// quarantine it while the interrupt owner remains permanently bound.
+    #[allow(
+        clippy::result_large_err,
+        reason = "failure retains affine startup ownership"
+    )]
+    pub fn initialize<I: oer_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
+        mut self,
+        bound: &Bound<I>,
+    ) -> Result<Ieee802154TaskOwner<P>, Ieee802154InitializationFailure<Self>> {
+        match bound.initialize(&mut Ieee802154Startup {
+            task: &mut self.task,
+        }) {
+            Some(Ok(())) => Ok(self.task),
+            Some(Err(fault)) => Err(Ieee802154InitializationFailure::Fault(
+                Ieee802154StartupFault {
+                    fault,
+                    _owners: ManuallyDrop::new(self),
+                },
+            )),
+            None => Err(Ieee802154InitializationFailure::Unavailable(self)),
+        }
+    }
+}
+
+impl<P: Placement> PostBindInitialization for Ieee802154InterruptOwner<P> {
+    type Context<'a>
+        = Ieee802154Startup<'a, P>
+    where
+        Self: 'a;
+    type Output = Result<(), Fault>;
+    fn initialize<I: oer_interrupt_table::Entry<Part = Self>>(
+        &mut self,
+        _bound: &Bound<I>,
+        context: &mut Self::Context<'_>,
+    ) -> Self::Output {
+        execute_interrupt_initialization(&mut TransitionPort {
+            task: context.task,
+            interrupt: &mut self.mac,
+        })
+    }
+}
+
 /// Inactive IEEE 802.15.4 interrupt ownership: the MAC's interrupt side
 /// while no handler holds it.
 #[must_use = "the inactive IEEE 802.15.4 interrupt owner must be returned to its foundation owner"]
@@ -96,10 +259,11 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 ///
 /// ```no_run
 /// use oer_esp32s31_hal::ieee802154::mac::{
+///     Ieee802154ArmedTaskOwner, Ieee802154InitializationFailure,
 ///     Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner,
 /// };
 /// use oer_esp32s31_hal::platform::InterruptController;
-/// use oer_interrupt_table::Router;
+/// use oer_interrupt_table::{Bound, Refused, Router};
 /// # const LINES: oer_interrupt_table::Lines =
 /// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2, tie_break: oer_interrupt_table::TieBreak::HighestLine };
 /// use oer_espressif_ieee802154_engine::types::Ieee802154EventMask;
@@ -115,17 +279,25 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 ///     contexts { radio: 3; }
 ///     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// }
-/// fn start(
-///     router: &mut Router<InterruptController>,
-///     token: MacToken,
-///     task: &mut Ieee802154TaskOwner,
-///     setup: Ieee802154InterruptSetupOwner,
-/// ) {
-///     if let Ok(bound) = router.bind(token, setup.arm(task)) {
-///         task.enable_events(&bound);
-///         // ... the session ...
-///         task.mask_events();
+/// fn bind(
+///     router: &mut Router<InterruptController>, token: MacToken,
+///     task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner,
+/// ) -> Result<(Ieee802154ArmedTaskOwner, Bound<MacToken>), (Ieee802154ArmedTaskOwner, Refused<MacToken>)> {
+///     let (startup, interrupts) = setup.arm(task);
+///     match router.bind(token, interrupts) {
+///         Ok(bound) => Ok((startup, bound)),
+///         Err(refused) => Err((startup, refused)),
 ///     }
+/// }
+/// fn start(startup: Ieee802154ArmedTaskOwner, bound: &Bound<MacToken>)
+///     -> Result<Ieee802154TaskOwner, Ieee802154InitializationFailure<Ieee802154ArmedTaskOwner>>
+/// {
+///     // Initialization faults go to the image's retained reset reporter.
+///     let mut task = startup.initialize(bound)?;
+///     task.enable_events(bound);
+///     // ... the session ...
+///     task.mask_events();
+///     Ok(task)
 /// }
 /// # fn main() {}
 /// ```
@@ -264,30 +436,28 @@ impl<P: Placement> Ieee802154InterruptSetupOwner<P> {
         Self { mac }
     }
 
-    /// Install the runtime abort baseline, clear stale pending and return
-    /// the armed interrupt owner with every event masked.
-    ///
-    /// With no handler bound, enable events, sample, mask and acknowledge
-    /// the saved sample. A masked timer read would hide retained pending.
-    /// The final fence precedes returning the owner. Events are enabled by
-    /// [`Ieee802154TaskOwner::enable_events`] once a handler holds the owner,
-    /// or by the polling engine pair.
-    /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
+    /// Mask events and install the abort baseline without exposing pending.
+    /// The returned affine task owner permits only post-bind initialization or
+    /// construction of the silent polling pair; neither starts an operation
+    /// before its saved startup event sample has been consumed.
     pub fn arm<E: Placement, B: Placement>(
-        self,
-        task: &mut Ieee802154TaskOwner<P, E, B>,
-    ) -> Ieee802154InterruptOwner<P> {
-        let mut port = TransitionPort {
-            task,
-            interrupt: self.mac,
-        };
+        mut self,
+        mut task: Ieee802154TaskOwner<P, E, B>,
+    ) -> (
+        Ieee802154ArmedTaskOwner<P, E, B>,
+        Ieee802154InterruptOwner<P>,
+    ) {
         execute_interrupt_arming(
-            &mut port,
+            &mut TransitionPort {
+                task: &mut task,
+                interrupt: &mut self.mac,
+            },
             Ieee802154InterruptActivationPlan::SOURCE_CONFIRMED_BASELINE,
         );
-        Ieee802154InterruptOwner {
-            mac: port.interrupt,
-        }
+        (
+            Ieee802154ArmedTaskOwner { task },
+            Ieee802154InterruptOwner { mac: self.mac },
+        )
     }
 }
 
@@ -354,24 +524,22 @@ impl<P: Placement> Ieee802154InterruptOwner<P> {
     /// before the setup owner is returned.
     /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
     pub fn deactivate<E: Placement, B: Placement>(
-        self,
+        mut self,
         task: &mut Ieee802154TaskOwner<P, E, B>,
     ) -> Ieee802154InterruptSetupOwner<P> {
         let mut port = TransitionPort {
             task,
-            interrupt: self.mac,
+            interrupt: &mut self.mac,
         };
         execute_interrupt_deactivation(&mut port);
-        Ieee802154InterruptSetupOwner {
-            mac: port.interrupt,
-        }
+        Ieee802154InterruptSetupOwner { mac: self.mac }
     }
 }
 
 /// The task owner and the interrupt side for one activation or teardown.
 struct TransitionPort<'task, P: Placement, E: Placement, B: Placement> {
     task: &'task mut Ieee802154TaskOwner<P, E, B>,
-    interrupt: Ieee802154MacIrq<P>,
+    interrupt: &'task mut Ieee802154MacIrq<P>,
 }
 
 impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptTransitionPort
@@ -433,3 +601,22 @@ pub(crate) mod host;
 
 #[cfg(test)]
 mod tests;
+
+impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptInitializationPort
+    for TransitionPort<'_, P, E, B>
+{
+    type Fault = Fault;
+    fn enable_handled_events(&mut self) {
+        self.task.enable_handled_events();
+    }
+    fn acknowledge_startup_events(&mut self, snapshot: Self::EventSnapshot) -> Result<(), Fault> {
+        let observation = interrupt::observation(&snapshot);
+        if observation.classification().is_err()
+            || observation.contains(Ieee802154Event::ClockCountMatch)
+        {
+            return Err(Fault::StartupEvents { observation });
+        }
+        self.interrupt.acknowledge_event_status(snapshot);
+        Ok(())
+    }
+}

@@ -107,18 +107,29 @@ no new claim or address construction. The S31 HAL preserves its DMA placement
 proof through this transition. Silence the CPU route before detaching and use
 the existing IRQ deactivation/foundation return path before leaving PHY.
 
-Timer events are acknowledged before masking. Successful ACK reception,
+Operational ACK waits acknowledge timer0 while enabled. Successful ACK reception,
 stopping an ACK wait and the hardware RX-ACK timeout stop timer0, sample and
 clear its pending event while enabled, then disable that event. Starting a
 new ACK wait enables timer0's event and clears old pending while the timer is
 stopped, before programming and starting the next deadline. This prevents a
 retained timeout from completing a later transmission with a false `NoAck`.
 The S31 HAL consumes a saved affine event snapshot for acknowledgement;
-copyable observations grant no write authority. Interrupt arming enables,
-samples, masks and acknowledges with no handler bound. Deactivation issues
-STOP and both timer-stop commands, samples, masks and acknowledges its saved
-sample. These commands and selected acknowledgements do not prove that every
-hardware producer drained.
+copyable observations grant no write authority. Interrupt arming masks every
+event and returns an affine startup task owner. New operations are unavailable
+until a typed post-bind transaction through `Bound` consumes startup pending;
+the IRQ owner stays in the handler cell. Only the HAL can create that opaque
+context, so the task receives no general acknowledgement API. Polling performs
+the same step with `Silent` before the combined MAC owner exists.
+Initialization issues STOP and both timer-stop commands, exposes only handled
+lanes (including timer0), saves one sample, masks and acknowledges it, and
+returns the task owner with events masked. Thus inherited timer1 pending cannot
+invoke a new `receive_at` callback. The subsequent working event sets stay
+unchanged. Unexpected visible startup events remain unacknowledged and produce
+`Fault::StartupEvents`; their owners stay quarantined through retained reset.
+The existing 24-byte record carries that reason without an engine state.
+Deactivation issues STOP and both timer-stop commands, samples, masks and
+acknowledges its saved sample. These commands and selected acknowledgements do
+not prove that every hardware producer drained.
 
 Engine interrupt service rejects a sample containing an unnamed lane (7 or 13)
 or the unsupported clock-match event (10) with `Fault::UnhandledEvents` before acknowledgement

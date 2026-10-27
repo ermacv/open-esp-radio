@@ -68,7 +68,8 @@
 
 mod router;
 pub use router::{
-    Bound, Controller, Error, EventAuthority, LineState, Refused, Router, Silent, Trigger,
+    Bound, Controller, Error, EventAuthority, LineState, PostBindInitialization, Refused, Router,
+    Silent, Trigger,
 };
 
 pub mod signal;

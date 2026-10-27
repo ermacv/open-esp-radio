@@ -60,6 +60,7 @@ enum InterruptTransitionOperation {
     StopTimer0,
     StopTimer1,
     EnableEvents,
+    EnableHandledEvents,
     MaskEvents,
     MaskTxAborts,
     EnableRuntimeTxAborts,
@@ -162,7 +163,7 @@ impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
 }
 
 #[test]
-fn arming_acks_the_exact_affine_sample_and_leaves_every_event_masked() {
+fn arming_never_exposes_or_acknowledges_pending_before_binding() {
     let mut port = RecordingInterruptTransitionPort {
         event_identity: 0x5a,
         events_enabled: false,
@@ -178,19 +179,15 @@ fn arming_acks_the_exact_affine_sample_and_leaves_every_event_masked() {
     assert_eq!(
         port.operations,
         [
+            InterruptTransitionOperation::MaskEvents,
             InterruptTransitionOperation::EnableRuntimeTxAborts,
             InterruptTransitionOperation::EnableRuntimeRxAborts,
-            InterruptTransitionOperation::EnableEvents,
-            InterruptTransitionOperation::OrderDeviceAccesses,
-            InterruptTransitionOperation::SampleStaleEvents(0x5a),
-            InterruptTransitionOperation::MaskEvents,
-            InterruptTransitionOperation::AcknowledgeStaleEvents(0x5a),
             InterruptTransitionOperation::OrderDeviceAccesses,
         ]
     );
     assert!(!port.events_enabled);
     port.enable_all_events();
-    assert_eq!(port.sample_events(), RecordingEventSnapshot(0));
+    assert_eq!(port.sample_events(), RecordingEventSnapshot(0x5a));
 }
 
 #[test]
@@ -253,4 +250,67 @@ fn a_security_payload_offset_is_made_only_inside_seven_bits() {
     assert_eq!(Offset::new(Offset::MAX).map(Offset::value), Some(0x7f));
     assert_eq!(Offset::new(0x80), None);
     assert_eq!(Offset::new(u8::MAX), None);
+}
+
+impl super::Ieee802154InterruptInitializationPort for RecordingInterruptTransitionPort {
+    type Fault = core::convert::Infallible;
+    fn enable_handled_events(&mut self) {
+        self.events_enabled = true;
+        self.operations
+            .push(InterruptTransitionOperation::EnableHandledEvents);
+    }
+    fn acknowledge_startup_events(
+        &mut self,
+        snapshot: Self::EventSnapshot,
+    ) -> Result<(), Self::Fault> {
+        self.acknowledge_events(snapshot);
+        Ok(())
+    }
+}
+
+#[test]
+fn saved_timer1_pending_is_consumed_before_a_new_operation_can_take_it() {
+    let mut port = RecordingInterruptTransitionPort {
+        event_identity: 1,
+        events_enabled: false,
+        pending: true,
+        expire_on_stop: true,
+        operations: Vec::new(),
+    };
+    execute_interrupt_arming(
+        &mut port,
+        Ieee802154InterruptActivationPlan::SOURCE_CONFIRMED_BASELINE,
+    );
+    assert!(port.pending, "masking alone must not invent a clear");
+    port.operations.clear();
+    super::execute_interrupt_initialization(&mut port).unwrap();
+    assert_eq!(
+        port.operations,
+        [
+            InterruptTransitionOperation::StopOperation,
+            InterruptTransitionOperation::StopTimer0,
+            InterruptTransitionOperation::StopTimer1,
+            InterruptTransitionOperation::OrderDeviceAccesses,
+            InterruptTransitionOperation::EnableHandledEvents,
+            InterruptTransitionOperation::OrderDeviceAccesses,
+            InterruptTransitionOperation::SampleStaleEvents(1),
+            InterruptTransitionOperation::MaskEvents,
+            InterruptTransitionOperation::AcknowledgeStaleEvents(1),
+            InterruptTransitionOperation::OrderDeviceAccesses,
+        ]
+    );
+    assert!(!port.events_enabled);
+    // A new timed operation now installs its callback and enables its lane.
+    port.events_enabled = true;
+    assert_eq!(
+        port.sample_events(),
+        RecordingEventSnapshot(0),
+        "old timer1 pending cannot invoke the new callback"
+    );
+    port.pending = true;
+    assert_eq!(
+        port.sample_events(),
+        RecordingEventSnapshot(1),
+        "a fresh deadline still reaches the new operation"
+    );
 }

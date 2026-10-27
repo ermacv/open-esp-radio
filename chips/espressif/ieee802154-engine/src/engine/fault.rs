@@ -7,6 +7,12 @@ use core::fmt::{self, Write};
 /// Impossible hardware input; no selected event has been acknowledged or dispatched.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Fault {
+    /// Unsupported events sampled while consuming startup pending, before
+    /// operational ownership or an engine state exists.
+    StartupEvents {
+        /// Complete source event sample, left unacknowledged and masked.
+        observation: Ieee802154EventObservation,
+    },
     /// A sample includes an unnamed lane or the unsupported clock-match event.
     UnhandledEvents {
         /// Complete sampled event set, including each unnamed lane separately.
@@ -56,22 +62,25 @@ pub struct FaultRecord {
     events_7: u8,
     events_13: u8,
     state: u8,
-    reserved: u8,
+    reason: u8,
     checksum: u32,
 }
 
 impl FaultRecord {
     /// Retain a terminal fault before software reset, without releasing owners.
     pub fn record(&mut self, fault: Fault) {
-        let Fault::UnhandledEvents { observation, state } = fault;
+        let (observation, state, reason) = match fault {
+            Fault::UnhandledEvents { observation, state } => (observation, state as u8, 0),
+            Fault::StartupEvents { observation } => (observation, 0, 1),
+        };
         self.magic = 0;
         for (byte, event) in self.named.iter_mut().zip(NAMED) {
             *byte = u8::from(observation.contains(event));
         }
         self.events_7 = u8::from(observation.events_7());
         self.events_13 = u8::from(observation.events_13());
-        self.state = state as u8;
-        self.reserved = 0;
+        self.state = state;
+        self.reason = reason;
         self.checksum = self.checksum();
         self.magic = MAGIC;
     }
@@ -80,22 +89,19 @@ impl FaultRecord {
         self.named
             .iter()
             .copied()
-            .chain([self.events_7, self.events_13, self.state, self.reserved])
+            .chain([self.events_7, self.events_13, self.state, self.reason])
             .fold(MAGIC, |sum, byte| {
                 (sum ^ u32::from(byte)).wrapping_mul(0x0100_0193)
             })
     }
 
     fn fault(&self) -> Option<Fault> {
-        if self.magic != MAGIC || self.checksum != self.checksum() || self.reserved != 0 {
+        if self.magic != MAGIC || self.checksum != self.checksum() {
             return None;
         }
         if self.named.iter().any(|byte| *byte > 1) || self.events_7 > 1 || self.events_13 > 1 {
             return None;
         }
-        let state = STATES
-            .into_iter()
-            .find(|state| *state as u8 == self.state)?;
         let events = self.named.iter().zip(NAMED).fold(
             Ieee802154EventMask::NONE,
             |events, (byte, event)| {
@@ -106,14 +112,18 @@ impl FaultRecord {
                 }
             },
         );
-        Some(Fault::UnhandledEvents {
-            observation: Ieee802154EventObservation::new(
-                events,
-                self.events_7 == 1,
-                self.events_13 == 1,
-            ),
-            state,
-        })
+        let observation =
+            Ieee802154EventObservation::new(events, self.events_7 == 1, self.events_13 == 1);
+        match self.reason {
+            0 => Some(Fault::UnhandledEvents {
+                observation,
+                state: STATES
+                    .into_iter()
+                    .find(|state| *state as u8 == self.state)?,
+            }),
+            1 if self.state == 0 => Some(Fault::StartupEvents { observation }),
+            _ => None,
+        }
     }
 
     /// Report a valid previous-boot fault once. Refused output retains it.
@@ -191,5 +201,39 @@ mod tests {
         record.events_13 ^= 1;
         assert_eq!(record.fault(), None);
         record.report(|_| panic!("invalid record")).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+
+    #[test]
+    fn startup_reason_preserves_exact_events_in_the_existing_record_size() {
+        let fault = Fault::StartupEvents {
+            observation: Ieee802154EventObservation::new(
+                Ieee802154Event::ClockCountMatch.mask(),
+                true,
+                false,
+            ),
+        };
+        let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
+        record.record(fault);
+        assert_eq!(record.fault(), Some(fault));
+        assert!(record.report(|_| false).is_err());
+        assert_eq!(record.fault(), Some(fault));
+        let mut output = std::vec::Vec::new();
+        record
+            .report(|bytes| {
+                output.extend_from_slice(bytes);
+                true
+            })
+            .unwrap();
+        assert!(
+            std::string::String::from_utf8(output)
+                .unwrap()
+                .contains(&std::format!("{fault:?}"))
+        );
+        record.report(|_| panic!("already reported")).unwrap();
     }
 }

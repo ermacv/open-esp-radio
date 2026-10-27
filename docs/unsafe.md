@@ -392,18 +392,32 @@ no unsafe code and perform no address arithmetic.
 
 The S31 802.15.4 HAL acknowledges events only through an affine
 `Ieee802154EventSnapshot`; its copyable observation grants no write authority.
-Timer pending survives masking but its status read becomes zero. Arming,
-before a handler is bound, enables events, samples, masks and acknowledges
-the saved sample. Deactivation issues STOP and both timer-stop commands,
-samples before masking and acknowledges that saved sample. These commands
-and selected acknowledgements do not prove producer drain.
-Engine interrupt service rejects a sample containing lane 7, 10 or 13 with `Fault::UnhandledEvents` before acknowledgement or dispatch, preserving
+Timer pending survives masking but its status read becomes zero. Arming
+masks events and installs the abort baseline without enabling or acknowledging
+any event. It returns an affine startup task owner with no operational access.
+After binding, `Bound::initialize` runs only the IRQ owner's typed transaction
+with its opaque context. It loans no owner or arbitrary callback to a task;
+the trait has no caller-selected context parameter. That context is created
+only while consuming the startup owner. The transaction issues STOP and both
+timer-stop commands, exposes the handled set including timer0, saves one sample,
+masks and acknowledges it. The returned operational task can then enable the
+unchanged runtime set. Polling performs the same transaction with `Silent`
+before constructing the operational pair. Stale timer1 pending cannot run a
+new operation's callback. Lanes 7/10/13 are never enabled by startup; an
+unexpected visible startup sample is `Fault::StartupEvents`, masked and left
+unacknowledged with all owners retained. The existing 24-byte retained record
+also encodes this reason without an engine state. Deactivation issues STOP and
+both timer-stop commands, samples before masking and acknowledges its saved
+sample. Commands and selected acknowledgements do not prove producer drain.
+Engine interrupt service rejects a sample containing lane 7, 10 or 13 with
+`Fault::UnhandledEvents` before acknowledgement or dispatch, preserving
 all named events, each unnamed lane and the entry state. The consuming
 engine/MAC owner becomes an absorbing quarantine with no recovery API.
 The PHY HIL image records the fault through safe `fatal::reset_recording`
 without dropping its quarantined owners; its 24-byte versioned/checksummed
 record prints at the next boot and remains retained on output refusal.
-During ACK reception the engine stops timer0, samples and clears its event while enabled, then masks
+During ACK reception the engine stops timer0, samples and clears its event
+while enabled, then masks
 it. A new ACK wait enables and clears old pending while timer0 is stopped,
 before programming and starting it. The HAL never resamples status as the
 authority for acknowledgement. Same-lane recurrence is not an event count.

@@ -42,6 +42,11 @@ system these rules serve.
   An impossible state returns a named fault retaining its source observations;
   its owners stay quarantined, then the image calls safe `fatal::reset_recording`
   to retain the reason for the next boot to print. A watchdog is not this mechanism.
+  IEEE 802.15.4 startup acknowledgement is one typed post-bind transaction:
+  `Bound` reaches only the IRQ owner's opaque initialization context, never
+  a general task-side acknowledgement or arbitrary owner callback. The affine
+  startup task owner is consumed before new operations become available;
+  polling performs the same step with its `Silent` proof.
   Owned PHY transactions preserve their registration and restore obligations;
   only consuming reunion with the exact affine return owner releases their
   quarantine guard. Dropping either half records its source observations and

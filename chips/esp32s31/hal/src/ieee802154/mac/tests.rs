@@ -47,8 +47,9 @@ fn assembling_host_owners_performs_no_register_access() {
 #[test]
 fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     let mut memory = HostMemory::filled(u32::MAX);
-    let (mut task, setup) = memory.owners();
-    let interrupts = setup.arm(&mut task);
+    let (task, setup) = memory.owners();
+    let (startup, interrupts) = setup.arm(task);
+    let mut task = startup.task;
     // Arming leaves every event masked: nothing is raised before a handler
     // holds the owner (`enable_events` takes the binding's proof).
     assert!(task.foundation_snapshot().events_masked());
@@ -87,7 +88,7 @@ fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     );
     assert!(!(tx.rx_ack_stop() || tx.tx_stop() || tx.rx_ack_crc_error()));
     assert_eq!(tx.tx_abort_en_25_30().get(), 0);
-    // Arming acknowledged the stale sample it took.
+    // Arming leaves the status image untouched.
     assert!(
         interrupts
             .events()
@@ -112,10 +113,10 @@ fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
 #[test]
 fn clearing_events_acknowledges_only_the_sampled_events_the_mask_selects() {
     let mut memory = HostMemory::filled(u32::MAX);
-    let (mut task, setup) = memory.owners();
-    let mut interrupts = setup.arm(&mut task);
-    // The stale acknowledgement left every event asserted, the two unnamed
-    // ones included.
+    let (task, setup) = memory.owners();
+    let (startup, mut interrupts) = setup.arm(task);
+    let mut task = startup.task;
+    // Arming leaves the status image untouched, including unnamed lanes.
     assert!(interrupts.events().observation().classification().is_err());
 
     let selected = mask(&[Ieee802154Event::TxDone, Ieee802154Event::RxSfdDone]);
@@ -443,8 +444,9 @@ fn the_recent_rssi_is_the_signed_low_byte_of_the_receive_information() {
 #[test]
 fn a_saved_timer_sample_is_acknowledged_after_masking_without_resampling() {
     let mut memory = HostMemory::filled(u32::MAX);
-    let (mut task, setup) = memory.owners();
-    let mut interrupts = setup.arm(&mut task);
+    let (task, setup) = memory.owners();
+    let (startup, mut interrupts) = setup.arm(task);
+    let mut task = startup.task;
     let saved = interrupts.events();
     // Host memory stores the acknowledgement image. Make the current status
     // zero to model the hidden read under mask, retaining the earlier sample.
@@ -463,4 +465,52 @@ fn a_saved_timer_sample_is_acknowledged_after_masking_without_resampling() {
         Ok(timers)
     );
     let _setup = interrupts.deactivate(&mut task);
+}
+
+#[test]
+fn startup_exposes_only_handled_events_and_keeps_runtime_selection_unchanged() {
+    let mut memory = HostMemory::filled(0);
+    let (task, setup) = memory.owners();
+    let (mut startup, _interrupts) = setup.arm(task);
+    assert!(startup.task.foundation_snapshot().events_masked());
+    startup.task.enable_handled_events();
+    let events = startup.task.mac_part().read_event_enable();
+    assert!(events.tx_done() && events.rx_done() && events.ack_tx_done() && events.ack_rx_done());
+    assert!(events.rx_abort() && events.tx_abort() && events.ed_done());
+    assert!(events.timer0_overflow() && events.timer1_overflow());
+    assert!(events.rx_sfd_done() && events.tx_sfd_done());
+    assert!(!events.events_7() && !events.clock_count_match() && !events.events_13());
+    startup.task.publish_runtime_events();
+    let events = startup.task.mac_part().read_event_enable();
+    assert!(!events.timer0_overflow() && events.timer1_overflow());
+    assert!(!events.events_7() && !events.clock_count_match() && !events.events_13());
+}
+
+#[test]
+fn unsupported_startup_observations_quarantine_both_polled_owners() {
+    let mut memory = HostMemory::filled(u32::MAX);
+    let (task, setup) = memory.owners();
+    let (startup, interrupts) = setup.arm(task);
+    let observed = interrupts.events().observation();
+    let quarantine = match crate::ieee802154::ll::Ieee802154MacOwners::new(
+        startup,
+        interrupts,
+        super::host::silent(),
+    ) {
+        Ok(_) => panic!("unsupported startup cannot release operational owners"),
+        Err(quarantine) => quarantine,
+    };
+    assert_eq!(
+        quarantine.fault(),
+        super::Fault::StartupEvents {
+            observation: observed
+        }
+    );
+    let (startup, interrupts, _) = &*quarantine._owners;
+    assert!(startup.task.foundation_snapshot().events_masked());
+    assert_eq!(
+        interrupts.events().observation(),
+        observed,
+        "fault does not acknowledge any source lane"
+    );
 }

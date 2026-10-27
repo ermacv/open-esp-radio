@@ -30,26 +30,52 @@ pub trait Ieee802154InterruptTransitionPort {
 /// Arm the interrupt side for its binding: the first part of the
 /// activation, with every event left masked.
 ///
-/// With no handler bound, enable events to expose retained timer pending,
-/// sample it, mask events and acknowledge that saved affine W1C sample.
-/// Both abort fields take their runtime baseline; the final fence precedes
-/// transfer of the interrupt owner. The task publishes runtime events after
-/// binding, or when the polling engine enables them.
+/// Mask every event before installing the abort baseline. No event is
+/// enabled or acknowledged here. Initialization consumes retained startup
+/// pending after binding, or after obtaining the polling route's authority.
 /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
 #[doc(hidden)]
 pub fn execute_interrupt_arming<Port>(port: &mut Port, _plan: Ieee802154InterruptActivationPlan)
 where
     Port: Ieee802154InterruptTransitionPort,
 {
+    port.mask_all_events();
     port.enable_runtime_tx_aborts();
     port.enable_runtime_rx_aborts();
-    port.enable_all_events();
     port.order_device_accesses();
+}
 
+/// Startup operations available only in a typed post-bind initialization or
+/// in a pair holding the silent-route proof. Unsupported events stay unacked.
+#[doc(hidden)]
+pub trait Ieee802154InterruptInitializationPort: Ieee802154InterruptTransitionPort {
+    type Fault;
+    fn enable_handled_events(&mut self);
+    fn acknowledge_startup_events(
+        &mut self,
+        snapshot: Self::EventSnapshot,
+    ) -> Result<(), Self::Fault>;
+}
+
+/// Stop startup producers, expose only handled lanes, sample once, mask and
+/// acknowledge that exact sample. The caller releases operational ownership
+/// only after success. Timer0 is sampled here too, then remains masked until
+/// its per-transmission ACK wait. No operation callback can consume old pending.
+#[doc(hidden)]
+pub fn execute_interrupt_initialization<Port: Ieee802154InterruptInitializationPort>(
+    port: &mut Port,
+) -> Result<(), Port::Fault> {
+    port.stop_operation();
+    port.stop_timer0();
+    port.stop_timer1();
+    port.order_device_accesses();
+    port.enable_handled_events();
+    port.order_device_accesses();
     let stale = port.sample_events();
     port.mask_all_events();
-    port.acknowledge_events(stale);
+    let result = port.acknowledge_startup_events(stale);
     port.order_device_accesses();
+    result
 }
 
 /// Issue the teardown commands and selected acknowledgement of a polled epoch.

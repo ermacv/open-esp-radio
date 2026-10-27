@@ -19,7 +19,7 @@ use super::{Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, task::byte}
 
 /// The named events of one `EVENT_STATUS` read, and whether one of the two
 /// unnamed event bits was set.
-fn observation(status: &event_status::Snapshot) -> Ieee802154EventObservation {
+pub(super) fn observation(status: &event_status::Snapshot) -> Ieee802154EventObservation {
     let named = [
         (status.tx_done(), Ieee802154Event::TxDone),
         (status.rx_done(), Ieee802154Event::RxDone),
