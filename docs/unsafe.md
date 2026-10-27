@@ -505,6 +505,12 @@ grant-protect words remain with the movable PHY half. Neither half exposes
 register ownership from the other. Channel and retune futures own
 `ChannelTransaction`, containing the PHY custody and exclusive MAC/platform
 loans, and return the domain with their result.
+The radio actor keeps lifecycle results in its parent future's storage;
+only exclusive `Placed` loans cross the result-poll boundary. Completion
+consumes the result loan before returning the same domain to its backend
+slot. Cancellation retains the existing transaction guards and performs no
+hardware restoration. This uses the memory crate's existing placement core.
+
 Both payloads stay in `ManuallyDrop` until consuming reunion. Both guards
 record `Cancelled(Operation)` with the registration observation, independently
 of field drop order. The operation names register, maintain, wake, close,

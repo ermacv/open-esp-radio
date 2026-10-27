@@ -257,7 +257,8 @@ fn fail(reason: &'static str) -> ! {
 }
 
 async fn radio_actor(actor: &'static mut Actor) {
-    match actor.run().await {}
+    let mut run = core::pin::pin!(actor.run());
+    match run.as_mut().await {}
 }
 async fn reporting(mut console: Console, _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads) {
     let result = loop {

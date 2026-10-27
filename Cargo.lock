@@ -2080,6 +2080,7 @@ dependencies = [
  "oer-espressif-coex",
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
+ "oer-memory",
  "oer-radio-regulatory",
  "oer-time",
  "oer-time-virtual",

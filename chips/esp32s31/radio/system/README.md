@@ -44,6 +44,13 @@ tracking period is 1 s, with the first due microsecond at
 the executor dispatches timers and polls the actor. B0 polls its attached
 actor from the P2 driver task rather than a separate actor task.
 
+Actor tasks pin their run future in the executor's retained task storage and
+await its pinned reference. The W1 timing adapter and B0's attached actor do
+the same for nested operations. Backend operations have a shared non-inlined
+poll boundary. Owned PHY results are polled into the parent future's retained
+storage and consumed through exclusive `Placed` loans before the domain
+returns to its backend slot.
+
 PHY's cooperative CPU admission is separate from RF admission. Shared
 transport and RX-gain drivers check admission between atoms; direct
 TXDC/PWDET paths do not. The 50 µs atom / 1 ms poll contracts are not universal

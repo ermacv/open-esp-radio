@@ -231,7 +231,8 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 }
 
 async fn radio_actor(actor: &'static mut Actor) {
-    match actor.run().await {}
+    let mut run = core::pin::pin!(actor.run());
+    match run.as_mut().await {}
 }
 async fn reporting(
     mut console: Console,
