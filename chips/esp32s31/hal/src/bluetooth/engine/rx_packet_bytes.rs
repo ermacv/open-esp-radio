@@ -71,7 +71,7 @@ impl RxPacketBytes {
             [0; 4],
             [0; 4],
             BleRxPacketPrefixAuxiliary::from_bits(0)
-                .with_bits_0_15_opaque(0xffff)
+                .with_association_tag(0xffff)
                 .bits()
                 .to_le_bytes(),
         ];
@@ -118,7 +118,7 @@ impl RxPacketBytes {
     pub(crate) fn rearm(&self) {
         self.update_prefix(|prefix| {
             prefix.set_result(REARMED_RESULT.with_rssi(prefix.result().rssi()));
-            prefix.set_auxiliary(prefix.auxiliary().with_bits_0_15_opaque(u16::MAX));
+            prefix.set_auxiliary(prefix.auxiliary().with_association_tag(u16::MAX));
         });
     }
     #[cfg(test)]

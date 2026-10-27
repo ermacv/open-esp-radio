@@ -69,13 +69,13 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 sources = ["S31_MMIO_USE_20101018"]
 
 [review.entity."WORD_0018_OPAQUE.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_USE_20101018", "S31_MMIO_DECLARED_20101018"]
+sources = ["S31_MMIO_USE_20101018", "S31_MMIO_DECLARED_20101018", "BLOB_S31_BT_TASK_TEST_ACK_20261027"]
 
 [review.entity."WORD_0038_OPAQUE"]
 sources = ["S31_MMIO_USE_20101038"]
 
 [review.entity."WORD_0038_OPAQUE.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_USE_20101038", "S31_MMIO_DECLARED_20101038"]
+sources = ["S31_MMIO_USE_20101038", "S31_MMIO_DECLARED_20101038", "BLOB_S31_BT_TASK_TEST_ACK_20261027"]
 
 [review.entity."WORD_0048_OPAQUE"]
 sources = ["S31_MMIO_USE_20101048"]
@@ -229,10 +229,10 @@ sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT", "HW2_S31_BLE_INHERITED_20261026", "HW9_S31_MAC_CAUSES_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026"]
 
 [review.entity."IRQ_ENABLE_1.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
 
 [review.entity."IRQ_ENABLE_1.BIT_2_OPAQUE"]
-sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
 
 [review.entity."IRQ_ENABLE_1.BIT_7_OPAQUE"]
 sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
@@ -247,13 +247,13 @@ sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026"]
 
 [review.entity."IRQ_CLEAR_1.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20101064"]
+sources = ["S31_MMIO_MANUAL_20101064", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
 
 [review.entity."IRQ_CLEAR_1.CONTROLLER_TIME_OVERFLOW"]
 sources = ["HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW9_S31_MAC_CAUSES_20261027"]
 
 [review.entity."IRQ_CLEAR_1.BIT_2_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20101064"]
+sources = ["S31_MMIO_MANUAL_20101064", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
 
 [review.entity."IRQ_CLEAR_1.SOURCE_3"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
@@ -281,7 +281,7 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027", "HW12
 completeness = "partial"
 
 [review.entity."IRQ_STATUS_1.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20101068"]
+sources = ["S31_MMIO_DECLARED_20101068", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
 provenance = "derived"
 accuracy = "unknown"
 completeness = "unknown"
@@ -290,7 +290,7 @@ completeness = "unknown"
 sources = ["HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW9_S31_MAC_CAUSES_20261027"]
 
 [review.entity."IRQ_STATUS_1.BIT_2_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20101068"]
+sources = ["S31_MMIO_DECLARED_20101068", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
 provenance = "derived"
 accuracy = "unknown"
 completeness = "unknown"
@@ -434,7 +434,6 @@ sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
 
 [review.entity."BTLC_TIMER_CONTROL.COMPARE_3_ENABLE"]
 sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
-
 
 [review.entity."BTLC_TIMER_CONTROL.TIMER_ARM"]
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
@@ -1180,10 +1179,10 @@ sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT",
 completeness = "partial"
 
 [review.entity."INTERRUPT_ENABLE.SCHEDULER_RUN"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT", "BLOB_S31_BT_TASK_RUN_SERVICE_20261027"]
 
 [review.entity."INTERRUPT_ENABLE.SOURCE_17"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027", "BLOB_S31_BT_TASK17_SELECTION_SCOPE_20261027"]
 
 [review.entity."INTERRUPT_ENABLE.BITS_0_13_OPAQUE"]
 sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
@@ -1195,26 +1194,208 @@ sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
 sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
 
 [review.entity."INTERRUPT_CLEAR"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027", "BLOB_S31_BT_TASK_RUN_SERVICE_20261027", "BLOB_S31_BT_TASK_CTE_ACK_20261027", "BLOB_S31_BT_TASK_ISOAL_ACK_20261027", "BLOB_S31_BT_TASK_TEST_ACK_20261027", "BLOB_S31_BT_TASK17_SELECTION_SCOPE_20261027"]
 completeness = "partial"
 
 [review.entity."INTERRUPT_CLEAR.SCHEDULER_RUN"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT", "BLOB_S31_BT_TASK_RUN_SERVICE_20261027"]
 
-[review.entity."INTERRUPT_CLEAR.BITS_0_13_OPAQUE"]
-sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8"]
+[review.entity."INTERRUPT_CLEAR.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
 
-[review.entity."INTERRUPT_CLEAR.BITS_15_31_OPAQUE"]
-sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8"]
+[review.entity."INTERRUPT_CLEAR.BITS_1_2_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_3_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027", "BLOB_S31_BT_TASK_TEST_ACK_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_4_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_CTE_ACK_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BITS_5_9_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_10_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_11_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BITS_12_13_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_15_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_17_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK17_SELECTION_SCOPE_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BITS_18_19_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_20_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_21_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_ISOAL_ACK_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BITS_22_23_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_24_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BITS_25_27_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BIT_28_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BT_TASK_TEST_ACK_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INTERRUPT_CLEAR.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
 
 [review.entity."WORD_04BC_OPAQUE"]
 sources = ["S31_MMIO_USE_201014BC"]
 
-[review.entity."WORD_04BC_OPAQUE.BITS_0_21_OPAQUE"]
+[review.entity."WORD_04BC_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BITS_1_2_OPAQUE"]
 sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BIT_3_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027", "BLOB_S31_BT_TASK_TEST_ACK_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BIT_4_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CTE_ACK_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BITS_5_9_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BIT_10_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BIT_11_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BITS_12_13_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.SCHEDULER_RUN"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_RUN_SERVICE_20261027"]
+provenance = "derived"
+completeness = "partial"
+
+[review.entity."WORD_04BC_OPAQUE.BIT_15_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BITS_16_19_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BIT_20_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_04BC_OPAQUE.BIT_21_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_ISOAL_ACK_20261027"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
 
 [review.entity."WORD_04BC_OPAQUE.BIT_24_OPAQUE"]
-sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_DIAGNOSTIC_20261027"]
 
 [review.entity."WORD_04C4_OPAQUE"]
 sources = ["S31_MMIO_USE_201014C4"]
@@ -1774,7 +1955,7 @@ description = "Aligned 32-bit bus view explicitly addressed by the cited vendor 
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "read-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Polled by wait_link_end_int before task clear3; no general interrupt/output equation established."
 
 [[registers]]
 name = "WORD_0038_OPAQUE"
@@ -1785,7 +1966,7 @@ description = "Aligned 32-bit bus view explicitly addressed by the cited vendor 
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "read-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Polled by ble_wait_rxend_int before task clear28; no general interrupt/output equation established."
 
 [[registers]]
 name = "WORD_0048_OPAQUE"
@@ -2025,13 +2206,13 @@ class = "plain"
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands."
 
 [[registers.fields]]
 name = "BIT_2_OPAQUE"
 bits = "2"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Event identity unknown. The reviewed baseline/dynamic and classic init/deinit stores preserve this inherited enable; CTE calibration can zero the whole enable word. No fixed producer or dedicated enable was recovered. This does not establish retention through hardware reset/commands."
 
 [[registers.fields]]
 name = "BIT_7_OPAQUE"
@@ -2060,6 +2241,7 @@ description = "Second controller interrupt-clear bank. Primary and NRT handlers 
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "write-one-to-clear"
+description = "Selected by a saved primary or NRT bank1 image, or the DTM all-ones clear. No separately attributed event or lane-specific clear timing is established."
 
 [[registers.fields]]
 name = "CONTROLLER_TIME_OVERFLOW"
@@ -2071,6 +2253,7 @@ description = "32-bit first-word BTLC overflow, delivered on primary source 124.
 name = "BIT_2_OPAQUE"
 bits = "2"
 class = "write-one-to-clear"
+description = "Selected by a saved primary or NRT bank1 image, or the DTM all-ones clear. No separately attributed event or lane-specific clear timing is established."
 
 [[registers.fields]]
 name = "SOURCE_3"
@@ -2116,6 +2299,7 @@ description = "Second masked controller interrupt-status bank; the primary sourc
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "read-only"
+description = "Event identity unknown. The primary source-124 snapshot carries this lane to shared acknowledgement/broker dispatch; no dedicated event consumer or physical producer is identified. Its relation to NRT133 is unknown."
 
 [[registers.fields]]
 name = "CONTROLLER_TIME_OVERFLOW"
@@ -2127,6 +2311,7 @@ description = "32-bit first-word BTLC overflow, delivered on primary source 124.
 name = "BIT_2_OPAQUE"
 bits = "2"
 class = "read-only"
+description = "Event identity unknown. The primary source-124 snapshot carries this lane to shared acknowledgement/broker dispatch; no dedicated event consumer or physical producer is identified. Its relation to NRT133 is unknown."
 
 [[registers.fields]]
 name = "SOURCE_3"
@@ -3779,13 +3964,13 @@ description = "BLE base-stack interrupt enable bank at +0x4b4, distinct from pri
 name = "SCHEDULER_RUN"
 bits = "14"
 class = "plain"
-description = "The synchronous base-stack subscriber enables source 14 immediately before the scheduler RUN command."
+description = "Task14 is cleared then enabled by scheduler entry1 before RUN; primary HAL entry0 later tests task status14, acknowledges it and performs scan capture/truncation/recycle service. The paired entry2 masks only14. The software order does not identify the physical trigger."
 
 [[registers.fields]]
 name = "SOURCE_17"
 bits = "17"
 class = "plain"
-description = "BLE PHY initialization retains this bit's inherited value while disabling every other task interrupt source. The scheduler-run disable masks only task bit 14, preserving this enable in its store. An argument-mask helper can change this bank, but supplies no fixed bit-17 producer. This bit's event identity, relation to outputs 124/133 and state after CONTROL1/2 remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027."
+description = "BLE PHY initialization retains this inherited enable; scheduler entry2 masks only14. Generic PHY-info configuration selects an argument mask, with no fixed17 call recovered. Its observer gates on ENABLE, not task-status17; observer invocation is not a positive pending17 witness. Event identity, output124/133 relation and state after CONTROL1/2 remain unknown."
 
 [[registers.fields]]
 name = "BITS_0_13_OPAQUE"
@@ -3808,25 +3993,127 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "INTERRUPT_CLEAR"
 offset = 0x4b8
-description = "Write-one-to-clear BLE base-stack interrupt bank. Initialization acknowledges every source with an all-ones image; the synchronous scheduler-run subscriber acknowledges source 14 before enabling it."
+description = "Task-side interrupt acknowledgement bank at +0x4b8, separate from primary CLEAR0/1. Vendor init/DTM publish all ones; individual consumers select0,3,4,10,14,21,28 and diagnostic11,15,20,24. Software stores do not establish complete readback or reassert semantics or a task-to124/133 equation."
 
 [[registers.fields]]
 name = "SCHEDULER_RUN"
 bits = "14"
 class = "write-trigger"
-description = "A one acknowledges stale scheduler-run source 14 before that source is enabled."
+description = "Task14 is cleared then enabled by scheduler entry1 before RUN; primary HAL entry0 later tests task status14, acknowledges it and performs scan capture/truncation/recycle service. The paired entry2 masks only14. The software order does not identify the physical trigger."
 
 [[registers.fields]]
-name = "BITS_0_13_OPAQUE"
-bits = "13:0"
+name = "BIT_0_OPAQUE"
+bits = "0"
 class = "write-trigger"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Selected by the registered PHY callback; physical event and output relation unknown."
 
 [[registers.fields]]
-name = "BITS_15_31_OPAQUE"
-bits = "31:15"
+name = "BITS_1_2_OPAQUE"
+bits = "2:1"
 class = "write-trigger"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Observed only in whole-bank or argument-mask acknowledgements; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "write-trigger"
+description = "Selected by the registered PHY callback and after link-end polling in vendor test code; physical event and output relation unknown."
+
+[[registers.fields]]
+name = "BIT_4_OPAQUE"
+bits = "4"
+class = "write-trigger"
+description = "Selected by the alternate CTE/source124 consumer when secondary status10 is clear; task4-only output causality unknown."
+
+[[registers.fields]]
+name = "BITS_5_9_OPAQUE"
+bits = "9:5"
+class = "write-trigger"
+description = "Observed only in whole-bank or argument-mask acknowledgements; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_10_OPAQUE"
+bits = "10"
+class = "write-trigger"
+description = "Selected by the registered PHY callback; physical event and output relation unknown."
+
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "write-trigger"
+description = "Part of the primary broker's selected diagnostic image; physical fault unknown."
+
+[[registers.fields]]
+name = "BITS_12_13_OPAQUE"
+bits = "13:12"
+class = "write-trigger"
+description = "Observed only in whole-bank or argument-mask acknowledgements; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_15_OPAQUE"
+bits = "15"
+class = "write-trigger"
+description = "Part of the primary broker's selected diagnostic image; physical fault unknown."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "write-trigger"
+description = "Observed only in whole-bank or argument-mask acknowledgements; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_17_OPAQUE"
+bits = "17"
+class = "write-trigger"
+description = "Observed in whole-bank or argument-mask acknowledgements. No fixed17 producer or pending17 test is recovered; individual event identity unknown."
+
+[[registers.fields]]
+name = "BITS_18_19_OPAQUE"
+bits = "19:18"
+class = "write-trigger"
+description = "Observed only in whole-bank or argument-mask acknowledgements; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_20_OPAQUE"
+bits = "20"
+class = "write-trigger"
+description = "Part of the primary broker's selected diagnostic image; physical fault unknown."
+
+[[registers.fields]]
+name = "BIT_21_OPAQUE"
+bits = "21"
+class = "write-trigger"
+description = "Acknowledged by the primary ISOAL input-SDU consumer and its mask/ack lifecycle; exact physical condition unknown."
+
+[[registers.fields]]
+name = "BITS_22_23_OPAQUE"
+bits = "23:22"
+class = "write-trigger"
+description = "Observed only in whole-bank or argument-mask acknowledgements; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_24_OPAQUE"
+bits = "24"
+class = "write-trigger"
+description = "Part of the primary broker's selected diagnostic image; physical fault unknown."
+
+[[registers.fields]]
+name = "BITS_25_27_OPAQUE"
+bits = "27:25"
+class = "write-trigger"
+description = "Observed only in whole-bank or argument-mask acknowledgements; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_28_OPAQUE"
+bits = "28"
+class = "write-trigger"
+description = "Selected after RX-end polling in vendor test code; task status/output relation unknown."
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "write-trigger"
+description = "Observed only in whole-bank or argument-mask acknowledgements; individual event identities unknown."
 
 [[registers]]
 name = "WORD_04BC_OPAQUE"
@@ -3834,16 +4121,88 @@ offset = 0x4bc
 description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
 
 [[registers.fields]]
-name = "BITS_0_21_OPAQUE"
-bits = "21:0"
+name = "BIT_0_OPAQUE"
+bits = "0"
 class = "read-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Selected by the registered PHY callback; physical event and output relation unknown."
+
+[[registers.fields]]
+name = "BITS_1_2_OPAQUE"
+bits = "2:1"
+class = "read-only"
+description = "Observed task-status positions; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "read-only"
+description = "Selected by the registered PHY callback and after link-end polling in vendor test code; physical event and output relation unknown."
+
+[[registers.fields]]
+name = "BIT_4_OPAQUE"
+bits = "4"
+class = "read-only"
+description = "Selected by the alternate CTE/source124 consumer when secondary status10 is clear; task4-only output causality unknown."
+
+[[registers.fields]]
+name = "BITS_5_9_OPAQUE"
+bits = "9:5"
+class = "read-only"
+description = "Observed task-status positions; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_10_OPAQUE"
+bits = "10"
+class = "read-only"
+description = "Selected by the registered PHY callback; physical event and output relation unknown."
+
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "read-only"
+description = "Part of the primary broker's selected diagnostic image; physical fault unknown."
+
+[[registers.fields]]
+name = "BITS_12_13_OPAQUE"
+bits = "13:12"
+class = "read-only"
+description = "Observed task-status positions; individual event identities unknown."
+
+[[registers.fields]]
+name = "SCHEDULER_RUN"
+bits = "14"
+class = "read-only"
+description = "Task14 is cleared then enabled by scheduler entry1 before RUN; primary HAL entry0 later tests task status14, acknowledges it and performs scan capture/truncation/recycle service. The paired entry2 masks only14. The software order does not identify the physical trigger."
+
+[[registers.fields]]
+name = "BIT_15_OPAQUE"
+bits = "15"
+class = "read-only"
+description = "Part of the primary broker's selected diagnostic image; physical fault unknown."
+
+[[registers.fields]]
+name = "BITS_16_19_OPAQUE"
+bits = "19:16"
+class = "read-only"
+description = "Observed task-status positions; individual event identities unknown."
+
+[[registers.fields]]
+name = "BIT_20_OPAQUE"
+bits = "20"
+class = "read-only"
+description = "Part of the primary broker's selected diagnostic image; physical fault unknown."
+
+[[registers.fields]]
+name = "BIT_21_OPAQUE"
+bits = "21"
+class = "read-only"
+description = "Acknowledged by the primary ISOAL input-SDU consumer and its mask/ack lifecycle; exact physical condition unknown."
 
 [[registers.fields]]
 name = "BIT_24_OPAQUE"
 bits = "24"
 class = "read-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Part of the primary broker's selected diagnostic image; physical fault unknown."
 
 [[registers]]
 name = "WORD_04C4_OPAQUE"

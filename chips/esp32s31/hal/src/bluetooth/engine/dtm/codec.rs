@@ -407,7 +407,7 @@ impl DtmRxPacketStorage {
         if result_not_produced(prefix.result()) {
             return Err(DtmRxPacketCompletionObservationError::ResultNotProduced);
         }
-        if prefix.auxiliary().bits_0_15_opaque() == u16::MAX {
+        if prefix.auxiliary().association_tag() == u16::MAX {
             return Err(DtmRxPacketCompletionObservationError::AuxiliaryNotProduced);
         }
         Ok(DtmRxResultProjection::from_word(prefix.result().bits()))
@@ -416,7 +416,7 @@ impl DtmRxPacketStorage {
     pub(super) fn model_controller_completion(&self, result_word: u32, auxiliary: u16) {
         self.bytes.update_prefix(|prefix| {
             prefix.set_result(BleRxPacketPrefixResult::from_bits(result_word));
-            prefix.set_auxiliary(prefix.auxiliary().with_bits_0_15_opaque(auxiliary));
+            prefix.set_auxiliary(prefix.auxiliary().with_association_tag(auxiliary));
         });
     }
 }

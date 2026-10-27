@@ -103,7 +103,7 @@ name = "BITS_28_31_OPAQUE"
 opaque = true
 bits = "31:28"
 writer = "cpu"
-description = "Direct (D) role reset images: advertising 0xe, passive scanning 0x4, DTM and connection 0x0. These are role-dependent nibble images retained around RX-header publication; individual bit meanings remain unknown. SOURCE: VENDOR_BLE_ROLE_RX_PATH_IMAGES."
+description = "Current direct advertising reset write selects 0xe. Scanner branches explicitly select 0x4 and 0xc. The cited connection/DTM direct stores preserve incoming bits31:28; zero describes their fresh profile image, not a proved unconditional reset value. Individual bit meanings and callee/hardware effects remain unknown."
 
 [[layout.words]]
 name = "CONTROL_POLICY"
@@ -680,8 +680,8 @@ completeness = "complete"
 
 [[review]]
 entity = "BLE_LINK_STATE.RX_PATH.BITS_28_31_OPAQUE"
-sources = ["VENDOR_BLE_ROLE_RX_PATH_IMAGES"]
+sources = ["VENDOR_BLE_ROLE_RX_PATH_IMAGES", "BLOB_LIBBLE_MEMORY_LINK_STATE", "BXB9_BLE_RX_PATH_TRANSFORMS"]
 provenance = "derived"
 accuracy = "positional"
-completeness = "unknown"
+completeness = "partial"
 naming = "opaque"

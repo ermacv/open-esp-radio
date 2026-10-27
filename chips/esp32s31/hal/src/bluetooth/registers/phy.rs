@@ -218,9 +218,26 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
         });
         // Clear every source in one write of all ones.
         btmac.trigger_interrupt_clear(|t| {
-            t.bits_0_13_opaque(oer_mmio::Bits::constant::<0x3fff>())
+            t.bit_0_opaque()
+                .bits_1_2_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bit_3_opaque()
+                .bit_4_opaque()
+                .bits_5_9_opaque(oer_mmio::Bits::constant::<0x1f>())
+                .bit_10_opaque()
+                .bit_11_opaque()
+                .bits_12_13_opaque(oer_mmio::Bits::constant::<0x3>())
                 .scheduler_run()
-                .bits_15_31_opaque(oer_mmio::Bits::constant::<0x1_ffff>());
+                .bit_15_opaque()
+                .bit_16_opaque()
+                .bit_17_opaque()
+                .bits_18_19_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bit_20_opaque()
+                .bit_21_opaque()
+                .bits_22_23_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bit_24_opaque()
+                .bits_25_27_opaque(oer_mmio::Bits::constant::<0x7>())
+                .bit_28_opaque()
+                .bits_29_31_opaque(oer_mmio::Bits::constant::<0x7>());
         });
 
         // `r_ble_phy_ramup_time_set`: the TX-on delay fields, then the
