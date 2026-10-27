@@ -21267,7 +21267,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_1` register.
     ///
-    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is0x00001300 and does not newly arm source 1; a seeded first-word BTLC wrap is now a measured primary producer, while normal handling and arming policy remain separate obligations. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking source 1 retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026.
+    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking source 1 retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026.
     pub mod irq_enable_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21277,12 +21277,12 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x60;
 
-        /// Width of `SOURCE_1` in bits.
-        pub const SOURCE_1_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `SOURCE_1`.
-        pub const SOURCE_1_MAX: u32 = 0x1;
-        /// Positioned bits of `SOURCE_1`.
-        pub const SOURCE_1_MASK: u32 = 0x2;
+        /// Width of `CONTROLLER_TIME_OVERFLOW` in bits.
+        pub const CONTROLLER_TIME_OVERFLOW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CONTROLLER_TIME_OVERFLOW`.
+        pub const CONTROLLER_TIME_OVERFLOW_MAX: u32 = 0x1;
+        /// Positioned bits of `CONTROLLER_TIME_OVERFLOW`.
+        pub const CONTROLLER_TIME_OVERFLOW_MASK: u32 = 0x2;
 
         /// Width of `SOURCE_3` in bits.
         pub const SOURCE_3_WIDTH: u32 = 1;
@@ -21380,9 +21380,9 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. The HAL baseline 0x1300 does not newly arm it and preserves an inherited enable; that enabled pending cause survived the measured release sequence. SOURCE: HW9_S31_MAC_RELEASE_20261027. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
+            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. CONTROL1/2 do not lower an enabled pending overflow; release masks and clears this cause. SOURCE: HW9_S31_MAC_RELEASE_20261027. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
             #[inline]
-            pub const fn source_1(self) -> bool {
+            pub const fn controller_time_overflow(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
@@ -21469,9 +21469,9 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. The HAL baseline 0x1300 does not newly arm it and preserves an inherited enable; that enabled pending cause survived the measured release sequence. SOURCE: HW9_S31_MAC_RELEASE_20261027. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
+            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. CONTROL1/2 do not lower an enabled pending overflow; release masks and clears this cause. SOURCE: HW9_S31_MAC_RELEASE_20261027. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026.
             #[inline]
-            pub const fn source_1(&self) -> bool {
+            pub const fn controller_time_overflow(&self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
@@ -21553,9 +21553,9 @@ pub mod bt_mac {
                 oer_mmio::Bits::truncate(self.0 >> 14)
             }
 
-            /// Set `SOURCE_1`.
+            /// Set `CONTROLLER_TIME_OVERFLOW`.
             #[inline]
-            pub fn set_source_1(&mut self, value: bool) -> &mut Self {
+            pub fn set_controller_time_overflow(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
                 self
             }
@@ -21665,12 +21665,26 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x64;
 
-        /// Width of `BITS_0_2_OPAQUE` in bits.
-        pub const BITS_0_2_OPAQUE_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `BITS_0_2_OPAQUE`.
-        pub const BITS_0_2_OPAQUE_MAX: u32 = 0x7;
-        /// Positioned bits of `BITS_0_2_OPAQUE`.
-        pub const BITS_0_2_OPAQUE_MASK: u32 = 0x7;
+        /// Width of `BIT_0_OPAQUE` in bits.
+        pub const BIT_0_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MASK: u32 = 0x1;
+
+        /// Width of `CONTROLLER_TIME_OVERFLOW` in bits.
+        pub const CONTROLLER_TIME_OVERFLOW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CONTROLLER_TIME_OVERFLOW`.
+        pub const CONTROLLER_TIME_OVERFLOW_MAX: u32 = 0x1;
+        /// Positioned bits of `CONTROLLER_TIME_OVERFLOW`.
+        pub const CONTROLLER_TIME_OVERFLOW_MASK: u32 = 0x2;
+
+        /// Width of `BIT_2_OPAQUE` in bits.
+        pub const BIT_2_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_2_OPAQUE`.
+        pub const BIT_2_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_2_OPAQUE`.
+        pub const BIT_2_OPAQUE_MASK: u32 = 0x4;
 
         /// Width of `SOURCE_3` in bits.
         pub const SOURCE_3_WIDTH: u32 = 1;
@@ -21726,10 +21740,22 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_2_OPAQUE` field.
+            /// The `BIT_0_OPAQUE` field.
             #[inline]
-            pub const fn bits_0_2_opaque(self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// 32-bit first-word BTLC overflow, delivered on primary source 124. Positive primary snapshots acknowledge it through CLEAR_1; the measured NRT snapshots stay zero. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW9_S31_MAC_CAUSES_20261027.
+            #[inline]
+            pub const fn controller_time_overflow(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `BIT_2_OPAQUE` field.
+            #[inline]
+            pub const fn bit_2_opaque(self) -> bool {
+                (self.0 & 0x00000004) != 0
             }
 
             /// The `SOURCE_3` field.
@@ -21786,18 +21812,48 @@ pub mod bt_mac {
                 self.0 == 0
             }
 
-            /// The `BITS_0_2_OPAQUE` field.
+            /// The `BIT_0_OPAQUE` field.
             #[inline]
-            pub const fn bits_0_2_opaque(&self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn bit_0_opaque(&self) -> bool {
+                (self.0 & 0x00000001) != 0
             }
 
-            /// The snapshot without `BITS_0_2_OPAQUE` unless `keep`: it is then not acknowledged.
-            pub const fn retain_bits_0_2_opaque(self, keep: bool) -> Self {
+            /// The snapshot without `BIT_0_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bit_0_opaque(self, keep: bool) -> Self {
                 if keep {
                     self
                 } else {
-                    Self(self.0 & 0xfffffff8)
+                    Self(self.0 & 0xfffffffe)
+                }
+            }
+
+            /// 32-bit first-word BTLC overflow, delivered on primary source 124. Positive primary snapshots acknowledge it through CLEAR_1; the measured NRT snapshots stay zero. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW9_S31_MAC_CAUSES_20261027.
+            #[inline]
+            pub const fn controller_time_overflow(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The snapshot without `CONTROLLER_TIME_OVERFLOW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_controller_time_overflow(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffd)
+                }
+            }
+
+            /// The `BIT_2_OPAQUE` field.
+            #[inline]
+            pub const fn bit_2_opaque(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The snapshot without `BIT_2_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bit_2_opaque(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffb)
                 }
             }
 
@@ -21920,12 +21976,26 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x68;
 
-        /// Width of `BITS_0_2_OPAQUE` in bits.
-        pub const BITS_0_2_OPAQUE_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `BITS_0_2_OPAQUE`.
-        pub const BITS_0_2_OPAQUE_MAX: u32 = 0x7;
-        /// Positioned bits of `BITS_0_2_OPAQUE`.
-        pub const BITS_0_2_OPAQUE_MASK: u32 = 0x7;
+        /// Width of `BIT_0_OPAQUE` in bits.
+        pub const BIT_0_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MASK: u32 = 0x1;
+
+        /// Width of `CONTROLLER_TIME_OVERFLOW` in bits.
+        pub const CONTROLLER_TIME_OVERFLOW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CONTROLLER_TIME_OVERFLOW`.
+        pub const CONTROLLER_TIME_OVERFLOW_MAX: u32 = 0x1;
+        /// Positioned bits of `CONTROLLER_TIME_OVERFLOW`.
+        pub const CONTROLLER_TIME_OVERFLOW_MASK: u32 = 0x2;
+
+        /// Width of `BIT_2_OPAQUE` in bits.
+        pub const BIT_2_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_2_OPAQUE`.
+        pub const BIT_2_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_2_OPAQUE`.
+        pub const BIT_2_OPAQUE_MASK: u32 = 0x4;
 
         /// Width of `SOURCE_3` in bits.
         pub const SOURCE_3_WIDTH: u32 = 1;
@@ -21981,10 +22051,22 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_2_OPAQUE` field.
+            /// The `BIT_0_OPAQUE` field.
             #[inline]
-            pub const fn bits_0_2_opaque(self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// 32-bit first-word BTLC overflow, delivered on primary source 124. Positive primary snapshots acknowledge it through CLEAR_1; the measured NRT snapshots stay zero. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW9_S31_MAC_CAUSES_20261027.
+            #[inline]
+            pub const fn controller_time_overflow(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `BIT_2_OPAQUE` field.
+            #[inline]
+            pub const fn bit_2_opaque(self) -> bool {
+                (self.0 & 0x00000004) != 0
             }
 
             /// The `SOURCE_3` field.
@@ -34798,18 +34880,48 @@ pub mod bt_mac {
             self.0
         }
 
-        /// The `BITS_0_2_OPAQUE` field.
+        /// The `BIT_0_OPAQUE` field.
         #[inline]
-        pub const fn bits_0_2_opaque(&self) -> oer_mmio::Bits<3> {
-            oer_mmio::Bits::truncate(self.0)
+        pub const fn bit_0_opaque(&self) -> bool {
+            (self.0 & 0x00000001) != 0
         }
 
-        /// The snapshot without `BITS_0_2_OPAQUE` unless `keep`: it is then not acknowledged.
-        pub const fn retain_bits_0_2_opaque(self, keep: bool) -> Self {
+        /// The snapshot without `BIT_0_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bit_0_opaque(self, keep: bool) -> Self {
             if keep {
                 self
             } else {
-                Self(self.0 & 0xfffffff8)
+                Self(self.0 & 0xfffffffe)
+            }
+        }
+
+        /// The `CONTROLLER_TIME_OVERFLOW` field.
+        #[inline]
+        pub const fn controller_time_overflow(&self) -> bool {
+            (self.0 & 0x00000002) != 0
+        }
+
+        /// The snapshot without `CONTROLLER_TIME_OVERFLOW` unless `keep`: it is then not acknowledged.
+        pub const fn retain_controller_time_overflow(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xfffffffd)
+            }
+        }
+
+        /// The `BIT_2_OPAQUE` field.
+        #[inline]
+        pub const fn bit_2_opaque(&self) -> bool {
+            (self.0 & 0x00000004) != 0
+        }
+
+        /// The snapshot without `BIT_2_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bit_2_opaque(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xfffffffb)
             }
         }
 
@@ -35044,14 +35156,14 @@ pub mod bt_mac {
             self.0.write::<0x58>(0x00008000);
         }
 
-        /// Mask the sources of `0x00001300` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
+        /// Mask the sources of `0x00001302` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ.
+        /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, BLOB_LIBBTDM_BASELINE_IRQ_CURRENT.
         #[inline]
         pub fn clear_bluetooth_primary_baseline_bank_1(&mut self) {
             let bits = self.0.read::<0x60>();
-            self.0.write::<0x60>(bits & 0xffffecff);
-            self.0.write::<0x64>(0x00001300);
+            self.0.write::<0x60>(bits & 0xffffecfd);
+            self.0.write::<0x64>(0x00001302);
         }
 
         /// Mask the sources of `0x18200000` in `BT_MAC.IRQ_ENABLE_0`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_0`).
@@ -35083,6 +35195,16 @@ pub mod bt_mac {
         #[inline]
         pub fn acknowledge_bluetooth_scheduler_cancellation_source(&mut self) {
             self.0.write::<0x58>(0x00000080);
+        }
+
+        /// Mask the sources of `0x00000002` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
+        ///
+        /// SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026, HW9_S31_MAC_MASK_ACK_20261027.
+        #[inline]
+        pub fn clear_bluetooth_controller_time_overflow(&mut self) {
+            let bits = self.0.read::<0x60>();
+            self.0.write::<0x60>(bits & 0xfffffffd);
+            self.0.write::<0x64>(0x00000002);
         }
 
         /// Sample `BT_MAC.IRQ_STATUS_SNAPSHOT_0` once, keeping the events `BT_MAC.IRQ_CLEAR_0` acknowledges (`BT_MAC.IRQ_STATUS_SNAPSHOT_0`).

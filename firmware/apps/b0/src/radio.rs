@@ -290,6 +290,10 @@ async fn fault<T>(
     reply: &mut Option<(rpc::Command, bridge::Response)>,
     cause: Fault,
 ) -> ! {
+    if let Fault::ControllerTimeRange(observation) = cause {
+        core::hint::black_box(&mut *owner);
+        crate::gate_fault::reset_controller_time(observation);
+    }
     bridge::complete(reply, Err(cause));
     bridge::fail_clock(cause);
     hold(owner).await

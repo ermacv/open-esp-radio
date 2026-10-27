@@ -86,6 +86,7 @@ impl<X: SignalExecutor> ControllerEventCells<X> {
         self.modem_lp_timer_worker_wake.is_pending()?;
         let _ = self.scheduler_wake.take()?;
         let _ = self.modem_lp_timer_worker_wake.take()?;
+        self.scheduler_wake.reset_controller_time_overflows();
         Ok(())
     }
 }

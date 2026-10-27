@@ -146,6 +146,28 @@ standalone profile has two raw ticks per microsecond; its hardware divider is
 a separate setting. Scheduler epoch updates retain fractional raw ticks, and
 earlier fractional timestamps round down before deadline projection.
 
+Primary controller-time overflow is a typed event with an independent,
+checked `u32` count in `SchedulerWakeCell`. P3 acknowledges the saved primary
+snapshot, increments the count and pends P2; scheduler notifications may
+coalesce without losing wraps. An overflow-only batch grants no finished-list
+transfer. P2 brackets each hardware latch transaction with count reads. After latch
+completion it requests a handler service barrier through the existing scheduler
+channel; that entry captures primary and publishes the count before P2 resumes.
+Thus even an overflow still pending in hardware reaches the second count read.
+P2 retries within its original deadline if the counts differ. An equal pair joins the
+low raw word and counted epoch before conversion, preserving fractional ticks
+and continuous `u64` microseconds across long idle periods without live samples.
+The count is reset only after Controller reset and bank retirement.
+
+At the measured standalone rate, the natural first-word period is nominally
+2147.483648 s (rate-derived, not a full-period measurement; SOURCE:
+`HW12_S31_BTLC_RATE_20261026`). P3 must acknowledge each wrap before the next;
+hardware pending is not a multi-wrap counter. P2 may remain unserviced for
+multiple periods because the software count is independent of its dequeues.
+NRT does not count this measured primary-only cause. Counter or conversion
+range exhaustion is a named fault preserving the count and raw inputs; owners
+stay quarantined for the image's retained-record reset path.
+
 Physical event spans are non-empty and at most the signed raw-counter
 half-range. The duration projection accepts a `RadioDuration<LeRadio>`, checks the full
 `u64` value and fractional carry, and narrows only after proving the result

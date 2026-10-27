@@ -29,6 +29,6 @@ pub use primary::PrimaryInterruptCapture;
 pub use route::{CpuInterruptRoutePolicy, CpuInterruptSource, InterruptHandlerResidency};
 
 pub use wake::{
-    CapturedWakeBatch, PrimaryWakeFault, SchedulerWakeBatch, SchedulerWakeCell,
-    SchedulerWakePublication,
+    CapturedWakeBatch, ControllerTimeOverflowEpoch, ControllerTimeOverflowExhausted,
+    PrimaryWakeFault, SchedulerWakeBatch, SchedulerWakeCell, SchedulerWakePublication,
 };

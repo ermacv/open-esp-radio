@@ -35,6 +35,11 @@ impl Record {
                 BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus { status, pending },
             ) => (5, status, Some(pending)),
             GateFaultReason::VacantTimer => (6, 0, None),
+            GateFaultReason::ControllerTimeOverflow(cause) => (7, cause.overflows, None),
+        };
+        let captured_inputs = match fault.reason {
+            GateFaultReason::ControllerTimeOverflow(cause) => cause.captured_inputs,
+            _ => 0,
         };
         let mut record = Self {
             magic: MAGIC,
@@ -49,7 +54,8 @@ impl Record {
             nrt_present: u32::from(fault.observation.nrt_status.is_some()),
             nrt: fault.observation.nrt_status.unwrap_or_default(),
             stopped_status,
-            pending_0024: pending.map_or(0, |pending| u32::from(pending.state_0024())),
+            pending_0024: pending
+                .map_or(captured_inputs, |pending| u32::from(pending.state_0024())),
             pending_002c: pending.map_or(0, |pending| u32::from(pending.state_002c())),
             checksum: 0,
         };
@@ -80,10 +86,10 @@ impl Record {
     fn take(&mut self) -> Option<Self> {
         let valid = self.magic == MAGIC
             && self.checksum == self.sum()
-            && (1..=6).contains(&self.reason)
+            && (1..=8).contains(&self.reason)
             && self.timer <= 3
             && self.nrt_present <= 1
-            && self.pending_0024 <= u32::from(u8::MAX)
+            && (self.reason == 7 || self.pending_0024 <= u32::from(u8::MAX))
             && self.pending_002c <= u32::from(u8::MAX);
         let record = valid.then_some(*self);
         self.magic = 0;
@@ -100,6 +106,8 @@ impl fmt::Display for Record {
             4 => "stopped-software-pending",
             5 => "stopped-unexpected-status",
             6 => "vacant-timer",
+            7 => "controller-time-overflow-exhausted",
+            8 => "controller-time-range-exhausted",
             _ => return Err(fmt::Error),
         };
         let timer = match self.timer {
@@ -126,7 +134,43 @@ impl fmt::Display for Record {
                 self.stopped_status, self.pending_0024, self.pending_002c
             )?;
         }
+        if self.reason == 7 || self.reason == 8 {
+            write!(f, " overflows={:#010x}", self.stopped_status)?;
+        }
+        if self.reason == 7 {
+            write!(f, " captured-inputs={:#010x}", self.pending_0024)?;
+        }
+        if self.reason == 8 {
+            write!(
+                f,
+                " raw-ticks={:#010x} scale-shift={}",
+                self.lp, self.pending_0024
+            )?;
+        }
         Ok(())
+    }
+}
+
+impl Record {
+    fn controller_time(
+        fault: oer_esp32s31_bluetooth_driver::controller_time::ControllerTimeRangeFault,
+    ) -> Self {
+        // Reuse the same retained slot and word layout; this reason has no gate
+        // observation. The raw word and count are the full source observation.
+        let mut record = Self {
+            magic: MAGIC,
+            reason: 8,
+            timer: 0,
+            lp: fault.raw_ticks,
+            nrt_present: 0,
+            nrt: [0; 2],
+            stopped_status: fault.overflows,
+            pending_0024: u32::from(fault.scale.shift_image()),
+            pending_002c: 0,
+            checksum: 0,
+        };
+        record.checksum = record.sum();
+        record
     }
 }
 
@@ -138,9 +182,21 @@ oer_espressif_staged_runtime::retained_static! {
 /// Never returns, so no live gate, task or DMA owner is dropped or reused.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset(fault: GateFault) -> ! {
+    reset_record(Record::new(fault))
+}
+
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn reset_controller_time(
+    fault: oer_esp32s31_bluetooth_driver::controller_time::ControllerTimeRangeFault,
+) -> ! {
+    reset_record(Record::controller_time(fault))
+}
+
+#[cfg(target_arch = "riscv32")]
+fn reset_record(record: Record) -> ! {
     oer_espressif_staged_runtime::fatal::reset_recording(|_stop| {
         if let Some(mut slot) = RECORD.try_lock() {
-            *slot = Record::new(fault);
+            *slot = record;
             // Keep the first record claimed until reset, including a nested fault.
             core::mem::forget(slot);
         }
@@ -265,5 +321,45 @@ mod tests {
                     .starts_with("OER-B0-FAULT: bluetooth-gate reason=")
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod controller_time_tests {
+    use super::*;
+    use oer_esp32s31_bluetooth_driver::{
+        controller_time::ControllerTimeRangeFault,
+        interrupt::{ControllerTimeOverflowExhausted, gate::GateObservation},
+    };
+    #[test]
+    fn time_faults_keep_their_source_words_in_the_existing_retained_slot() {
+        assert_eq!(core::mem::size_of::<Record>(), 44);
+        let fault = GateFault {
+            reason: GateFaultReason::ControllerTimeOverflow(ControllerTimeOverflowExhausted {
+                overflows: u32::MAX,
+                captured_inputs: 0x00420000,
+            }),
+            observation: GateObservation {
+                lp_status: 0x40000,
+                nrt_status: Some([0x12, 0x34]),
+                timer: GateTimerState::Ready,
+            },
+        };
+        let mut slot = Record::new(fault);
+        let text = slot.take().unwrap().to_string();
+        assert!(text.contains("reason=controller-time-overflow-exhausted"));
+        assert!(text.contains("nrt=0x00000012,0x00000034 overflows=0xffffffff"));
+        assert!(slot.take().is_none());
+        let mut slot = Record::controller_time(ControllerTimeRangeFault {
+            raw_ticks: 0xfedcba98,
+            overflows: u32::MAX,
+            scale:
+                oer_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig::reviewed_standalone()
+                    .controller_time_scale(),
+        });
+        let text = slot.take().unwrap().to_string();
+        assert!(text.contains("reason=controller-time-range-exhausted"));
+        assert!(text.ends_with("overflows=0xffffffff raw-ticks=0xfedcba98 scale-shift=0"));
+        assert!(slot.take().is_none());
     }
 }

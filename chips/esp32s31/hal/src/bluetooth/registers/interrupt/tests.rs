@@ -9,6 +9,7 @@ use super::{
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {
+    SilenceOverflow,
     ClearBank0,
     ClearBank1,
     EnableBank0,
@@ -26,6 +27,10 @@ struct SetupRecorder {
 }
 
 impl BluetoothInterruptControl for SetupRecorder {
+    fn silence_controller_time_overflow(&mut self) {
+        self.operations.push(Operation::SilenceOverflow);
+    }
+
     fn clear_primary_baseline_bank_0(&mut self) {
         self.operations.push(Operation::ClearBank0);
     }
@@ -108,6 +113,7 @@ impl EpochRecorder {
                 unclassified_pending: false,
             },
             bank_1: BluetoothPrimaryBank1Status {
+                controller_time_overflow: false,
                 source_3_pending: false,
                 source_8_pending: true,
                 source_9_pending: true,
@@ -127,6 +133,7 @@ impl EpochRecorder {
                 unclassified_pending: false,
             },
             bank_1: BluetoothPrimaryBank1Status {
+                controller_time_overflow: false,
                 source_3_pending: false,
                 source_8_pending: false,
                 source_9_pending: false,
@@ -269,17 +276,96 @@ fn primary_prepare_preserves_clear_enable_strobe_order() {
 }
 
 #[test]
-fn primary_release_preserves_strobe_then_mask_order() {
+fn primary_release_silences_overflow_before_strobes_and_baseline_masks() {
     let mut recorder = SetupRecorder::default();
     execute_primary_release(&mut recorder);
 
     assert_eq!(
         recorder.operations,
         [
+            Operation::SilenceOverflow,
             Operation::ReleaseOutput0,
             Operation::ReleaseOutput1,
             Operation::MaskBank0,
             Operation::MaskBank1,
         ]
+    );
+}
+
+#[test]
+fn overflow_is_acknowledged_as_a_normal_primary_epoch_without_scheduler_or_diagnostics() {
+    let mut recorder = EpochRecorder::empty();
+    recorder.bank_1.controller_time_overflow = true;
+    let epoch = execute_primary_interrupt_epoch(&mut recorder).unwrap();
+    assert!(epoch.controller_time_overflow());
+    assert!(!epoch.fault_sources().is_fault());
+    assert!(!epoch.bank_1_source_3_pending());
+    assert_eq!(
+        recorder.operations,
+        [
+            EpochOperation::SampleBank0,
+            EpochOperation::SampleBank1,
+            EpochOperation::AcknowledgeBank0,
+            EpochOperation::AcknowledgeBank1
+        ]
+    );
+}
+
+#[test]
+fn release_masks_and_clears_overflow_before_the_bank_leaves_its_handler() {
+    struct Pending {
+        setup: SetupRecorder,
+        enabled: bool,
+        pending: bool,
+    }
+    impl BluetoothInterruptControl for Pending {
+        fn clear_primary_baseline_bank_0(&mut self) {
+            unreachable!()
+        }
+        fn clear_primary_baseline_bank_1(&mut self) {
+            unreachable!()
+        }
+        fn enable_primary_baseline_bank_0(&mut self) {
+            unreachable!()
+        }
+        fn enable_primary_baseline_bank_1(&mut self) {
+            unreachable!()
+        }
+        fn prepare_output(&mut self) {
+            unreachable!()
+        }
+        fn release_output_0(&mut self) {
+            assert!(!self.enabled && !self.pending);
+            self.setup.release_output_0();
+        }
+        fn release_output_1(&mut self) {
+            self.setup.release_output_1();
+        }
+        fn mask_primary_baseline_bank_0(&mut self) {
+            self.setup.mask_primary_baseline_bank_0();
+        }
+        fn mask_primary_baseline_bank_1(&mut self) {
+            self.setup.mask_primary_baseline_bank_1();
+        }
+        fn silence_controller_time_overflow(&mut self) {
+            // SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026: masking alone
+            // lowers 124 but retains pending; teardown must also acknowledge.
+            self.enabled = false;
+            assert!(self.pending);
+            self.pending = false;
+            self.setup.silence_controller_time_overflow();
+        }
+    }
+    let mut bank = Pending {
+        setup: SetupRecorder::default(),
+        enabled: true,
+        pending: true,
+    };
+    execute_primary_release(&mut bank);
+    assert!(!bank.pending);
+    bank.enabled = true;
+    assert!(
+        !bank.pending,
+        "a later enable must not redeliver the retired overflow"
     );
 }

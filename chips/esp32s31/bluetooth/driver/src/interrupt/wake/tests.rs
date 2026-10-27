@@ -120,3 +120,47 @@ fn the_worker_waits_for_a_batch_in_its_executor_only() {
     assert_eq!(foreign.poll_take(&mut cx), Poll::Ready(Err(ForeignContext)));
     assert_eq!(foreign.take(), Err(ForeignContext));
 }
+
+#[test]
+fn overflow_count_is_independent_of_dequeues_and_does_not_wrap_on_exhaustion() {
+    use super::{ControllerTimeOverflowEpoch, ControllerTimeOverflowExhausted};
+    use crate::interrupt::PrimaryInterruptCapture;
+    use core::sync::atomic::Ordering;
+    let cell = cell();
+    for expected in 1..=3 {
+        cell.publish_from_interrupt(PrimaryInterruptCapture(
+            PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW,
+        ))
+        .unwrap();
+        let batch = cell.take().unwrap().unwrap().classify().unwrap();
+        assert_eq!(
+            batch.controller_time_overflows(),
+            Some(ControllerTimeOverflowEpoch(expected))
+        );
+        assert_eq!(
+            cell.controller_time_overflows(),
+            ControllerTimeOverflowEpoch(expected)
+        );
+        assert!(!batch.has_scheduler_work());
+    }
+    cell.controller_time_overflows
+        .store(u32::MAX, Ordering::Release);
+    assert_eq!(
+        cell.publish_from_interrupt(PrimaryInterruptCapture(
+            PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW
+        )),
+        Err(ControllerTimeOverflowExhausted {
+            overflows: u32::MAX,
+            captured_inputs: PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW,
+        })
+    );
+    assert_eq!(
+        cell.controller_time_overflows(),
+        ControllerTimeOverflowEpoch(u32::MAX)
+    );
+    cell.reset_controller_time_overflows();
+    assert_eq!(
+        cell.controller_time_overflows(),
+        ControllerTimeOverflowEpoch(0)
+    );
+}

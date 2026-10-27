@@ -11,8 +11,10 @@ use crate::bluetooth::registers::{BluetoothPlacements, BluetoothTaskRegisters};
 
 /// First latched controller-time word read after hardware clears the request.
 ///
-/// The value remains a wrapping positional `u32`: its physical unit and
-/// effective counter width are not established by current evidence.
+/// The value is a wrapping `u32`. The measured standalone configuration has
+/// two ticks per microsecond and raises primary controller-time overflow at
+/// its first-word wrap (SOURCE: HW12_S31_BTLC_RATE_20261026). Other clock
+/// configurations have no measured physical scale here.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothControllerLatchedTime(u32);
 

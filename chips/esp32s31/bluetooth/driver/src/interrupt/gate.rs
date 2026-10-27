@@ -219,6 +219,8 @@ pub enum GateFaultReason {
     StoppedTimer(bluetooth::BluetoothModemLpTimerStoppedInterruptFault),
     /// LP is pending while the handler has no timer owner.
     VacantTimer,
+    /// A captured BTLC wrap exhausted the software counter; retain its value.
+    ControllerTimeOverflow(super::ControllerTimeOverflowExhausted),
 }
 
 /// Why the gate refused a request or could not exchange it.
@@ -474,16 +476,24 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
             scheduler,
         } = &mut self.bank
         {
-            if H::serve_request(scheduler, registers, clock) {
-                self.signals.reply.raise(1);
-            }
+            let replied = H::serve_request(scheduler, registers, clock);
             let capture = H::capture_primary(registers, clock);
-            let _ = self
+            let published = self
                 .signals
                 .cells
                 .scheduler_wake()
                 .publish_from_interrupt(capture);
+            if let Err(cause) = published {
+                self.fault(GateFaultReason::ControllerTimeOverflow(cause), observation);
+                return self.check_fault();
+            }
             let _ = H::capture_nrt(registers);
+            // A service barrier completes only after the entry's pending
+            // primary cause has reached the wrap counter. The table proves
+            // that this handler is above its requesting P2 executor.
+            if replied {
+                self.signals.reply.raise(1);
+            }
         }
         Ok(())
     }

@@ -150,8 +150,8 @@ fn the_interrupt_output_enables_the_baseline_and_its_release_masks_it() {
         .read_irq_enable_1();
     assert!(enable_0.source_15());
     assert!(
-        !enable_1.source_1(),
-        "the unclassified vendor source stays disabled"
+        enable_1.controller_time_overflow(),
+        "controller-time overflow is armed"
     );
     assert!(enable_1.source_8() && enable_1.source_9() && enable_1.source_12());
     let released = prepared.release_controller_output();
@@ -165,7 +165,7 @@ fn the_interrupt_output_enables_the_baseline_and_its_release_masks_it() {
         .read_irq_enable_1();
     assert!(!enable_0.source_15());
     assert!(
-        !(enable_1.source_1()
+        !(enable_1.controller_time_overflow()
             || enable_1.source_8()
             || enable_1.source_9()
             || enable_1.source_12())
@@ -394,39 +394,49 @@ fn the_low_power_component_routes_channels_four_through_seven() {
 
 #[test]
 fn baseline_clear_enable_and_release_preserve_unrelated_sources() {
-    use oer_esp32s31_pac::bt_mac::{irq_clear_1, irq_enable_1};
-
-    // SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ: the HAL's classified baseline.
-    // Source 1 is outside this baseline: leave it unchanged, including an
-    // inherited enable, until B1 identifies its event and handling.
+    use oer_esp32s31_pac::bt_mac::irq_enable_1;
+    let unrelated = |r: irq_enable_1::R| {
+        (
+            r.source_3(),
+            r.source_4(),
+            r.source_5(),
+            r.source_6(),
+            r.source_13(),
+            r.bit_0_opaque(),
+            r.bit_2_opaque(),
+            r.bit_7_opaque(),
+            r.bits_10_11_opaque(),
+            r.bits_14_31_opaque(),
+        )
+    };
     for inherited in [0, 2, u32::MAX, 0xa55a_a55a] {
         let mut memory = HostMemory::filled(inherited);
-        {
-            let (_, interrupts, _) = memory.owners();
-            let prepared = BluetoothInterruptSetup {
-                peripherals: interrupts.peripherals,
-            }
-            .prepare_controller_output();
-            drop(prepared);
-        }
-        assert_eq!(memory.interrupt_bank[irq_clear_1::OFFSET / 4], 0x1300);
-        assert_eq!(
-            memory.interrupt_bank[irq_enable_1::OFFSET / 4],
-            inherited | 0x1300
+        let (_, interrupts, _) = memory.owners();
+        let before = unrelated(
+            interrupts
+                .peripherals
+                .bluetooth_interrupt_bank
+                .read_irq_enable_1(),
         );
-        {
-            let (_, interrupts, _) = memory.owners();
-            let released = BluetoothInterruptSetup {
-                peripherals: interrupts.peripherals,
-            }
-            .prepare_controller_output()
-            .release_controller_output();
-            drop(released);
+        let prepared = BluetoothInterruptSetup {
+            peripherals: interrupts.peripherals,
         }
-        assert_eq!(
-            memory.interrupt_bank[irq_enable_1::OFFSET / 4],
-            inherited & !0x1300
-        );
+        .prepare_controller_output();
+        let enabled = prepared
+            .peripherals
+            .bluetooth_interrupt_bank
+            .read_irq_enable_1();
+        assert!(enabled.controller_time_overflow());
+        assert!(enabled.source_8() && enabled.source_9() && enabled.source_12());
+        assert_eq!(unrelated(enabled), before);
+        let released = prepared.release_controller_output();
+        let disabled = released
+            .peripherals
+            .bluetooth_interrupt_bank
+            .read_irq_enable_1();
+        assert!(!disabled.controller_time_overflow());
+        assert!(!(disabled.source_8() || disabled.source_9() || disabled.source_12()));
+        assert_eq!(unrelated(disabled), before);
     }
 }
 

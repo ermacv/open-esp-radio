@@ -162,7 +162,7 @@ fn a_clear_bank_captures_nothing_and_publishes_nothing() {
     assert_eq!(capture, PrimaryInterruptCapture(0));
     assert_eq!(backend.operations, [Operation::PrimaryEpoch]);
     let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
-    assert_eq!(cell.publish_from_interrupt(capture), None);
+    assert_eq!(cell.publish_from_interrupt(capture), Ok(None));
 }
 
 #[test]
@@ -242,8 +242,9 @@ fn every_pair_of_coalesced_inputs_preserves_the_reference_marker_without_cross_p
             for key in [first, second] {
                 let (a, b, c, deferred) = dynamic_inputs(key);
                 let mut backend = Backend::dynamic(a, b, c, false, true, deferred);
-                let published =
-                    cell.publish_from_interrupt(execute_primary_interrupt_capture(&mut backend));
+                let published = cell
+                    .publish_from_interrupt(execute_primary_interrupt_capture(&mut backend))
+                    .unwrap();
                 if reference_marker(key).is_some() {
                     assert_eq!(
                         published,
@@ -299,4 +300,55 @@ fn coalesced_faults_preempt_work_and_keep_each_source_until_p2_takes_them() {
     assert!(!fault.bank_1_source_9_pending());
     assert!(!fault.bank_1_source_12_pending());
     assert_eq!(cell.take(), Ok(None));
+}
+
+#[test]
+fn overflow_is_counted_without_a_scheduler_suffix_and_survives_fault_coincidence() {
+    for fault in [false, true] {
+        let mut backend = if fault {
+            Backend::fault()
+        } else {
+            Backend::dynamic(false, false, false, false, false, false)
+        };
+        backend.epoch = backend
+            .epoch
+            .take()
+            .map(BluetoothPrimaryInterruptEpoch::with_controller_time_overflow_for_host_test);
+        let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
+        cell.publish_from_interrupt(execute_primary_interrupt_capture(&mut backend))
+            .unwrap();
+        assert_eq!(cell.controller_time_overflows().0, 1);
+        assert_eq!(backend.operations, [Operation::PrimaryEpoch]);
+        let result = cell.take().unwrap().unwrap().classify();
+        if fault {
+            assert!(result.is_err());
+        } else {
+            let batch = result.unwrap();
+            assert_eq!(
+                batch.controller_time_overflows(),
+                Some(cell.controller_time_overflows())
+            );
+            assert!(!batch.has_scheduler_work());
+        }
+    }
+}
+
+#[test]
+fn overflow_and_marked_scheduler_work_remain_independent_when_captured_together() {
+    let mut backend = Backend::dynamic(false, true, false, false, true, true);
+    backend.epoch = backend
+        .epoch
+        .take()
+        .map(BluetoothPrimaryInterruptEpoch::with_controller_time_overflow_for_host_test);
+    let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
+    cell.publish_from_interrupt(execute_primary_interrupt_capture(&mut backend))
+        .unwrap();
+    let batch = cell.take().unwrap().unwrap().classify().unwrap();
+    assert!(batch.is_marked());
+    assert!(batch.has_scheduler_work());
+    assert_eq!(batch.controller_time_overflows().unwrap().0, 1);
+    assert_eq!(
+        backend.operations,
+        [Operation::PrimaryEpoch, Operation::Work]
+    );
 }

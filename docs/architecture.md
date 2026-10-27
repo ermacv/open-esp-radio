@@ -389,6 +389,14 @@ its model and conformance case.
   command. During planning the handler acknowledges new pending/rollover facts
   and retains their software work until the in-flight plan returns. P2 shares
   no register writer or lock with the handler.
+  The primary handler also acknowledges controller-time overflow and counts
+  every observed wrap independently of scheduler-notification coalescing. P2
+  brackets a live latch with that count and requests a post-latch handler
+  service barrier before its second read. That entry counts hardware-pending
+  overflow before P2 resumes. P2 retries a crossing transaction and joins the
+  stable count and low raw word into continuous time. Sample gaps
+  may span multiple raw periods; P3 still services each hardware wrap. Terminal
+  output release masks and clears overflow before the bank leaves the handler.
 - **IEEE 802.15.4** (`protocols/ieee802154`). The port boundary follows the
   OpenThread radio platform: the backend executes acknowledgement, CSMA-CA
   and the cipher as advertised capabilities; retries, the pending-table

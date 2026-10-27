@@ -67,6 +67,7 @@ pub enum Fault {
     ClockBegin,
     ClockTimeout,
     ClockRead,
+    ControllerTimeRange(crate::controller_time::ControllerTimeRangeFault),
     Deadline,
     SchedulerStop,
     SchedulerResume,

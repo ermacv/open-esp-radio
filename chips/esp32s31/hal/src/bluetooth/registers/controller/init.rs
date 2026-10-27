@@ -117,6 +117,16 @@ pub struct BluetoothRawTickDeltaProjection {
 }
 
 impl BluetoothControllerTimeScale {
+    /// Convert the counted BTLC first-word time without truncating its epoch.
+    /// Refuse exhaustion of the destination microsecond range.
+    pub const fn checked_micros_from_extended_raw_ticks(self, ticks: u64) -> Option<u64> {
+        match self.period {
+            BluetoothHalInitPeriod::Image500 => ticks.checked_mul(2),
+            BluetoothHalInitPeriod::Image1000 => Some(ticks),
+            BluetoothHalInitPeriod::Image2000 => Some(ticks / 2),
+        }
+    }
+
     /// Software conversion selector established by the HAL config setter.
     ///
     /// This is independent of `BluetoothControllerHalInitConfig::sleep_timer_shift`,

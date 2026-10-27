@@ -121,3 +121,17 @@ fn stopped_capture_borrows_only_the_engine_and_refuses_before_mmio_without_its_r
     engine.stopped_for_host_test();
     assert!(engine.scheduler_is_stopped());
 }
+
+#[test]
+fn an_overflow_only_batch_grants_no_finished_list_transfer() {
+    use crate::interrupt::PrimaryInterruptCapture;
+    let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
+    cell.publish_from_interrupt(PrimaryInterruptCapture::controller_time_overflow_for_test())
+        .unwrap();
+    let batch = cell.take().unwrap().unwrap().classify().unwrap();
+    let mut backend = backend(&[3]);
+    let mut worker = SchedulerFinishedListWorker::new();
+    worker.capture_with(&mut backend, batch).unwrap();
+    assert!(backend.observation.is_some());
+    assert_eq!(worker.step(), SchedulerFinishedListWorkerStep::Idle);
+}

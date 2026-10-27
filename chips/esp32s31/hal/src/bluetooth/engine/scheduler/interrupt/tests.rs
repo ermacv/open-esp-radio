@@ -270,3 +270,17 @@ fn a_mismatched_release_reply_is_foreign() {
         Poll::Ready(Err(SchedulerInterruptError::ForeignReply))
     ));
 }
+
+#[test]
+fn a_service_barrier_requires_a_fresh_handler_round_trip_and_executes_once() {
+    let (mut task, mut irq, bell) = halves();
+    let mut future = pin!(task.service_barrier(&bell));
+    assert_eq!(poll(future.as_mut()), Poll::Pending);
+    assert_eq!(bell.0.get(), 1);
+    assert!(irq.service_with(|command| {
+        assert!(matches!(command, Command::ServiceBarrier));
+        Ok(Reply::Done)
+    }));
+    assert!(!irq.service_with(|_| panic!("a duplicate entry cannot repeat a barrier")));
+    assert_eq!(poll(future.as_mut()), Poll::Ready(Ok(())));
+}

@@ -20,9 +20,15 @@ use oer_time::settle::Unsettled;
 pub struct PrimaryInterruptCapture(pub(super) u32);
 
 impl PrimaryInterruptCapture {
+    #[cfg(test)]
+    pub(crate) const fn controller_time_overflow_for_test() -> Self {
+        Self(Self::CONTROLLER_TIME_OVERFLOW)
+    }
+
     pub(super) const FAULT_SHIFT: u32 = 16;
     pub(super) const FAULT_MASK: u32 = 0x1f << Self::FAULT_SHIFT;
     pub(super) const UNSETTLED: u32 = 1 << 21;
+    pub(super) const CONTROLLER_TIME_OVERFLOW: u32 = 1 << 22;
 
     /// Fault-free positional sources paired with this event's work sample.
     fn work(
@@ -77,6 +83,11 @@ fn execute_primary_interrupt_capture(
         return PrimaryInterruptCapture(0);
     };
     let fault = epoch.fault_sources();
+    let overflow = if epoch.controller_time_overflow() {
+        PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW
+    } else {
+        0
+    };
     // These positional captures also gate the hardware suffix: baseline or
     // unreviewed sources must not perform its diagnostic/read/write protocol.
     if fault.is_fault() {
@@ -85,11 +96,13 @@ fn execute_primary_interrupt_capture(
             | (u32::from(fault.bank_1_source_9_pending()) << 2)
             | (u32::from(fault.bank_1_source_12_pending()) << 3)
             | (u32::from(fault.unclassified_pending()) << 4);
-        return PrimaryInterruptCapture(sources << PrimaryInterruptCapture::FAULT_SHIFT);
+        return PrimaryInterruptCapture(
+            overflow | (sources << PrimaryInterruptCapture::FAULT_SHIFT),
+        );
     }
     if epoch.bank_1_source_3_pending() {
         let Ok(gate) = backend.capture_scheduler_reference_gate() else {
-            return PrimaryInterruptCapture(PrimaryInterruptCapture::UNSETTLED);
+            return PrimaryInterruptCapture(overflow | PrimaryInterruptCapture::UNSETTLED);
         };
         if !gate.is_busy() {
             backend.clear_scheduler_reference();
@@ -101,9 +114,10 @@ fn execute_primary_interrupt_capture(
     {
         // A distinct read after the optional reference clear, never the
         // earlier diagnostic sample reused as a work observation.
-        PrimaryInterruptCapture::work(&epoch, backend.capture_scheduler_work())
+        let work = PrimaryInterruptCapture::work(&epoch, backend.capture_scheduler_work());
+        PrimaryInterruptCapture(overflow | work.0)
     } else {
-        PrimaryInterruptCapture(0)
+        PrimaryInterruptCapture(overflow)
     }
 }
 

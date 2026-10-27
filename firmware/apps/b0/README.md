@@ -67,3 +67,9 @@ A vacant timer with nonzero LP status follows the same path. The next boot
 prints one `OER-B0-FAULT: bluetooth-gate` line on the early console, before H4
 opens, then consumes the record. The application watchdog does not drive this
 fault transition.
+
+Controller-time overflow is counted at P3, independently of P2 scheduler-event
+coalescing. The clock bridge remains continuous over idle gaps spanning multiple
+BTLC wraps. Counter exhaustion and a microsecond projection beyond `u64` retain
+their original inputs in the same 44-byte fault slot and reset with all owners
+quarantined. The next boot prints the reason, count and raw word when present.

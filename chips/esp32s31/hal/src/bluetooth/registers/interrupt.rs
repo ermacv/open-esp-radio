@@ -72,6 +72,7 @@ trait BluetoothInterruptControl {
     fn release_output_1(&mut self);
     fn mask_primary_baseline_bank_0(&mut self);
     fn mask_primary_baseline_bank_1(&mut self);
+    fn silence_controller_time_overflow(&mut self);
 }
 
 struct HardwareInterruptControl<'a, B: oer_mmio::Placement> {
@@ -95,6 +96,7 @@ impl<B: oer_mmio::Placement> BluetoothInterruptControl for HardwareInterruptCont
 
     fn enable_primary_baseline_bank_1(&mut self) {
         self.bank.modify_irq_enable_1(|w| {
+            w.set_controller_time_overflow(true);
             w.set_source_8(true);
             w.set_source_9(true);
             w.set_source_12(true);
@@ -127,10 +129,18 @@ impl<B: oer_mmio::Placement> BluetoothInterruptControl for HardwareInterruptCont
 
     fn mask_primary_baseline_bank_1(&mut self) {
         self.bank.modify_irq_enable_1(|w| {
+            w.set_controller_time_overflow(false);
             w.set_source_8(false);
             w.set_source_9(false);
             w.set_source_12(false);
         });
+    }
+
+    fn silence_controller_time_overflow(&mut self) {
+        // SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026 and
+        // HW9_S31_MAC_MASK_ACK_20261027: masking retains pending. This
+        // generated transaction masks only overflow, then clears it.
+        self.bank.clear_bluetooth_controller_time_overflow();
     }
 }
 
@@ -154,6 +164,7 @@ impl BluetoothPrimaryBank0Status {
 
 #[derive(Clone, Copy)]
 struct BluetoothPrimaryBank1Status {
+    controller_time_overflow: bool,
     source_3_pending: bool,
     source_8_pending: bool,
     source_9_pending: bool,
@@ -162,9 +173,10 @@ struct BluetoothPrimaryBank1Status {
 }
 
 impl BluetoothPrimaryBank1Status {
-    /// Whether no bit of the bank was pending: the five cover all of them.
+    /// Whether no bit of the bank was pending.
     const fn is_clear(self) -> bool {
-        !(self.source_3_pending
+        !(self.controller_time_overflow
+            || self.source_3_pending
             || self.source_8_pending
             || self.source_9_pending
             || self.source_12_pending
@@ -213,11 +225,13 @@ impl<B: oer_mmio::Placement> BluetoothPrimaryInterruptControl for HardwareInterr
 
     fn bank_1_status(&self, snapshot: &Self::Bank1Snapshot) -> BluetoothPrimaryBank1Status {
         BluetoothPrimaryBank1Status {
+            controller_time_overflow: snapshot.controller_time_overflow(),
             source_3_pending: snapshot.source_3(),
             source_8_pending: snapshot.source_8(),
             source_9_pending: snapshot.source_9(),
             source_12_pending: snapshot.source_12(),
-            unclassified_pending: snapshot.bits_0_2_opaque().get() != 0
+            unclassified_pending: snapshot.bit_0_opaque()
+                || snapshot.bit_2_opaque()
                 || snapshot.bits_4_7_opaque().get() != 0
                 || snapshot.bits_10_11_opaque().get() != 0
                 || snapshot.bits_13_31_opaque().get() != 0,
@@ -256,6 +270,7 @@ fn execute_primary_prepare(control: &mut impl BluetoothInterruptControl) {
 }
 
 fn execute_primary_release(control: &mut impl BluetoothInterruptControl) {
+    control.silence_controller_time_overflow();
     control.release_output_0();
     control.release_output_1();
     control.mask_primary_baseline_bank_0();
@@ -279,15 +294,15 @@ impl<P: BluetoothPlacements> BluetoothInterruptSetup<P> {
     ///
     /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ: reviewed ESP32-S31 baseline
     /// helpers. The composite setup clears bank images `0x0000_8000` and
-    /// `0x0000_1300`, ORs those same baseline sources into the two enable banks,
+    /// `0x0000_1302`, ORs those same baseline sources into the two enable banks,
     /// writes one
     /// to `0x2010_100c`, then the outer path calls the platform interrupt
     /// allocator for source 124. The earlier HAL-init part of that composite
     /// remains a separate lifecycle prerequisite. Each clear first masks its
-    /// baseline sources in their enable bank. The current vendor pin also
-    /// enables bank-one source 1 (BLOB_LIBBTDM_BASELINE_IRQ_CURRENT, N5).
-    /// This handler does not classify it, so this baseline leaves it unchanged
-    /// until B1 identifies the event and its handling.
+    /// baseline sources in their enable bank. Bank-one bit 1 is controller-time
+    /// overflow (SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026;
+    /// BLOB_LIBBTDM_BASELINE_IRQ_CURRENT, N5). CONTROL0 starts BTLC; it is
+    /// not merely an interrupt-route command (HW9_S31_BTLC_START_20261027).
     pub fn prepare_controller_output(mut self) -> BluetoothInterruptOutputPrepared<P> {
         let mut control = HardwareInterruptControl {
             bank: &mut self.peripherals.bluetooth_interrupt_bank,
@@ -304,10 +319,12 @@ impl<P: BluetoothPlacements> BluetoothInterruptOutputPrepared<P> {
     /// Release a prepared controller output after any CPU route has been
     /// removed.
     ///
-    /// The complete teardown leaf frees the CPU route before this transaction,
-    /// writes image one to `0x2010_1010` and then `0x2010_1014`, and finally
-    /// clears the same baseline enable groups. Dynamic Link-Layer sources must
-    /// already have been quiesced by their own owners.
+    /// First mask and clear controller-time overflow, then write image one to
+    /// CONTROL1 and CONTROL2 and mask the remaining baseline groups. CONTROL1/2
+    /// do not lower the output of an enabled pending cause (SOURCE:
+    /// HW9_S31_MAC_RELEASE_20261027). Dynamic Link-Layer sources must already
+    /// have been quiesced by their own owners. The bank remains in its bound
+    /// handler throughout this transaction.
     pub fn release_controller_output(mut self) -> BluetoothInterruptSetup<P> {
         let mut control = HardwareInterruptControl {
             bank: &mut self.peripherals.bluetooth_interrupt_bank,
@@ -432,6 +449,7 @@ impl BluetoothNrtInterruptAcknowledged {
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "a primary interrupt epoch must be classified before returning from the handler"]
 pub struct BluetoothPrimaryInterruptEpoch {
+    controller_time_overflow: bool,
     bank_0_source_21_pending: bool,
     bank_0_sources_27_or_28_pending: bool,
     bank_1_source_3_pending: bool,
@@ -450,6 +468,7 @@ impl BluetoothPrimaryInterruptEpoch {
         bank_1_source_3_pending: bool,
     ) -> Self {
         Self {
+            controller_time_overflow: false,
             bank_0_source_21_pending,
             bank_0_sources_27_or_28_pending,
             bank_1_source_3_pending,
@@ -463,6 +482,7 @@ impl BluetoothPrimaryInterruptEpoch {
     #[doc(hidden)]
     pub const fn for_fault_host_test() -> Self {
         Self {
+            controller_time_overflow: false,
             bank_0_source_21_pending: false,
             bank_0_sources_27_or_28_pending: false,
             bank_1_source_3_pending: false,
@@ -479,6 +499,7 @@ impl BluetoothPrimaryInterruptEpoch {
     #[doc(hidden)]
     pub const fn for_unclassified_host_test() -> Self {
         Self {
+            controller_time_overflow: false,
             bank_0_source_21_pending: false,
             bank_0_sources_27_or_28_pending: false,
             bank_1_source_3_pending: false,
@@ -492,6 +513,19 @@ impl BluetoothPrimaryInterruptEpoch {
     /// Whether positional dynamic bank-zero source 21 was pending.
     pub const fn bank_0_source_21_pending(&self) -> bool {
         self.bank_0_source_21_pending
+    }
+
+    /// Whether this acknowledged primary epoch captured a BTLC first-word wrap.
+    pub const fn controller_time_overflow(&self) -> bool {
+        self.controller_time_overflow
+    }
+
+    /// Add an overflow observation to a synthetic epoch for host tests.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub const fn with_controller_time_overflow_for_host_test(mut self) -> Self {
+        self.controller_time_overflow = true;
+        self
     }
 
     /// Whether positional dynamic bank-zero source 27 or 28 was pending.
@@ -535,6 +569,7 @@ fn execute_primary_interrupt_epoch(
     }
 
     Some(BluetoothPrimaryInterruptEpoch {
+        controller_time_overflow: bank_1_status.controller_time_overflow,
         bank_0_source_21_pending: bank_0_status.source_21_pending,
         bank_0_sources_27_or_28_pending: bank_0_status.sources_27_or_28_pending,
         bank_1_source_3_pending: bank_1_status.source_3_pending,
