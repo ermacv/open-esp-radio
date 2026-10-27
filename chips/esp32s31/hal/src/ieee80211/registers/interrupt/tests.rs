@@ -154,19 +154,17 @@ fn clearing_power_stores_the_zero_enable_then_the_whole_clear_word() {
 #[test]
 fn raw_acknowledgement_does_not_select_a_fatal_cause_arriving_after_the_sample() {
     let mut words = HostWords::filled(u32::MAX);
+    words.interrupt[oer_esp32s31_pac::wifi_mac::raw::OFFSET / size_of::<u32>()] &=
+        !oer_esp32s31_pac::wifi_mac::raw::FATAL_ASSERTION_MASK;
     let sample = {
         let mut owners = words.owners();
         owners.mac_interrupt.mask_all_mac_interrupts();
-        owners.mac_interrupt.mac.modify_raw(|word| {
-            word.set_fatal_assertion(false);
-        });
         owners.mac_interrupt.mac_interrupt_raw()
     };
     assert_eq!(sample.fatal_assertion_raw(), None);
     let sampled_bits = sample.0.bits();
-    words.owners().mac_interrupt.mac.modify_raw(|word| {
-        word.set_fatal_assertion(true);
-    });
+    words.interrupt[oer_esp32s31_pac::wifi_mac::raw::OFFSET / size_of::<u32>()] |=
+        oer_esp32s31_pac::wifi_mac::raw::FATAL_ASSERTION_MASK;
     assert!(
         words
             .owners()
@@ -276,10 +274,9 @@ fn preparing_a_connected_station_clears_the_beacon_filter_control_alone() {
 #[test]
 fn fatal_raw_is_visible_while_status_and_delivery_are_masked() {
     let mut words = HostWords::filled(0);
+    words.interrupt[oer_esp32s31_pac::wifi_mac::raw::OFFSET / size_of::<u32>()] =
+        oer_esp32s31_pac::wifi_mac::raw::FATAL_ASSERTION_MASK;
     let mut owners = words.owners();
-    owners.mac_interrupt.mac.modify_raw(|word| {
-        word.set_fatal_assertion(true);
-    });
     owners.mac_interrupt.mask_all_mac_interrupts();
     assert!(
         owners

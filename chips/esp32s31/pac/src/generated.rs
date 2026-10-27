@@ -275308,7 +275308,7 @@ pub mod wifi_mac {
 
     /// The `RAW` register.
     ///
-    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027.
+    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. hal_disable_mac+0x1e stores the complete RAW word as zero after setting common MAC disable gates and storing ENABLE=0, before zeroing INTERRUPT_1_RAW. That leaf does not read RAW afterward. This proves the publication and order, not its effect on positive pending, a reset value or arbitrary writable-storage semantics. Initialization/deinitialization instead clear stale state through CLEAR=0xffffffff. SOURCE: BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027, BLOB_WIFI_MAC_STALE_CLEAR_FORMS_20261027. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Access is limited to observation and the separately sourced complete zero publication, without a claim of hardware read-only behavior.
     pub mod raw {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -275344,7 +275344,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Vendor STATUS2/3 have RF-test polling/clear consumers and ENABLE2 has a sniffer accessor use, without established physical identities. These STATUS/ENABLE observations do not show a CPU store that sets RAW2/3/4. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027.
+            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Vendor STATUS2/3 have RF-test polling/clear consumers and ENABLE2 has a sniffer accessor use, without established physical identities. These STATUS/ENABLE observations do not show a CPU store that sets RAW2/3/4. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027. The recovered disabled-engine CPU publication writes this entire range zero as part of a whole-word store; nonzero writes and zero-write effects on positive pending are unqualified. Selective acknowledgement writes CLEAR instead. No reset value or zero-only read invariant follows. SOURCE: BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027, BLOB_WIFI_MAC_STALE_CLEAR_FORMS_20261027.
             #[inline]
             pub const fn bits_0_20_opaque(self) -> oer_mmio::Bits<21> {
                 oer_mmio::Bits::truncate(self.0)
@@ -275356,54 +275356,10 @@ pub mod wifi_mac {
                 (self.0 & 0x00200000) != 0
             }
 
-            /// Raw event observations; identities are not independently decoded here.
+            /// Raw event observations; identities are not independently decoded here. The disabled-engine whole-word zero publication covers these lanes too; effects on positive pending and nonzero writes are unqualified. SOURCE: BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027.
             #[inline]
             pub const fn bits_22_31_opaque(self) -> oer_mmio::Bits<10> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Vendor STATUS2/3 have RF-test polling/clear consumers and ENABLE2 has a sniffer accessor use, without established physical identities. These STATUS/ENABLE observations do not show a CPU store that sets RAW2/3/4. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027.
-            #[inline]
-            pub const fn bits_0_20_opaque(&self) -> oer_mmio::Bits<21> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank).
-            #[inline]
-            pub const fn fatal_assertion(&self) -> bool {
-                (self.0 & 0x00200000) != 0
-            }
-
-            /// Raw event observations; identities are not independently decoded here.
-            #[inline]
-            pub const fn bits_22_31_opaque(&self) -> oer_mmio::Bits<10> {
-                oer_mmio::Bits::truncate(self.0 >> 22)
-            }
-
-            /// Set `BITS_0_20_OPAQUE`.
-            #[inline]
-            pub fn set_bits_0_20_opaque(&mut self, value: oer_mmio::Bits<21>) -> &mut Self {
-                self.0 = (self.0 & 0xffe00000) | value.get();
-                self
-            }
-
-            /// Set `FATAL_ASSERTION`.
-            #[inline]
-            pub fn set_fatal_assertion(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffdfffff) | (u32::from(value) << 21);
-                self
-            }
-
-            /// Set `BITS_22_31_OPAQUE`.
-            #[inline]
-            pub fn set_bits_22_31_opaque(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
-                self.0 = (self.0 & 0x003fffff) | (value.get() << 22);
-                self
             }
         }
     }
@@ -280754,13 +280710,13 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Recovered PLCP0 control image; libpp[hal_mac_tx.o]::mac_tx_set_plcp0 initializes these two bits to binary 10 for the ordinary direct legacy path.
+            /// Ordinary libpp and rev0 ROM PLCP0 preparation writes binary 10 here before legacy, HT or HE vector preparation. RFTEST fill_tx_frame direct preparation writes binary 00. No rate, PHY-family or descriptor-mode meaning, and no meaning for encodings 01/11, is established. SOURCE: BX8_WIFI_CONTROL_PREPARATION_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027.
             #[inline]
             pub const fn bits_20_21_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
             }
 
-            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The open legacy/HT/HE formatter sets bit 22 unconditionally; its missing reserved-slot adjustment is a known vendor difference. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729.
+            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The ordinary PPDU parent reaches the reserved-slot adjustment only outside descriptor-rate codes 16 through 35. Its reviewed HT/HE branches bypass that helper and retain the initial set bit. The open formatter's unconditional set agrees with those branches and with the legacy no-granted-slot case; behavior for a reserved legacy slot requires separate qualification. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729. SOURCE: BX8_WIFI_CONTROL_TXOP_SCOPE_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027.
             #[inline]
             pub const fn bit_22_opaque(self) -> bool {
                 (self.0 & 0x00400000) != 0
@@ -280772,7 +280728,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Three-bit format selector derived by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 from vendor descriptor flags. For the bounded plain legacy roots, libpp[pp.o]::ppTxProtoProc maps the address-one I/G bit to descriptor flag 0x2: group traffic retains format zero, while an ordinary individual-address descriptor with zero flags selects format one. Exact vendor callback images select format one for both non-A-MPDU HT20 MCS0 and HE20 MCS0 DCM S-MPDU frames; the owned open paths receive ACK at the same format. Independently captured HT and HE A-MPDU images select aggregate format two or five respectively. Format three has an instruction-exact descriptor branch but its higher-level meaning remains open. A legacy-only single-variable A/B temporarily correlated format one with status five and format zero with one authentication response, but format-zero repetitions failed; that experiment is retained as evidence that completion status alone is not a protocol-success oracle, not as an override of the complete blob mapping.
+            /// Three-bit format selector derived by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 from vendor descriptor flags. For the bounded plain legacy roots, libpp[pp.o]::ppTxProtoProc maps the address-one I/G bit to descriptor flag 0x2: group traffic retains format zero, while an ordinary individual-address descriptor with zero flags selects format one. Exact vendor callback images select format one for both non-A-MPDU HT20 MCS0 and HE20 MCS0 DCM S-MPDU frames; the owned open paths receive ACK at the same format. Independently captured HT and HE A-MPDU images select aggregate format two or five respectively. Format three has an instruction-exact descriptor branch but its higher-level meaning remains open. A legacy-only single-variable A/B temporarily correlated format one with status five and format zero with one authentication response, but format-zero repetitions failed; that experiment is retained as evidence that completion status alone is not a protocol-success oracle, not as an override of the complete blob mapping. This CONTROL[26:24] descriptor-format domain is distinct from PLCP1.VECTOR_FORMAT; dbg_read_tx_sig selects its SIG interpretation from the latter's low two bits. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027.
             #[inline]
             pub const fn plcp_format(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 24)
@@ -280813,13 +280769,13 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Recovered PLCP0 control image; libpp[hal_mac_tx.o]::mac_tx_set_plcp0 initializes these two bits to binary 10 for the ordinary direct legacy path.
+            /// Ordinary libpp and rev0 ROM PLCP0 preparation writes binary 10 here before legacy, HT or HE vector preparation. RFTEST fill_tx_frame direct preparation writes binary 00. No rate, PHY-family or descriptor-mode meaning, and no meaning for encodings 01/11, is established. SOURCE: BX8_WIFI_CONTROL_PREPARATION_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027.
             #[inline]
             pub const fn bits_20_21_opaque(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
             }
 
-            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The open legacy/HT/HE formatter sets bit 22 unconditionally; its missing reserved-slot adjustment is a known vendor difference. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729.
+            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The ordinary PPDU parent reaches the reserved-slot adjustment only outside descriptor-rate codes 16 through 35. Its reviewed HT/HE branches bypass that helper and retain the initial set bit. The open formatter's unconditional set agrees with those branches and with the legacy no-granted-slot case; behavior for a reserved legacy slot requires separate qualification. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729. SOURCE: BX8_WIFI_CONTROL_TXOP_SCOPE_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027.
             #[inline]
             pub const fn bit_22_opaque(&self) -> bool {
                 (self.0 & 0x00400000) != 0
@@ -280831,7 +280787,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Three-bit format selector derived by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 from vendor descriptor flags. For the bounded plain legacy roots, libpp[pp.o]::ppTxProtoProc maps the address-one I/G bit to descriptor flag 0x2: group traffic retains format zero, while an ordinary individual-address descriptor with zero flags selects format one. Exact vendor callback images select format one for both non-A-MPDU HT20 MCS0 and HE20 MCS0 DCM S-MPDU frames; the owned open paths receive ACK at the same format. Independently captured HT and HE A-MPDU images select aggregate format two or five respectively. Format three has an instruction-exact descriptor branch but its higher-level meaning remains open. A legacy-only single-variable A/B temporarily correlated format one with status five and format zero with one authentication response, but format-zero repetitions failed; that experiment is retained as evidence that completion status alone is not a protocol-success oracle, not as an override of the complete blob mapping.
+            /// Three-bit format selector derived by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 from vendor descriptor flags. For the bounded plain legacy roots, libpp[pp.o]::ppTxProtoProc maps the address-one I/G bit to descriptor flag 0x2: group traffic retains format zero, while an ordinary individual-address descriptor with zero flags selects format one. Exact vendor callback images select format one for both non-A-MPDU HT20 MCS0 and HE20 MCS0 DCM S-MPDU frames; the owned open paths receive ACK at the same format. Independently captured HT and HE A-MPDU images select aggregate format two or five respectively. Format three has an instruction-exact descriptor branch but its higher-level meaning remains open. A legacy-only single-variable A/B temporarily correlated format one with status five and format zero with one authentication response, but format-zero repetitions failed; that experiment is retained as evidence that completion status alone is not a protocol-success oracle, not as an override of the complete blob mapping. This CONTROL[26:24] descriptor-format domain is distinct from PLCP1.VECTOR_FORMAT; dbg_read_tx_sig selects its SIG interpretation from the latter's low two bits. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027.
             #[inline]
             pub const fn plcp_format(&self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 24)
@@ -283921,7 +283877,7 @@ pub mod wifi_mac {
 
     /// The `EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL` register.
     ///
-    /// Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant.
+    /// Shared staging and readback-control word used by extra-SoftAP agreement add/update/delete, the diagnostic reader and ROM reset. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant. SOURCE: BLOB_WIFI_EXTRA_SOFTAP_BA_CONTROL_LIFECYCLE_20261027.
     pub mod extra_softap_rx_block_ack_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -284004,7 +283960,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 5)
             }
 
-            /// Bits cleared by every reviewed zero-based extra-SoftAP control publication.
+            /// The extra-SoftAP add publication writes these bits zero at hal_agreement_add_extra_softap_rx_ba+0xc4. Index selection, window reset and VALID-clear deletion preserve their sampled values. The vendor logs the latched control without a local zero test. Physical meaning and live readback invariants remain unknown. SOURCE: BLOB_WIFI_EXTRA_SOFTAP_BA_CONTROL_LIFECYCLE_20261027.
             #[inline]
             pub const fn bits_10_11_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 10)
@@ -284057,7 +284013,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 5)
             }
 
-            /// Bits cleared by every reviewed zero-based extra-SoftAP control publication.
+            /// The extra-SoftAP add publication writes these bits zero at hal_agreement_add_extra_softap_rx_ba+0xc4. Index selection, window reset and VALID-clear deletion preserve their sampled values. The vendor logs the latched control without a local zero test. Physical meaning and live readback invariants remain unknown. SOURCE: BLOB_WIFI_EXTRA_SOFTAP_BA_CONTROL_LIFECYCLE_20261027.
             #[inline]
             pub const fn bits_10_11_opaque(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 10)
@@ -288313,7 +288269,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 23)
             }
 
-            /// Three-bit vector family: zero for legacy, one for HT and two for HE in the reviewed paths.
+            /// Three-bit vector family: zero for legacy, one for HT and two for HE in the reviewed paths. The vendor debug decoder selects its family-specific interpretation from this field's low two bits at PLCP1[26:25], independently of CONTROL.PLCP_FORMAT. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027.
             #[inline]
             pub const fn vector_format(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 25)
@@ -288378,7 +288334,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 23)
             }
 
-            /// Three-bit vector family: zero for legacy, one for HT and two for HE in the reviewed paths.
+            /// Three-bit vector family: zero for legacy, one for HT and two for HE in the reviewed paths. The vendor debug decoder selects its family-specific interpretation from this field's low two bits at PLCP1[26:25], independently of CONTROL.PLCP_FORMAT. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027.
             #[inline]
             pub const fn vector_format(&self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 25)
@@ -289204,7 +289160,7 @@ pub mod wifi_mac {
 
     /// The `VHT_SIGNAL_1%s` register.
     ///
-    /// Complete dbg_read_tx_sig decodes this word only when PLCP_FORMAT is three and names VHT MCS, channel width, group ID, NSTS, SU partial AID, SGI, SGI symbol disambiguation and coding. This maps an internal hardware vector; it does not assert that the ESP32-S31 public Wi-Fi mode supports VHT transmission.
+    /// Complete dbg_read_tx_sig decodes this word only when PLCP1.VECTOR_FORMAT[1:0] is three and names VHT MCS, channel width, group ID, NSTS, SU partial AID, SGI, SGI symbol disambiguation and coding. This maps an internal hardware vector; it does not assert that the ESP32-S31 public Wi-Fi mode supports VHT transmission. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027.
     pub mod vht_signal_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xf73ffff3;
@@ -289440,7 +289396,7 @@ pub mod wifi_mac {
 
     /// The `VHT_MODE%s` register.
     ///
-    /// Complete dbg_read_tx_sig decodes this word only when PLCP_FORMAT is three and names bits 18:2 SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LEN. Remaining bits are not assigned a meaning by the complete body.
+    /// Complete dbg_read_tx_sig decodes this word only when PLCP1.VECTOR_FORMAT[1:0] is three and names bits 18:2 SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LEN. Remaining bits are not assigned a meaning by the complete body. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027.
     pub mod vht_mode {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x01fffffc;
@@ -300409,19 +300365,18 @@ pub mod wifi_mac {
             raw::R(self.0.read::<0xc44>())
         }
 
-        /// Read `RAW`, change fields and write it back; every other bit keeps
-        /// the value read, every write-trigger field is zero.
-        #[inline]
-        pub fn modify_raw(&mut self, change: impl FnOnce(&mut raw::W)) {
-            let mut value = raw::W(self.0.read::<0xc44>());
-            change(&mut value);
-            self.0.write::<0xc44>(value.0);
-        }
-
         /// Read `STATUS`.
         #[inline]
         pub fn read_status(&self) -> status::R {
             status::R(self.0.read::<0xc48>())
+        }
+
+        /// Publish the sourced complete zero word; its hardware effect is unqualified (`WIFI_MAC.RAW`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_DISABLE_MAC, BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027.
+        #[inline]
+        pub fn disable_mac_interrupt_raw(&mut self) {
+            self.0.write::<0xc44>(0);
         }
 
         /// Mask the sources of `0xffffffff` in `WIFI_MAC.ENABLE`, keeping every other bit, then acknowledge them (`WIFI_MAC.CLEAR`).
@@ -307839,10 +307794,10 @@ pub mod layouts {
         pub const OFFSET_WIDTH: u32 = 1;
         /// Greatest unsigned image of `OFFSET`.
         pub const OFFSET_MAX: u32 = 0x1;
-        /// Project-assigned name. Vendor offset bit, initialized by software through the control image. It reads zero on all sampled nodes in all three bounded 32-by-128-byte, three-beacon captures on s31-b rev0, including repeated writes correlated with FCS errors. The receive phase conservatively permits an unknown hardware writer; no hardware store to this bit is established. Its encoding, units and effect when set are unknown; it is not an established completion marker.
+        /// Vendor diagnostic name for CONTROL bit 28. The inspected vendor RX initialization stores preserve its prior value; append/rearm also preserves it, including an incoming one. This does not establish an initial value, a supported one-valued mode, physical units, relation to the separate RX-control-buffer byte displacement, or hardware writeback. The possible hardware writer in the receive phase is conservative, not an observed store. It remains zero in all recorded HW18 R1/R2/R3 control samples; setting it to one on hardware is untested. It is not an established completion or ownership predicate. SOURCE: BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
         ///
-        /// `OFFSET`, bit 28; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `receive`: the hardware.
-        /// SOURCE: HW18_RX_COMMITTED_PREFIX_20261027, VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027.
+        /// `OFFSET`, bit 28; written by the participants in the declared phases. Phase `arm-rearm`: the CPU. Phase `receive`: the hardware.
+        /// SOURCE: HW18_RX_COMMITTED_PREFIX_20261027, VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027, BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
         pub const fn offset(self) -> bool {
             self.0 & 0x10000000 != 0
         }
@@ -307860,10 +307815,10 @@ pub mod layouts {
         pub const SOSF_WIDTH: u32 = 1;
         /// Greatest unsigned image of `SOSF`.
         pub const SOSF_MAX: u32 = 0x1;
-        /// Project-assigned name. Vendor sosf bit, initialized/cleared by software on arm/rearm. Its acronym, hardware effects and relation to frame boundaries are unknown. It reads zero on all sampled nodes in all three bounded 32-by-128-byte, three-beacon captures on s31-b rev0, including repeated writes correlated with FCS errors. The receive phase conservatively permits an unknown hardware writer; no hardware store to this bit is established, and setting it to one is untested.
+        /// Vendor diagnostic name for CONTROL bit 29. Software explicitly clears it during RX descriptor initialization and append/rearm. Its acronym, physical effect, frame-boundary role and hardware writeback are unestablished. The possible hardware writer in the receive phase is conservative, not an observed store. It remains zero in all recorded HW18 R1/R2/R3 control samples; setting it to one on hardware is untested. It is not an established completion or ownership predicate. SOURCE: BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
         ///
         /// `SOSF`, bit 29; written by the participants in the declared phases. Phase `arm-rearm`: the CPU. Phase `receive`: the hardware.
-        /// SOURCE: HW18_RX_COMMITTED_PREFIX_20261027, VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027.
+        /// SOURCE: HW18_RX_COMMITTED_PREFIX_20261027, VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027, BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
         pub const fn sosf(self) -> bool {
             self.0 & 0x20000000 != 0
         }

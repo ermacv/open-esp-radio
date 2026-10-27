@@ -222,6 +222,103 @@ fn names_lose_the_block_prefix() {
     }
 }
 
+const READ_OBSERVED: &[(&str, &str, &str)] = &[
+    (
+        "types/radio.toml",
+        "class = \"unknown\"",
+        "class = \"read-observed\"",
+    ),
+    (
+        "policy.toml",
+        "chip = \"testchip\"",
+        "chip = \"testchip\"\n\n[[zero-register-writes]]\nname = \"publish_observed_zero\"\nregister = \"RADIO0.RAD_VAGUE\"\nsources = [\"SRC_DRIVER\"]",
+    ),
+];
+
+#[test]
+fn observed_reads_and_exact_zero_publication_have_no_generic_writer() {
+    for sibling in [
+        "",
+        "\n\n[[registers.fields]]\nname = \"CFG\"\nbits = \"7:4\"\nclass = \"plain\"",
+    ] {
+        let observed = format!("class = \"read-observed\"{sibling}");
+        let edits = [
+            ("types/radio.toml", "class = \"unknown\"", observed.as_str()),
+            READ_OBSERVED[1],
+        ];
+        let rust = rendered_with(&edits);
+        let result = run(
+            &rust,
+            r#"
+        fn main() {
+            for fill in [0, 0x55555555, u32::MAX] {
+                let mut memory = [fill; 128];
+                {
+                    let (mut task, _) = radio::radio0_host(&mut memory).expect("host");
+                    assert_eq!(task.read_vague().vague().get(), fill & 15);
+                    task.publish_observed_zero();
+                    assert_eq!(task.read_vague().vague().get(), 0);
+                }
+                for (index, word) in memory.into_iter().enumerate() {
+                    assert_eq!(word, if index == radio::vague::OFFSET / 4 { 0 } else { fill });
+                }
+            }
+            println!("observed");
+        }
+        "#,
+        );
+        assert_eq!(result.trim(), "observed");
+        for forbidden in [
+            "task.modify_vague(|_| {});",
+            "task.write_vague(|_| {});",
+            "let _: Option<radio::vague::W> = None;",
+        ] {
+            let errors = refused(
+                &rust,
+                &format!(
+                    "fn main() {{ let mut memory = [0; 128]; let (mut task, _) = radio::radio0_host(&mut memory).expect(\"host\"); {forbidden} }}"
+                ),
+            );
+            assert!(
+                errors.contains("E0599") || errors.contains("E0425"),
+                "{errors}"
+            );
+        }
+    }
+}
+
+#[test]
+fn observed_words_reject_other_policy_writes_even_in_mixed_words() {
+    for sibling in [
+        "",
+        "\n\n[[registers.fields]]\nname = \"CFG\"\nbits = \"7:4\"\nclass = \"plain\"",
+    ] {
+        for publication in [
+            "[[fixed-register-images]]\nname = \"other_write\"\nregister = \"RADIO0.RAD_VAGUE\"\nvalue = 0\nwhole-word = true\nsources = [\"SRC_DRIVER\"]",
+            "[[fixed-register-images]]\nname = \"other_write\"\nregister = \"RADIO0.RAD_VAGUE\"\nvalue = 1\nwhole-word = true\nsources = [\"SRC_DRIVER\"]",
+            "[[fixed-register-sequences]]\nname = \"other_write\"\nsteps = [{ register = \"RADIO0.RAD_VAGUE\", value = 0, whole-word = true }]\nsources = [\"SRC_DRIVER\"]",
+            "[[field-clear-modifies]]\nname = \"other_write\"\nfield = \"RADIO0.RAD_VAGUE.VAGUE\"\nsources = [\"SRC_DRIVER\"]",
+            "[[field-clear-modifies]]\nname = \"other_write\"\nfield = \"RADIO0.RAD_VAGUE.CFG\"\nsources = [\"SRC_DRIVER\"]",
+            "[[zero-based-field-writes]]\nname = \"other_write\"\nfields = [\"RADIO0.RAD_VAGUE.CFG\"]\nsources = [\"SRC_DRIVER\"]",
+        ] {
+            let observed = format!("class = \"read-observed\"{sibling}");
+            let policy = format!("chip = \"testchip\"\n\n{publication}");
+            let directory = edited(&[
+                ("types/radio.toml", "class = \"unknown\"", &observed),
+                ("policy.toml", "chip = \"testchip\"", &policy),
+            ]);
+            let evidence = RegisterEvidenceSet::load_all(&[directory.path().join("evidence.toml")])
+                .expect("evidence");
+            let model =
+                ChipModel::load(&directory.path().join("chip.toml"), &evidence).expect("model");
+            assert!(
+                ChipPolicy::load(&directory.path().join("policy.toml"), &model, &evidence).is_err(),
+                "{publication} beside {sibling} was admitted"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_template_beside_its_single_register_keeps_its_index_place() {
     let directory = edited(&[

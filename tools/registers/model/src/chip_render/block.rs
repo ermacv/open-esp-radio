@@ -381,6 +381,7 @@ impl Template<'_> {
                         | FieldClass::WriteOneToClear
                         | FieldClass::SetOnly
                         | FieldClass::HardwareWritten
+                        | FieldClass::ReadObserved
                 ) || (field.class == FieldClass::SelfClearing && !field.doorbell)
             })
     }

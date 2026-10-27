@@ -1,0 +1,17 @@
+schema = 1
+
+[[sources]]
+id = "BX8_WIFI_CONTROL_PREPARATION_20261027"
+description = "esp32-wifi-lib@af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. esp-rom-elfs@20260528, esp32s31_rev0_rom.elf SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. esp-phy-lib@20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a SHA-256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a. libpp[hal_mac_tx.o]::mac_tx_set_plcp0+0x18..0x26/+0x6c and rom[]::mac_tx_set_plcp0+0x14..0x22/+0x5c publish CONTROL[21:20]=2 and bit22=1 before family-specific legacy/HT/HE vectors. librftest[mac_common.o]::fill_tx_frame+0x6e/+0x392 publishes the low20 DMA address with these upper lanes zero. Preparation images establish neither physical modes nor successful RFTEST transmission; encodings 01/11 remain unidentified."
+
+[[sources]]
+id = "BX8_WIFI_CONTROL_TXOP_SCOPE_20261027"
+description = "esp32-wifi-lib@af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu+0xfe..0x10a gates descriptor-rate codes16..35 away from the TXOP call at +0x11c..0x120; those rates reach HE +0x184..0x194 or HT +0x1f4..0x1f8. mac_tx_set_txop_q+0xe/+0x2e..0x30 selects slots; +0x86..0xae sets CONTROL22 for software-descriptor class2, +0xd0..0xda clears it for classes0/1/3, and +0xfc..0x108 preserves it for slot3. The class comes from frame+0x34 software flags, separately from the DMA head. These are bounded local control-flow facts, without universal cipher, fragment or air semantics."
+
+[[sources]]
+id = "BX8_WIFI_TX_FORMAT_DOMAINS_20261027"
+description = "esp32-wifi-lib@af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. libpp[hal_mac_tx.o]::mac_tx_set_plcp1+0x8/+0x12..0x38/+0x4e..0x66/+0xac publishes RATE[16:12] and VECTOR_FORMAT[27:25] separately from CONTROL.PLCP_FORMAT[26:24]. libpp[hal_debug.o]::dbg_read_tx_sig+0x24..0x2a selects interpretation from PLCP1[26:25], with later comparisons +0x2a2/+0x2d4; it does not select CONTROL.PLCP_FORMAT. The VHT diagnostic branch establishes no public VHT-transmission capability."
+
+[[sources]]
+id = "BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027"
+description = "esp32-wifi-lib@af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. esp-rom-elfs@20260528, esp32s31_rev0_rom.elf SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. libpp[hal_debug.o]::dbg_read_tx_ppdu+0x14a..0x154 retains only CONTROL[19:0]; libpp[hal_mac_tx.o]::hal_mac_get_txq_complete+0x3b2/+0x40e..0x434 logs [26:24], discarding [22:20] locally. hal_mac_txq_enable+0xc/+0x1e and rom[]::hal_mac_txq_enable+0xc/+0x24 preserve [22:20] while setting ownership; libpp[hal_mac.o]::hal_mac_is_txq_valid+0xc and hal_mac_is_txq_enabled+0xc select ownership only. Partial scan/value semantics, indexed unresolved addresses, opaque calls and a work limit in the completion body prevent an exhaustive consumer absence proof. No physical identity for the opaque pair or bit22 is established."

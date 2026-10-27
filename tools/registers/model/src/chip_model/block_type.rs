@@ -937,7 +937,10 @@ fn check_commands(
             }
             if matches!(
                 field.class,
-                FieldClass::WriteTrigger | FieldClass::ReadClears | FieldClass::Unknown
+                FieldClass::WriteTrigger
+                    | FieldClass::ReadClears
+                    | FieldClass::ReadObserved
+                    | FieldClass::Unknown
             ) {
                 return Err(fail(format!(
                     "holds the {} field {}",

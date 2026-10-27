@@ -250,7 +250,7 @@ description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788
 
 [[sources]]
 id = "BLOB_LIBPP_DBG_READ_TX_SIG"
-description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_tx_sig size 0x350 and its pinned HT, VHT, HE, HT20-length and HT40-length format strings. The complete body selects interpretation from per-queue PLCP_FORMAT, then proves all documented shifts/masks at 0x201054e8..0x20105510-q*0x7c and the matching reverse-addressed queue-protection word."
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_tx_sig size 0x350 and its pinned HT, VHT, HE, HT20-length and HT40-length format strings. The complete body selects interpretation from per-queue PLCP1 bits26:25 (the low two VECTOR_FORMAT bits), then proves all documented shifts/masks at 0x201054e8..0x20105510-q*0x7c and the matching reverse-addressed queue-protection word."
 
 [[sources]]
 id = "BLOB_LIBPP_DBG_DUMP_RX_PPDU"
