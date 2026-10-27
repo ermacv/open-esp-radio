@@ -17,6 +17,70 @@ fn transfer(site: u32, target: Option<u32>) -> Transfer {
     }
 }
 
+/// The first handler has the worst stack bound; the other is independent.
+/// Used by the linker's compiler-driven relocation regression.
+pub(crate) fn same_level_handler_placement(handlers: [Function; 2]) -> CodePlacement {
+    let mut stacks = partial(0);
+    let exception = stacks.contract.memory.sram.origin + 0x1000;
+    let mut functions = BTreeMap::from([(exception, facts(exception, 4))]);
+    for (index, handler) in handlers.iter().enumerate() {
+        let mut value = facts(handler.address, handler.size);
+        value.function = handler.clone();
+        value.frame = Some(if index == 0 { 32 } else { 0 });
+        functions.insert(handler.address, value);
+    }
+    let analysis = Analysis {
+        traps: Default::default(),
+        functions,
+        code: Vec::new(),
+        summaries: BTreeSet::new(),
+    };
+    let resolutions = Resolutions::new();
+    let mut level = stacks.harts[0].exception.clone();
+    level.level = 1;
+    level.bound = analysis
+        .bound_with(handlers[0].address, &resolutions, &mut ledger(), &mut || Ok(()))
+        .unwrap();
+    stacks.harts[0].levels = vec![level];
+    stacks.harts[0].exception.bound = analysis
+        .bound_with(exception, &resolutions, &mut ledger(), &mut || Ok(()))
+        .unwrap();
+    let table: Vec<_> = handlers
+        .iter()
+        .enumerate()
+        .map(|(index, handler)| TableEntry {
+            source: index as u32,
+            line: 16 + index as u32,
+            level: 1,
+            class: Class::Hardware,
+            core: 0,
+            handler: Some(handler.address),
+        })
+        .collect();
+    let inputs = Stacks {
+        table: &table,
+        cores: &[0],
+        vectors: &[],
+        exception: TrapEntry {
+            entry: exception,
+            handler: exception,
+            frame: 0,
+        },
+        resolutions: &resolutions,
+    };
+    CodePlacement::of(
+        &analysis,
+        &handlers,
+        &stacks.harts,
+        &inputs,
+        BTreeSet::new(),
+        &stacks.contract.memory,
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap()
+}
+
 /// A real synthetic analysis: root calls dequeue and shared directly;
 /// dequeue polls task; task also calls shared. Exception is independent.
 /// The table's one entry, on hart 0 at `priority`, is of `class`.

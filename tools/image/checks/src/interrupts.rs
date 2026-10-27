@@ -27,6 +27,8 @@ mod classes;
 pub use classes::{Breach, CachedData, Finding};
 mod code;
 pub use code::CodePlacement;
+#[cfg(test)]
+pub(crate) use code::tests::same_level_handler_placement;
 pub(crate) mod allocation;
 mod guard;
 pub use allocation::LinkedStack;
