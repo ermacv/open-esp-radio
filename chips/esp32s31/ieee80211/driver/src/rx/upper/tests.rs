@@ -35,19 +35,28 @@ fn leak<T>(value: T) -> &'static mut T {
 /// storage.
 fn ends(
     counters: &'static WifiRxCounters,
-) -> RxFrameEnds<'static, SLOTS, BUFFER, oer_interrupt_table::signal::host::Host> {
-    let (publisher, _consumer) =
-        leak(IrqStorage::new(oer_interrupt_table::signal::host::signal())).split();
-    let publisher: &'static IrqPublisher<'static, oer_interrupt_table::signal::host::Host> =
-        leak(publisher);
+) -> RxFrameEnds<'static, SLOTS, BUFFER, oer_espressif_interrupt_table::signal::host::Host> {
+    let (publisher, _consumer) = leak(IrqStorage::new(
+        oer_espressif_interrupt_table::signal::host::signal(),
+    ))
+    .split();
+    let publisher: &'static IrqPublisher<
+        'static,
+        oer_espressif_interrupt_table::signal::host::Host,
+    > = leak(publisher);
     RxFrameQueue::init_in_place(leak(core::mem::MaybeUninit::uninit()))
         .split(counters, RxReturnNotifier::new(publisher))
 }
 
 /// Poll the receiver once.
 fn poll_next<'a>(
-    receiver: &mut FrameReceiver<'a, SLOTS, BUFFER, oer_interrupt_table::signal::host::Host>,
-) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER, oer_interrupt_table::signal::host::Host>> {
+    receiver: &mut FrameReceiver<
+        'a,
+        SLOTS,
+        BUFFER,
+        oer_espressif_interrupt_table::signal::host::Host,
+    >,
+) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER, oer_espressif_interrupt_table::signal::host::Host>> {
     let mut next = pin!(receiver.next());
     match next.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
         Poll::Ready(frame) => Some(frame),
@@ -59,7 +68,8 @@ struct Fixture {
     counters: &'static WifiRxCounters,
     clock: &'static VirtualClock,
     sink: QueueSink<'static, VirtualClock, SLOTS, BUFFER>,
-    receiver: FrameReceiver<'static, SLOTS, BUFFER, oer_interrupt_table::signal::host::Host>,
+    receiver:
+        FrameReceiver<'static, SLOTS, BUFFER, oer_espressif_interrupt_table::signal::host::Host>,
     admission: CountingAdmission<'static>,
     ring: Ring,
 }

@@ -24,7 +24,7 @@ use oer_espressif_ieee802154_engine::{
         Ieee802154TxAbortReasonObservation,
     },
 };
-use oer_interrupt_table::Silent;
+use oer_espressif_interrupt_table::Silent;
 use oer_mmio::Placement;
 
 use crate::ieee802154::mac::{
@@ -73,7 +73,7 @@ const fn timer_stop(timer: Ieee802154Timer) -> Opcode {
 /// ```no_run
 /// use oer_esp32s31_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
 /// use oer_esp32s31_hal::platform::InterruptController;
-/// use oer_interrupt_table::Router;
+/// use oer_espressif_interrupt_table::Router;
 /// fn poll(
 ///     router: &Router<InterruptController>,
 ///     task: Ieee802154TaskOwner,
@@ -118,7 +118,7 @@ pub type Ieee802154MacParts<P = MacPlacement, E = EtmPlacement, B = RxInfoPlacem
 impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
     /// Hold the task owner with the interrupt owner it armed and the proof
     /// that no line receives the MAC's source
-    /// (`oer_interrupt_table::Router::silent`).
+    /// (`oer_espressif_interrupt_table::Router::silent`).
     ///
     /// Startup discard completed before the IRQ owner became bindable.
     pub fn new(

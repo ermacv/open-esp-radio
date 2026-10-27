@@ -84,7 +84,7 @@ whose panic entry would otherwise reach the bootstrap through the board.
 `adopt` installs the per-core SRAM interrupt stack and the runtime's vectors
 (`mtvec` names the exception entry, `mtvt` the hart's table) and takes the
 hart's routes and lines through `controller`, the chip's
-`oer_interrupt_table::Controller`: it silences every source and disables
+`oer_espressif_interrupt_table::Controller`: it silences every source and disables
 every line. It returns the mapping and `Adopted`, or a `BootError`: a controller whose
 implemented geometry or level bits differ from the chip facts is a typed
 boot failure. `Adopted`'s router binds each entry, and its
@@ -96,13 +96,13 @@ line's handler directly and returns through the checked exit.
 Each image declares its interrupt bindings once with
 `oer_espressif_staged_runtime::interrupt_table!` (interrupt part, handler,
 CPU line 16 to 47, level, hart, class; see
-[`oer-interrupt-table`](../../../portable/interrupt-table/README.md)): the
+[`oer-espressif-interrupt-table`](../../espressif/interrupt-table/README.md)): the
 source comes from the part's type, the macro defines each line's handler
 symbol and one token per entry, and the image hands its `INTERRUPT_TABLE` to
 `Handoff::adopt`. Each 12-byte entry holds the source (`u16`), the line, the
 level, the class and the hart (`u8` each) and the handler address at offset 8
 (zero for an entry a `cfg` leaves out); compile-time assertions in
-`portable/interrupt-table` keep that layout. Binding an entry moves its part
+`chips/espressif/interrupt-table` keep that layout. Binding an entry moves its part
 where only its handler reaches it, writes the line and then the route, and
 returns the `Bound` proof the driver takes before it enables the
 peripheral's interrupt. The bootloader's PMS and PMA configuration stays

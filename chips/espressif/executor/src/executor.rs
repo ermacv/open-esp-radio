@@ -2,11 +2,11 @@ use core::{marker::PhantomData, task::Context};
 
 use crate::urgent_sources::UrgentSources;
 use crate::{Failure, Fault};
-use oer_espressif_staged_runtime::Hart;
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Entry,
     signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList},
 };
+use oer_espressif_staged_runtime::Hart;
 use oer_memory::OnceValue;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
@@ -157,14 +157,14 @@ pub(crate) fn should_yield() -> bool {
 fn signal_pending(swi: usize) -> bool {
     let interrupt_mode = INTERRUPT_MODE[swi].load(Ordering::Acquire);
     let pending = match (interrupt_mode, swi) {
-        (true, 0) => oer_interrupt_table::signal::has_pending::<InterruptExecutor<0>>(),
-        (true, 1) => oer_interrupt_table::signal::has_pending::<InterruptExecutor<1>>(),
-        (true, 2) => oer_interrupt_table::signal::has_pending::<InterruptExecutor<2>>(),
-        (true, _) => oer_interrupt_table::signal::has_pending::<InterruptExecutor<3>>(),
-        (false, 0) => oer_interrupt_table::signal::has_pending::<Executor<0>>(),
-        (false, 1) => oer_interrupt_table::signal::has_pending::<Executor<1>>(),
-        (false, 2) => oer_interrupt_table::signal::has_pending::<Executor<2>>(),
-        (false, _) => oer_interrupt_table::signal::has_pending::<Executor<3>>(),
+        (true, 0) => oer_espressif_interrupt_table::signal::has_pending::<InterruptExecutor<0>>(),
+        (true, 1) => oer_espressif_interrupt_table::signal::has_pending::<InterruptExecutor<1>>(),
+        (true, 2) => oer_espressif_interrupt_table::signal::has_pending::<InterruptExecutor<2>>(),
+        (true, _) => oer_espressif_interrupt_table::signal::has_pending::<InterruptExecutor<3>>(),
+        (false, 0) => oer_espressif_interrupt_table::signal::has_pending::<Executor<0>>(),
+        (false, 1) => oer_espressif_interrupt_table::signal::has_pending::<Executor<1>>(),
+        (false, 2) => oer_espressif_interrupt_table::signal::has_pending::<Executor<2>>(),
+        (false, _) => oer_espressif_interrupt_table::signal::has_pending::<Executor<3>>(),
     };
     match pending {
         Ok(pending) => pending,
@@ -235,21 +235,21 @@ impl<const SWI: u8> Executor<SWI> {
     pub fn run<T, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
-        router: &mut oer_interrupt_table::Router<C>,
+        router: &mut oer_espressif_interrupt_table::Router<C>,
         wake: W,
         part: W::Part,
         _urgent: U,
         init: impl FnOnce(&Spawner<T>),
-    ) -> Result<core::convert::Infallible, Failure<oer_interrupt_table::BindError<W>>>
+    ) -> Result<core::convert::Infallible, Failure<oer_espressif_interrupt_table::BindError<W>>>
     where
         T: Tasks<Mode = Thread>,
         W: Entry,
-        W::Part: oer_interrupt_table::InterruptSource,
-        C: oer_interrupt_table::Controller,
+        W::Part: oer_espressif_interrupt_table::InterruptSource,
+        C: oer_espressif_interrupt_table::Controller,
     {
         const {
             assert!(
-                <W::Part as oer_interrupt_table::InterruptSource>::SOURCE
+                <W::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE
                     == software_interrupt_source(SWI) as u16,
                 "the token is not this executor's software interrupt"
             );
@@ -271,7 +271,7 @@ impl<const SWI: u8> Executor<SWI> {
                 crate::time_driver::service(SWI);
                 // Raised signals wake their tasks before the round; a signal
                 // raised meanwhile marks the work flag again.
-                oer_interrupt_table::signal::service::<Self>();
+                oer_espressif_interrupt_table::signal::service::<Self>();
                 let _ = poll_tasks::<T>();
             });
             wait_for_work::<SWI>();
@@ -396,20 +396,20 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
     pub fn start<T, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
-        router: &mut oer_interrupt_table::Router<C>,
+        router: &mut oer_espressif_interrupt_table::Router<C>,
         wake: W,
         part: W::Part,
         _urgent: U,
-    ) -> Result<Spawner<T>, Failure<oer_interrupt_table::BindError<W>>>
+    ) -> Result<Spawner<T>, Failure<oer_espressif_interrupt_table::BindError<W>>>
     where
         T: Tasks<Mode = InterruptMode>,
         W: Entry,
-        W::Part: oer_interrupt_table::InterruptSource,
-        C: oer_interrupt_table::Controller,
+        W::Part: oer_espressif_interrupt_table::InterruptSource,
+        C: oer_espressif_interrupt_table::Controller,
     {
         const {
             assert!(
-                <W::Part as oer_interrupt_table::InterruptSource>::SOURCE
+                <W::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE
                     == software_interrupt_source(SWI) as u16,
                 "the token is not this executor's software interrupt"
             );
@@ -463,7 +463,7 @@ impl_executor_constructors!(3, FromCpu3, own_line_3);
 /// The interrupt-table handler of a thread-mode executor's software interrupt
 /// (`FROM_CPU_INTR<SWI>`), which holds the line's interrupt part: it lowers
 /// the line, which wakes the executor's core from its wait.
-pub fn wake_handler<const SWI: u8, P: oer_interrupt_table::InterruptSource>(_: &mut P) {
+pub fn wake_handler<const SWI: u8, P: oer_espressif_interrupt_table::InterruptSource>(_: &mut P) {
     const {
         assert!(
             P::SOURCE == software_interrupt_source(SWI),
@@ -479,7 +479,7 @@ pub fn wake_handler<const SWI: u8, P: oer_interrupt_table::InterruptSource>(_: &
 /// round of its ready tasks.
 pub fn interrupt_handler<
     T: Tasks<Mode = InterruptMode>,
-    P: oer_interrupt_table::InterruptSource,
+    P: oer_espressif_interrupt_table::InterruptSource,
 >(
     _: &mut P,
 ) {
@@ -499,10 +499,10 @@ fn round<T: Tasks<Mode = InterruptMode>>(swi: u8) {
         // Raised signals wake their tasks here, in this context, before
         // the poll; a signal raised meanwhile raises this interrupt again.
         match swi {
-            0 => oer_interrupt_table::signal::service::<InterruptExecutor<0>>(),
-            1 => oer_interrupt_table::signal::service::<InterruptExecutor<1>>(),
-            2 => oer_interrupt_table::signal::service::<InterruptExecutor<2>>(),
-            _ => oer_interrupt_table::signal::service::<InterruptExecutor<3>>(),
+            0 => oer_espressif_interrupt_table::signal::service::<InterruptExecutor<0>>(),
+            1 => oer_espressif_interrupt_table::signal::service::<InterruptExecutor<1>>(),
+            2 => oer_espressif_interrupt_table::signal::service::<InterruptExecutor<2>>(),
+            _ => oer_espressif_interrupt_table::signal::service::<InterruptExecutor<3>>(),
         }
         // A task woken during the round is polled in the next run of this
         // handler, after the timers and signals.

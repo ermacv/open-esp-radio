@@ -1,5 +1,5 @@
 //! The hart's interrupt controller: its interrupt-matrix bank and its CLIC,
-//! which the interrupt table's router (`oer_interrupt_table::Router`)
+//! which the interrupt table's router (`oer_espressif_interrupt_table::Router`)
 //! writes through the typed blocks.
 //!
 //! Each method of [`Controller`] reads or read-modify-writes one word: a
@@ -12,7 +12,7 @@
 use oer_esp32c5_pac::platform::{
     Clic, InterruptCore0, InterruptCore0Status, InterruptMatrixPeripherals, clic, interrupt_core0,
 };
-use oer_interrupt_table::{Controller, Error, LineState, Trigger};
+use oer_espressif_interrupt_table::{Controller, Error, LineState, Trigger};
 use oer_mmio::{Bits, Fixed, Index, Placement};
 
 #[cfg(test)]
@@ -58,16 +58,16 @@ impl InterruptBlocks {
 ///
 /// ```compile_fail,E0080
 /// use oer_esp32c5_hal::platform::InterruptController;
-/// use oer_interrupt_table::Router;
+/// use oer_espressif_interrupt_table::Router;
 /// pub struct FarIrq;
 /// impl oer_mmio::InterruptSource for FarIrq {
 ///     const SOURCE: u16 = 84;
 /// }
 /// pub fn on_far(_: &mut FarIrq) {}
 /// // `Lines` wider than the chip's: lines up to 63.
-/// const WIDE: oer_interrupt_table::Lines =
-///     oer_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1 };
-/// oer_interrupt_table::interrupt_table! {
+/// const WIDE: oer_espressif_interrupt_table::Lines =
+///     oer_espressif_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1 };
+/// oer_espressif_interrupt_table::interrupt_table! {
 ///     lines: WIDE,
 ///     handler_attributes: [];
 ///     far: FarToken = FarIrq => on_far, line 60, level 3, hart 0, Hardware;

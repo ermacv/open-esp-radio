@@ -34,7 +34,7 @@ use oer_espressif_ieee802154_engine::{
     types::Ieee802154RxStatus,
 };
 use oer_hil_protocol::base::RejectReason;
-use oer_interrupt_table::Silent;
+use oer_espressif_interrupt_table::Silent;
 use oer_memory::HandlerCell;
 use oer_radio_regulatory::{
     Country, FrequencySpan, PowerLimits, RegulatoryDomain, Rule, RuleFlags,

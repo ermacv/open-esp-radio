@@ -1,0 +1,27 @@
+[package]
+name = "oer-espressif-interrupt-table"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Each image's static table of interrupt bindings: source from the part's type, CPU line, level, hart and handler per entry; the router that writes routes and lines"
+
+[dependencies]
+oer-memory = { path = "../../../portable/memory" }
+oer-mmio = { path = "../../../portable/mmio" }
+static_cell = "2.1.1"
+
+[target.'cfg(not(target_os = "none"))'.dev-dependencies]
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+tempfile = "=3.27.0"
+
+[dev-dependencies]
+oer-espressif-interrupt-table = { path = ".", features = ["host-signal"] }
+
+[lints]
+workspace = true
+
+[features]
+# The host executor of `signal::host`, for the tests of a signal's users.
+host-signal = []

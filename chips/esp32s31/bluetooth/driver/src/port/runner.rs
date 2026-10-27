@@ -28,7 +28,7 @@ use oer_esp32s31_hal::bluetooth::{
     },
 };
 use oer_esp32s31_radio_client::bluetooth::{Operation, Permission};
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_espressif_interrupt_table::signal::SignalExecutor;
 use oer_time::{Duration, Instant, Timer};
 
 /// An independent clock request channel serviced even while a physical DTM

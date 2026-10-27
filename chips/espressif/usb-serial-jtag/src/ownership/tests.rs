@@ -89,7 +89,7 @@ impl EndpointRegisters for Counting<'_> {
 
     fn enable_events(
         &mut self,
-        _authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+        _authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
     ) {
     }
 }

@@ -1,6 +1,6 @@
 //! Interrupt classes: where each entry's class may sit, and what code of the
 //! `Hardware` class does that the class forbids. The class is the image's
-//! declaration in its table (`oer_interrupt_table::Class`), never a level
+//! declaration in its table (`oer_espressif_interrupt_table::Class`), never a level
 //! number or a handler's name.
 
 use oer_analysis_riscv_stack::{

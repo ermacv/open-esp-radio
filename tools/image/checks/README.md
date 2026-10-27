@@ -108,7 +108,7 @@ SRAM or the analysed mask ROM. The panic path, compiler panic entries and the
 image panic hook retain their independent checks; static references from the
 hook and its resolved callees must also avoid cached memory.
 
-Each interrupt table entry declares its class (`oer_interrupt_table::Class`,
+Each interrupt table entry declares its class (`oer_espressif_interrupt_table::Class`,
 the byte at `table-class`); the level of a hart's `Executor` entry is the
 executor's level, every other level is a hardware level. The class, never a
 level number or a handler's name, decides the rules:

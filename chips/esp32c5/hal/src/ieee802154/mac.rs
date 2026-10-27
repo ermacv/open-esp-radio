@@ -13,7 +13,7 @@ use oer_esp32c5_pac::{
     Ieee802154InterruptSetup as PacInterruptSetup, Ieee802154RegisterLease as PacRegisterLease,
     Ieee802154TaskRegisters as PacTaskRegisters,
 };
-use oer_interrupt_table::Bound;
+use oer_espressif_interrupt_table::Bound;
 use oer_mmio::InterruptSource;
 
 /// Exclusive task-side owner of the IEEE 802.15.4 MAC registers.
@@ -78,12 +78,12 @@ impl Ieee802154InterruptSetupOwner {
     /// acknowledge one stale snapshot and return the interrupt owner.
     ///
     /// The owner is the MAC's interrupt part: the interrupt table binds it
-    /// by value (`oer_interrupt_table::Router::bind`), and the binding's
+    /// by value (`oer_espressif_interrupt_table::Router::bind`), and the binding's
     /// [`Bound`] proof is what [`Ieee802154TaskOwner::enable_events`] takes,
     /// so no event reaches the CPU before the handler holds the owner. The
     /// engine pair ([`Ieee802154MacOwners`](crate::ieee802154::ll::Ieee802154MacOwners))
     /// holds the owner itself instead, with the router's
-    /// [`Silent`](oer_interrupt_table::Silent) proof that no entry binds its
+    /// [`Silent`](oer_espressif_interrupt_table::Silent) proof that no entry binds its
     /// source and the matrix routes it nowhere; the engine polls its events.
     pub fn arm(self, task: &mut Ieee802154TaskOwner) -> Ieee802154InterruptOwner {
         Ieee802154InterruptOwner {
@@ -108,7 +108,7 @@ impl Ieee802154TaskOwner {
     ///
     /// ```compile_fail,E0308
     /// # use oer_esp32c5_hal::ieee802154::mac::Ieee802154TaskOwner;
-    /// # use oer_interrupt_table::Bound;
+    /// # use oer_espressif_interrupt_table::Bound;
     /// struct OtherIrq;
     /// impl oer_mmio::InterruptSource for OtherIrq {
     ///     const SOURCE: u16 = 3;
@@ -133,11 +133,11 @@ impl Ieee802154TaskOwner {
 ///     Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner,
 /// };
 /// use oer_esp32c5_hal::platform::InterruptController;
-/// use oer_interrupt_table::Router;
-/// # const LINES: oer_interrupt_table::Lines =
-/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
+/// use oer_espressif_interrupt_table::Router;
+/// # const LINES: oer_espressif_interrupt_table::Lines =
+/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
 /// pub fn on_mac(_: &mut Ieee802154InterruptOwner) {}
-/// oer_interrupt_table::interrupt_table! {
+/// oer_espressif_interrupt_table::interrupt_table! {
 ///     lines: LINES,
 ///     handler_attributes: [];
 ///     mac: MacToken = Ieee802154InterruptOwner => on_mac, line 20, level 3, hart 0, Hardware;
@@ -161,11 +161,11 @@ impl Ieee802154TaskOwner {
 /// ```compile_fail,E0382
 /// # use oer_esp32c5_hal::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
 /// # use oer_esp32c5_hal::platform::InterruptController;
-/// # use oer_interrupt_table::Router;
-/// # const LINES: oer_interrupt_table::Lines =
-/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
+/// # use oer_espressif_interrupt_table::Router;
+/// # const LINES: oer_espressif_interrupt_table::Lines =
+/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
 /// # pub fn on_mac(_: &mut Ieee802154InterruptOwner) {}
-/// # oer_interrupt_table::interrupt_table! {
+/// # oer_espressif_interrupt_table::interrupt_table! {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
 /// #     mac: MacToken = Ieee802154InterruptOwner => on_mac, line 20, level 3, hart 0, Hardware;
@@ -188,11 +188,11 @@ impl Ieee802154TaskOwner {
 /// ```compile_fail,E0308
 /// # use oer_esp32c5_hal::ieee802154::mac::Ieee802154InterruptOwner;
 /// # use oer_esp32c5_hal::platform::InterruptController;
-/// # use oer_interrupt_table::Router;
-/// # const LINES: oer_interrupt_table::Lines =
-/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
+/// # use oer_espressif_interrupt_table::Router;
+/// # const LINES: oer_espressif_interrupt_table::Lines =
+/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
 /// # pub fn on_mac(_: &mut Ieee802154InterruptOwner) {}
-/// # oer_interrupt_table::interrupt_table! {
+/// # oer_espressif_interrupt_table::interrupt_table! {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
 /// #     mac: MacToken = Ieee802154InterruptOwner => on_mac, line 20, level 3, hart 0, Hardware;

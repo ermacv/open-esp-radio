@@ -169,7 +169,7 @@ One received frame and the owner of its DMA buffer at each step:
 
 1. **P3.** The radio handler masks RX delivery, acknowledges and raises
    the RX fact in the image's static `IrqSignal` of the P2 executor
-   (`oer_interrupt_table::signal`), which pends P2 and touches no waker;
+   (`oer_espressif_interrupt_table::signal`), which pends P2 and touches no waker;
    the buffer is the DMA engine's.
 2. **P2.** The executor's handler hands the fact to the receive runner
    (`rx/receive.rs`) and wakes it in P2's own context; the runner runs

@@ -112,7 +112,7 @@ fn rejected_scheduler_initialization_retains_owners_and_pending_notifications() 
 
 #[test]
 fn foreign_scheduler_context_is_a_checked_rejection_before_hardware_writes() {
-    use oer_interrupt_table::signal::host;
+    use oer_espressif_interrupt_table::signal::host;
     let cells = ControllerEventCells::new(host::foreign_signal(), host::foreign_signal());
     let mut writes = 0;
     let result = initialized_for_rejection_test().initialize_scheduler_with(

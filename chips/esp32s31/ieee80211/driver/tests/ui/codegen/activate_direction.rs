@@ -1,4 +1,4 @@
-use oer_interrupt_table::{Bound, Context, Lines, TieBreak};
+use oer_espressif_interrupt_table::{Bound, Context, Lines, TieBreak};
 const LINES: Lines = Lines { first: 16, count: 48, levels: 8, harts: 1, tie_break: TieBreak::HighestLine };
 #[derive(Clone)]
 pub struct Bell;
@@ -15,7 +15,7 @@ use oer_esp32s31_ieee80211_driver::irq::{DoorbellAcknowledge, WifiIrqPart, WifiI
 pub struct Lower;
 impl DoorbellAcknowledge for Lower { fn acknowledge(&mut self) {} }
 pub fn on_wifi(_: &mut WifiIrqPart<Lower>) {}
-oer_interrupt_table::interrupt_table! {
+oer_espressif_interrupt_table::interrupt_table! {
     lines: LINES, handler_attributes: [];
     contexts { radio: 3; }
     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 18, context radio, hart 0, Hardware;

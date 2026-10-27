@@ -14,7 +14,7 @@ use super::{
     mac_source_authority, multipan_register_index,
 };
 use crate::ieee802154::ownership::{RawDebugCounter, RawEvent};
-use oer_interrupt_table::EventAuthority;
+use oer_espressif_interrupt_table::EventAuthority;
 use oer_mmio::InterruptSource;
 
 /// Complete `RX_STATUS` observation (`ieee802154_ll_get_rx_status`).

@@ -24,7 +24,7 @@ use oer_esp32s31_hal::{
     bluetooth::{InterruptOutputReleasedOwner, ModemLpTimerStopped},
     domain::RadioDomain,
 };
-use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
+use oer_espressif_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 use crate::{
     interrupt::{BluetoothInterruptGate, ChipGate, GateError, RadioDoorbell},

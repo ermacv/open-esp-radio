@@ -17,7 +17,7 @@
 //! pairs and levels are not measured by that observation.
 
 use oer_esp32s31_pac::{instances, ownership::TimerGroup0Peripherals, timg};
-use oer_interrupt_table::EventAuthority;
+use oer_espressif_interrupt_table::EventAuthority;
 use oer_mmio::{Bits, Fixed, InterruptSource, Placement};
 use oer_time::Duration;
 

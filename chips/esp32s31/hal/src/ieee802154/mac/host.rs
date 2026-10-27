@@ -68,20 +68,24 @@ pub(crate) fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {
 /// the router's proofs in tests: its writes change nothing it reports.
 pub(crate) struct NoRoutes;
 
-impl oer_interrupt_table::Controller for NoRoutes {
+impl oer_espressif_interrupt_table::Controller for NoRoutes {
     const SOURCES: u16 = 256;
     const LINES: u8 = crate::platform::interrupt_controller::facts::LINES.count;
     const LEVEL_BITS: u8 = crate::platform::interrupt_controller::facts::LEVEL_BITS;
-    fn verify_configuration(&self) -> Result<(), oer_interrupt_table::Error> {
+    fn verify_configuration(&self) -> Result<(), oer_espressif_interrupt_table::Error> {
         Ok(())
     }
     fn hart(&self) -> u8 {
         0
     }
-    fn route(&mut self, _source: u16, _line: u8) -> Result<(), oer_interrupt_table::Error> {
+    fn route(
+        &mut self,
+        _source: u16,
+        _line: u8,
+    ) -> Result<(), oer_espressif_interrupt_table::Error> {
         Ok(())
     }
-    fn silence(&mut self, _source: u16) -> Result<(), oer_interrupt_table::Error> {
+    fn silence(&mut self, _source: u16) -> Result<(), oer_espressif_interrupt_table::Error> {
         Ok(())
     }
     fn routed(&self, _source: u16) -> Option<u8> {
@@ -90,20 +94,20 @@ impl oer_interrupt_table::Controller for NoRoutes {
     fn set_line(
         &mut self,
         _line: u8,
-        _state: oer_interrupt_table::LineState,
-    ) -> Result<(), oer_interrupt_table::Error> {
+        _state: oer_espressif_interrupt_table::LineState,
+    ) -> Result<(), oer_espressif_interrupt_table::Error> {
         Ok(())
     }
-    fn line(&self, _line: u8) -> oer_interrupt_table::LineState {
-        oer_interrupt_table::LineState::DISABLED
+    fn line(&self, _line: u8) -> oer_espressif_interrupt_table::LineState {
+        oer_espressif_interrupt_table::LineState::DISABLED
     }
 }
 
 /// The router's proof that no line receives the MAC's source, over a table
 /// without entries.
-pub(crate) fn silent<'a>() -> oer_interrupt_table::Silent<super::Ieee802154InterruptOwner<Host<'a>>>
-{
-    oer_interrupt_table::Router::install(NoRoutes, &[])
+pub(crate) fn silent<'a>()
+-> oer_espressif_interrupt_table::Silent<super::Ieee802154InterruptOwner<Host<'a>>> {
+    oer_espressif_interrupt_table::Router::install(NoRoutes, &[])
         .and_then(|router| router.silent())
         .expect("a table without entries leaves the MAC's source silent")
 }

@@ -319,7 +319,7 @@ at every level and the exception. `Required::Product` rejects a guard violation;
 `Required::Diagnostic` warns, also naming any function whose frame is unknown.
 Its placement summary lines separate strict code in cached memory by hart/level
 from executor task code in PSRAM and name the task roots. A level's class is
-its table entries' (`oer_interrupt_table::Class`): the level of an `Executor`
+its table entries' (`oer_espressif_interrupt_table::Class`): the level of an `Executor`
 entry is the executor's, every other level is hardware. Only an executor's
 level has a task boundary; it comes from
 the executor's task poll sites (`task_poll_sites`) through `Analysis::reached_cut`; each level

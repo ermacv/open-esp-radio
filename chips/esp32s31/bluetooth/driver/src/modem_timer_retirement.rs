@@ -1,6 +1,6 @@
 //! Admission for returning a drained timer task without losing pending work.
 
-use oer_interrupt_table::signal::ForeignContext;
+use oer_espressif_interrupt_table::signal::ForeignContext;
 
 /// Why the timer task cannot return its queue and hardware owner yet.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

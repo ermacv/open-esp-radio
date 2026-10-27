@@ -11,11 +11,11 @@ description = "The USB Serial/JTAG console of Espressif chips over the chip HAL'
 [dependencies]
 embedded-io-async = "0.7.0"
 oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-espressif-interrupt-table = { path = "../interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }
 
 [dev-dependencies]
-oer-interrupt-table = { path = "../../../portable/interrupt-table", features = ["host-signal"] }
+oer-espressif-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }
 
 [lints]
 workspace = true

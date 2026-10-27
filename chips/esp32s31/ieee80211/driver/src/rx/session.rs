@@ -24,14 +24,14 @@ use oer_esp32s31_ieee80211_mac::{
     irq::consumer::{IrqBatch, IrqConsumer, PowerIrqConsumer},
     rx::pool::RxStagePool,
 };
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_espressif_interrupt_table::signal::SignalExecutor;
 use oer_memory::HandlerCell;
 use oer_time::{Instant, Timer};
 
 /// The receive owners of one Wi-Fi arena across its channel transactions.
 ///
 /// `V` is the router's proof that the image binds the radio handler's part
-/// ([`Bound`](oer_interrupt_table::Bound) of a
+/// ([`Bound`](oer_espressif_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)); the session holds it, and
 /// every activation takes it.
 pub struct ReceiveSession<

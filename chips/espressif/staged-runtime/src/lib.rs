@@ -24,7 +24,7 @@
 //! image's `runtime_main` that [`entry!`] defines. The image's `main` adopts
 //! the bootstrap's PSRAM mapping through its board and takes its hart's
 //! routes and lines ([`Handoff::adopt`]), binds its interrupts through the
-//! [`Router`](oer_interrupt_table::Router) it gets back and enables
+//! [`Router`](oer_espressif_interrupt_table::Router) it gets back and enables
 //! interrupts ([`Adopted::enable_interrupts`]). A chip feature selects the
 //! chip, and the build generates the vector tables, every hart's line
 //! entries, each line's default handler and the interrupt table's lines
@@ -87,10 +87,10 @@ pub mod stacks;
 pub mod trap;
 
 #[doc(hidden)]
-pub use oer_interrupt_table as __interrupt_table;
+pub use oer_espressif_interrupt_table as __interrupt_table;
 
 /// The image's interrupt table as [`interrupt_table!`] declares it.
-pub type InterruptTable = oer_interrupt_table::Table;
+pub type InterruptTable = oer_espressif_interrupt_table::Table;
 
 pub use oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping;
 
@@ -113,7 +113,7 @@ pub enum BootError {
     /// Vector CSRs no longer name the runtime's checked entries.
     ForeignVectors,
     /// Controller geometry, configuration, routes or lines failed verification.
-    InterruptController(oer_interrupt_table::Error),
+    InterruptController(oer_espressif_interrupt_table::Error),
 }
 
 impl BootError {
@@ -124,22 +124,22 @@ impl BootError {
             Self::NoInterruptStack { .. } => "interrupt-stack",
             Self::InvalidStackGuard { .. } => "interrupt-stack-guard",
             Self::ForeignVectors => "interrupt-vectors",
-            Self::InterruptController(oer_interrupt_table::Error::WrongControlBits { .. }) => {
-                "interrupt-control-bits"
-            }
-            Self::InterruptController(oer_interrupt_table::Error::WrongInterruptCount {
+            Self::InterruptController(oer_espressif_interrupt_table::Error::WrongControlBits {
                 ..
-            }) => "interrupt-count",
-            Self::InterruptController(oer_interrupt_table::Error::WrongLevelBits { .. }) => {
-                "interrupt-level-bits"
-            }
+            }) => "interrupt-control-bits",
+            Self::InterruptController(
+                oer_espressif_interrupt_table::Error::WrongInterruptCount { .. },
+            ) => "interrupt-count",
+            Self::InterruptController(oer_espressif_interrupt_table::Error::WrongLevelBits {
+                ..
+            }) => "interrupt-level-bits",
             Self::InterruptController(_) => "interrupt-table",
         }
     }
 }
 
-impl From<oer_interrupt_table::Error> for BootError {
-    fn from(error: oer_interrupt_table::Error) -> Self {
+impl From<oer_espressif_interrupt_table::Error> for BootError {
+    fn from(error: oer_espressif_interrupt_table::Error) -> Self {
         Self::InterruptController(error)
     }
 }
@@ -187,7 +187,7 @@ impl Handoff {
     /// A wrong hart, missing interrupt stack, invalid stack guard, or controller
     /// disagreement with its chip facts or the image's table returns [`BootError`].
     #[cfg(target_arch = "riscv32")]
-    pub fn adopt<B: AdoptsBootstrapMapping, C: oer_interrupt_table::Controller>(
+    pub fn adopt<B: AdoptsBootstrapMapping, C: oer_espressif_interrupt_table::Controller>(
         mut self,
         interrupt_table: &'static InterruptTable,
         controller: C,
@@ -202,7 +202,7 @@ impl Handoff {
             return Err(BootError::WrongHart { actual, expected });
         }
         stacks::install_interrupt_stack(&mut self.admission)?;
-        let router = oer_interrupt_table::Router::install(controller, interrupt_table)?;
+        let router = oer_espressif_interrupt_table::Router::install(controller, interrupt_table)?;
         // Interrupts are disabled and trigger 0 is the runtime's;
         // the generated table names this checked hart's word-aligned task bottom.
         let hart = oer_esp32s31_hal::platform::BOOT_HART;
@@ -220,21 +220,26 @@ impl Handoff {
 /// The adopted stage-two interrupt context of the boot hart, before interrupts are
 /// enabled: the hart's router, through which the image binds its entries.
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
-pub struct Adopted<C: oer_interrupt_table::Controller> {
-    router: oer_interrupt_table::Router<C>,
+pub struct Adopted<C: oer_espressif_interrupt_table::Controller> {
+    router: oer_espressif_interrupt_table::Router<C>,
     #[cfg(feature = "esp32s31")]
     admission: PreAdmission<BOOT_HART>,
 }
 
-impl<C: oer_interrupt_table::Controller> Adopted<C> {
+impl<C: oer_espressif_interrupt_table::Controller> Adopted<C> {
     /// Borrow the local execution identity and router together before admission.
     #[cfg(feature = "esp32s31")]
-    pub fn parts(&mut self) -> (&Hart<BOOT_HART>, &mut oer_interrupt_table::Router<C>) {
+    pub fn parts(
+        &mut self,
+    ) -> (
+        &Hart<BOOT_HART>,
+        &mut oer_espressif_interrupt_table::Router<C>,
+    ) {
         (self.admission.hart(), &mut self.router)
     }
 
     /// The hart's router: bind entries before interrupts are enabled.
-    pub fn router(&mut self) -> &mut oer_interrupt_table::Router<C> {
+    pub fn router(&mut self) -> &mut oer_espressif_interrupt_table::Router<C> {
         &mut self.router
     }
 
@@ -253,7 +258,7 @@ impl<C: oer_interrupt_table::Controller> Adopted<C> {
     #[cfg(target_arch = "riscv32")]
     pub fn enable_interrupts(
         self,
-    ) -> Result<(oer_interrupt_table::Router<C>, Hart<BOOT_HART>), BootError> {
+    ) -> Result<(oer_espressif_interrupt_table::Router<C>, Hart<BOOT_HART>), BootError> {
         stacks::verify_current_hart_vectors()?;
         self.router.verify()?;
         oer_riscv::enable_interrupts();

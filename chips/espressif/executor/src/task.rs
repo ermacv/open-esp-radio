@@ -447,17 +447,17 @@ impl Current {
     }
 }
 
-/// The signal side of an executor (`oer_interrupt_table::signal`): the task
+/// The signal side of an executor (`oer_espressif_interrupt_table::signal`): the task
 /// its `current` names, when `cx`'s waker is the waker of the task
 /// executor `executor` polls now.
 pub(crate) fn signal_current(
     current: &Current,
     executor: u8,
     cx: &Context<'_>,
-) -> Result<TaskId, oer_interrupt_table::signal::ForeignTask> {
+) -> Result<TaskId, oer_espressif_interrupt_table::signal::ForeignTask> {
     current
         .matching(executor, cx.waker())
-        .ok_or(oer_interrupt_table::signal::ForeignTask)
+        .ok_or(oer_espressif_interrupt_table::signal::ForeignTask)
 }
 
 /// The signal side's `wake`, in the executor's context before its poll

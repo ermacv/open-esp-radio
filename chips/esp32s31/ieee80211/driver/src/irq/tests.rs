@@ -17,7 +17,7 @@ use oer_esp32s31_ieee80211_mac::irq::{
         MacInterruptModel, MacInterruptOperation, PowerInterruptModel, PowerInterruptOperation,
     },
 };
-use oer_interrupt_table::signal::host::Host;
+use oer_espressif_interrupt_table::signal::host::Host;
 
 use super::*;
 
@@ -69,9 +69,12 @@ fn parts() -> (
     IrqConsumer<'static, Host>,
     PowerIrqConsumer<'static, Host>,
 ) {
-    let (mac, irq) = leak(IrqStorage::new(oer_interrupt_table::signal::host::signal())).split();
+    let (mac, irq) = leak(IrqStorage::new(
+        oer_espressif_interrupt_table::signal::host::signal(),
+    ))
+    .split();
     let (power, power_consumer) = leak(PowerIrqStorage::new(
-        oer_interrupt_table::signal::host::signal(),
+        oer_espressif_interrupt_table::signal::host::signal(),
     ))
     .split();
     let parts = WifiIrqLineParts {
@@ -137,10 +140,10 @@ impl Wake for WakeCount {
 struct Rings(Cell<usize>);
 
 impl RadioDoorbell for Rings {
-    const HANDLER: oer_interrupt_table::Context =
-        oer_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_interrupt_table::Context =
-        oer_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_espressif_interrupt_table::Context =
+        oer_espressif_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_espressif_interrupt_table::Context =
+        oer_espressif_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.0.set(self.0.get() + 1);
     }
@@ -148,7 +151,7 @@ impl RadioDoorbell for Rings {
 
 #[test]
 fn the_part_names_both_banks_and_the_doorbell_as_its_sources() {
-    use oer_interrupt_table::InterruptSource;
+    use oer_espressif_interrupt_table::InterruptSource;
     let sources = <WifiIrqPart<Lower> as InterruptSources>::SOURCES;
     assert_eq!(
         sources,

@@ -30,7 +30,7 @@ use crate::{Failure, Fault};
 use oer_memory::{ContextCell, ContextProof};
 
 use embassy_time_driver::Driver;
-use oer_interrupt_table::Entry;
+use oer_espressif_interrupt_table::Entry;
 use portable_atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::{
@@ -140,7 +140,7 @@ enum TimeSetupOwners<A: Entry> {
         _part: A::Part,
     },
     Binding {
-        _error: oer_interrupt_table::BindError<A>,
+        _error: oer_espressif_interrupt_table::BindError<A>,
     },
 }
 
@@ -156,14 +156,14 @@ enum TimeSetupOwners<A: Entry> {
 /// quarantine. Duplicate installation records a fault and resets.
 pub fn init<const WRITER_SWI: u8, A, C>(
     systimer: crate::systimer::SystemTimer,
-    router: &mut oer_interrupt_table::Router<C>,
+    router: &mut oer_espressif_interrupt_table::Router<C>,
     alarm: A,
     part: A::Part,
 ) -> Result<(), Failure<TimeSetup<A>>>
 where
     A: Entry,
     A::Part: AlarmPart,
-    C: oer_interrupt_table::Controller,
+    C: oer_espressif_interrupt_table::Controller,
 {
     let writer = WRITER.load(Ordering::Acquire);
     if writer != NO_EXECUTOR {
@@ -209,18 +209,19 @@ where
 /// A refused route returns its token and part in quarantine. Duplicate
 /// assignment or an unavailable timer bank records a fault and resets.
 pub fn bind<const SWI: u8, A, C>(
-    router: &mut oer_interrupt_table::Router<C>,
+    router: &mut oer_espressif_interrupt_table::Router<C>,
     alarm: A,
     mut part: A::Part,
-) -> Result<(), Failure<oer_interrupt_table::BindError<A>>>
+) -> Result<(), Failure<oer_espressif_interrupt_table::BindError<A>>>
 where
     A: Entry,
     A::Part: AlarmPart,
-    C: oer_interrupt_table::Controller,
+    C: oer_espressif_interrupt_table::Controller,
 {
     let comparator = const {
-        let comparator =
-            comparator_of_source(<A::Part as oer_interrupt_table::InterruptSource>::SOURCE);
+        let comparator = comparator_of_source(
+            <A::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE,
+        );
         assert!(
             comparator != NO_COMPARATOR,
             "the token is not a SYSTIMER alarm"
@@ -267,9 +268,9 @@ where
                 expected: A::HART,
                 actual,
             },
-            oer_interrupt_table::BindError::Refused {
-                error: oer_interrupt_table::Error::WrongHart {
-                    source: <A::Part as oer_interrupt_table::InterruptSource>::SOURCE,
+            oer_espressif_interrupt_table::BindError::Refused {
+                error: oer_espressif_interrupt_table::Error::WrongHart {
+                    source: <A::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE,
                     hart: A::HART,
                     current: actual as u8,
                 },

@@ -12,8 +12,8 @@
 use core::future::poll_fn;
 use core::task::Poll;
 
-use oer_interrupt_table::EventAuthority;
-use oer_interrupt_table::signal::{IrqSignal, SignalExecutor};
+use oer_espressif_interrupt_table::EventAuthority;
+use oer_espressif_interrupt_table::signal::{IrqSignal, SignalExecutor};
 
 use crate::{EndpointRegisters, IN_EMPTY, OUT_RECEIVED, PACKET};
 

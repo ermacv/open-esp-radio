@@ -13,7 +13,7 @@ use crate::{
     runtime_resources::ControllerModemTimerRuntime,
 };
 use oer_esp32s31_hal::bluetooth::{ModemLpTimerPlan, ModemLpTimerWork};
-use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
+use oer_espressif_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 /// Value-only snapshot/plan boundary for the source-127 task.
 ///

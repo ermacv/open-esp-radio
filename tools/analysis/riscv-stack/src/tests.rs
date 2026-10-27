@@ -1387,7 +1387,7 @@ fn table_image(entries: &[(u16, u8, u8, u8, u8, Option<u32>)], relocate_handlers
     )
 }
 
-/// `oer_interrupt_table::Binding`, as the chips' contracts give it.
+/// `oer_espressif_interrupt_table::Binding`, as the chips' contracts give it.
 const TABLE: TableLayout = TableLayout {
     entry: 12,
     source: Field { offset: 0, size: 2 },

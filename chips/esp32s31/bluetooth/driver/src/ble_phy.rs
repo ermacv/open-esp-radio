@@ -6,7 +6,7 @@ use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::power::PlatformClockBackend;
 #[cfg(target_arch = "riscv32")]
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_espressif_interrupt_table::signal::SignalExecutor;
 
 #[cfg(target_arch = "riscv32")]
 use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::InterruptBankOwner};

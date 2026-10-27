@@ -34,8 +34,8 @@ fn doorbell_constructor_checks_direction_and_urgent_source_identity() {
             &format!("include!(\"{}/tests/ui/support/", manifest.display()),
         );
         fs::write(scratch.path().join("Cargo.toml"), format!(
-        "[package]\nname = \"doorbell-direction\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-interrupt-table = {{ path = {:?} }}\n",
-        manifest.join("../../../portable/interrupt-table")
+        "[package]\nname = \"doorbell-direction\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {:?} }}\n",
+        manifest.join("../../../chips/espressif/interrupt-table")
     )).expect("write isolated compiler manifest");
         for (mode, cfg, accepted) in [("pass", "any()", true), ("reject", "all()", false)] {
             fs::write(

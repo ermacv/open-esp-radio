@@ -29,7 +29,7 @@ pub struct TableLayout {
 }
 
 /// What an entry's handler may do, as the image declares it
-/// (`oer_interrupt_table::Class`, whose discriminants these are).
+/// (`oer_espressif_interrupt_table::Class`, whose discriminants these are).
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Class {
     /// Strict code throughout: no task poll, no waker call, never on the

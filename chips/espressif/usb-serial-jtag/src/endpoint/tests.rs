@@ -10,7 +10,7 @@ use core::{
 use std::{boxed::Box, vec, vec::Vec};
 
 use embedded_io_async::{Read, Write};
-use oer_interrupt_table::signal::host::{Host, foreign_signal};
+use oer_espressif_interrupt_table::signal::host::{Host, foreign_signal};
 
 use super::{Endpoint, Error};
 use crate::{

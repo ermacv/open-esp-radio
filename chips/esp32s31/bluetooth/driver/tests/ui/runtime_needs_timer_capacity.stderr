@@ -2,7 +2,7 @@ error[E0080]: evaluation panicked: a Controller runtime needs at least one modem
  --> $RUST/core/src/panic.rs
   |
   |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
-  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_esp32s31_bluetooth_driver::runtime_resources::ControllerRuntimeResources::<'_, 0, oer_interrupt_table::signal::host::Deferred>::CAPACITY` failed here
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_esp32s31_bluetooth_driver::runtime_resources::ControllerRuntimeResources::<'_, 0, oer_espressif_interrupt_table::signal::host::Deferred>::CAPACITY` failed here
   |
  ::: src/runtime_resources.rs
   |

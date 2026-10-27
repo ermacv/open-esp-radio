@@ -24,7 +24,7 @@ use core::{
     sync::atomic::{Ordering, fence},
 };
 
-use oer_interrupt_table::{
+use oer_espressif_interrupt_table::{
     Bound, Class, Context, Entry, InterruptSource, InterruptSources, request_direction,
 };
 

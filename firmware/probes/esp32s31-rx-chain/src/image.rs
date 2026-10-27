@@ -63,7 +63,7 @@ use crate::phy_pilot;
 
 // SAFETY: the production runtime script maps .hot.text.* to executable SRAM;
 // each generated wrapper retains the interrupt-table ABI and owned part.
-oer_interrupt_table::interrupt_table! {
+oer_espressif_interrupt_table::interrupt_table! {
     lines: oer_espressif_staged_runtime::interrupts::LINES,
     handler_attributes: [#[unsafe(link_section = ".hot.text.rx_chain_vectors")]];
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }

@@ -15,7 +15,7 @@ const EXCEPTIONS: &[(&str, usize)] = &[
         1,
     ),
     ("chips/espressif/executor/src/task.rs", 1),
-    ("portable/interrupt-table/src/signal/tests.rs", 2),
+    ("chips/espressif/interrupt-table/src/signal/tests.rs", 2),
 ];
 
 fn sync_or_send_trait<'a>(tokens: impl Iterator<Item = &'a TokenTree>) -> bool {
@@ -171,9 +171,9 @@ fn a_new_crate_with_unsafe_sync_is_rejected_even_below_the_unsafe_boundary() {
 
 #[test]
 fn exception_counts_must_match_including_removed_files_and_zero_entries() {
-    let file = "portable/interrupt-table/src/signal.rs";
+    let file = "chips/espressif/interrupt-table/src/signal.rs";
     let root = fixture(
-        "portable/interrupt-table",
+        "chips/espressif/interrupt-table",
         "src/signal.rs",
         "struct Cell; unsafe impl Sync for Cell {}",
     );
@@ -205,9 +205,9 @@ fn exception_counts_must_match_including_removed_files_and_zero_entries() {
 
 #[test]
 fn an_exception_does_not_allow_more_impls_or_another_file() {
-    let file = "portable/interrupt-table/src/signal.rs";
+    let file = "chips/espressif/interrupt-table/src/signal.rs";
     let root = fixture(
-        "portable/interrupt-table",
+        "chips/espressif/interrupt-table",
         "src/signal.rs",
         "struct Cell; unsafe impl Sync for Cell {} unsafe impl Send for Cell {}",
     );
@@ -219,7 +219,8 @@ fn an_exception_does_not_allow_more_impls_or_another_file() {
     );
     std::fs::rename(
         root.path().join(file),
-        root.path().join("portable/interrupt-table/src/other.rs"),
+        root.path()
+            .join("chips/espressif/interrupt-table/src/other.rs"),
     )
     .expect("move source");
     assert_eq!(violations(root.path(), &[(file, 2)]).len(), 2);

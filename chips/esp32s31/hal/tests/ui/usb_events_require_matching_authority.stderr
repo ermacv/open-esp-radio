@@ -27,7 +27,7 @@ error[E0277]: the trait bound `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>
    |
 help: the trait `EventAuthority<UsbInterrupt<oer_mmio::Fixed<540610560>>>` is not implemented for `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>>`
       but trait `EventAuthority<SystimerAlarm0<oer_mmio::Fixed<540643328>>>` is implemented for it
-  --> $WORKSPACE/portable/interrupt-table/src/router.rs
+  --> $WORKSPACE/chips/espressif/interrupt-table/src/router.rs
    |
    | impl<P: InterruptSources> EventAuthority<P> for Silent<P> {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -38,5 +38,5 @@ note: required by a bound in `enable_events`
    |     fn enable_events(
    |        ------------- required by a bound in this associated function
    |         &mut self,
-   |         authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
-   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EndpointRegisters::enable_events`
+   |         authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EndpointRegisters::enable_events`

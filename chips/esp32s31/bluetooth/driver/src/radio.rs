@@ -10,7 +10,7 @@ use oer_esp32s31_hal::{
     power::PlatformClockBackend,
 };
 use oer_esp32s31_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_espressif_interrupt_table::signal::SignalExecutor;
 
 use crate::{
     ble_phy::{BlePhyRuntime, ControllerBlePhyEngineInitialized},

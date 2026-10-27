@@ -153,7 +153,7 @@ impl<P: Placement> EndpointRegisters for Endpoint<P> {
 
     fn enable_events(
         &mut self,
-        _authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+        _authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
     ) {
         self.0.modify_int_ena(|enables| {
             enables
@@ -188,7 +188,7 @@ impl<P: Placement> EndpointRegisters for UsbEndpoint<P> {
 
     fn enable_events(
         &mut self,
-        authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+        authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
     ) {
         self.0.enable_events(authority);
     }

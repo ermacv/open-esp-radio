@@ -1,7 +1,7 @@
 //! Cooperative admission observes exactly the sources its image composes.
 
 use core::marker::PhantomData;
-use oer_interrupt_table::InterruptSource;
+use oer_espressif_interrupt_table::InterruptSource;
 
 mod sealed {
     pub trait Sources {}
@@ -56,7 +56,7 @@ mod tests {
     use super::{InterruptSource, UrgentSource, UrgentSources};
 
     struct FromCpu3Irq;
-    impl oer_interrupt_table::InterruptSource for FromCpu3Irq {
+    impl oer_espressif_interrupt_table::InterruptSource for FromCpu3Irq {
         const SOURCE: u16 = 68;
     }
 

@@ -8,7 +8,7 @@ error[E0277]: the trait bound `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>
    |
 help: the trait `EventAuthority<Timg0AlarmInterrupt<oer_mmio::Fixed<542638080>>>` is not implemented for `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>>`
       but trait `EventAuthority<SystimerAlarm0<oer_mmio::Fixed<540643328>>>` is implemented for it
-  --> $WORKSPACE/portable/interrupt-table/src/router.rs
+  --> $WORKSPACE/chips/espressif/interrupt-table/src/router.rs
    |
    | impl<P: InterruptSources> EventAuthority<P> for Silent<P> {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

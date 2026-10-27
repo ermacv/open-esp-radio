@@ -1,8 +1,8 @@
 //! Executor failures retain their observations and quarantine every owner.
 
 use core::mem::ManuallyDrop;
+use oer_espressif_interrupt_table::{Error, LineState};
 use oer_espressif_staged_runtime::panic::FaultReason;
-use oer_interrupt_table::{Error, LineState};
 
 /// Source observations of an executor or time-driver invariant failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,7 +50,7 @@ pub enum Fault {
         executor: u8,
         comparator: u8,
     },
-    Binding(oer_interrupt_table::BindFault),
+    Binding(oer_espressif_interrupt_table::BindFault),
     Route {
         executor: u8,
         error: Error,
@@ -58,16 +58,16 @@ pub enum Fault {
 }
 
 impl Fault {
-    pub(crate) fn binding<E: oer_interrupt_table::Entry>(
+    pub(crate) fn binding<E: oer_espressif_interrupt_table::Entry>(
         executor: u8,
-        error: &oer_interrupt_table::BindError<E>,
+        error: &oer_espressif_interrupt_table::BindError<E>,
     ) -> Self {
         match error {
-            oer_interrupt_table::BindError::Refused { error, .. } => Self::Route {
+            oer_espressif_interrupt_table::BindError::Refused { error, .. } => Self::Route {
                 executor,
                 error: *error,
             },
-            oer_interrupt_table::BindError::Fault(held) => Self::Binding(held.fault),
+            oer_espressif_interrupt_table::BindError::Fault(held) => Self::Binding(held.fault),
         }
     }
 
