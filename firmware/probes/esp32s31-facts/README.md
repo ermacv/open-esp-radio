@@ -958,3 +958,14 @@ an ordered sample-to-ack interval; exact same-cycle set/clear priority and
 counting multiple same-bit arrivals are separate questions. No positive local
 recipe for bank1 bits0/2 is supplied by these selections. SOURCE and silicon
 results: `oer-notes/research/hw-ble-inherited-enables.md`.
+
+
+218 additionally records controller/latch state at `2250/2260/2270`: request,
+arm, shift; capture0/config24/compare enables; APB gate/MAC gate/reset bits.
+`225f` records the failed crossing's elapsed cycles. `227f` records the
+post-CONTROL0 request observation; `228f/2280` witness a fresh CC0 afterward.
+The shared capture helper emits `91fd` only when its actual final poll still
+has LATCH_REQUEST set at its deadline. A `223f=(0,0,0)` with no `91fd` is an
+accepted zero origin followed by crossing-wait expiry, not a latch failure.
+This restart is a probe diagnostic after observing release; production does
+not use it as retirement or quiescence. SOURCE: `HW25_S31_BLE_LATCH_RESTART_20261027`.

@@ -178,3 +178,13 @@ Staged firmware retains a 16-byte operation/epoch record and resets; hermetic ho
 `WifiClocked` and `RadioAccess` consume PHY custody into a
 `ChannelTransaction`, which borrows their MAC and platform. Channel and retune
 futures own that custody and return the domain with their typed result.
+
+
+Bluetooth task and interrupt owners expose `interrupt_observation(&self)`
+for side-effect-free, value-only diagnostic reads. The interrupt owners return
+all modeled primary enable/status and NRT words; the task owner returns its
+complete enable word and only the modeled opaque +0x4bc lanes. Dynamic
+enables are subsets of the primary words. These sequential reads grant no
+acknowledgement or release proof and do not establish a task cause/output
+mapping. Comparison code may borrow the existing owner for these reads;
+production does not call the observation methods.

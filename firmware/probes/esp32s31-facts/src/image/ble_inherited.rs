@@ -347,7 +347,7 @@ pub(super) fn retention(s: &mut Session<'_>) {
     if mac::produce(s, 0, 0x223f) {
         state(s, 0x2230);
     } else {
-        // Retain the failed post-release latch as a measured diagnostic,
+        // Retain the failed post-release crossing as a measured diagnostic,
         // then discriminate it from an APB/reset or permanent latch failure.
         emit(0x225f, 218, oer_riscv::cycle32().wrapping_sub(started), 0);
         latch_state(s, 0x2260);
