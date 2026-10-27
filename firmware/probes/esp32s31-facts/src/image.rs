@@ -224,10 +224,6 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(ble_inherited::inherited),
     },
     Probe {
-        id: 211,
-        run: Action::Thread(ble_inherited::admission),
-    },
-    Probe {
         id: 212,
         run: Action::Thread(ble_inherited::software_reset),
     },
