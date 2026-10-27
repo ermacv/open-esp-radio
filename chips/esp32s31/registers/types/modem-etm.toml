@@ -343,3 +343,20 @@ class = "write-only"
 
 [review.entity."CHANNEL_ENABLE_SET.BIT_11_OPAQUE"]
 sources = ["BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
+
+[review.entity."WORD_010C_OPAQUE"]
+sources = ["BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
+
+[review.entity."WORD_010C_OPAQUE.BIT_26_OPAQUE"]
+sources = ["BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
+
+[[registers]]
+name = "WORD_010C_OPAQUE"
+offset = 0x10c
+description = "Sleep-disable checks bit26 before the sleep0 disable helper. No completion or read-side-effect contract is established. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."
+
+[[registers.fields]]
+name = "BIT_26_OPAQUE"
+bits = "26"
+class = "read-only"
+description = "Selected assertion input in the sleep-disable path; physical meaning unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."

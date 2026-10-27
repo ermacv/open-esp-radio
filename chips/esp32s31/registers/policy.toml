@@ -1102,7 +1102,7 @@ elements = [{ register = "CH%s_EVENT", first = 4, count = 4 }, { register = "CH%
 triggers = [{ register = "CHANNEL_ENABLE_SET", fields = ["CH4", "CH5", "CH6", "CH7", "BIT_11_OPAQUE"] }, { register = "CHANNEL_ENABLE_CLEAR", fields = ["CH4", "CH5", "CH6", "CH7"] }]
 description = "The Bluetooth runtime's event channels four through seven and their bits of the write-trigger set and clear words."
 sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
-registers = ["WORD_0110_OPAQUE", "WORD_0114_OPAQUE"]
+registers = ["WORD_010C_OPAQUE", "WORD_0110_OPAQUE", "WORD_0114_OPAQUE"]
 
 [[partitions]]
 name = "Ieee802154Peripherals"
@@ -7743,3 +7743,15 @@ sources = ["HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW9_S31_MAC_MASK_ACK_20261027"
 name = "read_bluetooth_modem_lp_status"
 register = "MODEM_PWR.WORD_0038_OPAQUE"
 sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027", "HW_BLE_LP_CAUSES_2026_10_26"]
+
+# SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027 establishes complete loads;
+# these diagnostic images assign no meaning to undeclared upper lanes.
+[[register-image-reads]]
+name = "read_bluetooth_modem_lp_pending_image"
+register = "MODEM_PWR.WORD_0024_OPAQUE"
+sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027"]
+
+[[register-image-reads]]
+name = "read_bluetooth_modem_lp_rollover_image"
+register = "MODEM_PWR.WORD_002C_OPAQUE"
+sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027"]

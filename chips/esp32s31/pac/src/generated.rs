@@ -124651,6 +124651,38 @@ pub mod modem_etm {
         }
     }
 
+    /// The `WORD_010C_OPAQUE` register.
+    ///
+    /// Sleep-disable checks bit26 before the sleep0 disable helper. No completion or read-side-effect contract is established. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+    pub mod word_010c_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x04000000;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10c;
+
+        /// Width of `BIT_26_OPAQUE` in bits.
+        pub const BIT_26_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_26_OPAQUE`.
+        pub const BIT_26_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_26_OPAQUE`.
+        pub const BIT_26_OPAQUE_MASK: u32 = 0x4000000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Selected assertion input in the sleep-disable path; physical meaning unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
+            #[inline]
+            pub const fn bit_26_opaque(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+        }
+    }
+
     /// The `WORD_0110_OPAQUE` register.
     ///
     /// One complete bit26 image in the boolean LP sleep helper. Action and readability unknown. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
@@ -125047,8 +125079,9 @@ pub mod modem_etm {
     pub struct ModemEtmBluetoothWords;
 
     impl oer_mmio::Words for ModemEtmBluetoothWords {
-        const OWNED: &'static [usize] =
-            &[0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44, 0x48, 0x110, 0x114];
+        const OWNED: &'static [usize] = &[
+            0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44, 0x48, 0x10c, 0x110, 0x114,
+        ];
         const OBSERVED: &'static [usize] = &[];
         const TRIGGERS: &'static [(usize, u32)] = &[(0x4, 0x000008f0), (0x8, 0x000000f0)];
     }
@@ -125246,6 +125279,12 @@ pub mod modem_etm {
             self.0.write::<0x48>(value.0);
         }
 
+        /// Read `WORD_010C_OPAQUE`.
+        #[inline]
+        pub fn read_word_010c_opaque(&self) -> word_010c_opaque::R {
+            word_010c_opaque::R(self.0.read::<0x10c>())
+        }
+
         /// Write `WORD_0110_OPAQUE` from zero: the fields set, the reserved bits at
         /// their reset value, every high field at its prefix, zero in every
         /// other bit.
@@ -125291,7 +125330,7 @@ pub mod modem_etm {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40,
-            0x44, 0x48, 0x110, 0x114,
+            0x44, 0x48, 0x10c, 0x110, 0x114,
         ];
     }
 
@@ -136728,6 +136767,22 @@ pub mod modem_pwr {
         #[inline]
         pub fn disable_bluetooth_lp_sleep_17(&mut self) {
             self.0.write::<0x44>(0x00020000);
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_0024_OPAQUE`).
+        ///
+        /// SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027.
+        #[inline]
+        pub fn read_bluetooth_modem_lp_pending_image(&self) -> u32 {
+            self.0.read::<0x24>()
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_002C_OPAQUE`).
+        ///
+        /// SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027.
+        #[inline]
+        pub fn read_bluetooth_modem_lp_rollover_image(&self) -> u32 {
+            self.0.read::<0x2c>()
         }
     }
 
