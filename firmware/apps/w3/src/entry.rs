@@ -165,28 +165,27 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
+        .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
     let (line, lower) = oer_espressif_executor::DoorbellLine::<3>::split(software.line3);
-    let Ok(bound) = adopted.router().bind(
-        interrupts.wifi,
-        WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(lower)),
-    ) else {
-        fail("wifi-interrupt");
-    };
+    let bound = adopted
+        .router()
+        .bind(
+            interrupts.wifi,
+            WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(lower)),
+        )
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let bell = irq::ImageDoorbell(bell);
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2).start(
-        hart,
-        router,
-        interrupts.radio,
-        software.irq2,
-        urgent,
-    );
+    let radio = InterruptExecutor::<2>::new(software.line2)
+        .start(hart, router, interrupts.radio, software.irq2, urgent)
+        .unwrap_or_else(|failure| failure.reset());
     let mut rng = Rng::new(runtime.entropy, EmbassyClock);
     let seed = (u64::from(rng.random()) << 32) | u64::from(rng.random());
     let entropy = rng.random();
@@ -222,21 +221,24 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
-    executor.run(
-        &hart,
-        &mut router,
-        interrupts.wake,
-        software.irq0,
-        urgent,
-        move |spawner| {
-            if AppTasks::reporting(spawner, console, pads).is_err()
-                || AppTasks::station_task(spawner, frontend_channel, config, station, seed).is_err()
-                || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
-            {
-                fail("task-start");
-            }
-        },
-    )
+    match executor
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            urgent,
+            move |spawner| {
+                if AppTasks::reporting(spawner, console, pads).is_err()
+                    || AppTasks::station_task(spawner, frontend_channel, config, station, seed)
+                        .is_err()
+                    || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
+                {
+                    fail("task-start");
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {}
 }
 
 /// Feed the RTC watchdog for good: the image resets when this executor stops

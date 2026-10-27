@@ -178,17 +178,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
+        .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2).start(
-        hart,
-        router,
-        interrupts.radio,
-        software.irq2,
-        (),
-    );
+    let radio = InterruptExecutor::<2>::new(software.line2)
+        .start(hart, router, interrupts.radio, software.irq2, ())
+        .unwrap_or_else(|failure| failure.reset());
     if RadioTasks::radio_actor(&radio, actor).is_err() {
         fail("radio-actor-start");
     }
@@ -200,29 +198,31 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let rng = Rng::new(runtime.entropy, EmbassyClock);
     let watchdog = runtime.watchdogs.rtc;
-    executor.run(
-        &hart,
-        &mut router,
-        interrupts.wake,
-        software.irq0,
-        (),
-        move |spawner| {
-            let boot = Boot {
-                console,
-                _pads: pads,
-                cell: cells.wifi,
-                wifi,
-                rng,
-                station,
-                access_point,
-            };
-            if AppTasks::w0(spawner, boot).is_err()
-                || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
-            {
-                fail("task-start");
-            }
-        },
-    )
+    match executor
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            (),
+            move |spawner| {
+                let boot = Boot {
+                    console,
+                    _pads: pads,
+                    cell: cells.wifi,
+                    wifi,
+                    rng,
+                    station,
+                    access_point,
+                };
+                if AppTasks::w0(spawner, boot).is_err()
+                    || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
+                {
+                    fail("task-start");
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {}
 }
 
 /// Feed the RTC watchdog for good: the image resets when this executor

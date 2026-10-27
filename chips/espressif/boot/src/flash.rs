@@ -143,6 +143,10 @@ pub enum FlashFailure {
     TuningRegion,
     /// The scratch is shorter than the tuning region's pages.
     ScratchTooSmall,
+    /// The bootstrap's exclusive tuning scratch was already claimed.
+    ScratchClaimed,
+    /// A cached read names a word outside the supplied XIP reference.
+    XipOutside { index: usize, words: usize },
     /// No run of three candidates passed both reads.
     NoStableWindow,
     /// A page read back otherwise through the cache at the chosen timing.
@@ -161,6 +165,8 @@ impl FlashFailure {
             Self::StatusModeBits => "flash-status-mode-bits",
             Self::TuningRegion => "flash-tuning-region",
             Self::ScratchTooSmall => "flash-tuning-scratch",
+            Self::ScratchClaimed => "flash-tuning-scratch-claimed",
+            Self::XipOutside { .. } => "flash-xip-outside",
             Self::NoStableWindow => "flash-no-stable-window",
             Self::CacheMismatch => "flash-cache-mismatch",
             Self::RollbackUnsuspended => "flash-rollback-unsuspended",
@@ -205,7 +211,7 @@ where
     registers.configure_read(Access::new(), flash.commands.get(mode));
     let mut chunk_address = address;
     for chunk in destination.chunks_mut(CHUNK_WORDS) {
-        // A chunk holds at most sixteen words: its bytes fit.
+        // A chunk holds at most CHUNK_WORDS words: its bytes fit.
         let chunk_bytes = (chunk.len() * 4) as u32;
         registers.set_transfer(Access::new(), chunk_address, chunk_bytes);
         deadline.poll(wait, || registers.start(Access::new()).ok())?;
@@ -251,8 +257,8 @@ pub trait FlashTimingRegisters {
 
 /// The tuning region's mapping, read through the cache.
 pub trait XipWindow {
-    /// Word `index` of the region's mapping.
-    fn word(&self, index: usize) -> u32;
+    /// Word `index` of the region's mapping, or the observed region bounds.
+    fn word(&self, index: usize) -> Result<u32, FlashFailure>;
 }
 
 /// The flash pages the sweep compares, mapped for instruction fetch at
@@ -300,7 +306,9 @@ pub struct TuningWaits {
 ///
 /// SOURCE: esp-hal 1f646c5 `esp-hal/src/flash/tuning.rs:6-23`.
 pub const fn page_count(region: TuningRegion, capacity: u32, candidates: usize) -> Option<usize> {
-    if !region.physical_start.is_multiple_of(TUNING_PAGE_BYTES)
+    if candidates == 0
+        || candidates > u16::BITS as usize
+        || !region.physical_start.is_multiple_of(TUNING_PAGE_BYTES)
         || !region.virtual_start.is_multiple_of(TUNING_PAGE_BYTES)
     {
         return None;
@@ -333,7 +341,7 @@ pub const fn select_window(mask: u16, candidates: usize) -> Option<usize> {
     let mut current_start = 0;
     let mut current_len = 0;
     let mut candidate = 0;
-    while candidate < candidates && candidate < 16 {
+    while candidate < candidates && candidate < u16::BITS as usize {
         if mask & (1 << candidate) != 0 {
             if current_len == 0 {
                 current_start = candidate;
@@ -394,7 +402,7 @@ where
         xip,
     } = owners;
     let candidates = timings.len();
-    if candidates == 0 || candidates > 16 {
+    if candidates == 0 || candidates > u16::BITS as usize {
         return Err(FlashFailure::TuningRegion.into());
     }
     let pages = page_count(region, flash.capacity, candidates).ok_or(FlashFailure::TuningRegion)?;
@@ -457,10 +465,14 @@ where
         resume_fetch(cache, suspended);
     }
     // The pages no candidate read, through the cache at the chosen timing.
-    let verified = (0..pages - candidates).all(|page| page_matches(xip, scratch, page));
-    if !verified {
+    for page in 0..pages - candidates {
+        let failure = match page_matches(xip, scratch, page) {
+            Ok(true) => continue,
+            Ok(false) => FlashFailure::CacheMismatch.into(),
+            Err(failure) => failure,
+        };
         rollback(port, clock, cache, None)?;
-        return Err(FlashFailure::CacheMismatch.into());
+        return Err(failure);
     }
     Ok(timing)
 }
@@ -510,7 +522,7 @@ where
         if let Some(held) = suspended.take() {
             resume_fetch(cache, held);
         }
-        if page_matches(xip, scratch, pages - timings.len() + candidate) {
+        if page_matches(xip, scratch, pages - timings.len() + candidate)? {
             cache_mask |= 1 << candidate;
         }
         *suspended = Some(suspend_fetch(cache, waits.suspend, deadline)?);
@@ -530,14 +542,20 @@ where
     })
 }
 
-fn page_matches<X: XipWindow>(xip: &X, scratch: &[u32], page: usize) -> bool {
-    let start = page * TUNING_PAGE_WORDS;
-    scratch
-        .get(start..start + TUNING_PAGE_WORDS)
-        .is_some_and(|words| {
-            words
-                .iter()
-                .enumerate()
-                .all(|(offset, &word)| xip.word(start + offset) == word)
-        })
+fn page_matches<X: XipWindow>(xip: &X, scratch: &[u32], page: usize) -> Result<bool, BootFailure> {
+    let start = page
+        .checked_mul(TUNING_PAGE_WORDS)
+        .ok_or(FlashFailure::TuningRegion)?;
+    let end = start
+        .checked_add(TUNING_PAGE_WORDS)
+        .ok_or(FlashFailure::TuningRegion)?;
+    let words = scratch
+        .get(start..end)
+        .ok_or(FlashFailure::ScratchTooSmall)?;
+    for (index, &word) in (start..end).zip(words) {
+        if xip.word(index)? != word {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }

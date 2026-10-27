@@ -282,29 +282,28 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
+        .unwrap_or_else(|failure| failure.reset());
     // The radio handler's part holds both banks and the doorbell's lowering
     // half from the start; the doorbell rings once the part is bound.
     let software = runtime.software_interrupts;
     let (bell, acknowledger) = oer_espressif_executor::DoorbellLine::<3>::split(software.line3);
-    let Ok(wifi_bound) = adopted.router().bind(
-        interrupts.wifi,
-        WifiPart::new(runtime.wifi_interrupts, software.irq3, Lower(acknowledger)),
-    ) else {
-        fail("wifi-interrupt")
-    };
+    let wifi_bound = adopted
+        .router()
+        .bind(
+            interrupts.wifi,
+            WifiPart::new(runtime.wifi_interrupts, software.irq3, Lower(acknowledger)),
+        )
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     let (doorbell, urgent) = Doorbell::new::<FromCpu3Irq>(bell, &wifi_bound);
     let doorbell = ImageDoorbell(doorbell);
     let (timer_sender, timer_lines) = TIMER_LINES.take().split();
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2).start(
-        hart,
-        router,
-        interrupts.radio,
-        software.irq2,
-        urgent,
-    );
+    let radio = InterruptExecutor::<2>::new(software.line2)
+        .start(hart, router, interrupts.radio, software.irq2, urgent)
+        .unwrap_or_else(|failure| failure.reset());
     if RadioTasks::radio_actor(&radio, actor).is_err()
         || RadioTasks::p2_timers(&radio, timer_sender).is_err()
     {
@@ -321,34 +320,36 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let rng = Rng::new(runtime.entropy, EmbassyClock);
     let rtc_watchdog = runtime.watchdogs.rtc;
-    executor.run(
-        &hart,
-        &mut router,
-        interrupts.wake,
-        software.irq0,
-        urgent,
-        move |spawner| {
-            let boot = Boot {
-                console,
-                _pads: pads,
-                cell: cells.wifi,
-                wifi,
-                rng,
-                station,
-                access_point,
-                radio,
-                wifi_bound,
-                doorbell,
-                bound: BOUND.take().split(),
-                timer_lines,
-            };
-            if AppTasks::w1(spawner, boot).is_err()
-                || AppTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
-            {
-                fail("app-tasks")
-            }
-        },
-    )
+    match executor
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            urgent,
+            move |spawner| {
+                let boot = Boot {
+                    console,
+                    _pads: pads,
+                    cell: cells.wifi,
+                    wifi,
+                    rng,
+                    station,
+                    access_point,
+                    radio,
+                    wifi_bound,
+                    doorbell,
+                    bound: BOUND.take().split(),
+                    timer_lines,
+                };
+                if AppTasks::w1(spawner, boot).is_err()
+                    || AppTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
+                {
+                    fail("app-tasks")
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {}
 }
 
 /// Feed the RTC watchdog for good: the image resets when this executor

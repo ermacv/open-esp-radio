@@ -1,6 +1,7 @@
 #![no_std]
 #![cfg_attr(test, feature(type_alias_impl_trait))]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(not(test), deny(clippy::panic, clippy::expect_used))]
 #![deny(
     clippy::unwrap_used,
     clippy::unreachable,
@@ -45,6 +46,10 @@ mod deadline_cell;
 mod doorbell;
 #[cfg(feature = "chip")]
 mod executor;
+#[cfg(any(feature = "chip", test))]
+mod fault;
+#[cfg(any(feature = "chip", test))]
+pub use fault::{Failure, Fault};
 pub mod hardware;
 #[cfg(feature = "chip")]
 mod hart_binding;
@@ -74,7 +79,7 @@ pub use executor::{Executor, InterruptExecutor, interrupt_handler, ready_peers, 
 #[cfg(any(feature = "chip", test))]
 pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
 #[cfg(feature = "chip")]
-pub use time_driver::{alarm_interrupt, bind, init};
+pub use time_driver::{TimeSetup, alarm_interrupt, bind, init};
 #[cfg(feature = "chip")]
 pub use urgent_sources::{UrgentSource, UrgentSources};
 

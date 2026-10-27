@@ -91,14 +91,13 @@ impl<'a> XipRegion<'a> {
 impl XipWindow for XipRegion<'_> {
     /// Word `index` of the region.
     ///
-    /// # Panics
-    ///
-    /// When `index` lies past the region: the sweep reads inside it.
-    fn word(&self, index: usize) -> u32 {
-        oer_memory::read_volatile(
-            self.0
-                .get(index)
-                .expect("the sweep reads inside its region"),
+    /// Returns the index and region length when the word lies outside it.
+    fn word(&self, index: usize) -> Result<u32, oer_espressif_boot::FlashFailure> {
+        self.0.get(index).map(oer_memory::read_volatile).ok_or(
+            oer_espressif_boot::FlashFailure::XipOutside {
+                index,
+                words: self.0.len(),
+            },
         )
     }
 }

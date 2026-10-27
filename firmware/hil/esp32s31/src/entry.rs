@@ -235,7 +235,8 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.alarm,
         timer.alarm0,
-    );
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let console = usb::open(adopted.router(), interrupts.console_usb);
     let software = runtime.software_interrupts;
     let executor = Executor::<0>::new(software.line0);
@@ -270,14 +271,16 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
 
     #[cfg(feature = "boot-smoke")]
-    executor.run(&hart, &mut router, wake.0, wake.1, (), move |spawner| {
-        let console = boot_smoke_console::BootSmokeConsole::new(console);
-        if BootSmokeTasks::boot_smoke(spawner, console).is_err()
-            || BootSmokeTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
-        {
-            fail(fatal::Failure::TaskAllocation);
-        }
-    });
+    match executor
+        .run(&hart, &mut router, wake.0, wake.1, (), move |spawner| {
+            let console = boot_smoke_console::BootSmokeConsole::new(console);
+            if BootSmokeTasks::boot_smoke(spawner, console).is_err()
+                || BootSmokeTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
+            {
+                fail(fatal::Failure::TaskAllocation);
+            }
+        })
+        .unwrap_or_else(|failure| failure.reset()) {};
 }
 
 /// Feed the RTC watchdog for good: the image resets when its executor stops

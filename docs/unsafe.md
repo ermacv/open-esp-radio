@@ -203,6 +203,37 @@ contains no register owner or waker; copying it permits both local executors
 to observe the same urgent source. A sealed `UrgentSources` contract accepts
 that observation or `()`; executor startup cannot take a raw numeric list.
 
+Executor and time-driver setup return route or counter-latch refusals through
+`Result`. Each `Failure<T>` holds its inputs in `ManuallyDrop`; dropping a
+refusal cannot release those owners or authorize retry. Internal invariant
+failures carry a named `Fault` with the original observations. The terminal
+path masks execution through `fatal::reset_recording` and keeps all static,
+handler and interrupted task owners until reset. A numeric reason code and four
+exact 32-bit observation words reuse the existing 148-byte panic slot under
+tag `NAMED_FAULT = 3`, with its checksum; no retained bytes are added. Capture
+reads no reason text, including from an interrupt. Adoption decodes the code
+in thread context, prints it through the early console and clears it only after
+successful output. The cell's claim lives in boot-zeroed SRAM and stays held
+through a fatal reset, preserving the current boot's first record. A fresh
+boot's first fatal claim replaces stale retained bytes even without previous
+record consumption or successful console output.
+Software lines use fallible static placement and one-time value publication,
+without a panicking initialization path or additional unsafe code.
+
+`Router::bind` returns ordinary input refusals with their unchanged token
+and part. Once admitted, storage, handler installation and controller write
+failures return a named `BindFault`; the token and any uninstalled part stay
+in `Quarantined`, whose private `ManuallyDrop` fields have no recovery API.
+Placed parts retain their claimed static allocation; installed parts remain
+in their handler cell. No failed binding issues `Bound` or enables a driver.
+The image keeps its router and all interrupted owners while the staged
+runtime's binding reporter records the complete source/line/hart, operation
+and controller error through `fatal::reset_recording`. The existing panic
+slot holds four lossless diagnostic words; no retained allocation is added.
+Successful binding still installs the part, writes the line, then routes
+sources in declaration order. A failed write attempts no later write or
+rollback. No unsafe code is added to placement or ownership transfer.
+
 The generated Rust MTVT is one immutable array of aligned per-hart rows.
 Its one unsafe attribute owns the SRAM section. The table and trap assembly
 share a module/codegen unit; the existing `global_asm!` exports `_runtime_mtvt`
@@ -807,6 +838,12 @@ needs:
   Its `Staged` result retains the exclusive payload loan through publication
   and handoff. The bootstrap checks the physical PSRAM base before the probe
   and its flash source immediately after the probe, before header/CRC reads.
+  Payload copying iterates over the checked equal-length source and destination.
+  The tuning scratch uses a fallible exclusive claim. XIP reads return the
+  rejected index and reference length rather than panicking; the sweep and
+  verification propagate the typed boot failure through their existing
+  suspended-fetch rollback. The terminal boot report emits bytes directly
+  and keeps all boot owners on the diverging caller's stack.
 - A probe image is entered by the Blobray verifier through the exported
   symbols the vendor code calls (`_start`, `ets_delay_us`, the probe
   entries), with that code's C signatures, and keeps its fixtures in statics

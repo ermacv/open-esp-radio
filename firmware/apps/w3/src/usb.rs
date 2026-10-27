@@ -54,6 +54,6 @@ pub(crate) fn open<C: Controller>(
     let (endpoint, interrupt, pads) = retire_early_writer().map_err(|_| "console")?;
     let bound = router
         .bind(token, interrupt)
-        .map_err(|_| "console interrupt")?;
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     Ok((Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads))
 }

@@ -125,6 +125,16 @@ release a secondary hart.
   bound activation then publishes the same ten runtime events as later
   sessions through the task owner alone. No task accesses the handler cell.
   Polling retains `Silent` after the same pre-bind discard.
+  Binding returns a recoverable input refusal before placement. A failed
+  admitted placement, handler installation or controller write returns a named
+  fault with source observations, retaining its token and part in quarantine.
+  The image records/resets through the existing retained slot, without
+  publishing `Bound`, releasing owners or rolling back an unconfirmed write.
+  Fault capture stores numeric reasons without reading cached text. Next-boot
+  thread reporting decodes their names. The boot-zeroed claim preserves the
+  current boot's first fault while allowing it to replace an unconsumed record
+  from an older boot. Console and Wi-Fi input bind refusals terminate as image
+  configuration faults through this same path.
   The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
@@ -259,6 +269,11 @@ release a secondary hart.
   which lends the mapped region once as a static mutable byte slice. Staging
   validates, copies and checks the image through that slice and retains its
   payload loan until the cache publication and stage-two jump.
+  Flash tuning claims its SRAM scratch fallibly and checks each XIP word;
+  a refused read carries its index and region length through `BootFailure`.
+  All polling stays under the common boot deadline; failures use the
+  bootstrap's existing terminal report. It writes bounded decimal observations
+  directly, without formatter dispatch or another retained allocation.
   Stage two adopts the initialized platform without repeating cold boot.
   Its own traps, vectors, checked exits and the image's `critical-section`
   run on the typed interrupt controller. Each table entry moves its part

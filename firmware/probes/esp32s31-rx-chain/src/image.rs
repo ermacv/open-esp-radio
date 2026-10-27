@@ -152,8 +152,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
+        .unwrap_or_else(|failure| failure.reset());
     // No Wi-Fi interrupt consumer is installed: this experiment polls only.
     // The MAC bank stays with the polling task; no CPU route is installed.
     let mut wifi_irqs = runtime.wifi_interrupts;
@@ -165,13 +167,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     }
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2).start(
-        hart,
-        router,
-        interrupts.radio,
-        software.irq2,
-        (),
-    );
+    let radio = InterruptExecutor::<2>::new(software.line2)
+        .start(hart, router, interrupts.radio, software.irq2, ())
+        .unwrap_or_else(|failure| failure.reset());
     let rng = Rng::new(runtime.entropy, EmbassyClock);
     if RadioTasks::direct(&radio, backend, lp, partitions.wifi, rng, station, ap).is_err() {
         fail("direct-task");
@@ -190,20 +188,22 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         mac_irq: wifi_irqs.mac,
         traffic,
     };
-    Executor::<0>::new(software.line0).run(
-        &hart,
-        &mut router,
-        interrupts.wake,
-        software.irq0,
-        (),
-        move |spawner| {
-            if AppTasks::capture(spawner, boot).is_err()
-                || AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err()
-            {
-                fail("task");
-            }
-        },
-    )
+    match Executor::<0>::new(software.line0)
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            (),
+            move |spawner| {
+                if AppTasks::capture(spawner, boot).is_err()
+                    || AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err()
+                {
+                    fail("task");
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail(reason: &'static str) -> ! {
     oer_espressif_staged_runtime::fatal_halt(|_| {

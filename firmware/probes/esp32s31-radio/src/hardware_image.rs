@@ -70,17 +70,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
+        .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2).start(
-        hart,
-        router,
-        interrupts.radio,
-        software.irq2,
-        (),
-    );
+    let radio = InterruptExecutor::<2>::new(software.line2)
+        .start(hart, router, interrupts.radio, software.irq2, ())
+        .unwrap_or_else(|failure| failure.reset());
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(value) => value,
         Err(error) => fail(error.name()),
@@ -93,18 +91,20 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     if RadioTasks::sheets(&radio, boot).is_err() {
         fail("radio-task");
     }
-    Executor::<0>::new(software.line0).run(
-        &hart,
-        &mut router,
-        interrupts.wake,
-        software.irq0,
-        (),
-        move |spawner| {
-            if AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err() {
-                fail("watchdog-task");
-            }
-        },
-    )
+    match Executor::<0>::new(software.line0)
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            (),
+            move |spawner| {
+                if AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err() {
+                    fail("watchdog-task");
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail(reason: &'static str) -> ! {
     oer_espressif_staged_runtime::fatal_halt(|_| {

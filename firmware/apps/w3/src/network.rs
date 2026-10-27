@@ -135,7 +135,14 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         match select(
             application,
             join3(
-                oer_firmware_apps_w3::bridge::run(radio, tx, rx, &observations, link, &EmbassyClock),
+                oer_firmware_apps_w3::bridge::run(
+                    radio,
+                    tx,
+                    rx,
+                    &observations,
+                    link,
+                    &EmbassyClock,
+                ),
                 runner.run(),
                 drain(&socket),
             ),
@@ -226,7 +233,8 @@ async fn application<'id, Path: PoolPath>(
                 socket.send(&packet).await
             },
             || healthy(link, failed),
-        ).await;
+        )
+        .await;
         while !observations.borrow().complete()
             && healthy(link, failed)
             && EmbassyClock.now() < failure_deadline

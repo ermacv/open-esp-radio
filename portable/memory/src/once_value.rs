@@ -16,6 +16,8 @@ const READY: u8 = 2;
 /// `None` until publication completes, while `is_requested` already reports
 /// the request. The caller supplies its own wake after `set`. Reset requires
 /// exclusive access, after every endpoint of the previous epoch ended.
+#[derive(bytemuck::Zeroable)]
+#[zeroable(bound = "")]
 pub struct OnceValue<T> {
     state: AtomicU8,
     value: UnsafeCell<MaybeUninit<T>>,
@@ -120,6 +122,16 @@ impl<T> Drop for OnceValue<T> {
 mod tests {
     extern crate std;
     use super::*;
+
+    #[test]
+    fn zeroed_storage_publishes_a_nonzeroable_payload_once() {
+        let cell: OnceValue<&'static str> = crate::zeroed::zeroed();
+        assert_eq!(cell.get(), None);
+        assert!(!cell.is_requested());
+        assert_eq!(cell.set("urgent"), Ok(()));
+        assert_eq!(cell.get(), Some("urgent"));
+        assert_eq!(cell.set("other"), Err("other"));
+    }
 
     #[test]
     fn an_interrupted_writer_blocks_neither_the_reader_nor_a_competing_writer() {

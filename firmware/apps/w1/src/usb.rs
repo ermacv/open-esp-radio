@@ -49,8 +49,6 @@ pub(crate) async fn text(console: &mut Console, bytes: &[u8]) {
 pub(crate) enum OpenError {
     /// The early writer kept the block.
     Retire,
-    /// The router refused the console's entry.
-    Bind,
 }
 
 impl OpenError {
@@ -58,7 +56,6 @@ impl OpenError {
     pub(crate) const fn reason(&self) -> &'static str {
         match self {
             Self::Retire => "console-retire",
-            Self::Bind => "console-bind",
         }
     }
 }
@@ -74,6 +71,6 @@ pub(crate) fn open<C: Controller>(
         retire_early_writer().map_err(|_held: RetireError| OpenError::Retire)?;
     let bound = router
         .bind(token, interrupt)
-        .map_err(|_refused| OpenError::Bind)?;
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     Ok((Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads))
 }

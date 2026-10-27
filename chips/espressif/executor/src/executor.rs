@@ -1,12 +1,13 @@
 use core::{marker::PhantomData, task::Context};
 
 use crate::urgent_sources::UrgentSources;
+use crate::{Failure, Fault};
 use oer_espressif_staged_runtime::Hart;
 use oer_interrupt_table::{
     Entry,
     signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList},
 };
-use oer_memory::zeroed::ZeroedOnce;
+use oer_memory::OnceValue;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 use crate::chip::{
@@ -72,7 +73,9 @@ static RUNNING: [Running; HARTS] = [const { Running::new() }; HARTS];
 
 oer_memory::zeroed_static! {
     /// Composition-owned urgent sources, published before an executor can poll.
-    static URGENT: [ZeroedOnce<&'static [u16]>; SOFTWARE_INTERRUPT_COUNT] =
+    /// Placement: interrupt executors read this list reference from critical SRAM.
+    #[used]
+    static URGENT: [OnceValue<&'static [u16]>; SOFTWARE_INTERRUPT_COUNT] =
         zeroed in ".critical.bss.executor";
 }
 
@@ -103,12 +106,17 @@ pub(crate) fn ready(executor: u8) -> Option<&'static Ready> {
 /// Signal/interrupt facts not yet translated into task wakes are additional
 /// reasons to yield and must be checked by their owner.
 ///
-/// # Panics
-/// Outside a started executor's polling context.
+/// Outside a started polling context, records `OutsideExecutor` and resets.
 pub fn ready_peers() -> bool {
     READY
         .get(usize::from(running()))
-        .expect("ready peers requires a running executor")
+        .unwrap_or_else(|| {
+            Fault::OutsideExecutor {
+                running: running(),
+                level: interrupt_level(),
+            }
+            .reset()
+        })
         .any()
 }
 
@@ -127,9 +135,13 @@ fn stamp_poll(swi: u8) {
 #[inline(never)]
 pub(crate) fn should_yield() -> bool {
     let swi = usize::from(running());
-    let state = EXECUTOR_CORE
-        .get(swi)
-        .expect("cooperative admission requires a running executor");
+    let state = EXECUTOR_CORE.get(swi).unwrap_or_else(|| {
+        Fault::OutsideExecutor {
+            running: running(),
+            level: interrupt_level(),
+        }
+        .reset()
+    });
     READY[swi].any()
         || crate::chip::is_pending(software_interrupt_source(swi as u8))
         || URGENT[swi]
@@ -156,7 +168,11 @@ fn signal_pending(swi: usize) -> bool {
     };
     match pending {
         Ok(pending) => pending,
-        Err(_) => panic!("signals are queried from their owning executor"),
+        Err(_) => Fault::SignalContext {
+            executor: swi as u8,
+            running: running(),
+        }
+        .reset(),
     }
 }
 
@@ -179,8 +195,7 @@ fn poll_tasks<T: Tasks>() -> bool {
 
 /// Claim executor `swi` for the current core.
 ///
-/// # Panics
-/// When another executor uses the software interrupt.
+/// A duplicate claim records its original poll stamp and resets.
 fn claim_core(swi: u8) {
     EXECUTOR_CORE[usize::from(swi)]
         .compare_exchange(
@@ -189,7 +204,13 @@ fn claim_core(swi: u8) {
             Ordering::AcqRel,
             Ordering::Acquire,
         )
-        .unwrap_or_else(|_| panic!("software interrupt {swi} is already used by an executor"));
+        .unwrap_or_else(|stamp| {
+            Fault::ExecutorClaimed {
+                executor: swi,
+                stamp,
+            }
+            .reset()
+        });
 }
 
 /// Scheduler-free thread-mode executor.
@@ -208,10 +229,9 @@ impl<const SWI: u8> Executor<SWI> {
     /// `urgent` comes from the composition's doorbell constructor, or `()`
     /// when it has no urgent sources.
     ///
-    /// # Panics
-    ///
-    /// When the software interrupt already serves an executor or binding fails.
-    /// A foreign hart's entry fails at compile time.
+    /// # Errors
+    /// A refused route returns its token and part in quarantine. A foreign
+    /// hart's entry fails at compile time; duplicate startup records a fault.
     pub fn run<T, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
@@ -220,7 +240,7 @@ impl<const SWI: u8> Executor<SWI> {
         part: W::Part,
         _urgent: U,
         init: impl FnOnce(&Spawner<T>),
-    ) -> !
+    ) -> Result<core::convert::Infallible, Failure<oer_interrupt_table::BindError<W>>>
     where
         T: Tasks<Mode = Thread>,
         W: Entry,
@@ -237,11 +257,13 @@ impl<const SWI: u8> Executor<SWI> {
         };
         crate::hart_binding::check::<H, W>();
         let _ = self.not_send;
-        if let Err(error) = router.bind(wake, part) {
-            panic!("executor software interrupt {SWI}: {error:?}");
-        }
+        let _bound = router
+            .bind(wake, part)
+            .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))?;
         claim_core(SWI);
-        let _ = URGENT[usize::from(SWI)].get_or_init(|| U::SOURCES);
+        URGENT[usize::from(SWI)]
+            .set(U::SOURCES)
+            .unwrap_or_else(|_| Fault::UrgentPublished { executor: SWI }.reset());
         init(&Spawner::new());
         loop {
             WORK_PENDING.0[usize::from(SWI)].store(0, Ordering::Release);
@@ -368,10 +390,9 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
     /// `urgent` comes from the composition's doorbell constructor, or `()`
     /// when it has no urgent sources.
     ///
-    /// # Panics
-    ///
-    /// When the software interrupt already serves an executor or binding fails.
-    /// A foreign hart's entry fails at compile time.
+    /// # Errors
+    /// A refused route returns its token and part in quarantine. A foreign
+    /// hart's entry fails at compile time; duplicate startup records a fault.
     pub fn start<T, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
@@ -379,7 +400,7 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         wake: W,
         part: W::Part,
         _urgent: U,
-    ) -> Spawner<T>
+    ) -> Result<Spawner<T>, Failure<oer_interrupt_table::BindError<W>>>
     where
         T: Tasks<Mode = InterruptMode>,
         W: Entry,
@@ -397,14 +418,16 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         crate::hart_binding::check::<H, W>();
         let _ = self._line;
         claim_core(SWI);
-        let _ = URGENT[usize::from(SWI)].get_or_init(|| U::SOURCES);
+        URGENT[usize::from(SWI)]
+            .set(U::SOURCES)
+            .unwrap_or_else(|_| Fault::UrgentPublished { executor: SWI }.reset());
         // Published before the source is enabled, so the first handler polls
         // and a pend raises its interrupt.
         INTERRUPT_MODE[usize::from(SWI)].store(true, Ordering::Release);
-        if let Err(error) = router.bind(wake, part) {
-            panic!("executor software interrupt {SWI}: {error:?}");
-        }
-        Spawner::new()
+        let _bound = router
+            .bind(wake, part)
+            .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))?;
+        Ok(Spawner::new())
     }
 }
 
@@ -489,21 +512,23 @@ fn round<T: Tasks<Mode = InterruptMode>>(swi: u8) {
     });
 }
 
-#[inline(always)]
-pub(crate) fn mark_work(swi: u8) {
-    WORK_PENDING.0[usize::from(swi)].store(1, Ordering::Release);
-}
-
 /// Make executor `swi` run again: a thread-mode executor sees its work flag
 /// at its next wake, an interrupt-mode executor's handler runs.
 pub(crate) fn pend(swi: u8) {
-    if INTERRUPT_MODE[usize::from(swi)].load(Ordering::Acquire) {
+    let index = usize::from(swi);
+    let (Some(mode), Some(work), Some(core)) = (
+        INTERRUPT_MODE.get(index),
+        WORK_PENDING.0.get(index),
+        EXECUTOR_CORE.get(index),
+    ) else {
+        Fault::InvalidExecutor { executor: swi }.reset();
+    };
+    if mode.load(Ordering::Acquire) {
         raise_interrupt(swi);
         return;
     }
-    mark_work(swi);
-    let target_core =
-        crate::poll_stamp::assigned_core(EXECUTOR_CORE[usize::from(swi)].load(Ordering::Acquire));
+    work.store(1, Ordering::Release);
+    let target_core = crate::poll_stamp::assigned_core(core.load(Ordering::Acquire));
     if target_core.is_some_and(|core| core != current_core()) {
         raise_interrupt(swi);
     }

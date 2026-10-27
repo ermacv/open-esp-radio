@@ -37,7 +37,6 @@ impl FaultRecord {
                 kind | (operation_code(operation) << 8)
             }
             FaultReason::SarSetup(SarSetupFault::Storage(_)) => 16,
-            FaultReason::SarSetup(SarSetupFault::Binding(_)) => 17,
             FaultReason::SarAlarmWithoutBundle(_) => 18,
         };
         self.registration = fault.registration.map_or(0, |epoch| epoch.get());
@@ -71,7 +70,6 @@ impl FaultRecord {
             14 => ("SarForeignSignal", "maintain"),
             15 => ("SarForeignReunion", "maintain"),
             16 => ("SarSetupStorage", "none"),
-            17 => ("SarSetupBinding", "none"),
             18 => ("SarAlarmWithoutBundle", "none"),
             _ => return Ok(()),
         };

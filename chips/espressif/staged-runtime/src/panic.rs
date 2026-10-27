@@ -11,6 +11,8 @@
 //! format constants may live in cached PSRAM even when their code is in SRAM.
 //! Every step is a bounded copy, so the path stays a short leaf in every
 //! context's stack bound.
+//! Named faults retain a numeric reason code and four observation words;
+//! only next-boot thread reporting decodes the reason's text.
 //!
 //! An image with the `panic-hook` feature defines `oer_platform_panic_hook`,
 //! which the entry calls after the record: it records more of the image's
@@ -19,6 +21,8 @@
 //! the next boot takes the record with [`take_previous`] and reports it in
 //! thread context.
 use core::ops::DerefMut;
+mod fault;
+pub use fault::FaultReason;
 
 #[cfg(target_arch = "riscv32")]
 use oer_memory::retained::RetainedGuard;
@@ -28,6 +32,7 @@ pub const FILE_BYTES: usize = 48;
 /// Bytes of a static panic message kept: its start.
 pub const MESSAGE_BYTES: usize = 64;
 const INVALID_HART: u32 = 2;
+const NAMED_FAULT: u32 = 3;
 const MAGIC: u32 = 0x5045_524f; // "OREP"
 
 /// Metadata safe for the image's panic hook to read. Task context keeps the
@@ -141,10 +146,13 @@ struct Slot {
     file_length: u32,
     file: [u8; FILE_BYTES],
     /// A static message's length plus one; zero for a formatted message.
+    /// Under NAMED_FAULT this word holds the numeric reason code instead.
     message_length: u32,
     message: [u8; MESSAGE_BYTES],
     checksum: u32,
 }
+
+const _: () = assert!(core::mem::size_of::<Slot>() == 148);
 
 impl Slot {
     #[cfg(test)]
@@ -189,15 +197,16 @@ crate::retained_static! {
 }
 
 /// Take the record the previous boot's panic left, and clear it. Call once,
-/// early at boot. A retained `InvalidHart` is reported through the early console
-/// and cleared only after successful output; it is never returned as a panic.
+/// early at boot. Retained named faults (including `InvalidHart`) are reported
+/// through the early console and cleared only after successful output; they
+/// are never returned as panics.
 /// `None` when the previous boot did not panic, the chip lost
 /// power or the slot is held by a panic already being recorded.
 pub fn take_previous() -> Option<PanicRecord> {
     let mut slot = SLOT.try_lock()?;
-    if slot.invalid_hart().is_some() {
+    if slot.invalid_hart().is_some() || slot.named_fault().is_some() {
         #[cfg(feature = "esp32s31")]
-        report_invalid_hart_early(&mut slot);
+        report_fault_early(&mut slot);
         return None;
     }
     slot.take()
@@ -208,12 +217,19 @@ pub fn take_previous() -> Option<PanicRecord> {
 #[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
 pub(crate) fn report_previous_fault() {
     if let Some(mut slot) = SLOT.try_lock() {
-        report_invalid_hart_early(&mut slot);
+        report_fault_early(&mut slot);
     }
 }
 
 #[cfg(feature = "esp32s31")]
-fn report_invalid_hart_early(slot: &mut Slot) {
+fn report_fault_early(slot: &mut Slot) {
+    let _reported = report_named_fault(slot, |name, observations| {
+        write_named_fault(name, observations, |bytes| {
+            oer_esp32s31_hal::usb_serial_jtag::early_text(bytes)
+                .then_some(())
+                .ok_or(())
+        })
+    });
     let _reported = report_invalid_hart(slot, |note| {
         oer_diagnostics::emit_note(note, |bytes| {
             oer_esp32s31_hal::usb_serial_jtag::early_text(bytes)
@@ -244,6 +260,101 @@ pub(crate) fn with_invalid_hart_record<R>(raw: u32, reset: impl FnOnce() -> R) -
     reset()
 }
 
+/// Retain a named fault in the existing panic slot, holding its claim until
+/// reset. The four words are the caller's exact source observations. No owner
+/// is released, no cached reason text is read, and no retained allocation is added.
+#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
+pub fn reset_fault(reason: FaultReason, observations: [u32; 4]) -> ! {
+    crate::fatal::reset_recording(|_| {
+        let _record = record_named_fault_in(SLOT.try_lock(), reason, observations).map(|slot| {
+            // Keep the claim even if a later reset operation faults.
+            core::mem::forget(slot);
+        });
+    })
+}
+
+// The guard is the current boot's first-writer election: it stays held until
+// reset. A fresh claim may replace any retained bytes from an earlier boot,
+// even when that image never consumed the previous record.
+#[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
+fn record_named_fault_in<G: DerefMut<Target = Slot>>(
+    slot: Option<G>,
+    reason: FaultReason,
+    observations: [u32; 4],
+) -> Option<G> {
+    let mut slot = slot?;
+    slot.record_named_fault(reason, observations);
+    Some(slot)
+}
+
+#[cfg(any(test, feature = "esp32s31"))]
+fn write_named_fault<E>(
+    name: &str,
+    observations: [u32; 4],
+    mut emit: impl FnMut(&[u8]) -> Result<(), E>,
+) -> Result<(), E> {
+    emit(b"previous fault ")?;
+    emit(name.as_bytes())?;
+    emit(b":")?;
+    for mut word in observations {
+        let mut digits = [0; 8];
+        for digit in digits.iter_mut().rev() {
+            let nibble = (word & 0xf) as u8;
+            *digit = if nibble < 10 {
+                b'0'.wrapping_add(nibble)
+            } else {
+                b'a'.wrapping_add(nibble - 10)
+            };
+            word >>= 4;
+        }
+        emit(b" ")?;
+        emit(&digits)?;
+    }
+    emit(b"\n")
+}
+
+#[cfg(any(test, feature = "esp32s31"))]
+fn report_named_fault<E>(
+    slot: &mut Slot,
+    emit: impl FnOnce(&str, [u32; 4]) -> Result<(), E>,
+) -> Result<(), E> {
+    if let Some((name, observations)) = slot.named_fault() {
+        emit(name, observations)?;
+        slot.magic = 0;
+    }
+    Ok(())
+}
+
+impl Slot {
+    #[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
+    fn record_named_fault(&mut self, reason: FaultReason, observations: [u32; 4]) {
+        self.magic = 0;
+        self.file = [0; FILE_BYTES];
+        self.file_length = 0;
+        self.message = [0; MESSAGE_BYTES];
+        // NAMED_FAULT interprets this existing word as a numeric reason code.
+        self.message_length = reason as u32;
+        [self.hart, self.interrupted_pc, self.line, self.column] = observations;
+        self.in_interrupt = NAMED_FAULT;
+        self.magic = MAGIC;
+        self.checksum = self.sum();
+    }
+
+    fn named_fault(&self) -> Option<(&str, [u32; 4])> {
+        if self.magic != MAGIC || self.in_interrupt != NAMED_FAULT || self.checksum != self.sum() {
+            return None;
+        }
+        if self.file_length != 0 {
+            return None;
+        }
+        let name = FaultReason::from_code(self.message_length)?.name();
+        Some((
+            name,
+            [self.hart, self.interrupted_pc, self.line, self.column],
+        ))
+    }
+}
+
 impl Slot {
     fn invalid_hart(&self) -> Option<u32> {
         (self.magic == MAGIC && self.in_interrupt == INVALID_HART && self.checksum == self.sum())
@@ -252,10 +363,9 @@ impl Slot {
 
     #[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
     fn record_invalid_hart(&mut self, raw: u32) {
-        // Keep the first completed record, including one already captured by panic entry.
-        if self.magic == MAGIC && self.checksum == self.sum() {
-            return;
-        }
+        // The retained cell's current-boot claim, not stale valid bytes,
+        // excludes nested fault writers.
+        self.magic = 0;
         self.hart = raw;
         self.in_interrupt = INVALID_HART;
         self.magic = MAGIC;
@@ -659,12 +769,6 @@ mod tests {
         let mut slot = Slot::EMPTY;
         slot.record_invalid_hart(u32::MAX);
         assert_eq!(slot.invalid_hart(), Some(u32::MAX));
-        slot.record_invalid_hart(3);
-        assert_eq!(
-            slot.invalid_hart(),
-            Some(u32::MAX),
-            "first fault stays intact"
-        );
         assert!(
             slot.take().is_none(),
             "a fault is never a panic with a truncated hart"
@@ -705,5 +809,110 @@ mod tests {
         assert_eq!(note.words(), &[u32::MAX]);
         assert_eq!(note.names(), &["InvalidHart"]);
         assert_eq!(slot.invalid_hart(), None);
+    }
+}
+
+#[cfg(test)]
+mod fault_tests {
+    use super::*;
+
+    use core::cell::RefCell;
+
+    #[test]
+    fn named_fault_reuses_the_slot_and_preserves_the_current_boot_claim() {
+        let storage = RefCell::new(Slot::EMPTY);
+        let words = [0xffff_ffff, 0xfedc_ba98, 0x7654_3210, 0x8000_0000];
+        let mut slot = record_named_fault_in(
+            storage.try_borrow_mut().ok(),
+            FaultReason::RouteWrongHart,
+            words,
+        )
+        .expect("first fault owns the current boot claim");
+        assert!(
+            record_named_fault_in(
+                storage.try_borrow_mut().ok(),
+                FaultReason::OutsideExecutor,
+                [0; 4],
+            )
+            .is_none()
+        );
+        assert_eq!(slot.file, [0; FILE_BYTES], "capture keeps no text");
+        assert_eq!(slot.message, [0; MESSAGE_BYTES], "capture keeps no text");
+        assert_eq!(slot.message_length, FaultReason::RouteWrongHart as u32);
+        assert_eq!(slot.named_fault(), Some(("RouteWrongHart", words)));
+        assert!(report_named_fault(&mut slot, |_, _| Err(())).is_err());
+        assert_eq!(slot.named_fault(), Some(("RouteWrongHart", words)));
+        let mut output = std::vec::Vec::new();
+        assert!(
+            report_named_fault(&mut slot, |name, observations| {
+                write_named_fault(name, observations, |bytes| {
+                    output.extend_from_slice(bytes);
+                    Ok::<_, ()>(())
+                })
+            })
+            .is_ok()
+        );
+        assert_eq!(
+            output,
+            b"previous fault RouteWrongHart: ffffffff fedcba98 76543210 80000000\n"
+        );
+        assert!(slot.named_fault().is_none());
+        assert!(slot.take().is_none());
+    }
+
+    #[test]
+    fn a_fresh_boot_claim_replaces_unconsumed_panic_or_fault_records() {
+        let mut previous_named = Slot::EMPTY;
+        previous_named.record_named_fault(FaultReason::OutsideExecutor, [1; 4]);
+        let mut previous_invalid_hart = Slot::EMPTY;
+        previous_invalid_hart.record_invalid_hart(u32::MAX);
+        let storage = RefCell::new(Slot::EMPTY);
+        let (panic, _) = record_in(storage.try_borrow_mut().ok(), 0, false, 0, || {
+            PanicDetails {
+                file: "old.rs",
+                line: 1,
+                column: 2,
+                message: None,
+            }
+        })
+        .expect("previous boot recorded a panic");
+        for previous in [previous_named, previous_invalid_hart, *panic] {
+            // RTC bytes survive; the SRAM claim starts unheld each boot.
+            // No take_previous or successful console output precedes this fault.
+            let next_boot = RefCell::new(previous);
+            let current = record_named_fault_in(
+                next_boot.try_borrow_mut().ok(),
+                FaultReason::TimerBankUnavailable,
+                [u32::MAX, 2, 3, 4],
+            )
+            .expect("current boot replaces stale valid bytes");
+            assert!(
+                record_named_fault_in(
+                    next_boot.try_borrow_mut().ok(),
+                    FaultReason::InvalidExecutor,
+                    [9; 4],
+                )
+                .is_none(),
+                "a nested writer cannot replace the current record"
+            );
+            let reboot = RefCell::new(*current);
+            assert_eq!(
+                reboot.borrow().named_fault(),
+                Some(("TimerBankUnavailable", [u32::MAX, 2, 3, 4]))
+            );
+        }
+    }
+
+    #[test]
+    fn corrupt_and_unknown_numeric_faults_are_rejected() {
+        let mut slot = Slot::EMPTY;
+        slot.record_named_fault(FaultReason::InvalidExecutor, [255, 0, 0, 0]);
+        slot.hart ^= 1;
+        assert!(slot.named_fault().is_none());
+        slot.record_named_fault(FaultReason::InvalidExecutor, [255, 0, 0, 0]);
+        slot.message_length = u32::MAX;
+        slot.checksum = slot.sum();
+        assert!(slot.named_fault().is_none());
+        assert_eq!(core::mem::size_of::<Slot>(), 148);
     }
 }

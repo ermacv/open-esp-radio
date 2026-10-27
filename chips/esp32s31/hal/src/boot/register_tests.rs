@@ -52,6 +52,29 @@ fn budget() -> BootBudget {
     BootBudget::below(Duration::from_millis(10), Duration::from_secs(9)).expect("below")
 }
 
+#[test]
+fn xip_reads_return_the_exact_rejected_index_and_region_length() {
+    use oer_espressif_boot::flash::XipWindow;
+
+    let words = [0x1234_5678, 0x89ab_cdef];
+    let region = super::XipRegion::new(&words);
+    assert_eq!(region.word(0), Ok(words[0]));
+    assert_eq!(region.word(1), Ok(words[1]));
+    for index in [words.len(), usize::MAX] {
+        assert_eq!(
+            region.word(index),
+            Err(FlashFailure::XipOutside {
+                index,
+                words: words.len(),
+            })
+        );
+    }
+    assert_eq!(
+        super::XipRegion::new(&[]).word(0),
+        Err(FlashFailure::XipOutside { index: 0, words: 0 })
+    );
+}
+
 /// The PMU's active-state power: the radio PMU block's word, not this
 /// PAC's soc blocks; the tests count its calls.
 #[derive(Default)]
