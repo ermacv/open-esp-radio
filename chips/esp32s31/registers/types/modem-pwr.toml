@@ -101,7 +101,7 @@ sources = ["S31_MMIO_MANUAL_2010D044", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027", "
 completeness = "partial"
 
 [review.entity."WORD_0044_OPAQUE.SLEEP16_FLAG_DISABLE"]
-sources = ["S31_MMIO_MANUAL_2010D044", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS", "HW16_S31_LP_SLEEP_LANES_20261026"]
+sources = ["S31_MMIO_MANUAL_2010D044", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS", "HW16_S31_LP_SLEEP_LANES_20261026", "HW29_S31_LP_SLEEP_20261027"]
 completeness = "partial"
 
 [review.entity."WORD_0044_OPAQUE.SLEEP17_FLAG_DISABLE"]
@@ -1266,7 +1266,7 @@ description = "The sleep0 nonzero branch pairs ETM+0x110 bit26, sleep-bank+0x40 
 name = "SLEEP16_FLAG_DISABLE"
 bits = "16"
 class = "write-only"
-description = "Observed bit16 command paired with the +0x40 sleep16 command. A positive low-byte +0x1c flag survives this command; suppression of a later +0x64 crossing not tested. It is not an acknowledgement of the tested flag or a mask of the known compare/rollover IRQ lanes. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS."
+description = "Bit16 command paired with the +0x40 sleep16 command. A positive low-byte +0x1c flag survives this command. At XTAL/divider399 with CONTROL0/4=0/0, disabling sleep16 before a fresh target64=origin+2048 crossing leaves flag1c=0 after4096 ticks; a fresh enabled control produces1. This command is not an acknowledgement of the tested flag or a mask of the known compare/rollover IRQ lanes. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS; HW29_S31_LP_SLEEP_20261027."
 
 [[registers.fields]]
 name = "SLEEP17_FLAG_DISABLE"
