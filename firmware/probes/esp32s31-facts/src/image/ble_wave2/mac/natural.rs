@@ -1,4 +1,4 @@
-//! One explicitly authorized natural period, not part of request-zero batches.
+//! One 38-minute natural-period observation, outside request-zero batches.
 //! No VALUE/UPDATE writes, timer seeding, RF, scheduler RUN or interrupt service.
 use super::{Session, all_mask, command, emit, enable, finish, sample, window};
 
@@ -6,7 +6,8 @@ use super::{Session, all_mask, command, emit, enable, finish, sample, window};
 // also used by the production boot clock owner. Read-back must establish
 // XTAL / 1 before using this nominal reference.
 const CPU_HZ: u64 = 40_000_000;
-// SOURCE: owner authorization 2026-10-27, hw-btlc-natural-wrap task.
+// Observation cadence and deadlines: journal every 90 s, ack at 2250 s,
+// finish at 2280 s; this holds the board for about 38 minutes.
 const JOURNAL_SECONDS: u64 = 90;
 const ACK_SECONDS: u64 = 2250;
 const END_SECONDS: u64 = 2280;
@@ -160,7 +161,7 @@ fn run(s: &mut Session<'_>, full_period: bool) {
     let mut acked = false;
     loop {
         // Keep the ROM watchdog armed. Each digital poll and latch is bounded;
-        // only this owner-authorized outer observation spans a full period.
+        // only this 38-minute outer observation spans a full period.
         feed(s);
         window(400_000);
         let Some(now) = observe(s) else {

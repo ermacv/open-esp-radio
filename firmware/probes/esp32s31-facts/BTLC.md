@@ -1,9 +1,9 @@
 # Natural BTLC wrap observation
 
-Selection 230 is the single 38-minute observation authorized on 2026-10-27.
-Selection 231 checks the same reset-origin setup for 120 ms before committing
-to that interval. Run under a held `cargo stand lease --board s31-a --air none`.
-Other long runs or repetitions require a new owner decision.
+Selection 230 observes one natural BTLC period and holds the board for about
+38 minutes. Selection 231 checks the same reset-origin setup for 120 ms before
+that interval. Run under a held `cargo stand lease --board s31-a --air none`.
+Project policy requires a separate decision for other long runs or repetitions.
 
 The PAC-only leaf resets the digital BT MAC/APB/timer domains, uses the sourced
 digital-clock prefix, selects CLOCK_SHIFT=3 and CONFIG_24=0, enables only the
