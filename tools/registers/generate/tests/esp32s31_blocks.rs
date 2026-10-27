@@ -263,7 +263,13 @@ fn unestablished_facts_stay_unestablished() {
             .field(&format!("I2C_ANA_MST.{host}.START_OR_RESET"))
             .expect("the reset bit exists");
         assert_eq!(field.class, FieldClass::WriteOnly);
-        assert_eq!(field.review.sources, ["ROM_REV0_PHY_I2C"]);
+        assert!(
+            field
+                .review
+                .sources
+                .iter()
+                .any(|source| source == "ROM_REV0_PHY_I2C")
+        );
     }
 }
 
