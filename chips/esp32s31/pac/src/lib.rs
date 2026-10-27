@@ -98,6 +98,27 @@
 //!     let _ = radio.read_hp_int_ena();
 //! }
 //! ```
+//!
+//! Modem wake-route observation is independent of clock configuration and
+//! grants no write to the inherited wake enables.
+//!
+//! ```
+//! fn observe(wake: &oer_esp32s31_pac::modem_lpcon::ModemWakeStatus) -> bool {
+//!     wake.read_modem_intr_wakeup_conf().lp_timer_intr_wakeup_en()
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn change(wake: &mut oer_esp32s31_pac::modem_lpcon::ModemWakeStatus) {
+//!     wake.modify_modem_intr_wakeup_conf(|_| {});
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn change(wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus) {
+//!     wake.modify_slp_wakeup_cntl2(|_| {});
+//! }
+//! ```
 
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]

@@ -709,3 +709,44 @@ stimulus or causally attribute the final result difference. The stronger
 reference separation in the older incomplete-preparation capture is not
 transferred to the corrected prefix or production. No statistical series or
 full calibration is added to resolve that limitation.
+
+
+## Awake BLE LP wake-route observations
+
+Selections 170/171/172 use one near compare / sleep16 / sleep17 target crossing
+in each CONTROL4 state, with CONTROL0 set. Each target is 2048 low-counter
+ticks ahead; the crossing poll stops after 200,000 cycles, and observations
+after a bit change or clear wait 4096 cycles. There is no system sleep request,
+RF, scheduler RUN, DMA or CPU interrupt admission. Sleep17 uses the existing
+advancing-BTLC/digital-ETM prefix (channels6/7 and bit11); prerequisites are not
+varied independently. Known +0x10 enables1/18 remain active. No other +0x10
+lane or sleep0 completion read is invented.
+
+Each mode emits five states: before programming, after a witnessed crossing,
+after toggling CONTROL4 with pending present, after the CONTROL1 trigger,
+and after the all-ones +0x34 clear. CONTROL4 changes preserve CONTROL0.
+A positive flag/cause must be checked independently of command completion.
+The next target uses the other initial CONTROL4 setting; these are distinct
+register conditions, not repeated baseline captures.
+
+State bases are `0x17100` (initial CONTROL4=0) and `0x17300` (initial
+CONTROL4=1); phase offsets are `0/0x10/0x20/0x30/0x40`. At each phase:
+
+| Tag offset | a | b | c |
+| --- | --- | --- | --- |
+| 0 | LP low counter | LP cause | matrix bank3 |
+| 1 | low byte1c | low byte20 | low byte24 |
+| 2 | low byte2c | readable mode58 image | PMU wakeup cause |
+| 3 | all modeled HP RAW fields | all HP ST fields | all HP ENA fields |
+| 4 | all modeled LP RAW fields | all LP ST fields | all LP ENA fields |
+| 5 | PMU reject cause | LP-CPU wakeup cause | PMU WAKEUP_ENA |
+| 6 | PMU last state | PMU target state | PMU current state |
+| 7 | LPCON modem interrupt vector | all 14 modem wake enables | LP ETM wake flag |
+
+`base+0xf0` records origin/target/initial mode; `base+0xf1` records crossing
+success/current counter/poll cycles. Mode58 contains every modeled readable
+field (0/2/3/4/31:5), excluding write-trigger bit1; it is not a full-word raw
+read. PMU/LPCON images are reconstructed only from typed getters and generated
+field geometry; reserved bits are unobserved. These snapshots neither
+acknowledge PMU state nor change any wake enable. A zero PMU cause while awake
+is not proof of absent silicon wake routing or a successful sleep/wake cycle.
