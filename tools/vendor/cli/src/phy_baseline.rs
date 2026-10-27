@@ -25,6 +25,9 @@ enum Command {
         /// Defaults to the chip's libphy-keyed Wi-Fi cold reference path.
         #[arg(long)]
         output: Option<PathBuf>,
+        /// Rebuild this reference's exact archived series under current metadata.
+        #[arg(long)]
+        reference: Option<PathBuf>,
     },
     /// Compare a recorded production run without building or flashing vendor code.
     Check {
@@ -46,6 +49,7 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
             source,
             revision,
             output,
+            reference,
         } => {
             let signature = Signature::current(&ctx.root)?;
             let mut inputs = vec![];
@@ -58,15 +62,20 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
                 )?);
             }
             let output = output.unwrap_or_else(|| signature.path(&ctx.root));
-            let provenance = Provenance::current(
-                &ctx.root,
-                &inputs.first().ok_or("no primary vendor captures")?.identity,
-            )?;
-            let reference =
-                baseline::generate(signature, provenance, inputs, &baseline::images(&ctx.root)?)?;
+            let images = baseline::images(&ctx.root)?;
+            let reference = match reference {
+                Some(path) => Reference::read(&path)?.regenerate(signature, inputs, &images)?,
+                None => {
+                    let provenance = Provenance::current(
+                        &ctx.root,
+                        &inputs.first().ok_or("no primary vendor captures")?.identity,
+                    )?;
+                    baseline::generate(signature, provenance, inputs, &images)?
+                }
+            };
             reference.validate(
                 &reference.signature,
-                &baseline::images(&ctx.root)?,
+                &images,
                 reference.boards.keys().next().ok_or("no boards")?,
                 revision,
             )?;
@@ -165,6 +174,8 @@ mod tests {
             Cli::try_parse_from([
                 "phy-baseline",
                 "generate",
+                "--reference",
+                "captured-reference.json",
                 "--source",
                 "s31-a=run-a",
                 "--source",

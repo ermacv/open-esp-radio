@@ -93,6 +93,9 @@ The [recorded vendor reference](../../../chips/esp32s31/vendor/phy-baselines/REA
 provides generated Wi-Fi cold bounds for labeled boards, keyed only by the
 pinned libphy artifact SHA-256. IDF and other capture inputs remain provenance;
 changing libphy without a reference yields INCOMPLETE.
+The generator can rebuild the same authenticated archive series under current
+register metadata. Retired MMIO bounds and original per-boot observations stay
+in provenance; active coverage remains exact.
 `cargo hil run phy-recorded-calibration-cold --chip esp32s31 --board s31-b`
 captures only the diagnostic image and applies the same comparison rules;
 no vendor image is built or flashed on this path.

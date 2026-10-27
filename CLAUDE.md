@@ -155,6 +155,9 @@ system these rules serve.
   IDF, application, ROM, `esp_phy` and recipe inputs remain capture provenance
   and never invalidate a reference for the same libphy. Missing libphy
   reference is INCOMPLETE. Coverage, metadata and measured-bound checks apply.
+  Regeneration projects archived primary captures through current metadata;
+  retired MMIO bounds and unmasked per-boot observations remain provenance.
+  Only active words are compared, with exact coverage still required.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables

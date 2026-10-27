@@ -14,6 +14,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod archive;
+#[cfg(test)]
+mod archive_tests;
 pub mod runs;
 #[cfg(test)]
 mod tests;
@@ -38,6 +41,8 @@ pub struct Provenance {
     pub relation_sha256: String,
     pub review_sha256: String,
     pub recipe_sha256: String,
+    pub retired_mmio: BTreeMap<String, Entry>,
+    pub retired_series: Vec<RetiredSeries>,
 }
 fn digest(root: &Path, files: &[&str]) -> Result<String> {
     let mut bytes = Vec::new();
@@ -186,6 +191,8 @@ impl Provenance {
                     "tools/vendor/phy-esp32s31/src/compare/initial_pair.rs",
                 ],
             )?,
+            retired_mmio: BTreeMap::new(),
+            retired_series: Vec::new(),
         })
     }
 }
@@ -201,6 +208,14 @@ pub struct Source {
     pub date: String,
     pub samples: usize,
     pub observations_sha256: String,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RetiredSeries {
+    pub board: String,
+    pub source: Source,
+    /// Unmasked observations, in the primary series' original boot order.
+    pub boots: Vec<Readings>,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -388,7 +403,17 @@ pub fn generate(
     };
     let mut boots: BTreeMap<String, Vec<VendorBoot>> = BTreeMap::new();
     let mut source_ids = BTreeSet::new();
-    for input in inputs {
+    if !reference.provenance.retired_series.is_empty() {
+        return Err("retired observations must be regenerated from primary captures".into());
+    }
+    let retired = archive::image(&reference.provenance, images)?;
+    let captured = images
+        .registers
+        .iter()
+        .chain(&retired)
+        .cloned()
+        .collect::<Vec<_>>();
+    for mut input in inputs {
         if !label(&input.label)
             || input.identity.vendor_idf_revision != reference.provenance.idf_revision
             || input.identity.vendor_application_sha256
@@ -417,8 +442,11 @@ pub fn generate(
             return Err("board revision changed".into());
         }
         board.samples += input.boots.len();
-        board.sources.push(input.source);
-        for boot in &input.boots {
+        board.sources.push(input.source.clone());
+        let mut retired_boots = vec![];
+        for boot in &mut input.boots {
+            complete(&boot.registers, &captured, true)?;
+            retired_boots.push(archive::take(&mut boot.registers, &retired)?);
             complete(&boot.registers, &images.registers, true)?;
             complete(&boot.analog, &images.analog, false)?;
             if boot
@@ -428,6 +456,13 @@ pub fn generate(
             {
                 return Err("vendor object length changed".into());
             }
+        }
+        if !retired.is_empty() {
+            reference.provenance.retired_series.push(RetiredSeries {
+                board: input.label.clone(),
+                source: input.source,
+                boots: retired_boots,
+            });
         }
         boots.entry(input.label).or_default().extend(input.boots);
     }
@@ -530,6 +565,14 @@ pub fn generate(
                 .then(a.repetition.cmp(&b.repetition))
         });
     }
+    reference.provenance.retired_series.sort_by(|a, b| {
+        a.board
+            .cmp(&b.board)
+            .then(a.source.run_id.cmp(&b.source.run_id))
+            .then(a.source.scenario.cmp(&b.source.scenario))
+            .then(a.source.repetition.cmp(&b.source.repetition))
+    });
+    archive::validate(&reference.provenance, &reference.boards, images)?;
     Ok(reference)
 }
 #[derive(Debug, Serialize)]
@@ -591,6 +634,7 @@ impl Reference {
                 return Err("invalid board sample provenance".into());
             }
         }
+        archive::validate(&self.provenance, &self.boards, images)?;
         let expected = metadata(self.lifecycle, images)?;
         if expected.len() != self.entries.len() {
             return Err("missing reference coverage".into());
@@ -732,8 +776,15 @@ impl Reference {
                     .ok_or("unknown register index")
             })
             .collect::<std::result::Result<Vec<_>, _>>()?;
+        let retired = archive::image(&self.provenance, images)?;
+        let mut production = production.to_vec();
+        for boot in &mut production {
+            // Archived production boots may still include the retired words.
+            // Their original attachments remain unchanged in the run store.
+            archive::take(&mut boot.registers, &retired)?;
+        }
         let mut objects = vec![];
-        for boot in production {
+        for boot in &production {
             complete(&boot.registers, &selected, false)?;
             complete(&boot.analog, &images.analog, false)?;
             objects.push(

@@ -1,12 +1,12 @@
 use super::*;
 use oer_vendor_phy::calibration_capture::space::Register;
 
-fn signature() -> Signature {
+pub(super) fn signature() -> Signature {
     Signature {
         libphy_sha256: "a".repeat(64),
     }
 }
-fn provenance() -> Provenance {
+pub(super) fn provenance() -> Provenance {
     Provenance {
         vendor_application_sha256: "app".into(),
         idf_revision: "pin".into(),
@@ -15,9 +15,11 @@ fn provenance() -> Provenance {
         relation_sha256: "relation".into(),
         review_sha256: "reviews".into(),
         recipe_sha256: "recipe".into(),
+        retired_mmio: BTreeMap::new(),
+        retired_series: vec![],
     }
 }
-fn images() -> RegisterImages {
+pub(super) fn images() -> RegisterImages {
     RegisterImages {
         registers: vec![
             Register {
@@ -38,7 +40,7 @@ fn images() -> RegisterImages {
         }],
     }
 }
-fn identity() -> Images {
+pub(super) fn identity() -> Images {
     Images {
         vendor_idf_revision: "pin".into(),
         vendor_application_sha256: "app".into(),
@@ -47,7 +49,7 @@ fn identity() -> Images {
         ..Images::default()
     }
 }
-fn vendor(value: i16, counter: u32) -> VendorBoot {
+pub(super) fn vendor(value: i16, counter: u32) -> VendorBoot {
     let fields = compare::fields();
     let len = fields
         .iter()
@@ -74,7 +76,7 @@ fn vendor(value: i16, counter: u32) -> VendorBoot {
         ..VendorBoot::default()
     }
 }
-fn production(vendor: &VendorBoot) -> ProductionBoot {
+pub(super) fn production(vendor: &VendorBoot) -> ProductionBoot {
     let fields = compare::fields();
     let len = fields
         .iter()
@@ -95,7 +97,7 @@ fn production(vendor: &VendorBoot) -> ProductionBoot {
         analog: vendor.analog.clone(),
     }
 }
-fn input(label: &str, boots: Vec<VendorBoot>) -> Input {
+pub(super) fn input(label: &str, boots: Vec<VendorBoot>) -> Input {
     Input {
         label: label.into(),
         revision: 0,

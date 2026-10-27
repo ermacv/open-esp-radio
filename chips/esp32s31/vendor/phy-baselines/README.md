@@ -17,6 +17,7 @@ reference must have the selected libphy identity too.
 
 ```console
 cargo vendor-check phy-baseline generate --source s31-a=/path/to/run-a --source s31-b=/path/to/run-b --source s31-b=/path/to/additional-run-b
+cargo vendor-check phy-baseline generate --reference /path/to/reference.json --source s31-a=/path/to/run-a --source s31-b=/path/to/run-b --source s31-b=/path/to/additional-run-b
 cargo hil run phy-recorded-calibration-cold --chip esp32s31 --board s31-b
 cargo vendor-check phy-baseline check --board s31-b --run /path/to/production-run
 ```
@@ -28,6 +29,19 @@ invalidate complete vendor measurements. Each board needs at least ten
 primary vendor boots; larger complete series are retained, with their actual
 sample counts and run IDs. The silicon revision is recorded explicitly
 (`generate --revision 0` for the measured rev0 boards).
+
+`generate --reference` rebuilds that reference's exact source series from
+authenticated archived primary captures, using current register names, masks
+and reviewed metadata. It requires the same libphy, boards, source identities,
+sample counts, channel and calibration-object size. No new capture is needed.
+Every active word must be present. A captured MMIO word no longer selected by
+the current model is removed from the active table and retained in
+`provenance.retired-mmio` with its original metadata and measured bounds.
+`provenance.retired-series` retains its unmasked value or explicit unreadability
+for every original boot, tied to the board and source run/repetition. The
+committed reference retains nine such MMIO words. Unknown addresses, missing
+active or retired coverage, changed sources and lost retired observations are
+refused. Repeated regeneration preserves those original observations.
 
 Schema 2 stores entry identities in sorted maps. Each field, MMIO word or analog
 byte records its width/count, address where applicable, signedness, mask and
@@ -43,13 +57,14 @@ window/control word remains subject to the vendor-spread value comparison.
 The document's `signature` contains only `libphy-sha256`. Its `provenance`
 retains the capture's IDF revision and vendor application SHA-256, plus the
 scenario, register model, relation, reviews and capture/comparison recipe
-digests used at generation. ROM and `esp_phy` pins are historical capture
+digests of the original capture interpretation. The active table embeds its
+current metadata explicitly. ROM and `esp_phy` pins are historical capture
 inputs recorded through the recipe's artifact-manifest digest and the source
 repository commits. None of these provenance values participates in baseline
 identity or is compared against current pins or recipes. Board provenance
 retains silicon revision, UTC date, actual N, source run/repetition, repository
 commit/dirty flag and observation digest. Generation applies the current
-reviewed interpretation to the retained primary capture data. The original
+reviewed interpretation to the retained primary capture data. Full original
 captures remain in the local run store and are not committed.
 
 The recorded scenario builds/flashes only the diagnostic image, resets it
@@ -59,6 +74,10 @@ Unknown board, different silicon revision or libphy, incompatible field/register
 metadata, missing readable values or incomplete calibration yields INCOMPLETE. DIFF and INCOMPLETE both fail;
 their evidence is retained. A recorded comparison is a state comparison, not
 an RF-quality or timing qualification.
+Archived production captures may contain the same retired MMIO words; they
+remain in their authenticated run attachments and do not participate in active
+comparison. Other unexpected addresses or missing active words remain
+INCOMPLETE. New captures need only the active reference's readability image.
 
 An IDF, application, ROM, `esp_phy` or recipe change preserves the baseline
 when libphy is unchanged; complete production captures yield MATCH or DIFF
