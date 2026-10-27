@@ -1,7 +1,7 @@
 //! PAC-only experiments. Add a leaf to PROBES; production has no probe hooks.
 #![allow(
     unsafe_code,
-    reason = "standalone probe entry, trap ABI and retained SRAM"
+    reason = "standalone probe entry, handler export and retained SRAM"
 )]
 const SECONDARY: pac::SecondaryHart = const { pac::Hart::SECONDARIES[0] };
 
@@ -126,7 +126,7 @@ fn halt() -> ! {
     }
 }
 
-// SAFETY: generated vector aliases call the handler using the C ABI;
+// SAFETY: the probe trap entry `_facts_irq` calls the handler using the C ABI;
 // SOURCE points to the live shared PAC source until all interrupts are disabled.
 #[unsafe(no_mangle)]
 extern "C" fn facts_irq() {
