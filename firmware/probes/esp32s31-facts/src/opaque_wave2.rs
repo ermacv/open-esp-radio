@@ -17,7 +17,7 @@ fn settle(cycles: u32) {
 
 /// Probe-specific transport prefix. Its complete differences from production
 /// power/phy_rf_init are listed in the README; no calibrated epoch is claimed.
-fn prepare(s: &mut Session<'_>) {
+pub(super) fn prepare(s: &mut Session<'_>) {
     contain(s);
     // SOURCE: hal/src/power/chip_clocks.rs ClockCounts::adopt/ClockWords.
     s.sar

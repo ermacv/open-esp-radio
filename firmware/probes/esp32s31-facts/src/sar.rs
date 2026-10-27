@@ -197,7 +197,11 @@ impl Sar {
         self.powered = true;
         self.power_readback()
     }
-    fn analog_byte(&mut self, address: pac::analog_i2c::Address, write: Option<u8>) -> Option<u8> {
+    pub(super) fn analog_byte(
+        &mut self,
+        address: pac::analog_i2c::Address,
+        write: Option<u8>,
+    ) -> Option<u8> {
         // SOURCE: production phy/i2c/master.rs. Resolve command alias and host
         // for every operation, including writes, through the generated route.
         let route =

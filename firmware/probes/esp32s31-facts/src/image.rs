@@ -16,6 +16,7 @@ mod opaque;
 #[path = "opaque_wave2.rs"]
 mod opaque_wave2;
 
+mod analog_pmu;
 mod ble;
 mod ble_inherited;
 mod ble_wave2;
@@ -209,6 +210,7 @@ struct Session<'a> {
     radio: radio_local::Radio,
     generic: generic::Hardware,
     opaque: opaque::Hardware,
+    tx_control: pac::wifi_mac::WifiMacTxQueueControl,
 }
 struct Probe {
     id: u32,
@@ -741,6 +743,90 @@ const PROBES: &[Probe] = &[
         id: 9,
         run: Action::Thread(threshold_raising),
     },
+    Probe {
+        id: 240,
+        run: Action::Thread(analog_pmu::cold_none),
+    },
+    Probe {
+        id: 241,
+        run: Action::Thread(analog_pmu::cold_23),
+    },
+    Probe {
+        id: 242,
+        run: Action::Thread(analog_pmu::cold_9),
+    },
+    Probe {
+        id: 243,
+        run: Action::Thread(analog_pmu::cold_pair),
+    },
+    Probe {
+        id: 244,
+        run: Action::Thread(analog_pmu::registers),
+    },
+    Probe {
+        id: 245,
+        run: Action::Thread(analog_pmu::rxdesc),
+    },
+    Probe {
+        id: 250,
+        run: Action::Thread(analog_pmu::injection::<1, 0>),
+    },
+    Probe {
+        id: 251,
+        run: Action::Thread(analog_pmu::injection::<1, 1>),
+    },
+    Probe {
+        id: 252,
+        run: Action::Thread(analog_pmu::injection::<1, 2>),
+    },
+    Probe {
+        id: 253,
+        run: Action::Thread(analog_pmu::injection::<1, 3>),
+    },
+    Probe {
+        id: 254,
+        run: Action::Thread(analog_pmu::injection::<1, 4>),
+    },
+    Probe {
+        id: 255,
+        run: Action::Thread(analog_pmu::injection::<2, 0>),
+    },
+    Probe {
+        id: 256,
+        run: Action::Thread(analog_pmu::injection::<2, 1>),
+    },
+    Probe {
+        id: 257,
+        run: Action::Thread(analog_pmu::injection::<2, 2>),
+    },
+    Probe {
+        id: 258,
+        run: Action::Thread(analog_pmu::injection::<2, 3>),
+    },
+    Probe {
+        id: 259,
+        run: Action::Thread(analog_pmu::injection::<2, 4>),
+    },
+    Probe {
+        id: 260,
+        run: Action::Thread(analog_pmu::injection::<3, 0>),
+    },
+    Probe {
+        id: 261,
+        run: Action::Thread(analog_pmu::injection::<3, 1>),
+    },
+    Probe {
+        id: 262,
+        run: Action::Thread(analog_pmu::injection::<3, 2>),
+    },
+    Probe {
+        id: 263,
+        run: Action::Thread(analog_pmu::injection::<3, 3>),
+    },
+    Probe {
+        id: 264,
+        run: Action::Thread(analog_pmu::injection::<3, 4>),
+    },
 ];
 
 // SAFETY: _start initializes the image and calls this once on hart 0.
@@ -751,6 +837,7 @@ extern "C" fn facts_main() -> ! {
     let source_owner = p.software_interrupt_2.from_cpu2;
     let mut s = Session {
         sar: sar::Sar::new(p.radio_phy, p.chip_clocks, p.boot, p.analog_bus),
+        tx_control: p.wifi_mac.wifi_mac_tx_queue_control,
         source: &source_owner,
         interrupt_matrix: p.interrupt_matrix,
         core_control: p.core_control,
