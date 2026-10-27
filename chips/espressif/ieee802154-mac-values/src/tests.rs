@@ -60,7 +60,7 @@ enum InterruptTransitionOperation {
     StopTimer0,
     StopTimer1,
     EnableEvents,
-    EnableHandledEvents,
+    DiscardStartupEvents,
     MaskEvents,
     MaskTxAborts,
     EnableRuntimeTxAborts,
@@ -80,6 +80,9 @@ struct RecordingInterruptTransitionPort {
     pending: bool,
     expire_on_stop: bool,
     operations: Vec<InterruptTransitionOperation>,
+    line_was_high: bool,
+    handler_calls: usize,
+    bound: bool,
 }
 
 impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
@@ -104,6 +107,7 @@ impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
 
     fn enable_all_events(&mut self) {
         self.events_enabled = true;
+        self.observe_line();
         self.operations
             .push(InterruptTransitionOperation::EnableEvents);
     }
@@ -135,6 +139,7 @@ impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
     }
 
     fn order_device_accesses(&mut self) {
+        self.observe_line();
         self.operations
             .push(InterruptTransitionOperation::OrderDeviceAccesses);
     }
@@ -170,6 +175,9 @@ fn arming_never_exposes_or_acknowledges_pending_before_binding() {
         pending: true,
         expire_on_stop: false,
         operations: Vec::new(),
+        line_was_high: false,
+        handler_calls: 0,
+        bound: false,
     };
     execute_interrupt_arming(
         &mut port,
@@ -198,6 +206,9 @@ fn production_deactivation_stops_every_engine_before_final_affine_ack() {
         pending: false,
         expire_on_stop: true,
         operations: Vec::new(),
+        line_was_high: false,
+        handler_calls: 0,
+        bound: false,
     };
     execute_interrupt_deactivation(&mut port);
 
@@ -229,6 +240,9 @@ fn masked_zero_cannot_clear_pending_but_a_saved_positive_sample_can() {
         pending: true,
         expire_on_stop: false,
         operations: Vec::new(),
+        line_was_high: false,
+        handler_calls: 0,
+        bound: false,
     };
     let saved = port.sample_events();
     port.mask_all_events();
@@ -253,64 +267,89 @@ fn a_security_payload_offset_is_made_only_inside_seven_bits() {
 }
 
 impl super::Ieee802154InterruptInitializationPort for RecordingInterruptTransitionPort {
-    type Fault = core::convert::Infallible;
-    fn enable_handled_events(&mut self) {
-        self.events_enabled = true;
+    fn discard_startup_events(&mut self) {
+        assert!(!self.events_enabled && !self.bound);
+        self.pending = false;
         self.operations
-            .push(InterruptTransitionOperation::EnableHandledEvents);
+            .push(InterruptTransitionOperation::DiscardStartupEvents);
     }
-    fn acknowledge_startup_events(
-        &mut self,
-        snapshot: Self::EventSnapshot,
-    ) -> Result<(), Self::Fault> {
-        self.acknowledge_events(snapshot);
-        Ok(())
+}
+
+impl RecordingInterruptTransitionPort {
+    fn line_high(&self) -> bool {
+        self.events_enabled && self.pending
+    }
+    fn observe_line(&mut self) {
+        self.line_was_high |= self.line_high();
+        // Emulate CPU admission at every observable boundary, rather than
+        // waiting for the test to explicitly poll after initialization.
+        let _ = self.service_interrupt();
+    }
+    fn service_interrupt(&mut self) -> bool {
+        if !self.bound || !self.line_high() {
+            return false;
+        }
+        self.handler_calls += 1;
+        self.pending = false;
+        true
     }
 }
 
 #[test]
-fn saved_timer1_pending_is_consumed_before_a_new_operation_can_take_it() {
+fn pre_bind_discard_consumes_hidden_timer1_without_delivery_or_storm() {
     let mut port = RecordingInterruptTransitionPort {
         event_identity: 1,
         events_enabled: false,
         pending: true,
         expire_on_stop: true,
         operations: Vec::new(),
+        line_was_high: false,
+        handler_calls: 0,
+        bound: false,
     };
-    execute_interrupt_arming(
+    // Measured masking hides timer1 pending; a fresh zero sample cannot ack it.
+    assert_eq!(port.sample_events(), RecordingEventSnapshot(0));
+    assert!(port.pending);
+    port.operations.clear();
+    super::execute_interrupt_initialization(
         &mut port,
         Ieee802154InterruptActivationPlan::SOURCE_CONFIRMED_BASELINE,
     );
-    assert!(port.pending, "masking alone must not invent a clear");
-    port.operations.clear();
-    super::execute_interrupt_initialization(&mut port).unwrap();
     assert_eq!(
         port.operations,
         [
+            InterruptTransitionOperation::MaskEvents,
+            InterruptTransitionOperation::EnableRuntimeTxAborts,
+            InterruptTransitionOperation::EnableRuntimeRxAborts,
+            InterruptTransitionOperation::OrderDeviceAccesses,
             InterruptTransitionOperation::StopOperation,
             InterruptTransitionOperation::StopTimer0,
             InterruptTransitionOperation::StopTimer1,
             InterruptTransitionOperation::OrderDeviceAccesses,
-            InterruptTransitionOperation::EnableHandledEvents,
-            InterruptTransitionOperation::OrderDeviceAccesses,
-            InterruptTransitionOperation::SampleStaleEvents(1),
-            InterruptTransitionOperation::MaskEvents,
-            InterruptTransitionOperation::AcknowledgeStaleEvents(1),
+            InterruptTransitionOperation::DiscardStartupEvents,
             InterruptTransitionOperation::OrderDeviceAccesses,
         ]
     );
-    assert!(!port.events_enabled);
-    // A new timed operation now installs its callback and enables its lane.
+    assert!(!port.pending && !port.line_high() && !port.line_was_high);
+    assert_eq!(port.handler_calls, 0);
+    assert!(!port.service_interrupt());
+
+    // Bind only after discard. Enabling the handled set cannot deliver the
+    // inherited pending, so a newly installed callback receives no stale IRQ.
+    port.bound = true;
     port.events_enabled = true;
+    for _ in 0..32 {
+        assert!(!port.service_interrupt());
+    }
+    assert!(!port.line_high());
     assert_eq!(
-        port.sample_events(),
-        RecordingEventSnapshot(0),
-        "old timer1 pending cannot invoke the new callback"
+        port.handler_calls, 0,
+        "neither stale callback nor IRQ storm"
     );
+    // A fresh deadline delivers once and then leaves the line low.
     port.pending = true;
-    assert_eq!(
-        port.sample_events(),
-        RecordingEventSnapshot(1),
-        "a fresh deadline still reaches the new operation"
-    );
+    assert!(port.service_interrupt());
+    assert!(!port.service_interrupt());
+    assert!(!port.line_high());
+    assert_eq!(port.handler_calls, 1);
 }

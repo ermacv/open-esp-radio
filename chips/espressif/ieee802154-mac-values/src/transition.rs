@@ -31,8 +31,8 @@ pub trait Ieee802154InterruptTransitionPort {
 /// activation, with every event left masked.
 ///
 /// Mask every event before installing the abort baseline. No event is
-/// enabled or acknowledged here. Initialization consumes retained startup
-/// pending after binding, or after obtaining the polling route's authority.
+/// enabled or acknowledged here. The pre-bind initialization continues with
+/// STOP and an unsampled discard before the IRQ owner becomes bindable.
 /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
 #[doc(hidden)]
 pub fn execute_interrupt_arming<Port>(port: &mut Port, _plan: Ieee802154InterruptActivationPlan)
@@ -45,37 +45,31 @@ where
     port.order_device_accesses();
 }
 
-/// Startup operations available only in a typed post-bind initialization or
-/// in a pair holding the silent-route proof. Unsupported events stay unacked.
+/// Startup discard available only while the task still owns the unbound IRQ
+/// part. Every event before binding is stale and cannot be serviced.
 #[doc(hidden)]
 pub trait Ieee802154InterruptInitializationPort: Ieee802154InterruptTransitionPort {
-    type Fault;
-    fn enable_handled_events(&mut self);
-    fn acknowledge_startup_events(
-        &mut self,
-        snapshot: Self::EventSnapshot,
-    ) -> Result<(), Self::Fault>;
+    fn discard_startup_events(&mut self);
 }
 
-/// Stop startup producers, expose only handled lanes, sample once, mask and
-/// acknowledge that exact sample. The caller releases operational ownership
-/// only after success. Timer0 is sampled here too, then remains masked until
-/// its per-transmission ACK wait. No operation callback can consume old pending.
+/// Mask delivery, install the abort baseline, issue STOP and both timer stops,
+/// then discard all fourteen event lanes without sampling. Pending hidden by
+/// the mask is discarded too. No lane is enabled and no handler cell is lent.
+/// The HAL releases the bindable IRQ owner only after the final fence.
+/// SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026;
+/// HW26_S31_IEEE_ABORT_20261027 (masked ack qualification: timers and reason26).
 #[doc(hidden)]
 pub fn execute_interrupt_initialization<Port: Ieee802154InterruptInitializationPort>(
     port: &mut Port,
-) -> Result<(), Port::Fault> {
+    plan: Ieee802154InterruptActivationPlan,
+) {
+    execute_interrupt_arming(port, plan);
     port.stop_operation();
     port.stop_timer0();
     port.stop_timer1();
     port.order_device_accesses();
-    port.enable_handled_events();
+    port.discard_startup_events();
     port.order_device_accesses();
-    let stale = port.sample_events();
-    port.mask_all_events();
-    let result = port.acknowledge_startup_events(stale);
-    port.order_device_accesses();
-    result
 }
 
 /// Issue the teardown commands and selected acknowledgement of a polled epoch.

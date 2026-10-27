@@ -113,25 +113,21 @@ clear its pending event while enabled, then disable that event. Starting a
 new ACK wait enables timer0's event and clears old pending while the timer is
 stopped, before programming and starting the next deadline. This prevents a
 retained timeout from completing a later transmission with a false `NoAck`.
-The S31 HAL consumes a saved affine event snapshot for acknowledgement;
-copyable observations grant no write authority. Interrupt arming masks every
-event and returns an affine startup task owner. New operations are unavailable
-until a typed post-bind transaction through `Bound` consumes startup pending;
-the IRQ owner stays in the handler cell. Only the HAL can create that opaque
-context, so the task receives no general acknowledgement API. Polling performs
-the same step with `Silent` before the combined MAC owner exists.
-Initialization issues STOP and both timer-stop commands, exposes only handled
-lanes (including timer0), saves one sample, masks and acknowledges it, and
-returns the task owner with events masked. Thus inherited timer1 pending cannot
-invoke a new `receive_at` callback. The subsequent working event sets stay
-unchanged. Unexpected visible startup events remain unacknowledged and produce
-`Fault::StartupEvents`; their owners stay quarantined through retained reset.
-The new 12-byte record carries that reason without an engine state. Its
-magic, packed diagnostic and checksum add 12 retained bytes to the PHY HIL
-image. The diagnostic packs all fourteen event flags, state and reason;
-its positions are independent from hardware register encoding. Masked
-visibility and hidden pending are unmeasured for lanes 7/10/13: this check
-rejects only lanes visible in the sample, without proving hidden absence.
+The S31 HAL consumes a saved affine event snapshot for runtime acknowledgement;
+copyable observations grant no write authority. Before binding, `arm` consumes
+both task and inactive IRQ owners, masks all events, installs the abort
+baseline, issues STOP and both timer stops, then discards every event lane
+without a sample through the existing IRQ part. All pre-bind pending is stale
+and cannot be serviced. The fixed W1C image includes all fourteen lanes even
+when masked status reads zero; its read preserves undeclared bits only.
+The returned affine task owner has no operational methods. After the IRQ owner
+moves into its handler, task activation with `Bound` publishes the handled set
+plus timer0 without accessing the handler cell. Later session publication keeps
+the existing runtime selection. Polling instead requires `Silent` after the
+same pre-bind discard. Inherited timer1 pending cannot reach a new operation.
+Masked ack is measured for timers0/1 and RX_ABORT reason26; masked visibility
+and hidden pending on 7/10/13 remain unmeasured. No zero read establishes their
+absence, and the startup discard does not prove producer drain.
 Deactivation issues STOP and both timer-stop commands, samples, masks and
 acknowledges its saved sample. These commands and selected acknowledgements do
 not prove that every hardware producer drained.

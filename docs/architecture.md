@@ -118,11 +118,13 @@ release a secondary hart.
   handler learns which fired from the peripherals' status. A part is bound
   once and its handler holds it for the image's life: a task asks the
   handler for each bank transition, and the CPU route never changes.
-  IEEE 802.15.4 admits one typed post-bind initialization through `Bound`:
-  the part's defining crate selects its opaque context and retains the IRQ
-  owner in the handler cell. This consumes startup pending before releasing
-  the affine task owner for new operations; it grants no general task-side
-  acknowledgement. A polling pair performs the same transaction with `Silent`.
+  IEEE 802.15.4 prepares its IRQ owner before binding: while task code still
+  owns both sides, it masks delivery, issues STOP and both timer stops and
+  discards all fourteen stale event lanes without sampling. No pre-bind event
+  can be serviced. The bindable IRQ owner is returned only after this step;
+  bound activation then publishes the handled set plus timer0 through the task
+  owner alone. No task accesses the handler cell. Polling retains `Silent`
+  after the same pre-bind discard.
   The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.

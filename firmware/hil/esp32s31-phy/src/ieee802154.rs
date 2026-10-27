@@ -244,10 +244,7 @@ impl Rx {
         } = RegisteredIeee802154Operational::new(foundation, member);
         let silent = self.silent.take().ok_or(RejectReason::Internal)?;
         let (startup, interrupts) = interrupts.arm(task);
-        let mac = match Ieee802154MacOwners::new(startup, interrupts, silent) {
-            Ok(mac) => mac,
-            Err(quarantine) => reset_fault(quarantine.fault()),
-        };
+        let mac = Ieee802154MacOwners::new(startup, interrupts, silent);
         let mut engine = match self.detached.take() {
             Some(detached) => detached.rebind(mac),
             None => Ieee802154Engine::place(

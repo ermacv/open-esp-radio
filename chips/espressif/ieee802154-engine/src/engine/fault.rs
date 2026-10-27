@@ -7,12 +7,6 @@ use core::fmt::{self, Write};
 /// Impossible hardware input; no selected event has been acknowledged or dispatched.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Fault {
-    /// Unsupported events sampled while consuming startup pending, before
-    /// operational ownership or an engine state exists.
-    StartupEvents {
-        /// Complete source event sample, left unacknowledged and masked.
-        observation: Ieee802154EventObservation,
-    },
     /// A sample includes an unnamed lane or the unsupported clock-match event.
     UnhandledEvents {
         /// Complete sampled event set, including each unnamed lane separately.
@@ -50,12 +44,12 @@ const STATES: [Ieee802154State; 11] = [
     Ieee802154State::Ed,
     Ieee802154State::Cca,
 ];
-const MAGIC: u32 = 0x154f_0002;
+const MAGIC: u32 = 0x154f_0003;
 // Diagnostic layout: named events in bits 0..=11, unnamed 7/13 at 12/13,
-// state at 14..=17, startup reason at 18; upper bits are reserved.
+// state at 14..=17, reason (UnhandledEvents = 0) at 18; upper bits are reserved.
 const STATE_SHIFT: u32 = 14;
 const STATE_MASK: u32 = 0xf;
-const STARTUP: u32 = 1 << 18;
+const REASON: u32 = 1 << 18;
 const RECORD_BITS: u32 = (1 << 19) - 1;
 
 /// Twelve retained bytes: magic, packed diagnostic and checksum. The fourteen
@@ -72,17 +66,13 @@ pub struct FaultRecord {
 impl FaultRecord {
     /// Retain a terminal fault before software reset, without releasing owners.
     pub fn record(&mut self, fault: Fault) {
-        let (observation, state, reason) = match fault {
-            Fault::UnhandledEvents { observation, state } => (observation, state as u32, 0),
-            Fault::StartupEvents { observation } => (observation, 0, STARTUP),
-        };
+        let Fault::UnhandledEvents { observation, state } = fault;
         self.magic = 0;
         self.raw = NAMED.into_iter().enumerate().fold(0, |raw, (bit, event)| {
             raw | (u32::from(observation.contains(event)).wrapping_shl(bit as u32))
         }) | (u32::from(observation.events_7()) << 12)
             | (u32::from(observation.events_13()) << 13)
-            | (state << STATE_SHIFT)
-            | reason;
+            | ((state as u32) << STATE_SHIFT);
         self.checksum = self.checksum();
         self.magic = MAGIC;
     }
@@ -95,7 +85,7 @@ impl FaultRecord {
         if self.magic != MAGIC || self.checksum != self.checksum() {
             return None;
         }
-        if self.raw & !RECORD_BITS != 0 {
+        if self.raw & !RECORD_BITS != 0 || self.raw & REASON != 0 {
             return None;
         }
         let events = NAMED.into_iter().enumerate().fold(
@@ -114,16 +104,12 @@ impl FaultRecord {
             self.raw & (1 << 13) != 0,
         );
         let state = (self.raw >> STATE_SHIFT) & STATE_MASK;
-        match self.raw & STARTUP {
-            0 => Some(Fault::UnhandledEvents {
-                observation,
-                state: STATES
-                    .into_iter()
-                    .find(|candidate| *candidate as u32 == state)?,
-            }),
-            STARTUP if state == 0 => Some(Fault::StartupEvents { observation }),
-            _ => None,
-        }
+        Some(Fault::UnhandledEvents {
+            observation,
+            state: STATES
+                .into_iter()
+                .find(|candidate| *candidate as u32 == state)?,
+        })
     }
 
     /// Report a valid previous-boot fault once. Refused output retains it.
@@ -217,12 +203,13 @@ mod tests {
                     }
                 },
             );
-            let fault = Fault::StartupEvents {
+            let fault = Fault::UnhandledEvents {
                 observation: Ieee802154EventObservation::new(
                     events,
                     flags & (1 << 12) != 0,
                     flags & (1 << 13) != 0,
                 ),
+                state: Ieee802154State::Rx,
             };
             let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
             record.record(fault);
@@ -234,7 +221,8 @@ mod tests {
     fn invalid_state_reason_and_reserved_bits_are_rejected_with_valid_checksum() {
         for raw in [
             0xf << STATE_SHIFT,
-            STARTUP | (1 << STATE_SHIFT),
+            REASON,
+            REASON | (1 << STATE_SHIFT),
             1 << 19,
             1 << 31,
         ] {
@@ -247,39 +235,5 @@ mod tests {
             assert_eq!(record.fault(), None);
             record.report(|_| panic!("invalid encoding")).unwrap();
         }
-    }
-}
-
-#[cfg(test)]
-mod startup_tests {
-    use super::*;
-
-    #[test]
-    fn startup_reason_preserves_exact_events_in_twelve_bytes() {
-        let fault = Fault::StartupEvents {
-            observation: Ieee802154EventObservation::new(
-                Ieee802154Event::ClockCountMatch.mask(),
-                true,
-                false,
-            ),
-        };
-        let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
-        record.record(fault);
-        assert_eq!(record.fault(), Some(fault));
-        assert!(record.report(|_| false).is_err());
-        assert_eq!(record.fault(), Some(fault));
-        let mut output = std::vec::Vec::new();
-        record
-            .report(|bytes| {
-                output.extend_from_slice(bytes);
-                true
-            })
-            .unwrap();
-        assert!(
-            std::string::String::from_utf8(output)
-                .unwrap()
-                .contains(&std::format!("{fault:?}"))
-        );
-        record.report(|_| panic!("already reported")).unwrap();
     }
 }

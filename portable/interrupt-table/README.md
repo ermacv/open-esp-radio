@@ -138,12 +138,3 @@ associated scheduling constants in generic const expressions in a signature.
 ```console
 cargo test -p oer-interrupt-table
 ```
-
-`Bound::initialize` runs a part-defined `PostBindInitialization` transaction.
-The trait is implemented on the interrupt part, with no caller-selected type
-parameter: only the part's defining crate selects its opaque context. It
-returns the typed result without lending the part to an arbitrary callback.
-The handler cell refuses a nested loan immediately and leaves the context
-untouched. The IEEE 802.15.4 HAL creates its context only while consuming an
-affine startup task owner, so this transaction can acknowledge retained
-startup events without granting a general task-side acknowledgement API.

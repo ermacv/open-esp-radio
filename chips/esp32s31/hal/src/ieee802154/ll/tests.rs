@@ -42,13 +42,8 @@ fn a_timer_threshold_is_written_whole() {
 fn the_pib_accessors_read_back_what_they_write() {
     let mut memory = HostMemory::filled(0);
     let (task, setup) = memory.owners();
-    let (startup, mut interrupts) = setup.arm(task);
-    // Host memory stores W1C images rather than emulating pending. Supply
-    // an empty startup observation independently of the other word fills.
-    let empty = interrupts.events();
-    interrupts.clear_events(empty, Ieee802154EventMask::NONE);
-    let mut owners =
-        Ieee802154MacOwners::new(startup, interrupts, silent()).expect("empty startup sample");
+    let (startup, interrupts) = setup.arm(task);
+    let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
 
     owners.set_tx_auto_ack(true);
     owners.set_rx_auto_ack(true);
@@ -83,13 +78,8 @@ fn the_pib_accessors_read_back_what_they_write() {
 fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (task, setup) = memory.owners();
-    let (startup, mut interrupts) = setup.arm(task);
-    // Host memory stores W1C images rather than emulating pending. Supply
-    // an empty startup observation independently of the other word fills.
-    let empty = interrupts.events();
-    interrupts.clear_events(empty, Ieee802154EventMask::NONE);
-    let mut owners =
-        Ieee802154MacOwners::new(startup, interrupts, silent()).expect("empty startup sample");
+    let (startup, interrupts) = setup.arm(task);
+    let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
     owners.disable_coex();
     let pti = owners.task.mac_part().read_coex_pti();
     assert_eq!(pti.txrx_pti().get(), u32::from(COEX_DISABLED_PTI));
@@ -111,13 +101,8 @@ fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
 fn an_event_enable_reaches_only_its_event() {
     let mut memory = HostMemory::filled(0);
     let (task, setup) = memory.owners();
-    let (startup, mut interrupts) = setup.arm(task);
-    // Host memory stores W1C images rather than emulating pending. Supply
-    // an empty startup observation independently of the other word fills.
-    let empty = interrupts.events();
-    interrupts.clear_events(empty, Ieee802154EventMask::NONE);
-    let mut owners =
-        Ieee802154MacOwners::new(startup, interrupts, silent()).expect("empty startup sample");
+    let (startup, interrupts) = setup.arm(task);
+    let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
     // Arming left every event masked; the engine enables them.
     owners.enable_all_events();
     let events = owners.task.mac_part().read_event_enable();

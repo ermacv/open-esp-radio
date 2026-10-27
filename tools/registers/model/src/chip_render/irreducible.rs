@@ -188,7 +188,25 @@ pub(super) fn render(
         {
             return Err(Error::new(entity, "a fixed image sets an address field"));
         }
-        let value = if configuration {
+        let declared = target
+            .template
+            .fields
+            .iter()
+            .fold(0, |bits, field| bits | field.mask());
+        let preserve_w1c_reserved = !image.whole_word
+            && declared != u32::MAX
+            && !target.template.fields.is_empty()
+            && target
+                .template
+                .fields
+                .iter()
+                .all(|field| field.class == FieldClass::WriteOneToClear);
+        let value = if preserve_w1c_reserved {
+            // The fixed W1C set does not come from a status sample. Read
+            // only to preserve undeclared bits, as affine ack does.
+            let read = target.read(entity, owner)?;
+            format!("({read} & 0x{:08x}) | 0x{:08x}", !declared, image.value)
+        } else if configuration {
             let mask = target
                 .template
                 .fields

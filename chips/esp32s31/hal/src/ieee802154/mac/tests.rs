@@ -88,7 +88,7 @@ fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     );
     assert!(!(tx.rx_ack_stop() || tx.tx_stop() || tx.rx_ack_crc_error()));
     assert_eq!(tx.tx_abort_en_25_30().get(), 0);
-    // Arming leaves the status image untouched.
+    // Host memory stores the full startup-discard W1C image.
     assert!(
         interrupts
             .events()
@@ -116,7 +116,7 @@ fn clearing_events_acknowledges_only_the_sampled_events_the_mask_selects() {
     let (task, setup) = memory.owners();
     let (startup, mut interrupts) = setup.arm(task);
     let mut task = startup.task;
-    // Arming leaves the status image untouched, including unnamed lanes.
+    // Host memory stores the startup W1C image, including unnamed lanes.
     assert!(interrupts.events().observation().classification().is_err());
 
     let selected = mask(&[Ieee802154Event::TxDone, Ieee802154Event::RxSfdDone]);
@@ -487,26 +487,26 @@ fn startup_exposes_only_handled_events_and_keeps_runtime_selection_unchanged() {
 }
 
 #[test]
-fn unsupported_startup_observations_quarantine_both_polled_owners() {
-    assert_visible_startup_quarantine(true, true, true, true);
+fn startup_discards_all_fourteen_lanes() {
+    assert_startup_discard(true, true, true, true);
 }
 
 #[test]
-fn visible_startup_lane7_quarantines_without_acknowledgement() {
-    assert_visible_startup_quarantine(true, false, false, false);
+fn startup_discards_lane7() {
+    assert_startup_discard(true, false, false, false);
 }
 
 #[test]
-fn visible_startup_lane10_quarantines_without_acknowledgement() {
-    assert_visible_startup_quarantine(false, true, false, false);
+fn startup_discards_lane10() {
+    assert_startup_discard(false, true, false, false);
 }
 
 #[test]
-fn visible_startup_lane13_quarantines_without_acknowledgement() {
-    assert_visible_startup_quarantine(false, false, true, false);
+fn startup_discards_lane13() {
+    assert_startup_discard(false, false, true, false);
 }
 
-fn assert_visible_startup_quarantine(events_7: bool, clock: bool, events_13: bool, other: bool) {
+fn assert_startup_discard(events_7: bool, clock: bool, events_13: bool, other: bool) {
     let mut memory = HostMemory::filled(u32::MAX);
     let (task, mut setup) = memory.owners();
     // Host memory stores the selected W1C image as the next visible read.
@@ -532,25 +532,34 @@ fn assert_visible_startup_quarantine(events_7: bool, clock: bool, events_13: boo
     setup.mac.acknowledge_event_status(visible);
     let (startup, interrupts) = setup.arm(task);
     let observed = interrupts.events().observation();
-    let quarantine = match crate::ieee802154::ll::Ieee802154MacOwners::new(
-        startup,
-        interrupts,
-        super::host::silent(),
-    ) {
-        Ok(_) => panic!("unsupported startup cannot release operational owners"),
-        Err(quarantine) => quarantine,
-    };
-    assert_eq!(
-        quarantine.fault(),
-        super::Fault::StartupEvents {
-            observation: observed
-        }
-    );
-    let (startup, interrupts, _) = &*quarantine._owners;
     assert!(startup.task.foundation_snapshot().events_masked());
+    // Host memory stores the write image. Even when a lane was absent from
+    // the initial read, the pre-bind discard writes one to every event field.
     assert_eq!(
-        interrupts.events().observation(),
         observed,
-        "fault does not acknowledge any source lane"
+        oer_espressif_ieee802154_engine::types::Ieee802154EventObservation::new(
+            Ieee802154EventMask::NAMED,
+            true,
+            true,
+        )
+    );
+    let _owners =
+        crate::ieee802154::ll::Ieee802154MacOwners::new(startup, interrupts, super::host::silent());
+}
+
+#[test]
+fn startup_discards_hidden_pending_even_with_an_empty_visible_image() {
+    let mut memory = HostMemory::filled(0);
+    let (task, setup) = memory.owners();
+    let (startup, interrupts) = setup.arm(task);
+    assert!(startup.task.foundation_snapshot().events_masked());
+    let image = interrupts.events().observation();
+    assert_eq!(
+        image,
+        oer_espressif_ieee802154_engine::types::Ieee802154EventObservation::new(
+            Ieee802154EventMask::NAMED,
+            true,
+            true,
+        )
     );
 }

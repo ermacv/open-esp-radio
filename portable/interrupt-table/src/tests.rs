@@ -117,7 +117,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
     __oer_interrupt_h0_l16();
 
-    let bound: crate::Bound<TimerToken> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
+    let _bound: crate::Bound<TimerToken> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
     assert_eq!(crate::Bound::<TimerToken>::SOURCE, 3);
     assert_eq!(
         zero.controller.writes[before..],
@@ -176,21 +176,6 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert_eq!(
         <PairToken as Entry>::cell().with(|part| part.handled),
         Some(1)
-    );
-
-    let mut context = StartupCount(0);
-    assert_eq!(bound.initialize(&mut context), Some(2));
-    assert_eq!(context.0, 1);
-    // A nested loan is refused without accessing or changing the context.
-    assert_eq!(
-        <TimerToken as Entry>::cell().with(|_| bound.initialize(&mut context)),
-        Some(None)
-    );
-    assert_eq!(context.0, 1);
-    __oer_interrupt_h0_l16();
-    assert_eq!(
-        <TimerToken as Entry>::cell().with(|part| part.handled),
-        Some(3)
     );
 
     let mut one = fake_router(1);
@@ -332,18 +317,4 @@ fn only_a_silent_source_no_entry_binds_gets_the_polling_proof() {
             line: 30
         })
     );
-}
-
-pub struct StartupCount(usize);
-impl crate::PostBindInitialization for TimerIrq {
-    type Context<'a> = StartupCount;
-    type Output = u32;
-    fn initialize<E: Entry<Part = Self>>(
-        &mut self,
-        _bound: &crate::Bound<E>,
-        context: &mut StartupCount,
-    ) -> u32 {
-        context.0 += 1;
-        self.handled
-    }
 }

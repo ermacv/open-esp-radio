@@ -152,37 +152,7 @@ impl<E: Entry> core::fmt::Debug for Bound<E> {
     }
 }
 
-/// A part-defined post-bind transaction, with a typed context rather than
-/// an arbitrary callback or access to the handler's owner. Implementations
-/// keep their initialization context private and affine when it grants a
-/// one-time startup operation. The binding is required even for direct calls.
-pub trait PostBindInitialization: InterruptSources + Sized {
-    type Context<'a>
-    where
-        Self: 'a;
-    type Output;
-
-    fn initialize<E: Entry<Part = Self>>(
-        &mut self,
-        bound: &Bound<E>,
-        context: &mut Self::Context<'_>,
-    ) -> Self::Output;
-}
-
 impl<E: Entry> Bound<E> {
-    /// Run the bound part's typed initialization without lending the part to
-    /// the caller. Only the part's defining crate can select its context type;
-    /// refusal leaves that context untouched and never waits.
-    pub fn initialize(
-        &self,
-        context: &mut <E::Part as PostBindInitialization>::Context<'_>,
-    ) -> Option<<E::Part as PostBindInitialization>::Output>
-    where
-        E::Part: PostBindInitialization,
-    {
-        E::cell().with(|part| part.initialize(self, context))
-    }
-
     pub const LEVEL: u8 = E::LEVEL;
     pub const HART: u8 = E::HART;
     pub const CONTEXT: crate::Context = E::CONTEXT;

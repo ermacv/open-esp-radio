@@ -455,7 +455,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
         });
     }
 
-    /// Startup exposure includes the handled timer0 lane, without enabling
+    /// Bound activation includes the handled timer0 lane, without enabling
     /// the unnamed lanes or the unsupported clock-match event.
     pub(crate) fn enable_handled_events(&mut self) {
         self.enable_runtime_events();

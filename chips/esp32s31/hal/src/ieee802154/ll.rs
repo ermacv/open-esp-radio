@@ -29,7 +29,7 @@ use oer_mmio::Placement;
 
 use crate::ieee802154::mac::{
     EtmPlacement, Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner, Ieee802154PowerSequence,
-    Ieee802154Pti, Ieee802154StartupFault, Ieee802154TaskOwner, MacPlacement, RxInfoPlacement,
+    Ieee802154Pti, Ieee802154TaskOwner, MacPlacement, RxInfoPlacement,
 };
 
 /// The command image of an operation command.
@@ -78,15 +78,11 @@ const fn timer_stop(timer: Ieee802154Timer) -> Opcode {
 ///     router: &Router<InterruptController>,
 ///     task: Ieee802154TaskOwner,
 ///     setup: Ieee802154InterruptSetupOwner,
-/// ) -> Result<Option<Ieee802154MacOwners>, Ieee802154StartupFault<(
-///     Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner,
-///     oer_interrupt_table::Silent<Ieee802154InterruptOwner>,
-/// )>> {
+/// ) -> Option<Ieee802154MacOwners> {
 ///     // A refused route has not accessed or started the MAC.
-///     let Ok(silent) = router.silent::<Ieee802154InterruptOwner>() else { return Ok(None); };
+///     let Ok(silent) = router.silent::<Ieee802154InterruptOwner>() else { return None; };
 ///     let (startup, interrupts) = setup.arm(task);
-///     // The image records/resets on Err, with both owners quarantined.
-///     Ieee802154MacOwners::new(startup, interrupts, silent).map(Some)
+///     Some(Ieee802154MacOwners::new(startup, interrupts, silent))
 /// }
 /// # fn main() {}
 /// ```
@@ -124,32 +120,18 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
     /// that no line receives the MAC's source
     /// (`oer_interrupt_table::Router::silent`).
     ///
-    /// # Errors
-    /// Unexpected startup events retain both MAC owners and the route proof
-    /// in quarantine. No new operation can start before this step succeeds.
-    #[allow(
-        clippy::result_large_err,
-        clippy::type_complexity,
-        reason = "startup failure retains both MAC owners and route authority"
-    )]
+    /// Startup discard completed before the IRQ owner became bindable.
     pub fn new(
         startup: Ieee802154ArmedTaskOwner<P, E, B>,
         interrupts: Ieee802154InterruptOwner<P>,
         silent: Silent<Ieee802154InterruptOwner<P>>,
-    ) -> Result<
-        Self,
-        Ieee802154StartupFault<(
-            Ieee802154ArmedTaskOwner<P, E, B>,
-            Ieee802154InterruptOwner<P>,
-            Silent<Ieee802154InterruptOwner<P>>,
-        )>,
-    > {
-        let (task, interrupts, silent) = startup.initialize_polled(interrupts, silent)?;
-        Ok(Self {
+    ) -> Self {
+        let (task, interrupts, silent) = startup.into_polled(interrupts, silent);
+        Self {
             task,
             interrupts,
             silent,
-        })
+        }
     }
 
     /// Separate the owners and the proof, for the interrupt owner's

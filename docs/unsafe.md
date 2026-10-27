@@ -390,26 +390,31 @@ inside the retained allocation; subsequent register publications take those
 typed addresses. The shared engine and the combined engine/MAC owner contain
 no unsafe code and perform no address arithmetic.
 
-The S31 802.15.4 HAL acknowledges events only through an affine
+The S31 802.15.4 HAL's runtime acknowledgement consumes an affine
 `Ieee802154EventSnapshot`; its copyable observation grants no write authority.
-Timer pending survives masking but its status read becomes zero. Arming
-masks events and installs the abort baseline without enabling or acknowledging
-any event. It returns an affine startup task owner with no operational access.
-After binding, `Bound::initialize` runs only the IRQ owner's typed transaction
-with its opaque context. It loans no owner or arbitrary callback to a task;
-the trait has no caller-selected context parameter. That context is created
-only while consuming the startup owner. The transaction issues STOP and both
-timer-stop commands, exposes the handled set including timer0, saves one sample,
-masks and acknowledges it. The returned operational task can then enable the
-unchanged runtime set. Polling performs the same transaction with `Silent`
-before constructing the operational pair. Stale timer1 pending cannot run a
-new operation's callback. Lanes 7/10/13 are never enabled by startup; an
-unexpected visible startup sample is `Fault::StartupEvents`, masked and left
-unacknowledged with all owners retained. Hidden pending and masked visibility
-are unmeasured for lanes 7/10/13; a sample without them does not prove their
-absence. A new 12-byte retained record encodes this reason without an engine
-state. Deactivation issues STOP and both timer-stop commands, samples before
-masking and acknowledges its saved sample. Commands and selected
+Startup is a separate, typed pre-bind discard. `arm` consumes the task and
+inactive IRQ owners, masks every event, installs the abort baseline, issues
+STOP and both timer stops, then writes the fixed W1C set of all fourteen event
+lanes through the existing `Ieee802154MacIrq` part. This write does not use a
+status sample: every pre-bind event is stale and cannot be serviced. Its
+register read preserves undeclared bits only; masked zero status cannot narrow
+the discard. The policy records this consumption proof and the generated
+accessor preserves undeclared bits rather than treating it as a whole-word
+vendor image. A word consisting entirely of W1C fields is its own status/clear
+pair and needs the same explicit fixed-image proof as a named pair.
+
+Only after the final fence does `arm` return the bindable IRQ owner and an
+affine task owner without operational methods. `Router::bind` transfers the
+IRQ owner permanently into its handler. Consuming task activation with its
+`Bound` proof publishes the handled set plus timer0; it writes only task-owned
+enables and never borrows `HandlerCell`. Later session publication preserves
+the existing runtime set. A polled pair instead requires `Silent`; its startup
+discard has already completed. The pre-bind transaction enables no event lane.
+Masked acknowledgement is measured for timers0/1 (HW8) and RX_ABORT reason26
+(HW26). Hidden pending and masked visibility on 7/10/13 remain unmeasured;
+neither a zero read nor the discard is an all-lane visibility or producer-drain
+proof. Deactivation issues STOP and both timer-stop commands, samples before
+masking and acknowledges the saved sample. Commands and selected
 acknowledgements do not prove producer drain.
 Engine interrupt service rejects a sample containing lane 7, 10 or 13 with
 `Fault::UnhandledEvents` before acknowledgement or dispatch, preserving

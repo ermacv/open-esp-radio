@@ -198,6 +198,36 @@ fn a_fixed_hardware_updated_configuration_preserves_undeclared_bits_and_pulses_i
 }
 
 #[test]
+fn unsampled_w1c_discard_uses_its_owner_and_preserves_undeclared_bits() {
+    let rust = rendered_with(&[(
+        "policy.toml",
+        "chip = \"testchip\"",
+        "chip = \"testchip\"\n\n[[fixed-register-images]]\nname = \"discard_startup\"\nregister = \"RADIO0.RAD_STATUS\"\nvalue = 3\nconsumed-event = \"All pre-bind pending belongs to the discarded epoch.\"\nsources = [\"SRC_DRIVER\"]",
+    )]);
+    let result = run(
+        &rust,
+        r#"
+        fn main() {
+            for fill in [0, u32::MAX] {
+                let mut memory = [fill; 128];
+                {
+                    let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+                    task.discard_startup();
+                    let status = task.read_status();
+                    assert!(status.done() && status.error());
+                }
+                let changed: Vec<_> = memory.into_iter().filter(|value| *value != fill).collect();
+                if fill == 0 { assert_eq!(changed, [3]); }
+                else { assert!(changed.is_empty(), "undeclared bits must survive"); }
+            }
+            println!("discarded");
+        }
+    "#,
+    );
+    assert_eq!(result.trim(), "discarded");
+}
+
+#[test]
 fn names_lose_the_block_prefix() {
     let (model, _) = load(&fixture());
     let radio = model.types().get("RADIO").expect("the RADIO type");
