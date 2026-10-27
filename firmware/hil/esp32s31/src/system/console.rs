@@ -53,7 +53,7 @@ pub(crate) fn start<C: oer_interrupt_table::Controller>(
     #[cfg(not(feature = "usb-jtag-off"))]
     let _pads = pads;
     CONSOLE.start(boot);
-    executor.run(hart, router, wake, line, &[], |spawner| {
+    executor.run(hart, router, wake, line, (), |spawner| {
         WatchdogTasks::test_watchdog(spawner, service).expect("system watchdog test task");
         WatchdogTasks::panic_on_request(spawner).expect("panic task");
         #[cfg(feature = "usb-jtag-off")]

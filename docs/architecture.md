@@ -78,7 +78,11 @@ moves; ownership, orchestration and wiring are rebuilt.
   execution state has one slot per facts-defined `HARTS`; its packed poll
   stamp reserves enough low bits for every hart and an unassigned sentinel.
   The remaining timestamp bits must hold the cooperative admission budget.
-  Each image supplies its executor's urgent doorbell sources. Admission reads
+  `Doorbell::new::<Member>` returns its ringing owner and a zero-sized
+  `UrgentSource<Member>` observation together, after checking that member
+  against the software line and bound handler. Executor startup takes that
+  typed observation, or `()` for no urgent source; callers cannot substitute
+  an independently selected source number. Admission reads
   those sources and its own wake source from the current hart's pending bank;
   an idle wait checks that hart's debug status. These read-only selections use
   the PAC's checked hart identity; invalid raw IDs take the retained fatal path.

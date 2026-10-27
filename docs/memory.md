@@ -52,7 +52,9 @@ facts at build time; the host checks read the same facts.
   assignment/poll words derive hart-bit width and the unassigned sentinel
   from `HARTS`, retaining the timestamp wrap bound in const checks.
   Each executor publishes its composition's immutable urgent-source list before
-  polling; its list reference stays in zeroed critical SRAM. The runtime's
+  polling; the source type comes from its doorbell constructor, through a
+  copyable zero-sized observation. Its list reference stays in zeroed critical
+  SRAM. The runtime's
   zero-sized hart token survives interrupt enable while stack-install authority
   is consumed. Current images retain every task and waker on the boot hart.
 

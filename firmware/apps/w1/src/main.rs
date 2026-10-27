@@ -231,10 +231,6 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::r
 oer_espressif_staged_runtime::entry!(main);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    const URGENT_SOURCES: &[u16] = &[
-        <oer_esp32s31_hal::platform::FromCpu3Irq as oer_interrupt_table::InterruptSource>::SOURCE,
-    ];
-
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
@@ -312,7 +308,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     ) else {
         fail("wifi-interrupt")
     };
-    let doorbell = ImageDoorbell(Doorbell::new::<FromCpu3Irq>(bell, &wifi_bound));
+    let (doorbell, urgent) = Doorbell::new::<FromCpu3Irq>(bell, &wifi_bound);
+    let doorbell = ImageDoorbell(doorbell);
     let (timer_sender, timer_lines) = TIMER_LINES.take().split();
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
@@ -320,7 +317,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         router,
         interrupts.radio,
         software.irq2,
-        URGENT_SOURCES,
+        urgent,
     );
     if RadioTasks::radio_actor(&radio, actor).is_err()
         || RadioTasks::p2_timers(&radio, timer_sender).is_err()
@@ -343,7 +340,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         &mut router,
         interrupts.wake,
         software.irq0,
-        URGENT_SOURCES,
+        urgent,
         move |spawner| {
             let boot = Boot {
                 console,

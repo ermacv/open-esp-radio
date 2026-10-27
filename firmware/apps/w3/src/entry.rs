@@ -96,10 +96,6 @@ pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    const URGENT_SOURCES: &[u16] = &[
-        <oer_esp32s31_hal::platform::FromCpu3Irq as oer_interrupt_table::InterruptSource>::SOURCE,
-    ];
-
     let previous = oer_espressif_staged_runtime::panic::take_previous();
     let Some(root) = Root::take() else {
         fail("root-taken");
@@ -173,14 +169,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     ) else {
         fail("wifi-interrupt");
     };
-    let bell = irq::ImageDoorbell(Doorbell::new::<FromCpu3Irq>(line, &bound));
+    let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
+    let bell = irq::ImageDoorbell(bell);
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
         hart,
         router,
         interrupts.radio,
         software.irq2,
-        URGENT_SOURCES,
+        urgent,
     );
     let mut rng = Rng::new(runtime.entropy, EmbassyClock);
     let seed = (u64::from(rng.random()) << 32) | u64::from(rng.random());
@@ -222,7 +219,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         &mut router,
         interrupts.wake,
         software.irq0,
-        URGENT_SOURCES,
+        urgent,
         move |spawner| {
             if AppTasks::reporting(spawner, console, pads).is_err()
                 || AppTasks::station_task(spawner, frontend_channel, config, station, seed).is_err()

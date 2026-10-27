@@ -75,6 +75,8 @@ pub use executor::{Executor, InterruptExecutor, interrupt_handler, ready_peers, 
 pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
 #[cfg(feature = "chip")]
 pub use time_driver::{alarm_interrupt, bind, init};
+#[cfg(feature = "chip")]
+pub use urgent_sources::{UrgentSource, UrgentSources};
 
 #[cfg(any(all(oer_profile, feature = "chip"), test))]
 pub mod timer_observation;

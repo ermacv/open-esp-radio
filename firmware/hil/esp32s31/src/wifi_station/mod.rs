@@ -79,10 +79,6 @@ type Actor = RadioSystem<
 >;
 
 pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    const URGENT_SOURCES: &[u16] = &[
-        <oer_esp32s31_hal::platform::FromCpu3Irq as oer_interrupt_table::InterruptSource>::SOURCE,
-    ];
-
     crate::early(&oer_diagnostics::Note::runtime_start(crate::PROFILE_NAME));
     crate::fatal::report_previous();
     crate::validate_runtime_layout();
@@ -155,14 +151,15 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     ) else {
         crate::fail(crate::fatal::Failure::InterruptTable);
     };
-    let bell = irq::ImageDoorbell(Doorbell::new::<FromCpu3Irq>(line, &bound));
+    let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
+    let bell = irq::ImageDoorbell(bell);
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
         hart,
         router,
         interrupts.radio,
         software.irq2,
-        URGENT_SOURCES,
+        urgent,
     );
     let mut rng = crate::Rng::new(runtime.entropy, EmbassyClock);
     if !rng.status().is_healthy() {
@@ -214,7 +211,7 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         &mut router,
         interrupts.wake,
         software.irq0,
-        URGENT_SOURCES,
+        urgent,
         move |spawner| {
             let console_work = CONSOLE_WORK.take().future(|| console_future(usb, boot));
             if AppTasks::console(spawner, console_work).is_err() {

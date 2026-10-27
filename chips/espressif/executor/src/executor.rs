@@ -1,5 +1,6 @@
 use core::{marker::PhantomData, task::Context};
 
+use crate::urgent_sources::UrgentSources;
 use oer_espressif_staged_runtime::Hart;
 use oer_interrupt_table::{
     Entry,
@@ -204,19 +205,20 @@ impl<const SWI: u8> Executor<SWI> {
     /// software interrupt: `wake` is that source's token of the image's
     /// interrupt table, whose entry names [`wake_handler::<SWI>`](wake_handler)
     /// on this core. `init` starts the first tasks.
-    /// `urgent` names the composition's sources that stop cooperative admission.
+    /// `urgent` comes from the composition's doorbell constructor, or `()`
+    /// when it has no urgent sources.
     ///
     /// # Panics
     ///
     /// When the software interrupt already serves an executor or binding fails.
     /// A foreign hart's entry fails at compile time.
-    pub fn run<T, W, C, const H: u8>(
+    pub fn run<T, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
         router: &mut oer_interrupt_table::Router<C>,
         wake: W,
         part: W::Part,
-        urgent: &'static [u16],
+        _urgent: U,
         init: impl FnOnce(&Spawner<T>),
     ) -> !
     where
@@ -239,7 +241,7 @@ impl<const SWI: u8> Executor<SWI> {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
         claim_core(SWI);
-        let _ = URGENT[usize::from(SWI)].get_or_init(|| urgent);
+        let _ = URGENT[usize::from(SWI)].get_or_init(|| U::SOURCES);
         init(&Spawner::new());
         loop {
             WORK_PENDING.0[usize::from(SWI)].store(0, Ordering::Release);
@@ -363,19 +365,20 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
     /// table entry names [`interrupt_handler::<T>`](interrupt_handler) on
     /// this core. Signal declarations and request bindings check their
     /// direction from the table entries. The spawner starts `T`'s tasks.
-    /// `urgent` names the composition's sources that stop cooperative admission.
+    /// `urgent` comes from the composition's doorbell constructor, or `()`
+    /// when it has no urgent sources.
     ///
     /// # Panics
     ///
     /// When the software interrupt already serves an executor or binding fails.
     /// A foreign hart's entry fails at compile time.
-    pub fn start<T, W, C, const H: u8>(
+    pub fn start<T, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
         router: &mut oer_interrupt_table::Router<C>,
         wake: W,
         part: W::Part,
-        urgent: &'static [u16],
+        _urgent: U,
     ) -> Spawner<T>
     where
         T: Tasks<Mode = InterruptMode>,
@@ -394,7 +397,7 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         crate::hart_binding::check::<H, W>();
         let _ = self._line;
         claim_core(SWI);
-        let _ = URGENT[usize::from(SWI)].get_or_init(|| urgent);
+        let _ = URGENT[usize::from(SWI)].get_or_init(|| U::SOURCES);
         // Published before the source is enabled, so the first handler polls
         // and a pend raises its interrupt.
         INTERRUPT_MODE[usize::from(SWI)].store(true, Ordering::Release);

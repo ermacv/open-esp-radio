@@ -32,7 +32,7 @@ pub(crate) fn start<C: oer_interrupt_table::Controller>(
 ) -> ! {
     let boot = u64::from_le_bytes(entropy.random_bytes()).max(1);
     CONSOLE.start(boot);
-    executor.run(hart, router, wake, line, &[], |spawner| {
+    executor.run(hart, router, wake, line, (), |spawner| {
         PanicResetTasks::panic_on_request(spawner).expect("panic-reset task");
         PanicResetTasks::run(spawner, usb, boot).expect("system console task");
         if PanicResetTasks::rtc_watchdog(spawner, watchdog).is_err() {

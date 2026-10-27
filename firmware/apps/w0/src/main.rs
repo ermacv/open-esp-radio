@@ -119,8 +119,6 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::r
 oer_espressif_staged_runtime::entry!(main);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    const URGENT_SOURCES: &[u16] = &[];
-
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
@@ -198,7 +196,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         router,
         interrupts.radio,
         software.irq2,
-        URGENT_SOURCES,
+        (),
     );
     if RadioTasks::radio_actor(&radio, actor).is_err() {
         fail("radio-actor-start");
@@ -216,7 +214,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         &mut router,
         interrupts.wake,
         software.irq0,
-        URGENT_SOURCES,
+        (),
         move |spawner| {
             let boot = Boot {
                 console,

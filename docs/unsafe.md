@@ -167,6 +167,12 @@ the architectural ID before selecting its running-context slot or these reads.
 An invalid ID follows the retained `InvalidHart` reset path, releasing
 no owner. These selections use no unsafe code.
 
+`Doorbell::new::<Member>` returns a typed `UrgentSource<Member>` beside its
+ringing owner only after its const member/line/binding checks. The observation
+contains no register owner or waker; copying it permits both local executors
+to observe the same urgent source. A sealed `UrgentSources` contract accepts
+that observation or `()`; executor startup cannot take a raw numeric list.
+
 The generated Rust MTVT is one immutable array of aligned per-hart rows.
 Its one unsafe attribute owns the SRAM section. The table and trap assembly
 share a module/codegen unit; the existing `global_asm!` exports `_runtime_mtvt`

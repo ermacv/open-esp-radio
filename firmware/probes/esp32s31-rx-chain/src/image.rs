@@ -132,8 +132,6 @@ struct Boot {
 oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    const URGENT_SOURCES: &[u16] = &[];
-
     let Some(root) = Root::take() else {
         fail("root");
     };
@@ -200,7 +198,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         router,
         interrupts.radio,
         software.irq2,
-        URGENT_SOURCES,
+        (),
     );
     if RadioTasks::actor(&radio, actor).is_err() {
         fail("actor-task");
@@ -228,7 +226,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         &mut router,
         interrupts.wake,
         software.irq0,
-        URGENT_SOURCES,
+        (),
         move |spawner| {
             if AppTasks::capture(spawner, boot).is_err()
                 || AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err()

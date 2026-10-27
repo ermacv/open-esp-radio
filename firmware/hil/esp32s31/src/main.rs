@@ -262,7 +262,7 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
 
     #[cfg(feature = "boot-smoke")]
-    executor.run(&hart, &mut router, wake.0, wake.1, &[], move |spawner| {
+    executor.run(&hart, &mut router, wake.0, wake.1, (), move |spawner| {
         let console = boot_smoke_console::BootSmokeConsole::new(console);
         if BootSmokeTasks::boot_smoke(spawner, console).is_err()
             || BootSmokeTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
