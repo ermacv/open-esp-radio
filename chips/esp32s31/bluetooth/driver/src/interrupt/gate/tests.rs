@@ -1032,10 +1032,7 @@ fn unexpected_nrt_overflow_quarantines_the_bank_and_retains_the_exact_later_pair
         model.nrt_fault = Some(cause);
     });
     let fault = harness.part.service(&harness.clock).unwrap_err();
-    assert_eq!(
-        invariant(fault).0,
-        GateFaultReason::NrtControllerTimeOverflow(cause)
-    );
+    assert_eq!(invariant(fault).0, GateFaultReason::NrtPrimaryFault(cause));
     assert_eq!(
         invariant(fault).1.nrt_status,
         Some([0, 0]),

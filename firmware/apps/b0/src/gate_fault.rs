@@ -40,11 +40,11 @@ impl Record {
             ) => (5, status, Some(pending)),
             GateFaultReason::VacantTimer => (6, 0, None),
             GateFaultReason::ControllerTimeOverflow(cause) => (7, cause.overflows, None),
-            GateFaultReason::NrtControllerTimeOverflow(cause) => (9, cause.snapshots[0], None),
+            GateFaultReason::NrtPrimaryFault(cause) => (9, cause.snapshots[0], None),
         };
         let captured_inputs = match gate_reason {
             GateFaultReason::ControllerTimeOverflow(cause) => cause.captured_inputs,
-            GateFaultReason::NrtControllerTimeOverflow(cause) => cause.snapshots[1],
+            GateFaultReason::NrtPrimaryFault(cause) => cause.snapshots[1],
             _ => 0,
         };
         let [nrt0, nrt1] = observation.nrt_status.unwrap_or_default();
@@ -113,7 +113,7 @@ impl fmt::Display for Record {
             6 => "vacant-timer",
             7 => "controller-time-overflow-exhausted",
             8 => "controller-time-range-exhausted",
-            9 => "nrt-controller-time-overflow",
+            9 => "nrt-primary-fault",
             10 => "foreign-enable",
             11 => "release-not-quiet",
             _ => return Err(fmt::Error),
@@ -448,7 +448,7 @@ mod nrt_tests {
     #[test]
     fn the_existing_record_keeps_the_full_nrt_fault_pair_and_entry_causes() {
         let fault = GateFault::Invariant {
-            reason: GateFaultReason::NrtControllerTimeOverflow(BluetoothNrtInterruptFault {
+            reason: GateFaultReason::NrtPrimaryFault(BluetoothNrtInterruptFault {
                 snapshots: [0x87654321, 0xa5000002],
             }),
             observation: GateObservation {
@@ -462,7 +462,7 @@ mod nrt_tests {
         let record = slot.take().unwrap();
         assert_eq!(
             record.to_string(),
-            "OER-B0-FAULT: bluetooth-gate reason=nrt-controller-time-overflow timer=ready lp=0x00040000 nrt=0x00000000,0x00000000 nrt-captured=0x87654321,0xa5000002"
+            "OER-B0-FAULT: bluetooth-gate reason=nrt-primary-fault timer=ready lp=0x00040000 nrt=0x00000000,0x00000000 nrt-captured=0x87654321,0xa5000002"
         );
         assert!(slot.take().is_none());
     }

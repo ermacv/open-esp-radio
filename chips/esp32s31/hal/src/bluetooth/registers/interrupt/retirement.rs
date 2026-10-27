@@ -33,19 +33,16 @@ pub enum BluetoothControllerOutputReleaseError {
     /// A fatal or unclassified primary source is pending, or the handler
     /// acknowledged one during the epoch.
     InterruptFault,
-    /// Terminal mask/ack readback did not establish quiet.
+    /// A visible interrupt-policy fault or terminal readback failure.
     InterruptPolicy(crate::bluetooth::BluetoothInterruptPolicyFault),
 }
 
 /// The handler's side of the release: the bank.
 trait BankControl {
-    fn fault_pending(&mut self) -> bool;
+    fn fault_acknowledged(&self) -> bool;
     fn observation(&self) -> crate::bluetooth::BluetoothInterruptObservation;
     fn mask_dynamic(&mut self);
-    fn clear_pending(
-        &mut self,
-        task_enable: u32,
-    ) -> Result<(), crate::bluetooth::BluetoothInterruptPolicyFault>;
+    fn clear_pending(&mut self);
     fn release_output(&mut self);
     fn fence(&mut self);
 }
@@ -67,19 +64,19 @@ fn sample_idle(
     if busy.is_busy() {
         return Err(Error::SchedulerBusy);
     }
-    check_supported_pending(bank, task_enable)?;
-    if bank.fault_pending() {
+    check_visible_faults(bank, task_enable)?;
+    if bank.fault_acknowledged() {
         return Err(Error::InterruptFault);
     }
     Ok(())
 }
 
-fn check_supported_pending(
+fn check_visible_faults(
     bank: &impl BankControl,
     task_enable: u32,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
     let primary = bank.observation();
-    if crate::bluetooth::interrupt_policy::unsupported_primary_pending(primary) {
+    if crate::bluetooth::interrupt_policy::release_fault_visible(primary) {
         return Err(BluetoothControllerOutputReleaseError::InterruptPolicy(
             crate::bluetooth::BluetoothInterruptPolicyFault::ReleaseNotQuiet(
                 crate::bluetooth::BluetoothInterruptPolicyObservation {
@@ -106,9 +103,33 @@ fn confirm_heads_absent(
 
 /// Mask all sourced terminal-cleanup sources and fence before the task disables
 /// RUN in its own context.
-fn mask(bank: &mut impl BankControl) {
+fn mask(
+    bank: &mut impl BankControl,
+    task_enable: u32,
+) -> Result<(), BluetoothControllerOutputReleaseError> {
+    // The last visible fault check precedes the mask. A later fault cannot
+    // be erased: neither fixed terminal image contains its W1C lane.
+    check_visible_faults(bank, task_enable)?;
+    if bank.fault_acknowledged() {
+        return Err(BluetoothControllerOutputReleaseError::InterruptFault);
+    }
     bank.mask_dynamic();
     bank.fence();
+    let primary = bank.observation();
+    if primary.enable_0 != 0
+        || primary.enable_1 != 0
+        || crate::bluetooth::interrupt_policy::release_fault_visible(primary)
+    {
+        return Err(BluetoothControllerOutputReleaseError::InterruptPolicy(
+            crate::bluetooth::BluetoothInterruptPolicyFault::ReleaseNotQuiet(
+                crate::bluetooth::BluetoothInterruptPolicyObservation {
+                    primary,
+                    task_enable,
+                },
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Disable RUN and fence.
@@ -123,17 +144,16 @@ fn release(
     task_enable: u32,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
     use BluetoothControllerOutputReleaseError as Error;
-    // Do not acknowledge a new fault or release output if execution changed
-    // after the mask.
+    // Refuse changed execution and any still-visible fault. Masked fault
+    // arrivals stay latched because no terminal clear selects their lanes.
     if busy.is_busy() {
         return Err(Error::SchedulerBusy);
     }
-    check_supported_pending(bank, task_enable)?;
-    if bank.fault_pending() {
+    check_visible_faults(bank, task_enable)?;
+    if bank.fault_acknowledged() {
         return Err(Error::InterruptFault);
     }
-    bank.clear_pending(task_enable)
-        .map_err(Error::InterruptPolicy)?;
+    bank.clear_pending();
     bank.release_output();
     bank.fence();
     crate::bluetooth::BluetoothInterruptPolicyObservation {
@@ -154,23 +174,8 @@ impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
     fn observation(&self) -> crate::bluetooth::BluetoothInterruptObservation {
         crate::bluetooth::observation::primary(self.bank)
     }
-    fn fault_pending(&mut self) -> bool {
-        if self.fault_acknowledged {
-            return true;
-        }
-        let mut control = HardwareInterruptControl {
-            bank: &mut *self.bank,
-        };
-        let bank_0 = control.sample_bank_0();
-        let bank_1 = control.sample_bank_1();
-        let faults = BluetoothPrimaryFaultSources::from_status(
-            control.bank_0_status(&bank_0),
-            control.bank_1_status(&bank_1),
-        );
-        faults.bank_0_source_15_pending()
-            || faults.bank_1_source_8_pending()
-            || faults.bank_1_source_9_pending()
-            || faults.bank_1_source_12_pending()
+    fn fault_acknowledged(&self) -> bool {
+        self.fault_acknowledged
     }
 
     fn mask_dynamic(&mut self) {
@@ -199,40 +204,16 @@ impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
         });
     }
 
-    fn clear_pending(
-        &mut self,
-        task_enable: u32,
-    ) -> Result<(), crate::bluetooth::BluetoothInterruptPolicyFault> {
-        // SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ / HW9_S31_MAC_MASK_ACK_20261027:
-        // STATUS is masked by ENA. These samples cannot reveal retained
-        // causes hidden by mask_dynamic; zero is not a pending-zero proof.
-        let bank_0 = self.bank.sample_bluetooth_primary_interrupt_bank_0();
-        let bank_1 = self.bank.sample_bluetooth_primary_interrupt_bank_1();
-        self.bank
-            .acknowledge_bluetooth_primary_interrupt_bank_0(bank_0);
-        self.bank
-            .acknowledge_bluetooth_primary_interrupt_bank_1(bank_1);
-        // SOURCE: BLOB_S31_BLE_NRT_DISPOSITION_20261027: the NRT pair has
-        // its own affine sample/ack prefix, using the same primary W1C words.
-        let nrt_0 = self.bank.sample_bluetooth_interrupt_bank_0();
-        let nrt_1 = self.bank.sample_bluetooth_interrupt_bank_1();
-        let snapshots = [nrt_0.pending_bits(), nrt_1.pending_bits()];
-        if snapshots[1] & bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK != 0 {
-            let mut primary = self.observation();
-            primary.nrt_0 = snapshots[0];
-            primary.nrt_1 = snapshots[1];
-            return Err(
-                crate::bluetooth::BluetoothInterruptPolicyFault::ReleaseNotQuiet(
-                    crate::bluetooth::BluetoothInterruptPolicyObservation {
-                        primary,
-                        task_enable,
-                    },
-                ),
-            );
-        }
-        self.bank.acknowledge_bluetooth_interrupt_bank_0(nrt_0);
-        self.bank.acknowledge_bluetooth_interrupt_bank_1(nrt_1);
-        Ok(())
+    fn clear_pending(&mut self) {
+        // SOURCE: POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027,
+        // BLOB_LIBBTDM_CONTROLLER_IRQ / BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027.
+        // Fixed W1C works while masked; never derive a clear image from masked
+        // STATUS. Shared primary/NRT CLEAR words exclude every fault lane.
+        // Bank1 CC0/CC1/overflow: hw32-20261027-ble-masked-01 (#757).
+        // Bank0/NRT and the remaining feature lanes are vendor-covered only,
+        // not hardware-verified. No enable is opened for observation.
+        self.bank.clear_bluetooth_terminal_non_fault_bank_0();
+        self.bank.clear_bluetooth_terminal_non_fault_bank_1();
     }
 
     fn release_output(&mut self) {
@@ -319,14 +300,21 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     }
 
     /// Mask all sourced terminal-cleanup sources and fence.
-    pub(crate) fn mask_output_dynamic_sources(&mut self) {
-        mask(&mut BankHardware::<P> {
-            bank: &mut self.peripherals.bluetooth_interrupt_bank,
-            fault_acknowledged: false,
-        });
+    pub(crate) fn mask_output_dynamic_sources(
+        &mut self,
+        fault_acknowledged: bool,
+        task_enable: u32,
+    ) -> Result<(), BluetoothControllerOutputReleaseError> {
+        mask(
+            &mut BankHardware::<P> {
+                bank: &mut self.peripherals.bluetooth_interrupt_bank,
+                fault_acknowledged,
+            },
+            task_enable,
+        )
     }
 
-    /// Acknowledge the saved primary/NRT sources and release the output when a BUSY
+    /// Discard the fixed non-fault primary/NRT subset under the mask when a BUSY
     /// sample taken after RUN was disabled is idle and no fault is pending
     /// or was acknowledged. Masked STATUS does not prove pending is absent.
     pub(crate) fn release_idle_output(

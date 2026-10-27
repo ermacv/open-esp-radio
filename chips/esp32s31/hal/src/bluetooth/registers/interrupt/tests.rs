@@ -392,3 +392,21 @@ fn nrt_cannot_acknowledge_a_sample_containing_the_primary_overflow_lane() {
     );
     assert_eq!(acknowledgements, ordinary);
 }
+
+#[test]
+fn nrt_cannot_clear_primary_faults_in_either_shared_bank() {
+    use super::{BluetoothNrtInterruptFault, acknowledge_nrt_if_admitted, bank};
+    for snapshots in [
+        [bank::irq_clear_0::SOURCE_15_MASK, 0],
+        [0, bank::irq_clear_1::SOURCE_8_MASK],
+        [0, bank::irq_clear_1::SOURCE_9_MASK],
+        [0, bank::irq_clear_1::SOURCE_12_MASK],
+    ] {
+        let mut acknowledged = false;
+        assert_eq!(
+            acknowledge_nrt_if_admitted(snapshots, || acknowledged = true),
+            Err(BluetoothNrtInterruptFault { snapshots })
+        );
+        assert!(!acknowledged, "the whole pair stays unacknowledged");
+    }
+}

@@ -87,7 +87,7 @@ enum Reply {
     Done,
     Flag(bool),
     IdleSampled(Result<BluetoothOutputIdleSampled, BluetoothControllerOutputReleaseError>),
-    OutputMasked(BluetoothDynamicSourcesMasked),
+    OutputMasked(Result<BluetoothDynamicSourcesMasked, BluetoothControllerOutputReleaseError>),
     OutputReleased(Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError>),
 }
 
@@ -239,6 +239,9 @@ impl SchedulerInterruptHalf {
                 }
             };
             if let Reply::IdleSampled(Err(
+                BluetoothControllerOutputReleaseError::InterruptPolicy(cause),
+            ))
+            | Reply::OutputMasked(Err(
                 BluetoothControllerOutputReleaseError::InterruptPolicy(cause),
             ))
             | Reply::OutputReleased(Err(
@@ -527,7 +530,10 @@ impl SchedulerTaskHalf {
         &mut self,
         bell: &impl SchedulerDoorbell,
         heads: BluetoothSchedulerHeadsAbsent,
-    ) -> Result<BluetoothDynamicSourcesMasked, SchedulerInterruptError> {
+    ) -> Result<
+        Result<BluetoothDynamicSourcesMasked, BluetoothControllerOutputReleaseError>,
+        SchedulerInterruptError,
+    > {
         match self.exchange(bell, Command::MaskOutput(heads)).await? {
             (_, Reply::OutputMasked(masked)) => Ok(masked),
             _ => Err(SchedulerInterruptError::ForeignReply),

@@ -46,6 +46,26 @@ const FEATURES_1: Bank1Lanes = Bank1Lanes(
         | bt_mac::irq_enable_1::SOURCE_6_MASK
         | bt_mac::irq_enable_1::SOURCE_13_MASK,
 );
+// Fault lanes never enter the terminal fixed W1C images. Overflow is a
+// normal primary event; its terminal discard is covered separately by hw32.
+pub(super) const FAULTS_0: u32 = bt_mac::irq_enable_0::SOURCE_15_MASK;
+pub(super) const FAULTS_1: u32 = bt_mac::irq_enable_1::SOURCE_8_MASK
+    | bt_mac::irq_enable_1::SOURCE_9_MASK
+    | bt_mac::irq_enable_1::SOURCE_12_MASK;
+pub(super) const CLEANUP_0: u32 = PRODUCTION.dynamic_0.0 | FEATURES_0.0;
+pub(super) const CLEANUP_1: u32 =
+    PRODUCTION.dynamic_1.0 | FEATURES_1.0 | bt_mac::irq_enable_1::CONTROLLER_TIME_OVERFLOW_MASK;
+
+pub(super) const fn release_fault_visible(primary: BluetoothInterruptObservation) -> bool {
+    unsupported_primary_pending(primary)
+        || primary.status_0 & FAULTS_0 != 0
+        || primary.status_1 & FAULTS_1 != 0
+        // NRT shares CLEAR0/1. Only the fixed non-fault subset may be
+        // discarded, and NRT must not consume the primary wrap observation.
+        || primary.nrt_0 & !CLEANUP_0 != 0
+        || primary.nrt_1 & (!CLEANUP_1 | bt_mac::irq_enable_1::CONTROLLER_TIME_OVERFLOW_MASK) != 0
+}
+
 pub(super) const fn unsupported_primary_pending(primary: BluetoothInterruptObservation) -> bool {
     primary.status_0 & !(PRODUCTION.baseline_0.0 | PRODUCTION.dynamic_0.0 | FEATURES_0.0) != 0
         || primary.status_1 & !(PRODUCTION.baseline_1.0 | PRODUCTION.dynamic_1.0 | FEATURES_1.0)
@@ -64,7 +84,8 @@ pub struct BluetoothInterruptPolicyObservation {
 pub enum BluetoothInterruptPolicyFault {
     /// An enable outside production's explicit set was inherited.
     ForeignEnable(BluetoothInterruptPolicyObservation),
-    /// Unsupported pending blocked cleanup, or terminal readback stayed nonzero.
+    /// A visible fault/unsupported cause blocked cleanup, or terminal enables
+    /// or visible status remained nonzero.
     ReleaseNotQuiet(BluetoothInterruptPolicyObservation),
 }
 impl BluetoothInterruptPolicyFault {
@@ -86,8 +107,8 @@ impl BluetoothInterruptPolicyObservation {
             Ok(())
         }
     }
-    /// Check the supplied primary/NRT status images and all enable words.
-    /// A masked STATUS image does not establish that retained pending is zero.
+    /// Reject nonzero enables or residual visible status.
+    /// Hidden pending is not observed: this is no pending-zero proof.
     pub fn confirm_released(self) -> Result<(), BluetoothInterruptPolicyFault> {
         if [
             self.primary.enable_0,

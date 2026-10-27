@@ -225,9 +225,9 @@ pub enum GateFaultReason {
     VacantTimer,
     /// A captured BTLC wrap exhausted the software counter; retain its value.
     ControllerTimeOverflow(super::ControllerTimeOverflowExhausted),
-    /// An exact NRT pair contained the primary overflow clear lane; neither
+    /// An exact NRT pair contained a primary-owned fault or overflow clear lane; neither
     /// bank was acknowledged and both observations remain retained.
-    NrtControllerTimeOverflow(bluetooth::BluetoothNrtInterruptFault),
+    NrtPrimaryFault(bluetooth::BluetoothNrtInterruptFault),
 }
 
 /// Why the gate refused a request or could not exchange it.
@@ -504,10 +504,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
                 return self.check_fault();
             }
             if let Err(cause) = H::capture_nrt(registers) {
-                self.fault(
-                    GateFaultReason::NrtControllerTimeOverflow(cause),
-                    observation,
-                );
+                self.fault(GateFaultReason::NrtPrimaryFault(cause), observation);
                 return self.check_fault();
             }
             // A service barrier completes only after the entry's pending

@@ -100,21 +100,33 @@ CONTROL0 starts BTLC. CONTROL1/2 do not lower an enabled pending cause, so
 terminal release masks the baseline, dynamic and sourced ISO/coex/CIG/CC
 feature enable lanes in its existing handler mask step. The task's RUN-disable
 step masks all task enables, including opaque task17, and strobes the sourced
-all-lane task WT acknowledgement. Primary/NRT acknowledgements consume saved
-status images before CONTROL1/2. The primary STATUS words are masked by ENA:
-a zero read after masking does not prove that retained pending was cleared.
-`ReleaseNotQuiet` reports nonzero observed words, but masked zero readback is
-not a pending-zero proof. Fault checks also observe only enabled primary lanes.
-SOURCE: `BLOB_LIBBTDM_BASELINE_IRQ_CURRENT` (N5),
-`HW9_S31_BTLC_START_20261027`, `HW9_S31_MAC_RELEASE_20261027`,
-`HW9_S31_MAC_MASK_ACK_20261027` and
-`HW12_S31_BLE_OVERFLOW_ACK_20261026` in the register evidence.
-The measured overflow is visible in primary status/source 124 while the NRT
-snapshots/source 133 remain zero; their zero acknowledgement does not consume
-it. The exact sampled NRT pair is checked against the primary overflow clear
-lane before either acknowledgement. If that lane is present, a typed fault
-retains both words and neither bank is acknowledged. This does not identify
-other NRT producers or simultaneous set/clear priority.
+all-lane task WT acknowledgement. Immediately before masking, the handler
+checks visible primary fault/unsupported causes and the shared NRT clear
+lanes. A visible fault returns its complete observation for quarantine.
+After RUN-disable, it writes fixed non-fault W1C images `0x18212103` / `0x207a`
+under the mask, issues CONTROL1/2 and verifies zero primary/task enables.
+Nonzero enables or residual visible status are `ReleaseNotQuiet`.
+The fixed images exclude bank0[15] and bank1[8/9/12]; a fault arriving after
+the last visible check remains retained rather than being blindly cleared.
+No enable is reopened and no matrix route is transferred. Masked pending is
+not observable, so this proves neither zero pending nor producer shutdown.
+
+SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`,
+`BLOB_LIBBTDM_CONTROLLER_IRQ`, `BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027`,
+`BLOB_LIBBLE_ISO_COEX_REGISTERS` and `BLOB_S31_BLE_NRT_DISPOSITION_20261027`.
+Masked W1C is hardware-confirmed only for bank1 CC0/CC1/overflow, run
+`hw32-20261027-ble-masked-01` (#757). Bank0/NRT and the other feature lanes
+have vendor coverage and are **not hardware-verified**. Opening a tested
+lane with CPU routes at MAP0 still raises matrix124 and modem wake vector
+`0x10`; terminal cleanup does not perform that transaction.
+
+The measured overflow is visible in primary status/source124 while the NRT
+snapshots/source133 remain zero. Before either runtime NRT acknowledgement,
+the exact affine sample is checked against all primary-owned fault and
+overflow clear lanes. `BluetoothNrtInterruptFault` retains both words and
+refuses both writes when any such lane is present. An arrival absent from
+the sample is absent from its clear image. This does not identify an NRT
+producer or establish simultaneous set/clear priority.
 
 The modem LP timer samples the low bytes of its pending and rollover words,
 acknowledges each nonzero byte with a reviewed whole-word zero, and publishes
@@ -210,12 +222,13 @@ bank1[0,2] or task17, is `ForeignEnable` with seven source words
 (primary ENA/status/NRT and task ENA).
 Read side effects of the opaque +0x4bc view remain unestablished.
 Its cited sources establish use, not read safety, and HW25 did not read it
-on the board.
+on the board. hw32 preserved the three tested bank1 indications and BTLC
+progress across reads, but had no positive task indication; general read
+safety remains unqualified.
 
 Admission and terminal readback faults retain their owners and reach the
 image's retained reset path. B0 stores these seven words and a reserved zero
-word in its existing 44-byte
-BLE gate record with a reason-tagged payload; the next boot prints them.
+word in its existing 44-byte BLE gate record with a reason-tagged payload; the next boot prints them.
 Readback is sequential, not an atomic cross-bank sample or proof that every
 producer is stopped. The stop sequence keeps its handler/task order.
 SOURCE: `BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027`,

@@ -494,14 +494,18 @@ its model and conformance case.
   stable count and low raw word into continuous time. Sample gaps
   may span multiple raw periods; P3 still services each hardware wrap. Terminal
   output release masks and clears overflow before the bank leaves the handler.
-  Admission checks all controller enables before HAL/PHY initialization against
+  Admission checks primary/task enables before HAL/PHY initialization against
   the explicit production baseline, dynamic and task-lifecycle set; an enable
   outside that set is a named `ForeignEnable` fault. Release retains the existing
   handler/task step order, extends masks to sourced feature lanes and
-  task17, acknowledges saved primary/NRT status and the task WT bank, and
-  rejects nonzero observed enables/status as `ReleaseNotQuiet`. Primary STATUS
-  is masked by ENA: a zero masked read does not establish that retained pending
-  is zero. The opaque task +0x4bc view is diagnostic-only and is never read by
+  task17, checks visible faults immediately before masking, writes fixed
+  non-fault primary/NRT W1C images under the mask and acknowledges the task WT
+  bank. Fault lanes are excluded from unconditional W1C, so arrivals after the
+  check remain retained. Release verifies zero primary/task enables and rejects
+  residual visible status as `ReleaseNotQuiet`. It never reopens ENA or changes
+  matrix routing; masked pending is not observable and no zero-pending proof
+  follows. Bank1 CC0/CC1/overflow have hw32 masked-W1C coverage; bank0/NRT
+  and other feature lanes have vendor coverage, not hardware verification. The opaque task +0x4bc view is diagnostic-only and is never read by
   production. Both faults retain primary observations and task enables and
   quarantine owners through `fatal::reset_recording`; B0 reuses its 44-byte
   BLE gate slot. The separate CTE interrupt bank is outside this policy;

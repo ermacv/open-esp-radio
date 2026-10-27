@@ -431,7 +431,7 @@ pub struct BluetoothNrtInterruptAcknowledged {
     _private: (),
 }
 
-/// NRT unexpectedly exposed the primary controller-time-overflow clear lane.
+/// NRT unexpectedly exposed a primary-owned overflow or fault clear lane.
 /// Neither bank of this exact sampled pair was acknowledged.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothNrtInterruptFault {
@@ -440,12 +440,21 @@ pub struct BluetoothNrtInterruptFault {
 }
 
 /// Admission for a sampled NRT pair. Geometry comes from the shared clear
-/// register: an opaque NRT word must never consume primary overflow unseen.
+/// register: an opaque NRT word must never consume primary overflow or a
+/// primary fault unseen. New arrivals absent from this affine sample are not
+/// included in its acknowledgement.
 fn acknowledge_nrt_if_admitted<T>(
     snapshots: [u32; 2],
     acknowledge: impl FnOnce() -> T,
 ) -> Result<T, BluetoothNrtInterruptFault> {
-    if snapshots[1] & bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK != 0 {
+    if snapshots[0] & bank::irq_clear_0::SOURCE_15_MASK != 0
+        || snapshots[1]
+            & (bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK
+                | bank::irq_clear_1::SOURCE_8_MASK
+                | bank::irq_clear_1::SOURCE_9_MASK
+                | bank::irq_clear_1::SOURCE_12_MASK)
+            != 0
+    {
         Err(BluetoothNrtInterruptFault { snapshots })
     } else {
         Ok(acknowledge())
@@ -662,7 +671,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     /// The bank shares its handler's line with other sources, so an entry
     /// may find both snapshots clear: it then writes nothing and returns
     /// `Ok(None)`.
-    /// If the exact NRT sample includes the shared controller-time-overflow
+    /// If the exact NRT sample includes a shared primary fault or overflow
     /// clear lane, refuse both acknowledgements and retain both observations.
     pub fn capture_nrt_and_acknowledge(
         &mut self,

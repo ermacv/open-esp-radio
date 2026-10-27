@@ -563,7 +563,9 @@ impl TaskOwner {
         _sampled: BluetoothOutputIdleSampled,
     ) -> Result<BluetoothSchedulerHeadsAbsent, BluetoothControllerOutputReleaseError> {
         self.registers.confirm_scheduler_heads_absent()?;
-        Ok(BluetoothSchedulerHeadsAbsent { _private: () })
+        Ok(BluetoothSchedulerHeadsAbsent {
+            task_enable: self.interrupt_enable_image(),
+        })
     }
 
     /// After the handler masked the dynamic scheduler sources, disable
@@ -1265,7 +1267,7 @@ impl InterruptRegistersOwner {
     ///
     /// This preserves the sample/sample/acknowledge/acknowledge order. It
     /// deliberately performs no feature dispatch and publishes no task wake.
-    /// An NRT sample containing the primary overflow clear lane returns a
+    /// An NRT sample containing a primary fault or overflow clear lane returns a
     /// fault retaining both snapshots, without acknowledging either bank.
     pub fn capture_nrt_and_acknowledge(
         &mut self,
@@ -1415,17 +1417,19 @@ impl InterruptRegistersOwner {
         Ok(BluetoothOutputIdleSampled { _private: () })
     }
 
-    /// Mask the sourced terminal-cleanup sources and fence, once the task found no
-    /// list head published.
+    /// Check visible faults, then mask the sourced terminal-cleanup sources and
+    /// fence, once the task found no list head published. A visible fault retains
+    /// its observations for quarantine; no fault lane is acknowledged.
     pub fn mask_output_dynamic_sources(
         &mut self,
         _heads: &BluetoothSchedulerHeadsAbsent,
-    ) -> BluetoothDynamicSourcesMasked {
-        self.registers.mask_output_dynamic_sources();
-        BluetoothDynamicSourcesMasked { _private: () }
+    ) -> Result<BluetoothDynamicSourcesMasked, BluetoothControllerOutputReleaseError> {
+        self.registers
+            .mask_output_dynamic_sources(self.fault_acknowledged, _heads.task_enable)?;
+        Ok(BluetoothDynamicSourcesMasked { _private: () })
     }
 
-    /// Acknowledge saved primary/NRT samples and release the controller output,
+    /// Discard the fixed non-fault primary/NRT subset under the mask and release output,
     /// once the task disabled RUN, on a fresh idle BUSY sample within
     /// `settle` with no visible fault pending or acknowledged. Masked STATUS
     /// does not prove pending is absent.
@@ -1496,7 +1500,7 @@ pub struct BluetoothOutputIdleSampled {
 #[derive(Debug)]
 #[must_use = "the empty lists admit the handler's mask"]
 pub struct BluetoothSchedulerHeadsAbsent {
-    _private: (),
+    task_enable: u32,
 }
 
 /// The handler masked the dynamic scheduler sources and fenced.
@@ -1540,7 +1544,7 @@ impl BluetoothOutputIdleSampled {
 impl BluetoothSchedulerHeadsAbsent {
     #[doc(hidden)]
     pub const fn for_host_test() -> Self {
-        Self { _private: () }
+        Self { task_enable: 0 }
     }
 }
 

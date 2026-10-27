@@ -227,11 +227,11 @@ fn the_output_release_alternates_through_the_channel_with_its_proofs() {
         assert!(poll(mask.as_mut()).is_pending());
         assert!(irq.service_with(|command| {
             assert!(matches!(command, Command::MaskOutput(_)));
-            Ok(Reply::OutputMasked(
+            Ok(Reply::OutputMasked(Ok(
                 crate::bluetooth::BluetoothDynamicSourcesMasked::for_host_test(),
-            ))
+            )))
         }));
-        assert!(matches!(poll(mask.as_mut()), Poll::Ready(Ok(_))));
+        assert!(matches!(poll(mask.as_mut()), Poll::Ready(Ok(Ok(_)))));
     }
     {
         let mut release = pin!(task.release_output(
@@ -283,4 +283,35 @@ fn a_service_barrier_requires_a_fresh_handler_round_trip_and_executes_once() {
     }));
     assert!(!irq.service_with(|_| panic!("a duplicate entry cannot repeat a barrier")));
     assert_eq!(poll(future.as_mut()), Poll::Ready(Ok(())));
+}
+
+#[test]
+fn a_visible_fault_refuses_the_mask_through_the_affine_reply() {
+    let (mut task, mut irq, bell) = halves();
+    let observation = crate::bluetooth::BluetoothInterruptPolicyObservation {
+        primary: crate::bluetooth::BluetoothInterruptObservation {
+            enable_0: 0x8000,
+            enable_1: 0x1302,
+            status_0: 0x8000,
+            status_1: 0,
+            nrt_0: 0xabcdef01,
+            nrt_1: 0x12345678,
+        },
+        task_enable: 0x4000,
+    };
+    let cause = crate::bluetooth::BluetoothInterruptPolicyFault::ReleaseNotQuiet(observation);
+    let mut request = pin!(task.mask_output(
+        &bell,
+        crate::bluetooth::BluetoothSchedulerHeadsAbsent::for_host_test()
+    ));
+    assert!(poll(request.as_mut()).is_pending());
+    assert!(irq.service_with(|command| {
+        assert!(matches!(command, Command::MaskOutput(_)));
+        Ok(Reply::OutputMasked(Err(
+            BluetoothControllerOutputReleaseError::InterruptPolicy(cause),
+        )))
+    }));
+    assert!(
+        matches!(poll(request.as_mut()), Poll::Ready(Ok(Err(BluetoothControllerOutputReleaseError::InterruptPolicy(observed)))) if observed == cause)
+    );
 }
