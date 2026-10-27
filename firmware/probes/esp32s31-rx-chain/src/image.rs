@@ -39,6 +39,11 @@ use oer_radio_regulatory::{Country, RegulatoryDomain};
 use oer_time::{Clock, Duration, Timer};
 use static_cell::StaticCell;
 
+#[path = "irq120.rs"]
+mod irq120;
+// The current finite capture; selection 4 retains the barrier observer below.
+const SELECTION: u16 = 160;
+
 const COUNT: usize = 32;
 const BUFFER: usize = 128;
 const NODES: usize = COUNT + 1;
@@ -697,6 +702,49 @@ async fn run(
     let ring = stopped_ring
         .try_start(access.rx_dma())
         .map_err(|_| "rx-start")?;
+    if SELECTION == 160 {
+        let trace = irq120::take()?;
+        let raw = mac_irq.mac_interrupt_raw();
+        if raw.fatal_assertion_raw().is_some() {
+            return Err("fatal-before-rx");
+        }
+        mac_irq.acknowledge_mac_interrupt_raw(raw);
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        mac_irq.mask_all_mac_interrupts();
+        irq120::checkpoint(trace, 160, storage, &access, &mac_irq)?;
+        usb::text(
+            console,
+            b"IRQ120 begin v=1 selection=160 channel=13 cap_ms=700 mask_ms=250 barriers=none\n",
+        )
+        .await;
+        mac_irq.unmask_rx_delivery_interrupts();
+        access.wifi_mac_hal().start_mac_runtime(&ring);
+        let observation = irq120::collect(trace, storage, &access, &mut mac_irq);
+        access.wifi_mac_hal().request_channel_stop();
+        let stop_deadline = EmbassyClock
+            .now()
+            .checked_add(Duration::from_millis(50))
+            .ok_or("stop-deadline")?;
+        while access.wifi_mac_hal().channel_active_state() != 0 {
+            if EmbassyClock.now() >= stop_deadline {
+                return Err("mac-stop");
+            }
+            EmbassyClock
+                .wait_until(
+                    EmbassyClock
+                        .now()
+                        .checked_add(Duration::from_millis(1))
+                        .ok_or("wait")?,
+                )
+                .await;
+        }
+        let _halted = ring.try_stop(access.rx_dma()).map_err(|_| "walker-stop")?;
+        irq120::finish(trace, storage, &access, &mut mac_irq, console).await?;
+        let stopped = parts.context.into_stopped(parts.platform, access);
+        let (_cell, release) = stopped.release(cell).await;
+        release.map_err(|_| "radio-release")?;
+        return observation;
+    }
     // Production start validates an entirely armed topology. Install the
     // deliberately CPU-owned barriers after that edge, but before outer RX.
     // Whether a walker prefetch can defeat this live OWNER store is part of

@@ -146,7 +146,84 @@ impl MacInterruptObservation {
 #[must_use = "an interrupt snapshot must be inspected and acknowledged"]
 pub struct MacInterruptSnapshot(wifi_mac::MacInterruptSnapshot);
 
+/// Independently selectable RX-associated lanes of the MAC interrupt bank.
+/// The auxiliary names identify register lanes, not established event causes.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct MacRxInterrupts {
+    pub auxiliary_5: bool,
+    pub success: bool,
+    pub auxiliary_24: bool,
+}
+
+impl MacRxInterrupts {
+    pub const NONE: Self = Self {
+        auxiliary_5: false,
+        success: false,
+        auxiliary_24: false,
+    };
+    pub const ALL: Self = Self {
+        auxiliary_5: true,
+        success: true,
+        auxiliary_24: true,
+    };
+    pub const AUXILIARY_5: Self = Self {
+        auxiliary_5: true,
+        ..Self::NONE
+    };
+    pub const SUCCESS: Self = Self {
+        success: true,
+        ..Self::NONE
+    };
+    pub const AUXILIARY_24: Self = Self {
+        auxiliary_24: true,
+        ..Self::NONE
+    };
+}
+
 impl MacInterruptSnapshot {
+    /// Complete sampled diagnostic value; grants no acknowledgement authority.
+    pub const fn bits(&self) -> u32 {
+        self.0.bits()
+    }
+
+    pub const fn rx_causes(&self) -> MacRxInterrupts {
+        MacRxInterrupts {
+            auxiliary_5: self.0.rx_associated_auxiliary_5(),
+            success: self.0.rx_success(),
+            auxiliary_24: self.0.rx_associated_auxiliary_24(),
+        }
+    }
+
+    /// Consume this sample, retaining only selected RX lanes for acknowledgement.
+    /// Unselected causes remain unacknowledged; this never selects a later arrival.
+    pub const fn retain_rx_causes(self, selected: MacRxInterrupts) -> Self {
+        Self(
+            self.0
+                .retain_bits_0_4_opaque(false)
+                .retain_rx_associated_auxiliary_5(selected.auxiliary_5)
+                .retain_bit_6_opaque(false)
+                .retain_tx_complete(false)
+                .retain_bss_color_collision(false)
+                .retain_bits_9_10_opaque(false)
+                .retain_watchdog(false)
+                .retain_bit_12_opaque(false)
+                .retain_bit_13_opaque(false)
+                .retain_rx_success(selected.success)
+                .retain_sta_beacon_filter(false)
+                .retain_bits_16_18_opaque(false)
+                .retain_tx_timeout(false)
+                .retain_bit_20_opaque(false)
+                .retain_fatal_assertion(false)
+                .retain_bit_22_opaque(false)
+                .retain_bit_23_opaque(false)
+                .retain_rx_associated_auxiliary_24(selected.auxiliary_24)
+                .retain_bits_25_26_opaque(false)
+                .retain_wdev_timer_0(false)
+                .retain_wdev_timer_1(false)
+                .retain_bits_29_31_opaque(false),
+        )
+    }
+
     pub fn observation(&self) -> MacInterruptObservation {
         let sample = &self.0;
         let work_events = MacInterruptEvents::from_causes(
@@ -193,6 +270,11 @@ impl core::fmt::Debug for MacInterruptSnapshot {
 pub struct MacInterruptRawSnapshot(wifi_mac::MacInterruptRawSnapshot);
 
 impl MacInterruptRawSnapshot {
+    /// Complete unmasked diagnostic value; grants no write authority.
+    pub const fn bits(&self) -> u32 {
+        self.0.bits()
+    }
+
     /// The complete diagnostic word if the named fatal assertion was sampled.
     pub fn fatal_assertion_raw(&self) -> Option<u32> {
         self.0.fatal_assertion().then_some(self.0.bits())
@@ -555,6 +637,27 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// Read the currently published MAC interrupt mask.
     pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
         observe_mac_interrupt_enable(&self.mac)
+    }
+
+    /// Read each RX delivery-enable lane independently.
+    pub fn mac_rx_interrupt_enable(&self) -> MacRxInterrupts {
+        let value = self.mac.read_enable();
+        MacRxInterrupts {
+            auxiliary_5: value.rx_associated_auxiliary_5(),
+            success: value.rx_success(),
+            auxiliary_24: value.rx_associated_auxiliary_24(),
+        }
+    }
+
+    /// Change only the selected RX delivery lanes, preserving every other lane.
+    /// This is a mask operation and acknowledges nothing.
+    pub fn set_mac_rx_interrupt_enable(&mut self, enabled: MacRxInterrupts) {
+        self.mac.modify_enable(|w| {
+            w.set_rx_associated_auxiliary_5(enabled.auxiliary_5)
+                .set_rx_success(enabled.success)
+                .set_rx_associated_auxiliary_24(enabled.auxiliary_24);
+        });
+        oer_riscv::fence();
     }
 
     /// Sample RAW independently of the delivery mask. The epoch checks the

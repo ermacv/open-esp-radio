@@ -1,5 +1,61 @@
 # S31 RX chain hardware observation
 
+The default source selection is **160**, a source120 RAW/STATUS/DMA observation.
+The source constant `image.rs::SELECTION` selects it; selection4 runs the
+barrier observer described below. Both use the same public cold startup and
+one retained 32×128-byte RX arena plus R, without take/recycle/rearm.
+
+## Source120 capture (selection160)
+
+One passive channel13 receive window lasts **700 ms**. RX delivery5/14/24 is
+enabled and sampled/acknowledged for250ms, then all MAC enables are masked
+without acknowledging for the remaining450ms. No CPU source120 handler is
+installed: the observation is peripheral-register visibility, not ISR latency.
+The journal lives in internal SRAM `.critical.bss.rx_irq120`; it emits no
+console traffic during collection. There are no CPU-owned barrier nodes in
+this mode. Buffer-full pressure can occur naturally; no frame is synthesized.
+
+After stopping outer RX and the descriptor walker, phases162–169 record:
+masked pending, RX unmask, remask, second unmask, selected W1C5 while enabled,
+selected W1C24 while masked using a retained enabled STATUS sample, W1C14
+while enabled, and final all-enable mask. A zero positive-precondition sample
+makes that lane's clear test inconclusive. The selected acknowledgement
+consumes an affine STATUS sample narrowed through generated field accessors;
+full RAW observations grant no write authority. All other pending causes
+remain unacknowledged by these selected clears.
+
+`IRQ120 begin/end` delimit output. Each `I` row contains48 hexadecimal words;
+phase IDs160–169 below are decimal (printed as `a0`–`a9`). The accesses are
+sequential and perturb timing; each cycle value brackets the adjacent reads.
+
+| Indices (zero-based) | Words |
+| --- | --- |
+| 0–2 | scan ordinal, phase, begin mcycle |
+| 3–8 | BASE, pre LAST/NEXT, pre DONE bitmap0–31, pre R DONE, pre-read end cycle |
+| 9–12 | first RAW, RAW-read end cycle, first STATUS, STATUS-read end cycle |
+| 13–17 | post LAST/NEXT, post DONE bitmap0–31, post R DONE, post-read end cycle |
+| 18–21 | second RAW, its end cycle, second STATUS, its end cycle |
+| 22–23 | compact RX enables (5=1,14=2,24=4), full-enable classified Disabled boolean |
+| 24–39 | MPDU, END, FCS, abort, abort-FCS-pass, power-drop, same-BM, other-unicast, last-unmatched, buffer-full, FIFO-overflow, NRX-abort, NRX-restart, HT-SIG, HE-SIG-A-CRC, data-success |
+| 40–42 | statistics end cycle, pre/post NEXT upper-unknown flags |
+| 43–47 | before-ack cycle (0 if no ack), after-ack RAW, after-ack STATUS, compact RX enables, final cycle |
+
+Stopped checkpoint rows have zero in43–46; their first/second RAW/STATUS and
+enables remain in9/11/18/20/22. At most256 changed/forced rows are retained;
+live collection reserves10 rows for stopped phases and stops on exhaustion,
+then dumps the retained evidence before returning a failed verdict.
+`N` rows contain node index (hex20=R), CONTROL, BUFFER, descriptor NEXT,
+then all32 stopped buffer words. Data dumps belong only in local evidence.
+
+A DONE read after RAW=1 can occur after a later DMA store; it does not alone
+prove DONE was already set when RAW was observed. Pre/post DONE and cursor
+brackets permit bounded ordering/counterexample analysis. Unchanged payload
+at stop is also not a proof that every payload beat preceded IRQ or DONE.
+Cause identity requires independently characterized stimulus; counter
+co-occurrence alone cannot distinguish the physical roles of5 and24.
+
+## Barrier observer (selection4)
+
 This bootable probe makes one finite RX publication: 32 nodes of 128 bytes,
 plus the production reserved descriptor R. It passively receives on channel 13
 under the DE domain, stopping at 3 terminal nodes or 700 milliseconds. A 512-row

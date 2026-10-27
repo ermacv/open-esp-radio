@@ -2323,7 +2323,7 @@ accuracy = "exact"
 completeness = "complete"
 
 [review.entity."ENABLE.RX_ASSOCIATED_AUXILIARY_5"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
 provenance = "observed"
 accuracy = "exact"
 
@@ -2358,7 +2358,7 @@ sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 accuracy = "exact"
 
 [review.entity."ENABLE.RX_SUCCESS"]
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2397,13 +2397,13 @@ sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_INIT_TAIL", "S3
 accuracy = "exact"
 
 [review.entity."RAW"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
 [review.entity."RAW.BITS_0_20_OPAQUE"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
 
 [review.entity."RAW.FATAL_ASSERTION"]
 sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_ISR_REGISTER_DUMP"]
@@ -2414,7 +2414,7 @@ accuracy = "exact"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
 
 [review.entity."STATUS"]
-sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "HW20_RX_IRQ_DMA_BRACKETS_20261027", "HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2424,7 +2424,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"
 accuracy = "exact"
 
 [review.entity."STATUS.RX_ASSOCIATED_AUXILIARY_5"]
-sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "HW20_RX_AUXILIARY_OBSERVATION_20261027", "HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
 provenance = "observed"
 accuracy = "exact"
 
@@ -2463,7 +2463,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL",
 accuracy = "exact"
 
 [review.entity."STATUS.RX_SUCCESS"]
-sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "HW20_RX_IRQ_DMA_BRACKETS_20261027", "HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2501,7 +2501,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL",
 accuracy = "exact"
 
 [review.entity."STATUS.RX_ASSOCIATED_AUXILIARY_24"]
-sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
+sources = ["HW20_RX_AUXILIARY_OBSERVATION_20261027", "HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
 provenance = "observed"
 accuracy = "exact"
 
@@ -2522,13 +2522,13 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"
 accuracy = "exact"
 
 [review.entity."CLEAR"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
 [review.entity."CLEAR.EVENTS"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -9712,14 +9712,14 @@ description = "Interrupt-enable bits whose event identities remain unknown."
 [[registers]]
 name = "RAW"
 offset = 0xc44
-description = "Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+description = "Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027."
 
 [[registers.fields]]
 name = "BITS_0_20_OPAQUE"
 bits = "20:0"
 class = "plain"
 write-range = { min = 0, max = 0x1fffff }
-description = "Raw event observations; identities are not independently decoded here."
+description = "Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027."
 
 [[registers.fields]]
 name = "FATAL_ASSERTION"
@@ -9749,7 +9749,7 @@ description = "Masked event bits whose identities remain unknown."
 name = "RX_ASSOCIATED_AUXILIARY_5"
 bits = "5"
 class = "read-only"
-description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity. The grouped pending-STATUS observation establishes that at least one of auxiliary bits 5/24 was pending; it does not identify this lane independently or prove both."
+description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer remains unknown; software must not treat it as RX ownership or work multiplicity. A bounded passive-beacon capture independently observes this lane, pending RAW retention across masking, and selective CLEAR5 while enabled preserving pending RX_SUCCESS. Its observed accepted-frame correlation does not establish equivalence to RX_SUCCESS or exclude error producers. SOURCE: HW20_RX_RAW_RETENTION_20261027, HW20_RX_AUXILIARY_OBSERVATION_20261027."
 
 [[registers.fields]]
 name = "BIT_6_OPAQUE"
@@ -9797,7 +9797,7 @@ description = "Masked event bit enabled by the complete cold receive mask; its e
 name = "RX_SUCCESS"
 bits = "14"
 class = "read-only"
-description = "RX success event used to schedule descriptor service; it does not by itself establish payload durability or IRQ-to-DMA ordering."
+description = "RX success event used to schedule descriptor service; it does not by itself establish payload durability or IRQ-to-DMA ordering. In a bounded capture, each of three first observed enabled RAW14/STATUS14 positives follows a read of the corresponding new terminal RX_DONE and advanced NEXT; this is observed register-read order, not a universal hardware assertion-order guarantee. SOURCE: HW20_RX_IRQ_DMA_BRACKETS_20261027."
 
 [[registers.fields]]
 name = "STA_BEACON_FILTER"
@@ -9845,7 +9845,7 @@ description = "Masked event bit enabled by the complete cold receive mask; its e
 name = "RX_ASSOCIATED_AUXILIARY_24"
 bits = "24"
 class = "read-only"
-description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity. The grouped pending-STATUS observation establishes that at least one of auxiliary bits 5/24 was pending; it does not identify this lane independently or prove both."
+description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer and independent clear/retention behavior remain unknown; software must not treat it as RX ownership or work multiplicity. Grouped pending-STATUS evidence alone cannot identify this lane. A bounded passive-beacon capture has no recorded positive lane24 sample, so it supplies no positive W1C24 or delivery-mask test. SOURCE: HW20_RX_AUXILIARY_OBSERVATION_20261027."
 
 [[registers.fields]]
 name = "BITS_25_26_OPAQUE"
