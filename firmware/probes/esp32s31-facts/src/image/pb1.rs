@@ -353,19 +353,22 @@ pub(super) fn sleep0(s: &mut Session<'_>) {
     stop(s);
 }
 pub(super) fn width(s: &mut Session<'_>) {
-    width_modes(s, &[false, true]);
+    width_modes(s, &[false, true], 0);
 }
 pub(super) fn width_set(s: &mut Session<'_>) {
-    width_modes(s, &[true]);
+    width_modes(s, &[true], 0);
 }
-fn width_modes(s: &mut Session<'_>, modes: &[bool]) {
+pub(super) fn width_remaining(s: &mut Session<'_>) {
+    width_modes(s, &[true], 2);
+}
+fn width_modes(s: &mut Session<'_>, modes: &[bool], first: u32) {
     if !init(s) {
         return;
     }
     const LOW_WIDTH: u32 = pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH;
     const UPPER_WIDTH: u32 = pac::modem_pwr::word_006c_opaque::BITS_24_31_OPAQUE_WIDTH;
     for &enabled in modes {
-        for trial in 0..UPPER_WIDTH + 2 {
+        for trial in first..UPPER_WIDTH + 2 {
             // CONTROL4=1 retained latch2 in the first capture. Clear the
             // sourced mode pair before its CONTROL1 trigger, then restore
             // the tested pair before reading the independent precondition.
@@ -417,7 +420,9 @@ fn width_modes(s: &mut Session<'_>, modes: &[bool]) {
                     .read_int_status_reg_3()
                     .int_status_3(),
             );
-            if initial != 0 || latch || s.ble.timer.read_word_0024_opaque().low_byte() == 0 {
+            // The fresh 0->1 byte is the compare witness. A retained latch
+            // is recorded, but supplies no independent new-edge evidence.
+            if initial != 0 || s.ble.timer.read_word_0024_opaque().low_byte() == 0 {
                 emit(0x24ee, 3, tag, 0);
                 stop(s);
                 return;
