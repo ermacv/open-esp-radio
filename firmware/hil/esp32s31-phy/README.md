@@ -99,6 +99,8 @@ The P2 owner pins large child futures and awaits references to their retained
 storage. Owned registration, maintenance and RF results are polled into parent
 storage; a separate completion frame returns domain custody and inspects the
 registration result in place before diagnostics or capture bring-up.
+Future construction and request handling have separate non-inlined frames, so
+their scratch does not remain live beneath calibration or tracking polls.
 
 The image uses existing staged boot and chip placement/stack policies. It has
 no retained diagnostic post-mortem store; base boot evidence retains the actual

@@ -2,6 +2,13 @@
 use core::{future::Future, mem::MaybeUninit, pin::Pin};
 use oer_memory::Placed;
 
+// LLVM retains whole-future construction scratch even for uninitialized
+// suspension fields. Keep it off the stack while the child is being polled.
+#[inline(never)]
+pub fn construct<F: Future>(initialize: impl FnOnce() -> F) -> F {
+    initialize()
+}
+
 // Construct directly in the parent's return place: an async fn adds a
 // whole-future temporary before it can be pinned by the caller.
 #[inline(always)]
@@ -41,6 +48,22 @@ mod tests {
         fn drop(&mut self) {
             self.0.set(self.0.get() + 1);
         }
+    }
+
+    #[test]
+    fn construction_transfers_custody_without_polling_the_operation() {
+        let drops = Cell::new(0);
+        let polled = Cell::new(false);
+        let owner = Owner(&drops);
+        let operation = construct(|| async {
+            polled.set(true);
+            core::future::pending::<()>().await;
+            owner
+        });
+        assert!(!polled.get());
+        assert_eq!(drops.get(), 0);
+        drop(operation);
+        assert_eq!(drops.get(), 1);
     }
 
     #[test]

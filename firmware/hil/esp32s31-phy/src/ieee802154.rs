@@ -212,13 +212,15 @@ impl Rx {
             let timer_window = oer_espressif_executor::timer_observation::Window::begin();
             let result = {
                 let mut platform = ();
-                let mut maintain = core::pin::pin!(maintain_concurrent_phy::<_, (), RomShortDelay, _>(
+                let domain = require_radio(domain_slot.take(), fault);
+                let observer = &mut observer;
+                let mut maintain = core::pin::pin!(crate::completion::construct(|| maintain_concurrent_phy::<_, (), RomShortDelay, _>(
                     &crate::PHY_CLOCK,
-                    require_radio(domain_slot.take(), fault),
+                    domain,
                     &mut platform,
-                    &mut observer,
+                    observer,
                     phy_pilot,
-                ));
+                )));
                 crate::completion::run(maintain.as_mut(), domain_slot, crate::completion::restore).await
             };
             observer.report(0).await;
@@ -362,11 +364,12 @@ impl Rx {
         .await?;
         {
             let mut platform = ();
-            let mut close = core::pin::pin!(close_concurrent_rf::<_, (), RomShortDelay>(
+            let domain = require_radio(domain_slot.take(), fault);
+            let mut close = core::pin::pin!(crate::completion::construct(|| close_concurrent_rf::<_, (), RomShortDelay>(
                 &crate::PHY_CLOCK,
-                require_radio(domain_slot.take(), fault),
+                domain,
                 &mut platform,
-            ));
+            )));
             crate::completion::run(close.as_mut(), domain_slot, crate::completion::restore).await
         }
         .map_err(|_| RejectReason::Internal)?;

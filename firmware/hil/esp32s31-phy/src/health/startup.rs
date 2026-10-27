@@ -125,7 +125,7 @@ pub(crate) async fn serve_radio(radio: &'static mut radio::Radio) {
         radio.expire_cache();
         if radio.registration_pending() {
             let mut registration = core::pin::pin!(radio.service_registration());
-            poll_fn(|cx| radio::poll_registration(registration.as_mut(), cx)).await;
+            poll_fn(|cx| radio::poll_operation(registration.as_mut(), cx)).await;
             continue;
         }
         if let Some(deadline) = radio.deadline() {

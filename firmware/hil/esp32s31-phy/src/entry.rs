@@ -376,7 +376,7 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
         radio.expire_cache();
         if radio.registration_pending() {
             let mut registration = core::pin::pin!(radio.service_registration());
-            poll_fn(|cx| radio::poll_registration(registration.as_mut(), cx)).await;
+            poll_fn(|cx| radio::poll_operation(registration.as_mut(), cx)).await;
             continue;
         }
         if let Some(deadline) = radio.deadline() {
@@ -408,12 +408,17 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
                     response.answer(Answer::Proceeded);
                 }
                 Request::Wire(request) => {
-                    let result = {
-                        let mut request = core::pin::pin!(radio.request(request, &mut capture_rx));
-                        request.as_mut().await
-                    };
-                    radio.request_finished(&result);
-                    response.answer(result.unwrap_or_else(Answer::Rejected));
+                    // Request/response scratch must not remain on the stack
+                    // while an unrelated registration or hold is polled.
+                    let mut operation = core::pin::pin!(async {
+                        let result = {
+                            let mut request = core::pin::pin!(radio.request(request, &mut capture_rx));
+                            request.as_mut().await
+                        };
+                        radio.request_finished(&result);
+                        response.answer(result.unwrap_or_else(Answer::Rejected));
+                    });
+                    poll_fn(|cx| radio::poll_operation(operation.as_mut(), cx)).await;
                 }
             }
         }
