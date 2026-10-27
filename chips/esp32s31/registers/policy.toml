@@ -2833,19 +2833,25 @@ sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
 name = "configure_timg0_timer0_stopped"
 register = "TIMG0.T0CONFIG"
 value = 0x40051000
-sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW23_S31_TIMG0_RELOAD_20261027"]
+
+[[fixed-register-images]]
+name = "configure_timg0_timer0_stopped_alarm"
+register = "TIMG0.T0CONFIG"
+value = 0x40051400
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW23_S31_TIMG0_COMPARATOR_20261027"]
 
 [[fixed-register-images]]
 name = "configure_timg0_timer0_counting"
 register = "TIMG0.T0CONFIG"
 value = 0xc0051000
-sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW23_S31_TIMG0_RELOAD_20261027"]
 
 [[fixed-register-images]]
 name = "configure_timg0_timer0_armed"
 register = "TIMG0.T0CONFIG"
 value = 0xc0051400
-sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW23_S31_TIMG0_RELOAD_20261027"]
 
 [[fixed-register-images]]
 name = "capture_timg0_timer0"

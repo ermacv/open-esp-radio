@@ -4,15 +4,17 @@
 //!
 //! Runtime startup selects/enables XTAL through the watchdog's retained
 //! clock/reset word. Adopting these parts performs no hardware writes.
-//! No image binds or arms them. The host composition fixture selects P2
+//! No production image binds or arms them. The host composition fixture selects P2
 //! `Exempt(ExecutorLevel)` and a lower line ID than FROM_CPU2. Its arbitration
-//! interpretation comes from the family CLIC contract, not an S31 measurement:
+//! interpretation follows the family CLIC contract:
 //! SOURCE: chips/espressif/platform/family.toml [interrupts], RISC-V CLIC
 //! specification 3f8ee744, "Specifying Interrupt Priority"; ESP-IDF 4d59230d
 //! components/soc/esp32s31/include/soc/clic_reg.h (NLBITS/INT_INFO geometry).
 //! SOURCE for same-level priority/ID arbitration: ESP32-C5 TRM v1.1,
 //! documentation/esp32-c5_technical_reference_manual_en.pdf, section 2.8.2.5,
-//! p.86. Applying that family contract is unverified on S31 (probe P3).
+//! p.86. SOURCE: HW23_S31_P2_ARBITRATION_20261027 confirms line17 before16
+//! on S31 hart0 at P2, with TIMG0/FROM_CPU2 assigned both ways. Other line
+//! pairs and levels are not measured by that observation.
 
 use oer_esp32s31_pac::{instances, ownership::TimerGroup0Peripherals, timg};
 use oer_interrupt_table::EventAuthority;
@@ -88,8 +90,10 @@ impl<P: Placement> Timg0AlarmProgram<P> {
     /// SOURCE: ESP-IDF 4d59230d
     /// components/esp_hal_timg/esp32s31/include/hal/timer_ll.h:293-321
     /// (reload value and software reload), :236-239 (counter enable), :279-283
-    /// (alarm value). The stop/load-zero/strobe/start sequence is unverified
-    /// on S31; HW7 run03's past-target test does not qualify it.
+    /// (alarm value). SOURCE: HW23_S31_TIMG0_RELOAD_20261027 confirms the
+    /// stop/load-zero/strobe/start sequence on S31 at XTAL/divider40 for
+    /// 10/100/1000 us and with old pending retained across rearm. A separate
+    /// acknowledgement is still required; arm does not consume old pending.
     /// HW7_S31_TIMG0_20261026 qualifies one-shot expiry, masked RAW retention
     /// and ENA redelivery, not clear/arrival collisions or an IRQ latency bound.
     ///
@@ -206,7 +210,8 @@ impl<P: Placement> ProgramRegisters for Timg0AlarmProgram<P> {
         });
         // SOURCE: ESP-IDF 4d59230d components/esp_hal_timg/esp32s31/include/
         // hal/timer_ll.h:293-321 (set_reload_value / trigger_soft_reload).
-        // Stop -> load zero -> LOAD strobe -> start is unverified on S31.
+        // SOURCE: HW23_S31_TIMG0_RELOAD_20261027 observes both counter halves
+        // reload to zero and 10/100/1000-us expiry after this sequence on S31.
         self.0.trigger_t0load_t_load(1);
     }
 

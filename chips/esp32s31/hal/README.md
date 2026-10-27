@@ -29,13 +29,20 @@ and unmasks delivery. It does not acknowledge an existing cause. `disarm`
 only stops and masks; RAW remains for the handler's IRQ owner to observe and
 acknowledge separately. The IRQ owner's `acknowledge` samples RAW/ST and
 strobes only T0 CLR, leaving sibling causes, programming and ENA unchanged.
-Zero and out-of-range input return `InvalidDelay` before MMIO; equality against
-a freshly reloaded zero is not qualified by the bounded facts.
+Zero and out-of-range input return `InvalidDelay` before MMIO. Separate
+comparator observations at stopped count10000 cover equal/below targets;
+zero-delay arming remains outside this API.
 
 SOURCE for stop/load-zero/T0LOAD-strobe/start: ESP-IDF 4d59230d,
 `components/esp_hal_timg/esp32s31/include/hal/timer_ll.h:236-239` (counter),
-`:293-297` (reload value), `:319-322` (software reload). This sequence is
-**unverified on S31**; HW7 run03's past-target arming does not qualify it.
+`:293-297` (reload value), `:319-322` (software reload).
+`HW23_S31_TIMG0_RELOAD_20261027` confirms this sequence on S31 at
+XTAL/divider40 for 10/100/1000 µs and with pending retained across rearm.
+LOAD resets both counter halves; programming LOADHI/LO alone does not.
+Instrumented RAW observations agree with nominal 1 MHz counting; they do
+not measure exact comparator or interrupt-entry latency.
+`HW23_S31_TIMG0_COMPARATOR_20261027` observes no expiry at/below the stopped
+count until T_EN is set, then prompt expiry; a running past target also fires.
 `HW7_S31_TIMG0_20261026` in the register evidence supports one-shot expiry,
 RAW retention under stop/mask, ENA redelivery and CLR at ENA=0/1, without a
 clear/arrival collision or exact IRQ-latency guarantee.
@@ -46,8 +53,10 @@ RISC-V CLIC specification 3f8ee744, "Specifying Interrupt Priority";
 ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/clic_reg.h` supplies the
 CLIC geometry. SOURCE for priority/ID arbitration:
 [ESP32-C5 TRM v1.1](https://www.espressif.com/sites/default/files/documentation/esp32-c5_technical_reference_manual_en.pdf),
-section 2.8.2.5, p.86. Applying that family contract's highest-ID tie-break at
-equal level is **unverified on S31 (probe P3)**. No image binds or arms T0;
+section 2.8.2.5, p.86. `HW23_S31_P2_ARBITRATION_20261027` confirms line17
+before16 on S31 hart0 at P2, with TIMG0/FROM_CPU2 assigned both ways and
+both positively pending before admission. Other pairs, levels and sustained
+fairness remain unmeasured. No production image binds or arms T0;
 PHY uses the existing P2 executor.
 
 ## Platform clocks

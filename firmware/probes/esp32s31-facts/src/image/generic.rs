@@ -27,13 +27,30 @@ pub(super) fn interrupt() -> bool {
     if clic.is_null() {
         return false;
     }
-    // SAFETY: admit lends the live CLIC owner only while the masked thread
-    // enables IRQs and waits without touching that owner. Hart1 is contained,
-    // the handler is non-reentrant, and the loan ends after MIE is cleared.
-    unsafe { &mut *clic }.modify_ctrl(CPU_LINE, |w| {
-        w.set_ie(false);
-    });
+    // SAFETY: admit_window lends the live CLIC owner only while the masked
+    // thread enables IRQs and waits without touching it. Both generic and
+    // arbitration callers contain hart1 and admit only non-reentrant handlers.
+    // The loan ends after MIE is cleared, before the thread reuses the owner.
+    let clic = unsafe { &mut *clic };
+    if !super::timg_arbitration::interrupt(clic) {
+        clic.modify_ctrl(CPU_LINE, |w| {
+            w.set_ie(false);
+        });
+    }
     true
+}
+
+/// One bounded handler loan; callers configure lines with MIE masked first.
+/// Neither caller accesses the borrowed CLIC owner during interrupt admission.
+pub(super) fn admit_window(clic: &mut pac::clic::Clic) -> [u32; 2] {
+    oer_riscv::disable_interrupts();
+    CLIC.store(ptr::from_mut(clic), Ordering::Release);
+    let start = oer_riscv::cycle32();
+    oer_riscv::enable_interrupts();
+    wait_window();
+    oer_riscv::disable_interrupts();
+    CLIC.store(ptr::null_mut(), Ordering::Release);
+    [start, oer_riscv::cycle32()]
 }
 fn window(cycles: u32) {
     let start = oer_riscv::cycle32();
@@ -110,18 +127,11 @@ fn matrix_state(s: &Session<'_>, tag: u32) {
 }
 fn admit(s: &mut Session<'_>, tag: u32) {
     IRQ_COUNT.store(0, Ordering::Relaxed);
-    CLIC.store(
-        ptr::addr_of_mut!(s.interrupt_matrix.clic),
-        Ordering::Release,
-    );
     s.interrupt_matrix.clic.modify_ctrl(CPU_LINE, |w| {
         w.set_ie(true);
     });
     oer_riscv::restore_interrupt_threshold(0);
-    oer_riscv::enable_interrupts();
-    wait_window();
-    oer_riscv::disable_interrupts();
-    CLIC.store(ptr::null_mut(), Ordering::Release);
+    admit_window(&mut s.interrupt_matrix.clic);
     emit(
         tag,
         IRQ_COUNT.load(Ordering::Relaxed),
