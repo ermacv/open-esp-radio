@@ -84,7 +84,7 @@ sources = ["S31_MMIO_USE_20101048"]
 sources = ["S31_MMIO_USE_20101048", "S31_MMIO_DECLARED_20101048"]
 
 [review.entity."IRQ_ENABLE_0"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_APB_RESET_20261026", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_APB_RESET_20261026", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027", "HW25_S31_BLE_INHERITED_20261027", "HW25_S31_BLE_RELEASE_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_ENABLE_0.SOURCE_0"]
@@ -198,7 +198,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."IRQ_ENABLE_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW12_S31_BLE_APB_RESET_20261026", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW12_S31_BLE_APB_RESET_20261026", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027", "HW25_S31_BLE_INHERITED_20261027", "HW25_S31_BLE_RELEASE_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_ENABLE_1.SOURCE_3"]
@@ -244,7 +244,7 @@ sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
 sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
 
 [review.entity."IRQ_CLEAR_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW25_S31_BLE_ARRIVAL_20261027"]
 
 [review.entity."IRQ_CLEAR_1.BIT_0_OPAQUE"]
 sources = ["S31_MMIO_MANUAL_20101064", "BLOB_S31_BT_BANK1_0_2_SCOPE_20261027"]
@@ -277,7 +277,7 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 sources = ["S31_MMIO_MANUAL_20101064"]
 
 [review.entity."IRQ_STATUS_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW12_S31_BLE_APB_RESET_20261026", "HW27_S31_BTLC_NATURAL_20261027"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027", "HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW12_S31_BLE_APB_RESET_20261026", "HW27_S31_BTLC_NATURAL_20261027", "HW25_S31_BLE_ARRIVAL_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_STATUS_1.BIT_0_OPAQUE"]
@@ -407,7 +407,7 @@ sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBREDR_HAL_LINK_AC
 sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS"]
 
 [review.entity."BTLC_TIMER_CONTROL"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026", "HW9_S31_BTLC_START_20261027", "HW12_S31_BTLC_RATE_20261026", "HW27_S31_BTLC_NATURAL_20261027"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026", "HW9_S31_BTLC_START_20261027", "HW12_S31_BTLC_RATE_20261026", "HW27_S31_BTLC_NATURAL_20261027", "HW25_S31_BLE_LATCH_RESTART_20261027"]
 completeness = "partial"
 
 [review.entity."BTLC_TIMER_CONTROL.CLOCK_SHIFT"]
@@ -1175,14 +1175,14 @@ sources = ["S31_MMIO_USE_201014B0", "S31_MMIO_DECLARED_201014B0"]
 sources = ["S31_MMIO_USE_201014B0", "S31_MMIO_DECLARED_201014B0"]
 
 [review.entity."INTERRUPT_ENABLE"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT", "BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT", "BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027", "BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027", "HW25_S31_BLE_INHERITED_20261027", "HW25_S31_BLE_RELEASE_20261027"]
 completeness = "partial"
 
 [review.entity."INTERRUPT_ENABLE.SCHEDULER_RUN"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT", "BLOB_S31_BT_TASK_RUN_SERVICE_20261027"]
 
 [review.entity."INTERRUPT_ENABLE.SOURCE_17"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027", "BLOB_S31_BT_TASK17_SELECTION_SCOPE_20261027"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027", "BLOB_S31_BT_TASK17_SELECTION_SCOPE_20261027", "HW25_S31_BLE_INHERITED_20261027", "HW25_S31_BLE_RELEASE_20261027"]
 
 [review.entity."INTERRUPT_ENABLE.BITS_0_13_OPAQUE"]
 sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
@@ -1982,7 +1982,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "IRQ_ENABLE_0"
 offset = 0x54
-description = "First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000. The baseline and dynamic mask leaves preserve all other enable bits in their stores. ISO coexistence separately masks bits 0/1/8/13/16 before acknowledging them; common masks do not cover that feature group. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. BT MAC reset preserved the tested 0x8000 image; subsequent APB reset made every modeled lane zero. No POR value follows. SOURCE: HW12_S31_BLE_APB_RESET_20261026."
+description = "First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000. The baseline and dynamic mask leaves preserve all other enable bits in their stores. ISO coexistence separately masks bits 0/1/8/13/16 before acknowledging them; common masks do not cover that feature group. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. BT MAC reset preserved the tested 0x8000 image; subsequent APB reset made every modeled lane zero. No POR value follows. SOURCE: HW12_S31_BLE_APB_RESET_20261026. On the measured s31-a power-cycle/download-loader path and after the seeded HP software reset plus ROM re-entry, all modeled enables read zero; neither observation establishes pristine POR or production-admission defaults. SOURCE: HW25_S31_BLE_INHERITED_20261027. The synthetic-enable idle retirement register suffix preserved feature lanes and task17 while removing the dynamic groups; it retained enabled pending CC0/source124. SOURCE: HW25_S31_BLE_RELEASE_20261027."
 
 [[registers.fields]]
 name = "SOURCE_0"
@@ -2154,7 +2154,7 @@ class = "read-only"
 [[registers]]
 name = "IRQ_ENABLE_1"
 offset = 0x60
-description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. ISO coexistence separately masks bit 13 before acknowledgement; common baseline/dynamic masks preserve that enable and bits 4/5/6 in their stores. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking CONTROLLER_TIME_OVERFLOW retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026."
+description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. ISO coexistence separately masks bit 13 before acknowledgement; common baseline/dynamic masks preserve that enable and bits 4/5/6 in their stores. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking CONTROLLER_TIME_OVERFLOW retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026. On the measured s31-a power-cycle/download-loader path and after the seeded HP software reset plus ROM re-entry, all modeled enables read zero; neither observation establishes pristine POR or production-admission defaults. SOURCE: HW25_S31_BLE_INHERITED_20261027. The synthetic-enable idle retirement register suffix preserved feature lanes and task17 while removing the dynamic groups; it retained enabled pending CC0/source124. SOURCE: HW25_S31_BLE_RELEASE_20261027."
 
 [[registers.fields]]
 name = "CONTROLLER_TIME_OVERFLOW"
@@ -2235,7 +2235,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "IRQ_CLEAR_1"
 offset = 0x64
-description = "Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027. A positive sampled image 2 written while ENA1[1]=1 cleared isolated overflow pending and lowered 124; copying the zero NRT pair did not clear that primary cause. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026."
+description = "Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027. A positive sampled image 2 written while ENA1[1]=1 cleared isolated overflow pending and lowered 124; copying the zero NRT pair did not clear that primary cause. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026. Ordered sample-to-ack windows on s31-a preserved a new CC0 after an empty sample, and preserved CC1 or overflow after a saved CC0 acknowledgement. Two same-CC0 crossings pending before old-image acknowledgement left one indication, then zero; a fresh crossing after clear delivered again. Exact coincident priority is unmeasured. SOURCE: HW25_S31_BLE_ARRIVAL_20261027."
 
 [[registers.fields]]
 name = "BIT_0_OPAQUE"
@@ -2293,7 +2293,7 @@ class = "write-one-to-clear"
 [[registers]]
 name = "IRQ_STATUS_1"
 offset = 0x68
-description = "Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027. An enabled sampled overflow image2 was acknowledged to zero with124 low. APB reset also removed the tested pending cause, checked after re-enable and CONTROL0 reopen before a fresh positive wrap. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026. One natural, unseeded first-word wrap produced image2/source124, retained without ISR/ack for approximately 102.519 nominal seconds (status reads follow the capture brackets); consuming the positive primary image lowered both, quiet for approximately 29.999 s. No hidden-event count or multi-period retention follows. SOURCE: HW27_S31_BTLC_NATURAL_20261027."
+description = "Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027. An enabled sampled overflow image2 was acknowledged to zero with124 low. APB reset also removed the tested pending cause, checked after re-enable and CONTROL0 reopen before a fresh positive wrap. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026. One natural, unseeded first-word wrap produced image2/source124, retained without ISR/ack for approximately 102.519 nominal seconds (status reads follow the capture brackets); consuming the positive primary image lowered both, quiet for approximately 29.999 s. No hidden-event count or multi-period retention follows. SOURCE: HW27_S31_BTLC_NATURAL_20261027. Ordered sample-to-ack windows on s31-a preserved a new CC0 after an empty sample, and preserved CC1 or overflow after a saved CC0 acknowledgement. Two same-CC0 crossings pending before old-image acknowledgement left one indication, then zero; a fresh crossing after clear delivered again. Exact coincident priority is unmeasured. SOURCE: HW25_S31_BLE_ARRIVAL_20261027."
 
 [[registers.fields]]
 name = "BIT_0_OPAQUE"
@@ -2485,7 +2485,7 @@ class = "write-only"
 [[registers]]
 name = "BTLC_TIMER_CONTROL"
 offset = 0x90
-description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027. At CLOCK_SHIFT=3/CONFIG_24=0 with CONTROL0=1 in the sourced digital clock setup, the first capture word advanced approximately 2 million ticks/s at the nominal 40 MHz CPU clock. This is a measured positional-word rate, not validation of a universal crystal/shift equation. SOURCE: HW12_S31_BTLC_RATE_20261026. Without VALUE writes or TIMER_ARM assertion after digital reset, CONTROL0=1 also started reset-origin progression; the natural first-word wrap matched the rate prediction after approximately 2147.48 nominal seconds. SOURCE: HW27_S31_BTLC_NATURAL_20261027."
+description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027. At CLOCK_SHIFT=3/CONFIG_24=0 with CONTROL0=1 in the sourced digital clock setup, the first capture word advanced approximately 2 million ticks/s at the nominal 40 MHz CPU clock. This is a measured positional-word rate, not validation of a universal crystal/shift equation. SOURCE: HW12_S31_BTLC_RATE_20261026. Without VALUE writes or TIMER_ARM assertion after digital reset, CONTROL0=1 also started reset-origin progression; the natural first-word wrap matched the rate prediction after approximately 2147.48 nominal seconds. SOURCE: HW27_S31_BTLC_NATURAL_20261027. After the measured synthetic-enable release suffix, latch requests completed with a zero count and the subsequent crossing wait expired. Advancing captures and a fresh CC0/source124 positive were restored by CONTROL0=1 in runs04/05. No internal stop or clock mechanism or production-admission invariant is established. SOURCE: HW25_S31_BLE_LATCH_RESTART_20261027."
 
 [[registers.fields]]
 name = "CLOCK_SHIFT"
@@ -3958,7 +3958,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "INTERRUPT_ENABLE"
 offset = 0x4b4
-description = "BLE base-stack interrupt enable bank at +0x4b4, distinct from primary IRQ_ENABLE_0/1. BLE PHY initialization preserves only inherited source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here; its paired disable masks only 14 and preserves all other enables in that store. Common primary baseline/dynamic mask leaves do not write this word. These observations do not establish whether the complete release transaction lowers every task interrupt output. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027; BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. All omitted source identities remain unknown."
+description = "BLE base-stack interrupt enable bank at +0x4b4, distinct from primary IRQ_ENABLE_0/1. BLE PHY initialization preserves only inherited source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here; its paired disable masks only 14 and preserves all other enables in that store. Common primary baseline/dynamic mask leaves do not write this word. These observations do not establish whether the complete release transaction lowers every task interrupt output. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027; BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. All omitted source identities remain unknown. On the measured s31-a power-cycle/download-loader path and after the seeded HP software reset plus ROM re-entry, all modeled enables read zero; neither observation establishes pristine POR or production-admission defaults. SOURCE: HW25_S31_BLE_INHERITED_20261027. The synthetic-enable idle retirement register suffix preserved feature lanes and task17 while removing the dynamic groups; it retained enabled pending CC0/source124. SOURCE: HW25_S31_BLE_RELEASE_20261027."
 
 [[registers.fields]]
 name = "SCHEDULER_RUN"
@@ -3970,7 +3970,7 @@ description = "Task14 is cleared then enabled by scheduler entry1 before RUN; pr
 name = "SOURCE_17"
 bits = "17"
 class = "plain"
-description = "BLE PHY initialization retains this inherited enable; scheduler entry2 masks only14. Generic PHY-info configuration selects an argument mask, with no fixed17 call recovered. Its observer gates on ENABLE, not task-status17; observer invocation is not a positive pending17 witness. Event identity, output124/133 relation and state after CONTROL1/2 remain unknown."
+description = "BLE PHY initialization retains this inherited enable; scheduler entry2 masks only14. Generic PHY-info configuration selects an argument mask, with no fixed17 call recovered. Its observer gates on ENABLE, not task-status17; observer invocation is not a positive pending17 witness. Event identity and output124/133 relation remain unknown. SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027; BLOB_S31_BT_TASK17_SELECTION_SCOPE_20261027. A synthetic enabled task17 survived the exact PHY task mask/clear and subsequent idle retirement register suffix including CONTROL1/2. It was zero on the measured loader path and after a seeded HP software reset plus ROM re-entry; no pristine POR or full production-admission value is established. SOURCE: HW25_S31_BLE_RELEASE_20261027; HW25_S31_BLE_INHERITED_20261027."
 
 [[registers.fields]]
 name = "BITS_0_13_OPAQUE"
@@ -4118,7 +4118,7 @@ description = "Observed only in whole-bank or argument-mask acknowledgements; in
 [[registers]]
 name = "WORD_04BC_OPAQUE"
 offset = 0x4bc
-description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset, read side effect or hardware write effect is established. Read only by diagnostics; the cited sources establish use, not read safety. SOURCE: S31_MMIO_USE_201014BC; S31_MMIO_DECLARED_201014BC."
 
 [[registers.fields]]
 name = "BIT_0_OPAQUE"

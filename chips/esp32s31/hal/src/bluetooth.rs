@@ -2429,3 +2429,6 @@ fn test_ready<F: core::future::Future>(future: F) -> F::Output {
         core::task::Poll::Pending => panic!("the policy model completes every request immediately"),
     }
 }
+
+mod observation;
+pub use observation::{BluetoothInterruptObservation, BluetoothTaskInterruptObservation};

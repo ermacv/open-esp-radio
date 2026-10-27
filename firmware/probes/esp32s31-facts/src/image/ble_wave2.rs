@@ -3,7 +3,7 @@ use super::{Session, ble, contain, emit, pac};
 use oer_mmio::Bits;
 
 mod lp;
-mod mac;
+pub(super) mod mac;
 pub(super) use lp::{lp_clear, lp_masked, shutdown_soft, shutdown_wrap, sleep_other, sleep16};
 pub(super) use mac::{arrivals, controls, groups, mapping, masks};
 pub(super) use mac::{natural_ready, natural_wrap, overflow_ack, overflow_rate, overflow_reset};

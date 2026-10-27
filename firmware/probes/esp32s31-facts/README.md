@@ -900,3 +900,72 @@ while masked. Run01/#913 separately establishes RX_ABORT reason26
 SYSTIMER cases. ED_DONE/ED_STOP, other event lanes and exact coincident
 set/clear priority remain unqualified. See the
 [research report](/home/ermacv/dev/oer-notes/research/hw-irq-generic-2.md).
+
+
+## Inherited BLE enables and primary arrival windows
+
+Selections 210–219 use the existing PAC owners without RF, DMA, scheduler RUN
+or CPU interrupt admission. All cause/latch waits use the existing 200,000-cycle
+BTLC limit. Commands remain serial under one board lease and one PAC claim.
+
+| Selection | Experiment |
+| --- | --- |
+| 210 | All modeled enable fields before writes and after access clocks only; HP reset cause |
+| 211 | Reserved; no qualified standalone production-admission sequence or callable leaf |
+| 212 / 213 | Seed modeled feature/dynamic/task lanes, HP software reset / automatic next-ROM-entry observer before peripheral writes, then access clocks only |
+| 214 | Empty saved pair, then one witnessed CC0 crossing before saved-pair acknowledgement |
+| 215 | Saved CC0, then CC1 crossing before acknowledgement |
+| 216 | Saved CC0, then a second CC0 crossing before acknowledgement |
+| 217 | Saved CC0, then seeded controller-time overflow before acknowledgement |
+| 218 | Synthetic inherited feature enables with live CC0, exact PHY task-bank prefix and retirement register suffix, then fresh CC0 |
+| 219 | Mask primary banks and synthetic task17/task14; final observation |
+
+Selection 213 is selected by its distinct LP retained record after a ROM
+MEM_END handoff. No host reset may intervene after 212. The record retains
+the exact three pre-reset enable words, not SRAM result-buffer retention.
+
+The state record at each base tag contains full ENA0, ENA1 and task ENA,
+reconstructed from typed getters and generated field geometry. `base+1`
+contains dynamic source21, sources27/28 and source3; these are subsets of the
+two primary words, not a fourth register bank. `base+2` contains primary
+STATUS0/1 and matrix bank3; `base+3` contains NRT snapshots0/1 and matrix bank4;
+`base+4` contains APB gate, MAC reset and APB reset readbacks. The first gated
+sample alone cannot establish register state. Each word has all 32 bits
+modeled; opaque bits retain their unknown meaning.
+
+210 uses `2100` before access-clock setup and `2110` afterward. 212 retains
+its `2160` enable triple in LP SRAM; 213 emits `2170` before writes, the
+retained record at `2180`–`2183`, validity/reset cause at `218f`, and `2190`
+after access clocks. The loader and access-clock prefix are explicit
+differences from a pristine POR read and the production platform/RF lifecycle.
+No complete production-admission result is established. Selection 211 is
+excluded from the callable registry because its standalone parent prerequisites
+are unqualified. The external report records the admission boundary and
+observations; the measured source tag retains the exact trial implementation.
+
+214–217 emit `21a0` initial state, `21a8` initial CC0 crossing when applicable,
+`21b0` saved pair plus cycle stamp, `21b8` fresh crossing, `21c0` observed
+pre-ack state, `21c8` before/after saved-pair acknowledgement stamps, `21d0`
+post-ack state, `21d8` fresh control crossing and `21e0` control state. Crossing
+records contain origin, completed-capture endpoint and success. `21ee` means
+failure (1 prerequisite, 2 initial cause, 3 new cause, 4 fresh control), never
+a passing suppression result. 218 uses `2200` seeded positive, `2210` after
+the PHY task mask/clear, `2220` after retirement suffix and `2230` after fresh
+CC0. Its success crossing records are `220f` and `223f`. 219 ends at `2240`.
+
+The new arrival must be visible before the saved W1C. These experiments test
+an ordered sample-to-ack interval; exact same-cycle set/clear priority and
+counting multiple same-bit arrivals are separate questions. No positive local
+recipe for bank1 bits0/2 is supplied by these selections. SOURCE and silicon
+results: `oer-notes/research/hw-ble-inherited-enables.md`.
+
+
+218 additionally records controller/latch state at `2250/2260/2270`: request,
+arm, shift; capture0/config24/compare enables; APB gate/MAC gate/reset bits.
+`225f` records the failed crossing's elapsed cycles. `227f` records the
+post-CONTROL0 request observation; `228f/2280` witness a fresh CC0 afterward.
+The shared capture helper emits `91fd` only when its actual final poll still
+has LATCH_REQUEST set at its deadline. A `223f=(0,0,0)` with no `91fd` is an
+accepted zero origin followed by crossing-wait expiry, not a latch failure.
+This restart is a probe diagnostic after observing release; production does
+not use it as retirement or quiescence. SOURCE: `HW25_S31_BLE_LATCH_RESTART_20261027`.

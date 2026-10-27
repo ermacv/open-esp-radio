@@ -12,8 +12,22 @@ fn sample(s: &mut Session<'_>) -> Option<u32> {
     });
     oer_riscv::fence();
     let start = oer_riscv::cycle32();
-    while s.ble.core.read_btlc_timer_control().latch_request() {
-        if oer_riscv::cycle32().wrapping_sub(start) >= LIMIT {
+    loop {
+        let control = s.ble.core.read_btlc_timer_control();
+        if !control.latch_request() {
+            break;
+        }
+        let elapsed = oer_riscv::cycle32().wrapping_sub(start);
+        if elapsed >= LIMIT {
+            // Retain the actual final poll, rather than a later read whose
+            // self-clearing request may already differ. The capture read is
+            // later and is explicitly not an accepted completed latch.
+            emit(
+                0x91fd,
+                u32::from(control.latch_request()),
+                elapsed,
+                s.ble.core.read_btlc_timer_capture_0().value(),
+            );
             return None;
         }
     }
@@ -54,7 +68,7 @@ fn all_mask(s: &mut Session<'_>) {
     });
     oer_riscv::fence();
 }
-pub(super) fn clear(s: &mut Session<'_>) {
+pub(in crate::image) fn clear(s: &mut Session<'_>) {
     let a = s.ble.bank.sample_bluetooth_primary_interrupt_bank_0();
     let b = s.ble.bank.sample_bluetooth_primary_interrupt_bank_1();
     s.ble.bank.acknowledge_bluetooth_primary_interrupt_bank_0(a);
@@ -65,7 +79,7 @@ pub(super) fn clear(s: &mut Session<'_>) {
     s.ble.bank.acknowledge_bluetooth_interrupt_bank_1(b);
     oer_riscv::fence();
 }
-pub(super) fn command(s: &mut Session<'_>, n: u32) {
+pub(in crate::image) fn command(s: &mut Session<'_>, n: u32) {
     match n {
         0 => s.ble.bank.write_irq_control_0(|w| {
             w.set_command(pac::bt_mac::irq_control_0::Command::Command1.bits());
@@ -79,7 +93,7 @@ pub(super) fn command(s: &mut Session<'_>, n: u32) {
     }
     oer_riscv::fence();
 }
-pub(super) fn enable(s: &mut Session<'_>, cause: u32, on: bool) {
+pub(in crate::image) fn enable(s: &mut Session<'_>, cause: u32, on: bool) {
     s.ble.bank.modify_irq_enable_1(|w| match cause {
         0 => {
             w.set_source_4(on);
@@ -144,7 +158,7 @@ pub(super) fn state(s: &Session<'_>, tag: u32) {
         e.bits_14_31_opaque().get(),
     );
 }
-pub(super) fn prepare(s: &mut Session<'_>) -> bool {
+pub(in crate::image) fn prepare(s: &mut Session<'_>) -> bool {
     setup(s);
     all_mask(s);
     s.ble.core.modify_btlc_timer_control(|w| {
@@ -201,7 +215,7 @@ fn wait(s: &mut Session<'_>, origin: u32, delta: u32) -> Option<u32> {
     }
     None
 }
-pub(super) fn produce(s: &mut Session<'_>, cause: u32, tag: u32) -> bool {
+pub(in crate::image) fn produce(s: &mut Session<'_>, cause: u32, tag: u32) -> bool {
     let (origin, delta) = if cause == 2 {
         seed(s, 0xfffffc00);
         let Some(origin) = sample(s) else {
@@ -237,7 +251,7 @@ pub(super) fn produce(s: &mut Session<'_>, cause: u32, tag: u32) -> bool {
     emit(tag, origin, end.unwrap_or(origin), u32::from(end.is_some()));
     end.is_some()
 }
-pub(super) fn finish(s: &mut Session<'_>) {
+pub(in crate::image) fn finish(s: &mut Session<'_>) {
     all_mask(s);
     clear(s);
     command(s, 1);
