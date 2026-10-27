@@ -5,6 +5,8 @@
 include!("entry.rs");
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod cache;
+#[cfg(all(test, not(target_arch = "riscv32")))]
+mod completion;
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}
 

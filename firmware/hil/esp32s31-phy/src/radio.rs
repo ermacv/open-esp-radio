@@ -267,7 +267,10 @@ impl Radio {
                 let current = self.current(epoch)?;
                 let next = epoch.checked_add(1).ok_or(RejectReason::InvalidState)?;
                 self.ready = None;
-                self.exit_capture(current.radio).await?;
+                {
+                    let mut exit = core::pin::pin!(self.exit_capture(current.radio));
+                    exit.as_mut().await?;
+                }
                 if !require_radio(self.domain.as_ref(), self.radio_fault)
                     .attachment()
                     .rf_closed()
@@ -275,14 +278,12 @@ impl Radio {
                     return Err(RejectReason::Internal);
                 }
                 {
-                    let (domain, result) = wake_concurrent_rf::<_, RomShortDelay>(
+                    let mut wake = core::pin::pin!(wake_concurrent_rf::<_, RomShortDelay>(
                         &crate::PHY_CLOCK,
                         require_radio(self.domain.take(), self.radio_fault),
                         &self.clocks,
-                    )
-                    .await;
-                    self.domain = Some(domain);
-                    result
+                    ));
+                    crate::completion::run(wake.as_mut(), &mut self.domain, crate::completion::restore).await
                 }
                 .map_err(|_| RejectReason::Internal)?;
                 crate::sar2_checkpoint::observe(
@@ -295,7 +296,10 @@ impl Radio {
                     channel: current.channel,
                     radio: current.radio,
                 };
-                self.enter_capture(config).await?;
+                {
+                    let mut enter = core::pin::pin!(self.enter_capture(config));
+                    enter.as_mut().await?;
+                }
                 if config.radio == CaptureRadio::Wifi {
                     self.prepare_capture_rx(capture_rx).await?;
                 }
@@ -332,7 +336,10 @@ impl Radio {
                 } else {
                     Ok(())
                 };
-                let closed = self.exit_capture(current.radio).await;
+                let closed = {
+                    let mut exit = core::pin::pin!(self.exit_capture(current.radio));
+                    exit.as_mut().await
+                };
                 report_capture_stop(
                     &observed,
                     &closed,
@@ -419,7 +426,11 @@ impl Radio {
 
     /// Once started, the native registration future runs to its terminal result.
     pub async fn service_registration(&mut self) {
-        if let Err(_reason) = self.register().await {
+        let result = {
+            let mut registration = core::pin::pin!(self.register());
+            registration.as_mut().await
+        };
+        if let Err(_reason) = result {
             self.poisoned = true;
             self.ready = None;
             self.cache.fail();
@@ -436,20 +447,22 @@ impl Radio {
         // Consume the native result before awaiting diagnostics: its failure
         // variant retains the complete registration transition.
         let outcome = {
-            let (domain, result) = register_concurrent_phy::<_, (), RomShortDelay, _>(
+            let mut platform = ();
+            let mut registration = core::pin::pin!(register_concurrent_phy::<_, (), RomShortDelay, _>(
                 &crate::PHY_CLOCK,
                 require_radio(self.domain.take(), self.radio_fault),
-                &mut (),
+                &mut platform,
                 &self.clocks,
                 registration_config,
                 capture_observer!(self),
+            ));
+            crate::completion::run(
+                registration.as_mut(),
+                &mut self.domain,
+                finish_registration,
             )
-            .await;
-            self.domain = Some(domain);
-            result
-        }
-        .map(|registration| registration.outcome())
-        .map_err(|_| RejectReason::Internal);
+            .await
+        };
         let outcome = match outcome {
             Ok(outcome) => outcome,
             Err(_) => {
@@ -513,7 +526,10 @@ impl Radio {
                 }
             })
             .await;
-        self.enter_capture(config).await?;
+        {
+            let mut enter = core::pin::pin!(self.enter_capture(config));
+            enter.as_mut().await?;
+        }
         let lifecycle = match config.radio {
             CaptureRadio::Wifi => CaptureLifecycle::Cold,
             CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154,
@@ -686,29 +702,33 @@ impl Radio {
 
     async fn enter_capture(&mut self, config: PrepareCapture) -> Result<()> {
         match config.radio {
-            CaptureRadio::Wifi => self.enter(config.channel).await,
+            CaptureRadio::Wifi => {
+                let mut enter = core::pin::pin!(self.enter(config.channel));
+                enter.as_mut().await
+            }
             CaptureRadio::Ieee802154 { power_dbm } => {
-                self.ieee802154
-                    .enter(
+                let mut enter = core::pin::pin!(self.ieee802154.enter(
                         &mut self.phy_pilot,
                         &mut self.domain,
                         self.radio_fault,
                         &self.clocks,
                         config.channel,
                         power_dbm,
-                    )
-                    .await
+                    ));
+                enter.as_mut().await
             }
         }
     }
 
     async fn exit_capture(&mut self, radio: CaptureRadio) -> Result<()> {
         match radio {
-            CaptureRadio::Wifi => self.exit().await,
+            CaptureRadio::Wifi => {
+                let mut exit = core::pin::pin!(self.exit());
+                exit.as_mut().await
+            }
             CaptureRadio::Ieee802154 { .. } => {
-                self.ieee802154
-                    .exit(&mut self.domain, self.radio_fault)
-                    .await
+                let mut exit = core::pin::pin!(self.ieee802154.exit(&mut self.domain, self.radio_fault));
+                exit.as_mut().await
             }
         }
     }
@@ -749,16 +769,15 @@ impl Radio {
         self.member = Some(joined.membership);
         if due {
             {
-                let (domain, result) = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
+                let mut platform = ();
+                let mut maintain = core::pin::pin!(maintain_concurrent_phy::<_, (), RomShortDelay, _>(
                     &crate::PHY_CLOCK,
                     require_radio(self.domain.take(), self.radio_fault),
-                    &mut (),
+                    &mut platform,
                     capture_observer!(self),
                     &mut self.phy_pilot,
-                )
-                .await;
-                self.domain = Some(domain);
-                result
+                ));
+                crate::completion::run(maintain.as_mut(), &mut self.domain, crate::completion::restore).await
             }
             .map_err(|_| RejectReason::Internal)?;
         }
@@ -914,14 +933,13 @@ impl Radio {
         )
         .await?;
         {
-            let (domain, result) = close_concurrent_rf::<_, (), RomShortDelay>(
+            let mut platform = ();
+            let mut close = core::pin::pin!(close_concurrent_rf::<_, (), RomShortDelay>(
                 &crate::PHY_CLOCK,
                 require_radio(self.domain.take(), self.radio_fault),
-                &mut (),
-            )
-            .await;
-            self.domain = Some(domain);
-            result
+                &mut platform,
+            ));
+            crate::completion::run(close.as_mut(), &mut self.domain, crate::completion::restore).await
         }
         .map_err(|_| RejectReason::Internal)?;
         Ok(())
@@ -955,6 +973,24 @@ impl Radio {
         .await;
         self.domain = Some(transaction.reunite());
         result
+    }
+}
+
+// Collapse the large registration result in its retained return place before
+// diagnostics or radio bring-up; failed transitions are still dropped there.
+#[inline(never)]
+fn finish_registration(
+    destination: &mut Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
+    returned: oer_memory::Placed<'_, (
+        RadioDomain<ChipClocks, ConcurrentPhy>,
+        core::result::Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+    )>,
+) -> Result<PhyRegisterOutcome> {
+    let (domain, result) = returned.split();
+    *destination = Some(domain.read());
+    match &*result {
+        Ok(registration) => Ok(registration.outcome()),
+        Err(_) => Err(RejectReason::Internal),
     }
 }
 

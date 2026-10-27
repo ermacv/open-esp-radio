@@ -19,6 +19,7 @@ macro_rules! capture_observer {
 mod cache;
 mod cca_checkpoint;
 mod cca_rx;
+mod completion;
 mod hold;
 mod ieee802154;
 mod projection;
@@ -407,7 +408,10 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
                     response.answer(Answer::Proceeded);
                 }
                 Request::Wire(request) => {
-                    let result = radio.request(request, &mut capture_rx).await;
+                    let result = {
+                        let mut request = core::pin::pin!(radio.request(request, &mut capture_rx));
+                        request.as_mut().await
+                    };
                     radio.request_finished(&result);
                     response.answer(result.unwrap_or_else(Answer::Rejected));
                 }
