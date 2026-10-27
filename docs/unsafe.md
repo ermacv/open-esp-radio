@@ -394,8 +394,15 @@ The S31 802.15.4 HAL acknowledges events only through an affine
 `Ieee802154EventSnapshot`; its copyable observation grants no write authority.
 Timer pending survives masking but its status read becomes zero. Arming,
 before a handler is bound, enables events, samples, masks and acknowledges
-the saved sample. Deactivation stops the operation and both timers, samples
-before masking and acknowledges that saved sample. During ACK reception the
+the saved sample. Deactivation issues STOP and both timer-stop commands,
+samples before masking and acknowledges that saved sample. These commands
+and selected acknowledgements do not prove producer drain. An event sample containing lane 7, 10 or 13
+returns `Fault::UnhandledEvents` before acknowledgement or dispatch, preserving
+all named events, each unnamed lane and the entry state. The consuming
+engine/MAC owner becomes an absorbing quarantine with no recovery API.
+The PHY HIL image records the fault through safe `fatal::reset_recording`
+without dropping its quarantined owners; its 24-byte versioned/checksummed
+record prints at the next boot and remains retained on output refusal. During ACK reception the
 engine stops timer0, samples and clears its event while enabled, then masks
 it. A new ACK wait enables and clears old pending while timer0 is stopped,
 before programming and starting it. The HAL never resamples status as the

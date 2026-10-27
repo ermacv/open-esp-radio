@@ -52,12 +52,13 @@ where
     port.order_device_accesses();
 }
 
-/// Execute the complete teardown of a polled epoch.
+/// Issue the teardown commands and selected acknowledgement of a polled epoch.
 ///
 /// Stop the operation and both MAC timers, sample before masking, then close
 /// all three enable fields and acknowledge the saved affine W1C sample.
 /// Masked timer status reads zero even when pending remains latched.
 /// Both ordering boundaries precede transfer back to inactive setup ownership.
+/// Issued commands and saved-sample acknowledgement do not prove producer drain.
 /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
 #[doc(hidden)]
 pub fn execute_interrupt_deactivation<Port>(port: &mut Port)

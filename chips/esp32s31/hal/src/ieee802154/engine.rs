@@ -70,6 +70,23 @@ impl DetachedIeee802154Engine {
 }
 
 impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
+    /// Service events, returning the owner only on success.
+    ///
+    /// # Errors
+    /// Unsupported events retain the MAC and placed buffers in quarantine.
+    /// The image records the fault and resets without releasing either owner.
+    #[allow(
+        clippy::result_large_err,
+        reason = "quarantine retains the complete affine owner"
+    )]
+    pub fn isr<E: oer_espressif_ieee802154_engine::engine::Ieee802154Environment + ?Sized>(
+        self,
+        env: &mut E,
+    ) -> Result<Self, oer_espressif_ieee802154_engine::engine::owner::Quarantined<'static, Ll>>
+    {
+        self.inner.isr(env).map(|inner| Self { inner })
+    }
+
     /// Detach a quiescent MAC, retaining the DMA placement proof for rebind.
     /// Stop the operation and return delivered slots first. A software-only
     /// disable cannot close an active operation epoch.

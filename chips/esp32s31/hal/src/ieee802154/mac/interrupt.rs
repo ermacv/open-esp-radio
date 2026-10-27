@@ -40,7 +40,7 @@ fn observation(status: &event_status::Snapshot) -> Ieee802154EventObservation {
         .fold(Ieee802154EventMask::NONE, |events, (_, event)| {
             events.with(event)
         });
-    Ieee802154EventObservation::new(events, status.events_7() || status.events_13())
+    Ieee802154EventObservation::new(events, status.events_7(), status.events_13())
 }
 
 /// One affine event sample, retained across changes to the enable mask.

@@ -77,12 +77,23 @@ pub(crate) enum Call {
     SecurityOffset(u8),
 }
 
+struct DropWitness(std::rc::Rc<std::cell::Cell<usize>>);
+
+impl Drop for DropWitness {
+    fn drop(&mut self) {
+        self.0.set(self.0.get() + 1);
+    }
+}
+
 /// Register model: getters return the last value set.
 pub(crate) struct Hw {
     pub(crate) calls: Vec<Call>,
     events: Ieee802154EventMask,
+    events_7: bool,
+    events_13: bool,
     enabled_events: Ieee802154EventMask,
     expire_timer0_on_stop: bool,
+    drop_witness: Option<DropWitness>,
     rx_abort: Ieee802154RxAbortReasonObservation,
     tx_abort: Ieee802154TxAbortReasonObservation,
     tx_auto_ack: bool,
@@ -108,8 +119,11 @@ impl Default for Hw {
         Self {
             calls: Vec::new(),
             events: Ieee802154EventMask::NONE,
+            events_7: false,
+            events_13: false,
             enabled_events: Ieee802154EventMask::NONE,
             expire_timer0_on_stop: false,
+            drop_witness: None,
             rx_abort: Ieee802154RxAbortReasonObservation::Unclassified,
             tx_abort: Ieee802154TxAbortReasonObservation::Unclassified,
             tx_auto_ack: false,
@@ -158,7 +172,7 @@ impl Ieee802154LowLevel for Hw {
     }
     fn events(&mut self) -> Ieee802154EventObservation {
         self.calls.push(Call::Events);
-        Ieee802154EventObservation::from_named(self.visible_events())
+        Ieee802154EventObservation::new(self.visible_events(), self.events_7, self.events_13)
     }
     fn clear_events(&mut self, mask: Ieee802154EventMask) {
         self.calls.push(Call::ClearEvents(mask));
@@ -557,7 +571,9 @@ impl Bench {
     fn interrupt(&mut self, events: &[Ieee802154Event]) {
         self.hw.events = self.hw.events.union(mask(events));
         self.hw.calls.clear();
-        self.engine.isr(&mut self.hw, &mut self.env);
+        self.engine
+            .isr(&mut self.hw, &mut self.env)
+            .expect("handled events");
     }
 
     fn take_notes(&mut self) -> Vec<Note> {
@@ -1839,4 +1855,65 @@ fn a_new_ack_wait_clears_hidden_old_pending_before_starting_timer0() {
     bench.interrupt(&[]);
     assert_eq!(bench.engine.state(), Ieee802154State::RxAck);
     assert!(bench.take_notes().is_empty());
+}
+
+#[test]
+fn unhandled_7_10_13_fault_before_ack_or_any_simultaneous_dispatch() {
+    for (events_7, clock, events_13) in [
+        (true, false, false),
+        (false, true, false),
+        (false, false, true),
+        (true, true, true),
+    ] {
+        let mut bench = Bench::enabled();
+        bench.receive();
+        bench.hw.events = Ieee802154Event::RxDone.mask();
+        if clock {
+            bench.hw.events = bench.hw.events.with(Ieee802154Event::ClockCountMatch);
+        }
+        bench.hw.events_7 = events_7;
+        bench.hw.events_13 = events_13;
+        bench.hw.calls.clear();
+        let observation = Ieee802154EventObservation::new(bench.hw.events, events_7, events_13);
+        assert_eq!(
+            bench.engine.isr(&mut bench.hw, &mut bench.env),
+            Err(super::Fault::UnhandledEvents {
+                observation,
+                state: Ieee802154State::Rx,
+            })
+        );
+        assert_eq!(bench.hw.calls, [Call::Events]);
+        assert!(bench.take_notes().is_empty());
+
+        let drops = std::rc::Rc::new(std::cell::Cell::new(0));
+        bench.hw.drop_witness = Some(DropWitness(drops.clone()));
+        let owner = super::owner::Ieee802154EngineOwner::new(bench.engine, bench.hw);
+        let quarantine = match owner.isr(&mut bench.env) {
+            Ok(_) => panic!("unsupported event cannot return usable owners"),
+            Err(quarantine) => quarantine,
+        };
+        assert_eq!(
+            quarantine.fault(),
+            super::Fault::UnhandledEvents {
+                observation,
+                state: Ieee802154State::Rx
+            }
+        );
+        drop(quarantine);
+        assert_eq!(drops.get(), 0, "quarantine never releases the MAC owner");
+    }
+}
+
+#[test]
+fn a_handled_entry_returns_the_same_reusable_mac_owner() {
+    let mut bench = Bench::enabled();
+    let drops = std::rc::Rc::new(std::cell::Cell::new(0));
+    bench.hw.drop_witness = Some(DropWitness(drops.clone()));
+    let owner = super::owner::Ieee802154EngineOwner::new(bench.engine, bench.hw);
+    let owner = owner
+        .isr(&mut bench.env)
+        .expect("empty event sample is handled");
+    assert_eq!(drops.get(), 0);
+    drop(owner);
+    assert_eq!(drops.get(), 1, "normal service returns ownership");
 }

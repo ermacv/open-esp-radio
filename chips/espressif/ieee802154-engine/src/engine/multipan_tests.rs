@@ -138,9 +138,13 @@ impl Bench {
         let address = self.hw.rx_address.unwrap();
         assert!(self.engine.model_dma_write(address, image));
         self.hw.raise(&[Ieee802154Event::RxDone]);
-        self.engine.isr(&mut self.hw, &mut self.env);
+        self.engine
+            .isr(&mut self.hw, &mut self.env)
+            .expect("handled events");
         self.hw.raise(&[Ieee802154Event::AckTxDone]);
-        self.engine.isr(&mut self.hw, &mut self.env);
+        self.engine
+            .isr(&mut self.hw, &mut self.env)
+            .expect("handled events");
         self.env.0.pop().expect("the frame was delivered")
     }
 }

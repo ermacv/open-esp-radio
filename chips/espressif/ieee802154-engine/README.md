@@ -115,8 +115,18 @@ stopped, before programming and starting the next deadline. This prevents a
 retained timeout from completing a later transmission with a false `NoAck`.
 The S31 HAL consumes a saved affine event snapshot for acknowledgement;
 copyable observations grant no write authority. Interrupt arming enables,
-samples, masks and acknowledges with no handler bound; deactivation stops
-the operation and both timers, samples, masks and acknowledges.
+samples, masks and acknowledges with no handler bound. Deactivation issues
+STOP and both timer-stop commands, samples, masks and acknowledges its saved
+sample. These commands and selected acknowledgements do not prove that every
+hardware producer drained.
+
+An event sample containing an unnamed lane (7 or 13) or the unsupported
+clock-match event (10) returns `Fault::UnhandledEvents` before acknowledgement
+or dispatch, preserving the complete event sample and entry state. The combined
+MAC/engine owner consumes itself into absorbing `Quarantined` storage with no
+recovery operations. The S31 PHY HIL image calls `fatal::reset_recording` with
+those owners retained. Its 24-byte versioned/checksummed record reports the
+original fault at the next boot and survives console refusal.
 SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`,
 [PR #689](https://github.com/ermacv/open-esp-radio/pull/689): masking hides
 timer0/timer1 status while retaining pending; a positive sample captured
