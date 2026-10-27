@@ -46,6 +46,13 @@ no calling crate's count grows. Runtime panic counts never increase. Image
 panic budgets report counts and sites without gating builds; zero reachable
 panics remains the code goal.
 
+Compiler-runtime coverage reviews explain missing frame metadata only; they
+supply no trusted frame size or callee bound. A frame without metadata needs
+complete local control flow and a known entry-relative stack pointer.
+Unresolved callees still leave the stack bound unresolved. Captured indexed
+addresses require the same complete read-only table and target proofs as
+straight-line dispatches; relocation labels alone do not prove immutability.
+
 Only `oer-memory` defines `unsafe impl Sync` or `Send`; the layer test
 `unsafe_sync_and_send_impls_stay_in_oer_memory` maintains the shrinking
 file-to-count list of existing exceptions and rejects new or stale entries.

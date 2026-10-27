@@ -57,11 +57,11 @@ pub use cha::{
 };
 pub use contexts::{HartStack, LevelStack, Stacks, Vector, interrupt_stacks};
 pub use dwarf::{DebugMetadata, Dwarf, Returned, read as read_debug};
+use image::ReadOnlyTables;
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};
 pub use oer_analysis_riscv_analysis::TrapSemantics;
 use oer_analysis_riscv_analysis::{JumpTableSource, KnownJump, ProvenTables, RecognizedTables};
-use oer_analysis_riscv_program::tables::ImageTables;
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions, task_poll_sites};
@@ -637,7 +637,7 @@ fn inspect_function_as(
         },
         &DispatchTables {
             recognized: RecognizedTables {
-                entries: &ImageTables { image },
+                entries: &ReadOnlyTables { image },
                 section: function.section as u32,
             },
             known: &jumps,
@@ -653,7 +653,7 @@ fn inspect_function_as(
 
 /// The tables of a function's dispatches: the value analysis's `Dispatch`
 /// records whose entries the image's facts prove ([`RecognizedTables`] over
-/// [`ImageTables`]), but for the sites the sweep's own jumps already follow.
+/// [`ReadOnlyTables`]), but for the sites the sweep's own jumps already follow.
 struct DispatchTables<'a> {
     recognized: RecognizedTables<'a>,
     known: &'a [KnownJump],
@@ -709,7 +709,7 @@ fn function_facts(
     }
     let tables = DispatchTables {
         recognized: RecognizedTables {
-            entries: &ImageTables { image: elf },
+            entries: &ReadOnlyTables { image: elf },
             section: function.section as u32,
         },
         known: &jumps,
@@ -732,7 +732,7 @@ fn function_facts(
         // tail target alone supplies neither a frame nor a callee bound.
         let tables = DispatchTables {
             recognized: RecognizedTables {
-                entries: &ImageTables { image: elf },
+                entries: &ReadOnlyTables { image: elf },
                 section: function.section as u32,
             },
             known: &jumps,

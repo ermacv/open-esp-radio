@@ -28,9 +28,13 @@ following them while each pass proves again every table it followed and
 more, and a pass that loses or changes one reports the function from a pass
 that follows only the caller's own jumps. `RecognizedTables` is the source for compiler `switch` dispatches. The
 value analysis records each jump through `load4[base + (index << 2) + displacement]` as a
-`Dispatch` record when the load, addition and scaling lie on the jump's unique
-predecessor chain and the base the addition reads is a constant, image address
-or object symbol: a base the block or a loop's preheader forms holds on every pass even
+`Dispatch` record when the load lies on the jump's unique predecessor chain
+and its address is formed by addition and scaling on that chain or retained
+as the captured `base + (index << scale)` expression at the load. The base
+must be a constant, image address or object symbol. A saved address survives
+calls only while the value solver preserves it; a clobbered or ambiguous
+address supplies no candidate. This locates a dispatch without proving its
+table: a base the block or a loop's preheader forms holds on every pass even
 when the index merges to an unknown value; `jump_tables` reads those records, the
 bounds check guarding the dispatch block where its index is known, and asks
 the model's `TableEntries` port what the table holds. An unlabelled table

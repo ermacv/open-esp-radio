@@ -236,7 +236,7 @@ fn a_table_reachable_unimp_keeps_both_observers_open_at_unknown() {
         );
         let tables = DispatchTables {
             recognized: RecognizedTables {
-                entries: &ImageTables { image: facts },
+                entries: &ReadOnlyTables { image: facts },
                 section: function.section as u32,
             },
             known: &[],
@@ -315,7 +315,7 @@ fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
                 call_behavior: &UnknownCallBehavior,
             },
             &RecognizedTables {
-                entries: &ImageTables { image: facts },
+                entries: &ReadOnlyTables { image: facts },
                 section: function.section as u32,
             },
             &oer_analysis_riscv_lift::StructuralRiscvDecoder,

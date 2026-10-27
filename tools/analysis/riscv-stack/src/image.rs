@@ -71,11 +71,61 @@ pub(crate) fn jump_table(
         return Ok(None);
     };
     let mut words = Vec::new();
-    for entry in entries {
+    for (index, entry) in entries.enumerate() {
         control.checkpoint(1)?;
+        let address = u32::try_from(index)
+            .ok()
+            .and_then(|index| index.checked_mul(4))
+            .and_then(|offset| base.checked_add(offset));
+        if address.and_then(|address| image.read_only_word(address)) != Some(entry) {
+            return Ok(None);
+        }
         ledger.push(&mut words, entry, control)?;
     }
     Ok(Some(words))
+}
+
+/// Labels and relocations delimit the candidate table; the image's immutable
+/// words must independently agree with every entry before it can close a CFG.
+pub(crate) struct ReadOnlyTables<'f, 'a> {
+    pub image: &'f ImageFacts<'a>,
+}
+
+impl TableEntries for ReadOnlyTables<'_, '_> {
+    fn entries<'m>(
+        &self,
+        base: &AbstractValue,
+        count: Option<u32>,
+        section: u32,
+        memory: &'m WorkingMemory,
+        control: &mut dyn RunControl,
+    ) -> Result<Option<TableWords<'m>>> {
+        let Some(words) = oer_analysis_riscv_program::tables::ImageTables { image: self.image }
+            .entries(base, count, section, memory, control)?
+        else {
+            return Ok(None);
+        };
+        let (AbstractValue::Constant { value: base }
+        | AbstractValue::ImageAddress { address: base }) = base
+        else {
+            return Ok(None);
+        };
+        for (index, &entry) in words.entries.iter().enumerate() {
+            control.checkpoint(1)?;
+            let address = u32::try_from(index)
+                .ok()
+                .and_then(|index| index.checked_mul(4))
+                .and_then(|offset| base.checked_add(offset));
+            if address
+                .and_then(|address| self.image.read_only_word(address))
+                .map(u64::from)
+                != Some(entry)
+            {
+                return Ok(None);
+            }
+        }
+        Ok(Some(words))
+    }
 }
 
 fn uleb128(bytes: &[u8], at: &mut usize) -> Result<u64> {
@@ -447,8 +497,11 @@ pub(crate) fn observing<R>(
             // The psABI preserves sp and the saved registers across calls.
             Some(CallAbi::RiscvInteger),
         )?;
+        // Calls retain their local continuation under the psABI even when
+        // their target is unknown. Prove this frame from the local graph;
+        // the stack walk must still resolve and bound every callee.
         let complete = summary.coverage.decoding
-            && summary.coverage.control_flow
+            && observer.open_graph.closed()
             && observer.unexpanded.is_empty()
             && !observer.dynamic
             && !observer.expression_limited;
