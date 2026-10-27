@@ -3,17 +3,12 @@
 //! irq-blobray-wifi.md (P0, P-BA, BB-L, P-TSENS).
 use super::{Bits, Index, Session, contain, emit, pac};
 
-/// The opaque leaves' own PAC parts. The radio clock, reset and PMU parts are
-/// shared with the BLE leaves through `Session::ble`.
+/// Additional MAC owners; shared PHY/analog/clock owners are borrowed from
+/// `Session::sar`, like the BLE and local-timer leaves.
 pub(super) struct Hardware {
-    pub wifi_bb: pac::wifi_bb::PhyBasebandConfigOracleWifiBb,
     pub block_ack: pac::wifi_mac::WifiMacBlockAck,
     pub core_enable: pac::wifi_mac::WifiMacCoreEnable,
     pub mac_interrupt: pac::wifi_mac::WifiMacInterrupt,
-    pub tsens: pac::tsens::LpTsens,
-    pub periclkrst: pac::lp_peri_clkrst::LpPericlkrst,
-    pub analog_master: pac::i2c_ana_mst::I2cAnaMst,
-    pub pll160: pac::hp_sys_clkrst::HpSysClkrstPll160,
 }
 
 /// Named observation bound from BB-L; independent of modem clock progress.
@@ -25,7 +20,7 @@ fn wait_cycles(cycles: u32) {
 /// Refuse timing attribution unless the CPU is directly on the 40 MHz XTAL.
 /// SOURCE: HP clock model, pinned IDF clk_tree_defs.h (40 MHz XTAL).
 pub(super) fn xtal_cpu(s: &Session<'_>) -> bool {
-    let c = &s.boot_clock;
+    let c = &s.sar.boot.hp_sys_clkrst_boot_clock;
     let root = c.read_soc_clk_sel().reg_soc_clk_sel().get();
     let div = c.read_cpu_freq_ctrl0();
     emit(
@@ -42,27 +37,41 @@ pub(super) fn xtal_cpu(s: &Session<'_>) -> bool {
 fn prepare(s: &mut Session<'_>) {
     contain(s);
     oer_riscv::disable_interrupts();
-    let p = &mut s.ble;
-    p.upstream.modify_modem_ctrl0(|w| {
+    s.sar.radio.hp_sys_clkrst_radio.modify_modem_ctrl0(|w| {
         w.set_reg_modem_clk_en(pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled);
     });
-    p.pmu.select_hp_active_modem_icg();
-    p.clocks.modify_clk_conf_power_st(|w| {
-        w.set_clk_modem_apb_st_map(Bits::constant::<6>())
-            .set_clk_modem_peri_st_map(Bits::constant::<4>())
-            .set_clk_wifi_st_map(Bits::constant::<6>())
-            .set_clk_bt_st_map(Bits::constant::<4>());
-    });
-    p.lp_clock.modify_clk_conf_power_st(|w| {
-        w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
-        w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
-        w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
-        w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
-    });
-    p.pmu.trigger_imm_modem_icg_update_dig_icg_modem_en();
-    p.pmu.trigger_imm_sleep_sysclk_update_dig_icg_switch();
-    p.upstream.close_modem_pll_source_gate();
-    p.clocks.modify_clk_conf1(|w| {
+    s.sar.radio.pmu_radio.select_hp_active_modem_icg();
+    s.sar
+        .radio
+        .modem_syscon_radio
+        .modify_clk_conf_power_st(|w| {
+            w.set_clk_modem_apb_st_map(Bits::constant::<6>())
+                .set_clk_modem_peri_st_map(Bits::constant::<4>())
+                .set_clk_wifi_st_map(Bits::constant::<6>())
+                .set_clk_bt_st_map(Bits::constant::<4>());
+        });
+    s.sar
+        .radio
+        .modem_lpcon_shared_clock
+        .modify_clk_conf_power_st(|w| {
+            w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
+            w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
+            w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
+            w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
+        });
+    s.sar
+        .radio
+        .pmu_radio
+        .trigger_imm_modem_icg_update_dig_icg_modem_en();
+    s.sar
+        .radio
+        .pmu_radio
+        .trigger_imm_sleep_sysclk_update_dig_icg_switch();
+    s.sar
+        .radio
+        .hp_sys_clkrst_radio
+        .close_modem_pll_source_gate();
+    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
         use pac::modem_syscon::clk_conf1::*;
         w.set_clk_wifi_apb_en(ClkWifiApbEn::Enabled)
             .set_clk_wifimac_en(ClkWifimacEn::Enabled)
@@ -77,21 +86,27 @@ fn prepare(s: &mut Session<'_>) {
 }
 
 fn clock_snapshot(s: &Session<'_>, tag: u32) {
-    let p = &s.ble;
     emit(
         tag,
-        modem_conf(p.upstream.read_modem_conf()),
-        p.pmu
+        modem_conf(s.sar.radio.hp_sys_clkrst_radio.read_modem_conf()),
+        s.sar
+            .radio
+            .pmu_radio
             .read_hp_active_icg_modem()
             .hp_active_dig_icg_modem_code()
             .get(),
-        syscon_map(p.clocks.read_clk_conf_power_st()),
+        syscon_map(s.sar.radio.modem_syscon_radio.read_clk_conf_power_st()),
     );
     emit(
         tag + 1,
-        lpcon_map(p.lp_clock.read_clk_conf_power_st()),
-        syscon_clocks(p.clocks.read_clk_conf1()),
-        syscon_reset(p.clocks.read_modem_rst_conf()),
+        lpcon_map(
+            s.sar
+                .radio
+                .modem_lpcon_shared_clock
+                .read_clk_conf_power_st(),
+        ),
+        syscon_clocks(s.sar.radio.modem_syscon_radio.read_clk_conf1()),
+        syscon_reset(s.sar.radio.modem_syscon_radio.read_modem_rst_conf()),
     );
 }
 
@@ -105,9 +120,10 @@ pub(super) fn pll(s: &mut Session<'_>) {
     // changes. Do not read a modem-domain timer on an unestablished PLL.
     emit(
         0xa1,
-        modem_conf(s.ble.upstream.read_modem_conf()),
-        s.ble
-            .pmu
+        modem_conf(s.sar.radio.hp_sys_clkrst_radio.read_modem_conf()),
+        s.sar
+            .radio
+            .pmu_radio
             .read_hp_active_icg_modem()
             .hp_active_dig_icg_modem_code()
             .get(),
@@ -123,7 +139,7 @@ pub(super) fn pll(s: &mut Session<'_>) {
         (4, false, true, true),
         (5, false, false, true),
     ] {
-        s.ble.upstream.modify_modem_conf(|w| {
+        s.sar.radio.hp_sys_clkrst_radio.modify_modem_conf(|w| {
             w.set_modem_apb_clk_en(true)
                 .set_modem_rst_en(false)
                 .set_modem_clk_en(true)
@@ -134,16 +150,20 @@ pub(super) fn pll(s: &mut Session<'_>) {
         oer_riscv::fence();
         emit(
             0xa4 + step * 4,
-            modem_conf(s.ble.upstream.read_modem_conf()),
-            s.ble
-                .pmu
+            modem_conf(s.sar.radio.hp_sys_clkrst_radio.read_modem_conf()),
+            s.sar
+                .radio
+                .pmu_radio
                 .read_hp_active_icg_modem()
                 .hp_active_dig_icg_modem_code()
                 .get(),
             oer_riscv::cycle32(),
         );
     }
-    s.ble.upstream.close_modem_pll_source_gate();
+    s.sar
+        .radio
+        .hp_sys_clkrst_radio
+        .close_modem_pll_source_gate();
 }
 
 fn ordinary_snapshot(s: &Session<'_>, tag: u32) {
@@ -288,7 +308,7 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
 // WORD_004C_OPAQUE has unknown read side effects and no PAC accessor.
 // This snapshot deliberately makes no handler-word/read-to-ack observation.
 fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
-    let b = &s.opaque.wifi_bb;
+    let b = &s.sar.radio.phy_baseband_config_oracle_wifi_bb;
     let status = b.read_baseband_watchdog_status().status();
     let raw = mac_raw(s.opaque.mac_interrupt.read_raw());
     let st = mac_status(s.opaque.mac_interrupt.read_status());
@@ -320,24 +340,27 @@ fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
     status
 }
 fn set_bb(s: &mut Session<'_>, irq: bool, clear: bool, reset: bool) {
-    s.opaque.wifi_bb.modify_baseband_watchdog_enable(|w| {
-        w.set_watchdog_reset_enable(reset)
-            .set_watchdog_interrupt_enable(irq)
-            .set_watchdog_timeout_clear_request(clear);
-    });
+    s.sar
+        .radio
+        .phy_baseband_config_oracle_wifi_bb
+        .modify_baseband_watchdog_enable(|w| {
+            w.set_watchdog_reset_enable(reset)
+                .set_watchdog_interrupt_enable(irq)
+                .set_watchdog_timeout_clear_request(clear);
+        });
     oer_riscv::fence();
 }
 fn enable_baseband(s: &mut Session<'_>) {
     // SOURCE: HAL modem clock-device BB reset-before-enable sequence and
     // ROM phy_mac_enable_bb's digital interface / Wi-Fi-enable transition.
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Released);
     });
     // SOURCE: ROM open_fe_bb clocks; enable digital BB clocks only, RF stays off.
-    s.ble.clocks.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
         use pac::modem_syscon::clk_conf1::*;
         w.set_clk_wifibb_22m_en(ClkWifibb22mEn::Enabled)
             .set_clk_wifibb_40m_en(ClkWifibb40mEn::Enabled)
@@ -349,11 +372,11 @@ fn enable_baseband(s: &mut Session<'_>) {
             .set_clk_wifibb_80x1_en(ClkWifibb80x1En::Enabled)
             .set_clk_wifibb_160x1_en(ClkWifibb160x1En::Enabled);
     });
-    s.ble.clocks.modify_wifi_bb_cfg(|w| {
+    s.sar.radio.modem_syscon_radio.modify_wifi_bb_cfg(|w| {
         w.set_bit_28_opaque(pac::modem_syscon::wifi_bb_cfg::Bit28Opaque::Enabled)
             .set_wifi_enable(pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled);
     });
-    s.ble.clocks.modify_wifi_bb_cfg(|w| {
+    s.sar.radio.modem_syscon_radio.modify_wifi_bb_cfg(|w| {
         w.set_wifi_enable(pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled);
     });
 }
@@ -361,28 +384,34 @@ fn enable_baseband(s: &mut Session<'_>) {
 pub(super) fn watchdog(s: &mut Session<'_>) {
     prepare(s);
     enable_baseband(s);
-    let b = &mut s.opaque.wifi_bb;
+    let b = &mut s.sar.radio.phy_baseband_config_oracle_wifi_bb;
     let old_control = b.read_baseband_watchdog_control();
     let old_enable = b.read_baseband_watchdog_enable();
     set_bb(s, false, false, false);
     bb_snapshot(s, 0xd0);
-    s.opaque.wifi_bb.modify_baseband_watchdog_control(|w| {
-        w.set_bits_0_15_opaque(1)
-            .set_bits_16_29_opaque(Bits::constant::<1>())
-            .set_bit_30_opaque(true)
-            .set_bit_31_opaque(true);
-    });
+    s.sar
+        .radio
+        .phy_baseband_config_oracle_wifi_bb
+        .modify_baseband_watchdog_control(|w| {
+            w.set_bits_0_15_opaque(1)
+                .set_bits_16_29_opaque(Bits::constant::<1>())
+                .set_bit_30_opaque(true)
+                .set_bit_31_opaque(true);
+        });
     set_bb(s, true, true, false);
     bb_snapshot(s, 0xd3);
     set_bb(s, true, false, false);
     wait_cycles(4096);
     let positive = bb_snapshot(s, 0xd6);
-    s.opaque.wifi_bb.modify_baseband_watchdog_control(|w| {
-        w.set_bits_0_15_opaque(old_control.bits_0_15_opaque())
-            .set_bits_16_29_opaque(old_control.bits_16_29_opaque())
-            .set_bit_30_opaque(old_control.bit_30_opaque())
-            .set_bit_31_opaque(old_control.bit_31_opaque());
-    });
+    s.sar
+        .radio
+        .phy_baseband_config_oracle_wifi_bb
+        .modify_baseband_watchdog_control(|w| {
+            w.set_bits_0_15_opaque(old_control.bits_0_15_opaque())
+                .set_bits_16_29_opaque(old_control.bits_16_29_opaque())
+                .set_bit_30_opaque(old_control.bit_30_opaque())
+                .set_bit_31_opaque(old_control.bit_31_opaque());
+        });
     set_bb(s, false, false, false);
     bb_snapshot(s, 0xd9);
     set_bb(s, true, false, false);
@@ -406,19 +435,18 @@ pub(super) fn temperature(s: &mut Session<'_>) {
         emit(0xaf, 13, 0, 0);
         return;
     }
-    let p = &mut s.ble;
-    let old_clk = s.opaque.tsens.read_clk_conf();
-    let old_ctrl = s.opaque.tsens.read_ctrl();
-    let old_peri = s.opaque.periclkrst.read_tsens_ctrl();
-    let old_power = p.pmu.read_ana_peri_pwr_ctrl();
-    p.pmu.modify_ana_peri_pwr_ctrl(|w| {
+    let old_clk = s.sar.radio.lp_tsens.read_clk_conf();
+    let old_ctrl = s.sar.radio.lp_tsens.read_ctrl();
+    let old_peri = s.sar.radio.lp_periclkrst.read_tsens_ctrl();
+    let old_power = s.sar.radio.pmu_radio.read_ana_peri_pwr_ctrl();
+    s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
         w.set_rstb_perif_i2c(false);
     });
     wait_cycles(40); // sourced 1 us SAR-I2C reset settle
-    p.pmu.modify_ana_peri_pwr_ctrl(|w| {
+    s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
         w.set_xpd_perif_i2c(true).set_rstb_perif_i2c(true);
     });
-    s.opaque.periclkrst.modify_tsens_ctrl(|w| {
+    s.sar.radio.lp_periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled)
             .set_lp_tsens_rst_en(false);
     });
@@ -428,19 +456,19 @@ pub(super) fn temperature(s: &mut Session<'_>) {
         (2, true, false),
         (3, false, false),
     ] {
-        s.opaque.tsens.modify_clk_conf(|w| {
+        s.sar.radio.lp_tsens.modify_clk_conf(|w| {
             w.set_clk_en(true)
                 .set_bit_9_opaque(bit9)
                 .set_bit_23_opaque(bit23);
         });
-        s.opaque.tsens.modify_ctrl(|w| {
+        s.sar.radio.lp_tsens.modify_ctrl(|w| {
             w.set_power_up(pac::tsens::ctrl::PowerUp::Enabled)
                 .set_power_up_force(true)
                 .set_clk_div(15);
         });
-        let configured = s.opaque.tsens.read_clk_conf();
-        let control = s.opaque.tsens.read_ctrl();
-        let peripheral = s.opaque.periclkrst.read_tsens_ctrl();
+        let configured = s.sar.radio.lp_tsens.read_clk_conf();
+        let control = s.sar.radio.lp_tsens.read_ctrl();
+        let peripheral = s.sar.radio.lp_periclkrst.read_tsens_ctrl();
         emit(
             0x110 + case,
             u32::from(configured.bit_9_opaque())
@@ -453,12 +481,12 @@ pub(super) fn temperature(s: &mut Session<'_>) {
                 | (u32::from(peripheral.lp_tsens_rst_en()) << 3),
         );
         for repeat in 0..2 {
-            s.opaque.tsens.modify_ctrl(|w| {
+            s.sar.radio.lp_tsens.modify_ctrl(|w| {
                 w.set_sample_en(false);
             });
             wait_cycles(400);
-            let before = s.opaque.tsens.read_ctrl();
-            s.opaque.tsens.modify_ctrl(|w| {
+            let before = s.sar.radio.lp_tsens.read_ctrl();
+            s.sar.radio.lp_tsens.modify_ctrl(|w| {
                 w.set_sample_en(true);
             });
             let mut ready_count = 0u32;
@@ -473,7 +501,7 @@ pub(super) fn temperature(s: &mut Session<'_>) {
                 if oer_riscv::cycle32().wrapping_sub(start) >= 40_000 {
                     break;
                 }
-                last = s.opaque.tsens.read_ctrl();
+                last = s.sar.radio.lp_tsens.read_ctrl();
                 ready_count += u32::from(last.ready());
                 changes += u32::from(last.out() != prior);
                 prior = last.out();
@@ -491,12 +519,12 @@ pub(super) fn temperature(s: &mut Session<'_>) {
                 changes,
             );
         }
-        s.opaque.tsens.modify_clk_conf(|w| {
+        s.sar.radio.lp_tsens.modify_clk_conf(|w| {
             w.set_bit_9_opaque(old_clk.bit_9_opaque())
                 .set_bit_23_opaque(old_clk.bit_23_opaque());
         });
     }
-    s.opaque.tsens.modify_ctrl(|w| {
+    s.sar.radio.lp_tsens.modify_ctrl(|w| {
         w.set_sample_en(old_ctrl.sample_en())
             .set_power_up(pac::tsens::ctrl::PowerUp::from_field(u32::from(
                 old_ctrl.power_up(),
@@ -504,18 +532,18 @@ pub(super) fn temperature(s: &mut Session<'_>) {
             .set_power_up_force(old_ctrl.power_up_force())
             .set_clk_div(old_ctrl.clk_div());
     });
-    s.opaque.tsens.modify_clk_conf(|w| {
+    s.sar.radio.lp_tsens.modify_clk_conf(|w| {
         w.set_clk_en(old_clk.clk_en())
             .set_bit_9_opaque(old_clk.bit_9_opaque())
             .set_bit_23_opaque(old_clk.bit_23_opaque());
     });
-    s.opaque.periclkrst.modify_tsens_ctrl(|w| {
+    s.sar.radio.lp_periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::from_field(
             u32::from(old_peri.lp_tsens_clk_en()),
         ))
         .set_lp_tsens_rst_en(old_peri.lp_tsens_rst_en());
     });
-    p.pmu.modify_ana_peri_pwr_ctrl(|w| {
+    s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
         w.set_xpd_perif_i2c(old_power.xpd_perif_i2c())
             .set_rstb_perif_i2c(old_power.rstb_perif_i2c());
     });

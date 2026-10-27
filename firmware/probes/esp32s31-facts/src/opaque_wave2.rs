@@ -16,35 +16,52 @@ fn settle(cycles: u32) {
 fn prepare(s: &mut Session<'_>) {
     contain(s);
     // SOURCE: hal/src/power/chip_clocks.rs ClockCounts::adopt/ClockWords.
-    s.ble.gates.set_modem_pwr_wifi_power_clock(true);
+    s.sar
+        .clocks
+        .modem_lpcon_chip_clocks
+        .set_modem_pwr_wifi_power_clock(true);
     // SOURCE: hal/src/power.rs execute_owned; modem/ops.rs. Preserve its
     // PMU update -> APB -> maps -> source -> BB reset -> clocks order only.
     // MPLL reference counting and the separate RF-init graph are not run.
-    let p = &mut s.ble;
-    p.pmu.select_hp_active_modem_icg();
-    p.pmu.trigger_imm_modem_icg_update_dig_icg_modem_en();
-    p.pmu.trigger_imm_sleep_sysclk_update_dig_icg_switch();
-    p.upstream.modify_modem_ctrl0(|w| {
+    s.sar.radio.pmu_radio.select_hp_active_modem_icg();
+    s.sar
+        .radio
+        .pmu_radio
+        .trigger_imm_modem_icg_update_dig_icg_modem_en();
+    s.sar
+        .radio
+        .pmu_radio
+        .trigger_imm_sleep_sysclk_update_dig_icg_switch();
+    s.sar.radio.hp_sys_clkrst_radio.modify_modem_ctrl0(|w| {
         w.set_reg_modem_clk_en(pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled);
     });
-    p.clocks.modify_clk_conf_power_st(|w| {
-        w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
-        w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
-        w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
-        w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
-        w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
-        w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
-    });
-    p.lp_clock.modify_clk_conf_power_st(|w| {
-        w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
-        w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
-        w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
-        w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
-    });
-    s.opaque.pll160.modify_ref_160m_ctrl0(|w| {
-        w.set_reg_ref_160m_clk_en(true);
-    });
-    p.upstream.modify_modem_conf(|w| {
+    s.sar
+        .radio
+        .modem_syscon_radio
+        .modify_clk_conf_power_st(|w| {
+            w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
+            w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
+            w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
+            w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
+            w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
+            w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
+        });
+    s.sar
+        .radio
+        .modem_lpcon_shared_clock
+        .modify_clk_conf_power_st(|w| {
+            w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
+            w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
+            w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
+            w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
+        });
+    s.sar
+        .clocks
+        .hp_sys_clkrst_pll160
+        .modify_ref_160m_ctrl0(|w| {
+            w.set_reg_ref_160m_clk_en(true);
+        });
+    s.sar.radio.hp_sys_clkrst_radio.modify_modem_conf(|w| {
         w.set_modem_apb_clk_en(true)
             .set_modem_rst_en(false)
             .set_modem_clk_en(true)
@@ -56,11 +73,11 @@ fn prepare(s: &mut Session<'_>) {
         pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted,
         pac::modem_syscon::modem_rst_conf::RstWifibb::Released,
     ] {
-        p.clocks.modify_modem_rst_conf(|w| {
+        s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_wifibb(reset);
         });
     }
-    p.clocks.modify_clk_conf1(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf1(|w| {
         use pac::modem_syscon::clk_conf1::*;
         w.set_clk_wifibb_22m_en(ClkWifibb22mEn::Enabled)
             .set_clk_wifibb_40m_en(ClkWifibb40mEn::Enabled)
@@ -81,41 +98,59 @@ fn prepare(s: &mut Session<'_>) {
             .set_clk_fe_adc_en(true)
             .set_clk_fe_dac_en(true);
     });
-    p.clocks.modify_clk_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_clk_conf(|w| {
         w.set_clk_i2c_mst_sel_160m(pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled);
     });
-    p.gates.set_i2c_ana_mst_master_clock(true);
+    s.sar
+        .clocks
+        .modem_lpcon_chip_clocks
+        .set_i2c_ana_mst_master_clock(true);
 
     // SOURCE: hal/src/phy/analog_i2c.rs prepare_open_i2c_pre_delay and
     // complete_open_i2c_power_and_reset; modem/ops.rs. The false BB tie
     // deliberately has no write in production (write-trigger field).
-    p.pmu.modify_rf_pwc(|w| {
+    s.sar.radio.pmu_radio.modify_rf_pwc(|w| {
         w.set_xpd_rf_circuit(pac::pmu::rf_pwc::XpdRfCircuit::PoweredOff);
     });
     settle(4_000); // sourced 100 us pre-delay, once, in the standalone probe
-    p.pmu.modify_rf_pwc(|w| {
+    s.sar.radio.pmu_radio.modify_rf_pwc(|w| {
         w.set_xpd_rf_circuit(pac::pmu::rf_pwc::XpdRfCircuit::PoweredOn);
     });
-    p.pmu.trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c();
-    if !p.pmu.read_ana_peri_pwr_ctrl().xpd_perif_i2c() {
-        p.pmu.modify_ana_peri_pwr_ctrl(|w| {
+    s.sar
+        .radio
+        .pmu_radio
+        .trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c();
+    if !s
+        .sar
+        .radio
+        .pmu_radio
+        .read_ana_peri_pwr_ctrl()
+        .xpd_perif_i2c()
+    {
+        s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
             w.set_xpd_perif_i2c(true);
         });
-        p.pmu.modify_ana_peri_pwr_ctrl(|w| {
+        s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
             w.set_rstb_perif_i2c(false);
         });
-        p.pmu.modify_ana_peri_pwr_ctrl(|w| {
+        s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
             w.set_rstb_perif_i2c(true);
         });
     }
-    if !p.pmu.read_ana_peri_pwr_ctrl().rstb_perif_i2c() {
-        p.pmu.modify_ana_peri_pwr_ctrl(|w| {
+    if !s
+        .sar
+        .radio
+        .pmu_radio
+        .read_ana_peri_pwr_ctrl()
+        .rstb_perif_i2c()
+    {
+        s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
             w.set_rstb_perif_i2c(true);
         });
     }
     // SOURCE: hal/src/phy/i2c/master.rs configure_clock_selection and
     // configure_master_registers (six timing RMWs, mode then enable).
-    let m = &mut s.opaque.analog_master;
+    let m = &mut s.sar.analog.i2c_ana_mst;
     m.modify_i2c0_ctrl1(|w| {
         w.set_i2c0_sda_side_guard(Bits::constant::<2>());
     });
@@ -195,7 +230,7 @@ fn upper_host_map_image(map: pac::i2c_ana_mst::ana_conf2::R) -> u32 {
 // A case has route at +0, completion at +1, identity at +2,
 // mode at +3 and request at +4. Refusals have separate global tags.
 fn routing(s: &Session<'_>, tag: u32, host: Host, seed: u8) {
-    let m = &s.opaque.analog_master;
+    let m = &s.sar.analog.i2c_ana_mst;
     let mask = m.read_ana_conf1();
     let map = m.read_ana_conf2();
     emit(
@@ -223,7 +258,7 @@ fn host_number(host: Host) -> u32 {
 }
 
 fn busy(s: &Session<'_>, host: Host) -> bool {
-    let m = &s.opaque.analog_master;
+    let m = &s.sar.analog.i2c_ana_mst;
     match host {
         Host::Host0 => m.read_i2c0_ctrl().i2c0_busy(),
         Host::Host1 => m.read_i2c1_ctrl().i2c1_busy(),
@@ -231,7 +266,7 @@ fn busy(s: &Session<'_>, host: Host) -> bool {
 }
 
 fn start(s: &mut Session<'_>, host: Host, address: Address, seed: u8) {
-    let m = &mut s.opaque.analog_master;
+    let m = &mut s.sar.analog.i2c_ana_mst;
     // SOURCE: hal/src/phy/i2c/master.rs publish_command; ROM_REV0_PHY_I2C.
     // Deliberate probe difference: nonzero DATA seeds distinguish a read
     // returning zero from an unchanged command. READ_WRITE is always false.
@@ -268,7 +303,7 @@ fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
             return false;
         }
     }
-    let m = &s.opaque.analog_master;
+    let m = &s.sar.analog.i2c_ana_mst;
     let (data, block, index) = match host {
         Host::Host0 => {
             let r = m.read_i2c0_ctrl();
@@ -296,7 +331,7 @@ fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
 
 fn normal_map(s: &mut Session<'_>) {
     // SOURCE: hal/src/phy/i2c/master.rs configure_host_map, image 0x3fa0.
-    s.opaque.analog_master.modify_ana_conf2(|w| {
+    s.sar.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_bbtop_mst0_select(false)
             .set_txrf_mst0_select(false)
             .set_sdm_mst0_select(false)
@@ -332,14 +367,15 @@ fn serial(s: &mut Session<'_>, address: Address, seed: u8, tag: u32) -> bool {
         return false;
     };
     normal_map(s);
-    s.opaque
-        .analog_master
+    s.sar
+        .analog
+        .i2c_ana_mst
         .publish_phy_i2c_read_mask(Bits::truncate(route.complemented_read_select()));
     read_case(s, address, route.host, seed, tag)
 }
 
 fn lane_snapshot(s: &Session<'_>, tag: u32) {
-    let m = s.opaque.analog_master.read_ana_conf2();
+    let m = s.sar.analog.i2c_ana_mst.read_ana_conf2();
     emit(
         tag,
         u32::from(m.bbtop_mst0_select()),
@@ -355,8 +391,8 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     }
     emit(0x140, 0, 0, 0);
     prepare(s);
-    let power = s.ble.pmu.read_ana_peri_pwr_ctrl();
-    let gates = s.ble.gates.read_clk_conf();
+    let power = s.sar.radio.pmu_radio.read_ana_peri_pwr_ctrl();
+    let gates = s.sar.clocks.modem_lpcon_chip_clocks.read_clk_conf();
     emit(
         0x141,
         u32::from(power.xpd_perif_i2c()),
@@ -365,11 +401,24 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     );
     emit(
         0x142,
-        u32::from(s.ble.clocks.read_clk_conf().clk_i2c_mst_sel_160m()),
-        u32::from(s.opaque.pll160.read_ref_160m_ctrl0().reg_ref_160m_clk_en()),
         u32::from(
-            s.opaque
-                .analog_master
+            s.sar
+                .radio
+                .modem_syscon_radio
+                .read_clk_conf()
+                .clk_i2c_mst_sel_160m(),
+        ),
+        u32::from(
+            s.sar
+                .clocks
+                .hp_sys_clkrst_pll160
+                .read_ref_160m_ctrl0()
+                .reg_ref_160m_clk_en(),
+        ),
+        u32::from(
+            s.sar
+                .analog
+                .i2c_ana_mst
                 .read_ana_conf0()
                 .phy_register_enable(),
         ),
@@ -387,16 +436,16 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     }
     // Probe preparation makes the ROM's second operation a real 1->0 edge.
     // No command executes while both banks are assigned to host zero.
-    s.opaque.analog_master.modify_ana_conf2(|w| {
+    s.sar.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_txrf_mst0_select(true);
     });
     lane_snapshot(s, 0x143);
     // SOURCE: ROM_REV0_PHY_I2C_HOST_LANES: set BBTOP, then clear TXRF.
-    s.opaque.analog_master.modify_ana_conf2(|w| {
+    s.sar.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_bbtop_mst0_select(true);
     });
     lane_snapshot(s, 0x144);
-    s.opaque.analog_master.modify_ana_conf2(|w| {
+    s.sar.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_txrf_mst0_select(false);
     });
     lane_snapshot(s, 0x145);
@@ -409,8 +458,9 @@ pub(super) fn i2c(s: &mut Session<'_>) {
         return;
     };
     // SOURCE: ROM phy_i2c_paral_set_read/read; host0 publication first.
-    s.opaque
-        .analog_master
+    s.sar
+        .analog
+        .i2c_ana_mst
         .publish_phy_i2c_read_mask(Bits::truncate(
             !(u32::from(br.read_select) | u32::from(tr.read_select)),
         ));
@@ -429,8 +479,9 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     // Negative control: no read selector enabled. Expected to differ from
     // the positive BBTOP value or time out; no exact electrical code assumed.
     normal_map(s);
-    s.opaque
-        .analog_master
+    s.sar
+        .analog
+        .i2c_ana_mst
         .publish_phy_i2c_read_mask(Bits::truncate(u32::MAX));
     if !read_case(s, b, Host::Host1, 0xa5, 0x1b0) {
         return;
@@ -440,7 +491,7 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     }
     // Negative control: BBTOP routed to host0, command deliberately on host1.
     // The correct BBTOP read mask from the preceding serial read remains set.
-    s.opaque.analog_master.modify_ana_conf2(|w| {
+    s.sar.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_bbtop_mst0_select(true);
     });
     if !read_case(s, b, Host::Host1, 0xa5, 0x1d0) {

@@ -72,21 +72,26 @@ pub(in crate::image) fn overflow_rate(s: &mut Session<'_>) {
         u32::from(c.config_24()),
         u32::from(c.timer_arm()),
     );
-    let cpu = s.boot_clock.read_cpu_freq_ctrl0();
+    let cpu = s.sar.boot.hp_sys_clkrst_boot_clock.read_cpu_freq_ctrl0();
     emit(
         0xa301,
         u32::from(cpu.reg_cpu_clk_div_num()),
         cpu.reg_cpu_clk_div_numerator().get(),
         cpu.reg_cpu_clk_div_denominator().get(),
     );
-    let m = s.ble.upstream.read_modem_conf();
+    let m = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
     emit(
         0xa302,
-        s.boot_clock.read_soc_clk_sel().reg_soc_clk_sel().get(),
+        s.sar
+            .boot
+            .hp_sys_clkrst_boot_clock
+            .read_soc_clk_sel()
+            .reg_soc_clk_sel()
+            .get(),
         u32::from(m.modem_clk_source_sel()),
         u32::from(m.modem_pll_clk_en()),
     );
-    let pll = s.cpll.read_cpll_div();
+    let pll = s.sar.boot.lp_aon_clkrst_cpll.read_cpll_div();
     emit(
         0xa303,
         u32::from(pll.cpll_fb_div()),
@@ -214,18 +219,18 @@ pub(in crate::image) fn overflow_reset(s: &mut Session<'_>) {
     }
     boundary(s, 0xa410);
     // SOURCE: production Bluetooth shutdown reset order, MAC then APB.
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
     });
     oer_riscv::fence();
     boundary(s, 0xa430);
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Asserted);
     });
-    s.ble.clocks.modify_modem_rst_conf(|w| {
+    s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Released);
     });
     oer_riscv::fence();

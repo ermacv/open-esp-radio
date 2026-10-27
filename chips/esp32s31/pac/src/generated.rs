@@ -67830,7 +67830,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// Hardware completion state sampled by the complete power-detector paths; neither source writes these bits.
+            /// All-three-ready predicate is 7. Observed partial codes 0,1,2,3,4,5,6 occurred nonmonotonically before 7 over approximately 20 us; individual bit meanings are unresolved. Separate one-board short isolated manual-trigger captures, including the corrected finite prefix with documented remaining differences, observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample.
             #[inline]
             pub const fn sar_ready(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 14)
@@ -67859,7 +67859,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// Hardware completion state sampled by the complete power-detector paths; neither source writes these bits.
+            /// All-three-ready predicate is 7. Observed partial codes 0,1,2,3,4,5,6 occurred nonmonotonically before 7 over approximately 20 us; individual bit meanings are unresolved. Separate one-board short isolated manual-trigger captures, including the corrected finite prefix with documented remaining differences, observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample.
             #[inline]
             pub const fn sar_ready(&self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 14)
@@ -68010,7 +68010,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_SAR_RESULT` register.
     ///
-    /// First of four consecutive SAR result words. phy_get_tone_sar_dout_ consumes its upper thirteen-bit sample; phy_get_fm_sar_dout consumes both thirteen-bit halves from all four words.
+    /// First of four consecutive SAR result words copied by phy_read_sar_dout. phy_get_tone_sar_dout_ consumes only this word upper thirteen-bit lane; phy_get_fm_sar_dout invokes that callback with sample count 2.
     pub mod power_detector_sar_result {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x3ffe3ffe;
@@ -68045,7 +68045,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 1)
             }
 
-            /// The `SAR_SAMPLE` field.
+            /// Upper lane consumed by the tone/SAR2 wrapper. The corrected-prefix capture (one board, one run, four HOLD conversions among ten total) retained nonzero data across reads through ready+100 us, including tone-arm clear; the lane can change before all-three-ready during conversion. Preparation differs from production as specified by HW17_S31_SAR_PREPARATION_20261027; this is an observation, not a production contract. Other modes and longer retention are untested.
             #[inline]
             pub const fn sar_sample(self) -> oer_mmio::Bits<13> {
                 oer_mmio::Bits::truncate(self.0 >> 17)
@@ -68055,7 +68055,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_SAR_RESULT_1` register.
     ///
-    /// Second of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout.
+    /// Second of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane.
     pub mod power_detector_sar_result_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x3ffe3ffe;
@@ -68100,7 +68100,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_SAR_RESULT_2` register.
     ///
-    /// Third of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout.
+    /// Third of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane.
     pub mod power_detector_sar_result_2 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x3ffe3ffe;
@@ -68145,7 +68145,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_SAR_RESULT_3` register.
     ///
-    /// Fourth of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout.
+    /// Fourth of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane.
     pub mod power_detector_sar_result_3 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x3ffe3ffe;
@@ -304406,12 +304406,34 @@ pub mod analog_i2c {
             /// SOURCE: BLOB_LIBPHY_PHY_I2C.
             pub const ADDRESS: Address = Address::new(0x6b, 0xa);
 
-            /// Width of `BITS_0_7_OPAQUE`.
-            pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
+            /// Width of `BITS_0_2_OPAQUE`.
+            pub const BITS_0_2_OPAQUE_WIDTH: u32 = 3;
             /// Greatest field image.
-            pub const BITS_0_7_OPAQUE_MAX: u8 = 255;
+            pub const BITS_0_2_OPAQUE_MAX: u8 = 7;
             /// SOURCE: BLOB_LIBPHY_PHY_I2C.
-            pub const BITS_0_7_OPAQUE: Field = match Field::new(Address::new(0x6b, 0xa), 7, 0) {
+            pub const BITS_0_2_OPAQUE: Field = match Field::new(Address::new(0x6b, 0xa), 2, 0) {
+                Some(field) => field,
+                None => panic!("the model's field lies in its byte"),
+            };
+            /// Width of `PHY_SET_RATE_CLASS`.
+            pub const PHY_SET_RATE_CLASS_WIDTH: u32 = 3;
+            /// Greatest field image.
+            pub const PHY_SET_RATE_CLASS_MAX: u8 = 7;
+            /// Named image of `PHY_SET_RATE_CLASS`. SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS.
+            pub const PHY_SET_RATE_CLASS_ARGUMENT_BELOW_8: u8 = 0;
+            /// Named image of `PHY_SET_RATE_CLASS`. SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS.
+            pub const PHY_SET_RATE_CLASS_ARGUMENT_AT_LEAST_8: u8 = 1;
+            /// SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS.
+            pub const PHY_SET_RATE_CLASS: Field = match Field::new(Address::new(0x6b, 0xa), 5, 3) {
+                Some(field) => field,
+                None => panic!("the model's field lies in its byte"),
+            };
+            /// Width of `BITS_6_7_OPAQUE`.
+            pub const BITS_6_7_OPAQUE_WIDTH: u32 = 2;
+            /// Greatest field image.
+            pub const BITS_6_7_OPAQUE_MAX: u8 = 3;
+            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            pub const BITS_6_7_OPAQUE: Field = match Field::new(Address::new(0x6b, 0xa), 7, 6) {
                 Some(field) => field,
                 None => panic!("the model's field lies in its byte"),
             };
@@ -305524,8 +305546,8 @@ pub mod analog_i2c {
         },
         RegisterFacts {
             address: Address::new(0x6b, 0xa),
-            described: 0x0,
-            opaque: 0xff,
+            described: 0x38,
+            opaque: 0xc7,
             reserved: 0x0,
             reset: None,
             read_safe_epoch: None,

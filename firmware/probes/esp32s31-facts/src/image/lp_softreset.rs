@@ -44,9 +44,9 @@ fn state(s: &Session<'_>, tag: u32) -> [u32; 5] {
     v
 }
 fn clocks(s: &Session<'_>, tag: u32) {
-    let m = s.ble.upstream.read_modem_conf();
-    let c = s.ble.gates.read_clk_conf();
-    let l = s.ble.lp_clock.read_lp_timer_conf();
+    let m = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
+    let c = s.sar.clocks.modem_lpcon_chip_clocks.read_clk_conf();
+    let l = s.sar.radio.modem_lpcon_shared_clock.read_lp_timer_conf();
     emit(
         tag + 2,
         u32::from(s.ble.timer.read_word_0078_opaque().control_25()),
@@ -63,7 +63,13 @@ fn clocks(s: &Session<'_>, tag: u32) {
         tag + 1,
         u32::from(l.clk_lp_timer_sel_xtal()),
         l.clk_lp_timer_div_num().get(),
-        u32::from(s.ble.clocks.read_clk_conf().clk_ble_timer_en()),
+        u32::from(
+            s.sar
+                .radio
+                .modem_syscon_radio
+                .read_clk_conf()
+                .clk_ble_timer_en(),
+        ),
     );
 }
 fn window() {
@@ -223,7 +229,7 @@ pub(super) fn observe(s: &mut Session<'_>) {
     }
     // Diagnostic phase: restore access clocks only. No LP prepare, reset,
     // pending clear, counter start or +0x10 enable command before this sample.
-    ble::clocks(&mut s.ble);
+    ble::clocks(s);
     state(s, 0xb120);
     window();
     state(s, 0xb122);
@@ -276,12 +282,15 @@ pub(super) fn observe(s: &mut Session<'_>) {
 }
 
 fn source_clocks(s: &mut Session<'_>) {
-    s.ble.lp_clock.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_osc_slow(false)
-            .set_clk_lp_timer_sel_osc_fast(false)
-            .set_clk_lp_timer_sel_xtal32k(false)
-            .set_clk_lp_timer_sel_xtal(true)
-            .set_clk_lp_timer_div_num(Bits::constant::<1>());
-    });
+    s.sar
+        .radio
+        .modem_lpcon_shared_clock
+        .modify_lp_timer_conf(|w| {
+            w.set_clk_lp_timer_sel_osc_slow(false)
+                .set_clk_lp_timer_sel_osc_fast(false)
+                .set_clk_lp_timer_sel_xtal32k(false)
+                .set_clk_lp_timer_sel_xtal(true)
+                .set_clk_lp_timer_div_num(Bits::constant::<1>());
+        });
     oer_riscv::fence();
 }

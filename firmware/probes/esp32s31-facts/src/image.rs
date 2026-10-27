@@ -22,6 +22,8 @@ mod generic;
 mod lp_lanes;
 mod lp_softreset;
 mod radio_local;
+#[path = "sar.rs"]
+mod sar;
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
 const CPU_LINE: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
@@ -107,6 +109,9 @@ static FACTS_THRESHOLD_K: AtomicU32 = AtomicU32::new(0);
 // all u32 bit patterns are valid, and only the masked thread publishes them.
 #[unsafe(link_section = ".noinit.facts")]
 static RETAINED: [AtomicU32; 12] = [const { AtomicU32::new(0) }; 12];
+static SAR_CONTEXT: AtomicPtr<sar::Sar> = AtomicPtr::new(ptr::null_mut());
+static SAR_SELECTION: AtomicU32 = AtomicU32::new(0);
+static SAR_DONE: AtomicU32 = AtomicU32::new(0);
 static IRQ_COUNT: AtomicU32 = AtomicU32::new(0);
 static IRQ_CYCLE: AtomicU32 = AtomicU32::new(0);
 static IRQ_PC: AtomicU32 = AtomicU32::new(0);
@@ -150,6 +155,30 @@ extern "C" fn facts_irq() {
         // shared-register owner is only accessed through &self until IRQs stop.
         unsafe { &*source }.store_hp_cpu_int_from_cpu_2(false);
     }
+    let sar = SAR_CONTEXT.swap(ptr::null_mut(), Ordering::AcqRel);
+    if !sar.is_null() {
+        let id = SAR_SELECTION.load(Ordering::Relaxed);
+        if let Some(Probe {
+            run: Action::Sar(run),
+            ..
+        }) = PROBES.iter().find(|p| p.id == id)
+        {
+            // SAFETY: the exclusive SAR borrow published by run_sar remains
+            // live through this handler; no other context accesses it.
+            let sar = unsafe { &mut *sar };
+            emit(
+                0x14f0,
+                id,
+                oer_riscv::read_mintstatus() as u32,
+                oer_riscv::read_mcause() as u32,
+            );
+            run(sar);
+        } else {
+            emit(0x14ee, 7, id, 0);
+        }
+        SAR_DONE.store(1, Ordering::Release);
+        return;
+    }
     let count = IRQ_COUNT.fetch_add(1, Ordering::Relaxed);
     if count >= 8 {
         emit(0xee, oer_riscv::read_mcause() as u32, count, cycle);
@@ -173,8 +202,9 @@ extern "C" fn oer_exception_handler(_frame: usize) -> ! {
 }
 
 struct Session<'a> {
-    boot_clock: pac::hp_sys_clkrst::HpSysClkrstBootClock,
-    cpll: pac::lp_aonclkrst::LpAonClkrstCpll,
+    // Sole PHY/chip-clock/boot owners; serial thread probes borrow these
+    // same groups. Only the SAR action transfers this owner to P2.
+    sar: sar::Sar,
     source: &'a pac::hp_system::FromCpu2,
     interrupt_matrix: pac::ownership::InterruptMatrixPeripherals,
     core_control: pac::ownership::CoreControlPeripherals,
@@ -188,257 +218,302 @@ struct Session<'a> {
 }
 struct Probe {
     id: u32,
-    run: fn(&mut Session<'_>),
+    run: Action,
+}
+enum Action {
+    Thread(fn(&mut Session<'_>)),
+    Sar(fn(&mut sar::Sar)),
 }
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
     Probe {
         id: 14,
-        run: opaque_wave2::i2c,
+        run: Action::Thread(opaque_wave2::i2c),
     },
     Probe {
         id: 10,
-        run: opaque::pll,
+        run: Action::Thread(opaque::pll),
     },
     Probe {
         id: 11,
-        run: opaque::block_ack,
+        run: Action::Thread(opaque::block_ack),
     },
     Probe {
         id: 12,
-        run: opaque::watchdog,
+        run: Action::Thread(opaque::watchdog),
     },
     Probe {
         id: 13,
-        run: opaque::temperature,
+        run: Action::Thread(opaque::temperature),
     },
     Probe {
         id: 113,
-        run: lp_lanes::sleep17,
+        run: Action::Thread(lp_lanes::sleep17),
     },
     Probe {
         id: 114,
-        run: lp_lanes::compare_mode,
+        run: Action::Thread(lp_lanes::compare_mode),
     },
     Probe {
         id: 110,
-        run: lp_lanes::sleep16,
+        run: Action::Thread(lp_lanes::sleep16),
     },
     Probe {
         id: 111,
-        run: lp_lanes::delivery,
+        run: Action::Thread(lp_lanes::delivery),
     },
     Probe {
         id: 112,
-        run: lp_lanes::sleep_other,
+        run: Action::Thread(lp_lanes::sleep_other),
     },
     Probe {
         id: 105,
-        run: lp_softreset::compare,
+        run: Action::Thread(lp_softreset::compare),
     },
     Probe {
         id: 106,
-        run: lp_softreset::rollover,
+        run: Action::Thread(lp_softreset::rollover),
     },
     Probe {
         id: 107,
-        run: lp_softreset::both,
+        run: Action::Thread(lp_softreset::both),
     },
     Probe {
         id: 108,
-        run: lp_softreset::control,
+        run: Action::Thread(lp_softreset::control),
     },
     Probe {
         id: 109,
-        run: lp_softreset::observe,
+        run: Action::Thread(lp_softreset::observe),
     },
     Probe {
         id: 102,
-        run: ble_wave2::overflow_ack,
+        run: Action::Thread(ble_wave2::overflow_ack),
     },
     Probe {
         id: 103,
-        run: ble_wave2::overflow_rate,
+        run: Action::Thread(ble_wave2::overflow_rate),
     },
     Probe {
         id: 104,
-        run: ble_wave2::overflow_reset,
+        run: Action::Thread(ble_wave2::overflow_reset),
     },
     Probe {
         id: 101,
-        run: ble_wave2::lp_masked,
+        run: Action::Thread(ble_wave2::lp_masked),
     },
     Probe {
         id: 96,
-        run: ble_wave2::lp_clear,
+        run: Action::Thread(ble_wave2::lp_clear),
     },
     Probe {
         id: 97,
-        run: ble_wave2::sleep16,
+        run: Action::Thread(ble_wave2::sleep16),
     },
     Probe {
         id: 98,
-        run: ble_wave2::sleep_other,
+        run: Action::Thread(ble_wave2::sleep_other),
     },
     Probe {
         id: 99,
-        run: ble_wave2::shutdown_soft,
+        run: Action::Thread(ble_wave2::shutdown_soft),
     },
     Probe {
         id: 100,
-        run: ble_wave2::shutdown_wrap,
+        run: Action::Thread(ble_wave2::shutdown_wrap),
     },
     Probe {
         id: 91,
-        run: ble_wave2::mapping,
+        run: Action::Thread(ble_wave2::mapping),
     },
     Probe {
         id: 92,
-        run: ble_wave2::masks,
+        run: Action::Thread(ble_wave2::masks),
     },
     Probe {
         id: 93,
-        run: ble_wave2::controls,
+        run: Action::Thread(ble_wave2::controls),
     },
     Probe {
         id: 94,
-        run: ble_wave2::groups,
+        run: Action::Thread(ble_wave2::groups),
     },
     Probe {
         id: 95,
-        run: ble_wave2::arrivals,
+        run: Action::Thread(ble_wave2::arrivals),
     },
     Probe {
         id: 90,
-        run: ble_wave2::prerequisite,
+        run: Action::Thread(ble_wave2::prerequisite),
     },
     Probe {
         id: 82,
-        run: radio_local::ieee_timers,
+        run: Action::Thread(radio_local::ieee_timers),
     },
     Probe {
         id: 83,
-        run: radio_local::wifi_timers,
+        run: Action::Thread(radio_local::wifi_timers),
     },
     Probe {
         id: 80,
-        run: ble::compare_ack,
+        run: Action::Thread(ble::compare_ack),
     },
     Probe {
         id: 81,
-        run: ble::two_wraps,
+        run: Action::Thread(ble::two_wraps),
     },
     Probe {
         id: 40,
-        run: generic::matrix,
+        run: Action::Thread(generic::matrix),
     },
     Probe {
         id: 41,
-        run: generic::usb,
+        run: Action::Thread(generic::usb),
     },
     Probe {
         id: 42,
-        run: generic::systimer0,
+        run: Action::Thread(generic::systimer0),
     },
     Probe {
         id: 43,
-        run: generic::systimer1,
+        run: Action::Thread(generic::systimer1),
     },
     Probe {
         id: 44,
-        run: generic::timer0,
+        run: Action::Thread(generic::timer0),
     },
     Probe {
         id: 32,
-        run: ble::timer_reset_on,
+        run: Action::Thread(ble::timer_reset_on),
     },
     Probe {
         id: 33,
-        run: ble::timer_reset_off,
+        run: Action::Thread(ble::timer_reset_off),
     },
     Probe {
         id: 34,
-        run: ble::controller_reset_on,
+        run: Action::Thread(ble::controller_reset_on),
     },
     Probe {
         id: 35,
-        run: ble::controller_reset_off,
+        run: Action::Thread(ble::controller_reset_off),
     },
     Probe {
         id: 20,
-        run: ble::inherited,
+        run: Action::Thread(ble::inherited),
     },
     Probe {
         id: 31,
-        run: ble::btlc_prefix,
+        run: Action::Thread(ble::btlc_prefix),
     },
     Probe {
         id: 30,
-        run: ble::rollover_gates,
+        run: Action::Thread(ble::rollover_gates),
     },
     Probe {
         id: 29,
-        run: ble::software_pending,
+        run: Action::Thread(ble::software_pending),
     },
     Probe {
         id: 28,
-        run: ble::counter_controls,
+        run: Action::Thread(ble::counter_controls),
     },
     Probe {
         id: 27,
-        run: ble::bit_one,
+        run: Action::Thread(ble::bit_one),
     },
     Probe {
         id: 21,
-        run: ble::nrt_controls,
+        run: Action::Thread(ble::nrt_controls),
     },
     Probe {
         id: 22,
-        run: ble::nrt_arrivals,
+        run: Action::Thread(ble::nrt_arrivals),
     },
     Probe {
         id: 23,
-        run: ble::lp_causes,
+        run: Action::Thread(ble::lp_causes),
     },
     Probe {
         id: 24,
-        run: ble::lp_stop,
+        run: Action::Thread(ble::lp_stop),
     },
     Probe {
         id: 25,
-        run: ble::lp_wrap,
+        run: Action::Thread(ble::lp_wrap),
     },
     Probe {
         id: 26,
-        run: ble::lp_modes,
+        run: Action::Thread(ble::lp_modes),
+    },
+    Probe {
+        id: 140,
+        run: Action::Sar(|s| s.preflight()),
+    },
+    Probe {
+        id: 141,
+        run: Action::Sar(|s| s.hold(false, false)),
+    },
+    Probe {
+        id: 142,
+        run: Action::Sar(|s| s.hold(true, false)),
+    },
+    Probe {
+        id: 143,
+        run: Action::Sar(|s| s.hold(false, true)),
+    },
+    Probe {
+        id: 144,
+        run: Action::Sar(|s| s.hold(true, true)),
+    },
+    Probe {
+        id: 145,
+        run: Action::Sar(|s| s.edge(false)),
+    },
+    Probe {
+        id: 146,
+        run: Action::Sar(|s| s.edge(true)),
+    },
+    Probe {
+        id: 149,
+        run: Action::Sar(|s| s.cleanup()),
     },
     Probe {
         id: 2,
-        run: geometry,
+        run: Action::Thread(geometry),
     },
-    Probe { id: 3, run: config },
+    Probe {
+        id: 3,
+        run: Action::Thread(config),
+    },
     Probe {
         id: 6,
-        run: boot_address,
+        run: Action::Thread(boot_address),
     },
-    Probe { id: 1, run: edge },
+    Probe {
+        id: 1,
+        run: Action::Thread(edge),
+    },
     Probe {
         id: 4,
-        run: threshold,
+        run: Action::Thread(threshold),
     },
     Probe {
         id: 5,
-        run: latency,
+        run: Action::Thread(latency),
     },
-    Probe { id: 7, run: reset },
+    Probe {
+        id: 7,
+        run: Action::Thread(reset),
+    },
     Probe {
         id: 8,
-        run: after_reset,
+        run: Action::Thread(after_reset),
     },
     Probe {
         id: 9,
-        run: threshold_raising,
+        run: Action::Thread(threshold_raising),
     },
 ];
 
@@ -449,8 +524,7 @@ extern "C" fn facts_main() -> ! {
     let Some(p) = pac::take() else { halt() };
     let source_owner = p.software_interrupt_2.from_cpu2;
     let mut s = Session {
-        boot_clock: p.boot.hp_sys_clkrst_boot_clock,
-        cpll: p.boot.lp_aon_clkrst_cpll,
+        sar: sar::Sar::new(p.radio_phy, p.chip_clocks, p.boot, p.analog_bus),
         source: &source_owner,
         interrupt_matrix: p.interrupt_matrix,
         core_control: p.core_control,
@@ -458,7 +532,6 @@ extern "C" fn facts_main() -> ! {
         reset_cause: p.reset_cause,
         wake_status: p.pmu_wake.pmu_wake_status,
         radio: radio_local::Radio {
-            tick: p.radio_phy.modem_lpcon_phy_tick,
             local_time: p.mac_local_time.wifi_mac_local_time,
             status: p.wifi_mac.wifi_mac_tsf_status,
             zb: p.ieee802154,
@@ -482,25 +555,15 @@ extern "C" fn facts_main() -> ! {
             core: p.bluetooth.bluetooth_controller_core,
             timer: p.bluetooth_modem_lp_timer.btdm_runtime_control,
             timer_status: p.bluetooth_modem_lp_timer.btdm_lp_timer_status,
-            clocks: p.radio_phy.modem_syscon_radio,
-            lp_clock: p.radio_phy.modem_lpcon_shared_clock,
-            gates: p.chip_clocks.modem_lpcon_chip_clocks,
-            upstream: p.radio_phy.hp_sys_clkrst_radio,
-            pmu: p.radio_phy.pmu_radio,
             watchdog: p.watchdog.lp_wdt,
             positional: p.bluetooth.ble_hw_positional_word1ff0,
             etm: p.modem_etm.modem_etm_bluetooth,
             task_irq: p.bluetooth.btmac_ble_phy_init,
         },
         opaque: opaque::Hardware {
-            wifi_bb: p.radio_phy.phy_baseband_config_oracle_wifi_bb,
             block_ack: p.wifi_mac.wifi_mac_block_ack,
             core_enable: p.wifi_mac.wifi_mac_core_enable,
             mac_interrupt: p.wifi_interrupts.wifi_mac_interrupt,
-            tsens: p.radio_phy.lp_tsens,
-            periclkrst: p.radio_phy.lp_periclkrst,
-            analog_master: p.analog_bus.i2c_ana_mst,
-            pll160: p.chip_clocks.hp_sys_clkrst_pll160,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();
@@ -527,7 +590,10 @@ extern "C" fn facts_main() -> ! {
             for probe in PROBES {
                 if request == probe.id || (request == 0 && probe.id < 7) {
                     ran = true;
-                    (probe.run)(&mut s);
+                    match probe.run {
+                        Action::Sar(_) => run_sar(&mut s, request),
+                        Action::Thread(run) => run(&mut s),
+                    }
                 }
             }
             if !ran {
@@ -949,4 +1015,23 @@ fn after_reset(s: &mut Session<'_>) {
 fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
     FACTS_OUTPUT[0].store(0xbad00003, Ordering::Release);
     halt()
+}
+
+// Short isolated P2 probe context, using the existing trap ABI. Cycle-counter
+// deadlines advance the SAR observations; no production runtime is linked.
+fn run_sar(s: &mut Session<'_>, id: u32) {
+    setup(s);
+    route_source(s);
+    line(s, CONTROLS[1], false);
+    SAR_SELECTION.store(id, Ordering::Relaxed);
+    SAR_DONE.store(0, Ordering::Relaxed);
+    SAR_CONTEXT.store(ptr::addr_of_mut!(s.sar), Ordering::Release);
+    raise(s);
+    oer_riscv::enable_interrupts();
+    wait_window();
+    oer_riscv::disable_interrupts();
+    SAR_CONTEXT.store(ptr::null_mut(), Ordering::Release);
+    if SAR_DONE.load(Ordering::Acquire) != 1 {
+        emit(0x14ee, 8, id, 0);
+    }
 }

@@ -114,9 +114,11 @@ pub fn write_reference(registers: &mut impl SharedPhyAccess, value: u16) {
 
 /// Pulse the power-detector SAR trigger.
 ///
-/// Complete rev0 ROM `phy_get_tone_sar_dout_` at `0x2f82_66da`, size `0x40`,
-/// clears then sets the PAC `SAR_TRIGGER` bit through two fresh reads, with the
-/// one-microsecond delay remaining in the caller.
+/// Rev0 ROM `phy_pwdet_tone_start` at `0x2f82_643c` clears then sets
+/// `SAR_TRIGGER` at +0x28/+0x34 through fresh reads and requests a 2 µs
+/// post-trigger wait at +0x38. Its caller `phy_get_tone_sar_dout_` invokes
+/// tone-start once per sample; the wait remains in the Rust caller.
+/// SOURCE: ermacv/oer-notes research/opaque-blobray-phy.md, SAR/PWDET.
 #[cfg(target_arch = "riscv32")]
 pub fn trigger_sar(registers: &mut impl SharedPhyAccess) {
     ops::trigger_power_detector_sar(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
@@ -124,8 +126,9 @@ pub fn trigger_sar(registers: &mut impl SharedPhyAccess) {
 
 /// Read the power-detector readiness state through its SVD field.
 ///
-/// Complete rev0 ROM `phy_get_tone_sar_dout_` at `0x2f82_66da`, size `0x40`,
-/// samples `POWER_DETECTOR_SAR_CONTROL_STATUS`; repetition and deadline
+/// Rev0 ROM `phy_pwdet_tone_start+0x42` and `phy_pwdet_wait_idle+0x6`
+/// sample the three-bit field and compare it with 7. The wrapper
+/// `phy_get_tone_sar_dout_` calls tone-start; repetition and deadline
 /// ownership remain in the Rust async state machine.
 #[cfg(target_arch = "riscv32")]
 pub fn sample_ready(registers: &mut impl SharedPhyAccess) -> bool {
