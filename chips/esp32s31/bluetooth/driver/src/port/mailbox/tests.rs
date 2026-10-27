@@ -250,6 +250,50 @@ fn abandoned_clock_answer_never_satisfies_a_new_read() {
 }
 
 #[test]
+fn abandoned_clock_wait_registers_the_current_callers_waker() {
+    use std::{
+        sync::{Arc, atomic::AtomicUsize},
+        task::Wake,
+    };
+    #[derive(Default)]
+    struct Wakes(AtomicUsize);
+    impl Wake for Wakes {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let (f, mut device) = Fixture::new();
+    let mut clock = device.clock();
+    clock.activate().expect("P1 activates clock");
+    let first = Arc::new(Wakes::default());
+    let current = Arc::new(Wakes::default());
+    let first_waker = Waker::from(first.clone());
+    let current_waker = Waker::from(current.clone());
+    {
+        let mut now = pin!(clock.now());
+        assert!(
+            now.as_mut()
+                .poll(&mut Context::from_waker(&first_waker))
+                .is_pending()
+        );
+    }
+    let (request, response) = f.clocks.take_request().expect("abandoned physical read");
+    {
+        let mut now = pin!(clock.now());
+        assert_eq!(
+            now.as_mut().poll(&mut Context::from_waker(&current_waker)),
+            Poll::Ready(Ok(Err(ClockError::Unavailable)))
+        );
+    }
+    response.answer(ClockAnswer {
+        request,
+        result: Ok(LeInstant::from_micros(111)),
+    });
+    assert_eq!(first.0.load(Ordering::Relaxed), 0);
+    assert_eq!(current.0.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn fault_in_an_abandoned_clock_answer_closes_publication() {
     let (f, mut device) = Fixture::new();
     let mut clock = device.clock();

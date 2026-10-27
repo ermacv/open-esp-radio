@@ -14,6 +14,7 @@ const COUNTRY: &str = "OER_W3_COUNTRY";
 const CAP: &str = "OER_W3_POWER_CAP_DBM";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rustc-check-cfg=cfg(oer_w3_configured)");
     if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
         oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w3")?;
     }
@@ -40,6 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_else(|| panic!("{COUNTRY} is no two uppercase letters"));
             let cap = cap.parse::<i8>().expect("W3 cap is an integer dBm");
             assert_eq!(cap, 10, "W3 uses the explicit 10 dBm lab profile");
+            println!("cargo:rustc-cfg=oer_w3_configured");
             format!(
                 "Some(crate::W3Config {{ channel: {channel}, stand: [{}], ssid: &[{}], country: *b\"{}\", cap_dbm: {cap} }})",
                 octets(&stand),

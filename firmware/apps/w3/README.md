@@ -1,5 +1,10 @@
 # w3 report contract
 
+The build selects the configured composition only when all five stand
+settings are present. Without them, a separate entry adopts the platform,
+prints `OER-RESULT: fail w3 unconfigured` and idles with no tasks or interrupt
+bindings. Only the configured composition declares executor task poll records.
+
 The image composes the S31 lower-MAC backend, channel arbiter, open
 `StationService` and Espressif rate selection with the owned Embassy network
 adapter. P2 owns the device and port registration; the station and IP stack run
