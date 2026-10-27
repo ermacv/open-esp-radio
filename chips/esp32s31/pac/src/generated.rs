@@ -64484,7 +64484,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// Address bit10 in reviewed frequency-memory reads and writes. The same physical bit is independently written 0 then 1 by phy_freq_module_resetn. No electrical mode switch or reset effect is established. HW19's held mode0 high-address observation and its clear-from0 limitation remain as recorded in HW19_S31_FREQUENCY_SELECTION_20261027.
+            /// Address bit10 in reviewed frequency-memory reads and writes. The same physical bit is independently written 0 then 1 by phy_freq_module_resetn. No electrical mode switch or reset effect is established. HW19's held mode0 high-address observation and its clear-from0 limitation remain as recorded in HW19_S31_FREQUENCY_SELECTION_20261027. HW31 confirms retained address-high readback at requested address0x400 while byte channel indices1/255 change independently, with the engine held and no memory strobe. SOURCE: HW31_S31_FE_COMPOSITION_20261027.
             #[inline]
             pub const fn memory_address_high(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -64549,7 +64549,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// Address bit10 in reviewed frequency-memory reads and writes. The same physical bit is independently written 0 then 1 by phy_freq_module_resetn. No electrical mode switch or reset effect is established. HW19's held mode0 high-address observation and its clear-from0 limitation remain as recorded in HW19_S31_FREQUENCY_SELECTION_20261027.
+            /// Address bit10 in reviewed frequency-memory reads and writes. The same physical bit is independently written 0 then 1 by phy_freq_module_resetn. No electrical mode switch or reset effect is established. HW19's held mode0 high-address observation and its clear-from0 limitation remain as recorded in HW19_S31_FREQUENCY_SELECTION_20261027. HW31 confirms retained address-high readback at requested address0x400 while byte channel indices1/255 change independently, with the engine held and no memory strobe. SOURCE: HW31_S31_FE_COMPOSITION_20261027.
             #[inline]
             pub const fn memory_address_high(&self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -73140,6 +73140,14 @@ pub mod fe {
         #[inline]
         pub fn frequency_parameter_1_initialization(&mut self) {
             self.0.write::<0x28>(0x25824e58);
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`FE.FREQUENCY_CONTROL`).
+        ///
+        /// SOURCE: BX10_S31_FE_FREQ_ADDRESS_20261027.
+        #[inline]
+        pub fn read_frequency_control_image(&self) -> u32 {
+            self.0.read::<0x1c>()
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -143334,7 +143342,7 @@ pub mod pmu {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Bits 3:0 set together to 0xf by rev0 ROM phy_open_fe_bb_clk+0x34, alongside bit22. Individual physical effects and necessity are unknown; the public header labels this region reserved.
+            /// Bits 3:0 set together to 0xf by rev0 ROM phy_open_fe_bb_clk+0x34, alongside bit22. Individual physical effects and necessity are unknown; the public header labels this region reserved. In HW31 the requested15 reads0; only bit22 changes in the complete word and all lanes outside0x0040000f are preserved. Storage and functional effects remain unresolved. SOURCE: HW31_S31_CK_POWER_READBACK_20261027.
             #[inline]
             pub const fn bits_0_3_opaque(self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0)
@@ -143417,7 +143425,7 @@ pub mod pmu {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Bits 3:0 set together to 0xf by rev0 ROM phy_open_fe_bb_clk+0x34, alongside bit22. Individual physical effects and necessity are unknown; the public header labels this region reserved.
+            /// Bits 3:0 set together to 0xf by rev0 ROM phy_open_fe_bb_clk+0x34, alongside bit22. Individual physical effects and necessity are unknown; the public header labels this region reserved. In HW31 the requested15 reads0; only bit22 changes in the complete word and all lanes outside0x0040000f are preserved. Storage and functional effects remain unresolved. SOURCE: HW31_S31_CK_POWER_READBACK_20261027.
             #[inline]
             pub const fn bits_0_3_opaque(&self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0)
@@ -158605,6 +158613,14 @@ pub mod pmu {
             let mut value = ana_peri_pwr_ctrl::W(self.0.read::<0x208>());
             change(&mut value);
             self.0.write::<0x208>(value.0);
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`PMU.HP_ACTIVE_HP_CK_POWER`).
+        ///
+        /// SOURCE: BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4.
+        #[inline]
+        pub fn read_hp_active_clock_power_image(&self) -> u32 {
+            self.0.read::<0x1c>()
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -241840,13 +241856,13 @@ pub mod tsens {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample.
+            /// Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample. HW31 forced-power DAC15/11/15 steps produce fresh bidirectional OUT response with READY0 in separate cold and timed-injection arms; this is not FSM-power or exact conversion-latency qualification. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn out(self) -> u8 {
                 self.0 as u8
             }
 
-            /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice.
+            /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice. HW31 forced-power cold-DAC and timed-injection captures observed READY0 while OUT followed verified DAC15/11/15 steps; this does not qualify FSM-power readiness. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn ready(self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -241917,13 +241933,13 @@ pub mod tsens {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample.
+            /// Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample. HW31 forced-power DAC15/11/15 steps produce fresh bidirectional OUT response with READY0 in separate cold and timed-injection arms; this is not FSM-power or exact conversion-latency qualification. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn out(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice.
+            /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice. HW31 forced-power cold-DAC and timed-injection captures observed READY0 while OUT followed verified DAC15/11/15 steps; this does not qualify FSM-power readiness. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn ready(&self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -242292,13 +242308,13 @@ pub mod tsens {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x26 and sets bit9 at +0x2c after the bit23 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual conversion role is established.
+            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x26 and sets bit9 at +0x2c after the bit23 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual conversion role is established. HW31 cold omission and timed injection arms retain positive DAC15/11/15 OUT response while this lane reads0; no command, gate or lasting effect is identified in the tested forced-power mode. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn bit_9_opaque(self) -> bool {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x1c and sets bit23 at +0x24 before the bit9 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual readout role is established.
+            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x1c and sets bit23 at +0x24 before the bit9 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual readout role is established. HW31 cold omission and timed injection arms retain positive DAC15/11/15 OUT response while this lane reads0; no command, gate or lasting effect is identified in the tested forced-power mode. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn bit_23_opaque(self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -242315,13 +242331,13 @@ pub mod tsens {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x26 and sets bit9 at +0x2c after the bit23 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual conversion role is established.
+            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x26 and sets bit9 at +0x2c after the bit23 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual conversion role is established. HW31 cold omission and timed injection arms retain positive DAC15/11/15 OUT response while this lane reads0; no command, gate or lasting effect is identified in the tested forced-power mode. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn bit_9_opaque(&self) -> bool {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x1c and sets bit23 at +0x24 before the bit9 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual readout role is established.
+            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x1c and sets bit23 at +0x24 before the bit9 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual readout role is established. HW31 cold omission and timed injection arms retain positive DAC15/11/15 OUT response while this lane reads0; no command, gate or lasting effect is identified in the tested forced-power mode. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn bit_23_opaque(&self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -242786,6 +242802,22 @@ pub mod tsens {
             let mut value = clk_conf::W(self.0.read::<0x18>());
             change(&mut value);
             self.0.write::<0x18>(value.0);
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`LP_TSENS.CTRL`).
+        ///
+        /// SOURCE: ROM_REV0_PHY_TSENS.
+        #[inline]
+        pub fn read_tsens_control_image(&self) -> u32 {
+            self.0.read::<0x0>()
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`LP_TSENS.CLK_CONF`).
+        ///
+        /// SOURCE: BLOB_S31_TSENS_CLK_CONF_WRITES_20261027.
+        #[inline]
+        pub fn read_tsens_clock_image(&self) -> u32 {
+            self.0.read::<0x18>()
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -281910,13 +281942,13 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Ordinary libpp and rev0 ROM PLCP0 preparation writes binary 10 here before legacy, HT or HE vector preparation. RFTEST fill_tx_frame direct preparation writes binary 00. No rate, PHY-family or descriptor-mode meaning, and no meaning for encodings 01/11, is established. SOURCE: BX8_WIFI_CONTROL_PREPARATION_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027.
+            /// Ordinary libpp and rev0 ROM PLCP0 preparation writes binary 10 here before legacy, HT or HE vector preparation. RFTEST fill_tx_frame direct preparation writes binary 00. No rate, PHY-family or descriptor-mode meaning, and no meaning for encodings 01/11, is established. SOURCE: BX8_WIFI_CONTROL_PREPARATION_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027. HW31 disabled CONTROL0 readback distinguishes pair0/2 with bit22 low/high and restores the exact saved image; physical meaning remains unresolved. SOURCE: HW31_S31_CONTROL0_READBACK_20261027.
             #[inline]
             pub const fn bits_20_21_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
             }
 
-            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The ordinary PPDU parent reaches the reserved-slot adjustment only outside descriptor-rate codes 16 through 35. Its reviewed HT/HE branches bypass that helper and retain the initial set bit. The open formatter's unconditional set agrees with those branches and with the legacy no-granted-slot case; behavior for a reserved legacy slot requires separate qualification. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729. SOURCE: BX8_WIFI_CONTROL_TXOP_SCOPE_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027.
+            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The ordinary PPDU parent reaches the reserved-slot adjustment only outside descriptor-rate codes 16 through 35. Its reviewed HT/HE branches bypass that helper and retain the initial set bit. The open formatter's unconditional set agrees with those branches and with the legacy no-granted-slot case; behavior for a reserved legacy slot requires separate qualification. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729. SOURCE: BX8_WIFI_CONTROL_TXOP_SCOPE_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027. HW31 disabled CONTROL0 retains both requested levels and restores the exact saved image, without descriptor publication. SOURCE: HW31_S31_CONTROL0_READBACK_20261027.
             #[inline]
             pub const fn bit_22_opaque(self) -> bool {
                 (self.0 & 0x00400000) != 0
@@ -281969,13 +282001,13 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Ordinary libpp and rev0 ROM PLCP0 preparation writes binary 10 here before legacy, HT or HE vector preparation. RFTEST fill_tx_frame direct preparation writes binary 00. No rate, PHY-family or descriptor-mode meaning, and no meaning for encodings 01/11, is established. SOURCE: BX8_WIFI_CONTROL_PREPARATION_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027.
+            /// Ordinary libpp and rev0 ROM PLCP0 preparation writes binary 10 here before legacy, HT or HE vector preparation. RFTEST fill_tx_frame direct preparation writes binary 00. No rate, PHY-family or descriptor-mode meaning, and no meaning for encodings 01/11, is established. SOURCE: BX8_WIFI_CONTROL_PREPARATION_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027. HW31 disabled CONTROL0 readback distinguishes pair0/2 with bit22 low/high and restores the exact saved image; physical meaning remains unresolved. SOURCE: HW31_S31_CONTROL0_READBACK_20261027.
             #[inline]
             pub const fn bits_20_21_opaque(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
             }
 
-            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The ordinary PPDU parent reaches the reserved-slot adjustment only outside descriptor-rate codes 16 through 35. Its reviewed HT/HE branches bypass that helper and retain the initial set bit. The open formatter's unconditional set agrees with those branches and with the legacy no-granted-slot case; behavior for a reserved legacy slot requires separate qualification. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729. SOURCE: BX8_WIFI_CONTROL_TXOP_SCOPE_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027.
+            /// PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The ordinary PPDU parent reaches the reserved-slot adjustment only outside descriptor-rate codes 16 through 35. Its reviewed HT/HE branches bypass that helper and retain the initial set bit. The open formatter's unconditional set agrees with those branches and with the legacy no-granted-slot case; behavior for a reserved legacy slot requires separate qualification. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729. SOURCE: BX8_WIFI_CONTROL_TXOP_SCOPE_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027. HW31 disabled CONTROL0 retains both requested levels and restores the exact saved image, without descriptor publication. SOURCE: HW31_S31_CONTROL0_READBACK_20261027.
             #[inline]
             pub const fn bit_22_opaque(&self) -> bool {
                 (self.0 & 0x00400000) != 0
@@ -300426,6 +300458,14 @@ pub mod wifi_mac {
             let mut value = control_n::W(self.0.read_indexed::<0xd40, 0x10, 4>(index));
             change(&mut value);
             self.0.write_indexed::<0xd40, 0x10, 4>(index, value.0);
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`WIFI_MAC.CONTROL0`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_MAC_TX.
+        #[inline]
+        pub fn read_tx_control0_image(&self) -> u32 {
+            self.0.read::<0xd40>()
         }
     }
 

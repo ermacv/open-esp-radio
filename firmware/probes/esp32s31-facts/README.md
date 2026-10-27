@@ -1074,3 +1074,63 @@ actual publication mask. A skipped reset is not a reset observation.
 SOURCE: `oer-notes/research/hw30-tbtt-irq-observer.md`; captures retain their
 exact loaded ELF and source patch. The legacy selection 83 is used only as a
 PWRBANK timer0/1 harness control; ED6 and radio traffic are outside these leaves.
+
+## TSENS and analog/PMU facts (PB-1e)
+
+Observation waits use the initialized SAR owner's ticks-per-microsecond conversion.
+HW31 uses selections280–299; HW29 retains240–248 and HW30 retains260–273.
+Archived HW31 cold/register selections240–244 map to280–284; archived
+injection selections250–264 map to285–299 in the same order. Capture labels
+and measured source hashes retain their original values.
+
+Selections 280–283 require a separate power-on/download loader entry for each
+arm: no opaque-one publication, bit23 alone, bit9 alone and the ordered
+bit23/bit9 pair. They use the existing probe-specific analog-I2C prefix, named
+SAR-I2C and TSENS reset, CLK_EN, divider15, forced power and SAMPLE_EN. This
+is not a calibrated PHY or FSM-power epoch. DAC15 settles for 500 µs before
+DAC11 and DAC15 observation windows of 500 µs each. Each step records actual
+CPU-cycle timestamps at requested 0/1/2/5/10/20-µs boundaries and every 10 µs
+thereafter; observer overhead can make the early observations late. The
+reference is completion of the typed DAC write, not its unknown analog edge.
+A separate DAC-byte readback follows each window. OUT noise or READY alone
+cannot replace the ordered-pair arm's DAC-correlated positive control.
+
+Selections 285–299 are cold omission/injection arms. Groups of five select
+bit23, bit9 and the ordered pair; the five patterns are no injection, one,
+one followed immediately by zero, repeated ones at +50 µs and at +500 µs.
+The first injection follows the 20-µs sample of the DAC11 step, whose window
+extends through 530 µs. The DAC15 return step has no new injection. Each
+command emits at most 127 of the existing 128 four-word records. Clock,
+power and reset state precede/follow each command; CTRL and CLK_CONF are
+sampled together in each observation. `0x31ee` reports an unqualified setup,
+DAC or disabled-CONTROL prerequisite. Completion alone is not success.
+
+Selection284 records CK_POWER around the existing typed enable image, then
+tests CONTROL0 pair0/2 and bit22 low/high only if ENABLE=VALID=0. It restores
+the changed lanes from the owned saved image and records exact restoration
+before completion, without a descriptor or TX publication. It then holds FE
+frequency updates and strobes inactive, changes the address-high bit
+(address0x400) and byte channel index1/255, before restoring the saved fields.
+The address-low field is written only0 and reads0 throughout, so it is not
+qualified by this experiment. This qualifies address-high/channel-index
+composition/readback only.
+
+Record tags: `0x31a0/31b0` arm; `0x3100/01/03/31ff` inherited/prepared/stable/
+final CTRL, CLK_CONF and packed LP-clock/reset + SAR-I2C power/reset state;
+`0x3102` DAC request/old/new byte; `0x3104` DAC request/readback; `0x3111/15`
+elapsed cycles/CTRL/CLK_CONF for DAC11/15; `0x31c0` injection before/after
+cycle marks/CLK_CONF. `0x3120` CK_POWER before/after/XOR; `0x3121` saved
+CONTROL0/ENABLE/VALID; `0x3122` case/request/readback; `0x3123` saved/restored;
+`0x3124/25` address or channel/full FE image; `0x3126` final FE image.
+
+On s31-c rev0, the four cold forced-power arms have a positive DAC response
+with READY0 and both opaque CLK_CONF lanes reading0. Fifteen cold injection
+arms establish no distinct command, gate or lasting-latch effect. CK_POWER's
+requested low4 image15 reads0, while the full enable readback preserves lanes
+outside the sourced mask. FE/CONTROL0 results qualify only address-high and
+byte-channel composition and disabled CONTROL0 readback described above.
+SOURCE: `HW31_S31_*_20261027` in `registers/evidence/hw-analog-pmu.toml`;
+runs `hw31-20261027-pb1e-02-registers` (lease#933),
+`hw31-20261027-pb1e-03-cold-240..243` (lease#938) and
+`hw31-20261027-pb1e-03-inject-250..264` (lease#940),
+[research report](/home/ermacv/dev/oer-notes/research/hw31-tsens-feest-pmuck.md).

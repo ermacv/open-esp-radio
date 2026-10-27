@@ -44,7 +44,7 @@ impl Sar {
             distinct: false,
         }
     }
-    fn clock(&mut self) -> bool {
+    pub(super) fn clock(&mut self) -> bool {
         // SOURCE: production hal/src/boot/clock.rs::CpuFrequency::from_dividers.
         let root = self
             .boot
@@ -90,7 +90,7 @@ impl Sar {
         self.ticks_per_us.saturating_mul(us)
     }
     #[inline(always)]
-    fn until(&self, start: u32, us: u32) {
+    pub(super) fn until(&self, start: u32, us: u32) {
         let bound = self.cycles(us);
         while oer_riscv::cycle32().wrapping_sub(start) < bound {}
     }
@@ -197,7 +197,11 @@ impl Sar {
         self.powered = true;
         self.power_readback()
     }
-    fn analog_byte(&mut self, address: pac::analog_i2c::Address, write: Option<u8>) -> Option<u8> {
+    pub(super) fn analog_byte(
+        &mut self,
+        address: pac::analog_i2c::Address,
+        write: Option<u8>,
+    ) -> Option<u8> {
         // SOURCE: production phy/i2c/master.rs. Resolve command alias and host
         // for every operation, including writes, through the generated route.
         let route =

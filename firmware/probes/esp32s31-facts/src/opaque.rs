@@ -35,7 +35,7 @@ pub(super) fn xtal_cpu(s: &Session<'_>) -> bool {
 
 /// Digital gates only. The reset-isolated session ends with a download reset.
 /// SOURCE: existing HAL modem operations and ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP.
-fn prepare(s: &mut Session<'_>) {
+pub(super) fn prepare(s: &mut Session<'_>) {
     contain(s);
     oer_riscv::disable_interrupts();
     s.sar.radio.hp_sys_clkrst_radio.modify_modem_ctrl0(|w| {
