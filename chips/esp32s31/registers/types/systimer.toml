@@ -88,7 +88,7 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PAC
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
 
 [review.entity."INT_CLR.TARGET0_INT_CLR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER", "HW26_S31_SYSTIMER_REARM_WRAP_20261027"]
 
 [review.entity."INT_CLR.TARGET1_INT_CLR"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
@@ -491,7 +491,7 @@ reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "TARGET0_INT_CLR"
 bits = "0"
 class = "write-trigger"
-description = "Write 1 to clear SYSTIMER_TARGET0_INT. Clears comparator 0's interrupt."
+description = "Write 1 to clear SYSTIMER_TARGET0_INT. Clears comparator 0's interrupt. Ordered CLR/future rearm delivers a fresh expiry; with equal programmed target0/1 ticks, CLR0 preserves pending1. Seeded low32/full52 counter crossings deliver a freshly armed target0 after CLR before counting. Exact coincident arrival/clear priority remains unproved. SOURCE: HW26_S31_SYSTIMER_REARM_WRAP_20261027."
 
 [[registers.fields]]
 name = "TARGET1_INT_CLR"

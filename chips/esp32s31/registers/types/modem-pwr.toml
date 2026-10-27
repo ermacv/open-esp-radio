@@ -560,7 +560,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 completeness = "unknown"
 
 [review.entity."NAN_CONTROL.TSF_MODE"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_S31_TSF_DOMAIN_MODES_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -607,7 +607,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 completeness = "unknown"
 
 [review.entity."BTWT_CONTROL.TSF_MODE"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_S31_TSF_DOMAIN_MODES_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -747,7 +747,7 @@ sources = ["S31_MMIO_USE_2010D8AC", "S31_MMIO_DECLARED_2010D8AC"]
 completeness = "partial"
 
 [review.entity."ENABLE"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW26_S31_LOCAL_TBTT_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_3"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
@@ -787,7 +787,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."RAW"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027"]
 
 [review.entity."RAW.TSF_TIMER_3"]
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
@@ -862,7 +862,7 @@ sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO
 completeness = "unknown"
 
 [review.entity."CLEAR"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_3"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
@@ -1814,6 +1814,9 @@ description = "Complete NAN enable/disable leaves use the same two-stage gate an
 name = "TSF_MODE"
 bits = "22:19"
 class = "plain"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 4 }]
+write-values-only = true
+description = "Enable/disable code from the complete pinned vendor leaf; the gate bits are written before this mode. SOURCE: BLOB_S31_TSF_DOMAIN_MODES_20261027."
 
 [[registers.fields]]
 name = "TSF_ENABLE_LOW"
@@ -1875,6 +1878,9 @@ description = "Complete hal_enable_sta_btwt_tsf enables or disables the broadcas
 name = "TSF_MODE"
 bits = "22:19"
 class = "plain"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
+write-values-only = true
+description = "Enable/disable code from the complete pinned vendor leaf; the gate bits are written before this mode. SOURCE: BLOB_S31_TSF_DOMAIN_MODES_20261027."
 
 [[registers.fields]]
 name = "TSF_ENABLE_LOW"
@@ -2098,7 +2104,7 @@ description = "Enable the TSF-1 TBTT event."
 name = "TBTT_0"
 bits = "3"
 class = "plain"
-description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF."
+description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
@@ -2183,7 +2189,7 @@ description = "Raw TSF-1 TBTT event."
 name = "TBTT_0"
 bits = "3"
 class = "read-only"
-description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF."
+description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
@@ -2349,7 +2355,7 @@ description = "Acknowledge the TSF-1 TBTT event."
 name = "TBTT_0"
 bits = "3"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF."
+description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"

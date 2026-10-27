@@ -107497,7 +107497,7 @@ pub mod ieee802154 {
 
     /// The `EVENT_ENABLE` register.
     ///
-    /// Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions. For tested local timer bits 8/9, clearing the enable hides EVENT_STATUS and lowers output132 while retaining pending for unmask; EVENT_STATUS readback is not the raw pending state. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026.
+    /// Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions. For tested local timer bits 8/9, clearing the enable hides EVENT_STATUS and lowers output132 while retaining pending for unmask; EVENT_STATUS readback is not the raw pending state. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026. The same mask/hide/retain behavior is observed for RX_ABORT with ED_COEX_REJECT reason26; ED_DONE and other reasons remain unqualified. SOURCE: HW26_S31_IEEE_ABORT_20261027.
     pub mod event_enable {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00003fff;
@@ -108030,7 +108030,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// The `RX_ABORT` field.
+            /// For ED_COEX_REJECT reason26, ENA=0 hides this status but preserves hidden pending. A masked zero sample does not acknowledge it; a retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027.
             #[inline]
             pub const fn rx_abort(self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -108162,7 +108162,7 @@ pub mod ieee802154 {
                 }
             }
 
-            /// The `RX_ABORT` field.
+            /// For ED_COEX_REJECT reason26, ENA=0 hides this status but preserves hidden pending. A masked zero sample does not acknowledge it; a retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027.
             #[inline]
             pub const fn rx_abort(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -131510,6 +131510,41 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_MODE`.
         pub const TSF_MODE_MASK: u32 = 0x780000;
 
+        /// The declared values of the `TSF_MODE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum TsfMode {
+            Disabled = 0x0,
+            Enabled = 0x4,
+        }
+
+        impl TsfMode {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 19
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Disabled),
+                    0x4 => Some(Self::Enabled),
+                    _ => None,
+                }
+            }
+        }
+
         /// Width of `TSF_ENABLE_LOW` in bits.
         pub const TSF_ENABLE_LOW_WIDTH: u32 = 1;
         /// Greatest unsigned image of `TSF_ENABLE_LOW`.
@@ -131550,10 +131585,16 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `TSF_MODE` field.
+            /// Enable/disable code from the complete pinned vendor leaf; the gate bits are written before this mode. SOURCE: BLOB_S31_TSF_DOMAIN_MODES_20261027.
             #[inline]
             pub const fn tsf_mode(self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The `TSF_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn tsf_mode_variant(self) -> Option<TsfMode> {
+                TsfMode::from_bits((self.0 >> 19) & 0xf)
             }
 
             /// The `TSF_ENABLE_LOW` field.
@@ -131591,10 +131632,16 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `TSF_MODE` field.
+            /// Enable/disable code from the complete pinned vendor leaf; the gate bits are written before this mode. SOURCE: BLOB_S31_TSF_DOMAIN_MODES_20261027.
             #[inline]
             pub const fn tsf_mode(&self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The `TSF_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn tsf_mode_variant(&self) -> Option<TsfMode> {
+                TsfMode::from_bits((self.0 >> 19) & 0xf)
             }
 
             /// The `TSF_ENABLE_LOW` field.
@@ -131629,8 +131676,8 @@ pub mod modem_pwr {
 
             /// Set `TSF_MODE`.
             #[inline]
-            pub fn set_tsf_mode(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xff87ffff) | (value.get() << 19);
+            pub fn set_tsf_mode(&mut self, value: TsfMode) -> &mut Self {
+                self.0 = (self.0 & 0xff87ffff) | (value.bits() << 19);
                 self
             }
 
@@ -131792,6 +131839,41 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_MODE`.
         pub const TSF_MODE_MASK: u32 = 0x780000;
 
+        /// The declared values of the `TSF_MODE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum TsfMode {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl TsfMode {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 19
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Disabled),
+                    0x1 => Some(Self::Enabled),
+                    _ => None,
+                }
+            }
+        }
+
         /// Width of `TSF_ENABLE_LOW` in bits.
         pub const TSF_ENABLE_LOW_WIDTH: u32 = 1;
         /// Greatest unsigned image of `TSF_ENABLE_LOW`.
@@ -131832,10 +131914,16 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `TSF_MODE` field.
+            /// Enable/disable code from the complete pinned vendor leaf; the gate bits are written before this mode. SOURCE: BLOB_S31_TSF_DOMAIN_MODES_20261027.
             #[inline]
             pub const fn tsf_mode(self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The `TSF_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn tsf_mode_variant(self) -> Option<TsfMode> {
+                TsfMode::from_bits((self.0 >> 19) & 0xf)
             }
 
             /// The `TSF_ENABLE_LOW` field.
@@ -131873,10 +131961,16 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `TSF_MODE` field.
+            /// Enable/disable code from the complete pinned vendor leaf; the gate bits are written before this mode. SOURCE: BLOB_S31_TSF_DOMAIN_MODES_20261027.
             #[inline]
             pub const fn tsf_mode(&self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The `TSF_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn tsf_mode_variant(&self) -> Option<TsfMode> {
+                TsfMode::from_bits((self.0 >> 19) & 0xf)
             }
 
             /// The `TSF_ENABLE_LOW` field.
@@ -131911,8 +132005,8 @@ pub mod modem_pwr {
 
             /// Set `TSF_MODE`.
             #[inline]
-            pub fn set_tsf_mode(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xff87ffff) | (value.get() << 19);
+            pub fn set_tsf_mode(&mut self, value: TsfMode) -> &mut Self {
+                self.0 = (self.0 & 0xff87ffff) | (value.bits() << 19);
                 self
             }
 
@@ -132868,7 +132962,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF.
+            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -132951,7 +133045,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF.
+            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
             #[inline]
             pub const fn tbtt_0(&self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -133230,7 +133324,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Raw TSF-0 TBTT event. TSF 0 is the station TSF.
+            /// Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -133606,7 +133700,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF.
+            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -133723,7 +133817,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF.
+            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
             #[inline]
             pub const fn tbtt_0(&self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -246678,13 +246772,13 @@ pub mod usb_serial_jtag {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// The raw interrupt bit turns to high level when Serial Port OUT Endpoint received one packet.
+            /// The raw interrupt bit turns to high level when Serial Port OUT Endpoint received one packet. One received host OUT byte latches this event. ENA=0 retains it; retained-sample CLR while masked removes it even while the OUT FIFO remains occupied, without reassertion over4096 cycles. SOURCE: HW26_S31_USB_EVENTS_20261027.
             #[inline]
             pub const fn serial_out_recv_pkt_int_raw(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026.
+            /// Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026. Two consumed IN publications separated by CLR independently relatch this event; FIFO availability alone stays quiet in the sampled window. SOURCE: HW26_S31_USB_EVENTS_20261027.
             #[inline]
             pub const fn serial_in_empty_int_raw(self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -246804,7 +246898,7 @@ pub mod usb_serial_jtag {
                 }
             }
 
-            /// The raw interrupt bit turns to high level when Serial Port OUT Endpoint received one packet.
+            /// The raw interrupt bit turns to high level when Serial Port OUT Endpoint received one packet. One received host OUT byte latches this event. ENA=0 retains it; retained-sample CLR while masked removes it even while the OUT FIFO remains occupied, without reassertion over4096 cycles. SOURCE: HW26_S31_USB_EVENTS_20261027.
             #[inline]
             pub const fn serial_out_recv_pkt_int_raw(&self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -246819,7 +246913,7 @@ pub mod usb_serial_jtag {
                 }
             }
 
-            /// Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026.
+            /// Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026. Two consumed IN publications separated by CLR independently relatch this event; FIFO availability alone stays quiet in the sampled window. SOURCE: HW26_S31_USB_EVENTS_20261027.
             #[inline]
             pub const fn serial_in_empty_int_raw(&self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -247249,7 +247343,7 @@ pub mod usb_serial_jtag {
 
     /// The `INT_ENA` register.
     ///
-    /// Interrupt enable status register. Interrupt enables of the serial endpoints.
+    /// Interrupt enable status register. Interrupt enables of the serial endpoints. The tested s31-c ROM-loader path retains ENA=0x0c at the first USB observation. An explicitly seeded SOF enable survives endpoint-only enable RMW and console-only CLR, leaving source2 repeatedly deliverable; that SOF enable is not a boot observation. SOURCE: HW26_S31_USB_EVENTS_20261027.
     pub mod int_ena {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x0000ffff;
