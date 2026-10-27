@@ -125,6 +125,11 @@ release a secondary hart.
   bound activation then publishes the same ten runtime events as later
   sessions through the task owner alone. No task accesses the handler cell.
   Polling retains `Silent` after the same pre-bind discard.
+  Binding returns a recoverable input refusal before placement. A failed
+  admitted placement, handler installation or controller write returns a named
+  fault with source observations, retaining its token and part in quarantine.
+  The image records/resets through the existing retained slot, without
+  publishing `Bound`, releasing owners or rolling back an unconfirmed write.
   The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.

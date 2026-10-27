@@ -215,6 +215,20 @@ record through the early console and clears it only after successful output.
 Software lines use fallible static placement and one-time value publication,
 without a panicking initialization path or additional unsafe code.
 
+`Router::bind` returns ordinary input refusals with their unchanged token
+and part. Once admitted, storage, handler installation and controller write
+failures return a named `BindFault`; the token and any uninstalled part stay
+in `Quarantined`, whose private `ManuallyDrop` fields have no recovery API.
+Placed parts retain their claimed static allocation; installed parts remain
+in their handler cell. No failed binding issues `Bound` or enables a driver.
+The image keeps its router and all interrupted owners while the staged
+runtime's binding reporter records the complete source/line/hart, operation
+and controller error through `fatal::reset_recording`. The existing panic
+slot holds four lossless diagnostic words; no retained allocation is added.
+Successful binding still installs the part, writes the line, then routes
+sources in declaration order. A failed write attempts no later write or
+rollback. No unsafe code is added to placement or ownership transfer.
+
 The generated Rust MTVT is one immutable array of aligned per-hart rows.
 Its one unsafe attribute owns the SRAM section. The table and trap assembly
 share a module/codegen unit; the existing `global_asm!` exports `_runtime_mtvt`

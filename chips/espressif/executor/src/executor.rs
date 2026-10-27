@@ -236,7 +236,7 @@ impl<const SWI: u8> Executor<SWI> {
         part: W::Part,
         _urgent: U,
         init: impl FnOnce(&Spawner<T>),
-    ) -> Result<core::convert::Infallible, Failure<oer_interrupt_table::Refused<W>>>
+    ) -> Result<core::convert::Infallible, Failure<oer_interrupt_table::BindError<W>>>
     where
         T: Tasks<Mode = Thread>,
         W: Entry,
@@ -253,15 +253,9 @@ impl<const SWI: u8> Executor<SWI> {
         };
         crate::hart_binding::check::<H, W>();
         let _ = self.not_send;
-        let _bound = router.bind(wake, part).map_err(|refused| {
-            Failure::new(
-                Fault::Route {
-                    executor: SWI,
-                    error: refused.error,
-                },
-                refused,
-            )
-        })?;
+        let _bound = router
+            .bind(wake, part)
+            .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))?;
         claim_core(SWI);
         URGENT[usize::from(SWI)]
             .set(U::SOURCES)
@@ -402,7 +396,7 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         wake: W,
         part: W::Part,
         _urgent: U,
-    ) -> Result<Spawner<T>, Failure<oer_interrupt_table::Refused<W>>>
+    ) -> Result<Spawner<T>, Failure<oer_interrupt_table::BindError<W>>>
     where
         T: Tasks<Mode = InterruptMode>,
         W: Entry,
@@ -426,15 +420,9 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         // Published before the source is enabled, so the first handler polls
         // and a pend raises its interrupt.
         INTERRUPT_MODE[usize::from(SWI)].store(true, Ordering::Release);
-        let _bound = router.bind(wake, part).map_err(|refused| {
-            Failure::new(
-                Fault::Route {
-                    executor: SWI,
-                    error: refused.error,
-                },
-                refused,
-            )
-        })?;
+        let _bound = router
+            .bind(wake, part)
+            .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))?;
         Ok(Spawner::new())
     }
 }

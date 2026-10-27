@@ -49,6 +49,7 @@ pub enum Fault {
         executor: u8,
         comparator: u8,
     },
+    Binding(oer_interrupt_table::BindFault),
     Route {
         executor: u8,
         error: Error,
@@ -56,6 +57,19 @@ pub enum Fault {
 }
 
 impl Fault {
+    pub(crate) fn binding<E: oer_interrupt_table::Entry>(
+        executor: u8,
+        error: &oer_interrupt_table::BindError<E>,
+    ) -> Self {
+        match error {
+            oer_interrupt_table::BindError::Refused { error, .. } => Self::Route {
+                executor,
+                error: *error,
+            },
+            oer_interrupt_table::BindError::Fault(held) => Self::Binding(held.fault),
+        }
+    }
+
     /// A bounded diagnostic, without formatting or loss of source words.
     pub fn diagnostic(self) -> (&'static str, [u32; 4]) {
         match self {
@@ -97,6 +111,7 @@ impl Fault {
                 [executor.into(), comparator.into(), 0, 0],
             ),
             Self::Route { executor, error } => route_diagnostic(executor, error),
+            Self::Binding(fault) => fault.diagnostic(),
         }
     }
 

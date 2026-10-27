@@ -158,7 +158,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 ///     Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner,
 /// };
 /// use oer_esp32s31_hal::platform::InterruptController;
-/// use oer_interrupt_table::{Bound, Refused, Router};
+/// use oer_interrupt_table::{BindError, Bound, Router};
 /// # const LINES: oer_interrupt_table::Lines =
 /// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_esp32s31_pac::HARTS as u8, tie_break: oer_interrupt_table::TieBreak::HighestLine };
 /// use oer_espressif_ieee802154_engine::types::Ieee802154EventMask;
@@ -177,7 +177,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// fn bind(
 ///     router: &mut Router<InterruptController>, token: MacToken,
 ///     task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner,
-/// ) -> Result<(Ieee802154ArmedTaskOwner, Bound<MacToken>), (Ieee802154ArmedTaskOwner, Refused<MacToken>)> {
+/// ) -> Result<(Ieee802154ArmedTaskOwner, Bound<MacToken>), (Ieee802154ArmedTaskOwner, BindError<MacToken>)> {
 ///     let (startup, interrupts) = setup.arm(task);
 ///     match router.bind(token, interrupts) {
 ///         Ok(bound) => Ok((startup, bound)),

@@ -39,8 +39,8 @@ pub(crate) fn open<C: Controller>(
     let Ok((endpoint, interrupt, pads)) = retire_early_writer() else {
         crate::fail(crate::fatal::Failure::Console);
     };
-    let Ok(bound) = router.bind(token, interrupt) else {
-        crate::fail(crate::fatal::Failure::Console);
-    };
+    let bound = router
+        .bind(token, interrupt)
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     (Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads)
 }

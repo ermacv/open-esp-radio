@@ -85,8 +85,6 @@ pub struct Bound {
 pub enum BindError {
     /// The static storage was taken before.
     Storage,
-    /// The router refused the entry.
-    Route,
 }
 
 /// Bind the handler's part once, over software interrupt line 3, then make
@@ -112,7 +110,8 @@ pub fn bind<C: Controller>(
             fault: &GATE_FAULT,
         },
     );
-    let bound = router.bind(token, part).map_err(|_| BindError::Route)?;
+    let bound = router.bind(token, part)
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     let (doorbell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let doorbell = BELL.try_init(Bell(doorbell)).ok_or(BindError::Storage)?;
     let ring: &Bell = doorbell;

@@ -165,12 +165,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // The radio handler's part holds both MAC banks and the doorbell's
     // lowering half; its binding makes the doorbell's ringing half.
     let (line, ack) = oer_espressif_executor::DoorbellLine::<3>::split(software.line3);
-    let Ok(bound) = adopted.router().bind(
-        interrupts.wifi,
-        WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(ack)),
-    ) else {
-        fail("wifi-route")
-    };
+    let bound = adopted
+        .router()
+        .bind(
+            interrupts.wifi,
+            WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(ack)),
+        )
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let bell = irq::ImageDoorbell(bell);
     let (hart, router) = adopted.parts();

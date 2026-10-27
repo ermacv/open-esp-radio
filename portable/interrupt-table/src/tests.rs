@@ -102,9 +102,13 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     // writes nothing.
     let mut zero = fake_router(0);
     let before = zero.controller.writes.len();
-    let refused = zero.bind(tokens.radio, RadioIrq).unwrap_err();
+    let crate::BindError::Refused { error, token, part } =
+        zero.bind(tokens.radio, RadioIrq).unwrap_err()
+    else {
+        panic!("a foreign hart is a pre-admission refusal");
+    };
     assert_eq!(
-        refused.error,
+        error,
         Error::WrongHart {
             source: 5,
             hart: 1,
@@ -179,7 +183,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     );
 
     let mut one = fake_router(1);
-    let _bound = one.bind(refused.token, refused.part).unwrap();
+    let _bound = one.bind(token, part).unwrap();
     assert_eq!(one.controller.routes[5], Some(17));
     assert_eq!(one.controller.lines[17], LineState::bound(2, 3));
     one.verify().unwrap();

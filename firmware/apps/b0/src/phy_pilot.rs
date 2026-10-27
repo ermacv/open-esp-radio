@@ -37,13 +37,8 @@ pub(crate) fn init(
     if HANDLER.install(handler).is_err() {
         reset(SarSetupFault::Storage(SarSetupStorage::Handler));
     }
-    let bound = match router.bind(token, interrupt) {
-        Ok(bound) => bound,
-        Err(refused) => {
-            let held = core::mem::ManuallyDrop::new(refused);
-            reset(SarSetupFault::Binding(held.error));
-        }
-    };
+    let bound = router.bind(token, interrupt)
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     client.bind(bound)
 }
 pub(crate) fn interrupt(part: &mut Timg0AlarmInterrupt) {

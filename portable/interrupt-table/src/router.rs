@@ -11,7 +11,9 @@
 
 use oer_mmio::{InterruptSource, InterruptSources};
 
-use crate::{Binding, Entry, Table, line_control};
+use crate::{
+    BindError, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table, line_control,
+};
 
 /// The trigger of a CPU line (the CLIC's `clicintattr.trig`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -199,21 +201,6 @@ mod sealed {
     impl<P: super::InterruptSources> Sealed for super::Silent<P> {}
 }
 
-/// What [`Router::bind`] refused, with the token and the part it gives back.
-pub struct Refused<E: Entry> {
-    pub error: Error,
-    pub token: E,
-    pub part: E::Part,
-}
-
-impl<E: Entry> core::fmt::Debug for Refused<E> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Refused")
-            .field("error", &self.error)
-            .finish()
-    }
-}
-
 /// The one writer of a hart's routes and lines, by the image's table.
 pub struct Router<C: Controller> {
     pub(crate) controller: C,
@@ -280,7 +267,10 @@ impl<C: Controller> Router<C> {
     ///
     /// [`Error::WrongHart`] when the entry belongs to another hart and
     /// [`Error::NotInTable`] when the router's table lacks the entry;
-    /// nothing changes and the token and the part come back. An entry whose
+    /// nothing changes and `BindError::Refused` returns the token and part.
+    /// An admitted binding that cannot claim storage, install its handler or
+    /// write its controller returns `BindError::Fault`: its owners stay in
+    /// quarantine and the image must record the fault and reset. An entry whose
     /// source, line or level lies outside the controller fails to compile:
     ///
     /// ```compile_fail,E0080
@@ -324,7 +314,7 @@ impl<C: Controller> Router<C> {
     /// }
     /// # bind(&mut oer_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
     /// ```
-    pub fn bind<E: Entry>(&mut self, token: E, part: E::Part) -> Result<Bound<E>, Refused<E>> {
+    pub fn bind<E: Entry>(&mut self, token: E, part: E::Part) -> Result<Bound<E>, BindError<E>> {
         const {
             assert!(
                 inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES),
@@ -346,7 +336,7 @@ impl<C: Controller> Router<C> {
             [] => 0,
         };
         let current = self.controller.hart();
-        let refuse = |error, token, part| Err(Refused { error, token, part });
+        let refuse = |error, token, part| Err(BindError::Refused { error, token, part });
         if E::HART != current {
             return refuse(
                 Error::WrongHart {
@@ -365,30 +355,45 @@ impl<C: Controller> Router<C> {
         }) {
             return refuse(Error::NotInTable { source }, token, part);
         }
-        let _consumed = token;
-        let place = E::storage().init(part);
-        #[expect(
-            clippy::expect_used,
-            reason = "the token is unique, so its cell is empty until this install"
-        )]
-        let _installed = E::cell()
-            .install(place)
-            .ok()
-            .expect("an entry's part is installed once");
-        #[expect(
-            clippy::expect_used,
-            reason = "the entry's source, line and level lie inside the controller (checked at compile time)"
-        )]
+        let fault = |source, kind| BindFault {
+            source,
+            line: E::LINE,
+            hart: current,
+            kind,
+        };
+        let Some(storage) = E::storage().try_uninit() else {
+            return Err(BindError::Fault(Quarantined::owned(
+                fault(source, BindFaultKind::StorageClaimed),
+                token,
+                part,
+            )));
+        };
+        let place = storage.write(part);
+        if let Err(place) = E::cell().install(place) {
+            return Err(BindError::Fault(Quarantined::placed(
+                fault(source, BindFaultKind::HandlerOccupied),
+                token,
+                place,
+            )));
+        }
+        if let Err(error) = self
+            .controller
+            .set_line(E::LINE, LineState::bound(E::LEVEL, C::LEVEL_BITS))
         {
-            self.controller
-                .set_line(E::LINE, LineState::bound(E::LEVEL, C::LEVEL_BITS))
-                .expect("the entry's line is a line of the controller");
-            for &source in sources {
-                self.controller
-                    .route(source, E::LINE)
-                    .expect("the entry's source and line are the controller's");
+            return Err(BindError::Fault(Quarantined::installed(
+                fault(source, BindFaultKind::LineRefused(error)),
+                token,
+            )));
+        }
+        for &source in sources {
+            if let Err(error) = self.controller.route(source, E::LINE) {
+                return Err(BindError::Fault(Quarantined::installed(
+                    fault(source, BindFaultKind::RouteRefused(error)),
+                    token,
+                )));
             }
         }
+        let _consumed = token;
         Ok(Bound {
             _part: core::marker::PhantomData,
         })

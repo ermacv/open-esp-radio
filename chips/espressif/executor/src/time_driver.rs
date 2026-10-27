@@ -128,6 +128,22 @@ const fn comparator_of_source(source: u16) -> u8 {
     }
 }
 
+/// Inputs held by a failed time-driver setup. Only `Failure` owns this
+/// payload; no recovery authority is exposed after partial installation.
+pub struct TimeSetup<A: Entry> {
+    _owners: TimeSetupOwners<A>,
+}
+enum TimeSetupOwners<A: Entry> {
+    Counter {
+        _timer: crate::systimer::SystemTimer,
+        _alarm: A,
+        _part: A::Part,
+    },
+    Binding {
+        _error: oer_interrupt_table::BindError<A>,
+    },
+}
+
 /// Install the time driver over the SoC's system timer: `systimer` is
 /// consumed for the rest of the program. Executor `WRITER` serves the
 /// comparator of `alarm`'s source and writes the SYSTIMER registers for
@@ -143,7 +159,7 @@ pub fn init<const WRITER_SWI: u8, A, C>(
     router: &mut oer_interrupt_table::Router<C>,
     alarm: A,
     part: A::Part,
-) -> Result<(), Failure<(Option<crate::systimer::SystemTimer>, A, A::Part)>>
+) -> Result<(), Failure<TimeSetup<A>>>
 where
     A: Entry,
     A::Part: AlarmPart,
@@ -155,7 +171,15 @@ where
     }
     let bank = match ComparatorWriter::adopt(systimer) {
         Ok(bank) => bank,
-        Err(failure) => return Err(failure.map_owners(|timer| (Some(timer), alarm, part))),
+        Err(failure) => {
+            return Err(failure.map_owners(|timer| TimeSetup {
+                _owners: TimeSetupOwners::Counter {
+                    _timer: timer,
+                    _alarm: alarm,
+                    _part: part,
+                },
+            }));
+        }
     };
     let storage = match BANK_STORAGE.try_uninit() {
         Some(storage) => storage,
@@ -169,8 +193,11 @@ where
     {
         Fault::TimerInstalled { writer }.reset();
     }
-    bind::<WRITER_SWI, A, C>(router, alarm, part)
-        .map_err(|failure| failure.map_owners(|refused| (None, refused.token, refused.part)))
+    bind::<WRITER_SWI, A, C>(router, alarm, part).map_err(|failure| {
+        failure.map_owners(|refused| TimeSetup {
+            _owners: TimeSetupOwners::Binding { _error: refused },
+        })
+    })
 }
 
 /// Give executor `SWI` the comparator of `alarm`'s source, whose table entry
@@ -185,7 +212,7 @@ pub fn bind<const SWI: u8, A, C>(
     router: &mut oer_interrupt_table::Router<C>,
     alarm: A,
     mut part: A::Part,
-) -> Result<(), Failure<oer_interrupt_table::Refused<A>>>
+) -> Result<(), Failure<oer_interrupt_table::BindError<A>>>
 where
     A: Entry,
     A::Part: AlarmPart,
@@ -240,7 +267,7 @@ where
                 expected: A::HART,
                 actual,
             },
-            oer_interrupt_table::Refused {
+            oer_interrupt_table::BindError::Refused {
                 error: oer_interrupt_table::Error::WrongHart {
                     source: <A::Part as oer_interrupt_table::InterruptSource>::SOURCE,
                     hart: A::HART,
@@ -257,15 +284,7 @@ where
     router
         .bind(alarm, part)
         .map(|_bound| ())
-        .map_err(|refused| {
-            Failure::new(
-                Fault::Route {
-                    executor: SWI,
-                    error: refused.error,
-                },
-                refused,
-            )
-        })
+        .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))
 }
 
 /// Program `comparator` for `deadline` (microseconds), in the writer's

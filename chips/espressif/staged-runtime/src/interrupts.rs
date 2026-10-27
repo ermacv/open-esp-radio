@@ -39,3 +39,12 @@ macro_rules! interrupt_table {
         }
     };
 }
+
+/// Retain a binding refusal or invariant fault and reset with every setup,
+/// handler and interrupted owner held. No owner recovery or retry is issued.
+#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
+pub fn reset_binding<E: oer_interrupt_table::Entry>(error: oer_interrupt_table::BindError<E>) -> ! {
+    let held = core::mem::ManuallyDrop::new(error);
+    let (name, observations) = held.diagnostic();
+    crate::panic::reset_fault(name, observations)
+}

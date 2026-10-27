@@ -1,3 +1,4 @@
+#![cfg_attr(not(test), deny(clippy::expect_used))]
 #![deny(
     clippy::unwrap_used,
     clippy::panic,
@@ -66,10 +67,10 @@
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
+mod binding;
+pub use binding::{BindError, BindFault, BindFaultKind, Quarantined};
 mod router;
-pub use router::{
-    Bound, Controller, Error, EventAuthority, LineState, Refused, Router, Silent, Trigger,
-};
+pub use router::{Bound, Controller, Error, EventAuthority, LineState, Router, Silent, Trigger};
 
 pub mod signal;
 

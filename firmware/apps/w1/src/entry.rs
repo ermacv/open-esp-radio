@@ -290,12 +290,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // half from the start; the doorbell rings once the part is bound.
     let software = runtime.software_interrupts;
     let (bell, acknowledger) = oer_espressif_executor::DoorbellLine::<3>::split(software.line3);
-    let Ok(wifi_bound) = adopted.router().bind(
-        interrupts.wifi,
-        WifiPart::new(runtime.wifi_interrupts, software.irq3, Lower(acknowledger)),
-    ) else {
-        fail("wifi-interrupt")
-    };
+    let wifi_bound = adopted
+        .router()
+        .bind(
+            interrupts.wifi,
+            WifiPart::new(runtime.wifi_interrupts, software.irq3, Lower(acknowledger)),
+        )
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     let (doorbell, urgent) = Doorbell::new::<FromCpu3Irq>(bell, &wifi_bound);
     let doorbell = ImageDoorbell(doorbell);
     let (timer_sender, timer_lines) = TIMER_LINES.take().split();
