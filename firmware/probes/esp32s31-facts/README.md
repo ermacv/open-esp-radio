@@ -969,3 +969,51 @@ has LATCH_REQUEST set at its deadline. A `223f=(0,0,0)` with no `91fd` is an
 accepted zero origin followed by crossing-wait expiry, not a latch failure.
 This restart is a probe diagnostic after observing release; production does
 not use it as retirement or quiescence. SOURCE: `HW25_S31_BLE_LATCH_RESTART_20261027`.
+
+## PB-1 bank1 and divider399 LP facts
+
+Selections240–245 are explicit commands; request0 never runs them. They hold
+hart1, mask CPU admission, publish no scheduler RUN or DMA and use no RF.
+LP commands use the existing advancing-BTLC prefix, positional ETM6/7
+(event46, tasks11/0f) and XTAL/divider399. CPU root0/divider0 with no
+fractional numerator is required. They do not request PMU sleep.
+
+| Selection | Finite operation |
+| --- | --- |
+| 240 | Separately seed bank1 enable0/2; baseline/dynamic clear, enable and mask stores; classic unchanged-image init/deinit stores |
+| 241 | Sleep16 disabled crossing then a fresh enabled positive control, each target origin+2048 and observation at4096 ticks |
+| 242 | Fresh low24 target68 crossing, sleep17 disable, then whole-zero20; no read of the WO target |
+| 243 | Sourced sleep0 enable/disable helper and separate CONTROL25 clear/set, counter/reference brackets |
+| 244 | Upper0, each bit24–31 and upperff with fresh low24 compares in sourced CONTROL0/4 clear/set pair states |
+| 245 | Software pending enabled/masked/unmasked and zero ack; exactly two natural LP wraps, with one zero ack between them; sleep0 reference observations near the first wrap |
+
+Selection245 requires explicit authorization for its two approximately167.8s
+natural waits. Each wait stops at190 nominal CPU seconds, accumulates wrapping
+mcycle32 deltas into u64 and feeds the still-armed ROM watchdog once per
+nominal second. No LP counter seed is written. Other counter-crossing polls
+stop at4M CPU cycles (100ms at40MHz). Ordinary settles are4096 cycles.
+Completion alone never establishes a positive cause. Tag24ee is a refusal or
+failed precondition, independently of the completion marker.
+
+Records240f0/1 contain CPU root/divider/fraction and LP divider/XTAL/counter.
+Bank tags24100/24300 record enable0, enable2 and compact enables
+(overflow, dynamic3, baseline8/9/12 in bits0–4). Offsets0/7/1/8/2/3/4/5/6
+are seed, baseline clear/enable, dynamic clear/enable/mask, baseline mask,
+classic init/deinit respectively. LP state tagT records counter/cause/matrix3;
+T+1 records complete pending24/rollover2c/latch2; T+2 records
+flag1c/flag20/LPCON vector. These full-word reads decode no undeclared lane.
+Sleep16 bases25000/25100 record initial/final(+10) states, origin/target/enable
+at+8 and counter-crossing bracket at+9. Sleep17 states26000/10/20/30
+are initial/crossed/disabled/zero-acknowledged, with target+8/crossing+9.
+
+Reference pairs record counter-before/reference-low24/counter-after, followed
+by CONTROL25/bit26/ETM10c-bit26. Command blocks27000/27010 hold pairs before,
+after and settled(+0/+2/+4);27020/22/24 isolate CONTROL25. Width bases
+28000/29000 plus10*trial record written/readback/origin at+0,
+origin/end/poll-cycles at+1, old-byte/old-latch/new-latch at+2 and
+pending24/cause/matrix3 at+3. Whole bases2a000/2a100 use states+0/+10/+20/+30
+(initial/published/unmasked/zero-ack);+20 exists only for the masked case.
+Wrap states2a200/210/220/230/240 are initial/first/ack/second/ack.
+Wrap journals2a2f0/2a3f0 contain last-before/first-after/elapsed-low;
++1 contains elapsed-high/deadline-seconds/reference-observed. First-wrap
+reference blocks are journal+10/+20, in the same command-pair encoding.
