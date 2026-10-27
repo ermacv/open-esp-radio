@@ -61,11 +61,11 @@ fn state(s: &Session<'_>, tag: u32) {
     let w = &s.wake_status;
     let r = w.read_int_raw();
     use pac::pmu::int_raw as f;
-    let raw = u32::from(r.lp_cpu_exc_int_raw()) * f::LP_CPU_EXC_INT_RAW_MASK
-        | u32::from(r.sdio_idle_int_raw()) * f::SDIO_IDLE_INT_RAW_MASK
-        | u32::from(r.sw_int_raw()) * f::SW_INT_RAW_MASK
-        | u32::from(r.soc_sleep_reject_int_raw()) * f::SOC_SLEEP_REJECT_INT_RAW_MASK
-        | u32::from(r.soc_wakeup_int_raw()) * f::SOC_WAKEUP_INT_RAW_MASK;
+    let raw = (u32::from(r.lp_cpu_exc_int_raw()) * f::LP_CPU_EXC_INT_RAW_MASK)
+        | (u32::from(r.sdio_idle_int_raw()) * f::SDIO_IDLE_INT_RAW_MASK)
+        | (u32::from(r.sw_int_raw()) * f::SW_INT_RAW_MASK)
+        | (u32::from(r.soc_sleep_reject_int_raw()) * f::SOC_SLEEP_REJECT_INT_RAW_MASK)
+        | (u32::from(r.soc_wakeup_int_raw()) * f::SOC_WAKEUP_INT_RAW_MASK);
     emit(
         tag + 3,
         s.modem_wake_status
@@ -95,21 +95,23 @@ fn state(s: &Session<'_>, tag: u32) {
 fn lp_raw(p: &pac::pmu::PmuWakeStatus) -> u32 {
     use pac::pmu::lp_int_raw as f;
     let r = p.read_lp_int_raw();
-    u32::from(r.lp_cpu_wakeup_int_raw()) * f::LP_CPU_WAKEUP_INT_RAW_MASK
-        | u32::from(r.modem_switch_active_end_int_raw()) * f::MODEM_SWITCH_ACTIVE_END_INT_RAW_MASK
-        | u32::from(r.sleep_switch_active_end_int_raw()) * f::SLEEP_SWITCH_ACTIVE_END_INT_RAW_MASK
-        | u32::from(r.sleep_switch_modem_end_int_raw()) * f::SLEEP_SWITCH_MODEM_END_INT_RAW_MASK
-        | u32::from(r.modem_switch_sleep_end_int_raw()) * f::MODEM_SWITCH_SLEEP_END_INT_RAW_MASK
-        | u32::from(r.active_switch_sleep_end_int_raw()) * f::ACTIVE_SWITCH_SLEEP_END_INT_RAW_MASK
-        | u32::from(r.modem_switch_active_start_int_raw())
-            * f::MODEM_SWITCH_ACTIVE_START_INT_RAW_MASK
-        | u32::from(r.sleep_switch_active_start_int_raw())
-            * f::SLEEP_SWITCH_ACTIVE_START_INT_RAW_MASK
-        | u32::from(r.sleep_switch_modem_start_int_raw()) * f::SLEEP_SWITCH_MODEM_START_INT_RAW_MASK
-        | u32::from(r.modem_switch_sleep_start_int_raw()) * f::MODEM_SWITCH_SLEEP_START_INT_RAW_MASK
-        | u32::from(r.active_switch_sleep_start_int_raw())
-            * f::ACTIVE_SWITCH_SLEEP_START_INT_RAW_MASK
-        | u32::from(r.hp_sw_trigger_int_raw()) * f::HP_SW_TRIGGER_INT_RAW_MASK
+    (u32::from(r.lp_cpu_wakeup_int_raw()) * f::LP_CPU_WAKEUP_INT_RAW_MASK)
+        | (u32::from(r.modem_switch_active_end_int_raw()) * f::MODEM_SWITCH_ACTIVE_END_INT_RAW_MASK)
+        | (u32::from(r.sleep_switch_active_end_int_raw()) * f::SLEEP_SWITCH_ACTIVE_END_INT_RAW_MASK)
+        | (u32::from(r.sleep_switch_modem_end_int_raw()) * f::SLEEP_SWITCH_MODEM_END_INT_RAW_MASK)
+        | (u32::from(r.modem_switch_sleep_end_int_raw()) * f::MODEM_SWITCH_SLEEP_END_INT_RAW_MASK)
+        | (u32::from(r.active_switch_sleep_end_int_raw()) * f::ACTIVE_SWITCH_SLEEP_END_INT_RAW_MASK)
+        | (u32::from(r.modem_switch_active_start_int_raw())
+            * f::MODEM_SWITCH_ACTIVE_START_INT_RAW_MASK)
+        | (u32::from(r.sleep_switch_active_start_int_raw())
+            * f::SLEEP_SWITCH_ACTIVE_START_INT_RAW_MASK)
+        | (u32::from(r.sleep_switch_modem_start_int_raw())
+            * f::SLEEP_SWITCH_MODEM_START_INT_RAW_MASK)
+        | (u32::from(r.modem_switch_sleep_start_int_raw())
+            * f::MODEM_SWITCH_SLEEP_START_INT_RAW_MASK)
+        | (u32::from(r.active_switch_sleep_start_int_raw())
+            * f::ACTIVE_SWITCH_SLEEP_START_INT_RAW_MASK)
+        | (u32::from(r.hp_sw_trigger_int_raw()) * f::HP_SW_TRIGGER_INT_RAW_MASK)
 }
 
 fn routes(s: &Session<'_>, tag: u32, cause: u32) {

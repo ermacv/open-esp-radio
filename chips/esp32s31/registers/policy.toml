@@ -991,8 +991,8 @@ registers = ["ENTRY%s"]
 name = "BtmacBlePhyInit"
 instance = "BT_MAC"
 registers = ["WORD_04BC_OPAQUE", "WORD_0474_OPAQUE", "INTERRUPT_ENABLE", "INTERRUPT_CLEAR", "CRC_CONFIG", "LC_TX_ON_DELAY_CONFIG", "WORD_0654_OPAQUE", "WORD_0800_OPAQUE", "WORD_0858_OPAQUE", "PACKET_ERROR_MASK", "DEVICE_TABLE_CONTROL", "DEVICE_TABLE_FIRST_ENTRY", "PHY_ENVIRONMENT_MEMBER_POINTER", "ABORTED_OPCODE_SELECTORS_0", "ABORTED_OPCODE_SELECTORS_1", "CONNECTION_ABORT_CONTROL", "WORD_0940_OPAQUE", "WORD_094C_OPAQUE", "WORD_0950_OPAQUE", "WORD_0954_OPAQUE", "WORD_0958_OPAQUE", "WORD_095C_OPAQUE"]
-description = "BLE PHY/task registers, including the diagnostic opaque task view at +0x4bc. Read side effects of this view are not established; it is read only by diagnostics. This view grants no decoded cause or acknowledgement authority."
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+description = "BLE PHY/task registers, including the diagnostic opaque task view at +0x4bc. General read side effects of this view are not established; it is read only by diagnostics. Complete-image access issues a load without an explicit acknowledgement store and does not promise absence of hardware read effects. The scoped timer pending/progression observations in HW32 establish no general read-safety capability. This view grants no decoded cause or acknowledgement authority."
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "HW32_S31_BT_04BC_READ_SCOPE_20261027"]
 
 [[partitions.parts]]
 name = "BtV32Cte"
@@ -7754,26 +7754,26 @@ name = "discard_bluetooth_compare_0_indication"
 register = "BT_MAC.IRQ_CLEAR_1"
 value = 0x00000010
 consumed-event = "The caller consumes the local BTLC compare0 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement."
-sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027"]
+sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027", "HW32_S31_BT_MASKED_FIXED_W1C_20261027"]
 
 [[fixed-register-images]]
 name = "discard_bluetooth_compare_1_indication"
 register = "BT_MAC.IRQ_CLEAR_1"
 value = 0x00000020
 consumed-event = "The caller consumes the local BTLC compare1 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement."
-sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027"]
+sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027", "HW32_S31_BT_MASKED_FIXED_W1C_20261027"]
 
 [[fixed-register-images]]
 name = "discard_bluetooth_controller_time_overflow_indication"
 register = "BT_MAC.IRQ_CLEAR_1"
 value = 0x00000002
 consumed-event = "The caller consumes the local BTLC first-word overflow indication itself; no handler or continuous-time reconstruction may require this indication. This is a discard, not a sampled runtime acknowledgement."
-sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027"]
+sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027", "HW32_S31_BT_MASKED_FIXED_W1C_20261027"]
 
 [[register-image-reads]]
 name = "read_bluetooth_task_diagnostic_image"
 register = "BT_MAC.WORD_04BC_OPAQUE"
-sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "HW32_S31_BT_04BC_READ_SCOPE_20261027"]
 
 [[register-image-reads]]
 name = "read_bluetooth_modem_lp_status"

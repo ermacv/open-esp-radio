@@ -668,7 +668,7 @@ reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUD
 name = "MODEM_INTR_VECTOR"
 bits = "13:0"
 class = "read-only"
-description = "With inherited wake enables 0x3fff, the tested near LP compare yields 0x80 together with cause 0x40000/source 127; all-ones +0x34 returns these observations to zero. In the tested XTAL/divider-1 setup with +0x10 bits 1/18 issued, isolated sleep16/17 flags leave this vector zero. This does not qualify PMU wake: WAKEUP_ENA and all sampled PMU causes remain zero while awake. SOURCE: HW21_S31_LP_AWAKE_ROUTE_20261027."
+description = "With inherited wake enables 0x3fff, the tested near LP compare yields 0x80 together with cause 0x40000/source 127; all-ones +0x34 returns these observations to zero. In the tested XTAL/divider-1 setup with +0x10 bits 1/18 issued, isolated sleep16/17 flags leave this vector zero. This does not qualify PMU wake: WAKEUP_ENA and all sampled PMU causes remain zero while awake. SOURCE: HW21_S31_LP_AWAKE_ROUTE_20261027. Isolated pending BTLC compare0/compare1/seeded-overflow enables also produce vector0x10 together with primary status and matrix124 while both BLE routes are parked at MAP0 and CPU admission is masked. Masking or fixed W1C lowers this vector. This positively qualifies the vector observation, without proving an actual PMU wake or absence of PMU/ETM activity. SOURCE: HW32_S31_BT_OUTPUT_OBSERVER_20261027."
 
 [[registers]]
 name = "MEM_CONF2"
@@ -693,4 +693,4 @@ bits = "27:0"
 class = "plain"
 
 [review.entity."MODEM_INTR_STATUS.MODEM_INTR_VECTOR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "HW21_S31_LP_AWAKE_ROUTE_20261027"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "HW21_S31_LP_AWAKE_ROUTE_20261027", "HW32_S31_BT_OUTPUT_OBSERVER_20261027"]

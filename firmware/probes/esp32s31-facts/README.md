@@ -1169,3 +1169,13 @@ are context, with no positive event control; neither their zeros nor ETM
 command-state readback establish absence of wake or event activity. A quiet
 +4bc word does not qualify its own ungenerated task indications or all read
 effects. CPU-delivery masking alone is not a peripheral-output fence.
+
+Run `hw32-20261027-ble-masked-01` (s31-a, lease#944) positively observed
+all three bank1 indications: masked arrival becomes visible on enable;
+fixed W1C clears while enabled or hidden; matrix124 and modem wake vector0x10
+rise even at MAP0. The separate IE0 observer latches124. All eighteen +4bc
+words were zero, the tested pending survives their reads and BTLC advances.
+The wider read-safety, bank0/NRT and PMU/ETM-event questions remain unqualified.
+SOURCE: `HW32_S31_*_20261027` in
+`chips/esp32s31/registers/evidence/hw32-ble-masked-pending.toml` and the
+[research report](/home/ermacv/dev/oer-notes/research/hw32-ble-masked-pending.md).
