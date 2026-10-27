@@ -5,6 +5,11 @@ interrupt analysis to select strict SRAM code and each hart's IRQ allocation.
 Every staged runtime link needs the fingerprinted `image-linker.toml` supplied
 by `cargo fw` or `cargo hil`; ordinary and bootstrap links are unaffected.
 
+Strict code placement starts from every declared handler on each hart and
+level, plus the exception and panic paths. Stack sizing still uses the worst
+path of each level; that single path does not limit the code inventory.
+Executor task-poll boundaries keep task code separate from strict handler code.
+
 The first link uses the contract maximum. A proven product bound selects
 `align16(ceil(bound * (100 + margin) / 100)) + guard`, with the 10% margin
 of the family layer (`chips/espressif/platform/family.toml`). A hart whose interrupt stack the image policy declares

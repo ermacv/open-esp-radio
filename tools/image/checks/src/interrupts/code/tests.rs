@@ -39,7 +39,12 @@ pub(crate) fn same_level_handler_placement(handlers: [Function; 2]) -> CodePlace
     let mut level = stacks.harts[0].exception.clone();
     level.level = 1;
     level.bound = analysis
-        .bound_with(handlers[0].address, &resolutions, &mut ledger(), &mut || Ok(()))
+        .bound_with(
+            handlers[0].address,
+            &resolutions,
+            &mut ledger(),
+            &mut || Ok(()),
+        )
         .unwrap();
     stacks.harts[0].levels = vec![level];
     stacks.harts[0].exception.bound = analysis

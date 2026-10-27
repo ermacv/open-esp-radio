@@ -226,7 +226,10 @@ fn two_handlers_at_one_level_are_both_linked_into_sram() {
         let requests: Vec<_> = code
             .strict_cached()
             .map(|(address, size)| {
-                let function = handlers.iter().find(|function| function.address == address).unwrap();
+                let function = handlers
+                    .iter()
+                    .find(|function| function.address == address)
+                    .unwrap();
                 Requested {
                     name: function.names[0].clone(),
                     symbols: function.names.clone(),
@@ -242,7 +245,11 @@ fn two_handlers_at_one_level_are_both_linked_into_sram() {
         let second = oer_analysis_elf::Elf::parse(&second_bytes).unwrap();
         for handler in &handlers {
             let symbol = second.symbol(&handler.names[0]).unwrap();
-            assert!((0x20000000..0x20001000).contains(&symbol.address), "{} was not placed in SRAM", handler.names[0]);
+            assert!(
+                (0x20000000..0x20001000).contains(&symbol.address),
+                "{} was not placed in SRAM",
+                handler.names[0]
+            );
         }
         plan.final_sizes(&output).unwrap();
         for function in &plan.functions {
