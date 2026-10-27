@@ -1,4 +1,4 @@
-//! One finite RX publication. No take, recycle, reload, or live buffer write.
+//! One finite RX publication with CPU-owned barriers. No live CPU buffer write.
 use crate::usb;
 use core::fmt::Write as _;
 use oer_embassy_time::EmbassyClock;
@@ -49,6 +49,9 @@ const FRAME_LIMIT: usize = 3;
 const CORRELATIONS: usize = 192;
 const CAPTURE_MS: u32 = 700;
 const CHANNEL: u8 = 13;
+const CPU_NODES: [usize; 3] = [12, 20, 28];
+const WORDS: usize = BUFFER / 4;
+const GUARD_RECORDS: usize = 64;
 const _: () = assert!(BUFFER >= 4 && BUFFER.is_multiple_of(4) && COUNT <= u32::BITS as usize);
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
 type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
@@ -78,6 +81,17 @@ struct Trace {
     max_scan_cycles: u32,
     max_gap_cycles: u32,
     previous_end: u32,
+    guard_previous: [u32; CPU_NODES.len()],
+    guards: [[u32; 10]; GUARD_RECORDS],
+    guard_used: usize,
+    commits: [Commit; FRAME_LIMIT],
+    commit_used: usize,
+    terminal_previous: usize,
+}
+#[derive(bytemuck::Zeroable)]
+struct Commit {
+    header: [u32; 9],
+    nodes: [[u32; WORDS + 2]; NODES],
 }
 static TRACE: ZeroedStatic<Trace> = ZeroedStatic::new();
 
@@ -282,9 +296,66 @@ fn read_word(
     }
     // SAFETY: production placement/preparation published expected from this
     // permanent arena before RX started. Address identity, u32 alignment and
-    // full advertised capacity containment are checked above. Only DMA writes
+    // full advertised capacity containment are checked above. CPU initialization ends before publication; during observation only DMA writes
     // this storage; this load creates no reference and grants no ownership.
     Ok(unsafe { (address as *const u32).byte_add(offset).read_volatile() })
+}
+
+fn pattern(index: usize, word: usize) -> u32 {
+    if word == 0 && !CPU_NODES.contains(&index) {
+        RX_BUFFER_SENTINEL
+    } else {
+        0xa500_0000 | ((index as u32) << 12) | (word as u32)
+    }
+}
+
+// This probe paints patterns before BASE publication, while the stopped
+// MAC cannot receive. No production constructor is changed.
+#[allow(
+    unsafe_code,
+    reason = "probe-only initialization before DMA publication"
+)]
+fn prepare_patterns(storage: &Storage) -> Result<(), &'static str> {
+    for index in 0..NODES {
+        let descriptor = node(storage, index).ok_or("node")?;
+        let address = descriptor.buffer_address();
+        // Reuse the observation's complete arena/alignment/capacity checks.
+        let _ = read_word(storage, descriptor, address, 0)?;
+        for word in 0..WORDS {
+            // SAFETY: RX and its walker are stopped and BASE has not been
+            // published. The checked permanent allocation belongs only to
+            // this retained probe arena; no byte reference is created.
+            unsafe {
+                (address as *mut u32)
+                    .add(word)
+                    .write_volatile(pattern(index, word));
+            }
+        }
+    }
+    oer_riscv::fence();
+    Ok(())
+}
+
+#[allow(
+    unsafe_code,
+    reason = "probe-only OWNER barriers before outer RX starts"
+)]
+fn install_barriers(storage: &Storage) -> Result<(), &'static str> {
+    for index in CPU_NODES {
+        let descriptor = node(storage, index).ok_or("node")?;
+        // SAFETY: RxDescriptor is repr(transparent) over this generated
+        // layout. Its interior-mutable word is accessed through the
+        // original descriptor, with no second owner or mutable reference.
+        // Outer MAC RX is still stopped and no air frame has been admitted;
+        // only typed OWNER is changed, as the detach path also does live.
+        let layout = unsafe {
+            &*core::ptr::from_ref(descriptor)
+                .cast::<oer_esp32s31_hal::layouts::WifiRxDmaDescriptor>()
+        };
+        layout.control().write(descriptor.word0().with_owner(false));
+    }
+    oer_riscv::fence();
+    Ok(())
 }
 // These tags encode software semantic observations, not register bit images.
 fn enable_tag(state: oer_esp32s31_hal::ieee80211::registers::MacInterruptEnableState) -> u32 {
@@ -343,6 +414,83 @@ fn diagnostic(
     )
 }
 impl Trace {
+    fn observe_guards(
+        &mut self,
+        storage: &Storage,
+        access: &oer_esp32s31_hal::owner::RadioAccess,
+        force: bool,
+    ) -> Result<(), &'static str> {
+        for (slot, index) in CPU_NODES.into_iter().enumerate() {
+            let descriptor = node(storage, index).ok_or("node")?;
+            let expected = *self.expected.get(index).ok_or("expected")?;
+            let start = oer_riscv::cycle32();
+            let before = descriptor.word0();
+            let mut different = 0_u32;
+            for word in 0..WORDS {
+                if read_word(storage, descriptor, expected, word * 4)? != pattern(index, word) {
+                    different |= 1_u32.checked_shl(word as u32).ok_or("guard-word")?;
+                }
+            }
+            let after = descriptor.word0();
+            let cursor = access.receive_dma_snapshot();
+            let previous = self.guard_previous.get_mut(slot).ok_or("guard-slot")?;
+            if force || *previous != different {
+                let row = self.guards.get_mut(self.guard_used).ok_or("guard-full")?;
+                *row = [
+                    self.scans,
+                    index as u32,
+                    start,
+                    oer_riscv::cycle32(),
+                    before.bits(),
+                    after.bits(),
+                    different,
+                    cursor.descriptor_base,
+                    cursor.last_descriptor_low,
+                    cursor.next_descriptor_low,
+                ];
+                self.guard_used = self.guard_used.saturating_add(1);
+            }
+            *previous = different;
+        }
+        Ok(())
+    }
+    fn commit(
+        &mut self,
+        storage: &Storage,
+        access: &oer_esp32s31_hal::owner::RadioAccess,
+        terminals: usize,
+    ) -> Result<(), &'static str> {
+        let out = self
+            .commits
+            .get_mut(self.commit_used)
+            .ok_or("commit-full")?;
+        let before = access.receive_dma_snapshot();
+        let start = oer_riscv::cycle32();
+        for (index, words) in out.nodes.iter_mut().enumerate() {
+            let descriptor = node(storage, index).ok_or("node")?;
+            let expected = *self.expected.get(index).ok_or("expected")?;
+            let (first, rest) = words.split_first_mut().ok_or("commit-shape")?;
+            *first = descriptor.word0().bits();
+            for (word, output) in rest.iter_mut().take(WORDS).enumerate() {
+                *output = read_word(storage, descriptor, expected, word * 4)?;
+            }
+            *rest.last_mut().ok_or("commit-shape")? = descriptor.word0().bits();
+        }
+        let after = access.receive_dma_snapshot();
+        out.header = [
+            self.scans,
+            terminals as u32,
+            start,
+            oer_riscv::cycle32(),
+            before.descriptor_base,
+            before.last_descriptor_low,
+            before.next_descriptor_low,
+            after.last_descriptor_low,
+            after.next_descriptor_low,
+        ];
+        self.commit_used = self.commit_used.saturating_add(1);
+        Ok(())
+    }
     fn push(&mut self, row: [u32; 16]) -> Result<(), &'static str> {
         let out = self.rows.get_mut(self.used).ok_or("trace-full")?;
         *out = row;
@@ -426,6 +574,12 @@ impl Trace {
                 ])?;
             }
         }
+        let guards_before = self.guard_used;
+        self.observe_guards(storage, access, force)?;
+        if terminals > self.terminal_previous {
+            self.commit(storage, access, terminals)?;
+        }
+        self.terminal_previous = terminals;
         let (diagnostic_after, after_sample) = diagnostic(access, irq);
         let counters_changed = diagnostic_before
             .iter()
@@ -439,6 +593,7 @@ impl Trace {
         self.diagnostic_previous = diagnostic_after;
         if force
             || counters_changed
+            || self.guard_used != guards_before
             || leading_changed != 0
             || reserved_changed
             || diagnostic_before
@@ -536,11 +691,17 @@ async fn run(
     let prepared = placed
         .prepare_ring(access.rx_dma())
         .map_err(|_| "rx-prepare")?;
+    prepare_patterns(storage)?;
     let ready = access.wifi_mac_hal().prepare_mac_runtime(prepared);
     let stopped_ring = ready.publish(access.rx_dma()).map_err(|_| "rx-publish")?;
     let ring = stopped_ring
         .try_start(access.rx_dma())
         .map_err(|_| "rx-start")?;
+    // Production start validates an entirely armed topology. Install the
+    // deliberately CPU-owned barriers after that edge, but before outer RX.
+    // Whether a walker prefetch can defeat this live OWNER store is part of
+    // the detach premise under test, not an assumed quiescence guarantee.
+    install_barriers(storage)?;
     let trace = TRACE.try_take().ok_or("trace-claimed")?;
     for index in 0..NODES {
         *trace.expected.get_mut(index).ok_or("expected")? =
@@ -560,7 +721,7 @@ async fn run(
     access.wifi_mac_hal().configure_open_promiscuous_receive();
     usb::text(
         console,
-        b"RXCHAIN begin v=3 channel=13 buffer=128 count=32 frames=3 cap_ms=700 correlate=1\n",
+        b"RXCHAIN begin v=4 channel=13 buffer=128 count=32 frames=3 cap_ms=700 cpu_nodes=12,20,28 full_guard=1\n",
     )
     .await;
     let deadline = EmbassyClock
@@ -631,6 +792,33 @@ async fn run(
         terminals, trace.used, trace.scans, trace.max_scan_cycles, trace.max_gap_cycles,
         snapshot.descriptor_base, snapshot.last_descriptor_low, snapshot.next_descriptor_low).map_err(|_| "format")?;
     usb::text(console, line.as_bytes()).await;
+    for row in trace.guards.iter().take(trace.guard_used) {
+        line.clear();
+        line.push_str("G").map_err(|_| "format")?;
+        for value in row {
+            write!(&mut line, " {value:x}").map_err(|_| "format")?;
+        }
+        line.push('\n').map_err(|_| "format")?;
+        usb::text(console, line.as_bytes()).await;
+    }
+    for (ordinal, commit) in trace.commits.iter().take(trace.commit_used).enumerate() {
+        line.clear();
+        write!(&mut line, "K {ordinal:x}").map_err(|_| "format")?;
+        for value in commit.header {
+            write!(&mut line, " {value:x}").map_err(|_| "format")?;
+        }
+        line.push('\n').map_err(|_| "format")?;
+        usb::text(console, line.as_bytes()).await;
+        for (index, words) in commit.nodes.iter().enumerate() {
+            line.clear();
+            write!(&mut line, "F {ordinal:x} {index:x}").map_err(|_| "format")?;
+            for value in words {
+                write!(&mut line, " {value:08x}").map_err(|_| "format")?;
+            }
+            line.push('\n').map_err(|_| "format")?;
+            usb::text(console, line.as_bytes()).await;
+        }
+    }
     line.clear();
     writeln!(
         &mut line,
@@ -685,9 +873,6 @@ async fn run(
     for index in 0..NODES {
         let descriptor = node(storage, index).ok_or("node")?;
         let expected = *trace.expected.get(index).ok_or("expected")?;
-        if read_word(storage, descriptor, expected, 0)? == RX_BUFFER_SENTINEL {
-            continue;
-        }
         line.clear();
         write!(&mut line, "D {index:x}").map_err(|_| "format")?;
         for offset in (0..BUFFER).step_by(4) {
@@ -707,8 +892,7 @@ async fn run(
     let (_cell, release) = stopped.release(cell).await;
     release.map_err(|_| "radio-release")?;
     observation?;
-    if terminals == 0 {
-        return Err("no-frames");
-    }
+    // A CPU barrier may legitimately prevent every terminal. The result
+    // denotes completed collection; the host separately checks air coverage.
     Ok(())
 }

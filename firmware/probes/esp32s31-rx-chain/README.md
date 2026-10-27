@@ -5,13 +5,19 @@ plus the production reserved descriptor R. It passively receives on channel 13
 under the DE domain, stopping at 3 terminal nodes or 700 milliseconds. A 512-row
 buffer records changes with mcycle bounds; no console output occurs during
 collection. Nothing is taken, recycled, detached, reloaded, or repainted live.
-The production preparation path installs the leading `0xdeadbeef` word.
+Before BASE publication, every buffer is initialized word by word. Ordinary
+leading words retain the production `0xdeadbeef` marker; other words equal
+`0xa5000000 | (node << 12) | word_index`. Nodes 12, 20 and 28 use that pattern
+for all 32 words, including the first. After the public start validates the
+armed topology, their typed OWNER fields are cleared, with outer MAC RX still
+stopped. No descriptor is rearmed during the capture. Walker prefetch before
+this live OWNER change is not excluded; it is relevant to the detach premise.
 
 All hardware ownership and MMIO go through the public production API. The
 probe alone also reads DMA buffer words with volatile loads through the
 published BUFFER address: it checks the original production binding, alignment,
-capacity and containing permanent allocation, creates no references, and writes
-no buffer bytes. This narrow observation detects a first-word change independently
+capacity and containing permanent allocation and creates no byte references.
+The probe initializes bytes only before BASE publication, never during RX. This narrow observation detects a first-word change independently
 of descriptor completion. It is neither a completion nor ownership proof.
 
 Build with `cargo fw probe oer-firmware-probes-esp32s31-rx-chain`. The ELF is a
@@ -33,8 +39,7 @@ cycle after control, control before/after the leading-word read, leading word,
 BUFFER, descriptor NEXT, MAC BASE, MAC LAST/NEXT before the node sample,
 MAC LAST/NEXT after it, unknown NEXT-upper nonzero before/after, and scan number.
 Each row is a sequence of observations, not an atomic snapshot. `D` rows copy
-all 32 buffer words only for nodes whose leading word differs from the sentinel
-after the outer MAC and walker stop. Both E and D node indices are hexadecimal. Dumps may
+all 32 buffer words of every node after the outer MAC and walker stop. Both E and D node indices are hexadecimal. Dumps may
 contain received air data and belong in local evidence, never git.
 
 The final state is dumped without rearm, then the production release closes RF.
@@ -47,9 +52,8 @@ are software values: 0 = Disabled (every enable field read zero), 1 = Station,
 2; this tag does not expose an individual enable bit image. Initial and final
 masked zero STATUS samples alone prove no pending retention.
 
-Version 3 enables only RX delivery 5/14/24 during the receive window, samples
-statistics/semantic STATUS around each scan and acknowledges the sampled STATUS.
-It does not reproduce the version-2 pending-replay experiment. `rx` is
+The capture enables only RX delivery 5/14/24 during the receive window, samples
+statistics/semantic STATUS around each scan and acknowledges the sampled STATUS. `rx` is
 RX_SUCCESS; `aux` combines 5/24. RAW and the individual auxiliary/opaque lanes
 remain unavailable through the ordinary public HAL diagnostic API. No source120
 CPU route is installed, so IRQ-entry/DMA ordering is not measured.
@@ -72,9 +76,9 @@ writes also leave the sentinel's validity as a consumption predicate unproved.
 
 The capture stops at the first frame limit or deadline. If trace capacity is
 exhausted, collection stops, then emits the retained rows and stopped-buffer
-dumps before returning a failed verdict. The current probe builds on main with
-the bootstrap/cache and radio-start prerequisites included; no local integration
-merge is required.
+dumps before returning a failed verdict. A pass means bounded collection
+completed, even if the barriers prevented every terminal; air coverage and the
+hardware conclusion are assessed separately. The probe builds directly on main.
 
 The probe retains exception/panic details in reset-retained memory through the
 runtime's public hooks; a subsequent boot reports them before opening the live
@@ -87,28 +91,18 @@ The staged product-style stack check reports an unresolved P2 stack path.
 This is a diagnostic, unqualified image; no panic budget or memory profile is
 raised to make a product check pass.
 
-The single three-beacon capture `hw18-20261027-rx-radio-01-s31b` used the
-unpushed local composition `1f530932` (#687 + #700 and fallible-root handling),
-not the PR head. It also shows 13 clusters of repeated leading-word changes
-starting at ring nodes 0/3/6, with CONTROL still `0x80200080`, no RX_DONE,
-original descriptor NEXT and stationary sampled MAC BASE/LAST/NEXT. Some clusters
-rewrite nodes 3/4/6/7 before their later beacon contents; 24 ring nodes outside
-the three completed chains remain dirty. Thus a non-sentinel leading word is
-not established as membership in an accepted frame. Aborted/filtered reception
-with rollback is a hypothesis requiring counter/event correlation. The external
-report analyzes every dependent ring decision; this probe does not exercise the
-production take/admission path or demonstrate a production ownership violation.
+`G` rows compare every word of each CPU-owned buffer on every scan, and
+retain a row when its mismatch bitmap changes or a full scan is forced. The
+ten hex words are scan, node, cycle before/after, CONTROL before/after,
+32-bit differing-word bitmap, BASE, LAST and NEXT. At most 64 rows are kept.
+A zero final bitmap is only a sampled/final-state observation, not proof that
+a transient write followed by restoration never happened.
 
-The version-3 repeat `hw18-20261027-rx-radio-02-s31b` (lease 899) uses pushed
-PR commit `85badedb`, directly based on main after #682. It records three
-matching beacons and 11 stationary-cursor write clusters with 11 nearby FCS
-increments (nine inside a cluster's scan range, one scan before and one after),
-without sampled RX-success/auxiliary STATUS at those error increments. This
-supports FCS-rejected reception as a candidate mechanism; internal rollback
-versus staging/discard is unproved. Some dirty future nodes later become the
-current head without rearm, so their non-sentinel value carries stale evidence.
-The repeat reads Disabled ENABLE for initial/masked/remask and an unclassified
-RX-only enable image during capture. Its per-scan STATUS acknowledgement makes
-final Q zeroes uninformative about pending replay. Full RAW and separate 5/24
-are still not exposed. Neither capture validates the sentinel predicate or
-executes the production admission/take path.
+At each new terminal count, a bounded `K`/`F` snapshot copies all nodes. `K`
+contains snapshot ordinal then scan, terminal count, cycle before/after, BASE,
+LAST/NEXT before and LAST/NEXT after. `F` contains ordinal, node, CONTROL
+before, all 32 buffer words, CONTROL after. At most three snapshots are retained.
+These copies preserve accepted-frame bytes before later attempts can overwrite
+them, but their reads and cursor samples are sequential, not atomic. Missed
+intermediate cursor states and multiple completions within one scan remain
+possible. All buffers stay retained even if OWNER=0 fails to block DMA.
