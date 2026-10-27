@@ -4,9 +4,11 @@
 //! The bank stays with its handler for the whole epoch, so the release is a
 //! sequence of steps that alternate between the handler (the bank and the
 //! diagnostic pair) and the task (the scheduler's list heads and RUN). The
-//! writes keep the reviewed order: mask the dynamic scheduler sources, disable
-//! RUN, fence; acknowledge the dynamic sources, release the controller output,
-//! fence. It does not stop the modem counter or revoke PHY/RX/DF publications.
+//! writes acknowledge admitted sampled NRT before the last visible fault check
+//! and masking; mask the terminal sources, disable RUN and fence; write the fixed
+//! non-fault acknowledgements, issue CONTROL1/2 and fence; then acknowledge
+//! admitted sampled NRT again before final release confirmation. It does not stop
+//! the modem counter or revoke PHY/RX/DF publications.
 //!
 //! Scheduler BUSY is sampled by the HAL, which bounds the diagnostic retry:
 //! the idle sample precedes the mask, and a fresh sample after the fence that
@@ -136,11 +138,11 @@ fn mask(
     // HW32_S31_BT_OUTPUT_OBSERVER_20261027 (PR #757): tested pending is
     // hidden/retained under the mask; reopening raises matrix124 and modem
     // wake vector0x10 even at MAP0. Fault lanes are not hardware-qualified.
-    acknowledge_nrt(bank, task_enable)?;
-    check_visible_faults(bank, task_enable)?;
     if bank.fault_acknowledged() {
         return Err(BluetoothControllerOutputReleaseError::InterruptFault);
     }
+    acknowledge_nrt(bank, task_enable)?;
+    check_visible_faults(bank, task_enable)?;
     bank.mask_dynamic();
     bank.fence();
     let primary = bank.observation();

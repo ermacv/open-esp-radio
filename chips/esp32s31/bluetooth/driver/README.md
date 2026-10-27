@@ -232,8 +232,10 @@ Stop:
    the Controller output in alternating steps (the handler's idle sample, the
    task's list heads, the handler's mask, the task's RUN disable, the
    handler's release). Those steps also mask the sourced feature lanes and
-   task17, check visible faults before masking, write the fixed non-fault
-   primary/NRT W1C images under the mask and acknowledge the task WT bank.
+   task17, acknowledge admitted sampled NRT before the last visible fault check
+   preceding masking, write the fixed non-fault primary/NRT W1C images under the
+   mask and acknowledge the task WT bank. After CONTROL1/2 and its fence, the
+   handler repeats the admitted sampled NRT transaction before final confirmation.
    Before closing the bank's gate they verify zero enables and reject residual
    visible status. The released bank and channel endpoint then leave the handler;
    retirement reunites both quiet endpoints and has the handler stop the counter

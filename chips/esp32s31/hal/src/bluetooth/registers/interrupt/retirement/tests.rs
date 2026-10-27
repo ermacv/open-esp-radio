@@ -5,6 +5,23 @@ use oer_time::{Clock, Duration};
 use oer_time_virtual::VirtualClock;
 use std::{cell::RefCell, vec::Vec};
 
+const NRT_OUTSIDE_CLEANUP: [u32; 2] = [
+    bank::irq_clear_0::SOURCE_7_MASK,
+    bank::irq_clear_1::BIT_2_OPAQUE_MASK,
+];
+const LATE_NRT_0: u32 = bank::irq_clear_0::BITS_22_26_OPAQUE_MASK;
+const _: () = {
+    assert!(NRT_OUTSIDE_CLEANUP[0] & (CLEANUP_0 | FAULTS_0) == 0);
+    assert!(NRT_OUTSIDE_CLEANUP[1] & (CLEANUP_1 | FAULTS_1) == 0);
+    assert!(LATE_NRT_0 & (CLEANUP_0 | FAULTS_0 | NRT_OUTSIDE_CLEANUP[0]) == 0);
+    assert!(!crate::bluetooth::interrupt_policy::nrt_fault_visible(
+        NRT_OUTSIDE_CLEANUP
+    ));
+    assert!(!crate::bluetooth::interrupt_policy::nrt_fault_visible([
+        LATE_NRT_0, 0
+    ]));
+};
+
 /// Primary status is an ENA-masked view of retained causes. NRT is a
 /// separate visible observation in this model, without claiming RAW semantics.
 struct Model {
@@ -260,6 +277,30 @@ fn acknowledged_faults_and_execution_after_the_fence_refuse_release() {
     assert!(!model.borrow().events.contains(&"clear"));
     assert!(model.borrow().output_live);
 }
+
+#[test]
+fn a_fault_acknowledged_between_idle_and_mask_refuses_before_nrt_access() {
+    let model = RefCell::new(Model::idle());
+    let task = model.borrow().raw.task_enable;
+    sample_idle(&mut Bank(&model), busy(false), task).unwrap();
+    confirm_heads_absent(&mut Task(&model)).unwrap();
+    {
+        let mut m = model.borrow_mut();
+        m.acknowledged_fault = true;
+        [m.raw.primary.nrt_0, m.raw.primary.nrt_1] = NRT_OUTSIDE_CLEANUP;
+        m.events.clear();
+    }
+    let before = model.borrow().raw;
+    assert_eq!(
+        mask(&mut Bank(&model), task),
+        Err(BluetoothControllerOutputReleaseError::InterruptFault)
+    );
+    let m = model.borrow();
+    assert_eq!(m.events, ["fault history"]);
+    assert_eq!(m.raw, before);
+    assert!(m.output_live && m.run_enabled);
+}
+
 #[test]
 fn visible_fault_checks_precede_mask_and_fixed_clear_follows_task_disable() {
     let model = RefCell::new(Model::idle());
@@ -270,10 +311,10 @@ fn visible_fault_checks_precede_mask_and_fixed_clear_follows_task_disable() {
         [
             "observe",
             "fault history",
+            "fault history",
             "sample nrt0",
             "sample nrt1",
             "observe",
-            "fault history",
             "mask",
             "bank fence",
             "observe",
@@ -295,7 +336,7 @@ fn visible_fault_checks_precede_mask_and_fixed_clear_follows_task_disable() {
 #[test]
 fn nrt_outside_fixed_cleanup_is_acknowledged_before_mask_and_final_confirmation() {
     let model = RefCell::new(Model::idle());
-    let pending = [0x4, bank::irq_enable_1::BIT_2_OPAQUE_MASK];
+    let pending = NRT_OUTSIDE_CLEANUP;
     {
         let mut m = model.borrow_mut();
         [m.raw.primary.nrt_0, m.raw.primary.nrt_1] = pending;
@@ -310,13 +351,13 @@ fn nrt_outside_fixed_cleanup_is_acknowledged_before_mask_and_final_confirmation(
         [
             "observe",
             "fault history",
+            "fault history",
             "sample nrt0",
             "sample nrt1",
             "ack nrt0",
             "ack nrt1",
             "nrt fence",
             "observe",
-            "fault history",
             "mask",
             "bank fence",
             "observe",
@@ -341,11 +382,14 @@ fn forbidden_nrt_pairs() -> [[u32; 2]; 5] {
     // Each pair also includes an admitted lane in the other bank: admission
     // must refuse both acknowledgements, preserving the complete pair.
     [
-        [bank::irq_clear_0::SOURCE_15_MASK, 0x4],
-        [0x4, bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK],
-        [0x4, bank::irq_clear_1::SOURCE_8_MASK],
-        [0x4, bank::irq_clear_1::SOURCE_9_MASK],
-        [0x4, bank::irq_clear_1::SOURCE_12_MASK],
+        [bank::irq_clear_0::SOURCE_15_MASK, NRT_OUTSIDE_CLEANUP[1]],
+        [
+            NRT_OUTSIDE_CLEANUP[0],
+            bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK,
+        ],
+        [NRT_OUTSIDE_CLEANUP[0], bank::irq_clear_1::SOURCE_8_MASK],
+        [NRT_OUTSIDE_CLEANUP[0], bank::irq_clear_1::SOURCE_9_MASK],
+        [NRT_OUTSIDE_CLEANUP[0], bank::irq_clear_1::SOURCE_12_MASK],
     ]
 }
 
@@ -383,7 +427,7 @@ fn both_release_nrt_transactions_refuse_fault_and_overflow_without_either_ack() 
             }
             // A later diagnostic read includes another arrival; the fault must
             // retain the exact refused pair instead of replacing its image.
-            model.borrow_mut().nrt_after_sample = Some([0x80, 0]);
+            model.borrow_mut().nrt_after_sample = Some([LATE_NRT_0, 0]);
             let result = if final_check {
                 release(&mut Bank(&model), busy(false), 0)
             } else {
@@ -410,14 +454,14 @@ fn an_nrt_arrival_after_the_final_sample_is_not_acknowledged_and_blocks_release(
     {
         let mut m = model.borrow_mut();
         // The final sampled pair is nonzero. Only that pair may be cleared.
-        m.nrt_after_release = Some([0x4, 0]);
-        m.nrt_after_sample = Some([0x80, 0]);
+        m.nrt_after_release = Some([NRT_OUTSIDE_CLEANUP[0], 0]);
+        m.nrt_after_sample = Some([LATE_NRT_0, 0]);
     }
     assert_eq!(
         release(&mut Bank(&model), busy(false), 0),
         Err(policy_error(model.borrow().visible()))
     );
-    assert_eq!(model.borrow().raw.primary.nrt_0, 0x80);
+    assert_eq!(model.borrow().raw.primary.nrt_0, LATE_NRT_0);
 }
 #[test]
 fn masking_hides_but_retains_pending_and_fixed_w1c_clears_it_without_reopening() {

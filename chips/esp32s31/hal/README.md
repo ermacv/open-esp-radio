@@ -109,7 +109,8 @@ and the primary/task observations. Other sampled NRT lanes are acknowledged even
 when outside the fixed cleanup images. Visible primary fault/unsupported causes
 also return their complete observation for quarantine.
 After RUN-disable, it writes fixed non-fault W1C images `0x18212103` / `0x207a`
-under the mask, issues CONTROL1/2 and verifies zero primary/task enables.
+under the mask, issues CONTROL1/2 and fences, then performs the admitted sampled
+NRT acknowledgement before verifying zero primary/task enables.
 Nonzero enables or residual visible status are `ReleaseNotQuiet`.
 The fixed images exclude bank0[15] and bank1[8/9/12]. A fault arriving after
 the last visible check is hidden and retained through release, so release

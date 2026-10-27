@@ -1439,8 +1439,11 @@ impl InterruptRegistersOwner {
     ///
     /// # Errors
     ///
-    /// The sample did not settle, the scheduler is busy, or a fault is
-    /// pending or was acknowledged; the output stays prepared.
+    /// An unsettled sample, busy scheduler, visible fault or acknowledged fault
+    /// history refuses before this step writes; the output stays prepared.
+    /// `ReleaseNotQuiet` from the final NRT transaction or residual visible
+    /// status follows CONTROL1/2. The owners remain quarantined without a
+    /// released-output proof.
     pub fn release_idle_output<C: oer_time::Clock + ?Sized>(
         &mut self,
         _run: &BluetoothSchedulerRunDisabled,
