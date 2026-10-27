@@ -1,0 +1,33 @@
+schema = 1
+
+# Retained archive: hw30-tbtt-irq-observer-evidence.tar.zst.
+# Its durable location and SHA-256 are in the cited report; JSON paths below
+# are member names within that archive.
+
+[[sources]]
+id = "HW30_S31_TSF_TIMERS23_20261027"
+description = "SOURCE: hw30-20261027-tbtt-observer-01 and hw30-20261027-tbtt-observer-03, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. hw-hw30/hw30-20261027-tbtt-observer-01/timer2.json and hw-hw30/hw30-20261027-tbtt-observer-01/timer3.json: selected TSF+1024, positive RAW5/4, mask retention/output suppression, retained-positive masked clear, fresh enabled clear, new masked expiry, stopped target crossing and rearm. hw-hw30/hw30-20261027-tbtt-observer-01/distinct.json: RAW0x30 ->0x10 on selected timer2 clear. hw-hw30/hw30-20261027-tbtt-observer-03/timer-run.json tags3e03/07 and3f03/07 observe run31 one before and zero after a positive expiry before policy/explicit stop; explicit fresh rearm is positive. Scope is timers2/3 in this digital-only setup, not all timer/control lanes."
+
+[[sources]]
+id = "HW30_S31_TBTT_DOMAINS_20261027"
+description = "SOURCE: hw30-20261027-tbtt-observer-01, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. hw-hw30/hw30-20261027-tbtt-observer-01/tbtt0.json through hw-hw30/hw30-20261027-tbtt-observer-01/tbtt3.json: selected counters advance, interval8/shared target+8TU/ahead0/load8+domain produces RAW3-domain and matrix122. Positive RAW survives stop and mask, STATUS/output fall on mask and return on unmask; retained-positive sample clears under mask and fresh enabled clear works; fresh masked expiry is retained. hw-hw30/hw30-20261027-tbtt-observer-01/distinct-tbtt.json:0xc ->0x4 and0x3 ->0x1 on selected clears. Stopped-counter target crossing is quiet with positives before/after in hw-hw30/hw30-20261027-tbtt-observer-03/recovery01.json and hw-hw30/hw30-20261027-tbtt-observer-03/recovery23.json. Recovery in run01 produces an early cause before the new target and is explicitly rejected, not treated as a future expiry."
+
+[[sources]]
+id = "HW30_S31_TBTT_PERIODIC_POLICY_20261027"
+description = "SOURCE: hw30-20261027-tbtt-observer-03, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. hw-hw30/hw30-20261027-tbtt-observer-03/recovery01.json and hw-hw30/hw30-20261027-tbtt-observer-03/recovery23.json: after a stopped target crossing, run-before-schedule plus explicit stale discard gives zero RAW before a future target, a witnessed crossing/positive cause, then mask/all-ones CLEAR while run26 remains one. RAW reasserts under mask at the next selected TSF interval, snapshot delta0x1fff or0x2000 with interval8; unmask reveals STATUS/output122. This refutes producer shutdown by this bank policy for these four local TBTT domains, not a universal output equation or minimal setup proof."
+
+[[sources]]
+id = "HW30_S31_IRQ_OBSERVER_20261027"
+description = "SOURCE: hw30-20261027-tbtt-observer-01 and hw30-20261027-tbtt-observer-03, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. Members hw-hw30/<run-id>/*.json, tags3001/3002: each new leaf validates two CLIC PositiveEdge inputs with FROM_CPU2 while CPU delivery IE and MIE remain off: IP0 ->1, matrix bank2=8, then cleared IP0. Radio matrix inputs are read independently. Observer validation alone qualifies no radio producer."
+
+[[sources]]
+id = "HW30_S31_I2C_READ_OBSERVER_20261027"
+description = "SOURCE: hw30-20261027-tbtt-observer-01, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. hw-hw30/hw30-20261027-tbtt-observer-01/reads.json: seeded BBTOP04/TXRF08 serial, parallel and serial commands show BUSY then idle with BBTOP DATA0x1c/TXRF DATA0; host status bytes7 ->0x4a ->7 and burst DONE remains1. Matrix123/131 and validated edge IP stay0. These short command observations do not identify a completion interrupt, IRQ gate or acknowledgement, and do not close P4."
+
+[[sources]]
+id = "HW30_S31_I2C_BUSY26_20261027"
+description = "SOURCE: hw30-20261027-tbtt-observer-03, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. hw-hw30/hw30-20261027-tbtt-observer-03/reset-fast.json: normal BBTOP read, fresh positive host1 BUSY read followed immediately by a bit26-only publication, then normal recovery read. Publication mask2 at tag35cc and34f0; BUSY eventually falls, DATA1 remains0x1c, matrix131 before/after and edge IP0. No positively pending IRQ exists, so no IRQ-clear/reset-extent physics is established. hw-hw30/hw30-20261027-tbtt-observer-01/reset.json skipped the conditional publication after its broad snapshot outlived BUSY."
+
+[[sources]]
+id = "HW30_S31_IEEE132_ROUTE_20261027"
+description = "SOURCE: hw30-20261027-tbtt-observer-01, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. hw-hw30/hw30-20261027-tbtt-observer-01/route132.json: parked route132=0; timer0 threshold32 stops at value32. Masked EVENT_STATUS0 becomes timer0 flag1/output bank4 bit4 after unmask; saved positive acknowledgement under mask yields quiet unmask. FROM_CPU2 independently validates the observer. ED6 is not attempted and receives no qualification."

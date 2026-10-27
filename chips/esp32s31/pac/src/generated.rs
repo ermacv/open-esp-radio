@@ -104435,7 +104435,7 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// The `I2C0_STATUS` field.
+            /// Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c0_status(self) -> u8 {
                 (self.0 >> 24) as u8
@@ -104452,7 +104452,7 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// The `I2C0_STATUS` field.
+            /// Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c0_status(&self) -> u8 {
                 (self.0 >> 24) as u8
@@ -104502,7 +104502,7 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// The `I2C1_STATUS` field.
+            /// Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c1_status(self) -> u8 {
                 (self.0 >> 24) as u8
@@ -104519,7 +104519,7 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// The `I2C1_STATUS` field.
+            /// Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c1_status(&self) -> u8 {
                 (self.0 >> 24) as u8
@@ -104629,7 +104629,7 @@ pub mod i2c_ana_mst {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `I2C_MST_BURST_DONE` field.
+            /// This bit is already one before the short ordinary serial/parallel host reads and stays one afterwards; it is not a fresh burst-completion witness for those commands and establishes no source131 relationship. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c_mst_burst_done(self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -104658,7 +104658,7 @@ pub mod i2c_ana_mst {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `I2C_MST_BURST_DONE` field.
+            /// This bit is already one before the short ordinary serial/parallel host reads and stays one afterwards; it is not a fresh burst-completion witness for those commands and establishes no source131 relationship. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c_mst_burst_done(&self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -106024,6 +106024,10 @@ pub mod i2c_ana_mst {
     }
 
     /// The `I2cAnaMst` part of `I2C_ANA_MST`.
+    ///
+    /// Analog-I2C host commands, host configuration/status and burst control/status under their existing transport owner. SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H; oer-notes/research/bx-irq-123-131.md. Status observations establish no interrupt-source binding.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct I2cAnaMst<P: oer_mmio::Placement = oer_mmio::Fixed<0x2010f800>>(
         oer_mmio::Block<P, I2cAnaMstWords>,
@@ -106034,11 +106038,15 @@ pub mod i2c_ana_mst {
 
     impl oer_mmio::Registers for I2cAnaMstWords {
         type Sharing = oer_mmio::sharing::Owned;
-        const WORDS: &'static [usize] = &[0x0, 0x4, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c];
+        const WORDS: &'static [usize] = &[
+            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c,
+        ];
     }
 
     impl oer_mmio::Words for I2cAnaMstWords {
-        const OWNED: &'static [usize] = &[0x0, 0x4, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c];
+        const OWNED: &'static [usize] = &[
+            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c,
+        ];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -106091,6 +106099,66 @@ pub mod i2c_ana_mst {
             let mut value = i2c1_ctrl::W(0x00000000);
             change(&mut value);
             self.0.write::<0x4>(value.0);
+        }
+
+        /// Read `I2C0_CONF`.
+        #[inline]
+        pub fn read_i2c0_conf(&self) -> i2c0_conf::R {
+            i2c0_conf::R(self.0.read::<0x8>())
+        }
+
+        /// Read `I2C0_CONF`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_i2c0_conf(&mut self, change: impl FnOnce(&mut i2c0_conf::W)) {
+            let mut value = i2c0_conf::W(self.0.read::<0x8>());
+            change(&mut value);
+            self.0.write::<0x8>(value.0);
+        }
+
+        /// Read `I2C1_CONF`.
+        #[inline]
+        pub fn read_i2c1_conf(&self) -> i2c1_conf::R {
+            i2c1_conf::R(self.0.read::<0xc>())
+        }
+
+        /// Read `I2C1_CONF`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_i2c1_conf(&mut self, change: impl FnOnce(&mut i2c1_conf::W)) {
+            let mut value = i2c1_conf::W(self.0.read::<0xc>());
+            change(&mut value);
+            self.0.write::<0xc>(value.0);
+        }
+
+        /// Read `I2C_BURST_CONF`.
+        #[inline]
+        pub fn read_i2c_burst_conf(&self) -> i2c_burst_conf::R {
+            i2c_burst_conf::R(self.0.read::<0x10>())
+        }
+
+        /// Read `I2C_BURST_CONF`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_i2c_burst_conf(&mut self, change: impl FnOnce(&mut i2c_burst_conf::W)) {
+            let mut value = i2c_burst_conf::W(self.0.read::<0x10>());
+            change(&mut value);
+            self.0.write::<0x10>(value.0);
+        }
+
+        /// Read `I2C_BURST_STATUS`.
+        #[inline]
+        pub fn read_i2c_burst_status(&self) -> i2c_burst_status::R {
+            i2c_burst_status::R(self.0.read::<0x14>())
+        }
+
+        /// Read `I2C_BURST_STATUS`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_i2c_burst_status(&mut self, change: impl FnOnce(&mut i2c_burst_status::W)) {
+            let mut value = i2c_burst_status::W(self.0.read::<0x14>());
+            change(&mut value);
+            self.0.write::<0x14>(value.0);
         }
 
         /// Read `ANA_CONF0`.
@@ -108575,7 +108643,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// The `TIMER0_OVERFLOW` field.
+            /// A fresh threshold32 control also raises matrix source132 bank4 bit4 with its CPU route parked at zero; masked pending is revealed on unmask and a saved positive sample clears under mask. No ED6 qualification follows. SOURCE: HW30_S31_IEEE132_ROUTE_20261027.
             #[inline]
             pub const fn timer0_overflow(self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -108743,7 +108811,7 @@ pub mod ieee802154 {
                 }
             }
 
-            /// The `TIMER0_OVERFLOW` field.
+            /// A fresh threshold32 control also raises matrix source132 bank4 bit4 with its CPU route parked at zero; masked pending is revealed on unmask and a saved positive sample clears under mask. No ED6 qualification follows. SOURCE: HW30_S31_IEEE132_ROUTE_20261027.
             #[inline]
             pub const fn timer0_overflow(&self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -131775,7 +131843,7 @@ pub mod modem_pwr {
                 (self.0 & 0x01000000) != 0
             }
 
-            /// hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit.
+            /// hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn sta_tbtt_enable(self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -131858,7 +131926,7 @@ pub mod modem_pwr {
                 (self.0 & 0x01000000) != 0
             }
 
-            /// hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit.
+            /// hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn sta_tbtt_enable(&self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -132029,7 +132097,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The TBTT interval in station TSF units of 1024 µs.
+            /// The TBTT interval in station TSF units of 1024 µs. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn interval_tsf_bits_35_10(self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
@@ -132046,7 +132114,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The TBTT interval in station TSF units of 1024 µs.
+            /// The TBTT interval in station TSF units of 1024 µs. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn interval_tsf_bits_35_10(&self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
@@ -132184,7 +132252,7 @@ pub mod modem_pwr {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal.
+            /// Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn tbtt_enable(self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -132243,7 +132311,7 @@ pub mod modem_pwr {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal.
+            /// Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn tbtt_enable(&self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -132363,7 +132431,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
+            /// Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn interval_tsf_bits_35_10(self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
@@ -132380,7 +132448,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
+            /// Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn interval_tsf_bits_35_10(&self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
@@ -132585,7 +132653,7 @@ pub mod modem_pwr {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal.
+            /// Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn tbtt_enable(self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -132662,7 +132730,7 @@ pub mod modem_pwr {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal.
+            /// Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn tbtt_enable(&self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -132796,7 +132864,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
+            /// Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn interval_tsf_bits_35_10(self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
@@ -132813,7 +132881,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
+            /// Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn interval_tsf_bits_35_10(&self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
@@ -133018,7 +133086,7 @@ pub mod modem_pwr {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal.
+            /// Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn tbtt_enable(self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -133095,7 +133163,7 @@ pub mod modem_pwr {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal.
+            /// Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn tbtt_enable(&self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -133229,7 +133297,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
+            /// Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn interval_tsf_bits_35_10(self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
@@ -133246,7 +133314,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
+            /// Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished. With field8 and the complete local domain setup, selected-TSF snapshots around consecutive TBTT causes differ by0x1fff or0x2000 ticks while run remains active; these polling observations do not identify exact comparator timestamps, physical time units or minimal prerequisites. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
             pub const fn interval_tsf_bits_35_10(&self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
@@ -133418,7 +133486,7 @@ pub mod modem_pwr {
                 (self.0 & 0x40000000) != 0
             }
 
-            /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal.
+            /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal. For indices2/3, run31 reads one after arm and zero after a witnessed positive expiry, before any explicit stop or bank-clear policy. Explicitly setting run again gives a fresh masked expiry. This observation does not qualify automatic clearing for indices0/1 or every control bit. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn timer_enable(self) -> bool {
                 (self.0 & 0x80000000) != 0
@@ -133453,7 +133521,7 @@ pub mod modem_pwr {
                 (self.0 & 0x40000000) != 0
             }
 
-            /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal.
+            /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal. For indices2/3, run31 reads one after arm and zero after a witnessed positive expiry, before any explicit stop or bank-clear policy. Explicitly setting run again gives a fresh masked expiry. This observation does not qualify automatic clearing for indices0/1 or every control bit. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn timer_enable(&self) -> bool {
                 (self.0 & 0x80000000) != 0
@@ -134095,37 +134163,37 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_3(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_2(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_1(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -134178,37 +134246,37 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_3(&self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_2(&self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_1(&self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_0(&self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(&self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(&self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -134457,37 +134525,37 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Raw TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Raw TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_3(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Raw TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Raw TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_2(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Raw TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Raw TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_1(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -134645,37 +134713,37 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Masked TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Masked TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_3(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Masked TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Masked TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_2(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Masked TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Masked TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_1(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Masked TSF-0 TBTT event. TSF 0 is the station TSF. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Masked TSF-0 TBTT event. TSF 0 is the station TSF. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Masked guarded TSF timer-three event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Masked guarded TSF timer-three event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Masked guarded TSF timer-two event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Masked guarded TSF timer-two event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -134833,37 +134901,37 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_3(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_2(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_1(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -134923,7 +134991,7 @@ pub mod modem_pwr {
                 self.0 == 0
             }
 
-            /// Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_3(&self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -134938,7 +135006,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_2(&self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -134953,7 +135021,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_1(&self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -134968,7 +135036,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
             pub const fn tbtt_0(&self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -134983,7 +135051,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -134998,7 +135066,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
+            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(&self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -135197,6 +135265,10 @@ pub mod modem_pwr {
     }
 
     /// The `WifiMacAuxTsfControl` part of `MODEM_PWR`.
+    ///
+    /// Auxiliary TSF controls and their adjacent per-domain TBTT intervals. SOURCE: BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027; oer-notes/research/bx-irq-122.md. Shared snapshot/load staging remains with WifiMacTsfLoad.
+    ///
+    /// SOURCE: BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct WifiMacAuxTsfControl<P: oer_mmio::Placement = oer_mmio::Fixed<0x2010d000>>(
         oer_mmio::Block<P, WifiMacAuxTsfControlWords>,
@@ -135207,11 +135279,11 @@ pub mod modem_pwr {
 
     impl oer_mmio::Registers for WifiMacAuxTsfControlWords {
         type Sharing = oer_mmio::sharing::Owned;
-        const WORDS: &'static [usize] = &[0x860, 0x868, 0x870];
+        const WORDS: &'static [usize] = &[0x860, 0x864, 0x868, 0x86c, 0x870, 0x874];
     }
 
     impl oer_mmio::Words for WifiMacAuxTsfControlWords {
-        const OWNED: &'static [usize] = &[0x860, 0x868, 0x870];
+        const OWNED: &'static [usize] = &[0x860, 0x864, 0x868, 0x86c, 0x870, 0x874];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -135250,6 +135322,24 @@ pub mod modem_pwr {
             self.0.write::<0x860>(value.0);
         }
 
+        /// Read `SOFTAP_TBTT_INTERVAL`.
+        #[inline]
+        pub fn read_softap_tbtt_interval(&self) -> softap_tbtt_interval::R {
+            softap_tbtt_interval::R(self.0.read::<0x864>())
+        }
+
+        /// Read `SOFTAP_TBTT_INTERVAL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_softap_tbtt_interval(
+            &mut self,
+            change: impl FnOnce(&mut softap_tbtt_interval::W),
+        ) {
+            let mut value = softap_tbtt_interval::W(self.0.read::<0x864>());
+            change(&mut value);
+            self.0.write::<0x864>(value.0);
+        }
+
         /// Read `NAN_CONTROL`.
         #[inline]
         pub fn read_nan_control(&self) -> nan_control::R {
@@ -135265,6 +135355,21 @@ pub mod modem_pwr {
             self.0.write::<0x868>(value.0);
         }
 
+        /// Read `NAN_TBTT_INTERVAL`.
+        #[inline]
+        pub fn read_nan_tbtt_interval(&self) -> nan_tbtt_interval::R {
+            nan_tbtt_interval::R(self.0.read::<0x86c>())
+        }
+
+        /// Read `NAN_TBTT_INTERVAL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_nan_tbtt_interval(&mut self, change: impl FnOnce(&mut nan_tbtt_interval::W)) {
+            let mut value = nan_tbtt_interval::W(self.0.read::<0x86c>());
+            change(&mut value);
+            self.0.write::<0x86c>(value.0);
+        }
+
         /// Read `BTWT_CONTROL`.
         #[inline]
         pub fn read_btwt_control(&self) -> btwt_control::R {
@@ -135278,6 +135383,24 @@ pub mod modem_pwr {
             let mut value = btwt_control::W(self.0.read::<0x870>());
             change(&mut value);
             self.0.write::<0x870>(value.0);
+        }
+
+        /// Read `BTWT_TBTT_INTERVAL`.
+        #[inline]
+        pub fn read_btwt_tbtt_interval(&self) -> btwt_tbtt_interval::R {
+            btwt_tbtt_interval::R(self.0.read::<0x874>())
+        }
+
+        /// Read `BTWT_TBTT_INTERVAL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_btwt_tbtt_interval(
+            &mut self,
+            change: impl FnOnce(&mut btwt_tbtt_interval::W),
+        ) {
+            let mut value = btwt_tbtt_interval::W(self.0.read::<0x874>());
+            change(&mut value);
+            self.0.write::<0x874>(value.0);
         }
     }
 
@@ -136256,7 +136379,7 @@ pub mod modem_pwr {
 
         /// Mask the sources of `0xffffffff` in `MODEM_PWR.ENABLE`, keeping every other bit, then acknowledge them (`MODEM_PWR.CLEAR`).
         ///
-        /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT, HW8_S31_WIFI_TSF_MASK_20261026, POLICY_S31_PWR_BANK_CLEAR_SCOPE_20261027.
+        /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT, HW8_S31_WIFI_TSF_MASK_20261026, POLICY_S31_PWR_BANK_CLEAR_SCOPE_20261027, HW30_S31_TBTT_PERIODIC_POLICY_20261027.
         #[inline]
         pub fn clear_all_mac_power_interrupts(&mut self) {
             self.0.write::<0x8b4>(0);

@@ -1031,3 +1031,46 @@ LP wrap. It uses the same190s bound and watchdog feed. The wrap journal is
 CONTROL25-set references2b024/26, with crossing brackets2b029/2a. This
 isolates a sourced intermediate disable-helper state; bit26 remains1 during
 that CONTROL25 observation. Completion requires the same positive advance.
+
+## Local TBTT and interrupt observers
+
+Archived HW30 captures use selectors240–253 with their matching archived ELFs.
+The current registry uses selectors260–273.
+
+Selections 260–273 are explicit short PAC-only leaves with RF/DMA closed,
+CPU admission masked and hart1 contained. Each new leaf first validates both
+CLIC positive-edge observers with FROM_CPU2 while IE remains zero. Radio
+routes122/132 stay parked;123/131 use separate validated edge inputs with
+CPU delivery disabled. A quiet radio input never qualifies a producer.
+
+| Selection | Experiment |
+| --- | --- |
+| 260 /261 | Timer2/3 against its own advancing, loaded TSF: +1024 target, stop, mask/unmask, retained-positive masked CLR, enabled CLR, masked expiry, stopped crossing and policy/rearm |
+| 262–265 | The same boundaries for TBTT0–3: interval8, target selected snapshot+8TU, ahead0 and its shared load selector |
+| 266 /270 | Two positive timers / TBTT pairs0+1 and2+3; selected CLR preserves the other cause |
+| 267 | Seeded BBTOP04/TXRF08 serial reads, parallel host routing, then serial recovery; BUSY/DATA, host status, burst status, matrix123/131 and edge IP |
+| 268 | Normal read, a bit26-only publication conditional on a fresh BUSY read, then a normal recovery read; matrix131 recorded separately |
+| 269 | IEEE timer0 threshold32 with route132 parked; positive masked pending revealed on unmask and cleared from its saved sample |
+| 271 /273 | TBTT0/1 /2/3 restart after a stopped target crossing: sourced run-before-schedule order, explicit stale discard, future crossing, then policy with run left active |
+| 272 | Timer2/3 run readback before and after expiry/policy; explicit rearm and fresh masked expiry |
+
+Timer/TBTT waits and the stopped-crossing interval are bounded by 800,000 CPU
+cycles (20 ms at the checked 40 MHz XTAL); I2C commands by 40,000 cycles (1 ms).
+Operation stamps include observer overhead and are not bus-completion timestamps.
+Radio state tags carry `(RAW low8, STATUS, matrix bank3)` and tag+1 carries
+`(ENABLE low8, timer run bits0–3, TBTT run bits0–3)`. These are physical low8
+positions; upper power-bank lanes are not qualified. Tag31ee is a failed
+positive/crossing precondition, independently of the completion marker.
+
+Observer tags3001 encode `(input index, beforeIP | afterIP<<1 | IE<<2,
+matrix bank2)`. Command sample triples carry `(cycles, BUSY0|BUSY1<<1,
+DATA0|DATA1<<8)`, `(matrix bank3, bank4, edgeIP0|edgeIP1<<1)`, then
+`(host status0, status1, burst DONE|ERR0<<1|ERR1<<2)`. Four triples bracket
+publication/conditional reset/first idle; the following records aggregate
+observed BUSY, actual reset publications, polls, matrix inputs and final IP.
+Tag34f0 records matrix bank4 before/after the conditional bit26 path and the
+actual publication mask. A skipped reset is not a reset observation.
+
+SOURCE: `oer-notes/research/hw30-tbtt-irq-observer.md`; captures retain their
+exact loaded ELF and source patch. The legacy selection 83 is used only as a
+PWRBANK timer0/1 harness control; ED6 and radio traffic are outside these leaves.

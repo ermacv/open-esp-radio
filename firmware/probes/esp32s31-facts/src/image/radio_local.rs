@@ -14,6 +14,7 @@ pub(super) struct Radio {
     pub idle: pac::ieee802154::SharedBasebandResetIdleStatus,
     pub tbtt: pac::modem_pwr::WifiMacStaTbttTarget,
 }
+pub(super) mod hw30;
 pub(super) mod wave2;
 
 const LOCAL_LIMIT: u32 = 200_000;

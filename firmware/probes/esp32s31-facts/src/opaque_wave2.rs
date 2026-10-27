@@ -5,6 +5,9 @@ use pac::analog_i2c::{self, Address, Host, Profile};
 use pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
 
 // Probe-only command deadline: 1 ms at the verified 40 MHz CPU XTAL.
+#[path = "opaque_wave2/observer.rs"]
+pub(super) mod observer;
+
 const COMMAND_CYCLES: u32 = 40_000;
 
 fn settle(cycles: u32) {

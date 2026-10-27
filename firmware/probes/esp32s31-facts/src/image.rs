@@ -20,6 +20,7 @@ mod ble;
 mod ble_inherited;
 mod ble_wave2;
 mod generic;
+mod irq_observer;
 mod lp_ack_race;
 mod lp_lanes;
 mod lp_softreset;
@@ -255,6 +256,62 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 245,
         run: Action::Thread(pb1::whole),
+    },
+    Probe {
+        id: 273,
+        run: Action::Thread(radio_local::hw30::recovery23),
+    },
+    Probe {
+        id: 271,
+        run: Action::Thread(radio_local::hw30::recovery),
+    },
+    Probe {
+        id: 272,
+        run: Action::Thread(radio_local::hw30::timer_run),
+    },
+    Probe {
+        id: 270,
+        run: Action::Thread(radio_local::hw30::distinct_tbtt),
+    },
+    Probe {
+        id: 260,
+        run: Action::Thread(radio_local::hw30::timer2),
+    },
+    Probe {
+        id: 261,
+        run: Action::Thread(radio_local::hw30::timer3),
+    },
+    Probe {
+        id: 262,
+        run: Action::Thread(radio_local::hw30::tbtt0),
+    },
+    Probe {
+        id: 263,
+        run: Action::Thread(radio_local::hw30::tbtt1),
+    },
+    Probe {
+        id: 264,
+        run: Action::Thread(radio_local::hw30::tbtt2),
+    },
+    Probe {
+        id: 265,
+        run: Action::Thread(radio_local::hw30::tbtt3),
+    },
+    Probe {
+        id: 266,
+        run: Action::Thread(radio_local::hw30::distinct),
+    },
+    Probe {
+        id: 267,
+        run: Action::Thread(opaque_wave2::observer::reads),
+    },
+    Probe {
+        id: 268,
+        run: Action::Thread(opaque_wave2::observer::reset),
+    },
+    Probe {
+        id: 269,
+        run: Action::Thread(radio_local::hw30::route132),
     },
     Probe {
         id: 231,
