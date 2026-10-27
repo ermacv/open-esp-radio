@@ -1417,8 +1417,9 @@ impl InterruptRegistersOwner {
         Ok(BluetoothOutputIdleSampled { _private: () })
     }
 
-    /// Check visible faults, then mask the sourced terminal-cleanup sources and
-    /// fence, once the task found no list head published. A visible fault retains
+    /// Acknowledge admitted sampled NRT, check visible faults, then mask the
+    /// sourced terminal-cleanup sources and fence, once the task found no list
+    /// head published. A visible fault retains
     /// its observations for quarantine; no fault lane is acknowledged.
     pub fn mask_output_dynamic_sources(
         &mut self,
@@ -1432,12 +1433,17 @@ impl InterruptRegistersOwner {
     /// Discard the fixed non-fault primary/NRT subset under the mask and release output,
     /// once the task disabled RUN, on a fresh idle BUSY sample within
     /// `settle` with no visible fault pending or acknowledged. Masked STATUS
-    /// does not prove pending is absent.
+    /// does not prove pending is absent. The runtime NRT transaction precedes
+    /// final release confirmation; a refused pair or residual visible status
+    /// returns `ReleaseNotQuiet`.
     ///
     /// # Errors
     ///
-    /// The sample did not settle, the scheduler is busy, or a fault is
-    /// pending or was acknowledged; the output stays prepared.
+    /// An unsettled sample, busy scheduler, visible fault or acknowledged fault
+    /// history refuses before this step writes; the output stays prepared.
+    /// `ReleaseNotQuiet` from the final NRT transaction or residual visible
+    /// status follows CONTROL1/2. The owners remain quarantined without a
+    /// released-output proof.
     pub fn release_idle_output<C: oer_time::Clock + ?Sized>(
         &mut self,
         _run: &BluetoothSchedulerRunDisabled,

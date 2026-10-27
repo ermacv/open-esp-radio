@@ -55,7 +55,7 @@ pub(super) const FAULTS_1: u32 = bt_mac::irq_enable_1::SOURCE_8_MASK
 pub(super) const CLEANUP_0: u32 = bt_mac::CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_0_IMAGE;
 pub(super) const CLEANUP_1: u32 = bt_mac::CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_1_IMAGE;
 
-// Every serviced non-fault lane must be covered by the fixed W1C image.
+// Every sourced primary cleanup lane must be covered by the fixed W1C image.
 const _: () = assert!(CLEANUP_0 == PRODUCTION.dynamic_0.0 | FEATURES_0.0);
 const _: () = assert!(
     CLEANUP_1
@@ -68,16 +68,28 @@ pub(super) const fn release_fault_visible(primary: BluetoothInterruptObservation
     unsupported_primary_pending(primary)
         || primary.status_0 & FAULTS_0 != 0
         || primary.status_1 & FAULTS_1 != 0
-        // NRT shares CLEAR0/1. Only the fixed non-fault subset may be
-        // discarded, and NRT must not consume the primary wrap observation.
-        || primary.nrt_0 & !CLEANUP_0 != 0
-        || primary.nrt_1 & (!CLEANUP_1 | bt_mac::irq_enable_1::CONTROLLER_TIME_OVERFLOW_MASK) != 0
+        || nrt_fault_visible([primary.nrt_0, primary.nrt_1])
+}
+
+// NRT's shared clear words must retain every primary fault and overflow lane.
+const NRT_REFUSED_0: u32 = bt_mac::irq_clear_0::SOURCE_15_MASK;
+const NRT_REFUSED_1: u32 = bt_mac::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK
+    | bt_mac::irq_clear_1::SOURCE_8_MASK
+    | bt_mac::irq_clear_1::SOURCE_9_MASK
+    | bt_mac::irq_clear_1::SOURCE_12_MASK;
+const _: () = assert!(NRT_REFUSED_0 == PRODUCTION.baseline_0.0 && NRT_REFUSED_0 == FAULTS_0);
+const _: () = assert!(NRT_REFUSED_1 == PRODUCTION.baseline_1.0);
+const _: () =
+    assert!(NRT_REFUSED_1 == FAULTS_1 | bt_mac::irq_enable_1::CONTROLLER_TIME_OVERFLOW_MASK);
+
+/// Runtime and release share admission for the sampled NRT clear images.
+pub(super) const fn nrt_fault_visible(snapshots: [u32; 2]) -> bool {
+    snapshots[0] & NRT_REFUSED_0 != 0 || snapshots[1] & NRT_REFUSED_1 != 0
 }
 
 pub(super) const fn unsupported_primary_pending(primary: BluetoothInterruptObservation) -> bool {
-    primary.status_0 & !(PRODUCTION.baseline_0.0 | PRODUCTION.dynamic_0.0 | FEATURES_0.0) != 0
-        || primary.status_1 & !(PRODUCTION.baseline_1.0 | PRODUCTION.dynamic_1.0 | FEATURES_1.0)
-            != 0
+    primary.status_0 & !(PRODUCTION.baseline_0.0 | CLEANUP_0) != 0
+        || primary.status_1 & !(PRODUCTION.baseline_1.0 | CLEANUP_1) != 0
 }
 
 /// Sequential source observations; values grant no register or release authority.

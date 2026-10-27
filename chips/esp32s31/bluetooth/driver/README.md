@@ -90,7 +90,11 @@ snapshots have no consumer here either. The part holds a gate for the bank and
 one for the timer, and touches a register owner only while
 its gate holds it. An NRT pair containing a primary-owned fault or overflow clear lane
 faults before either acknowledgement; the gate retains both exact sampled
-words and quarantines its owners for the retained-record reset path.
+words and quarantines its owners for the retained-record reset path. Scheduler
+release requests perform the same HAL NRT transaction before the last visible
+fault check preceding masking and before final release confirmation. Admitted
+NRT outside the fixed cleanup subset is acknowledged; fault/overflow pairs stay
+unacknowledged and return `ReleaseNotQuiet`, as does residual visible status.
 
 `interrupt::BluetoothInterruptGate` is the task's end. The part holds the
 doorbell line's lowering half from the start; the task's end exists only
@@ -228,8 +232,10 @@ Stop:
    the Controller output in alternating steps (the handler's idle sample, the
    task's list heads, the handler's mask, the task's RUN disable, the
    handler's release). Those steps also mask the sourced feature lanes and
-   task17, check visible faults before masking, write the fixed non-fault
-   primary/NRT W1C images under the mask and acknowledge the task WT bank.
+   task17, acknowledge admitted sampled NRT before the last visible fault check
+   preceding masking, write the fixed non-fault primary/NRT W1C images under the
+   mask and acknowledge the task WT bank. After CONTROL1/2 and its fence, the
+   handler repeats the admitted sampled NRT transaction before final confirmation.
    Before closing the bank's gate they verify zero enables and reject residual
    visible status. The released bank and channel endpoint then leave the handler;
    retirement reunites both quiet endpoints and has the handler stop the counter

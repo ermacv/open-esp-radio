@@ -453,18 +453,29 @@ fn acknowledge_nrt_if_admitted<T>(
     snapshots: [u32; 2],
     acknowledge: impl FnOnce() -> T,
 ) -> Result<T, BluetoothNrtInterruptFault> {
-    if snapshots[0] & bank::irq_clear_0::SOURCE_15_MASK != 0
-        || snapshots[1]
-            & (bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK
-                | bank::irq_clear_1::SOURCE_8_MASK
-                | bank::irq_clear_1::SOURCE_9_MASK
-                | bank::irq_clear_1::SOURCE_12_MASK)
-            != 0
-    {
+    if crate::bluetooth::interrupt_policy::nrt_fault_visible(snapshots) {
         Err(BluetoothNrtInterruptFault { snapshots })
     } else {
         Ok(acknowledge())
     }
+}
+
+/// The same affine sample/admit/acknowledge transaction serves runtime and
+/// terminal release. Diagnostic observations cannot supply its clear images.
+fn capture_nrt_and_acknowledge<B: oer_mmio::Placement>(
+    bank: &mut bank::BluetoothInterruptBank<B>,
+) -> Result<Option<BluetoothNrtInterruptAcknowledged>, BluetoothNrtInterruptFault> {
+    let bank_0 = bank.sample_bluetooth_interrupt_bank_0();
+    let bank_1 = bank.sample_bluetooth_interrupt_bank_1();
+    acknowledge_nrt_if_admitted([bank_0.pending_bits(), bank_1.pending_bits()], || {
+        if bank_0.is_clear() && bank_1.is_clear() {
+            return None;
+        }
+        bank.acknowledge_bluetooth_interrupt_bank_0(bank_0);
+        bank.acknowledge_bluetooth_interrupt_bank_1(bank_1);
+        device_fence();
+        Some(BluetoothNrtInterruptAcknowledged { _private: () })
+    })
 }
 
 impl BluetoothNrtInterruptAcknowledged {
@@ -682,27 +693,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     pub fn capture_nrt_and_acknowledge(
         &mut self,
     ) -> Result<Option<BluetoothNrtInterruptAcknowledged>, BluetoothNrtInterruptFault> {
-        let bank_0 = self
-            .peripherals
-            .bluetooth_interrupt_bank
-            .sample_bluetooth_interrupt_bank_0();
-        let bank_1 = self
-            .peripherals
-            .bluetooth_interrupt_bank
-            .sample_bluetooth_interrupt_bank_1();
-        acknowledge_nrt_if_admitted([bank_0.pending_bits(), bank_1.pending_bits()], || {
-            if bank_0.is_clear() && bank_1.is_clear() {
-                return None;
-            }
-            self.peripherals
-                .bluetooth_interrupt_bank
-                .acknowledge_bluetooth_interrupt_bank_0(bank_0);
-            self.peripherals
-                .bluetooth_interrupt_bank
-                .acknowledge_bluetooth_interrupt_bank_1(bank_1);
-            device_fence();
-            Some(BluetoothNrtInterruptAcknowledged { _private: () })
-        })
+        capture_nrt_and_acknowledge(&mut self.peripherals.bluetooth_interrupt_bank)
     }
 }
 

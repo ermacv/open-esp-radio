@@ -98,13 +98,19 @@ including `CONTROLLER_TIME_OVERFLOW` in bank one. A primary status snapshot
 carries this normal event separately from fault and dynamic scheduler sources.
 CONTROL0 starts BTLC. CONTROL1/2 do not lower an enabled pending cause, so
 terminal release masks the baseline, dynamic and sourced ISO/coex/CIG/CC
-feature enable lanes in its existing handler mask step. The task's RUN-disable
+feature enable lanes in its handler mask step. The task's RUN-disable
 step masks all task enables, including opaque task17, and strobes the sourced
-all-lane task WT acknowledgement. Immediately before masking, the handler
-checks visible primary fault/unsupported causes and the shared NRT clear
-lanes. A visible fault returns its complete observation for quarantine.
+all-lane task WT acknowledgement. Before the last visible fault check preceding
+masking and before final release confirmation, the handler performs the same
+affine NRT sample/sample/admit/acknowledge/acknowledge transaction as runtime.
+Admission excludes shared primary fault and overflow clear lanes; a refused
+pair stays unacknowledged and returns `ReleaseNotQuiet` with both exact snapshots
+and the primary/task observations. Other sampled NRT lanes are acknowledged even
+when outside the fixed cleanup images. Visible primary fault/unsupported causes
+also return their complete observation for quarantine.
 After RUN-disable, it writes fixed non-fault W1C images `0x18212103` / `0x207a`
-under the mask, issues CONTROL1/2 and verifies zero primary/task enables.
+under the mask, issues CONTROL1/2 and fences, then performs the admitted sampled
+NRT acknowledgement before verifying zero primary/task enables.
 Nonzero enables or residual visible status are `ReleaseNotQuiet`.
 The fixed images exclude bank0[15] and bank1[8/9/12]. A fault arriving after
 the last visible check is hidden and retained through release, so release
@@ -129,8 +135,8 @@ The measured hidden/retained behavior covers those timer indications, not
 a positive fault-lane stimulus.
 
 The measured overflow is visible in primary status/source124 while the NRT
-snapshots/source133 remain zero. Before either runtime NRT acknowledgement,
-the exact affine sample is checked against all primary-owned fault and
+snapshots/source133 remain zero. Before either NRT acknowledgement in runtime
+or release, the exact affine sample is checked against all primary-owned fault and
 overflow clear lanes. `BluetoothNrtInterruptFault` retains both words and
 refuses both writes when any such lane is present. An arrival absent from
 the sample is absent from its clear image. This does not identify an NRT
