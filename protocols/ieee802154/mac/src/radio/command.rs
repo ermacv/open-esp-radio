@@ -50,7 +50,9 @@ pub enum TxSecurity {
     /// The upper layer wrote the frame's auxiliary security header and frame
     /// counter; the radio applies CCM* to every attempt with `key` and the
     /// nonce source `address`, instead of its MAC keys
-    /// (`esp_ieee802154_set_transmit_security`).
+    /// (`esp_ieee802154_set_transmit_security`). A malformed auxiliary
+    /// header is refused before programming security; it is never replaced
+    /// by an invalid hardware offset.
     Key {
         /// The key.
         key: [u8; 16],

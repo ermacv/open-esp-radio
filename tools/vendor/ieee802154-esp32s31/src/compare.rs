@@ -98,6 +98,29 @@ pub fn compare_scenario(
     vendor: &[Record],
     port: Result<Vec<Record>, String>,
 ) -> Verdict {
+    if vendor.iter().any(vendor_asserted) {
+        return compare(vendor, port);
+    }
+    // These obligations are outside the ordinary LL trace, and cannot be
+    // accepted by a complete-trace fingerprint that omits external calls.
+    if let Ok(port) = &port {
+        let obligation = |record: &&Record| {
+            matches!(record,
+            Record::External { name, .. } if name == "esp_coex_ieee802154_coex_break_notify")
+                || matches!(record, Record::Return { name, .. } if name == "esp_ieee802154_set_transmit_security")
+        };
+        let vendor: Vec<_> = vendor.iter().filter(obligation).collect();
+        let port: Vec<_> = port.iter().filter(obligation).collect();
+        for index in 0..vendor.len().max(port.len()) {
+            if vendor.get(index) != port.get(index) {
+                return Verdict::Diff {
+                    index,
+                    vendor: vendor.get(index).map(|record| (*record).clone()),
+                    port: port.get(index).map(|record| (*record).clone()),
+                };
+            }
+        }
+    }
     let expected = scenario.expected_difference.filter(|_| {
         port.as_ref().is_ok_and(|port| {
             crate::catalog::matches_expected(scenario.name, fingerprint(vendor), fingerprint(port))
@@ -130,6 +153,7 @@ pub fn compare(vendor: &[Record], port: Result<Vec<Record>, String>) -> Verdict 
         Err(reason) => return Verdict::Incomplete(reason),
     };
     let vendor: Vec<&Record> = vendor.iter().filter(|record| compared(record)).collect();
+    let port: Vec<Record> = port.into_iter().filter(compared).collect();
     let length = vendor.len().max(port.len());
     for index in 0..length {
         let (left, right) = (vendor.get(index).copied(), port.get(index));
@@ -189,6 +213,33 @@ mod tests {
                 port: None,
             }
         );
+    }
+
+    #[test]
+    fn vendor_assertion_precedes_mismatched_security_and_coex_obligations() {
+        let scenario = &crate::catalog::SCENARIOS[0];
+        let vendor = [
+            Record::Return {
+                name: "esp_ieee802154_set_transmit_security".to_owned(),
+                value: 258,
+            },
+            Record::External {
+                name: "esp_coex_ieee802154_coex_break_notify".to_owned(),
+                arguments: vec![],
+            },
+            Record::Event {
+                name: "assert_failed".to_owned(),
+                arguments: vec![],
+                first: vec![],
+                second: vec![],
+            },
+        ];
+        for port in [Ok(vec![]), Err("refused input".to_owned())] {
+            assert_eq!(
+                super::compare_scenario(scenario, &vendor, port),
+                Verdict::Incomplete("the vendor driver asserted".to_owned())
+            );
+        }
     }
 
     #[test]

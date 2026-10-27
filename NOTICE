@@ -33,6 +33,14 @@ modification notice:
 - protocols/ieee80211/ap/src/sae.rs (crate Apache-2.0):
   components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c
 
+Additional IEEE 802.15.4 parsing/security/ACK-break changes in
+protocols/ieee802154/mac/src/mac/header.rs and
+chips/espressif/ieee802154-engine/src/engine.rs derive from ESP-IDF
+4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d, components/ieee802154/driver/
+esp_ieee802154_{frame,sec,dev}.c (Copyright 2023-2026 Espressif Systems
+(Shanghai) Co Ltd, Apache-2.0), translated and modified by Vladislav
+Ermachenkov.
+
 Facts only (register sequences, values, call order) in the ESP32-S31 HAL and
 PAC, cited by SOURCE lines and evidence identifiers.
 

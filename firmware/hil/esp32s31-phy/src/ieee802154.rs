@@ -27,8 +27,8 @@ use oer_espressif_ieee802154_engine::{
     coex::{Ieee802154CoexPriorities, Ieee802154Coexistence},
     engine::{
         FRAME_SIZE, Ieee802154EngineBuffers, Ieee802154EnhancedAck, Ieee802154Environment,
-        Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154State,
-        Ieee802154TxError, RX_BUFFER_COUNT,
+        Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154SecurityFrameError,
+        Ieee802154State, Ieee802154TxError, RX_BUFFER_COUNT,
     },
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
     types::Ieee802154RxStatus,
@@ -413,6 +413,15 @@ struct Environment {
     failed: bool,
 }
 impl Ieee802154Environment for Environment {
+    fn enhanced_ack_security_failed(&mut self, _error: Ieee802154SecurityFrameError) {
+        self.failed = true;
+    }
+
+    fn coexistence_break(&mut self) {
+        // S31 libcoexist hal_ieee802154_coex_break_notify has no effects.
+        // SOURCE: BLOB_LIBCOEX_IEEE802154_HANDOFF; no RF grant is released.
+    }
+
     fn now_micros(&mut self) -> u64 {
         EmbassyClock.now().as_micros()
     }

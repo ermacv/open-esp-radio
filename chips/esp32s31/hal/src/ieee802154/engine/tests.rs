@@ -3,7 +3,7 @@ use oer_espressif_ieee802154_engine::{
     channel::Ieee802154Channel,
     engine::{
         FRAME_SIZE, Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo,
-        Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154TxError,
+        Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154TxError,
     },
     ll::model::Ieee802154LlModel,
     types::Ieee802154RxStatus,
@@ -15,6 +15,9 @@ static LEVELS: [i8; 1] = [0];
 #[derive(Default)]
 struct Environment;
 impl Ieee802154Environment for Environment {
+    fn enhanced_ack_security_failed(&mut self, _error: Ieee802154SecurityFrameError) {}
+
+    fn coexistence_break(&mut self) {}
     fn now_micros(&mut self) -> u64 {
         0
     }

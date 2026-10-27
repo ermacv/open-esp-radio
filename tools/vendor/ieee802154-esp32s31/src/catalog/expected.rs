@@ -26,7 +26,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x664d_bbfb_f086_6401,
         0x0455_5417_3006_935c,
     ),
-    ("recent-rssi", 0x7789_1d17_95f2_62df, 0x19af_0651_a0bf_0d4b),
+    ("recent-rssi", 0x7789_1d17_95f2_62df, 0xf1db_cb8e_de19_0ccf),
     (
         "receive-abort-reasons",
         0x5450_b5df_012b_2dc6,
@@ -40,7 +40,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-abort-reasons",
         0x394d_c144_2b95_7006,
-        0xd680_ea49_d7b7_cb9a,
+        0x78d9_9658_5021_14ee,
     ),
     (
         "energy-detection-abort-reasons",
@@ -60,7 +60,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-with-ack",
         0x8ec5_1aed_704b_425c,
-        0x70d4_16ec_9faa_13b0,
+        0x1729_ef5b_377e_d72a,
     ),
     (
         "transmit-with-cca-busy",
@@ -86,12 +86,12 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-ack-timer-expires",
         0x00cb_3e6c_fffe_deed,
-        0x49a6_3f94_834a_4571,
+        0xedd9_f066_03c3_dcfa,
     ),
     (
         "transmit-ack-abort-timeout",
         0x1dd8_5b2b_2e79_2a5b,
-        0x7bcc_7fbb_2b10_22cf,
+        0xf8d9_3205_d940_454b,
     ),
     (
         "receive-with-enhanced-ack",
@@ -184,7 +184,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x664d_bbfb_f086_6401,
         0x6489_d191_344a_6db2,
     ),
-    ("recent-rssi", 0x7789_1d17_95f2_62df, 0x5c2d_6cd5_9463_29d5),
+    ("recent-rssi", 0x7789_1d17_95f2_62df, 0x1f51_4d25_3863_1a45),
     (
         "receive-abort-reasons",
         0x5450_b5df_012b_2dc6,
@@ -198,7 +198,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-abort-reasons",
         0x394d_c144_2b95_7006,
-        0x4fb4_5b0e_3548_ae78,
+        0xf95e_e19e_d425_a518,
     ),
     (
         "energy-detection-abort-reasons",
@@ -218,7 +218,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-with-ack",
         0x7861_4376_c6d4_bd90,
-        0xa175_d420_0e39_18fe,
+        0xca33_38d4_51b4_2c70,
     ),
     (
         "transmit-with-cca-busy",
@@ -244,12 +244,12 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-ack-timer-expires",
         0x00cb_3e6c_fffe_deed,
-        0xc57c_e14b_4165_5883,
+        0xa5e0_94c7_1fa1_4ca0,
     ),
     (
         "transmit-ack-abort-timeout",
         0x1dd8_5b2b_2e79_2a5b,
-        0xb6f3_15a8_145d_ecc5,
+        0xc373_2860_db38_0c19,
     ),
     (
         "receive-with-enhanced-ack",
@@ -357,7 +357,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x59e9_ef4e_54df_95c5,
         0xa31e_53ee_3791_39f2,
     ),
-    ("recent-rssi", 0x3d56_e755_bb20_e325, 0x548e_c551_72e5_9901),
+    ("recent-rssi", 0x3d56_e755_bb20_e325, 0x31dd_1c15_3b5f_79a1),
     (
         "receive-abort-reasons",
         0xb78e_83e8_9f12_5ac2,
@@ -371,7 +371,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-abort-reasons",
         0x5c96_f328_f0ac_af1a,
-        0xf332_7257_75c2_194e,
+        0x4e24_12c5_8b2a_3a4a,
     ),
     (
         "energy-detection-abort-reasons",
@@ -391,7 +391,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-with-ack",
         0x21ee_533f_d85d_2808,
-        0x8f43_3901_12ef_bfcc,
+        0xe1ed_569e_88c5_bac6,
     ),
     (
         "transmit-with-cca-busy",
@@ -417,12 +417,12 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-ack-timer-expires",
         0x4e5c_d2d7_1bef_6869,
-        0xca89_62d6_504a_10fd,
+        0x05a8_19ba_87ec_6f26,
     ),
     (
         "transmit-ack-abort-timeout",
         0x17b4_30b2_1c3f_3af7,
-        0x0c9e_5d00_0760_198b,
+        0x9095_7c82_2fb0_2c57,
     ),
     (
         "receive-with-enhanced-ack",
@@ -515,7 +515,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x59e9_ef4e_54df_95c5,
         0x5c11_511a_c68f_6e98,
     ),
-    ("recent-rssi", 0x3d56_e755_bb20_e325, 0xd221_7742_bd52_c6bb),
+    ("recent-rssi", 0x3d56_e755_bb20_e325, 0x6bdb_4e26_c821_04df),
     (
         "receive-abort-reasons",
         0xb78e_83e8_9f12_5ac2,
@@ -529,7 +529,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-abort-reasons",
         0x5c96_f328_f0ac_af1a,
-        0x2efd_7243_21aa_b20c,
+        0x396c_0ff3_7bc2_9404,
     ),
     (
         "energy-detection-abort-reasons",
@@ -549,7 +549,7 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-with-ack",
         0xe60f_c0b1_e118_67f4,
-        0x5e28_bddf_aeea_6c0a,
+        0xb50f_880d_a183_346c,
     ),
     (
         "transmit-with-cca-busy",
@@ -575,12 +575,12 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
     (
         "transmit-ack-timer-expires",
         0x4e5c_d2d7_1bef_6869,
-        0x657b_ad1b_b7f4_6517,
+        0x8ada_dae5_0769_66e4,
     ),
     (
         "transmit-ack-abort-timeout",
         0x17b4_30b2_1c3f_3af7,
-        0x09d9_7a60_6e74_5549,
+        0xc0fe_6c99_d29d_d48d,
     ),
     (
         "receive-with-enhanced-ack",

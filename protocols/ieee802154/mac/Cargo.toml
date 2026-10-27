@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Allocation-free hardware-independent IEEE 802.15.4 radio contracts"
 
 [dependencies]
+oer-wire = { path = "../../../portable/wire" }
 scopeguard = { version = "1.2.0", default-features = false }
 oer-radio-coex = { path = "../../radio/coex" }
 oer-radio-port = { path = "../../radio/port" }

@@ -71,14 +71,14 @@ fn header_ies_are_skipped_up_to_the_ht2_terminator() {
     assert_eq!(frame.security_payload_offset(), Some(17));
 }
 
-/// `ieee802154_frame_ie_header_offset` adds the auxiliary-security length
-/// even when security is disabled, so an unsecured 2015 frame's IE scan
-/// starts inside its IEs and misses this Data Request, as in the vendor.
+/// ESP-IDF 4d80c1b2 `ieee802154_frame_payload_offset` skips auxiliary
+/// security only when enabled; an unsecured IE scan starts at the first IE.
 #[test]
-fn an_unsecured_ie_scan_starts_after_a_phantom_security_header() {
+fn an_unsecured_ie_scan_starts_at_the_first_ie() {
     let frame = PhrFrame::new(&DATA_REQUEST_2015_IE);
     assert!(!frame.security_enabled());
-    assert!(!frame.is_data_request());
+    assert!(frame.is_data_request());
+    assert_eq!(frame.security_payload_offset(), Some(16));
 }
 
 /// 2015 PAN ID presence: extended/extended with compression carries neither
@@ -121,6 +121,50 @@ fn unsupported_types_and_reserved_modes_have_no_addresses() {
 #[test]
 fn a_truncated_image_reports_absent_fields() {
     let frame = PhrFrame::new(&DATA_REQUEST_2006[..10]);
-    assert_eq!(frame.source_address(), Ok(None));
+    assert_eq!(frame.source_address(), Err(()));
     assert!(!frame.is_data_request());
+}
+
+#[test]
+fn phr_bounds_exclude_fcs_and_allocation_tail_from_header_fields() {
+    let mut frame = DATA_REQUEST_2006;
+    frame[0] = 3;
+    assert_eq!(PhrFrame::new(&frame).security_payload_offset(), None);
+    assert_eq!(PhrFrame::new(&frame).destination_address(), Err(()));
+    assert!(!PhrFrame::new(&frame).ack_required());
+    // The command byte exists in the allocation but occupies the FCS extent.
+    frame[0] = 17;
+    assert!(!PhrFrame::new(&frame).is_data_request());
+    assert_eq!(PhrFrame::new(&frame).security_payload_offset(), None);
+    for end in 0..SECURED_DATA_REQUEST_2015_IE.len() - 2 {
+        assert_eq!(
+            PhrFrame::new(&SECURED_DATA_REQUEST_2015_IE[..end]).security_payload_offset(),
+            None
+        );
+    }
+}
+
+#[test]
+fn security_and_ie_bodies_must_fit_before_the_footer() {
+    let mut frame = SECURED_DATA_REQUEST_2015_IE;
+    frame[0] = 12;
+    assert_eq!(PhrFrame::new(&frame).security_payload_offset(), None);
+    frame[0] = 24;
+    frame[11] = 127; // IE body extends through the MIC and FCS.
+    assert_eq!(PhrFrame::new(&frame).security_payload_offset(), None);
+    assert_eq!(PhrFrame::new(&frame).header_ie(0), None);
+    // An incomplete descriptor cannot borrow its high byte from the MIC.
+    frame[11] = 3;
+    frame[0] = 18;
+    assert_eq!(PhrFrame::new(&frame).security_payload_offset(), None);
+}
+
+#[test]
+fn payload_termination_keeps_the_pinned_vendor_projection() {
+    let mut image = DATA_REQUEST_2015_IE;
+    image[16] |= 0x40;
+    // The vendor's termination mask ignores descriptor bit 14. Full header
+    // IE lookup still uses the standard's eight-bit element identifier.
+    assert!(PhrFrame::new(&image).is_data_request());
+    assert_eq!(PhrFrame::new(&image).header_ie(0x7f), None);
 }

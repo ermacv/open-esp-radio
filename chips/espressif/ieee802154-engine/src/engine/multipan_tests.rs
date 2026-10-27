@@ -13,7 +13,7 @@ use oer_ieee802154_mac::FrameAddress;
 use super::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
     Ieee802154Environment, Ieee802154FrameInfo, Ieee802154Interfaces, Ieee802154ReceivedAck,
-    Ieee802154RxSlot, Ieee802154State, Ieee802154TxError,
+    Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154State, Ieee802154TxError,
 };
 
 static LEVELS: [i8; 1] = [0];
@@ -25,6 +25,10 @@ const IF1: Ieee802154MultipanIndex = Ieee802154MultipanIndex::CONTEXT1;
 struct Received(Vec<Ieee802154FrameInfo>);
 
 impl Ieee802154Environment for Received {
+    fn enhanced_ack_security_failed(&mut self, _error: Ieee802154SecurityFrameError) {}
+
+    fn coexistence_break(&mut self) {}
+
     fn now_micros(&mut self) -> u64 {
         0
     }
@@ -348,4 +352,15 @@ fn pending_mode_checks_the_configured_interface_count() {
         Ieee802154MultipanIndex::CONTEXT2,
         AutoPendingMode::Enable,
     );
+}
+
+#[test]
+fn malformed_destination_never_matches_an_interface() {
+    let mut bench = Bench::with_identities(Some(2));
+    let mut image = data_to(0xabcd, [0x11, 0x11]);
+    image[2] = 0x94; // reserved destination mode, otherwise matching bytes.
+    assert_eq!(bench.receive(&image).mpf_index, None);
+    let mut image = data_to(0xabcd, [0x11, 0x11]);
+    image[0] = 7; // destination extends into the footer despite allocated bytes.
+    assert_eq!(bench.receive(&image).mpf_index, None);
 }

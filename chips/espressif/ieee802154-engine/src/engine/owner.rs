@@ -269,7 +269,12 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     }
 
     /// [`Ieee802154Engine::set_transmit_security`], using this owner's MAC.
-    pub fn set_transmit_security(&mut self, frame: &[u8], key: &[u8; 16], address: &[u8; 8]) {
+    pub fn set_transmit_security(
+        &mut self,
+        frame: &[u8],
+        key: &[u8; 16],
+        address: &[u8; 8],
+    ) -> Result<(), Ieee802154SecurityFrameError> {
         self.engine
             .set_transmit_security(&mut self.ll, frame, key, address)
     }

@@ -11,8 +11,8 @@ use crate::pib::{Ieee802154MultipanIndex, Ieee802154PibDefaults};
 use super::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
     Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot,
-    Ieee802154SlotError, Ieee802154State, Ieee802154TxError, Ieee802154TxRxStatistics,
-    RX_BUFFER_COUNT,
+    Ieee802154SecurityFrameError, Ieee802154SlotError, Ieee802154State, Ieee802154TxError,
+    Ieee802154TxRxStatistics, RX_BUFFER_COUNT,
 };
 
 static LEVELS: [i8; 4] = [-9, -3, 4, 10];
@@ -403,6 +403,8 @@ impl Ieee802154LowLevel for Hw {
 /// Recorded upper-layer notification; frames are recorded as their PSDU.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Note {
+    EnhancedAckSecurityFailed(super::Ieee802154SecurityFrameError),
+    CoexistenceBreak,
     ReceiveDone {
         slot: usize,
         psdu: Vec<u8>,
@@ -436,6 +438,14 @@ struct Env {
 }
 
 impl Ieee802154Environment for Env {
+    fn enhanced_ack_security_failed(&mut self, error: Ieee802154SecurityFrameError) {
+        self.notes.push(Note::EnhancedAckSecurityFailed(error));
+    }
+
+    fn coexistence_break(&mut self) {
+        self.notes.push(Note::CoexistenceBreak);
+    }
+
     fn now_micros(&mut self) -> u64 {
         self.now
     }
@@ -1298,7 +1308,8 @@ fn transmit_security_is_armed_for_one_transmission() {
     let address = [9; 8];
     bench
         .engine
-        .set_transmit_security(&mut bench.hw, &secured, &key, &address);
+        .set_transmit_security(&mut bench.hw, &secured, &key, &address)
+        .unwrap();
     assert_eq!(
         bench.hw.calls,
         [
@@ -1916,4 +1927,157 @@ fn a_handled_entry_returns_the_same_reusable_mac_owner() {
     assert_eq!(drops.get(), 0);
     drop(owner);
     assert_eq!(drops.get(), 1, "normal service returns ownership");
+}
+
+#[test]
+fn malformed_security_refuses_before_every_security_setter() {
+    use super::Ieee802154SecurityFrameError;
+    let mut bench = Bench::enabled();
+    let mut secured = DATA_NO_ACK;
+    secured[1] |= 0x08;
+    secured[10] = 0x25;
+    secured[0] = 3;
+    assert_eq!(
+        bench
+            .engine
+            .set_transmit_security(&mut bench.hw, &secured, &[7; 16], &[9; 8]),
+        Err(Ieee802154SecurityFrameError::MalformedHeader)
+    );
+    // FCF fits, but addresses/security do not: the allocation tail grants nothing.
+    secured[0] = 4;
+    assert_eq!(
+        bench
+            .engine
+            .set_transmit_security(&mut bench.hw, &secured, &[7; 16], &[9; 8]),
+        Err(Ieee802154SecurityFrameError::MalformedHeader)
+    );
+    assert!(bench.hw.calls.is_empty());
+}
+
+#[test]
+fn ack_coexistence_break_notifies_once_before_receive_completion() {
+    for software in [false, true] {
+        for reason in [
+            Ieee802154RxAbortReason::TxAckCoexistenceBreak,
+            Ieee802154RxAbortReason::TxAckTimeout,
+            Ieee802154RxAbortReason::EnhancedAckSecurityError,
+        ] {
+            let mut bench = Bench::enabled();
+            if software {
+                bench
+                    .engine
+                    .set_coexistence(Ieee802154Coexistence::Software(vendor_priorities()));
+            }
+            bench.receive();
+            bench.deliver(&DATA_WITH_ACK);
+            bench.interrupt(&[Ieee802154Event::RxDone]);
+            bench.hw.rx_abort = Ieee802154RxAbortReasonObservation::Named(reason);
+            bench.interrupt(&[Ieee802154Event::RxAbort]);
+            let notes = bench.take_notes();
+            let expected = software && reason == Ieee802154RxAbortReason::TxAckCoexistenceBreak;
+            assert_eq!(
+                notes
+                    .iter()
+                    .filter(|note| **note == Note::CoexistenceBreak)
+                    .count(),
+                usize::from(expected)
+            );
+            if expected {
+                assert!(matches!(
+                    notes.as_slice(),
+                    [Note::CoexistenceBreak, Note::ReceiveDone { .. }]
+                ));
+            } else {
+                assert!(matches!(notes.as_slice(), [Note::ReceiveDone { .. }]));
+            }
+        }
+    }
+}
+
+#[test]
+fn malformed_generated_security_ack_is_refused_before_dma_publication() {
+    use super::Ieee802154SecurityFrameError;
+    for (ack, error) in [
+        (
+            vec![3, 0x0a, 0x20, 1, 0, 0],
+            Ieee802154SecurityFrameError::MalformedHeader,
+        ),
+        (
+            vec![5, 0x02, 0x20, 1, 0, 0],
+            Ieee802154SecurityFrameError::SecurityDisabled,
+        ),
+    ] {
+        let mut bench = Bench::enabled();
+        bench.env.enhanced_ack = Some(ack);
+        bench.env.enhanced_ack_key = Some([7; 16]);
+        bench.receive();
+        let mut image = DATA_WITH_ACK;
+        image[2] = 0xa8;
+        bench.deliver(&image);
+        bench.hw.calls.clear();
+        bench.hw.events = Ieee802154Event::RxDone.mask();
+        // Malformed callback output is handled input, never an engine fault.
+        bench
+            .engine
+            .isr(&mut bench.hw, &mut bench.env)
+            .expect("refused ACK is handled");
+        assert!(
+            bench
+                .hw
+                .calls
+                .contains(&Call::Command(Ieee802154LlCommand::Stop))
+        );
+        assert!(!bench.hw.calls.iter().any(|call| matches!(
+            call,
+            Call::SecurityAddress(_)
+                | Call::SecurityKey(_)
+                | Call::SecurityOffset(_)
+                | Call::SetTransmitSecurity(_)
+                | Call::TxAddress(_)
+                | Call::EnhancedAckNotify
+        )));
+        assert!(matches!(bench.take_notes().as_slice(),
+            [Note::EnhancedAckSecurityFailed(reason), Note::ReceiveDone { slot: 0, psdu, .. }]
+                if *reason == error && *psdu == image[1..]));
+        assert_eq!(bench.engine.state(), Ieee802154State::Sleep);
+        assert!(!bench.engine.needs_next_operation);
+    }
+}
+
+#[test]
+fn tx_coexistence_break_uses_the_same_environment_notification() {
+    for software in [false, true] {
+        for reason in [
+            Ieee802154TxAbortReason::TxCoexistenceBreak,
+            Ieee802154TxAbortReason::TxSecurityError,
+        ] {
+            let mut bench = Bench::enabled();
+            if software {
+                bench
+                    .engine
+                    .set_coexistence(Ieee802154Coexistence::Software(vendor_priorities()));
+            }
+            bench.transmit(&DATA_NO_ACK, false);
+            bench.hw.tx_abort = Ieee802154TxAbortReasonObservation::Named(reason);
+            bench.interrupt(&[Ieee802154Event::TxAbort]);
+            let notes = bench.take_notes();
+            let expected = software && reason == Ieee802154TxAbortReason::TxCoexistenceBreak;
+            assert_eq!(
+                notes
+                    .iter()
+                    .filter(|note| **note == Note::CoexistenceBreak)
+                    .count(),
+                usize::from(expected)
+            );
+            if expected {
+                assert!(matches!(
+                    notes.as_slice(),
+                    [
+                        Note::CoexistenceBreak,
+                        Note::TransmitFailed(_, Ieee802154TxError::Coexist)
+                    ]
+                ));
+            }
+        }
+    }
 }
