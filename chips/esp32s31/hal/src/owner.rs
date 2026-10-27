@@ -664,7 +664,7 @@ impl MacInterruptRegisters {
         self.inner.mac_rx_interrupt_enable()
     }
 
-    /// Change only RX delivery enables; preserve other lanes and pending events.
+    /// Change only RX delivery enables; preserve other lanes and acknowledge nothing.
     pub fn set_mac_rx_interrupt_enable(
         &mut self,
         enabled: crate::ieee80211::registers::MacRxInterrupts,

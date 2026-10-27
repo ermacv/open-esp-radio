@@ -1,5 +1,5 @@
 //! One bounded source120 register/DMA visibility capture, with stopped W1C phases.
-use super::{BUFFER, COUNT, NODES, Storage, WORDS, node, read_word, usb};
+use super::{BUFFER, NODES, Storage, WORDS, node, read_word, usb};
 use core::fmt::Write as _;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{

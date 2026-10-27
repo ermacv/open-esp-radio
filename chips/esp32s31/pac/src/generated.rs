@@ -274968,7 +274968,7 @@ pub mod wifi_mac {
 
     /// The `RAW` register.
     ///
-    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
     pub mod raw {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -275245,7 +275245,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity. The grouped pending-STATUS observation establishes that at least one of auxiliary bits 5/24 was pending; it does not identify this lane independently or prove both.
+            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer remains unknown; software must not treat it as RX ownership or work multiplicity. A bounded passive-beacon capture independently observes this lane, pending RAW retention across masking, and selective CLEAR5 while enabled preserving pending RX_SUCCESS. Its observed accepted-frame correlation does not establish equivalence to RX_SUCCESS or exclude error producers. SOURCE: HW20_RX_RAW_RETENTION_20261027, HW20_RX_AUXILIARY_OBSERVATION_20261027.
             #[inline]
             pub const fn rx_associated_auxiliary_5(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -275293,7 +275293,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00002000) != 0
             }
 
-            /// RX success event used to schedule descriptor service; it does not by itself establish payload durability or IRQ-to-DMA ordering.
+            /// RX success event used to schedule descriptor service; it does not by itself establish payload durability or IRQ-to-DMA ordering. In a bounded capture, each of three first observed enabled RAW14/STATUS14 positives follows a read of the corresponding new terminal RX_DONE and advanced NEXT; this is observed register-read order, not a universal hardware assertion-order guarantee. SOURCE: HW20_RX_IRQ_DMA_BRACKETS_20261027.
             #[inline]
             pub const fn rx_success(self) -> bool {
                 (self.0 & 0x00004000) != 0
@@ -275341,7 +275341,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity. The grouped pending-STATUS observation establishes that at least one of auxiliary bits 5/24 was pending; it does not identify this lane independently or prove both.
+            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer and independent clear/retention behavior remain unknown; software must not treat it as RX ownership or work multiplicity. Grouped pending-STATUS evidence alone cannot identify this lane. A bounded passive-beacon capture has no recorded positive lane24 sample, so it supplies no positive W1C24 or delivery-mask test. SOURCE: HW20_RX_AUXILIARY_OBSERVATION_20261027.
             #[inline]
             pub const fn rx_associated_auxiliary_24(self) -> bool {
                 (self.0 & 0x01000000) != 0
