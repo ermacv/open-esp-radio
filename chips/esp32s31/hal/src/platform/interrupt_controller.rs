@@ -231,7 +231,7 @@ pub fn fatal_view<R>(
 
 /// Hart 1's interrupt-matrix route bank. Its read-only pending sources are
 /// published with every hart's status. Hart 1 runs no
-/// code (the staged runtime refuses `cpu1-runs`): nothing writes the bank,
+/// code (the image declares hart 1's stacks unused): nothing writes the bank,
 /// and holding it keeps every other owner from it.
 #[must_use = "dropping hart 1's bank permanently loses its routes"]
 pub struct Hart1Interrupts {

@@ -22,6 +22,7 @@ pub mod build_log;
 pub mod bundle;
 pub mod cargo;
 pub mod compiler;
+mod critical_section;
 pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
@@ -112,12 +113,15 @@ pub fn build(spec: &ImageSpec) -> Result<crate::bundle::ImageBundle> {
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
     let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
+    let critical_section_hart =
+        critical_section::declared(&spec.root, &spec.application.package, &profile)?;
     let panics = panic_budget::declared(&spec.root, &spec.application.package)?;
     staged::build(
         spec,
         &profile,
         &instrumentation,
         task_stack_proven,
+        critical_section_hart,
         &panics,
         staged::cargo,
     )

@@ -1,0 +1,11 @@
+error[E0599]: no method named `start` found for mutable reference `&mut Cores` in the current scope
+ --> tests/ui/secondary_start_is_unavailable.rs:8:20
+  |
+8 |     let _ = _cores.start(_hart, _entry); // ui-error: E0599
+  |                    ^^^^^ method not found in `&mut Cores`
+
+error[E0599]: no method named `release` found for mutable reference `&mut CoreControlRegisters<oer_mmio::Fixed<544227328>, oer_mmio::Fixed<542662656>, oer_mmio::Fixed<542666752>, oer_mmio::Fixed<544215040>, oer_mmio::Fixed<544210944>>` in the current scope
+  --> tests/ui/secondary_start_is_unavailable.rs:15:16
+   |
+15 |     _registers.release(_hart); // ui-error: E0599
+   |                ^^^^^^^ method not found in `&mut CoreControlRegisters<oer_mmio::Fixed<544227328>, oer_mmio::Fixed<542662656>, oer_mmio::Fixed<542666752>, oer_mmio::Fixed<544215040>, oer_mmio::Fixed<544210944>>`

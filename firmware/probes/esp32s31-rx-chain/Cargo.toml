@@ -39,6 +39,9 @@ oer-esp32s31-layout = { workspace = true, features = ["build"] }
 workspace = true
 
 
+[package.metadata.open-radio]
+critical-section-hart = "boot"
+
 [package.metadata.open-radio.panic-budget]
 # Initial composition inventory: existing production/macro sites, no new
 # handwritten panic sites. This diagnostic image is not a panic-free product.

@@ -42,3 +42,6 @@ oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-esp32s31-layout = { workspace = true, features = ["build"] }
 [lints]
 workspace = true
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"

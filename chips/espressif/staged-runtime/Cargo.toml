@@ -12,10 +12,6 @@ description = "Stage-two entry, relocation, traps, per-hart interrupt stacks, cr
 # from its facts (its harts and CLIC lines); the chip's HAL holds the fatal
 # path's proof, the stop of the other hart and the software reset.
 esp32s31 = ["dep:oer-esp32s31-hal"]
-## Hart 1 runs code. No image enables it, and the crate refuses it: the
-## runtime's critical-section masks only the current hart, so a second
-## running hart needs a cross-hart lock without spinning first.
-cpu1-runs = []
 ## After the record, call the image's `oer_platform_panic_hook`, which
 ## records more of its state without formatting, then reset.
 panic-hook = []

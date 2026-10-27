@@ -26,7 +26,7 @@ size register, field and instance families. PAC `HARTS`, `Hart::ALL`,
 fixed IDs at monomorphization. These are identities, not launch permits.
 
 The bootstrap contains every secondary and clears its boot word. All current
-images execute repository code only on the boot hart; both HAL and runtime
-reject `cpu1-runs` at compile time. S31 rev0 ROM leaves MNLBITS at one
+images execute repository code only on the boot hart. An image check confines
+the hart-local critical section to one declared hart. S31 rev0 ROM leaves MNLBITS at one
 (SOURCE: `hw1-20261026-boot-07`, `research/hw-interrupt-facts.md`); HAL explicitly
 establishes its selected level bits.

@@ -129,8 +129,9 @@ boot-hart = 0
 harts = [0, 1]
 irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
 
-# Only the HAL core controller may release hart 1. An image must declare
-# that hart's roots and prove its stack policy before it links a starter.
+# The HAL exposes no way to release hart 1. The starter pattern below is a
+# name check that stays in force for any starter an image links itself; an
+# image must declare that hart's roots and prove its stack policy first.
 [core-start]
 ipc = []
 starters = ["*Cores*::start*"]

@@ -45,6 +45,7 @@ oer-esp32s31-layout = { workspace = true, features = ["build"] }
 workspace = true
 
 [package.metadata.open-radio]
+critical-section-hart = "boot"
 # `cargo fw` builds this image with `cfg(oer_profile)`: the executor's poll cycles and timer windows it measures.
 instrumentation = ["profile"]
 

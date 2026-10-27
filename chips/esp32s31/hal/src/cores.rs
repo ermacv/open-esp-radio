@@ -62,11 +62,6 @@ pub use crate::platform::{BOOT_HART, HARTS, Hart, SecondaryHart};
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "cpu1-runs")]
-compile_error!(
-    "the runtime's critical-section masks only the current hart; an image whose hart 1 runs code needs a cross-hart lock without spinning"
-);
-
 /// Reads of the stall status that a stall or run request waits for its
 /// confirmation; a hart the status does not confirm within them is
 /// reported, not waited for. The budget counts completed reads, not time:
@@ -237,7 +232,7 @@ fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement, T: Plac
     }
 }
 
-/// The cores' owner: secondary start, park, stall and run. One exists per
+/// The cores' owner: secondary status, park, stall and run requests. One exists per
 /// image, on the boot hart, which it never leaves (not `Send`).
 pub struct Cores(ThisHart);
 
@@ -297,32 +292,6 @@ impl Cores {
     pub fn run(&mut self, hart: SecondaryHart) -> Result<(), CoresError> {
         self.operate(|words| run(words, hart.hart(), STALL_POLLS))?
             .map_err(|Unconfirmed| CoresError::Unconfirmed)
-    }
-
-    /// Start a secondary hart at `entry`, as ESP-IDF starts the other core: no boot
-    /// address, the run request confirmed, the clocks enabled and the
-    /// global reset released, then the entry.
-    ///
-    /// SOURCE: ESP-IDF 4d59230d `components/esp_system/port/cpu_start.c`
-    /// (`start_other_core`).
-    ///
-    /// # Errors
-    /// No words are installed, a fatal path holds them, or the hardware did
-    /// not confirm the run within [`STALL_POLLS`].
-    #[cfg(feature = "cpu1-runs")]
-    pub fn start(
-        &mut self,
-        hart: SecondaryHart,
-        entry: extern "C" fn() -> !,
-    ) -> Result<(), CoresError> {
-        self.operate(|words| {
-            words.set_boot_address(hart, 0);
-            run(words, hart.hart(), STALL_POLLS)?;
-            words.release(hart);
-            words.set_boot_address(hart, entry as usize as u32);
-            Ok(())
-        })?
-        .map_err(|Unconfirmed| CoresError::Unconfirmed)
     }
 }
 

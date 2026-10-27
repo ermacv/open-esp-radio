@@ -75,9 +75,9 @@ contracts: [Hardware memory](hardware-memory.md).
   admit only the boot hart. The runtime's critical section masks only its
   executing hart and takes no cross-hart lock
   ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)).
-  HAL and runtime reject the `cpu1-runs` feature at compile time; the HAL's
-  secondary starter is gated by that feature
-  ([cores rustdoc](../chips/esp32s31/hal/src/cores.rs)). No image enables it.
+  The staged build/run check confines linked critical-section entry points to
+  the hart roots declared through `[package.metadata.open-radio] critical-section-hart`.
+  The public HAL cannot start or release a secondary hart.
 - `oer-staged-runtime-stacks.x` is generated from the same hart geometry as
   the vectors. It places each task stack in PSRAM and each interrupt stack
   in SRAM, with exact-size, memory-range, alignment and guard assertions.

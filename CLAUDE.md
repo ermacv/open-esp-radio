@@ -57,9 +57,11 @@ system these rules serve.
   keeping workspace lint inheritance. `debug_assert!` is not a guard.
   Arithmetic on peer values names its overflow behavior with `checked_`,
   `wrapping_` or `saturating_` operations.
-- **Execution.** An interrupt handler never shares a lock with a task. A
-  task waker stays on its executor's hart; no waker crosses harts. Executor
-  startup borrows the runtime's affine `Hart<H>` and const-checks its route's
+- **Execution.** The critical section is hart-local; staged build/run checks
+  confine linked section entry points to the image's declared hart roots. The
+  public HAL cannot start or release a secondary hart. An interrupt handler
+  never shares a lock with a task. A task waker stays on its executor's hart;
+  no waker crosses harts. Executor startup borrows the runtime's affine `Hart<H>` and const-checks its route's
   hart. Interrupt enable consumes pre-admission authority and returns the
   router with the same hart token; before enable they may be borrowed together.
   An executor's urgent sources come from the typed observations returned by

@@ -165,22 +165,6 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
             });
     }
 
-    /// Release the selected secondary HP core: enable its CPU and CLIC clocks
-    /// and deassert its global reset, keeping every other bit.
-    ///
-    /// SOURCE: ESP-IDF 4d59230d `components/esp_system/port/cpu_start.c`
-    /// (`start_other_core`).
-    #[cfg(any(test, feature = "cpu1-runs"))]
-    pub fn release(&mut self, core: SecondaryHart) {
-        self.clocks
-            .modify_hpcore_ctrl0(core.hart().index(), |control| {
-                control
-                    .set_reg_core_cpu_clk_en(true)
-                    .set_reg_core_clic_clk_en(true)
-                    .set_reg_core_global_rst_en(false);
-            });
-    }
-
     /// Reset `core`'s CPU once: a pulse, not a hold.
     pub fn reset_core(&mut self, core: Hart) {
         self.reset

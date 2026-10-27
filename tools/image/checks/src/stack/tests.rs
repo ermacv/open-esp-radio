@@ -212,6 +212,10 @@ pub(crate) fn image(code: &[Code], data: &[(&str, u32, u32)]) -> Image {
     Image::new(executable(code, data), &[], &[], None).unwrap()
 }
 
+pub(crate) fn from_bytes(elf: Vec<u8>) -> Image {
+    Image::new(elf, &[], &[], None).unwrap()
+}
+
 mod frame_limits {
     use super::*;
     use crate::{CheckedElf, interrupts::Required, stack::frames::FrameAudit};
@@ -555,6 +559,7 @@ flash-xip = { executable = true, cached = true, dma = false, retained = false, w
         flat: None,
         output: directory.path(),
         task_stack_proven: false,
+        critical_section_hart: 0,
         stage_two_elf: None,
         panics: None,
     };

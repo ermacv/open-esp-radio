@@ -48,6 +48,16 @@ D/I window. This grants no executable-flash exception.
 | HIL image builds | `All` | Every requested check and audit |
 
 App builds still report task-stack bounds, the bootstrap-stack bound and placement.
+The staged build/run pipeline also enforces the hart-local critical-section prerequisite:
+`[package.metadata.open-radio] critical-section-hart = "boot"` selects the boot
+hart from facts; an explicit hart ID selects that used hart. The image's declared
+foreign task, interrupt-table handler and exception roots must have complete
+resolved paths excluding linked critical-section entries, including inline copies.
+`critical-section.txt` records the result.
+This prerequisite and unused-hart containment apply even when optional checks
+are reported or absent. The public HAL cannot start or release a secondary hart.
+`cargo fw probe` emits reachability reports only, even for runtime-linked binaries;
+it does not run this gate.
 `cargo fw flash` uses an existing bundle without rerunning its checks.
 For app `build`, a `partial + ?` interrupt stack, an exceeded budget or an
 unadmitted assumption fails the build and CI; a bound conditional only on
