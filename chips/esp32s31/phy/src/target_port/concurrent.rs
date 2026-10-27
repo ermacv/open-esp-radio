@@ -153,7 +153,10 @@ impl oer_diagnostics::DiagnosticPath for ConcurrentPhyTrackingError {
     clippy::result_large_err,
     reason = "fail-stop error retains the allocation-free PHY transition"
 )]
-async fn execute_register<'a, B: PlatformClockBackend + 'a, P, D, O>(
+// Construct the async block directly in its enclosing return place. An async
+// function here adds a whole-future temporary before the poll wrapper is built.
+#[inline(always)]
+fn execute_register<'a, B: PlatformClockBackend + 'a, P, D, O>(
     timer: &'a impl oer_cooperate::CooperativeTimer,
     mut initial: Option<RadioTransaction<B, ConcurrentPhy>>,
     fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
@@ -161,34 +164,41 @@ async fn execute_register<'a, B: PlatformClockBackend + 'a, P, D, O>(
     clocks: &'a impl PlatformClockProvider<Backend = B>,
     config: PhyRegisterConfig,
     observer: O,
-) -> (
-    RadioDomain<B, ConcurrentPhy>,
-    Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
-)
+) -> impl core::future::Future<
+    Output = (
+        RadioDomain<B, ConcurrentPhy>,
+        Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+    ),
+> + 'a
 where
     D: PhyShortDelay + 'a,
     O: PhyTargetObserver + 'a,
 {
-    let mut preparation = core::mem::MaybeUninit::uninit();
-    let prepared = begin_concurrent_registration(&mut initial, fault, clocks, &mut preparation);
-    oer_memory::match_placed!(prepared, Result {
-        Ok(transaction) => {
-            let mut transaction = transaction;
-            let mut completion = core::mem::MaybeUninit::uninit();
-            let registered = {
-                let mut register = core::pin::pin!(PhyDomain::register::<P, _, D, O>(
-                    timer,
-                    platform,
-                    transaction.hardware_mut(),
-                    config,
-                    observer,
-                ));
-                oer_memory::poll_placed(register.as_mut(), &mut completion).await
-            };
-            complete_concurrent_registration(transaction, registered)
+    operations::RegisterFuture {
+        future: async move {
+            let mut preparation = core::mem::MaybeUninit::uninit();
+            let prepared =
+                begin_concurrent_registration(&mut initial, fault, clocks, &mut preparation);
+            oer_memory::match_placed!(prepared, Result {
+                Ok(transaction) => {
+                    let mut transaction = transaction;
+                    let mut completion = core::mem::MaybeUninit::uninit();
+                    let registered = {
+                        let mut register = core::pin::pin!(PhyDomain::register::<P, _, D, O>(
+                            timer,
+                            platform,
+                            transaction.hardware_mut(),
+                            config,
+                            observer,
+                        ));
+                        oer_memory::poll_placed(register.as_mut(), &mut completion).await
+                    };
+                    complete_concurrent_registration(transaction, registered)
+                },
+                Err(refused) => reject_concurrent_registration(refused),
+            })
         },
-        Err(refused) => reject_concurrent_registration(refused),
-    })
+    }
 }
 
 // Preparation and its working transaction stay in retained future storage.
@@ -312,69 +322,75 @@ fn finish_concurrent_registration<B: PlatformClockBackend>(
 ///
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
-async fn execute_close<B: PlatformClockBackend, P, D>(
+#[inline(always)]
+fn execute_close<B: PlatformClockBackend, P, D>(
     timer: &impl oer_cooperate::CooperativeTimer,
     initial: RadioTransaction<B, ConcurrentPhy>,
     platform: &mut P,
-) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)
+) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
 where
     D: PhyShortDelay,
 {
-    let mut radio = initial.reunite();
-    let mut domain = match radio.attachment_mut().idle_domain() {
-        Ok(domain) => domain,
-        Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
-    };
-    let mut transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Close);
-    let (registers, phy) = transaction.hardware_with_attachment();
-    if !domain.clients.describes(registers) {
-        *phy.slot_mut() = Slot::Registered(domain);
-        return (
-            transaction.reunite(),
-            Err(ConcurrentRfError::Rejected(
-                ConcurrentPhyError::EpochMismatch,
-            )),
-        );
+    operations::RegisterFuture {
+        future: async move {
+            let mut radio = initial.reunite();
+            let mut domain = match radio.attachment_mut().idle_domain() {
+                Ok(domain) => domain,
+                Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
+            };
+            let mut transaction =
+                radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Close);
+            let (registers, phy) = transaction.hardware_with_attachment();
+            if !domain.clients.describes(registers) {
+                *phy.slot_mut() = Slot::Registered(domain);
+                return (
+                    transaction.reunite(),
+                    Err(ConcurrentRfError::Rejected(
+                        ConcurrentPhyError::EpochMismatch,
+                    )),
+                );
+            }
+            let observed = core::pin::pin!(radio_lifecycle::observe_temperature_with_hal::<P, D>(
+                timer,
+                platform,
+                registers,
+                domain.registered.target_state_mut(),
+            ))
+            .await;
+            let closed = match observed {
+                Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D, _>(timer, registers)
+                    .and_then(|()| {
+                        // SOURCE: linked IDF override releases TSENS and the last
+                        // peripheral SAR-I2C reference after phy_close_rf.
+                        oer_esp32s31_hal::phy::temperature::release(registers)
+                            .map_err(|_| PhyTargetPortError::HardwareInvariant)
+                    })
+                    .map_err(PhyRfCloseTemperatureFailure::HardwareAmbiguous),
+                Err(failure) => Err(failure),
+            };
+            let result = match closed {
+                Ok(()) => {
+                    *phy.slot_mut() = Slot::RfClosed(domain);
+                    Ok(())
+                }
+                Err(PhyRfCloseTemperatureFailure::Recoverable(error)) => {
+                    *phy.slot_mut() = Slot::Registered(domain);
+                    Err(ConcurrentRfError::Recoverable(error))
+                }
+                Err(PhyRfCloseTemperatureFailure::HardwareAmbiguous(error)) => {
+                    *phy.slot_mut() = Slot::Poisoned;
+                    Err(ConcurrentRfError::Failed(error))
+                }
+            };
+            let mut radio = transaction.reunite();
+            let result = result.and_then(|()| {
+                radio
+                    .disable_phy_modem_clocks(PhyClockModule::Phy)
+                    .map_err(ConcurrentRfError::Clock)
+            });
+            (radio, result)
+        },
     }
-    let observed = core::pin::pin!(radio_lifecycle::observe_temperature_with_hal::<P, D>(
-        timer,
-        platform,
-        registers,
-        domain.registered.target_state_mut(),
-    ))
-    .await;
-    let closed = match observed {
-        Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D, _>(timer, registers)
-            .and_then(|()| {
-                // SOURCE: linked IDF override releases TSENS and the last
-                // peripheral SAR-I2C reference after phy_close_rf.
-                oer_esp32s31_hal::phy::temperature::release(registers)
-                    .map_err(|_| PhyTargetPortError::HardwareInvariant)
-            })
-            .map_err(PhyRfCloseTemperatureFailure::HardwareAmbiguous),
-        Err(failure) => Err(failure),
-    };
-    let result = match closed {
-        Ok(()) => {
-            *phy.slot_mut() = Slot::RfClosed(domain);
-            Ok(())
-        }
-        Err(PhyRfCloseTemperatureFailure::Recoverable(error)) => {
-            *phy.slot_mut() = Slot::Registered(domain);
-            Err(ConcurrentRfError::Recoverable(error))
-        }
-        Err(PhyRfCloseTemperatureFailure::HardwareAmbiguous(error)) => {
-            *phy.slot_mut() = Slot::Poisoned;
-            Err(ConcurrentRfError::Failed(error))
-        }
-    };
-    let mut radio = transaction.reunite();
-    let result = result.and_then(|()| {
-        radio
-            .disable_phy_modem_clocks(PhyClockModule::Phy)
-            .map_err(ConcurrentRfError::Clock)
-    });
-    (radio, result)
 }
 
 /// Wake RF of the closed shared domain for its next client.
@@ -395,64 +411,70 @@ where
 ///
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
-async fn execute_wake<B: PlatformClockBackend, D>(
+#[inline(always)]
+fn execute_wake<B: PlatformClockBackend, D>(
     timer: &impl oer_cooperate::CooperativeTimer,
     initial: RadioTransaction<B, ConcurrentPhy>,
     clocks: &impl PlatformClockProvider<Backend = B>,
-) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)
+) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
 where
     D: PhyShortDelay,
 {
-    let mut radio = initial.reunite();
-    let domain = match radio.attachment_mut().closed_domain() {
-        Ok(domain) => domain,
-        Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
-    };
-    let transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Wake);
-    let describes = domain.clients.describes(transaction.hardware());
-    let mut radio = transaction.reunite();
-    if !describes {
-        *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
-        return (
-            radio,
-            Err(ConcurrentRfError::Rejected(
-                ConcurrentPhyError::EpochMismatch,
-            )),
-        );
+    operations::RegisterFuture {
+        future: async move {
+            let mut radio = initial.reunite();
+            let domain = match radio.attachment_mut().closed_domain() {
+                Ok(domain) => domain,
+                Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
+            };
+            let transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Wake);
+            let describes = domain.clients.describes(transaction.hardware());
+            let mut radio = transaction.reunite();
+            if !describes {
+                *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+                return (
+                    radio,
+                    Err(ConcurrentRfError::Rejected(
+                        ConcurrentPhyError::EpochMismatch,
+                    )),
+                );
+            }
+            if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
+                *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+                return (
+                    radio,
+                    Err(ConcurrentRfError::Rejected(ConcurrentPhyError::Clock(
+                        error,
+                    ))),
+                );
+            }
+            let mut transaction =
+                radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Wake);
+            let result = core::pin::pin!(radio_lifecycle::execute_rf_wake_with_hal::<D>(
+                timer,
+                transaction.hardware_mut(),
+                domain.phy_state(),
+            ))
+            .await;
+            let result = match result {
+                Ok(()) => {
+                    *transaction.attachment_mut().slot_mut() = Slot::Registered(domain);
+                    Ok(())
+                }
+                Err(error) => {
+                    *transaction.attachment_mut().slot_mut() = Slot::Poisoned;
+                    Err(ConcurrentRfError::Failed(error))
+                }
+            };
+            let mut radio = transaction.reunite();
+            let result = result.and_then(|()| {
+                radio
+                    .disable_phy_modem_clocks(PhyClockModule::Calibration)
+                    .map_err(ConcurrentRfError::Clock)
+            });
+            (radio, result)
+        },
     }
-    if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
-        *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
-        return (
-            radio,
-            Err(ConcurrentRfError::Rejected(ConcurrentPhyError::Clock(
-                error,
-            ))),
-        );
-    }
-    let mut transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Wake);
-    let result = core::pin::pin!(radio_lifecycle::execute_rf_wake_with_hal::<D>(
-        timer,
-        transaction.hardware_mut(),
-        domain.phy_state(),
-    ))
-    .await;
-    let result = match result {
-        Ok(()) => {
-            *transaction.attachment_mut().slot_mut() = Slot::Registered(domain);
-            Ok(())
-        }
-        Err(error) => {
-            *transaction.attachment_mut().slot_mut() = Slot::Poisoned;
-            Err(ConcurrentRfError::Failed(error))
-        }
-    };
-    let mut radio = transaction.reunite();
-    let result = result.and_then(|()| {
-        radio
-            .disable_phy_modem_clocks(PhyClockModule::Calibration)
-            .map_err(ConcurrentRfError::Clock)
-    });
-    (radio, result)
 }
 
 /// Run the pending tracking request with the protocols running, as the

@@ -4,7 +4,7 @@ use super::*;
 use oer_esp32s31_hal::domain::transaction::Operation;
 
 // The constructor writes its async block directly into the caller's future.
-// A fixed poll boundary keeps registration temporaries out of enclosing radio
+// A fixed poll boundary keeps PHY lifecycle temporaries out of enclosing radio
 // polls without an allocation or another copy of the retained transition.
 pin_project_lite::pin_project! {
     pub(crate) struct RegisterFuture<F> {
@@ -39,6 +39,7 @@ impl<F: core::future::Future> core::future::Future for RegisterFuture<F> {
     clippy::result_large_err,
     reason = "fail-stop error retains the allocation-free PHY transition"
 )]
+#[inline(always)]
 pub fn register_concurrent_phy<'a, B: PlatformClockBackend + 'a, P, D, O>(
     timer: &'a impl oer_cooperate::CooperativeTimer,
     radio: RadioDomain<B, ConcurrentPhy>,
@@ -58,17 +59,15 @@ where
 {
     let fault = radio.fault_handle();
     let initial = radio.detach(Operation::Register);
-    RegisterFuture {
-        future: execute_register::<B, P, D, O>(
-            timer,
-            Some(initial),
-            fault,
-            platform,
-            clocks,
-            config,
-            observer,
-        ),
-    }
+    execute_register::<B, P, D, O>(
+        timer,
+        Some(initial),
+        fault,
+        platform,
+        clocks,
+        config,
+        observer,
+    )
 }
 
 /// Close RF after the last client left the shared domain, and release its
