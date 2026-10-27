@@ -150,6 +150,11 @@ system these rules serve.
   `chips/*/layout/linker/dma-window.x`; the linker fragment may be read,
   never edited. Its inputs are `chips/<chip>/registers/chip.toml`, `types/`,
   `layouts/`, `evidence/` and the schema-6 `policy.toml`.
+- **Recorded PHY baselines.** Identity is only the pinned `libphy` artifact's
+  SHA-256 in `chips/esp32s31/vendor/artifacts.toml`; directories use that hash.
+  IDF, application, ROM, `esp_phy` and recipe inputs remain capture provenance
+  and never invalidate a reference for the same libphy. Missing libphy
+  reference is INCOMPLETE. Coverage, metadata and measured-bound checks apply.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables

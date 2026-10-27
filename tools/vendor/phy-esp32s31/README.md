@@ -90,7 +90,9 @@ retain its P1 poll counts, maxima and timer lateness separately from T1 and T7.
 Associated Wi-Fi traffic is a separate workload.
 
 The [recorded vendor reference](../../../chips/esp32s31/vendor/phy-baselines/README.md)
-provides generated Wi-Fi cold bounds for labeled boards.
+provides generated Wi-Fi cold bounds for labeled boards, keyed only by the
+pinned libphy artifact SHA-256. IDF and other capture inputs remain provenance;
+changing libphy without a reference yields INCOMPLETE.
 `cargo hil run phy-recorded-calibration-cold --chip esp32s31 --board s31-b`
 captures only the diagnostic image and applies the same comparison rules;
 no vendor image is built or flashed on this path.

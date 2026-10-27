@@ -1,10 +1,14 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generated-by": "cargo vendor-check phy-baseline generate",
   "chip": "esp32s31",
   "lifecycle": "cold",
   "scenario": "phy-vendor-calibration-cold",
   "signature": {
+    "libphy-sha256": "116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2"
+  },
+  "provenance": {
+    "vendor-application-sha256": "e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a",
     "idf-revision": "4d59230ddff16327812782151ef0afef202dc6d7",
     "scenario-sha256": "d76e60adfd4a483617184b1e0effdbf4264a8a67a6087c336e889f2b99b4c1f4",
     "model-sha256": "3a97ac5d2f70cc244b9c9604053214bd2194667ac351de895935c2f7a0c355c9",
@@ -12,7 +16,6 @@
     "review-sha256": "1657a2553dbc6ec4e3caf3fb47801ffd572a623120a086c283acb616e0f8b52b",
     "recipe-sha256": "14dda62c87ae14084a7cc5f0296e45ab1c9d748891f2481130ae41c79a562704"
   },
-  "vendor-application-sha256": "e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a",
   "channel": 1,
   "vendor-object-bytes": 492,
   "boards": {

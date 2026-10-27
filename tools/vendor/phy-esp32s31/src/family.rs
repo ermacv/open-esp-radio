@@ -40,12 +40,12 @@ impl Comparison for Esp32s31 {
             return Err("no recorded reference at this lifecycle".into());
         }
         let signature = crate::baseline::Signature::current(root)?;
-        let reference = crate::baseline::Reference::read(&signature.path(root))?;
+        let reference = signature.read_reference(root)?;
         let images = Self::images(root)?;
         reference.validate(&signature, &images, board, 0)?;
         Ok(oer_vendor_phy::comparison::RecordedReference {
-            vendor_application_sha256: reference.vendor_application_sha256.clone(),
-            vendor_idf_revision: reference.signature.idf_revision.clone(),
+            vendor_application_sha256: reference.provenance.vendor_application_sha256.clone(),
+            vendor_idf_revision: reference.provenance.idf_revision.clone(),
             channel: reference.channel,
             readable: reference.readable(board, &images)?,
             document: serde_json::to_value(reference)?,

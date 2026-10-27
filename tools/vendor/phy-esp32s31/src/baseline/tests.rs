@@ -3,6 +3,12 @@ use oer_vendor_phy::calibration_capture::space::Register;
 
 fn signature() -> Signature {
     Signature {
+        libphy_sha256: "a".repeat(64),
+    }
+}
+fn provenance() -> Provenance {
+    Provenance {
+        vendor_application_sha256: "app".into(),
         idf_revision: "pin".into(),
         scenario_sha256: "scenario".into(),
         model_sha256: "model".into(),
@@ -122,6 +128,7 @@ fn fixture() -> (Reference, Vec<VendorBoot>, Vec<VendorBoot>) {
         .collect::<Vec<_>>();
     let reference = generate(
         signature(),
+        provenance(),
         vec![input("s31-a", a.clone()), input("s31-b", b.clone())],
         &images(),
     )
@@ -143,7 +150,13 @@ fn recorded_and_live_bounds_accept_only_the_same_boot_whole_initial_pair() {
         }
     }
     let boots = vec![v; 10];
-    let reference = generate(signature(), vec![input("s31-a", boots.clone())], &images()).unwrap();
+    let reference = generate(
+        signature(),
+        provenance(),
+        vec![input("s31-a", boots.clone())],
+        &images(),
+    )
+    .unwrap();
     for (pair, verdict) in [
         ([243_u16, 288], Verdict::Match),
         ([243, 303], Verdict::Diff),
@@ -268,7 +281,7 @@ fn stale_or_missing_coverage_is_incomplete_even_when_another_value_differs() {
         Verdict::Incomplete
     );
     let mut changed = signature();
-    changed.recipe_sha256.push('x');
+    changed.libphy_sha256 = "b".repeat(64);
     assert_eq!(
         reference
             .check(
@@ -339,6 +352,7 @@ fn inconsistent_shared_values_and_vendor_discovery_gaps_cannot_be_published() {
     assert!(
         generate(
             signature(),
+            provenance(),
             vec![input("s31-a", a), input("s31-b", b)],
             &images()
         )
@@ -422,6 +436,7 @@ fn recorded_bounds_use_masked_samples_before_computing_spread() {
         .collect::<Vec<_>>();
     let reference = generate(
         signature(),
+        provenance(),
         vec![input("s31-a", boots.clone()), input("s31-b", boots.clone())],
         &images,
     )
@@ -432,4 +447,129 @@ fn recorded_bounds_use_masked_samples_before_computing_spread() {
     primary.registers.values.insert(4, 0x2000_0009);
     let result = reference.check(&signature(), &images, "s31-a", 0, &identity(), &[primary]);
     assert_eq!(result.verdict, Verdict::Match);
+}
+
+#[test]
+fn capture_provenance_does_not_invalidate_the_same_libphy() {
+    let (mut reference, a, _) = fixture();
+    reference.provenance.idf_revision = "historical-idf".into();
+    reference.provenance.vendor_application_sha256 = "historical-app".into();
+    reference.provenance.scenario_sha256 = "historical-scenario".into();
+    reference.provenance.model_sha256 = "historical-model".into();
+    reference.provenance.relation_sha256 = "historical-relation".into();
+    reference.provenance.review_sha256 = "historical-review".into();
+    reference.provenance.recipe_sha256 = "historical-recipe".into();
+    for (value, verdict) in [(-3, Verdict::Match), (100, Verdict::Diff)] {
+        let checked = reference.check(
+            &signature(),
+            &images(),
+            "s31-a",
+            0,
+            &identity(),
+            &[production(&vendor(value, 4))],
+        );
+        assert_eq!(checked.verdict, verdict);
+    }
+    let mut changed = signature();
+    changed.libphy_sha256 = "b".repeat(64);
+    let checked = reference.check(
+        &changed,
+        &images(),
+        "s31-a",
+        0,
+        &identity(),
+        &[production(&a[0])],
+    );
+    assert_eq!(checked.verdict, Verdict::Incomplete);
+    assert!(checked.reasons[0].contains("no PHY baseline for libphy"));
+    assert!(checked.reasons[0].contains(&changed.libphy_sha256));
+}
+
+fn pin_checkout() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    for (path, contents) in [
+        (
+            "tools/vendor/phy-esp32s31/src/tolerances.toml",
+            compare::TOLERANCES,
+        ),
+        (
+            "chips/esp32s31/knowledge/src/phy_relation.rs",
+            include_str!("../../../../../chips/esp32s31/knowledge/src/phy_relation.rs"),
+        ),
+        (
+            "chips/esp32s31/knowledge/src/phy_relation/committed.rs",
+            include_str!("../../../../../chips/esp32s31/knowledge/src/phy_relation/committed.rs"),
+        ),
+    ] {
+        let path = dir.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
+    std::fs::create_dir_all(dir.path().join("chips/esp32s31/vendor")).unwrap();
+    dir
+}
+fn write_pins(root: &Path, revision: &str, sha256: &str) {
+    std::fs::write(root.join("chips/esp32s31/vendor/artifacts.toml"), format!(
+        "[[source]]\nid = 'esp-idf'\nrevision = '{revision}'\n[[artifact]]\nid = 'libphy'\nsha256 = '{sha256}'\n[[artifact]]\nid = 'rom'\nsha256 = '{revision}'\n[[artifact]]\nid = 'esp_phy'\nsha256 = '{revision}'\n"
+    )).unwrap();
+}
+
+#[test]
+fn pin_selection_ignores_idf_rom_and_esp_phy_changes_and_names_missing_libphy() {
+    let dir = pin_checkout();
+    let key = signature();
+    let path = key.path(dir.path());
+    let (reference, _, _) = fixture();
+    reference.write(&path).unwrap();
+    for revision in ["capture-idf", "another-idf"] {
+        write_pins(dir.path(), revision, &key.libphy_sha256);
+        let selected = Signature::current(dir.path()).unwrap();
+        assert_eq!(selected, key);
+        assert_eq!(selected.path(dir.path()), path);
+        assert_eq!(selected.read_reference(dir.path()).unwrap(), reference);
+    }
+    let changed_hash = "b".repeat(64);
+    write_pins(dir.path(), "another-idf", &changed_hash);
+    let selected = Signature::current(dir.path()).unwrap();
+    assert_ne!(selected.path(dir.path()), path);
+    let checked = Check::incomplete(selected.read_reference(dir.path()).unwrap_err());
+    assert_eq!(checked.verdict, Verdict::Incomplete);
+    assert!(checked.reasons[0].contains("no PHY baseline for libphy"));
+    assert!(checked.reasons[0].contains(&changed_hash));
+}
+
+#[test]
+fn malformed_libphy_pins_cannot_select_a_reference_path() {
+    let dir = pin_checkout();
+    for hash in ["", "../escape", "short", &"A".repeat(64), &"z".repeat(64)] {
+        write_pins(dir.path(), "idf", hash);
+        assert!(Signature::current(dir.path()).is_err());
+    }
+    write_pins(dir.path(), "idf", &"a".repeat(64));
+    let path = dir.path().join("chips/esp32s31/vendor/artifacts.toml");
+    let mut pins = std::fs::read_to_string(&path).unwrap();
+    pins.push_str(&format!(
+        "[[artifact]]\nid = 'libphy'\nsha256 = '{}'\n",
+        "b".repeat(64)
+    ));
+    std::fs::write(&path, pins).unwrap();
+    assert!(Signature::current(dir.path()).is_err());
+}
+
+#[test]
+fn committed_reference_is_valid_for_the_current_libphy_and_every_recorded_board() {
+    let root = crate::registers::repository();
+    let key = Signature::current(&root).unwrap();
+    let reference = key.read_reference(&root).unwrap();
+    assert_ne!(
+        reference.provenance.idf_revision,
+        "4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d"
+    );
+    let images = super::images(&root).unwrap();
+    for (label, board) in &reference.boards {
+        reference
+            .validate(&key, &images, label, board.revision)
+            .unwrap();
+        Esp32s31::recorded(&root, label, Lifecycle::Cold).unwrap();
+    }
 }

@@ -23,7 +23,7 @@ const CHIP: &str = "esp32s31";
 pub const PARTITION: &str = "RadioPhyPeripherals";
 
 /// The files the register model is loaded from, relative to the repository
-/// root, which a baseline's signature binds.
+/// root, recorded in a baseline's provenance.
 pub fn model_files(root: &Path) -> Result<Vec<String>> {
     let registers = format!("chips/{CHIP}/registers");
     let mut files = vec![

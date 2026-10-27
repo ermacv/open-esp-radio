@@ -18,13 +18,20 @@ pub mod runs;
 #[cfg(test)]
 mod tests;
 
-pub const SCHEMA: u16 = 1;
+pub const SCHEMA: u16 = 2;
 const CHIP: &str = "esp32s31";
 const SCENARIO: &str = "phy-vendor-calibration-cold";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Signature {
+    pub libphy_sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Provenance {
+    pub vendor_application_sha256: String,
     pub idf_revision: String,
     pub scenario_sha256: String,
     pub model_sha256: String,
@@ -44,21 +51,29 @@ fn digest(root: &Path, files: &[&str]) -> Result<String> {
     Ok(oer_os_durable::sha256_bytes(&bytes))
 }
 impl Signature {
-    /// Bind interpretation and capture recipe without fetching or building vendor code.
+    /// Select only the pinned libphy artifact, without fetching or building vendor code.
     pub fn current(root: &Path) -> Result<Self> {
         let pins: toml::Value = toml::from_str(&std::fs::read_to_string(
             root.join("chips/esp32s31/vendor/artifacts.toml"),
         )?)?;
-        let revision = pins
-            .get("source")
+        let mut artifacts = pins
+            .get("artifact")
             .and_then(toml::Value::as_array)
-            .and_then(|sources| {
-                sources
-                    .iter()
-                    .find(|s| s.get("id").and_then(toml::Value::as_str) == Some("esp-idf"))
-            })
-            .and_then(|s| s.get("revision").and_then(toml::Value::as_str))
-            .ok_or("no IDF pin")?;
+            .ok_or("no artifact pins")?
+            .iter()
+            .filter(|a| a.get("id").and_then(toml::Value::as_str) == Some("libphy"));
+        let sha256 = artifacts
+            .next()
+            .and_then(|a| a.get("sha256").and_then(toml::Value::as_str))
+            .ok_or("no libphy SHA-256 pin")?;
+        if artifacts.next().is_some()
+            || sha256.len() != 64
+            || !sha256
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err("invalid or duplicate libphy SHA-256 pin".into());
+        }
         // The comparator uses compiled reviews and relations, so stale executables
         // must not sign a newer checkout's files.
         for (file, compiled) in [
@@ -84,6 +99,54 @@ impl Signature {
             }
         }
         Ok(Self {
+            libphy_sha256: sha256.into(),
+        })
+    }
+    pub fn path(&self, root: &Path) -> PathBuf {
+        root.join("chips/esp32s31/vendor/phy-baselines")
+            .join(&self.libphy_sha256)
+            .join("wifi-cold.json")
+    }
+    pub fn read_reference(&self, root: &Path) -> Result<Reference> {
+        let path = self.path(root);
+        Reference::read(&path).map_err(|error| {
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            {
+                format!(
+                    "no PHY baseline for libphy {}: {}",
+                    self.libphy_sha256,
+                    path.display()
+                )
+                .into()
+            } else {
+                error
+            }
+        })
+    }
+}
+impl Provenance {
+    /// Record the capture environment and the interpretation used by the generator.
+    pub fn current(root: &Path, identity: &Images) -> Result<Self> {
+        let pins: toml::Value = toml::from_str(&std::fs::read_to_string(
+            root.join("chips/esp32s31/vendor/artifacts.toml"),
+        )?)?;
+        let revision = pins
+            .get("source")
+            .and_then(toml::Value::as_array)
+            .and_then(|sources| {
+                sources
+                    .iter()
+                    .find(|s| s.get("id").and_then(toml::Value::as_str) == Some("esp-idf"))
+            })
+            .and_then(|s| s.get("revision").and_then(toml::Value::as_str))
+            .ok_or("no IDF pin")?;
+        if revision != identity.vendor_idf_revision {
+            return Err("vendor capture differs from the generator's IDF pin".into());
+        }
+        Ok(Self {
+            vendor_application_sha256: identity.vendor_application_sha256.clone(),
             idf_revision: revision.into(),
             scenario_sha256: digest(
                 root,
@@ -124,11 +187,6 @@ impl Signature {
                 ],
             )?,
         })
-    }
-    pub fn path(&self, root: &Path) -> PathBuf {
-        root.join("chips/esp32s31/vendor/phy-baselines")
-            .join(&self.idf_revision)
-            .join("wifi-cold.json")
     }
 }
 
@@ -191,7 +249,7 @@ pub struct Reference {
     pub lifecycle: Lifecycle,
     pub scenario: String,
     pub signature: Signature,
-    pub vendor_application_sha256: String,
+    pub provenance: Provenance,
     pub channel: u8,
     pub vendor_object_bytes: usize,
     pub boards: BTreeMap<String, Board>,
@@ -305,6 +363,7 @@ fn metadata(lifecycle: Lifecycle, images: &RegisterImages) -> Result<BTreeMap<St
 
 pub fn generate(
     signature: Signature,
+    provenance: Provenance,
     inputs: Vec<Input>,
     images: &RegisterImages,
 ) -> Result<Reference> {
@@ -316,7 +375,7 @@ pub fn generate(
         lifecycle: Lifecycle::Cold,
         scenario: SCENARIO.into(),
         signature,
-        vendor_application_sha256: first.identity.vendor_application_sha256.clone(),
+        provenance,
         channel: first.channel,
         vendor_object_bytes: first
             .boots
@@ -331,8 +390,9 @@ pub fn generate(
     let mut source_ids = BTreeSet::new();
     for input in inputs {
         if !label(&input.label)
-            || input.identity.vendor_idf_revision != reference.signature.idf_revision
-            || input.identity.vendor_application_sha256 != reference.vendor_application_sha256
+            || input.identity.vendor_idf_revision != reference.provenance.idf_revision
+            || input.identity.vendor_application_sha256
+                != reference.provenance.vendor_application_sha256
             || input.identity.vendor_project != "calibration"
             || input.channel != reference.channel
             || input.source.samples != input.boots.len()
@@ -504,14 +564,16 @@ impl Reference {
         board: &str,
         revision: u16,
     ) -> Result<()> {
+        if &self.signature != signature {
+            return Err(format!("no PHY baseline for libphy {}", signature.libphy_sha256).into());
+        }
         if self.schema != SCHEMA
             || self.chip != CHIP
             || self.lifecycle != Lifecycle::Cold
             || self.scenario != SCENARIO
-            || &self.signature != signature
             || !(1..=14).contains(&self.channel)
         {
-            return Err("unknown schema or stale source/configuration identity".into());
+            return Err("unknown schema or capture configuration".into());
         }
         let selected = self.boards.get(board).ok_or("unknown board label")?;
         if selected.revision != revision {
@@ -652,10 +714,7 @@ impl Reference {
         production: &[ProductionBoot],
     ) -> Result<compare::Summary> {
         self.validate(signature, images, board, revision)?;
-        if identity.vendor_application_sha256 != self.vendor_application_sha256
-            || identity.vendor_idf_revision != self.signature.idf_revision
-            || identity.vendor_project != "calibration"
-            || identity.production_image != "diagnostic-phy"
+        if identity.vendor_project != "calibration" || identity.production_image != "diagnostic-phy"
         {
             return Err("capture image identity differs from the reference".into());
         }
