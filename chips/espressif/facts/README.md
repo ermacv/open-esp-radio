@@ -75,9 +75,10 @@ it writes is in git:
   its facts and its stack policy's `default_task_stack_bytes`
   (`chips/<id>/platform/stack.toml`), which its layout crate's build writes
   and every `--defsym` of the linker scripts comes from;
-- `Vectors`: the staged runtime's vector tables, every hart's line entries
-  (`RUNTIME_IRQ_ENTRIES`, `RUNTIME_VECTOR_TABLES` around the hand-written
-  entry and exit of `vectors.s`), every line's default handler (the linker
+- `Vectors`: the staged runtime's typed Rust vector-table rows and opaque
+  entry-address declarations, every hart's assembly line entries
+  (`RUNTIME_IRQ_ENTRIES` around the hand-written entry and exit of `vectors.s`),
+  secondary containment entries, every line's default handler (the linker
   fragment `oer-staged-runtime-vectors.x`) and the interrupt table's
   `LINES`, from the chip's harts and CLIC lines. The same geometry generates
   `oer-staged-runtime-stacks.x`, runtime marker tables and exact vector coverage;

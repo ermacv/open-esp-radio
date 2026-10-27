@@ -1,7 +1,7 @@
 //! Generates the runtime's vector entries, vector tables, every line's
 //! default handler and the interrupt table's CPU lines from the facts of the
 //! chip its feature selects (`oer_espressif_facts::generate::Vectors`):
-//! `vectors.rs`, `vectors.s` and the linker script fragment
+//! `vectors.rs`, `vector-tables.rs`, `vector-markers.rs`, `vectors.s` and the linker script fragment
 //! `oer-staged-runtime-vectors.x`, which the runtime linker script includes
 //! from this build directory, a library search path of every image that
 //! links the runtime. Without a chip feature (host tests) it generates

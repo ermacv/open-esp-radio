@@ -28,8 +28,8 @@ reason = "Reset installs the stack, clears BSS and enters bootstrap_main. The tr
 [[reviewed]]
 symbols = ["_runtime_mtvt"]
 category = "vector-data"
-source = "chips/espressif/staged-runtime/src/vectors.s"
-reason = "The staged runtime's own dispatch table is data, not a compiler-generated function. The interrupt-stack gate bounds its handlers."
+source = "chips/espressif/facts/src/generate.rs"
+reason = "Vectors::vector_tables generates immutable typed Rust MTVT rows from the chip facts. Their entry-address markers are vector data, not compiler-generated functions. The interrupt-stack gate bounds their handlers."
 
 [[reviewed]]
 symbols = ["_trap_section_origin", "_rwtext_start"]
