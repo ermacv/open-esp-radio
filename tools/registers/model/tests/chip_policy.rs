@@ -2023,6 +2023,32 @@ fn every_fixed_write_needs_a_writable_word() -> TestResult {
 }
 
 #[test]
+fn w1c_status_word_accepts_a_fixed_discard_only_with_its_consumption_proof() -> TestResult {
+    for (proof, accepted) in [
+        (
+            Some("The startup epoch discards all inherited pending."),
+            true,
+        ),
+        (None, false),
+        (Some(" "), false),
+    ] {
+        let fixture = Fixture::new()?;
+        fixture
+            .remove("interrupt-snapshots", "timer0_interrupt")?
+            .remove("fixed-register-images", "acknowledge_timer0_masked")?
+            .remove("fixed-register-images", "acknowledge_timer0_consumed")?;
+        let proof = proof.map_or(String::new(), |text| format!("consumed-event = {text:?}\n"));
+        fixture.append(&format!("\n[[fixed-register-images]]\nname = \"discard_startup\"\nregister = \"TIMER0.INT_CLR\"\nvalue = 3\n{proof}sources = [\"SRC_DRIVER\"]\n"))?;
+        if accepted {
+            fixture.load()?;
+        } else {
+            assert_eq!(fixture.rejection()?.entity, "discard_startup");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn every_fixed_write_checks_w1c_without_a_snapshot() -> TestResult {
     for sequence in [false, true] {
         let fixture = Fixture::new()?;

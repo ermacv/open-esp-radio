@@ -47,8 +47,9 @@ fn assembling_host_owners_performs_no_register_access() {
 #[test]
 fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     let mut memory = HostMemory::filled(u32::MAX);
-    let (mut task, setup) = memory.owners();
-    let interrupts = setup.arm(&mut task);
+    let (task, setup) = memory.owners();
+    let (startup, interrupts) = setup.arm(task);
+    let mut task = startup.task;
     // Arming leaves every event masked: nothing is raised before a handler
     // holds the owner (`enable_events` takes the binding's proof).
     assert!(task.foundation_snapshot().events_masked());
@@ -87,7 +88,7 @@ fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     );
     assert!(!(tx.rx_ack_stop() || tx.tx_stop() || tx.rx_ack_crc_error()));
     assert_eq!(tx.tx_abort_en_25_30().get(), 0);
-    // Arming acknowledged the stale sample it took.
+    // Host memory stores the full startup-discard W1C image.
     assert!(
         interrupts
             .events()
@@ -112,10 +113,10 @@ fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
 #[test]
 fn clearing_events_acknowledges_only_the_sampled_events_the_mask_selects() {
     let mut memory = HostMemory::filled(u32::MAX);
-    let (mut task, setup) = memory.owners();
-    let mut interrupts = setup.arm(&mut task);
-    // The stale acknowledgement left every event asserted, the two unnamed
-    // ones included.
+    let (task, setup) = memory.owners();
+    let (startup, mut interrupts) = setup.arm(task);
+    let mut task = startup.task;
+    // Host memory stores the startup W1C image, including unnamed lanes.
     assert!(interrupts.events().observation().classification().is_err());
 
     let selected = mask(&[Ieee802154Event::TxDone, Ieee802154Event::RxSfdDone]);
@@ -443,8 +444,9 @@ fn the_recent_rssi_is_the_signed_low_byte_of_the_receive_information() {
 #[test]
 fn a_saved_timer_sample_is_acknowledged_after_masking_without_resampling() {
     let mut memory = HostMemory::filled(u32::MAX);
-    let (mut task, setup) = memory.owners();
-    let mut interrupts = setup.arm(&mut task);
+    let (task, setup) = memory.owners();
+    let (startup, mut interrupts) = setup.arm(task);
+    let mut task = startup.task;
     let saved = interrupts.events();
     // Host memory stores the acknowledgement image. Make the current status
     // zero to model the hidden read under mask, retaining the earlier sample.
@@ -463,4 +465,123 @@ fn a_saved_timer_sample_is_acknowledged_after_masking_without_resampling() {
         Ok(timers)
     );
     let _setup = interrupts.deactivate(&mut task);
+}
+
+#[test]
+fn activation_publication_matches_the_ten_event_runtime_baseline() {
+    for fill in [0, u32::MAX] {
+        let mut memory = HostMemory::filled(fill);
+        let (task, setup) = memory.owners();
+        let (startup, _interrupts) = setup.arm(task);
+        assert!(startup.task.foundation_snapshot().events_masked());
+        // Exercise the publication used by activate. Host placements are
+        // deliberately !Send and cannot enter a static interrupt table.
+        let mut task = startup.task;
+        task.publish_runtime_events();
+        let events = task.mac_part().read_event_enable();
+        // Explicit main baseline, independent of the production event array.
+        assert_eq!(
+            [
+                events.tx_done(),
+                events.rx_done(),
+                events.ack_tx_done(),
+                events.ack_rx_done(),
+                events.rx_abort(),
+                events.tx_abort(),
+                events.ed_done(),
+                events.events_7(),
+                events.timer0_overflow(),
+                events.timer1_overflow(),
+                events.clock_count_match(),
+                events.tx_sfd_done(),
+                events.rx_sfd_done(),
+                events.events_13(),
+            ],
+            [
+                true, true, true, true, true, true, true, false, false, true, false, true, true,
+                false
+            ]
+        );
+        task.mask_events();
+        task.publish_runtime_events();
+        assert_eq!(task.mac_part().read_event_enable(), events);
+    }
+}
+
+#[test]
+fn startup_discards_all_fourteen_lanes() {
+    assert_startup_discard(true, true, true, true);
+}
+
+#[test]
+fn startup_discards_lane7() {
+    assert_startup_discard(true, false, false, false);
+}
+
+#[test]
+fn startup_discards_lane10() {
+    assert_startup_discard(false, true, false, false);
+}
+
+#[test]
+fn startup_discards_lane13() {
+    assert_startup_discard(false, false, true, false);
+}
+
+fn assert_startup_discard(events_7: bool, clock: bool, events_13: bool, other: bool) {
+    let mut memory = HostMemory::filled(u32::MAX);
+    let (task, mut setup) = memory.owners();
+    // Host memory stores the selected W1C image as the next visible read.
+    // This injects visible input; it does not model hidden hardware pending
+    // or establish masked visibility for the three unsupported lanes.
+    let visible = setup
+        .mac
+        .sample_event_status()
+        .retain_tx_done(other)
+        .retain_rx_done(other)
+        .retain_ack_tx_done(other)
+        .retain_ack_rx_done(other)
+        .retain_rx_abort(other)
+        .retain_tx_abort(other)
+        .retain_ed_done(other)
+        .retain_events_7(events_7)
+        .retain_timer0_overflow(other)
+        .retain_timer1_overflow(other)
+        .retain_clock_count_match(clock)
+        .retain_tx_sfd_done(other)
+        .retain_rx_sfd_done(other)
+        .retain_events_13(events_13);
+    setup.mac.acknowledge_event_status(visible);
+    let (startup, interrupts) = setup.arm(task);
+    let observed = interrupts.events().observation();
+    assert!(startup.task.foundation_snapshot().events_masked());
+    // Host memory stores the write image. Even when a lane was absent from
+    // the initial read, the pre-bind discard writes one to every event field.
+    assert_eq!(
+        observed,
+        oer_espressif_ieee802154_engine::types::Ieee802154EventObservation::new(
+            Ieee802154EventMask::NAMED,
+            true,
+            true,
+        )
+    );
+    let _owners =
+        crate::ieee802154::ll::Ieee802154MacOwners::new(startup, interrupts, super::host::silent());
+}
+
+#[test]
+fn startup_discards_hidden_pending_even_with_an_empty_visible_image() {
+    let mut memory = HostMemory::filled(0);
+    let (task, setup) = memory.owners();
+    let (startup, interrupts) = setup.arm(task);
+    assert!(startup.task.foundation_snapshot().events_masked());
+    let image = interrupts.events().observation();
+    assert_eq!(
+        image,
+        oer_espressif_ieee802154_engine::types::Ieee802154EventObservation::new(
+            Ieee802154EventMask::NAMED,
+            true,
+            true,
+        )
+    );
 }

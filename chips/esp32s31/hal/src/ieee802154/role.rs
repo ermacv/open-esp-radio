@@ -601,12 +601,13 @@ impl Ieee802154FoundationConfigured {
         Ieee802154Operational { task, interrupts }
     }
 
-    /// Reunite the quiescent operational owners and prove the foundation
+    /// Reunite the delivery-masked operational owners and prove the foundation
     /// again.
     ///
-    /// The interrupt owner is inactive only after its teardown zeroed every
-    /// event and abort enable and consumed the final pending image. No
-    /// register is written here. The operational epoch rewrote the PIB, so
+    /// Teardown issued STOP and both timer-stop commands, masked every event
+    /// and abort enable, and acknowledged its saved event sample. This does
+    /// not prove that every hardware producer drained. No register is written
+    /// here. The operational epoch rewrote the PIB, so
     /// only the foundation is re-proved; a policy is not.
     ///
     /// # Errors

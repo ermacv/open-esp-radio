@@ -42,6 +42,14 @@ system these rules serve.
   An impossible state returns a named fault retaining its source observations;
   its owners stay quarantined, then the image calls safe `fatal::reset_recording`
   to retain the reason for the next boot to print. A watchdog is not this mechanism.
+  IEEE 802.15.4 startup is an affine pre-bind discard: mask delivery,
+  issue STOP and both timer stops, then write W1C for all fourteen event
+  lanes without a sample through the existing IRQ part. All pre-bind
+  pending is stale and cannot be serviced. Only then can the IRQ owner bind;
+  bound task activation publishes the same ten runtime events as later
+  sessions. A task never borrows its handler cell. Runtime acknowledgements
+  consume affine samples;
+  polling requires `Silent` after the same pre-bind discard.
   Owned PHY transactions preserve their registration and restore obligations;
   only consuming reunion with the exact affine return owner releases their
   quarantine guard. Dropping either half records its source observations and

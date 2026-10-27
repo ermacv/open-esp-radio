@@ -1121,7 +1121,7 @@ interrupt = "MODEM_ZB_MAC"
 registers = ["EVENT_STATUS"]
 observes = ["RX_STATUS", "TX_STATUS", "ED_CONFIG"]
 irq-side = true
-description = "The hard interrupt handler samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included."
+description = "Before binding, this owner discards inherited event pending while delivery is masked. The hard interrupt handler then samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included."
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[partitions]]
@@ -3441,6 +3441,13 @@ name = "clear_bluetooth_scheduler_skip_request"
 register = "BT_MAC.SCHEDULER_SKIP_REQUEST"
 value = 0
 sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+
+[[fixed-register-images]]
+name = "discard_ieee802154_startup_events"
+register = "IEEE802154.EVENT_STATUS"
+value = 0x00003fff
+consumed-event = "Before bind, every event is stale and cannot be serviced. With all event enables masked, the affine startup transaction issues STOP and both timer stops, then discards all fourteen event lanes without a status sample before handing the IRQ owner to its handler. Masked acknowledgement is measured for timer0/1 and RX_ABORT reason26 only; no all-lane masked visibility or producer-drain claim follows."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "esp-idf-7b9cc1ac-ieee802154-common-ll", "HW8_S31_IEEE_MASKED_STATUS_20261026", "HW26_S31_IEEE_ABORT_20261027"]
 
 [[fixed-register-images]]
 name = "acknowledge_bluetooth_scheduler_cancellation_source"

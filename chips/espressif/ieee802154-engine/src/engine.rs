@@ -49,7 +49,9 @@ pub use buffers::{
     DmaFrame, FRAME_SIZE, Ieee802154DmaAddresses, Ieee802154EngineBuffers, RX_BUFFER_COUNT,
 };
 
+pub mod fault;
 pub mod owner;
+pub use fault::Fault;
 pub use statistics::{
     Ieee802154RxAbortStatistics, Ieee802154RxStatistics, Ieee802154TxAbortStatistics,
     Ieee802154TxRxStatistics, Ieee802154TxStatistics,
@@ -1100,18 +1102,35 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
 
     /// `ieee802154_isr`: sample and clear the events, handle them in the
     /// vendor order and start the next operation.
-    pub fn isr<L, E>(&mut self, ll: &mut L, env: &mut E)
+    ///
+    /// # Errors
+    /// An unsupported event retains the complete observation and entry state.
+    /// No acknowledgement or dispatch occurs; quarantine the MAC and storage
+    /// and record/reset through the image's terminal fault path.
+    pub fn isr<L, E>(&mut self, ll: &mut L, env: &mut E) -> Result<(), Fault>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let mut cx = Cx { ll, env };
         let observation = cx.ll.events();
+        let events = observation
+            .classification()
+            .map_err(|_| Fault::UnhandledEvents {
+                observation,
+                state: self.state,
+            })?;
+        // CLOCK_COUNT_MATCH has a name but no supported consumer. Reject it
+        // before acknowledging any lane or dispatching a simultaneous event.
+        if events.contains(Ieee802154Event::ClockCountMatch) {
+            return Err(Fault::UnhandledEvents {
+                observation,
+                state: self.state,
+            });
+        }
+        let mut events = events;
         let rx_abort_reason = cx.ll.rx_abort_reason();
         let tx_abort_reason = cx.ll.tx_abort_reason();
-        let Ok(mut events) = observation.classification() else {
-            panic!("IEEE802154_ASSERT(events == 0): unclassified MAC event");
-        };
         if let Some(statistics) = self.statistics.as_mut() {
             statistics.record(cx.ll, events);
         }
@@ -1223,14 +1242,13 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             if let Some(action) = action {
                 self.run_timer_action(&mut cx, action);
             }
-            events = events.difference(Ieee802154Event::Timer1Overflow.mask());
         }
         if self.needs_next_operation {
             self.next_operation(&mut cx);
             self.needs_next_operation = false;
         }
-        vendor_assert!(events.is_empty());
         self.publish_rx_when_safe(&mut cx);
+        Ok(())
     }
 
     // ---- buffers and notifications -------------------------------------

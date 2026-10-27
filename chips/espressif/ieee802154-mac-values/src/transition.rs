@@ -30,34 +30,57 @@ pub trait Ieee802154InterruptTransitionPort {
 /// Arm the interrupt side for its binding: the first part of the
 /// activation, with every event left masked.
 ///
-/// With no handler bound, enable events to expose retained timer pending,
-/// sample it, mask events and acknowledge that saved affine W1C sample.
-/// Both abort fields take their runtime baseline; the final fence precedes
-/// transfer of the interrupt owner. The task publishes runtime events after
-/// binding, or when the polling engine enables them.
+/// Mask every event before installing the abort baseline. No event is
+/// enabled or acknowledged here. The pre-bind initialization continues with
+/// STOP and an unsampled discard before the IRQ owner becomes bindable.
 /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
 #[doc(hidden)]
 pub fn execute_interrupt_arming<Port>(port: &mut Port, _plan: Ieee802154InterruptActivationPlan)
 where
     Port: Ieee802154InterruptTransitionPort,
 {
+    port.mask_all_events();
     port.enable_runtime_tx_aborts();
     port.enable_runtime_rx_aborts();
-    port.enable_all_events();
-    port.order_device_accesses();
-
-    let stale = port.sample_events();
-    port.mask_all_events();
-    port.acknowledge_events(stale);
     port.order_device_accesses();
 }
 
-/// Execute the complete teardown of a polled epoch.
+/// Startup discard available only while the task still owns the unbound IRQ
+/// part. Every event before binding is stale and cannot be serviced.
+#[doc(hidden)]
+pub trait Ieee802154InterruptInitializationPort: Ieee802154InterruptTransitionPort {
+    fn discard_startup_events(&mut self);
+}
+
+/// Mask delivery, install the abort baseline, issue STOP and both timer stops,
+/// then write W1C for all fourteen event lanes without sampling. Clearing
+/// pending under the mask is measured for timer0/1 and RX_ABORT reason26;
+/// masked visibility and clearing of lanes 7/10/13 remain unmeasured.
+/// No lane is enabled and no handler cell is lent.
+/// The HAL releases the bindable IRQ owner only after the final fence.
+/// SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026;
+/// HW26_S31_IEEE_ABORT_20261027 (masked ack qualification: timers and reason26).
+#[doc(hidden)]
+pub fn execute_interrupt_initialization<Port: Ieee802154InterruptInitializationPort>(
+    port: &mut Port,
+    plan: Ieee802154InterruptActivationPlan,
+) {
+    execute_interrupt_arming(port, plan);
+    port.stop_operation();
+    port.stop_timer0();
+    port.stop_timer1();
+    port.order_device_accesses();
+    port.discard_startup_events();
+    port.order_device_accesses();
+}
+
+/// Issue the teardown commands and selected acknowledgement of a polled epoch.
 ///
 /// Stop the operation and both MAC timers, sample before masking, then close
 /// all three enable fields and acknowledge the saved affine W1C sample.
 /// Masked timer status reads zero even when pending remains latched.
 /// Both ordering boundaries precede transfer back to inactive setup ownership.
+/// Issued commands and saved-sample acknowledgement do not prove producer drain.
 /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
 #[doc(hidden)]
 pub fn execute_interrupt_deactivation<Port>(port: &mut Port)

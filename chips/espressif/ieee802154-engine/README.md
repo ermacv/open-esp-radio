@@ -107,16 +107,39 @@ no new claim or address construction. The S31 HAL preserves its DMA placement
 proof through this transition. Silence the CPU route before detaching and use
 the existing IRQ deactivation/foundation return path before leaving PHY.
 
-Timer events are acknowledged before masking. Successful ACK reception,
+Operational ACK waits acknowledge timer0 while enabled. Successful ACK reception,
 stopping an ACK wait and the hardware RX-ACK timeout stop timer0, sample and
 clear its pending event while enabled, then disable that event. Starting a
 new ACK wait enables timer0's event and clears old pending while the timer is
 stopped, before programming and starting the next deadline. This prevents a
 retained timeout from completing a later transmission with a false `NoAck`.
-The S31 HAL consumes a saved affine event snapshot for acknowledgement;
-copyable observations grant no write authority. Interrupt arming enables,
-samples, masks and acknowledges with no handler bound; deactivation stops
-the operation and both timers, samples, masks and acknowledges.
+The S31 HAL consumes a saved affine event snapshot for runtime acknowledgement;
+copyable observations grant no write authority. Before binding, `arm` consumes
+both task and inactive IRQ owners, masks all events, installs the abort
+baseline, issues STOP and both timer stops, then discards every event lane
+without a sample through the existing IRQ part. All pre-bind pending is stale
+and cannot be serviced. The fixed W1C image includes all fourteen lanes even
+when masked status reads zero; its read preserves undeclared bits only.
+The returned affine task owner has no operational methods. After the IRQ owner
+moves into its handler, task activation with `Bound` publishes the handled set
+without accessing the handler cell. Initial and later publication use the
+same ten runtime events; timer0 is enabled only for an ACK wait. Polling instead
+requires `Silent` after the same pre-bind discard. Inherited timer1 pending
+cannot reach a new operation.
+Masked ack is measured for timers0/1 and RX_ABORT reason26; masked visibility
+and hidden pending on 7/10/13 remain unmeasured. No zero read establishes their
+absence, and the startup discard does not prove producer drain.
+Deactivation issues STOP and both timer-stop commands, samples, masks and
+acknowledges its saved sample. These commands and selected acknowledgements do
+not prove that every hardware producer drained.
+
+Engine interrupt service rejects a sample containing an unnamed lane (7 or 13)
+or the unsupported clock-match event (10) with `Fault::UnhandledEvents` before acknowledgement
+or dispatch, preserving the complete event sample and entry state. The combined
+MAC/engine owner consumes itself into absorbing `Quarantined` storage with no
+recovery operations. The S31 PHY HIL image calls `fatal::reset_recording` with
+those owners retained. Its new 12-byte versioned/checksummed record reports the
+original fault at the next boot and survives console refusal.
 SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`,
 [PR #689](https://github.com/ermacv/open-esp-radio/pull/689): masking hides
 timer0/timer1 status while retaining pending; a positive sample captured

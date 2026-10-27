@@ -390,13 +390,43 @@ inside the retained allocation; subsequent register publications take those
 typed addresses. The shared engine and the combined engine/MAC owner contain
 no unsafe code and perform no address arithmetic.
 
-The S31 802.15.4 HAL acknowledges events only through an affine
+The S31 802.15.4 HAL's runtime acknowledgement consumes an affine
 `Ieee802154EventSnapshot`; its copyable observation grants no write authority.
-Timer pending survives masking but its status read becomes zero. Arming,
-before a handler is bound, enables events, samples, masks and acknowledges
-the saved sample. Deactivation stops the operation and both timers, samples
-before masking and acknowledges that saved sample. During ACK reception the
-engine stops timer0, samples and clears its event while enabled, then masks
+Startup is a separate, typed pre-bind discard. `arm` consumes the task and
+inactive IRQ owners, masks every event, installs the abort baseline, issues
+STOP and both timer stops, then writes the fixed W1C set of all fourteen event
+lanes through the existing `Ieee802154MacIrq` part. This write does not use a
+status sample: every pre-bind event is stale and cannot be serviced. Its
+register read preserves undeclared bits only; masked zero status cannot narrow
+the discard. The policy records this consumption proof and the generated
+accessor preserves undeclared bits rather than treating it as a whole-word
+vendor image. A word consisting entirely of W1C fields is its own status/clear
+pair and needs the same explicit fixed-image proof as a named pair.
+
+Only after the final fence does `arm` return the bindable IRQ owner and an
+affine task owner without operational methods. `Router::bind` transfers the
+IRQ owner permanently into its handler. Consuming task activation with its
+`Bound` proof publishes the same ten runtime events as later sessions; it
+writes only task-owned enables and never borrows `HandlerCell`. A polled pair
+instead requires `Silent`; its startup discard has already completed. The
+pre-bind transaction enables no event lane.
+Masked acknowledgement is measured for timers0/1 (HW8) and RX_ABORT reason26
+(HW26). Hidden pending and masked visibility on 7/10/13 remain unmeasured;
+neither a zero read nor the discard is an all-lane visibility or producer-drain
+proof. Deactivation issues STOP and both timer-stop commands, samples before
+masking and acknowledges the saved sample. Commands and selected
+acknowledgements do not prove producer drain.
+Engine interrupt service rejects a sample containing lane 7, 10 or 13 with
+`Fault::UnhandledEvents` before acknowledgement or dispatch, preserving
+all named events, each unnamed lane and the entry state. The consuming
+engine/MAC owner becomes an absorbing quarantine with no recovery API.
+The PHY HIL image records the fault through safe `fatal::reset_recording`
+without dropping its quarantined owners. The new record adds 12 bytes of
+retained data to the PHY HIL image: magic, a diagnostic word packing all fourteen
+event flags, state and reason, and checksum. It prints at the next boot and
+remains retained on output refusal.
+During ACK reception the engine stops timer0, samples and clears its event
+while enabled, then masks
 it. A new ACK wait enables and clears old pending while timer0 is stopped,
 before programming and starting it. The HAL never resamples status as the
 authority for acknowledgement. Same-lane recurrence is not an event count.

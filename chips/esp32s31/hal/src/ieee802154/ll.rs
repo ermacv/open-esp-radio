@@ -28,8 +28,8 @@ use oer_interrupt_table::Silent;
 use oer_mmio::Placement;
 
 use crate::ieee802154::mac::{
-    EtmPlacement, Ieee802154InterruptOwner, Ieee802154PowerSequence, Ieee802154Pti,
-    Ieee802154TaskOwner, MacPlacement, RxInfoPlacement,
+    EtmPlacement, Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner, Ieee802154PowerSequence,
+    Ieee802154Pti, Ieee802154TaskOwner, MacPlacement, RxInfoPlacement,
 };
 
 /// The command image of an operation command.
@@ -76,13 +76,13 @@ const fn timer_stop(timer: Ieee802154Timer) -> Opcode {
 /// use oer_interrupt_table::Router;
 /// fn poll(
 ///     router: &Router<InterruptController>,
-///     mut task: Ieee802154TaskOwner,
+///     task: Ieee802154TaskOwner,
 ///     setup: Ieee802154InterruptSetupOwner,
 /// ) -> Option<Ieee802154MacOwners> {
-///     // Refused when the table binds the MAC's source or it is routed.
-///     let silent = router.silent::<Ieee802154InterruptOwner>().ok()?;
-///     let interrupts = setup.arm(&mut task);
-///     Some(Ieee802154MacOwners::new(task, interrupts, silent))
+///     // A refused route has not accessed or started the MAC.
+///     let Ok(silent) = router.silent::<Ieee802154InterruptOwner>() else { return None; };
+///     let (startup, interrupts) = setup.arm(task);
+///     Some(Ieee802154MacOwners::new(startup, interrupts, silent))
 /// }
 /// # fn main() {}
 /// ```
@@ -90,9 +90,9 @@ const fn timer_stop(timer: Ieee802154Timer) -> Opcode {
 /// ```compile_fail,E0061
 /// # use oer_esp32s31_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
 /// fn poll(mut task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner) {
-///     let interrupts = setup.arm(&mut task);
+///     let (startup, interrupts) = setup.arm(task);
 ///     // Enabling the events by polling takes the silent route's proof.
-///     let _mac = Ieee802154MacOwners::new(task, interrupts);
+///     let _mac = Ieee802154MacOwners::new(startup, interrupts);
 /// }
 /// ```
 #[must_use = "the MAC owners must be separated and returned to their route"]
@@ -119,11 +119,14 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
     /// Hold the task owner with the interrupt owner it armed and the proof
     /// that no line receives the MAC's source
     /// (`oer_interrupt_table::Router::silent`).
-    pub const fn new(
-        task: Ieee802154TaskOwner<P, E, B>,
+    ///
+    /// Startup discard completed before the IRQ owner became bindable.
+    pub fn new(
+        startup: Ieee802154ArmedTaskOwner<P, E, B>,
         interrupts: Ieee802154InterruptOwner<P>,
         silent: Silent<Ieee802154InterruptOwner<P>>,
     ) -> Self {
+        let (task, interrupts, silent) = startup.into_polled(interrupts, silent);
         Self {
             task,
             interrupts,

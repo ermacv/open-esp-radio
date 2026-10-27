@@ -348,7 +348,7 @@ impl Ieee802154LowLevel for PortLl {
         if u64::from(bits) != event_bits(named) {
             self.0.borrow_mut().incomplete = Some(format!("unclassified event bits in {bits:#x}"));
         }
-        Ieee802154EventObservation::from_named(named)
+        Ieee802154EventObservation::new(named, bits & (1 << 7) != 0, bits & (1 << 13) != 0)
     }
     fn clear_events(&mut self, mask: Ieee802154EventMask) {
         self.value("ieee802154_ll_clear_events", event_bits(mask));
@@ -1043,7 +1043,9 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
                         u64::from(tx_abort),
                     );
                 }
-                engine.isr(&mut ll, &mut env);
+                engine
+                    .isr(&mut ll, &mut env)
+                    .map_err(|fault| format!("{fault:?}"))?;
             }
         }
         if let Some(reason) = shared.borrow_mut().incomplete.take() {

@@ -853,7 +853,10 @@ consumed field the caller selects, and every lane it may write satisfies
 its field's constraints. The part holding the clear
 word takes the snapshot and holds or observes the status word. No other
 transaction writes a clear word or a `write-one-to-clear` field except a
-fixed image naming one proof, `masks` (an enable word of `plain` fields of
+fixed image naming one proof. A word consisting entirely of W1C fields is
+its own implicit status/clear pair even without a named snapshot. A fixed
+image on that word preserves undeclared bits and does not derive its W1C set
+from a sample. Its proof is `masks` (an enable word of `plain` fields of
 the same part, holding a field for every bit the image acknowledges,
 cleared first) or `consumed-event`. A sequence step never writes a clear
 word.

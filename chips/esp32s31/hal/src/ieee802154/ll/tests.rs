@@ -41,9 +41,9 @@ fn a_timer_threshold_is_written_whole() {
 #[test]
 fn the_pib_accessors_read_back_what_they_write() {
     let mut memory = HostMemory::filled(0);
-    let (mut task, setup) = memory.owners();
-    let interrupts = setup.arm(&mut task);
-    let mut owners = Ieee802154MacOwners::new(task, interrupts, silent());
+    let (task, setup) = memory.owners();
+    let (startup, interrupts) = setup.arm(task);
+    let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
 
     owners.set_tx_auto_ack(true);
     owners.set_rx_auto_ack(true);
@@ -77,9 +77,9 @@ fn the_pib_accessors_read_back_what_they_write() {
 #[test]
 fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
     let mut memory = HostMemory::filled(u32::MAX);
-    let (mut task, setup) = memory.owners();
-    let interrupts = setup.arm(&mut task);
-    let mut owners = Ieee802154MacOwners::new(task, interrupts, silent());
+    let (task, setup) = memory.owners();
+    let (startup, interrupts) = setup.arm(task);
+    let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
     owners.disable_coex();
     let pti = owners.task.mac_part().read_coex_pti();
     assert_eq!(pti.txrx_pti().get(), u32::from(COEX_DISABLED_PTI));
@@ -100,9 +100,9 @@ fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
 #[test]
 fn an_event_enable_reaches_only_its_event() {
     let mut memory = HostMemory::filled(0);
-    let (mut task, setup) = memory.owners();
-    let interrupts = setup.arm(&mut task);
-    let mut owners = Ieee802154MacOwners::new(task, interrupts, silent());
+    let (task, setup) = memory.owners();
+    let (startup, interrupts) = setup.arm(task);
+    let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
     // Arming left every event masked; the engine enables them.
     owners.enable_all_events();
     let events = owners.task.mac_part().read_event_enable();

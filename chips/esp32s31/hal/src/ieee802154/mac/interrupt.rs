@@ -19,7 +19,7 @@ use super::{Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, task::byte}
 
 /// The named events of one `EVENT_STATUS` read, and whether one of the two
 /// unnamed event bits was set.
-fn observation(status: &event_status::Snapshot) -> Ieee802154EventObservation {
+pub(super) fn observation(status: &event_status::Snapshot) -> Ieee802154EventObservation {
     let named = [
         (status.tx_done(), Ieee802154Event::TxDone),
         (status.rx_done(), Ieee802154Event::RxDone),
@@ -40,7 +40,7 @@ fn observation(status: &event_status::Snapshot) -> Ieee802154EventObservation {
         .fold(Ieee802154EventMask::NONE, |events, (_, event)| {
             events.with(event)
         });
-    Ieee802154EventObservation::new(events, status.events_7() || status.events_13())
+    Ieee802154EventObservation::new(events, status.events_7(), status.events_13())
 }
 
 /// One affine event sample, retained across changes to the enable mask.

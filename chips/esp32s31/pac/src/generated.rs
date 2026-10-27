@@ -113123,7 +113123,7 @@ pub mod ieee802154 {
 
     /// The `Ieee802154MacIrq` part of `IEEE802154`.
     ///
-    /// The hard interrupt handler samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included.
+    /// Before binding, this owner discards inherited event pending while delivery is masked. The hard interrupt handler then samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included.
     ///
     /// SOURCE: esp-idf-7b9cc1ac-ieee802154-common-ll.
     #[must_use = "dropping a register owner permanently loses its register authority"]
@@ -113181,6 +113181,18 @@ pub mod ieee802154 {
         #[inline]
         pub fn read_tx_status(&self) -> tx_status::R {
             tx_status::R(self.0.read::<0x84>())
+        }
+
+        /// Acknowledge the consumed events `0x00003fff` (`IEEE802154.EVENT_STATUS`).
+        ///
+        /// SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT, esp-idf-7b9cc1ac-ieee802154-common-ll, HW8_S31_IEEE_MASKED_STATUS_20261026, HW26_S31_IEEE_ABORT_20261027.
+        ///
+        /// The caller consumed these events:
+        /// Before bind, every event is stale and cannot be serviced. With all event enables masked, the affine startup transaction issues STOP and both timer stops, then discards all fourteen event lanes without a status sample before handing the IRQ owner to its handler. Masked acknowledgement is measured for timer0/1 and RX_ABORT reason26 only; no all-lane masked visibility or producer-drain claim follows.
+        #[inline]
+        pub fn discard_ieee802154_startup_events(&mut self) {
+            self.0
+                .write::<0x64>((self.0.read::<0x64>() & 0xffffc000) | 0x00003fff);
         }
     }
 

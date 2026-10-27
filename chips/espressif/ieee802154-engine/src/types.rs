@@ -543,18 +543,20 @@ impl Ieee802154TxAbortReasonObservation {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Ieee802154EventObservation {
     events: Ieee802154EventMask,
-    has_unclassified: bool,
+    events_7: bool,
+    events_13: bool,
 }
 
 impl Ieee802154EventObservation {
     /// An observation of the named `events`, plus whether the sampled field
-    /// also held a bit without a reviewed semantic identity. A chip HAL
+    /// also held either unnamed event, retained separately. A chip HAL
     /// builds it from its register field; observations grant no write
     /// authority.
-    pub const fn new(events: Ieee802154EventMask, has_unclassified: bool) -> Self {
+    pub const fn new(events: Ieee802154EventMask, events_7: bool, events_13: bool) -> Self {
         Self {
             events,
-            has_unclassified,
+            events_7,
+            events_13,
         }
     }
 
@@ -563,13 +565,24 @@ impl Ieee802154EventObservation {
     pub const fn from_named(events: Ieee802154EventMask) -> Self {
         Self {
             events,
-            has_unclassified: false,
+            events_7: false,
+            events_13: false,
         }
     }
 
     /// Return whether the complete observed event field is clear.
     pub const fn is_clear(self) -> bool {
-        self.events.is_empty() && !self.has_unclassified
+        self.events.is_empty() && !self.events_7 && !self.events_13
+    }
+
+    /// Presence of the unnamed event at position seven, without an invented meaning.
+    pub const fn events_7(self) -> bool {
+        self.events_7
+    }
+
+    /// Presence of the unnamed event at position thirteen.
+    pub const fn events_13(self) -> bool {
+        self.events_13
     }
 
     /// Return whether every named event in `required` was observed.
@@ -585,7 +598,7 @@ impl Ieee802154EventObservation {
     pub const fn classification(
         self,
     ) -> Result<Ieee802154EventMask, Ieee802154EventObservationError> {
-        if self.has_unclassified {
+        if self.events_7 || self.events_13 {
             Err(Ieee802154EventObservationError)
         } else {
             Ok(self.events)

@@ -503,10 +503,20 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
     }
 
     fn on_clear(&self, target: Target) -> bool {
-        match target {
+        let paired = match target {
             Target::Word(word) => self.clears.contains(&word),
             Target::Template(template) => self.clear_templates.contains(&template),
-        }
+        };
+        // A word consisting entirely of W1C fields is its own implicit
+        // status/clear pair, even without a named policy snapshot.
+        paired
+            || self.index.first(target).is_some_and(|word| {
+                !word.fields().is_empty()
+                    && word
+                        .fields()
+                        .iter()
+                        .all(|field| field.class == FieldClass::WriteOneToClear)
+            })
     }
 
     /// The DMA address lanes (pointer and address fields) of the words
