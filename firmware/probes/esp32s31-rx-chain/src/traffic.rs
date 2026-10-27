@@ -92,6 +92,15 @@ fn scan(
     }
     let status = irq.mac_interrupt_status();
     let status_end = oer_riscv::cycle32();
+    let post_begin = oer_riscv::cycle32();
+    for (i, words) in trace.post.iter_mut().enumerate() {
+        let d = node(storage, i).ok_or("traffic-post-node")?;
+        let binding = *trace.bindings.get(i).ok_or("traffic-binding")?;
+        for (w, out) in words.iter_mut().enumerate() {
+            *out = read_word(storage, d, binding, w * 4)?;
+        }
+    }
+    let post_end = oer_riscv::cycle32();
     let cursor = access.receive_dma_snapshot();
     let mut done = 0u32;
     for (i, d) in storage.descriptors().iter().enumerate() {
@@ -149,11 +158,13 @@ fn scan(
                 let mut offset = 0usize;
                 let mut mismatch = 0u32;
                 let mut previous_mismatch = 0u32;
+                let mut post_mismatch = 0u32;
                 let mut unstable = 0u32;
                 for step in 0..count {
                     let index = head.wrapping_add(step) % COUNT;
                     let early = trace.pre.get(index).ok_or("traffic-pre")?;
                     let previous = trace.previous_pre.get(index).ok_or("traffic-previous")?;
+                    let post = trace.post.get(index).ok_or("traffic-post")?;
                     let bytes = unit.segment(step).ok_or("traffic-segment")?;
                     for (i, byte) in bytes.iter().copied().enumerate() {
                         let observed = early.get(i / 4).ok_or("traffic-word")?.to_le_bytes();
@@ -163,12 +174,16 @@ fn scan(
                             .ok_or("traffic-previous-word")?
                             .to_le_bytes();
                         let old = *old.get(i % 4).ok_or("traffic-previous-byte")?;
+                        let after = post.get(i / 4).ok_or("traffic-post-word")?.to_le_bytes();
+                        let after = *after.get(i % 4).ok_or("traffic-post-byte")?;
+                        *saved.after_irq.get_mut(offset).ok_or("traffic-length")? = after;
                         *saved.previous.get_mut(offset).ok_or("traffic-length")? = old;
                         *saved.early.get_mut(offset).ok_or("traffic-length")? = before;
                         *saved.taken.get_mut(offset).ok_or("traffic-length")? = byte;
                         mismatch = mismatch.saturating_add(u32::from(before != byte));
                         previous_mismatch =
                             previous_mismatch.saturating_add(u32::from(old != byte));
+                        post_mismatch = post_mismatch.saturating_add(u32::from(after != byte));
                         offset = offset.checked_add(1).ok_or("traffic-offset")?;
                     }
                 }
@@ -205,6 +220,9 @@ fn scan(
                     trace.previous_begin,
                     trace.previous_end,
                     previous_mismatch,
+                    post_begin,
+                    post_end,
+                    post_mismatch,
                 ];
                 trace.unit_used = trace.unit_used.saturating_add(1);
                 for (column, value) in [
@@ -356,7 +374,7 @@ pub(super) async fn dump(trace: &Trace, console: &mut usb::Console) -> Result<()
         for offset in (0..length).step_by(16) {
             line.clear();
             write!(&mut line, "P {id:x} {offset:x}").map_err(|_| "format")?;
-            for bytes in [&unit.previous, &unit.early, &unit.taken] {
+            for bytes in [&unit.previous, &unit.early, &unit.after_irq, &unit.taken] {
                 for byte in bytes
                     .get(offset..offset.saturating_add(16).min(length))
                     .ok_or("dump-range")?

@@ -35,10 +35,14 @@ pending reload with the production20-µs settle. Recording errors retain the
 unit for deferred recycling and stop collection. No live payload is painted.
 
 Every scan copies all33 buffers by bounded volatile value reads **before**
-RAW and the exact pre-ack STATUS sample. The existing observation checks use
+RAW and the exact pre-ack STATUS sample, then copies them again immediately
+after those samples. The existing observation checks use
 the original pre-RX BUFFER bindings. The taken unit's complete segments are
 copied and compared against those earlier bytes and the preceding scan's
-retained byte copy, then read again through the completed view before recycling.
+retained byte copy and the post-IRQ byte copy, then read again through the
+completed view before recycling. A post-IRQ copy differing from the taken
+unit can supply a counterexample only with the corresponding completion and
+fresh14 transition identified; equality is a bounded sample, not a bus proof.
 A reserved-descriptor continuation is explicitly marked as an incomplete frame;
 it cannot qualify whole-frame payload ordering. A unit taken on a later scan
 than first positive14 also cannot qualify that earlier observation. Finite
@@ -66,9 +70,10 @@ At most256 rows are retained, with16 reserved for stopped checkpoints.
 reserved-continuation flag, copy begin/end, RAW/ST end, take begin/end,
 early-versus-taken mismatch count, completed-view reread mismatch count,
 preceding scan ordinal, preceding copy begin/end and preceding-versus-taken
-mismatch count. The second completed view is not an independent volatile bus
+mismatch count, post-IRQ copy begin/end and post-IRQ-versus-taken mismatch
+count. The second completed view is not an independent volatile bus
 observation. `P` rows contain unit ID, byte offset, up to16 preceding-scan
-bytes, then the same number of early and taken bytes. Packet dumps belong
+bytes, then the same number of early, post-IRQ and taken bytes. Packet dumps belong
 only in local evidence.
 
 This image does not associate a STA, exchange keys or establish HE/A-MPDU

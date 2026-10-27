@@ -6,7 +6,8 @@ pub(super) const PAYLOAD_CAPACITY: usize = 4096;
 
 #[cfg_attr(target_arch = "riscv32", derive(bytemuck::Zeroable))]
 pub(crate) struct Unit {
-    pub(super) header: [u32; 20],
+    pub(super) header: [u32; 23],
+    pub(super) after_irq: [u8; PAYLOAD_CAPACITY],
     pub(super) previous: [u8; PAYLOAD_CAPACITY],
     pub(super) early: [u8; PAYLOAD_CAPACITY],
     pub(super) taken: [u8; PAYLOAD_CAPACITY],
@@ -16,6 +17,7 @@ pub(crate) struct Unit {
 pub(crate) struct Journal<const N: usize, const W: usize> {
     pub(super) pre: [[u32; W]; N],
     pub(super) previous_pre: [[u32; W]; N],
+    pub(super) post: [[u32; W]; N],
     pub(super) previous_begin: u32,
     pub(super) previous_end: u32,
     pub(super) bindings: [u32; N],
@@ -69,6 +71,7 @@ mod tests {
         let mut j = Journal::<1, 1> {
             pre: [[0]],
             previous_pre: [[0]],
+            post: [[0]],
             previous_begin: 0,
             previous_end: 0,
             bindings: [0],
@@ -76,7 +79,8 @@ mod tests {
             used: 0,
             scans: 0,
             units: core::array::from_fn(|_| Unit {
-                header: [0; 20],
+                header: [0; 23],
+                after_irq: [0; PAYLOAD_CAPACITY],
                 previous: [0; PAYLOAD_CAPACITY],
                 early: [0; PAYLOAD_CAPACITY],
                 taken: [0; PAYLOAD_CAPACITY],
