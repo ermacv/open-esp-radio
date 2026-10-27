@@ -381,7 +381,9 @@ registers = ["COMMON_CONTROL", "BANK_CONTROL%s"]
 [[partitions.parts]]
 name = "WifiMacAuxTsfControl"
 instance = "MODEM_PWR"
-registers = ["SOFTAP_CONTROL", "NAN_CONTROL", "BTWT_CONTROL"]
+registers = ["SOFTAP_CONTROL", "SOFTAP_TBTT_INTERVAL", "NAN_CONTROL", "NAN_TBTT_INTERVAL", "BTWT_CONTROL", "BTWT_TBTT_INTERVAL"]
+description = "Auxiliary TSF controls and their adjacent per-domain TBTT intervals. SOURCE: BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027; oer-notes/research/bx-irq-122.md. Shared snapshot/load staging remains with WifiMacTsfLoad."
+sources = ["BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 
 [[partitions.parts]]
 name = "WifiMacBeaconIeCrc"
@@ -1207,7 +1209,9 @@ description = "The analog-I2C master and its command memory: the one writer of t
 [[partitions.parts]]
 name = "I2cAnaMst"
 instance = "I2C_ANA_MST"
-registers = ["I2C0_CTRL", "I2C1_CTRL", "ANA_CONF0", "ANA_CONF1", "ANA_CONF2", "I2C0_CTRL1", "I2C1_CTRL1", "HW_I2C_CTRL"]
+registers = ["I2C0_CTRL", "I2C1_CTRL", "I2C0_CONF", "I2C1_CONF", "I2C_BURST_CONF", "I2C_BURST_STATUS", "ANA_CONF0", "ANA_CONF1", "ANA_CONF2", "I2C0_CTRL1", "I2C1_CTRL1", "HW_I2C_CTRL"]
+description = "Analog-I2C host commands, host configuration/status and burst control/status under their existing transport owner. SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H; oer-notes/research/bx-irq-123-131.md. Status observations establish no interrupt-source binding."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
 
 [[partitions.parts]]
 name = "PhyI2cCommandRam"
@@ -1274,8 +1278,8 @@ reason = "Observed in vendor sources for bit-use coverage only: no transaction o
 
 [[unclaimed]]
 instance = "MODEM_PWR"
-registers = ["WORD_0848_OPAQUE", "WORD_0850_OPAQUE", "SOFTAP_TBTT_INTERVAL", "NAN_TBTT_INTERVAL", "BTWT_TBTT_INTERVAL", "WORD_08D0_OPAQUE"]
-reason = "Unclaimed auxiliary modem words and TBTT domain1-3 intervals; no production owner is assigned."
+registers = ["WORD_0848_OPAQUE", "WORD_0850_OPAQUE", "WORD_08D0_OPAQUE"]
+reason = "Unclaimed auxiliary modem words; no production owner is assigned."
 
 [[unclaimed]]
 instance = "MODEM_TIMER"
@@ -1304,7 +1308,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "I2C_ANA_MST"
-registers = ["I2C0_CONF", "I2C1_CONF", "I2C_BURST_CONF", "I2C_BURST_STATUS", "I2C_MST_NOUSE", "EXT_I2C_MASK", "I2C_MASK", "DATE"]
+registers = ["I2C_MST_NOUSE", "EXT_I2C_MASK", "I2C_MASK", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
