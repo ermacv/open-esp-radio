@@ -358,14 +358,18 @@ where
             Rf::Closed => {
                 // Any failure, a rejection included, leaves the domain's
                 // state unknown to the actor: it poisons.
-                let operation = wake_concurrent_rf::<_, RomShortDelay>(
+                let mut operation = core::pin::pin!(wake_concurrent_rf::<_, RomShortDelay>(
                     &self.timer,
                     require_radio(self.radio.take(), self.radio_fault),
                     &self.clocks,
-                );
-                owned_operation::run(operation, &mut self.radio, owned_operation::restore)
-                    .await
-                    .map_err(|error| Fault(rf_cause(error)))?;
+                ));
+                owned_operation::run(
+                    operation.as_mut(),
+                    &mut self.radio,
+                    owned_operation::restore,
+                )
+                .await
+                .map_err(|error| Fault(rf_cause(error)))?;
                 self.rf = Rf::Open;
                 Ok(PhyPreparation::Woke {
                     micros: self.micros_since(start),
@@ -377,16 +381,18 @@ where
                     .take()
                     .ok_or(Fault(PoisonCause::Custody))?;
                 let mut platform = ();
-                let operation = register_concurrent_phy::<_, (), RomShortDelay, O>(
-                    &self.timer,
-                    require_radio(self.radio.take(), self.radio_fault),
-                    &mut platform,
-                    &self.clocks,
-                    config,
-                    self.observer.clone(),
-                );
+                let mut operation =
+                    core::pin::pin!(register_concurrent_phy::<_, (), RomShortDelay, O>(
+                        &self.timer,
+                        require_radio(self.radio.take(), self.radio_fault),
+                        &mut platform,
+                        &self.clocks,
+                        config,
+                        self.observer.clone(),
+                    ));
                 let outcome =
-                    owned_operation::run(operation, &mut self.radio, finish_registration).await?;
+                    owned_operation::run(operation.as_mut(), &mut self.radio, finish_registration)
+                        .await?;
                 self.rf = Rf::Open;
                 Ok(PhyPreparation::Registered {
                     calibration_path: outcome.calibration_path,
@@ -401,13 +407,17 @@ where
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault> {
         let LastClientLeft(()) = last;
         let mut platform = ();
-        let operation = close_concurrent_rf::<_, (), RomShortDelay>(
+        let mut operation = core::pin::pin!(close_concurrent_rf::<_, (), RomShortDelay>(
             &self.timer,
             require_radio(self.radio.take(), self.radio_fault),
             &mut platform,
-        );
-        let result =
-            owned_operation::run(operation, &mut self.radio, owned_operation::restore).await;
+        ));
+        let result = owned_operation::run(
+            operation.as_mut(),
+            &mut self.radio,
+            owned_operation::restore,
+        )
+        .await;
         match result {
             Ok(()) => {
                 self.rf = Rf::Closed;
@@ -437,17 +447,21 @@ where
         // A rejected tick (the tracking clock ran backwards) would fall due
         // again at once; it poisons like a failed one.
         let mut platform = ();
-        let operation = track_concurrent_phy::<_, (), RomShortDelay, O>(
+        let mut operation = core::pin::pin!(track_concurrent_phy::<_, (), RomShortDelay, O>(
             require_radio(self.radio.take(), self.radio_fault),
             &mut platform,
             &self.timer,
             self.observer.clone(),
             &mut self.pilot,
-        );
-        let result = owned_operation::run(operation, &mut self.radio, owned_operation::restore)
-            .await
-            .map(|_tick| ())
-            .map_err(|error| Fault(tracking_cause(error)));
+        ));
+        let result = owned_operation::run(
+            operation.as_mut(),
+            &mut self.radio,
+            owned_operation::restore,
+        )
+        .await
+        .map(|_tick| ())
+        .map_err(|error| Fault(tracking_cause(error)));
         #[cfg(feature = "bluetooth")]
         if result.is_ok() && self.bluetooth_attached {
             self.wifi.tracking_due = false;
@@ -599,15 +613,22 @@ where
         let tracking_micros = if self.wifi.tracking_due {
             let start = self.timer.now();
             let mut platform = ();
-            let operation = maintain_concurrent_phy::<_, (), RomShortDelay, O>(
-                &self.timer,
-                require_radio(self.radio.take(), self.radio_fault),
-                &mut platform,
-                self.observer.clone(),
-                &mut self.pilot,
-            );
-            let result =
-                owned_operation::run(operation, &mut self.radio, owned_operation::restore).await;
+            let result = {
+                let mut operation =
+                    core::pin::pin!(maintain_concurrent_phy::<_, (), RomShortDelay, O>(
+                        &self.timer,
+                        require_radio(self.radio.take(), self.radio_fault),
+                        &mut platform,
+                        self.observer.clone(),
+                        &mut self.pilot,
+                    ));
+                owned_operation::run(
+                    operation.as_mut(),
+                    &mut self.radio,
+                    owned_operation::restore,
+                )
+                .await
+            };
             match result {
                 Ok(_outcome) => {
                     self.wifi.tracking_due = false;
@@ -640,16 +661,23 @@ where
         let mut platform = ();
         let transaction = require_radio(self.radio.take(), self.radio_fault)
             .detach(oer_esp32s31_hal::domain::transaction::Operation::Channel);
-        let channel = wifi.channel_transaction(&mut platform, transaction);
-        let operation = select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
-            &self.timer,
-            lowered.channel_or_frequency,
-            lowered.cbw,
-            channel,
-            &mut observer,
-        );
-        let selected =
-            owned_operation::run(operation, &mut self.radio, owned_operation::restore).await;
+        let selected = {
+            let channel = wifi.channel_transaction(&mut platform, transaction);
+            let mut operation =
+                core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
+                    &self.timer,
+                    lowered.channel_or_frequency,
+                    lowered.cbw,
+                    channel,
+                    &mut observer,
+                ));
+            owned_operation::run(
+                operation.as_mut(),
+                &mut self.radio,
+                owned_operation::restore,
+            )
+            .await
+        };
         if let Err(error) = selected {
             let cause = match error {
                 ConcurrentWifiChannelError::Rejected(_) => {

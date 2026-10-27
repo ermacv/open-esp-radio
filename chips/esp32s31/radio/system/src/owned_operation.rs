@@ -1,23 +1,23 @@
 //! Poll an owned PHY operation into retained output storage, then return custody.
-use core::{future::Future, mem::MaybeUninit};
+use core::{future::Future, mem::MaybeUninit, pin::Pin};
 use oer_esp32s31_hal::{domain::RadioDomain, power::PlatformClockBackend};
 use oer_memory::Placed;
 
 #[inline(always)]
-pub(super) fn run<B: PlatformClockBackend, A, R, E, U>(
-    operation: impl Future<Output = (RadioDomain<B, A>, Result<R, E>)>,
+pub(super) fn run<B: PlatformClockBackend, A, R, E, U, F>(
+    operation: Pin<&mut F>,
     destination: &mut Option<RadioDomain<B, A>>,
     finish: impl FnOnce(
         &mut Option<RadioDomain<B, A>>,
         Placed<'_, (RadioDomain<B, A>, Result<R, E>)>,
     ) -> U,
-) -> impl Future<Output = U> {
+) -> impl Future<Output = U>
+where
+    F: Future<Output = (RadioDomain<B, A>, Result<R, E>)>,
+{
     async move {
         let mut completion = MaybeUninit::uninit();
-        let returned = {
-            let mut operation = core::pin::pin!(operation);
-            oer_memory::poll_placed(operation.as_mut(), &mut completion).await
-        };
+        let returned = oer_memory::poll_placed(operation, &mut completion).await;
         finish(destination, returned)
     }
 }
@@ -79,7 +79,11 @@ mod tests {
             pending::<()>().await;
             (transaction.reunite(), Ok::<(), ()>(()))
         };
-        let mut future = Box::pin(run(operation, &mut destination, restore));
+        let parent = async {
+            let mut operation = core::pin::pin!(operation);
+            run(operation.as_mut(), &mut destination, restore).await
+        };
+        let mut future = Box::pin(parent);
         assert!(
             future
                 .as_mut()
@@ -111,11 +115,12 @@ mod tests {
         let transaction = radio.detach(Operation::Register);
         let mut destination = None;
         {
-            let mut future = core::pin::pin!(run(
-                async { (transaction.reunite(), Ok::<_, ()>(17)) },
-                &mut destination,
-                restore,
-            ));
+            let parent = async {
+                let mut operation =
+                    core::pin::pin!(async { (transaction.reunite(), Ok::<_, ()>(17)) });
+                run(operation.as_mut(), &mut destination, restore).await
+            };
+            let mut future = core::pin::pin!(parent);
             assert_eq!(
                 future
                     .as_mut()

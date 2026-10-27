@@ -175,7 +175,48 @@ where
     O: PhyTargetObserver + 'a,
 {
     Boundary::new(async move {
-        let mut radio = initial.reunite();
+        let mut initial_storage = core::mem::MaybeUninit::uninit();
+        let initial = oer_memory::Placed::init(&mut initial_storage, |place| place.write(initial));
+        let mut preparation = core::mem::MaybeUninit::uninit();
+        let prepared = begin_concurrent_registration(initial, clocks, &mut preparation);
+        oer_memory::match_placed!(prepared, Result {
+            Ok(transaction) => {
+                let mut transaction = transaction;
+                let mut completion = core::mem::MaybeUninit::uninit();
+                let registered = {
+                    let mut register = core::pin::pin!(PhyDomain::register::<P, _, D, O>(
+                        timer,
+                        platform,
+                        transaction.hardware_mut(),
+                        config,
+                        observer,
+                    ));
+                    oer_memory::poll_placed(register.as_mut(), &mut completion).await
+                };
+                complete_concurrent_registration(transaction, registered)
+            },
+            Err(refused) => reject_concurrent_registration(refused),
+        })
+    })
+}
+
+// Transfer typed custody between retained places; absence is not representable.
+#[inline(never)]
+fn begin_concurrent_registration<'p, B: PlatformClockBackend>(
+    initial: oer_memory::Placed<'p, RadioTransaction<B, ConcurrentPhy>>,
+    clocks: &impl PlatformClockProvider<Backend = B>,
+    storage: &'p mut core::mem::MaybeUninit<
+        Result<
+            RadioTransaction<B, ConcurrentPhy>,
+            (RadioDomain<B, ConcurrentPhy>, ConcurrentPhyError),
+        >,
+    >,
+) -> oer_memory::Placed<
+    'p,
+    Result<RadioTransaction<B, ConcurrentPhy>, (RadioDomain<B, ConcurrentPhy>, ConcurrentPhyError)>,
+> {
+    oer_memory::Placed::init(storage, |place| {
+        let mut radio = initial.read().reunite();
         let rejection = match radio.attachment_mut().slot_mut() {
             Slot::Empty => None,
             Slot::Poisoned => Some(ConcurrentPhyError::Poisoned),
@@ -184,37 +225,35 @@ where
             }
         };
         if let Some(error) = rejection {
-            return (radio, Err(ConcurrentPhyRegisterFailure::Rejected(error)));
+            return place.write(Err((radio, error)));
         }
         if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
-            return (
-                radio,
-                Err(ConcurrentPhyRegisterFailure::Rejected(
-                    ConcurrentPhyError::Clock(error),
-                )),
-            );
+            return place.write(Err((radio, ConcurrentPhyError::Clock(error))));
         }
-        let mut transaction =
-            radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Register);
-        let mut completion = core::mem::MaybeUninit::uninit();
-        let registered = {
-            let mut register = core::pin::pin!(PhyDomain::register::<P, _, D, O>(
-                timer,
-                platform,
-                transaction.hardware_mut(),
-                config,
-                observer,
-            ));
-            oer_memory::poll_placed(register.as_mut(), &mut completion).await
-        };
-        complete_concurrent_registration(transaction, registered)
+        place.write(Ok(
+            radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Register)
+        ))
     })
 }
 
-// The child result stays placed while reunion consumes the typed transaction.
+#[inline(never)]
+fn reject_concurrent_registration<B: PlatformClockBackend>(
+    refused: oer_memory::Placed<'_, (RadioDomain<B, ConcurrentPhy>, ConcurrentPhyError)>,
+) -> (
+    RadioDomain<B, ConcurrentPhy>,
+    Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+) {
+    let (radio, error) = refused.split();
+    (
+        radio.read(),
+        Err(ConcurrentPhyRegisterFailure::Rejected(error.read())),
+    )
+}
+
+// Only owned loans cross the poll boundary; reunion has its own return place.
 #[inline(never)]
 fn complete_concurrent_registration<B: PlatformClockBackend>(
-    transaction: RadioTransaction<B, ConcurrentPhy>,
+    transaction: oer_memory::Placed<'_, RadioTransaction<B, ConcurrentPhy>>,
     registered: oer_memory::Placed<
         '_,
         Result<super::domain::PhyDomainRegistered, super::domain::PhyDomainRegisterFailure>,
@@ -223,7 +262,7 @@ fn complete_concurrent_registration<B: PlatformClockBackend>(
     RadioDomain<B, ConcurrentPhy>,
     Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
 ) {
-    let mut radio = transaction.reunite();
+    let mut radio = transaction.read().reunite();
     let result = finish_concurrent_registration(&mut radio, registered.read());
     (radio, result)
 }

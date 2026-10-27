@@ -147,8 +147,8 @@ consumes both halves, so a stale return token cannot remain live.
 
 Registration, RF wake and RF close construct their async state directly in
 their enclosing place and use the same `executor::boundary::Boundary` as
-the radio actor. Registration retains its typed owned transaction across
-work; its constructor detaches that owner before the first poll.
+the radio actor. Registration transfers typed `Placed` custody between retained fields;
+its constructor detaches the owned transaction before the first poll.
 Owned lifecycle futures pin their borrowed PHY children in their retained
 state and await pinned references. The radio backend pins the owned
 operations in the same way. Completed child results remain in placed fields
