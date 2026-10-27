@@ -211,6 +211,7 @@ struct Session<'a> {
     uart0_clock: pac::ownership::Uart0ClockPeripherals,
     reset_cause: pac::ownership::ResetCausePeripherals,
     wake_status: pac::pmu::PmuWakeStatus,
+    modem_wake_status: pac::modem_lpcon::ModemWakeStatus,
     ble: ble::Ble,
     radio: radio_local::Radio,
     generic: generic::Hardware,
@@ -246,6 +247,18 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 13,
         run: Action::Thread(opaque::temperature),
+    },
+    Probe {
+        id: 170,
+        run: Action::Thread(lp_lanes::rest::compare),
+    },
+    Probe {
+        id: 171,
+        run: Action::Thread(lp_lanes::rest::sleep16),
+    },
+    Probe {
+        id: 172,
+        run: Action::Thread(lp_lanes::rest::sleep17),
     },
     Probe {
         id: 113,
@@ -531,6 +544,7 @@ extern "C" fn facts_main() -> ! {
         uart0_clock: p.uart0_clock,
         reset_cause: p.reset_cause,
         wake_status: p.pmu_wake.pmu_wake_status,
+        modem_wake_status: p.pmu_wake.modem_wake_status,
         radio: radio_local::Radio {
             local_time: p.mac_local_time.wifi_mac_local_time,
             status: p.wifi_mac.wifi_mac_tsf_status,

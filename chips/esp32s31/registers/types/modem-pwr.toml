@@ -135,7 +135,7 @@ completeness = "unknown"
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026"]
 
 [review.entity."WORD_0058_OPAQUE.CONTROL_4"]
-sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026"]
+sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026", "HW21_S31_LP_CONTROL4_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -1158,7 +1158,7 @@ description = "Sampled on the conditional ISR path. In the near-compare test thi
 name = "CONTROL_4"
 bits = "4"
 class = "plain"
-description = "Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8)."
+description = "Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027."
 
 [[registers.fields]]
 name = "BIT_3_OPAQUE"

@@ -1,5 +1,6 @@
 //! Local LP delivery, sleep commands and PMU observations; no RF or DMA.
 use super::{Bits, Session, ble, ble_wave2, emit, pac};
+pub(super) mod rest;
 
 const LOW_MAX: u32 = pac::modem_pwr::word_0048_opaque::COUNTER_LOW_MAX;
 const CAUSE_LIMIT: u32 = 200_000;
