@@ -1,9 +1,76 @@
 # S31 RX chain hardware observation
 
-The default source selection is **160**, a source120 RAW/STATUS/DMA observation.
-The source constant `image.rs::SELECTION` selects it; selection4 runs the
-barrier observer described below. Both use the same public cold startup and
-one retained 32×128-byte RX arena plus R, without take/recycle/rearm.
+The default source selection is **200**, a source120 traffic/take/recycle observation.
+The `legacy-observer` package feature selects the original actor composition
+and selection160; its source constant can select the selection4 barrier observer.
+All modes use the same public cold hardware transitions and one
+retained 32×128-byte RX arena plus R. Only200 performs take/recycle/rearm.
+
+## Traffic and ownership capture (selections200–209)
+
+Selection200 runs one 700-ms maximum RX window, or stops at twelve taken
+units. It uses the existing permanent 32×128-byte arena plus R. Every MMIO
+operation borrows the public HAL owner. There is no source120 CPU handler;
+timestamps describe peripheral visibility, not ISR entry. Nothing in production
+calls the independent opaque-enable observation added for this measurement.
+
+The new mode calls the existing backend's public `prepare`, `enter` and
+`track` transitions directly on P2, in production order. Its placed futures
+avoids the actor request/answer frames around registration, which exceed
+the unchanged IRQ-stack contract at this base. A `ClaimCell` transfers only
+the resulting permanent running owner's reference to P1. The backend, clocks
+and running owner remain retained until the leased host reset; no reusable
+radio is returned and no independent PAC claim is made. Only the selected
+composition's P2 task roots are compiled. Modes4/160 retain their original
+actor composition and its currently unqualified stack path.
+
+Checkpoints200/201 bracket this public cold startup;202 follows DMA publication
+and a sampled nonfatal stale RAW acknowledgement, before outer RX starts.
+Phase203 publishes the reviewed station interrupt mask and records enabled
+reception for350ms, then204 masks every MAC enable without acknowledgement
+for the rest of the window. Both phases exercise real frozen-cursor
+`take_completed_unit`, byte reads and `recycle`, immediately completing each
+pending reload with the production20-µs settle. Recording errors retain the
+unit for deferred recycling and stop collection. No live payload is painted.
+
+Every scan copies all33 buffers by bounded volatile value reads **before**
+RAW and the exact pre-ack STATUS sample. The existing observation checks use
+the original pre-RX BUFFER bindings. The taken unit's complete segments are
+copied and compared against those earlier bytes, then reread before recycling.
+A reserved-descriptor continuation is explicitly marked as an incomplete frame;
+it cannot qualify whole-frame payload ordering. A unit taken on a later scan
+than first positive14 also cannot qualify that earlier observation. Finite
+equal bytes constrain sampled order only; they do not prove electrical IRQ
+assertion order, a universal DMA guarantee or arbitrary detach safety.
+
+After stopping outer RX and the walker,205 records masked pending;206
+enables RX5/14/24 and retains three independent STATUS samples.207 masks all
+enables, records pre-clear state and clears only saved5;208 clears saved14;
+209 clears saved24, then observes RX-unmask replay and final all-enable mask.
+Each exact clear sample is emitted before consumption; zero samples remain
+inconclusive. No masked STATUS resample replaces the saved authority.
+
+`M` rows contain32 hex words: scan, phase, pre-copy begin/end cycle, RAW and
+its end cycle, STATUS and its end cycle, LAST/NEXT, DONE bitmap and R DONE,
+RX-enable software code (5=1/14=2/24=4), opaque-enable software code
+(6=1/12=2/13=4/23=8), MPDU/END/FCS/buffer-full/data-success counters,
+taken head+1/count/length/reserved-continuation/mismatching-byte count,
+take-end cycle, append-success flag, post-ack RAW/STATUS/end cycle,
+stopped substep, exact selected-clear sample (phase206 only), reserved zero.
+Bank-only checkpoints have zero DMA/counter columns.
+At most256 rows are retained, with16 reserved for stopped checkpoints.
+
+`T` rows contain unit ID, then scan/phase/RAW/STATUS/head/count/length,
+reserved-continuation flag, copy begin/end, RAW/ST end, take begin/end,
+early-versus-taken mismatch count and taken-reread mismatch count.
+`P` rows contain unit ID, byte offset, up to16 early bytes then the same
+number of taken bytes. Packet dumps belong only in local evidence.
+
+This image does not associate a STA, exchange keys or establish HE/A-MPDU
+stimulus delivery. A host must characterize and label actual peer traffic;
+ordinary beacons or broadcast UDP cannot be represented as the R24 associated
+CCMP HE20 one/eight-MPDU stimulus. No negative cause conclusion follows from
+an undelivered stimulus. Live acquisition emits no console output.
 
 ## Source120 capture (selection160)
 

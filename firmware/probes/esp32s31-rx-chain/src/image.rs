@@ -41,8 +41,14 @@ use static_cell::StaticCell;
 
 #[path = "irq120.rs"]
 mod irq120;
+#[path = "traffic.rs"]
+mod traffic;
 // The current finite capture; selection 4 retains the barrier observer below.
-const SELECTION: u16 = 160;
+const SELECTION: u16 = if cfg!(feature = "legacy-observer") {
+    160
+} else {
+    200
+};
 
 const COUNT: usize = 32;
 const BUFFER: usize = 128;
@@ -68,7 +74,20 @@ type Actor = RadioSystem<
     >,
     EmbassyClock,
 >;
+type Backend = Esp32s31Radio<
+    ChipClocks,
+    oer_espressif_executor::Cooperative<EmbassyClock>,
+    NoopPhyTargetObserver,
+>;
 static ACTOR: StaticCell<Actor> = StaticCell::new();
+static DIRECT_BACKEND: StaticCell<Backend> = StaticCell::new();
+struct DirectOutput {
+    access: oer_esp32s31_hal::owner::RadioAccess,
+    _clocks: oer_esp32s31_hal::ieee80211::client::WifiClocksOn,
+}
+static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
+static DIRECT_READY: oer_memory::ClaimCell<Result<&'static mut DirectOutput, &'static str>> =
+    oer_memory::ClaimCell::new();
 oer_esp32s31_hal::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
 #[derive(bytemuck::Zeroable)]
 struct Trace {
@@ -111,7 +130,12 @@ oer_interrupt_table::interrupt_table! {
     app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 20, context app, hart 0, Hardware;
 }
 oer_espressif_executor::tasks! {
-    RadioTasks: InterruptExecutor<2> { actor(actor: &'static mut Actor) = radio_actor; }
+    RadioTasks: InterruptExecutor<2> {
+        #[cfg(feature = "legacy-observer")]
+        actor(actor: &'static mut Actor) = radio_actor;
+        #[cfg(not(feature = "legacy-observer"))]
+        direct(backend: &'static mut Backend, lp: LpClock<RcSlow>, wifi: oer_esp32s31_hal::root::WifiPartition, rng: Rng, station: [u8;6], ap: [u8;6]) = direct_start;
+    }
 }
 oer_espressif_executor::tasks! {
     AppTasks: Executor<0> {
@@ -123,9 +147,10 @@ struct Boot {
     console: usb::Console,
     _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
-    wifi: oer_esp32s31_hal::root::WifiPartition,
+    wifi: Option<oer_esp32s31_hal::root::WifiPartition>,
     mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
-    rng: Rng,
+    rng: Option<Rng>,
+    traffic: Option<&'static mut traffic::Trace>,
     station: [u8; 6],
     ap: [u8; 6],
 }
@@ -174,7 +199,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     );
-    let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
+    let (actor, direct) = if SELECTION == 200 {
+        let Some(backend) = DIRECT_BACKEND.try_init(backend) else {
+            fail("direct-backend");
+        };
+        (None, Some((backend, lp)))
+    } else {
+        (
+            Some(ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp))),
+            None,
+        )
+    };
     let timer = runtime.system_timer;
     oer_espressif_executor::init::<2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
@@ -191,6 +226,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let mut wifi_irqs = runtime.wifi_interrupts;
     wifi_irqs.mac.mask_all_mac_interrupts();
     wifi_irqs.power.mask_all_power_interrupts();
+    let traffic = if SELECTION == 200 {
+        let trace = traffic::take().unwrap_or_else(|reason| fail(reason));
+        if let Err(reason) = traffic::checkpoint(trace, 200, 0, &wifi_irqs.mac) {
+            fail(reason);
+        }
+        Some(trace)
+    } else {
+        None
+    };
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
@@ -200,8 +244,25 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         software.irq2,
         (),
     );
-    if RadioTasks::actor(&radio, actor).is_err() {
-        fail("actor-task");
+    #[cfg(feature = "legacy-observer")]
+    if let Some(actor) = actor {
+        if RadioTasks::actor(&radio, actor).is_err() {
+            fail("actor-task");
+        }
+    }
+    let mut wifi = Some(partitions.wifi);
+    let mut rng = Some(Rng::new(runtime.entropy, EmbassyClock));
+    #[cfg(not(feature = "legacy-observer"))]
+    if let Some((backend, lp)) = direct {
+        let Some(wifi) = wifi.take() else {
+            fail("direct-wifi");
+        };
+        let Some(rng) = rng.take() else {
+            fail("direct-rng");
+        };
+        if RadioTasks::direct(&radio, backend, lp, wifi, rng, station, ap).is_err() {
+            fail("direct-task");
+        }
     }
     let (console, pads) = match usb::open(adopted.router(), interrupts.console_usb) {
         Ok(value) => value,
@@ -215,9 +276,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         console,
         _pads: pads,
         cell: cells.wifi,
-        wifi: partitions.wifi,
+        wifi,
         mac_irq: wifi_irqs.mac,
-        rng: Rng::new(runtime.entropy, EmbassyClock),
+        rng,
+        traffic,
         station,
         ap,
     };
@@ -243,8 +305,162 @@ fn fail(reason: &'static str) -> ! {
         );
     })
 }
+type ActorRun = impl core::future::Future<Output = core::convert::Infallible>;
+static ACTOR_RUN: static_cell::ConstStaticCell<oer_memory::StaticPlace<ActorRun>> =
+    static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
+#[define_opaque(ActorRun)]
+#[inline(never)]
+fn actor_run(actor: &'static mut Actor) -> ActorRun {
+    actor.run()
+}
+#[inline(never)]
+fn placed_actor(actor: &'static mut Actor) -> oer_memory::PlacedFuture<'static, ActorRun> {
+    let Some(place) = ACTOR_RUN.try_take() else {
+        fail("actor-future-claimed");
+    };
+    place.future(|| actor_run(actor))
+}
 async fn radio_actor(actor: &'static mut Actor) {
-    match actor.run().await {}
+    match placed_actor(actor).await {}
+}
+type DirectRun = impl core::future::Future<Output = Result<DirectOutput, &'static str>>;
+type DirectPrepare<'a> = impl core::future::Future<
+        Output = Result<
+            oer_esp32s31_radio_client::PhyPreparation,
+            oer_esp32s31_radio_system::Fault,
+        >,
+    > + 'a;
+type DirectTrack<'a> = impl core::future::Future<
+        Output = Result<
+            oer_esp32s31_radio_client::wifi::WifiTracked,
+            oer_esp32s31_radio_client::Failed<oer_esp32s31_hal::ieee80211::client::WifiClocked>,
+        >,
+    > + 'a;
+static PREPARE: static_cell::ConstStaticCell<oer_memory::StaticPlace<DirectPrepare<'static>>> =
+    static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
+static TRACK: static_cell::ConstStaticCell<oer_memory::StaticPlace<DirectTrack<'static>>> =
+    static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
+#[define_opaque(DirectPrepare)]
+fn prepare_future(backend: &mut Backend) -> DirectPrepare<'_> {
+    use oer_esp32s31_radio_system::PhyDomain;
+    backend.prepare()
+}
+#[define_opaque(DirectTrack)]
+fn track_future(
+    backend: &mut Backend,
+    request: oer_esp32s31_radio_client::wifi::WifiTrack,
+) -> DirectTrack<'_> {
+    use oer_esp32s31_radio_system::ClientBackend;
+    backend.track(request)
+}
+#[inline(never)]
+fn placed_prepare(
+    backend: &mut Backend,
+) -> Result<oer_memory::PlacedFuture<'_, DirectPrepare<'_>>, &'static str> {
+    let place = PREPARE.try_take().ok_or("direct-prepare-place")?;
+    Ok(place.future(|| prepare_future(backend)))
+}
+#[inline(never)]
+fn placed_track(
+    backend: &mut Backend,
+    request: oer_esp32s31_radio_client::wifi::WifiTrack,
+) -> Result<oer_memory::PlacedFuture<'_, DirectTrack<'_>>, &'static str> {
+    let place = TRACK.try_take().ok_or("direct-track-place")?;
+    Ok(place.future(|| track_future(backend, request)))
+}
+static DIRECT_RUN: static_cell::ConstStaticCell<oer_memory::StaticPlace<DirectRun>> =
+    static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
+#[define_opaque(DirectRun)]
+fn direct_future(
+    backend: &'static mut Backend,
+    lp: LpClock<RcSlow>,
+    wifi: oer_esp32s31_hal::root::WifiPartition,
+    rng: Rng,
+    station: [u8; 6],
+    ap: [u8; 6],
+) -> DirectRun {
+    async move {
+        use oer_esp32s31_hal::ieee80211::{client::WifiCold, init::MacColdStartConfig};
+        use oer_esp32s31_radio_client::wifi::{WifiJoin, WifiTrack};
+        use oer_esp32s31_radio_system::ClientBackend;
+        let channel = WifiChannel::new_2_4_ghz(CHANNEL, WifiChannelWidth::Mhz20)
+            .map_err(|_| "direct-channel")?;
+        let domain = Country::new(*b"DE")
+            .ok()
+            .and_then(RegulatoryDomain::of)
+            .ok_or("direct-domain")?;
+        let channel = domain.permit(channel).map_err(|_| "direct-permit")?;
+        let tx_ceiling = channel.tx_ceiling(board::wifi_power_limits(
+            i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
+            Some(1000),
+        ));
+        let phy = placed_prepare(backend)?
+            .await
+            .map_err(|_| "direct-prepare")?;
+        let joined = backend
+            .enter(
+                WifiJoin {
+                    wifi: WifiCold::from_partition(wifi),
+                },
+                phy,
+                &lp,
+            )
+            .await
+            .map_err(|_| "direct-enter")?;
+        let mut platform = Platform { rng };
+        let tracked = placed_track(
+            backend,
+            WifiTrack {
+                wifi: joined.wifi,
+                channel,
+                tx_ceiling,
+                mac: MacColdStartConfig {
+                    handshake_deadline: MAC_COLD_HANDSHAKE_DEADLINE,
+                    station_address: station,
+                    access_point_address: ap,
+                },
+                slow_clock: platform.mac_slow_clock_calibration(),
+                delay_random: platform.mac_delay_random(),
+            },
+        )?
+        .await
+        .map_err(|_| "direct-track")?;
+        let (access, clocks) = tracked.wifi.into_running();
+        Ok(DirectOutput {
+            access,
+            _clocks: clocks,
+        })
+    }
+}
+#[inline(never)]
+fn placed_direct(
+    backend: &'static mut Backend,
+    lp: LpClock<RcSlow>,
+    wifi: oer_esp32s31_hal::root::WifiPartition,
+    rng: Rng,
+    station: [u8; 6],
+    ap: [u8; 6],
+) -> oer_memory::PlacedFuture<'static, DirectRun> {
+    let Some(place) = DIRECT_RUN.try_take() else {
+        fail("direct-future-claimed");
+    };
+    place.future(|| direct_future(backend, lp, wifi, rng, station, ap))
+}
+async fn direct_start(
+    backend: &'static mut Backend,
+    lp: LpClock<RcSlow>,
+    wifi: oer_esp32s31_hal::root::WifiPartition,
+    rng: Rng,
+    station: [u8; 6],
+    ap: [u8; 6],
+) {
+    let result = match placed_direct(backend, lp, wifi, rng, station, ap).await {
+        Ok(output) => DIRECT_OUTPUT.try_init(output).ok_or("direct-output"),
+        Err(reason) => Err(reason),
+    };
+    if DIRECT_READY.install(result).is_err() {
+        fail("direct-publish");
+    }
 }
 async fn feed_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
     match watchdog
@@ -654,17 +870,109 @@ async fn capture(boot: Boot) {
         wifi,
         mac_irq,
         rng,
+        traffic,
         station,
         ap,
     } = boot;
     usb::text(&mut console, b"RXCHAIN boot\n").await;
-    let result = run(&mut console, cell, wifi, mac_irq, rng, station, ap).await;
+    let result = if let Some(trace) = traffic {
+        run_direct(&mut console, trace, mac_irq).await
+    } else {
+        match (wifi, rng) {
+            (Some(wifi), Some(rng)) => {
+                run(&mut console, cell, wifi, mac_irq, rng, station, ap).await
+            }
+            _ => Err("legacy-inputs"),
+        }
+    };
     if let Err(reason) = result {
         usb::text(&mut console, reason.as_bytes()).await;
         usb::text(&mut console, b"\nOER-RESULT: fail rx-chain\n").await;
     } else {
         usb::text(&mut console, b"OER-RESULT: pass rx-chain\n").await;
     }
+}
+async fn run_direct(
+    console: &mut usb::Console,
+    trace: &mut traffic::Trace,
+    mut mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
+) -> Result<(), &'static str> {
+    let deadline = EmbassyClock
+        .now()
+        .checked_add(Duration::from_secs(5))
+        .ok_or("direct-deadline")?;
+    let output = loop {
+        if let Ok(result) = DIRECT_READY.take() {
+            break result?;
+        }
+        if EmbassyClock.now() >= deadline {
+            return Err("direct-ready-timeout");
+        }
+        EmbassyClock
+            .wait_until(
+                EmbassyClock
+                    .now()
+                    .checked_add(Duration::from_millis(1))
+                    .ok_or("direct-wait")?,
+            )
+            .await;
+    };
+    let access = &mut output.access;
+    traffic::checkpoint(trace, 201, 0, &mac_irq)?;
+    let placed = RxDmaStorage::place(RX.take().ok_or("rx-claimed")?).map_err(|_| "rx-place")?;
+    let storage = placed.storage();
+    let prepared = placed
+        .prepare_ring(access.rx_dma())
+        .map_err(|_| "rx-prepare")?;
+    prepare_patterns(storage)?;
+    let ready = access.wifi_mac_hal().prepare_mac_runtime(prepared);
+    let stopped_ring = ready.publish(access.rx_dma()).map_err(|_| "rx-publish")?;
+    let mut ring = stopped_ring
+        .try_start(access.rx_dma())
+        .map_err(|_| "rx-start")?;
+    let stale = mac_irq.mac_interrupt_raw();
+    if stale.fatal_assertion_raw().is_some() {
+        return Err("traffic-initial-fatal");
+    }
+    mac_irq.acknowledge_mac_interrupt_raw(stale);
+    access.wifi_mac_hal().configure_open_promiscuous_receive();
+    mac_irq.mask_all_mac_interrupts();
+    traffic::checkpoint(trace, 202, 0, &mac_irq)?;
+    usb::text(
+        console,
+        b"TRAFFIC begin v=1 selections=200-209 channel=13 cap_ms=700 mask_ms=350 take_recycle=1\n",
+    )
+    .await;
+    let observation = traffic::collect(trace, storage, &mut ring, access, &mut mac_irq);
+    access.wifi_mac_hal().request_channel_stop();
+    let deadline = EmbassyClock
+        .now()
+        .checked_add(Duration::from_millis(50))
+        .ok_or("traffic-stop-deadline")?;
+    while access.wifi_mac_hal().channel_active_state() != 0 {
+        if EmbassyClock.now() >= deadline {
+            return Err("traffic-mac-stop");
+        }
+        EmbassyClock
+            .wait_until(
+                EmbassyClock
+                    .now()
+                    .checked_add(Duration::from_millis(1))
+                    .ok_or("traffic-stop-wait")?,
+            )
+            .await;
+    }
+    let stopped = ring
+        .try_stop(access.rx_dma())
+        .map_err(|_| "traffic-walker-stop");
+    let clear = traffic::clears(trace, &mut mac_irq);
+    traffic::dump(trace, console).await?;
+    observation?;
+    stopped?;
+    clear?;
+    // Static backend/output retain every power/clock/register owner until the
+    // leased host reset; this diagnostic returns no reusable radio/storage.
+    Ok(())
 }
 async fn run(
     console: &mut usb::Console,

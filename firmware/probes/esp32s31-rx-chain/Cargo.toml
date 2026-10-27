@@ -9,6 +9,9 @@ publish.workspace = true
 description = "Bounded passive hardware observation of multi-buffer Wi-Fi RX descriptors"
 build = "build.rs"
 
+[features]
+legacy-observer = []
+
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-riscv = { path = "../../../portable/riscv" }
