@@ -19,6 +19,7 @@ mod opaque_wave2;
 mod ble;
 mod ble_wave2;
 mod generic;
+mod lp_ack_race;
 mod lp_lanes;
 mod lp_softreset;
 mod radio_local;
@@ -244,6 +245,22 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 196,
         run: Action::Thread(timg_arbitration::timer_high),
+    },
+    Probe {
+        id: 180,
+        run: Action::Thread(lp_ack_race::compare),
+    },
+    Probe {
+        id: 181,
+        run: Action::Thread(lp_ack_race::wraps),
+    },
+    Probe {
+        id: 182,
+        run: Action::Thread(lp_ack_race::rearm),
+    },
+    Probe {
+        id: 183,
+        run: Action::Thread(lp_ack_race::compare_width),
     },
     Probe {
         id: 14,

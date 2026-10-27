@@ -77,6 +77,7 @@ pub use modem_timer::{
     BluetoothModemLpTimerHandlerRegisterObservation, BluetoothModemLpTimerInstant,
     BluetoothModemLpTimerInterruptObservation, BluetoothModemLpTimerPendingObservation,
     BluetoothModemLpTimerStoppedInterruptFault, BluetoothModemLpTimerStoppedInterruptObservation,
+    MODEM_LP_TIMER_SOURCE127_SERVICE_BOUND_XTAL_CYCLES,
 };
 pub use phy::{BlePhyEtmRouteDisabled, BluetoothPhyRegisterInitInputs};
 pub use scan::BluetoothScanStartPublished;

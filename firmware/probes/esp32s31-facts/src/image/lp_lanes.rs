@@ -129,7 +129,7 @@ fn init(s: &mut Session<'_>) {
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_001c();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0020();
     s.ble.timer.modify_word_006c_opaque(|w| {
-        w.set_bits_0_31_opaque(LOW_MAX);
+        w.set_compare_target(Bits::truncate(LOW_MAX));
     });
     enable(s, true, true);
 }
@@ -413,7 +413,7 @@ pub(super) fn compare_mode(s: &mut Session<'_>) {
         let origin = counter(s);
         let target = origin.wrapping_add(512) & LOW_MAX;
         s.ble.timer.modify_word_006c_opaque(|w| {
-            w.set_bits_0_31_opaque(target);
+            w.set_compare_target(Bits::truncate(target));
         });
         emit(tag + 0xf0, origin, target, image);
         if !crossed(s, origin, 1024, tag + 0xf1) {

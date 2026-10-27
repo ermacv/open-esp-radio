@@ -194,7 +194,8 @@ fn a_near_deadline_programs_its_low_counter_image() {
         timer
             .runtime_control
             .read_word_006c_opaque()
-            .bits_0_31_opaque(),
+            .compare_target()
+            .get(),
         0x0012_3456
     );
     drop(timer);

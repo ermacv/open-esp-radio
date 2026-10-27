@@ -110,7 +110,7 @@ fn run(s: &mut Session<'_>, scenario: u32) {
     let compare = scenario == 0 || scenario == 2;
     let target = counter(s).wrapping_add(if compare { 4096 } else { LOW_MAX / 2 }) & LOW_MAX;
     s.ble.timer.modify_word_006c_opaque(|w| {
-        w.set_bits_0_31_opaque(target);
+        w.set_compare_target(Bits::truncate(target));
     });
     enable(s, true, true);
     if compare {

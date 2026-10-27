@@ -39,7 +39,7 @@ pub(in crate::image) fn compare_ack(s: &mut Session<'_>) {
     let old = s.ble.timer.read_word_0024_opaque().low_byte();
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     target(&mut s.ble, 4096);
-    let deadline = s.ble.timer.read_word_006c_opaque().bits_0_31_opaque();
+    let deadline = s.ble.timer.read_word_006c_opaque().compare_target().get();
     command18(&mut s.ble);
     let start = oer_riscv::cycle32();
     while counter(&s.ble) < deadline && oer_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {}
