@@ -102739,6 +102739,8 @@ pub mod hp_sys_clkrst {
     }
 
     /// The `HpSysClkrstTimg0` part of `HP_SYS_CLKRST`.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct HpSysClkrstTimg0<P: oer_mmio::Placement = oer_mmio::Fixed<0x20587000>>(
         oer_mmio::Block<P, HpSysClkrstTimg0Words>,
@@ -238375,6 +238377,8 @@ pub mod timg {
     }
 
     /// The `Timg0Timer0` part of `TIMG0`.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW7_S31_TIMG0_20261026.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct Timg0Timer0<P: oer_mmio::Placement = oer_mmio::Fixed<0x20580000>>(
         oer_mmio::Block<P, Timg0Timer0Words>,
@@ -300412,7 +300416,7 @@ pub mod ownership {
         pub lp_wdt_swd: super::rtc_wdt::LpWdtSwd,
     }
 
-    /// Timer group zero's T0 counter and alarm, and the group's interrupt bank for the PHY timer consumer. Each ENA/RAW/ST word has one bank owner; only T0's CLR strobe is claimed. WatchdogPeripherals retains the group clock/reset word.
+    /// Timer group zero's T0 counter and one-shot alarm, and the group's interrupt bank retained together by the HAL alarm owner. Each ENA/RAW/ST word has one bank owner; only T0's CLR strobe is claimed. WatchdogPeripherals retains the group clock/reset word.
     pub struct TimerGroup0Peripherals {
         /// The `Timg0Timer0` part.
         pub timg0_timer0: super::timg::Timg0Timer0,

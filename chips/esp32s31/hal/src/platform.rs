@@ -38,6 +38,7 @@ pub mod software_interrupt;
 pub mod system_timer;
 #[cfg(test)]
 mod tests;
+pub mod timg0_alarm;
 
 pub use oer_esp32s31_pac::{BOOT_HART, HARTS, Hart, SecondaryHart};
 

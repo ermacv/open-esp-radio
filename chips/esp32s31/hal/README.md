@@ -14,7 +14,22 @@ startup selects XTAL and enables TIMG0 T0 through a private watchdog operation
 that changes only `T0_SRC_SEL/T0_CLK_EN`; it preserves group reset, APB, T1 and
 watchdog clocks. MWDT0 keeps that authority inside `StoppedMainWatchdog`.
 The separate T0 counter and interrupt-bank parts have no group-reset access;
-the HAL exposes no T0 timer API.
+`Runtime::timg0_alarm` adopts them without writes. Its
+`platform::timg0_alarm::Timg0Alarm` retains both for one context and provides
+exclusive `arm_after`, `disarm`, `acknowledge` and RAW/ENA/ST observation.
+Arming requires its own router `Bound` or `Silent` proof and accepts a checked
+positive relative microsecond interval within the generated counter geometry.
+It stops and masks T0, returns and clears observed old pending, reloads zero,
+then starts an increasing one-shot on XTAL/divider40 and unmasks delivery.
+Zero and out-of-range input leave the old alarm untouched; the bounded facts
+do not qualify equality against a freshly reloaded zero.
+Disarm stops and masks before observing/clearing RAW; acknowledgement alone
+leaves the counter and enable unchanged. Only the T0 CLR strobe acknowledges,
+never a bank-wide RAW write. Other interrupt enables and group clocks stay
+owned and unchanged. SOURCE: `ESP_IDF_4D59230D_S31_TIMER0_LL` and
+`HW7_S31_TIMG0_20261026` in the register evidence. Clear/arrival collisions and
+an exact interrupt latency bound are not qualified by these facts.
+No image binds or arms T0; PHY continues on P2 through the existing executor.
 
 ## Platform clocks
 

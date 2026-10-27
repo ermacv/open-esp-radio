@@ -161,6 +161,7 @@ registers = ["WDTCONFIG0", "WDTCONFIG1", "WDTCONFIG2", "WDTFEED", "WDTWPROTECT"]
 name = "HpSysClkrstTimg0"
 instance = "HP_SYS_CLKRST"
 registers = ["TIMERGRP0_CTRL0"]
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
 
 [[partitions.parts]]
 name = "HpSysClkrstTimg1"
@@ -180,12 +181,13 @@ registers = ["SWD_CONFIG", "SWD_WPROTECT"]
 [[partitions]]
 name = "TimerGroup0Peripherals"
 member = "timer_group0"
-description = "Timer group zero's T0 counter and alarm, and the group's interrupt bank for the PHY timer consumer. Each ENA/RAW/ST word has one bank owner; only T0's CLR strobe is claimed. WatchdogPeripherals retains the group clock/reset word."
+description = "Timer group zero's T0 counter and one-shot alarm, and the group's interrupt bank retained together by the HAL alarm owner. Each ENA/RAW/ST word has one bank owner; only T0's CLR strobe is claimed. WatchdogPeripherals retains the group clock/reset word."
 
 [[partitions.parts]]
 name = "Timg0Timer0"
 instance = "TIMG0"
 registers = ["T0CONFIG", "T0LO", "T0HI", "T0UPDATE", "T0ALARMLO", "T0ALARMHI", "T0LOADLO", "T0LOADHI", "T0LOAD"]
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW7_S31_TIMG0_20261026"]
 
 [[partitions.parts]]
 name = "Timg0InterruptBank"
