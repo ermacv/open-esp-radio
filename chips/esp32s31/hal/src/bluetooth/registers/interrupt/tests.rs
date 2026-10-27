@@ -369,3 +369,26 @@ fn release_masks_and_clears_overflow_before_the_bank_leaves_its_handler() {
         "a later enable must not redeliver the retired overflow"
     );
 }
+
+#[test]
+fn nrt_cannot_acknowledge_a_sample_containing_the_primary_overflow_lane() {
+    use super::{BluetoothNrtInterruptFault, acknowledge_nrt_if_admitted, bank};
+    // Opaque NRT observations are diagnostic values, not new hardware meanings.
+    let snapshots = [
+        0x87654321,
+        bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK | 0xa5000000,
+    ];
+    let mut acknowledgements = Vec::new();
+    let result = acknowledge_nrt_if_admitted(snapshots, || acknowledgements.extend(snapshots));
+    assert_eq!(result, Err(BluetoothNrtInterruptFault { snapshots }));
+    assert!(
+        acknowledgements.is_empty(),
+        "neither clear may run before primary counts overflow"
+    );
+    let ordinary = [0x87654321, 0xa5000000];
+    assert_eq!(
+        acknowledge_nrt_if_admitted(ordinary, || acknowledgements.extend(ordinary)),
+        Ok(())
+    );
+    assert_eq!(acknowledgements, ordinary);
+}

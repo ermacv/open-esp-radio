@@ -127,7 +127,8 @@ pub trait GateHardware: 'static {
         clock: &C,
     ) -> PrimaryInterruptCapture;
     /// Sample and acknowledge the NRT snapshots; whether any was set.
-    fn capture_nrt(bank: &mut Self::Bank) -> bool;
+    /// An unexpected primary overflow clear lane faults before either clear.
+    fn capture_nrt(bank: &mut Self::Bank) -> Result<bool, bluetooth::BluetoothNrtInterruptFault>;
     /// One finite register step of the timer.
     fn step_timer(
         timer: Self::Timer,
@@ -221,6 +222,9 @@ pub enum GateFaultReason {
     VacantTimer,
     /// A captured BTLC wrap exhausted the software counter; retain its value.
     ControllerTimeOverflow(super::ControllerTimeOverflowExhausted),
+    /// An exact NRT pair contained the primary overflow clear lane; neither
+    /// bank was acknowledged and both observations remain retained.
+    NrtControllerTimeOverflow(bluetooth::BluetoothNrtInterruptFault),
 }
 
 /// Why the gate refused a request or could not exchange it.
@@ -487,7 +491,13 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
                 self.fault(GateFaultReason::ControllerTimeOverflow(cause), observation);
                 return self.check_fault();
             }
-            let _ = H::capture_nrt(registers);
+            if let Err(cause) = H::capture_nrt(registers) {
+                self.fault(
+                    GateFaultReason::NrtControllerTimeOverflow(cause),
+                    observation,
+                );
+                return self.check_fault();
+            }
             // A service barrier completes only after the entry's pending
             // primary cause has reached the wrap counter. The table proves
             // that this handler is above its requesting P2 executor.
@@ -902,8 +912,8 @@ impl GateHardware for ChipGate {
         super::primary::step_primary_interrupt(bank, clock)
     }
 
-    fn capture_nrt(bank: &mut Self::Bank) -> bool {
-        super::nrt::step_nrt_default_interrupt(bank).is_some()
+    fn capture_nrt(bank: &mut Self::Bank) -> Result<bool, bluetooth::BluetoothNrtInterruptFault> {
+        super::nrt::step_nrt_default_interrupt(bank).map(|epoch| epoch.is_some())
     }
 
     fn step_timer(

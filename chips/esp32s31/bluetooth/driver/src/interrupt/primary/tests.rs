@@ -324,10 +324,6 @@ fn overflow_is_counted_without_a_scheduler_suffix_and_survives_fault_coincidence
             assert!(result.is_err());
         } else {
             let batch = result.unwrap();
-            assert_eq!(
-                batch.controller_time_overflows(),
-                Some(cell.controller_time_overflows())
-            );
             assert!(!batch.has_scheduler_work());
         }
     }
@@ -346,7 +342,7 @@ fn overflow_and_marked_scheduler_work_remain_independent_when_captured_together(
     let batch = cell.take().unwrap().unwrap().classify().unwrap();
     assert!(batch.is_marked());
     assert!(batch.has_scheduler_work());
-    assert_eq!(batch.controller_time_overflows().unwrap().0, 1);
+    assert_eq!(cell.controller_time_overflows().0, 1);
     assert_eq!(
         backend.operations,
         [Operation::PrimaryEpoch, Operation::Work]

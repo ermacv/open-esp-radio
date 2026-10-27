@@ -88,7 +88,9 @@ No producer of 133 is known without RF; the vendor's NRT handler has the same
 sample-and-acknowledge shape and no subscriber on this chip, so the NRT
 snapshots have no consumer here either. The part holds a gate for the bank and
 one for the timer, and touches a register owner only while
-its gate holds it.
+its gate holds it. An NRT pair containing the primary overflow clear lane
+faults before either acknowledgement; the gate retains both exact sampled
+words and quarantines its owners for the retained-record reset path.
 
 `interrupt::BluetoothInterruptGate` is the task's end. The part holds the
 doorbell line's lowering half from the start; the task's end exists only
@@ -164,7 +166,8 @@ At the measured standalone rate, the natural first-word period is nominally
 `HW12_S31_BTLC_RATE_20261026`). P3 must acknowledge each wrap before the next;
 hardware pending is not a multi-wrap counter. P2 may remain unserviced for
 multiple periods because the software count is independent of its dequeues.
-NRT does not count this measured primary-only cause. Counter or conversion
+NRT does not count this measured primary-only cause and refuses a snapshot
+containing its clear lane. Counter or conversion
 range exhaustion is a named fault preserving the count and raw inputs; owners
 stay quarantined for the image's retained-record reset path.
 

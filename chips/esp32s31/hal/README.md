@@ -91,7 +91,10 @@ SOURCE: `BLOB_LIBBTDM_BASELINE_IRQ_CURRENT` (N5),
 `HW12_S31_BLE_OVERFLOW_ACK_20261026` in the register evidence.
 The measured overflow is visible in primary status/source 124 while the NRT
 snapshots/source 133 remain zero; their zero acknowledgement does not consume
-it. This does not identify other NRT producers or simultaneous set/clear priority.
+it. The exact sampled NRT pair is checked against the primary overflow clear
+lane before either acknowledgement. If that lane is present, a typed fault
+retains both words and neither bank is acknowledged. This does not identify
+other NRT producers or simultaneous set/clear priority.
 
 The modem LP timer samples the low bytes of its pending and rollover words,
 acknowledges each nonzero byte with a reviewed whole-word zero, and publishes

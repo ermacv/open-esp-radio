@@ -688,6 +688,13 @@ word in a named fault. B0 uses the same 44-byte retained slot for these reasons,
 without releasing owners, through `fatal::reset_recording`; the next boot
 prints the diagnostic. No additional unsafe sharing is involved.
 
+NRT acknowledgement checks the exact sampled pair against the shared primary
+overflow clear lane before either clear. A pair containing that lane returns a
+named fault preserving both words; the gate quarantines its owners and B0
+records the later pair separately from the entry observations in the same
+44-byte slot before `fatal::reset_recording`. NRT cannot consume a primary
+overflow observation without its count being published.
+
 The Bluetooth modem LP timer retains its register authority in the permanently
 bound handler throughout software queue work. P2 receives only a positional
 time/epoch snapshot and returns an unarmed plan through the gate's single-slot

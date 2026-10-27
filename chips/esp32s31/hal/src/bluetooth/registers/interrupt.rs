@@ -431,6 +431,27 @@ pub struct BluetoothNrtInterruptAcknowledged {
     _private: (),
 }
 
+/// NRT unexpectedly exposed the primary controller-time-overflow clear lane.
+/// Neither bank of this exact sampled pair was acknowledged.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BluetoothNrtInterruptFault {
+    /// Complete NRT observations, preserved before any acknowledgement.
+    pub snapshots: [u32; 2],
+}
+
+/// Admission for a sampled NRT pair. Geometry comes from the shared clear
+/// register: an opaque NRT word must never consume primary overflow unseen.
+fn acknowledge_nrt_if_admitted<T>(
+    snapshots: [u32; 2],
+    acknowledge: impl FnOnce() -> T,
+) -> Result<T, BluetoothNrtInterruptFault> {
+    if snapshots[1] & bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK != 0 {
+        Err(BluetoothNrtInterruptFault { snapshots })
+    } else {
+        Ok(acknowledge())
+    }
+}
+
 impl BluetoothNrtInterruptAcknowledged {
     /// Construct an acknowledged token for host-only controller tests.
     #[cfg(any(test, feature = "test-support"))]
@@ -640,8 +661,12 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     ///
     /// The bank shares its handler's line with other sources, so an entry
     /// may find both snapshots clear: it then writes nothing and returns
-    /// `None`.
-    pub fn capture_nrt_and_acknowledge(&mut self) -> Option<BluetoothNrtInterruptAcknowledged> {
+    /// `Ok(None)`.
+    /// If the exact NRT sample includes the shared controller-time-overflow
+    /// clear lane, refuse both acknowledgements and retain both observations.
+    pub fn capture_nrt_and_acknowledge(
+        &mut self,
+    ) -> Result<Option<BluetoothNrtInterruptAcknowledged>, BluetoothNrtInterruptFault> {
         let bank_0 = self
             .peripherals
             .bluetooth_interrupt_bank
@@ -650,17 +675,19 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
             .peripherals
             .bluetooth_interrupt_bank
             .sample_bluetooth_interrupt_bank_1();
-        if bank_0.is_clear() && bank_1.is_clear() {
-            return None;
-        }
-        self.peripherals
-            .bluetooth_interrupt_bank
-            .acknowledge_bluetooth_interrupt_bank_0(bank_0);
-        self.peripherals
-            .bluetooth_interrupt_bank
-            .acknowledge_bluetooth_interrupt_bank_1(bank_1);
-        device_fence();
-        Some(BluetoothNrtInterruptAcknowledged { _private: () })
+        acknowledge_nrt_if_admitted([bank_0.pending_bits(), bank_1.pending_bits()], || {
+            if bank_0.is_clear() && bank_1.is_clear() {
+                return None;
+            }
+            self.peripherals
+                .bluetooth_interrupt_bank
+                .acknowledge_bluetooth_interrupt_bank_0(bank_0);
+            self.peripherals
+                .bluetooth_interrupt_bank
+                .acknowledge_bluetooth_interrupt_bank_1(bank_1);
+            device_fence();
+            Some(BluetoothNrtInterruptAcknowledged { _private: () })
+        })
     }
 }
 

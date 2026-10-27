@@ -63,6 +63,8 @@ owners without returning or dropping them. The handler records a `GateFault`
 through safe `fatal::reset_recording` and resets immediately. The 44-byte retained
 record includes the exact reason, entry LP cause, timer phase, NRT words when
 the bank is present, and stopped-timer pending bytes or unexpected status.
+A rejected NRT acknowledgement retains its exact later pair separately from
+the entry observations in the same slot.
 A vacant timer with nonzero LP status follows the same path. The next boot
 prints one `OER-B0-FAULT: bluetooth-gate` line on the early console, before H4
 opens, then consumes the record. The application watchdog does not drive this
@@ -73,3 +75,5 @@ coalescing. The clock bridge remains continuous over idle gaps spanning multiple
 BTLC wraps. Counter exhaustion and a microsecond projection beyond `u64` retain
 their original inputs in the same 44-byte fault slot and reset with all owners
 quarantined. The next boot prints the reason, count and raw word when present.
+Projection faults use the `OER-B0-FAULT: bluetooth-controller-time` prefix and
+the `overflows`, `raw-ticks` and `scale-shift` labels.

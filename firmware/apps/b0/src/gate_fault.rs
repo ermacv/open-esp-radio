@@ -36,9 +36,11 @@ impl Record {
             ) => (5, status, Some(pending)),
             GateFaultReason::VacantTimer => (6, 0, None),
             GateFaultReason::ControllerTimeOverflow(cause) => (7, cause.overflows, None),
+            GateFaultReason::NrtControllerTimeOverflow(cause) => (9, cause.snapshots[0], None),
         };
         let captured_inputs = match fault.reason {
             GateFaultReason::ControllerTimeOverflow(cause) => cause.captured_inputs,
+            GateFaultReason::NrtControllerTimeOverflow(cause) => cause.snapshots[1],
             _ => 0,
         };
         let mut record = Self {
@@ -86,10 +88,10 @@ impl Record {
     fn take(&mut self) -> Option<Self> {
         let valid = self.magic == MAGIC
             && self.checksum == self.sum()
-            && (1..=8).contains(&self.reason)
+            && (1..=9).contains(&self.reason)
             && self.timer <= 3
             && self.nrt_present <= 1
-            && (self.reason == 7 || self.pending_0024 <= u32::from(u8::MAX))
+            && (matches!(self.reason, 7 | 9) || self.pending_0024 <= u32::from(u8::MAX))
             && self.pending_002c <= u32::from(u8::MAX);
         let record = valid.then_some(*self);
         self.magic = 0;
@@ -108,8 +110,16 @@ impl fmt::Display for Record {
             6 => "vacant-timer",
             7 => "controller-time-overflow-exhausted",
             8 => "controller-time-range-exhausted",
+            9 => "nrt-controller-time-overflow",
             _ => return Err(fmt::Error),
         };
+        if self.reason == 8 {
+            return write!(
+                f,
+                "OER-B0-FAULT: bluetooth-controller-time reason={reason} overflows={:#010x} raw-ticks={:#010x} scale-shift={}",
+                self.stopped_status, self.lp, self.pending_0024
+            );
+        }
         let timer = match self.timer {
             0 => "vacant",
             1 => "ready",
@@ -134,17 +144,18 @@ impl fmt::Display for Record {
                 self.stopped_status, self.pending_0024, self.pending_002c
             )?;
         }
-        if self.reason == 7 || self.reason == 8 {
-            write!(f, " overflows={:#010x}", self.stopped_status)?;
-        }
         if self.reason == 7 {
-            write!(f, " captured-inputs={:#010x}", self.pending_0024)?;
-        }
-        if self.reason == 8 {
             write!(
                 f,
-                " raw-ticks={:#010x} scale-shift={}",
-                self.lp, self.pending_0024
+                " overflows={:#010x} captured-inputs={:#010x}",
+                self.stopped_status, self.pending_0024
+            )?;
+        }
+        if self.reason == 9 {
+            write!(
+                f,
+                " nrt-captured={:#010x},{:#010x}",
+                self.stopped_status, self.pending_0024
             )?;
         }
         Ok(())
@@ -358,8 +369,39 @@ mod controller_time_tests {
                     .controller_time_scale(),
         });
         let text = slot.take().unwrap().to_string();
-        assert!(text.contains("reason=controller-time-range-exhausted"));
-        assert!(text.ends_with("overflows=0xffffffff raw-ticks=0xfedcba98 scale-shift=0"));
+        assert_eq!(
+            text,
+            "OER-B0-FAULT: bluetooth-controller-time reason=controller-time-range-exhausted overflows=0xffffffff raw-ticks=0xfedcba98 scale-shift=0"
+        );
+        assert!(slot.take().is_none());
+    }
+}
+
+#[cfg(test)]
+mod nrt_tests {
+    use super::*;
+    use oer_esp32s31_bluetooth_driver::interrupt::gate::GateObservation;
+    use oer_esp32s31_hal::bluetooth::BluetoothNrtInterruptFault;
+
+    #[test]
+    fn the_existing_record_keeps_the_full_nrt_fault_pair_and_entry_causes() {
+        let fault = GateFault {
+            reason: GateFaultReason::NrtControllerTimeOverflow(BluetoothNrtInterruptFault {
+                snapshots: [0x87654321, 0xa5000002],
+            }),
+            observation: GateObservation {
+                lp_status: 0x40000,
+                nrt_status: Some([0, 0]),
+                timer: GateTimerState::Ready,
+            },
+        };
+        let mut slot = Record::new(fault);
+        assert_eq!(core::mem::size_of::<Record>(), 44);
+        let record = slot.take().unwrap();
+        assert_eq!(
+            record.to_string(),
+            "OER-B0-FAULT: bluetooth-gate reason=nrt-controller-time-overflow timer=ready lp=0x00040000 nrt=0x00000000,0x00000000 nrt-captured=0x87654321,0xa5000002"
+        );
         assert!(slot.take().is_none());
     }
 }

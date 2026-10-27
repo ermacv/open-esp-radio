@@ -134,10 +134,6 @@ fn overflow_count_is_independent_of_dequeues_and_does_not_wrap_on_exhaustion() {
         .unwrap();
         let batch = cell.take().unwrap().unwrap().classify().unwrap();
         assert_eq!(
-            batch.controller_time_overflows(),
-            Some(ControllerTimeOverflowEpoch(expected))
-        );
-        assert_eq!(
             cell.controller_time_overflows(),
             ControllerTimeOverflowEpoch(expected)
         );

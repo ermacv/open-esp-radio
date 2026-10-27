@@ -22,6 +22,8 @@ use super::PrimaryInterruptCapture;
 
 // These are software latch keys, not register fields. A bit records one
 // correlated set of source inputs and its own later deferred-work sample.
+const WORK_KEY_MASK: u32 = 0xffff;
+
 const MARKED_INPUTS: u32 = {
     let mut key = 0;
     let mut mask = 0;
@@ -64,7 +66,6 @@ pub enum SchedulerWakePublication {
 pub struct SchedulerWakeBatch {
     marked: bool,
     scheduler_work: bool,
-    controller_time_overflows: Option<ControllerTimeOverflowEpoch>,
 }
 
 impl SchedulerWakeBatch {
@@ -76,11 +77,6 @@ impl SchedulerWakeBatch {
     /// Whether dynamic scheduler inputs grant a finished-list transfer.
     pub const fn has_scheduler_work(&self) -> bool {
         self.scheduler_work
-    }
-
-    /// Latest counted overflow epoch, independent of coalesced scheduler work.
-    pub const fn controller_time_overflows(&self) -> Option<ControllerTimeOverflowEpoch> {
-        self.controller_time_overflows
     }
 }
 
@@ -124,16 +120,10 @@ impl PrimaryWakeFault {
 #[must_use = "classify the captured inputs before admitting scheduler work"]
 pub struct CapturedWakeBatch {
     facts: u32,
-    controller_time_overflows: Option<ControllerTimeOverflowEpoch>,
 }
 impl CapturedWakeBatch {
-    fn from_facts(facts: u32, epoch: ControllerTimeOverflowEpoch) -> Option<Self> {
-        (facts != 0).then_some(Self {
-            facts,
-            controller_time_overflows: (facts & PrimaryInterruptCapture::CONTROLLER_TIME_OVERFLOW
-                != 0)
-                .then_some(epoch),
-        })
+    fn from_facts(facts: u32) -> Option<Self> {
+        (facts != 0).then_some(Self { facts })
     }
     /// Classify on P2. Faults preempt ordinary work without creating a
     /// finished-list authority; all fault source presence remains retained.
@@ -146,8 +136,7 @@ impl CapturedWakeBatch {
         } else {
             Ok(SchedulerWakeBatch {
                 marked: self.facts & MARKED_INPUTS != 0,
-                scheduler_work: self.facts & 0xffff != 0,
-                controller_time_overflows: self.controller_time_overflows,
+                scheduler_work: self.facts & WORK_KEY_MASK != 0,
             })
         }
     }
@@ -261,9 +250,7 @@ impl<X: SignalExecutor> SchedulerWakeCell<X> {
     ///
     /// The caller runs outside the signal's executor; the batch stays.
     pub fn take(&self) -> Result<Option<CapturedWakeBatch>, ForeignContext> {
-        self.signal
-            .take()
-            .map(|facts| CapturedWakeBatch::from_facts(facts, self.controller_time_overflows()))
+        self.signal.take().map(CapturedWakeBatch::from_facts)
     }
 
     /// Whether a worker batch is currently pending.
@@ -288,9 +275,7 @@ impl<X: SignalExecutor> SchedulerWakeCell<X> {
         loop {
             match self.signal.poll_take(cx) {
                 Poll::Ready(Ok(facts)) => {
-                    if let Some(batch) =
-                        CapturedWakeBatch::from_facts(facts, self.controller_time_overflows())
-                    {
+                    if let Some(batch) = CapturedWakeBatch::from_facts(facts) {
                         return Poll::Ready(Ok(batch));
                     }
                     // An empty signal epoch grants no captured work.

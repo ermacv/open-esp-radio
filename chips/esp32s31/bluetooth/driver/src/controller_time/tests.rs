@@ -817,7 +817,6 @@ fn counted_time_survives_n_overflows_without_live_samples_or_p2_dequeues() {
         (total + 1) as u32
     );
     let batch = wake.take().unwrap().unwrap().classify().unwrap();
-    assert_eq!(batch.controller_time_overflows(), Some(count));
     assert!(!batch.has_scheduler_work());
     assert_eq!(wake.controller_time_overflows(), count);
 }

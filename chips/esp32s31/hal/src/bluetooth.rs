@@ -67,16 +67,17 @@ pub use registers::{
     BluetoothModemLpTimerInstant, BluetoothModemLpTimerInterruptObservation,
     BluetoothModemLpTimerPendingObservation, BluetoothModemLpTimerStoppedInterruptFault,
     BluetoothModemLpTimerStoppedInterruptObservation, BluetoothNrtInterruptAcknowledged,
-    BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch, BluetoothRawTickDeltaProjection,
-    BluetoothScanStartPublished, BluetoothSchedulerBusyObservation,
-    BluetoothSchedulerCancellationDisposition, BluetoothSchedulerCancellationIndexed,
-    BluetoothSchedulerCancellationReleased, BluetoothSchedulerCancellationRequested,
-    BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerExecutionLockDisposition,
-    BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
-    BluetoothSchedulerFinishedHardwareListObserved, BluetoothSchedulerFinishedListObservation,
-    BluetoothSchedulerFinishedListPop, BluetoothSchedulerHardwareListIndex,
-    BluetoothSchedulerHardwareListsCleared, BluetoothSchedulerHardwareRunCommandPublished,
-    BluetoothSchedulerInsertionCommand, BluetoothSchedulerInsertionCommandStartCleared,
+    BluetoothNrtInterruptFault, BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
+    BluetoothRawTickDeltaProjection, BluetoothScanStartPublished,
+    BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationDisposition,
+    BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationReleased,
+    BluetoothSchedulerCancellationRequested, BluetoothSchedulerCancellationSourceAcknowledged,
+    BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionModifyDisposition,
+    BluetoothSchedulerExecutionModifyPublished, BluetoothSchedulerFinishedHardwareListObserved,
+    BluetoothSchedulerFinishedListObservation, BluetoothSchedulerFinishedListPop,
+    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerHardwareListsCleared,
+    BluetoothSchedulerHardwareRunCommandPublished, BluetoothSchedulerInsertionCommand,
+    BluetoothSchedulerInsertionCommandStartCleared,
     BluetoothSchedulerLockModifyInterruptObservation, BluetoothSchedulerLockModifyObservation,
     BluetoothSchedulerLockModifyPublished, BluetoothSchedulerLockModifyTaskObservation,
     BluetoothSchedulerReferenceCleared, BluetoothSchedulerReferenceGateObservation,
@@ -1256,11 +1257,15 @@ impl InterruptRegistersOwner {
     }
 
     /// Capture and acknowledge one complete opaque NRT source-133 epoch;
-    /// `None`, writing nothing, when both snapshots are clear.
+    /// `Ok(None)`, writing nothing, when both snapshots are clear.
     ///
     /// This preserves the sample/sample/acknowledge/acknowledge order. It
     /// deliberately performs no feature dispatch and publishes no task wake.
-    pub fn capture_nrt_and_acknowledge(&mut self) -> Option<BluetoothNrtInterruptAcknowledged> {
+    /// An NRT sample containing the primary overflow clear lane returns a
+    /// fault retaining both snapshots, without acknowledging either bank.
+    pub fn capture_nrt_and_acknowledge(
+        &mut self,
+    ) -> Result<Option<BluetoothNrtInterruptAcknowledged>, BluetoothNrtInterruptFault> {
         self.registers.capture_nrt_and_acknowledge()
     }
 

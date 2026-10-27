@@ -46,6 +46,7 @@ struct Model {
     ops: Vec<Op>,
     primary: VecDeque<u32>,
     nrt: VecDeque<bool>,
+    nrt_fault: Option<bluetooth::BluetoothNrtInterruptFault>,
     channel: VecDeque<bool>,
     timer: VecDeque<Step>,
     lp_status: u32,
@@ -124,10 +125,13 @@ impl GateHardware for Fake {
         PrimaryInterruptCapture(model.primary.pop_front().unwrap_or(0))
     }
 
-    fn capture_nrt(bank: &mut FakeBank) -> bool {
+    fn capture_nrt(bank: &mut FakeBank) -> Result<bool, bluetooth::BluetoothNrtInterruptFault> {
         let mut model = bank.model.lock().expect("one test thread");
         model.ops.push(Op::Nrt);
-        model.nrt.pop_front().unwrap_or(false)
+        match model.nrt_fault.take() {
+            Some(fault) => Err(fault),
+            None => Ok(model.nrt.pop_front().unwrap_or(false)),
+        }
     }
 
     fn step_timer(timer: Timer) -> TimerEntry<Timer, TimerPending, Work> {
@@ -917,7 +921,6 @@ fn primary_overflow_is_counted_before_the_measured_empty_nrt_snapshot() {
         .unwrap()
         .classify()
         .unwrap();
-    assert_eq!(batch.controller_time_overflows().unwrap().0, 1);
     assert!(!batch.has_scheduler_work());
 }
 
@@ -996,5 +999,39 @@ fn the_latch_barrier_counts_hardware_pending_before_p2_chooses_the_samples_epoch
             .unwrap()
             .1,
         1_u64 << 31
+    );
+}
+
+#[test]
+fn unexpected_nrt_overflow_quarantines_the_bank_and_retains_the_exact_later_pair() {
+    let mut harness = Harness::new();
+    harness.open();
+    let cause = bluetooth::BluetoothNrtInterruptFault {
+        snapshots: [0x87654321, 0xa5000002],
+    };
+    harness.script(|model| {
+        model.ops.clear();
+        model.nrt_fault = Some(cause);
+    });
+    let fault = harness.part.service(&harness.clock).unwrap_err();
+    assert_eq!(
+        fault.reason,
+        GateFaultReason::NrtControllerTimeOverflow(cause)
+    );
+    assert_eq!(
+        fault.observation.nrt_status,
+        Some([0, 0]),
+        "entry observation must not replace the later exact sample"
+    );
+    assert!(
+        harness.part.is_open(),
+        "the bank remains quarantined with its handler"
+    );
+    let ops = harness.ops();
+    assert!(ops.contains(&Op::Nrt));
+    assert_eq!(harness.part.service(&harness.clock), Err(fault));
+    assert!(
+        harness.ops().is_empty(),
+        "a retained fault permits no further hardware accesses"
     );
 }

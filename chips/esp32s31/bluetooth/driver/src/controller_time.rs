@@ -586,6 +586,13 @@ pub fn drain_controller_time_orphan(
     owner.drain_orphan_controller_time()
 }
 
+/// Wrap the continuous time modulo the scheduler's 32-bit position domain.
+/// The independent u64 return value retains the full continuous epoch.
+#[cfg(any(target_arch = "riscv32", test))]
+const fn truncate_scheduler_micros(micros: u64) -> u32 {
+    micros as u32
+}
+
 /// Raw-tick anchor paired with the BLE scheduler's microsecond epoch.
 ///
 /// The projection exactly retains the current `r_sched_timer_convertTimeToUs`
@@ -626,7 +633,7 @@ impl ControllerSchedulerEpoch {
         Ok(Some((
             Self {
                 raw_tick_anchor: sample.raw_ticks().wrapping_sub(u32::from(remainder)),
-                micros_anchor: micros as u32,
+                micros_anchor: truncate_scheduler_micros(micros),
                 scale,
             },
             micros,
