@@ -50,12 +50,13 @@ system these rules serve.
   keeping workspace lint inheritance. `debug_assert!` is not a guard.
   Arithmetic on peer values names its overflow behavior with `checked_`,
   `wrapping_` or `saturating_` operations.
-- **Execution.** An interrupt handler never shares a lock with a task. Signals
-  declare their raisers at compile time: `FromHandler` is strictly
-  above the receiver; `FromExecutorLevel` is only `Exempt(ExecutorLevel)` on
-  the receiving executor's hart and level, with facts served next round.
-  Driver code never blocks or spins; it yields to its executor. The one
-  exception is a named settle of a known length up to 20 µs. Before an executor exists
+- **Execution.** An interrupt handler never shares a lock with a task. A
+  signal names its raisers at compile time. A raising handler sits strictly
+  above the receiving executor; the one exception is an
+  `Exempt(ExecutorLevel)` handler on that executor's hart and level
+  (`FromExecutorLevel`), whose signal the next round serves. Driver code
+  never blocks or spins; it yields to its executor. The one exception is a
+  named settle of a known length up to 20 µs. Before an executor exists
   (the bootstrap and early boot) there is nothing to yield to: console
   output there may wait for room in the USB FIFO up to a bounded budget per
   record, and hardware bring-up (PLL, RC calibration, cache, MSPI, PSRAM)
