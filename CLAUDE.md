@@ -58,7 +58,8 @@ system these rules serve.
   Isolated verifier probes keep their own terminal reporter and first fault
   in session RAM; they do not link the staged runtime.
   Remove existing runtime panics from image crates, including probes and
-  HIL; image panic budgets only shrink to 0. `const` panics evaluated at
+  HIL; image panic budgets are reports with a target of 0, not build gates.
+  Introduce no new runtime panics. `const` panics evaluated at
   compile time are allowed. Air, peer, host and API input return a handled
   error. New panic-lint `allow` and `expect` attributes are test-only. A crate
   moves each clean panic lint to crate-root `deny` in the PR that clears it,

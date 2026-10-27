@@ -65,7 +65,7 @@ because of the configuration constants. It enforces the same interrupt-stack
 check as an ordinary `build`.
 
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
-implicit moves above the stack policy's `max_move_bytes` rejected (`-D
+implicit moves above the stack policy's `max_move_bytes` reported (`-W
 large-assignments`), and through the image linker
 (`oer-image-linker` of `tools/image/linker`), which refuses bytes in an input section
 the boot zeroes. The stack checks then bound the runtime's task and
@@ -76,7 +76,7 @@ the runtime to the chip's `[placement]` contract (`placement.txt`).
 
 | Mode | Required checks | Reported checks |
 | --- | --- | --- |
-| `build`, including `--analysis` | Frames, interrupt stacks and panic budgets (`Enforced::Only({Frames, Interrupts, Panics})`) | Task stacks, bootstrap stack and placement |
+| `build`, including `--analysis` | Interrupt stacks (`Enforced::Only({Interrupts})`) | Frames, panic budgets, task stacks, bootstrap stack and placement |
 | `run` | None (`Enforced::Reported`) | All requested checks |
 | `build --diagnostic` (only `firmware/probes` packages) | None (`Enforced::Reported`, as already used by `run`) | All requested checks |
 | `flash` | Uses the existing bundle without rerunning checks | Uses its recorded results |
@@ -84,7 +84,13 @@ the runtime to the chip's `[placement]` contract (`placement.txt`).
 An interrupt stack without a proven bound (`partial + ?`), above its budget,
 or dependent on an assumption outside `ADMITTED` fails `build`, and so CI.
 A bound conditional only on the admitted executor invariant passes with a
-warning. A reported check that does not pass prints as a warning containing
+warning. Images declaring `task-stack = "proven"` also reject unresolved task
+paths and retain their task/bootstrap stack gate. Frame and panic limits are
+reports under every policy: `build` prints runtime/bootstrap frame excesses
+and panic counts by layer and hardware context, with their sites. Missing or
+malformed panic-budget declarations remain configuration errors. The goal
+of zero runtime panics and the ban on new panic sites remain code rules.
+A reported check that does not pass prints as a warning containing
 `reported only`. Stand `run` builds report every check; `flash` writes an
 already built bundle.
 

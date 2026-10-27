@@ -42,7 +42,9 @@ above an attribute that spans several lines.
 Memory operations move into `oer-memory`, architectural instructions into
 `oer-riscv`, and PSRAM slice creation into its HAL owner. Their unsafe counts
 may grow only by the relocated operations while the branch total falls and
-no calling crate's count grows. Runtime panic counts never increase.
+no calling crate's count grows. Runtime panic counts never increase. Image
+panic budgets report counts and sites without gating builds; zero reachable
+panics remains the code goal.
 
 Only `oer-memory` defines `unsafe impl Sync` or `Send`; the layer test
 `unsafe_sync_and_send_impls_stay_in_oer_memory` maintains the shrinking

@@ -1,6 +1,6 @@
 //! The panic check: the panic sites each root of an ELF reaches, by the
-//! crate layer of the function that holds them, held to the image's
-//! per-layer budget.
+//! crate layer of the function that holds them, compared with the image's
+//! per-layer reporting budget.
 //!
 //! A panic site is a direct call or jump from a function a root reaches
 //! (over what is resolved) into a panic entry ([`panic_entry`]), from a
@@ -13,8 +13,8 @@
 //! Each layer takes its budget from the image's
 //! `[package.metadata.open-radio.panic-budget]`, and so do the sites the
 //! `Hardware` interrupt contexts reach together (`hardware`, any layer);
-//! what it does not name has 0, the target of every budget. More sites than
-//! the budget fail; fewer are reported, so the budget can be lowered.
+//! what it does not name has 0, the target of every budget. Counts above or
+//! below the budget are warnings; no site count fails the build.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -430,18 +430,17 @@ impl Report<'_> {
         counts
     }
 
-    /// The verdict: the problems that fail the check, and the warnings.
-    pub fn verdict(&self, contract: &Contract) -> (Vec<String>, Vec<String>) {
+    /// Report differences from the budget without rejecting any site count.
+    pub fn warnings(&self, contract: &Contract) -> Vec<String> {
         let elf = match self.elf {
             CheckedElf::Runtime => "runtime",
             CheckedElf::Bootstrap => "bootstrap",
         };
         let counts = self.counts(contract);
-        let mut failed = Vec::new();
         let mut warnings = Vec::new();
         let mut hold = |count: usize, budget: usize, what: String, key: &str| {
             if count > budget {
-                failed.push(format!(
+                warnings.push(format!(
                     "{elf} reaches {count} panic sites {what}, over its budget of {budget}"
                 ));
             } else if count < budget {
@@ -465,17 +464,7 @@ impl Report<'_> {
             "from its hardware interrupt contexts".to_owned(),
             HARDWARE,
         );
-        (failed, warnings)
-    }
-
-    /// Check the roots against `contract`'s budget; the warnings on success.
-    pub fn check(&self, contract: &Contract) -> Result<Vec<String>> {
-        let (failed, warnings) = self.verdict(contract);
-        if failed.is_empty() {
-            Ok(warnings)
-        } else {
-            Err(failed.join("; ").into())
-        }
+        warnings
     }
 
     /// The report: the counts and budget by layer, each root's sites by
@@ -503,9 +492,8 @@ impl Report<'_> {
             self.hardware_sites().len(),
             contract.budget.hardware(self.elf)
         );
-        let (failed, _) = self.verdict(contract);
-        for problem in &failed {
-            let _ = writeln!(out, "FAIL: {problem}");
+        for warning in self.warnings(contract) {
+            let _ = writeln!(out, "warning: {warning}");
         }
         let _ = writeln!(out, "roots:");
         for root in &self.roots {

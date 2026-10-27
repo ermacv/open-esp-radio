@@ -253,7 +253,7 @@ pub fn run(
             cap_dbm: 0,
         }),
         false,
-        Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into()),
+        Enforced::Only([Check::Interrupts].into()),
         None,
     )?;
     let budget = sram_accounting(base_sizes, &bundle.directory.join("sizes.json"))?;

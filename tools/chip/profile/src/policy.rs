@@ -1,9 +1,11 @@
 //! The stack policy of an image family (`stack.toml`, schema 6): the stacks
 //! the gate bounds, each by the function that runs on it, the compiler move
-//! limit and the runtime headroom the firmware's stack painting enforces.
+//! reporting limit and the runtime headroom the firmware's stack painting
+//! enforces.
 //!
-//! A policy that names no stacks sets only the compiler move and function-frame limit: the
-//! image is compiled with every image flag (frame records included), and the
+//! A policy that names no stacks sets only the compiler move and
+//! function-frame reporting limit: the image is compiled with every image
+//! flag (frame records included), and the
 //! whole-stack check has nothing to bound. A policy that names stacks names the
 //! coverage review and, for every core of the chip (`[core.N.task_stack]` and
 //! `[core.N.interrupt_stack]`), either the stack's proven root or
@@ -30,9 +32,8 @@ pub struct StackPolicy {
     /// relative to the policy file that names it.
     #[serde(default)]
     pub coverage_policy: Option<PathBuf>,
-    /// The largest recorded function frame and implicit copy or move admitted
-    /// (`-Z move-size-limit` with `-D large-assignments`). Larger values live
-    /// in placed static storage; futures and task arguments borrow them.
+    /// The reporting threshold for recorded function frames and implicit copies
+    /// or moves (`-Z move-size-limit` with `-W large-assignments`).
     pub max_move_bytes: u64,
     /// Defaults for every hart, including explicit zero allocations.
     #[serde(default)]

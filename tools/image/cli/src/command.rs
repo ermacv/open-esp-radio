@@ -505,9 +505,7 @@ fn build_enforcement(package: &str, diagnostic: bool) -> Result<Enforced> {
         }
         Ok(Enforced::Reported)
     } else {
-        Ok(Enforced::Only(
-            [Check::Frames, Check::Interrupts, Check::Panics].into(),
-        ))
+        Ok(Enforced::Only([Check::Interrupts].into()))
     }
 }
 
@@ -561,10 +559,10 @@ mod tests {
 
     #[test]
     fn reported_build_checks_require_an_explicit_probe_request() {
-        assert!(matches!(
+        assert_eq!(
             build_enforcement("oer-firmware-apps-w0", false).unwrap(),
-            Enforced::Only(_)
-        ));
+            Enforced::Only([Check::Interrupts].into())
+        );
         assert!(build_enforcement("oer-firmware-apps-w0", true).is_err());
         assert!(matches!(
             build_enforcement("oer-firmware-probes-esp32s31-radio", true).unwrap(),

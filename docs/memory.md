@@ -121,5 +121,7 @@ resets the chip: [panic rustdoc](../chips/espressif/staged-runtime/src/panic.rs)
   `strict-placement.toml` record bounds, placement and the link fingerprint:
   [bundle contents](../tools/image/build/README.md#contract).
 - Image builds emit compiler frame records with `-Z emit-stack-sizes` and
-  take `move-size-limit` from the stack policy:
+  take `move-size-limit` from the stack policy as a warning threshold;
+  frame sizes and image panic budgets are reports, while proven stack bounds
+  and placement remain gates:
   [compiler flags in Gates](../tools/image/build/README.md#gates).

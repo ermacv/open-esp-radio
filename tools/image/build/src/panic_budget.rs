@@ -25,14 +25,15 @@ const KEY: &str = "panic-budget";
 /// # Errors
 ///
 /// `cargo metadata` fails, the workspace has no `package`, or its budget is
-/// malformed.
+/// missing or malformed.
 pub fn declared(root: &Path, package: &str) -> Result<Contract> {
     contract_of_metadata(&crate::manifest::workspace_metadata(root)?, package)
 }
 
 fn contract_of_metadata(metadata: &Value, package: &str) -> Result<Contract> {
-    let budget = Budget::parse(crate::manifest::declared(metadata, package, KEY)?)
-        .map_err(|error| format!("{package}: {error}"))?;
+    let declared = crate::manifest::declared(metadata, package, KEY)?
+        .ok_or_else(|| format!("{package} declares no panic budget"))?;
+    let budget = Budget::parse(Some(declared)).map_err(|error| format!("{package}: {error}"))?;
     let workspace = metadata
         .get("workspace_root")
         .and_then(Value::as_str)
@@ -96,13 +97,12 @@ mod tests {
         assert_eq!(contract.layers.of("oer_esp32s31_pac::x"), Layer::Pac);
         assert_eq!(contract.layers.of("oer_esp32s31_hal::x"), Layer::Hal);
         assert_eq!(contract.layers.of("image::main"), Layer::Firmware);
-        let nothing = contract_of_metadata(&metadata(Value::Null), "image").unwrap();
-        assert_eq!(nothing.budget, Budget::default());
     }
 
     #[test]
-    fn every_image_declares_a_budget_that_parses() {
+    fn every_image_declares_a_budget_that_parses() -> Result<()> {
         for text in [
+            include_str!("../../../../firmware/apps/b0/Cargo.toml"),
             include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
             include_str!("../../../../firmware/apps/radio-root/Cargo.toml"),
             include_str!("../../../../firmware/apps/w0/Cargo.toml"),
@@ -120,8 +120,23 @@ mod tests {
             let declared = manifest["package"]["metadata"]["open-radio"]
                 .get("panic-budget")
                 .map(|budget| serde_json::to_value(budget).expect("TOML converts to JSON"));
-            assert!(declared.is_some(), "{name} declares no panic budget");
-            Budget::parse(declared.as_ref()).unwrap_or_else(|error| panic!("{name}: {error}"));
+            contract_of_metadata(&metadata(declared.unwrap_or(Value::Null)), "image")
+                .map_err(|error| format!("{name}: {error}"))?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_missing_budget_is_a_configuration_error() {
+        for missing in [false, true] {
+            let mut metadata = metadata(Value::Null);
+            if missing {
+                metadata["packages"][2]["metadata"] = Value::Null;
+            }
+            let error = contract_of_metadata(&metadata, "image")
+                .unwrap_err()
+                .to_string();
+            assert_eq!(error, "image declares no panic budget");
         }
     }
 
