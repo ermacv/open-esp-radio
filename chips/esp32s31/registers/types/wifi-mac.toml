@@ -2322,13 +2322,16 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
+[review.entity."ENABLE.BITS_0_4_OPAQUE"]
+sources = ["BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
+
 [review.entity."ENABLE.RX_ASSOCIATED_AUXILIARY_5"]
 sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
 provenance = "observed"
 accuracy = "exact"
 
 [review.entity."ENABLE.BIT_6_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."ENABLE.TX_COMPLETE"]
@@ -2350,11 +2353,11 @@ accuracy = "exact"
 completeness = "complete"
 
 [review.entity."ENABLE.BIT_12_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."ENABLE.BIT_13_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."ENABLE.RX_SUCCESS"]
@@ -2380,11 +2383,11 @@ sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_INIT_TAIL", "S3
 accuracy = "exact"
 
 [review.entity."ENABLE.BIT_23_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."ENABLE.RX_ASSOCIATED_AUXILIARY_24"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 provenance = "observed"
 accuracy = "exact"
 
@@ -2403,7 +2406,7 @@ accuracy = "exact"
 completeness = "complete"
 
 [review.entity."RAW.BITS_0_20_OPAQUE"]
-sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027", "BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027"]
 
 [review.entity."RAW.FATAL_ASSERTION"]
 sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_ISR_REGISTER_DUMP"]
@@ -2411,7 +2414,7 @@ provenance = "observed"
 accuracy = "exact"
 
 [review.entity."RAW.BITS_22_31_OPAQUE"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 
 [review.entity."STATUS"]
 sources = ["HW20_RX_RAW_RETENTION_20261027", "HW20_RX_IRQ_DMA_BRACKETS_20261027", "HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
@@ -2420,7 +2423,7 @@ accuracy = "exact"
 completeness = "complete"
 
 [review.entity."STATUS.BITS_0_4_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48", "BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."STATUS.RX_ASSOCIATED_AUXILIARY_5"]
@@ -2429,7 +2432,7 @@ provenance = "observed"
 accuracy = "exact"
 
 [review.entity."STATUS.BIT_6_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."STATUS.TX_COMPLETE"]
@@ -2455,11 +2458,11 @@ accuracy = "exact"
 completeness = "complete"
 
 [review.entity."STATUS.BIT_12_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."STATUS.BIT_13_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."STATUS.RX_SUCCESS"]
@@ -2497,11 +2500,11 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"
 accuracy = "exact"
 
 [review.entity."STATUS.BIT_23_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 accuracy = "exact"
 
 [review.entity."STATUS.RX_ASSOCIATED_AUXILIARY_24"]
-sources = ["HW20_RX_AUXILIARY_OBSERVATION_20261027", "HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
+sources = ["HW20_RX_AUXILIARY_OBSERVATION_20261027", "HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 provenance = "observed"
 accuracy = "exact"
 
@@ -9581,7 +9584,7 @@ description = "Complete hal_init first publishes 0x19a879e0 here before its rema
 name = "BITS_0_4_OPAQUE"
 bits = "4:0"
 class = "plain"
-description = "Interrupt-enable bits whose event identities remain unknown."
+description = "Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "RX_ASSOCIATED_AUXILIARY_5"
@@ -9593,7 +9596,7 @@ description = "Enable for the status bit observed together with RX_SUCCESS durin
 name = "BIT_6_OPAQUE"
 bits = "6"
 class = "plain"
-description = "Unknown event enabled by the complete cold receive mask."
+description = "Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "TX_COMPLETE"
@@ -9623,13 +9626,13 @@ description = "Enable for the MAC watchdog event."
 name = "BIT_12_OPAQUE"
 bits = "12"
 class = "plain"
-description = "Unknown event enabled by the complete cold receive mask."
+description = "Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BIT_13_OPAQUE"
 bits = "13"
 class = "plain"
-description = "Unknown event enabled by the complete cold receive mask."
+description = "Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "RX_SUCCESS"
@@ -9677,7 +9680,7 @@ description = "Interrupt-enable bit whose event identity remains unknown."
 name = "BIT_23_OPAQUE"
 bits = "23"
 class = "plain"
-description = "Unknown event enabled by the complete cold receive mask."
+description = "Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "RX_ASSOCIATED_AUXILIARY_24"
@@ -9719,7 +9722,7 @@ name = "BITS_0_20_OPAQUE"
 bits = "20:0"
 class = "plain"
 write-range = { min = 0, max = 0x1fffff }
-description = "Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027."
+description = "Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Vendor STATUS2/3 have RF-test polling/clear consumers and ENABLE2 has a sniffer accessor use, without established physical identities. These STATUS/ENABLE observations do not show a CPU store that sets RAW2/3/4. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027."
 
 [[registers.fields]]
 name = "FATAL_ASSERTION"
@@ -9743,7 +9746,7 @@ description = "Masked MAC event snapshot read by the complete hal_mac_interrupt_
 name = "BITS_0_4_OPAQUE"
 bits = "4:0"
 class = "read-only"
-description = "Masked event bits whose identities remain unknown."
+description = "Masked event bits whose identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "RX_ASSOCIATED_AUXILIARY_5"
@@ -9755,7 +9758,7 @@ description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted wit
 name = "BIT_6_OPAQUE"
 bits = "6"
 class = "read-only"
-description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown."
+description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "TX_COMPLETE"
@@ -9785,13 +9788,13 @@ description = "MAC watchdog event cleared by the complete dedicated leaf."
 name = "BIT_12_OPAQUE"
 bits = "12"
 class = "read-only"
-description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown."
+description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BIT_13_OPAQUE"
 bits = "13"
 class = "read-only"
-description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown."
+description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "RX_SUCCESS"
@@ -9839,13 +9842,13 @@ description = "Masked event bit whose identity remains unknown."
 name = "BIT_23_OPAQUE"
 bits = "23"
 class = "read-only"
-description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown."
+description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "RX_ASSOCIATED_AUXILIARY_24"
 bits = "24"
 class = "read-only"
-description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer and independent clear/retention behavior remain unknown; software must not treat it as RX ownership or work multiplicity. Grouped pending-STATUS evidence alone cannot identify this lane. A bounded passive-beacon capture has no recorded positive lane24 sample, so it supplies no positive W1C24 or delivery-mask test. SOURCE: HW20_RX_AUXILIARY_OBSERVATION_20261027."
+description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer and independent clear/retention behavior remain unknown; software must not treat it as RX ownership or work multiplicity. Grouped pending-STATUS evidence alone cannot identify this lane. A bounded passive-beacon capture has no recorded positive lane24 sample, so it supplies no positive W1C24 or delivery-mask test. SOURCE: HW20_RX_AUXILIARY_OBSERVATION_20261027. The vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch; RX_SUCCESS alone selects ordinary RX service. No independent bit24 producer or task action is recovered from that FIQ. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BITS_25_26_OPAQUE"
