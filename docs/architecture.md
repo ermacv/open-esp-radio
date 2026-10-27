@@ -60,9 +60,8 @@ that poll the futures.
 Drivers own hardware and wait; adapters bind executors.
 
 The sans-IO safety and panic rules cover all crates under `protocols/` and
-`portable/`, except the unsafe homes `oer-mmio`, `oer-riscv`, `oer-memory`
-and the platform interrupt-table crate `oer-interrupt-table`. They also
-cover the following Espressif crates: their ordinary dependency closures
+`portable/`, except the unsafe homes `oer-mmio`, `oer-riscv` and `oer-memory`.
+They also cover the following Espressif crates: their ordinary dependency closures
 contain no PAC, HAL, mmio or riscv crate, and their roots forbid unsafe code.
 Build and development dependencies do not determine this membership.
 Explicit crate-root `deny` of both `clippy::disallowed_methods` and
@@ -85,7 +84,9 @@ existing local entries.
 | `oer-espressif-watchdog` | `chips/espressif/watchdog` |
 
 The console `oer-espressif-usb-serial-jtag` depends transitively on mmio
-through interrupt-table. Staged-layout owns an unsafe memory/ABI contract;
+through `oer-espressif-interrupt-table`, which owns platform interrupt
+bindings below the unsafe boundary. Staged-layout owns an unsafe memory/ABI
+contract;
 staged-bootstrap, staged-runtime and executor depend on the platform.
 These crates are outside the sans-IO layer. The sans-IO rules forbid unsafe
 code, runtime panic paths and dependencies on fatal, reset, retained-record,

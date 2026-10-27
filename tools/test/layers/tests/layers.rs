@@ -152,13 +152,7 @@ const ESPRESSIF_SANS_IO: &[&str] = &[
 fn sans_io(package: &str) -> bool {
     package.starts_with("protocols/")
         || (package.starts_with("portable/")
-            && ![
-                "portable/mmio",
-                "portable/riscv",
-                "portable/memory",
-                "portable/interrupt-table",
-            ]
-            .contains(&package))
+            && !["portable/mmio", "portable/riscv", "portable/memory"].contains(&package))
         || ESPRESSIF_SANS_IO.contains(&package)
 }
 
