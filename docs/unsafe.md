@@ -530,10 +530,12 @@ publishes facts and pends the next executor round, never a task waker.
 observation. `SarSetupFault` retains the failed storage or router binding;
 startup owners remain held on its non-returning reset path.
 `SarAlarmWithoutBundle` retains the acknowledged RAW/ST and request/reply
-lengths when a pending event has no custody. The handler, IRQ part and actor's
-owners remain held while the image records/resets; no silent return or owner
-recovery occurs. Cancelling the waiting lifecycle future leaves an in-flight
-alarm quarantined until reset; completion has stopped/masked it before reply.
+lengths when a pending event has no custody. IRQ `service` returns this fault
+through `Result`; the image immediately calls the existing retained reset
+path through a direct call. The handler, IRQ part and actor's owners remain
+held without further service or owner recovery. Cancelling the waiting lifecycle
+future leaves an in-flight alarm quarantined until reset; completion has
+stopped/masked it before reply.
 The narrow transaction reporter can report only SAR transfer faults, without
 reunion or register authority. Owners stay quarantined before record/reset;
 the existing retained codec remains 16 bytes and records the named reason and

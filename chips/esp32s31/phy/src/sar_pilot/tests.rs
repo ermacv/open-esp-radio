@@ -143,12 +143,6 @@ impl Io for SarModel {
 fn report(fault: Fault) -> ! {
     std::panic::panic_any(fault)
 }
-fn orphaned(fault: SarAlarmWithoutBundle) -> ! {
-    report(Fault {
-        reason: FaultReason::SarAlarmWithoutBundle(fault),
-        registration: None,
-    })
-}
 type Actor = Client<(), Deferred, ProgramModel>;
 type Handler = Interrupt<(), Deferred, ProgramModel>;
 struct Fixture {
@@ -164,8 +158,7 @@ impl Fixture {
         let cells = Box::leak(Box::new(Cells::new()));
         let signal = host::deferred_signal();
         let mut irq = IrqModel(hardware.clone());
-        let (client, handler) =
-            cells.split_with(ProgramModel(hardware.clone()), &mut irq, signal, orphaned);
+        let (client, handler) = cells.split_with(ProgramModel(hardware.clone()), &mut irq, signal);
         Self {
             hardware,
             client: client.into_client(()),
@@ -174,14 +167,18 @@ impl Fixture {
             signal,
         }
     }
-    fn service(&mut self) {
-        service(&self.handler, &mut self.irq, &self.hardware);
+    fn service(&mut self) -> Result<(), SarAlarmWithoutBundle> {
+        service(&self.handler, &mut self.irq, &self.hardware)
     }
 }
-fn service(handler: &RefCell<Handler>, irq: &mut IrqModel, hardware: &Rc<Hardware>) {
+fn service(
+    handler: &RefCell<Handler>,
+    irq: &mut IrqModel,
+    hardware: &Rc<Hardware>,
+) -> Result<(), SarAlarmWithoutBundle> {
     handler.borrow_mut().service_with(irq, |engine, _phy| {
         engine.advance(hardware.as_ref(), &mut SarModel(hardware.clone()))
-    });
+    })
 }
 type Returned =
     DetachedRadioDomain<crate::test_clocks::TestClockBackend, crate::concurrent::ConcurrentPhy>;
@@ -237,7 +234,7 @@ fn real_client_and_interrupt_clear_before_step_arm_before_deposit_and_preserve_n
     assert!(sample.as_mut().poll(&mut cx).is_pending());
     let before_reply = wakes.0.load(Ordering::Relaxed);
     for _ in 0..3 {
-        service(&f.handler, &mut f.irq, &f.hardware);
+        service(&f.handler, &mut f.irq, &f.hardware).unwrap();
     }
     assert_eq!(
         f.handler.borrow().send.len(),
@@ -282,7 +279,7 @@ fn real_client_and_interrupt_clear_before_step_arm_before_deposit_and_preserve_n
         ]
     );
     // No pending event after terminal disarm: an entry with RAW=0 is inert.
-    f.service();
+    f.service().unwrap();
     assert_eq!(f.hardware.edges().last(), Some(&Edge::Acknowledge(false)));
 }
 
@@ -296,7 +293,7 @@ fn trigger_crossing_a_microsecond_boundary_still_arms_two_full_microseconds() {
     assert!(sample.as_mut().poll(&mut cx).is_pending());
     for _ in 0..2 {
         f.hardware.expire();
-        service(&f.handler, &mut f.irq, &f.hardware);
+        service(&f.handler, &mut f.irq, &f.hardware).unwrap();
     }
     let events = f.hardware.events.borrow();
     let trigger = events.iter().find(|(e, _)| *e == Edge::Trigger).unwrap().1;
@@ -308,7 +305,7 @@ fn trigger_crossing_a_microsecond_boundary_still_arms_two_full_microseconds() {
     assert_eq!(interval, Edge::Arm(2), "do not turn at-now into a 1-us arm");
     drop(events);
     f.hardware.expire();
-    service(&f.handler, &mut f.irq, &f.hardware);
+    service(&f.handler, &mut f.irq, &f.hardware).unwrap();
     let ready = f
         .hardware
         .events
@@ -343,7 +340,7 @@ fn cancellation_of_the_real_waiting_future_quarantines_bundle_at_every_custody_l
                 .is_pending()
         );
         for _ in 0..services {
-            service(&f.handler, &mut f.irq, &f.hardware);
+            service(&f.handler, &mut f.irq, &f.hardware).unwrap();
         }
         let writes = f.hardware.edges();
         let stopped = catch_unwind(AssertUnwindSafe(|| drop(lifecycle))).unwrap_err();
@@ -385,7 +382,7 @@ fn pending_without_bundle_is_a_named_fault_with_source_observations() {
             assert!(sample.as_mut().poll(&mut cx).is_pending());
             for _ in 0..3 {
                 f.hardware.expire();
-                service(&f.handler, &mut f.irq, &f.hardware);
+                service(&f.handler, &mut f.irq, &f.hardware).unwrap();
             }
             // Keep the actual reply bundle quarantined in the reply cell.
             core::mem::drop(sample);
@@ -393,23 +390,28 @@ fn pending_without_bundle_is_a_named_fault_with_source_observations() {
         }
         assert!(!f.hardware.enabled.get());
         f.hardware.pending.set(true);
-        let stopped = catch_unwind(AssertUnwindSafe(|| f.service())).unwrap_err();
-        let expected = Fault {
-            reason: FaultReason::SarAlarmWithoutBundle(SarAlarmWithoutBundle {
+        let before = f.hardware.edges();
+        assert_eq!(
+            f.service(),
+            Err(SarAlarmWithoutBundle {
                 observation: Observation {
                     pending: true,
                     asserted: false,
                 },
                 requests: 0,
                 replies: usize::from(completed),
-            }),
-            registration: None,
-        };
-        assert_eq!(*stopped.downcast::<Fault>().unwrap(), expected);
+            })
+        );
+        let mut expected_edges = before;
+        expected_edges.push(Edge::Acknowledge(true));
+        assert_eq!(f.hardware.edges(), expected_edges, "no recovery writes");
+        assert!(f.handler.borrow().active.is_none());
+        assert_eq!(f.handler.borrow().receive.len(), 0);
+        assert_eq!(f.client.alarm.is_some(), !completed);
         assert!(!f.hardware.pending.get(), "acknowledgement precedes fault");
         assert_eq!(f.handler.borrow().send.len(), usize::from(completed));
-        // The test reporter unwinds; real reporters never return. Reunite
-        // only in this harness so no second cancellation reset unwinds.
+        // The image resets with custody still in the reply cell. Reunite
+        // only in this harness to avoid a second cancellation fault.
         if let Some(returned) = kept_return {
             let phy = f.client.receive.try_receive().ok().unwrap().phy;
             assert!(returned.reunite(phy).is_ok());

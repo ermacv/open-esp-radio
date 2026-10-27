@@ -54,7 +54,6 @@ impl<B: 'static, A: 'static> Cells<B, A> {
         mut alarm: A,
         interrupt: &mut impl Acknowledge,
         signal: &'static IrqSignal<E>,
-        orphaned: fn(SarAlarmWithoutBundle) -> !,
     ) -> (UnboundClient<B, E, A>, Interrupt<B, E, A>)
     where
         A: Program<B>,
@@ -75,7 +74,6 @@ impl<B: 'static, A: 'static> Cells<B, A> {
                 send: return_send,
                 signal,
                 active: None,
-                orphaned,
             },
         )
     }
@@ -87,15 +85,14 @@ impl<B: 'static, A: 'static> Default for Cells<B, A> {
 }
 impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Cells<Bound<I>> {
     /// Startup stops/masks the program and CLR-acknowledges stale RAW before
-    /// unmask. The image's terminal reporter retains an orphan event's data.
+    /// unmask. IRQ service returns an orphan event's data to the image.
     pub fn split<E: SignalExecutor>(
         &'static mut self,
         alarm: Timg0AlarmProgram,
         interrupt: &mut Timg0AlarmInterrupt,
         signal: &'static IrqSignal<E>,
-        orphaned: fn(SarAlarmWithoutBundle) -> !,
     ) -> (UnboundClient<Bound<I>, E>, Interrupt<Bound<I>, E>) {
-        self.split_with(alarm, interrupt, signal, orphaned)
+        self.split_with(alarm, interrupt, signal)
     }
 }
 
@@ -232,17 +229,22 @@ impl<B: 'static, E: SignalExecutor, A: Program<B> + 'static> Service for Client<
 /// part independently for the entire image. No task poll or waker is called.
 pub struct Interrupt<B: 'static, E: SignalExecutor, A: 'static = Timg0AlarmProgram> {
     active: Option<Bundle<B, A>>,
-    orphaned: fn(SarAlarmWithoutBundle) -> !,
     receive: Receiver<B, A>,
     send: Sender<B, A>,
     signal: &'static IrqSignal<E>,
 }
 impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> Interrupt<Bound<I>, E> {
     #[cfg(target_arch = "riscv32")]
-    pub fn service(&mut self, interrupt: &mut Timg0AlarmInterrupt, clock: &impl Clock) {
+    /// An orphan fault leaves all owners in place; the image must record it
+    /// and reset without servicing the handler or actor again.
+    pub fn service(
+        &mut self,
+        interrupt: &mut Timg0AlarmInterrupt,
+        clock: &impl Clock,
+    ) -> Result<(), SarAlarmWithoutBundle> {
         self.service_with(interrupt, |engine, phy| {
             engine.advance(clock, phy.hardware_mut())
-        });
+        })
     }
 }
 impl<B: 'static, E: SignalExecutor, A: 'static> Interrupt<B, E, A> {
@@ -250,12 +252,13 @@ impl<B: 'static, E: SignalExecutor, A: 'static> Interrupt<B, E, A> {
         &mut self,
         interrupt: &mut impl Acknowledge,
         advance: impl FnOnce(&mut Engine, &mut PhyTransaction) -> Event,
-    ) where
+    ) -> Result<(), SarAlarmWithoutBundle>
+    where
         A: Program<B>,
     {
         let observation = interrupt.acknowledge();
         if !observation.pending {
-            return;
+            return Ok(());
         }
         let Some(mut bundle) = self
             .active
@@ -265,7 +268,7 @@ impl<B: 'static, E: SignalExecutor, A: 'static> Interrupt<B, E, A> {
             // Startup and completion stop/mask the program. An acknowledged
             // event without custody is impossible; retain every owner in
             // place while the image records these observations and resets.
-            (self.orphaned)(SarAlarmWithoutBundle {
+            return Err(SarAlarmWithoutBundle {
                 observation,
                 requests: self.receive.len(),
                 replies: self.send.len(),
@@ -292,6 +295,7 @@ impl<B: 'static, E: SignalExecutor, A: 'static> Interrupt<B, E, A> {
                 let _new = self.signal.raise(1);
             }
         }
+        Ok(())
     }
 }
 /// Short loans into the owned PHY between submissions. It never implements
