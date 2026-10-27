@@ -308,12 +308,16 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     ) else {
         fail("wifi-interrupt")
     };
-    let doorbell = ImageDoorbell(Doorbell::new::<FromCpu3Irq>(bell, &wifi_bound));
+    let (doorbell, urgent) = Doorbell::new::<FromCpu3Irq>(bell, &wifi_bound);
+    let doorbell = ImageDoorbell(doorbell);
     let (timer_sender, timer_lines) = TIMER_LINES.take().split();
+    let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        urgent,
     );
     if RadioTasks::radio_actor(&radio, actor).is_err()
         || RadioTasks::p2_timers(&radio, timer_sender).is_err()
@@ -325,16 +329,18 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.reason()),
     };
     let executor = Executor::<0>::new(software.line0);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
     let rng = Rng::new(runtime.entropy, EmbassyClock);
     let rtc_watchdog = runtime.watchdogs.rtc;
     executor.run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        urgent,
         move |spawner| {
             let boot = Boot {
                 console,

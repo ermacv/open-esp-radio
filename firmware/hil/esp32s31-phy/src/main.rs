@@ -195,10 +195,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
     let software = runtime.software_interrupts;
+    let (hart, router) = adopted.parts();
     let radio_spawner = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        (),
     );
     if RadioTasks::serve_radio(&radio_spawner, radio).is_err() {
         fail("task-start");
@@ -213,15 +216,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         fail("console");
     };
     transport::CONSOLE.start(boot);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
     Executor::<0>::new(software.line0).run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        (),
         move |spawner| {
             if AppTasks::console(spawner, usb, boot, chip).is_err()
                 || AppTasks::dispatch(spawner, poster).is_err()

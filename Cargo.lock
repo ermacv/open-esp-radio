@@ -2118,6 +2118,7 @@ dependencies = [
  "embassy-time-driver",
  "oer-cooperate",
  "oer-esp32s31-hal",
+ "oer-espressif-staged-runtime",
  "oer-interrupt-table",
  "oer-memory",
  "oer-mmio",

@@ -226,8 +226,10 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(bell) = SCHEDULER.try_init(bound.bell) else {
         crate::fail("scheduler-bell")
     };
+    let urgent = bound.urgent;
     let _ = bridge::clock_state();
-    let radio = X::new(software.line2).start(adopted.router(), tokens.radio, software.irq2);
+    let (hart, router) = adopted.parts();
+    let radio = X::new(software.line2).start(hart, router, tokens.radio, software.irq2, urgent);
     let Some(arena) = ARENA.take() else {
         crate::fail("arena")
     };
@@ -257,28 +259,35 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     }
     let (console, pads) = usb::open(adopted.router(), tokens.console_usb);
     let app = Executor::<0>::new(software.line0);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => crate::fail(error.name()),
     };
     let rng = host::Rng::new(runtime.entropy, EmbassyClock);
     let watchdog = runtime.watchdogs.rtc;
-    app.run(&mut router, tokens.wake, software.irq0, move |spawner| {
-        let (_, power) = permission(profile);
-        if AppTasks::serve(
-            spawner,
-            console,
-            pads,
-            rng,
-            bridge::frontend(stop_reports),
-            power,
-        )
-        .is_err()
-            || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
-        {
-            crate::fail("app-tasks");
-        }
-    })
+    app.run(
+        &hart,
+        &mut router,
+        tokens.wake,
+        software.irq0,
+        urgent,
+        move |spawner| {
+            let (_, power) = permission(profile);
+            if AppTasks::serve(
+                spawner,
+                console,
+                pads,
+                rng,
+                bridge::frontend(stop_reports),
+                power,
+            )
+            .is_err()
+                || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
+            {
+                crate::fail("app-tasks");
+            }
+        },
+    )
 }
 async fn hold<T>(owner: &mut T) -> ! {
     core::hint::black_box(owner);

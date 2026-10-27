@@ -1,9 +1,12 @@
 use core::{marker::PhantomData, task::Context};
 
+use crate::urgent_sources::UrgentSources;
+use oer_espressif_staged_runtime::Hart;
 use oer_interrupt_table::{
     Entry,
     signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList},
 };
+use oer_memory::zeroed::ZeroedOnce;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 use crate::chip::{
@@ -14,7 +17,7 @@ pub(crate) use crate::context::NO_EXECUTOR;
 use crate::context::Running;
 use crate::task::{Current, Interrupt as InterruptMode, Ready, Spawner, TaskId, Tasks, Thread};
 
-const CORE_COUNT: usize = platform::HARTS;
+use platform::HARTS;
 const UNASSIGNED_CORE: usize = usize::MAX;
 
 /// Each thread-mode executor's wake flag: work other than a ready task (an
@@ -65,7 +68,13 @@ static READY: [Ready; SOFTWARE_INTERRUPT_COUNT] =
     reason = "board linker owns this exported executor core-state section"
 )]
 #[unsafe(link_section = ".critical.data.executor")]
-static RUNNING: [Running; CORE_COUNT] = [const { Running::new() }; CORE_COUNT];
+static RUNNING: [Running; HARTS] = [const { Running::new() }; HARTS];
+
+oer_memory::zeroed_static! {
+    /// Composition-owned urgent sources, published before an executor can poll.
+    static URGENT: [ZeroedOnce<&'static [u16]>; SOFTWARE_INTERRUPT_COUNT] =
+        zeroed in ".critical.bss.executor";
+}
 
 /// The task each executor polls now; only that executor's context reads it,
 /// to name a polling task for its signals.
@@ -79,7 +88,9 @@ static INTERRUPT_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
 /// The executor whose context the caller runs in: [`NO_EXECUTOR`] outside
 /// every executor and in a hardware interrupt that preempts one.
 pub(crate) fn running() -> u8 {
-    RUNNING[current_core()].at(interrupt_level())
+    crate::chip::current_hart()
+        .at(&RUNNING)
+        .at(interrupt_level())
 }
 
 /// Executor `executor`'s ready mask.
@@ -121,7 +132,9 @@ pub(crate) fn should_yield() -> bool {
         .expect("cooperative admission requires a running executor");
     READY[swi].any()
         || crate::chip::is_pending(software_interrupt_source(swi as u8))
-        || crate::chip::is_pending(software_interrupt_source(3))
+        || URGENT[swi]
+            .get()
+            .is_some_and(|sources| crate::urgent_sources::pending(sources, crate::chip::is_pending))
         || signal_pending(swi)
         || {
             let now = crate::chip::now();
@@ -150,7 +163,9 @@ fn signal_pending(swi: usize) -> bool {
 /// Run `poll` as executor `swi`'s context, at the caller's interrupt level,
 /// and restore the preempted one.
 fn as_running(swi: u8, poll: impl FnOnce()) {
-    RUNNING[current_core()].enter(swi, interrupt_level(), poll);
+    crate::chip::current_hart()
+        .at(&RUNNING)
+        .enter(swi, interrupt_level(), poll);
 }
 
 /// One poll round of executor `T::EXECUTOR`, in its context: whether a task
@@ -179,8 +194,8 @@ fn claim_core(swi: u8) {
 
 /// Scheduler-free thread-mode executor.
 ///
-/// One software interrupt is reserved per executor so a waker on another CPU
-/// can wake the sleeping owner without introducing a scheduler or RTOS.
+/// One software interrupt is reserved per executor; its task wakers remain
+/// on the hart that owns it.
 pub struct Executor<const SWI: u8> {
     not_send: PhantomData<*mut ()>,
 }
@@ -190,15 +205,20 @@ impl<const SWI: u8> Executor<SWI> {
     /// software interrupt: `wake` is that source's token of the image's
     /// interrupt table, whose entry names [`wake_handler::<SWI>`](wake_handler)
     /// on this core. `init` starts the first tasks.
+    /// `urgent` comes from the composition's doorbell constructor, or `()`
+    /// when it has no urgent sources.
     ///
     /// # Panics
     ///
-    /// When the table routes the source to another core.
-    pub fn run<T, W, C>(
+    /// When the software interrupt already serves an executor or binding fails.
+    /// A foreign hart's entry fails at compile time.
+    pub fn run<T, W, C, const H: u8, U: UrgentSources>(
         self,
+        _hart: &Hart<H>,
         router: &mut oer_interrupt_table::Router<C>,
         wake: W,
         part: W::Part,
+        _urgent: U,
         init: impl FnOnce(&Spawner<T>),
     ) -> !
     where
@@ -215,16 +235,13 @@ impl<const SWI: u8> Executor<SWI> {
             );
             assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
         };
+        crate::hart_binding::check::<H, W>();
         let _ = self.not_send;
-        assert_eq!(
-            W::HART as usize,
-            current_core(),
-            "executor route is on this hart"
-        );
         if let Err(error) = router.bind(wake, part) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
         claim_core(SWI);
+        let _ = URGENT[usize::from(SWI)].get_or_init(|| U::SOURCES);
         init(&Spawner::new());
         loop {
             WORK_PENDING.0[usize::from(SWI)].store(0, Ordering::Release);
@@ -348,16 +365,20 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
     /// table entry names [`interrupt_handler::<T>`](interrupt_handler) on
     /// this core. Signal declarations and request bindings check their
     /// direction from the table entries. The spawner starts `T`'s tasks.
+    /// `urgent` comes from the composition's doorbell constructor, or `()`
+    /// when it has no urgent sources.
     ///
     /// # Panics
     ///
-    /// When the table routes the source to another core, or the software
-    /// interrupt already serves an executor.
-    pub fn start<T, W, C>(
+    /// When the software interrupt already serves an executor or binding fails.
+    /// A foreign hart's entry fails at compile time.
+    pub fn start<T, W, C, const H: u8, U: UrgentSources>(
         self,
+        _hart: &Hart<H>,
         router: &mut oer_interrupt_table::Router<C>,
         wake: W,
         part: W::Part,
+        _urgent: U,
     ) -> Spawner<T>
     where
         T: Tasks<Mode = InterruptMode>,
@@ -373,16 +394,13 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
             );
             assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
         };
+        crate::hart_binding::check::<H, W>();
         let _ = self._line;
         claim_core(SWI);
+        let _ = URGENT[usize::from(SWI)].get_or_init(|| U::SOURCES);
         // Published before the source is enabled, so the first handler polls
         // and a pend raises its interrupt.
         INTERRUPT_MODE[usize::from(SWI)].store(true, Ordering::Release);
-        assert_eq!(
-            W::HART as usize,
-            current_core(),
-            "executor route is on this hart"
-        );
         if let Err(error) = router.bind(wake, part) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }

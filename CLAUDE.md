@@ -58,7 +58,13 @@ system these rules serve.
   Arithmetic on peer values names its overflow behavior with `checked_`,
   `wrapping_` or `saturating_` operations.
 - **Execution.** An interrupt handler never shares a lock with a task. A
-  signal names its raisers at compile time. A raising handler sits strictly
+  task waker stays on its executor's hart; no waker crosses harts. Executor
+  startup borrows the runtime's affine `Hart<H>` and const-checks its route's
+  hart. Interrupt enable consumes pre-admission authority and returns the
+  router with the same hart token; before enable they may be borrowed together.
+  An executor's urgent sources come from the typed observations returned by
+  the same constructors as its doorbells; an empty composition passes `()`.
+  A signal names its raisers at compile time. A raising handler sits strictly
   above the receiving executor; the one exception is an
   `Exempt(ExecutorLevel)` handler on that executor's hart and level
   (`FromExecutorLevel`), whose signal the next round serves. Driver code

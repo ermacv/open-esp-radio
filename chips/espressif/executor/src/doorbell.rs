@@ -30,6 +30,7 @@ use oer_interrupt_table::{
 
 use crate::chip::{Line, platform, software_interrupt_source};
 use crate::software_line::SoftwareLine;
+use crate::urgent_sources::UrgentSource;
 
 /// The radio doorbell on software interrupt `SWI` (`FROM_CPU_INTR<SWI>`):
 /// the ringing half.
@@ -99,7 +100,9 @@ impl<const SWI: u8, E: Entry, X: Entry> Doorbell<SWI, E, X> {
     /// A member that is not the line, or that the bound part does not hold,
     /// fails to compile (the constant's assertion, `E0080`). `X` is the
     /// requesting executor's entry; `E` must be above it on the same hart.
-    pub fn new<Member>(line: DoorbellLine<SWI>, bound: &Bound<E>) -> Self
+    /// The accompanying urgent source retains that same `Member` type for
+    /// executor admission; it cannot name another software line.
+    pub fn new<Member>(line: DoorbellLine<SWI>, bound: &Bound<E>) -> (Self, UrgentSource<Member>)
     where
         Member: InterruptSource,
     {
@@ -122,10 +125,13 @@ impl<const SWI: u8, E: Entry, X: Entry> Doorbell<SWI, E, X> {
             );
         };
         let _bound = bound;
-        Self {
-            line: line.line,
-            entries: PhantomData,
-        }
+        (
+            Self {
+                line: line.line,
+                entries: PhantomData,
+            },
+            UrgentSource::new(),
+        )
     }
 
     /// Raise the doorbell. The fence orders the caller's request writes

@@ -77,6 +77,7 @@ pub struct Bound {
     pub gate: Gate,
     pub port: &'static mut TimerPort,
     pub bell: SchedulerBell,
+    pub urgent: oer_espressif_executor::UrgentSource<FromCpu3Irq>,
 }
 
 /// Why the handler's part could not be bound.
@@ -112,9 +113,8 @@ pub fn bind<C: Controller>(
         },
     );
     let bound = router.bind(token, part).map_err(|_| BindError::Route)?;
-    let doorbell = BELL
-        .try_init(Bell(Doorbell::new::<FromCpu3Irq>(line, &bound)))
-        .ok_or(BindError::Storage)?;
+    let (doorbell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
+    let doorbell = BELL.try_init(Bell(doorbell)).ok_or(BindError::Storage)?;
     let ring: &Bell = doorbell;
     let (gate, port) = ends.attach(&bound, ring);
     let port = PORT.try_init(port).ok_or(BindError::Storage)?;
@@ -122,5 +122,6 @@ pub fn bind<C: Controller>(
         gate,
         port,
         bell: SchedulerBell::new(ring, &REPLY),
+        urgent,
     })
 }

@@ -17,10 +17,7 @@
 use oer_esp32s31_pac::{
     clic::{self, Clic, ClicObserver},
     instances,
-    interrupt_core::{
-        self, InterruptCore0, InterruptCore0Observer, InterruptCore0Status, InterruptCore1,
-        InterruptCore1Status,
-    },
+    interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
     ownership::InterruptMatrixPeripherals,
 };
 use oer_interrupt_table::{Controller, Error, LineState, Trigger};
@@ -29,9 +26,6 @@ use oer_memory::{ClaimCell, zeroed::ZeroedOnce};
 use crate::cores::{StopTheWorld, key};
 use oer_mmio::{Bits, Fixed, Index, Placement};
 
-#[cfg(test)]
-mod tests;
-
 /// Controller geometry generated from the chip facts, shared with runtime
 /// vector generation. Lines below `LINES.first` are reserved core-local inputs.
 pub mod facts {
@@ -39,7 +33,7 @@ pub mod facts {
 }
 
 /// The interrupt matrix's blocks, split from the root: hart 0's controller
-/// and hart 1's bank. Hart 0's pending sources are published for every
+/// and hart 1's bank. Every hart's pending sources are published for every
 /// context ([`is_pending`]).
 #[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
 pub struct InterruptBlocks {
@@ -49,39 +43,59 @@ pub struct InterruptBlocks {
     pub hart1: Hart1Interrupts,
 }
 
-/// Hart 0's pending sources, published once by [`InterruptBlocks::new`].
-static PENDING: ZeroedOnce<InterruptCore0Status> = ZeroedOnce::new();
+/// Every hart's read-only pending sources, published once at partition split.
+static PENDING: ZeroedOnce<PendingBanks> = ZeroedOnce::new();
 
-/// Whether `source` is pending at hart 0's bank, the hart stage two runs
-/// on (hart 1 runs no code); `false` before the blocks are split or for a
+/// Whether `source` is pending at the checked hart's bank;
+/// `false` before the blocks are split or for a
 /// source the bank does not have. Never waits.
-pub fn is_pending(source: u16) -> bool {
+pub fn is_pending(hart: crate::platform::Hart, source: u16) -> bool {
     PENDING
         .get()
-        .is_some_and(|pending| pending_in(pending, source))
+        .is_some_and(|pending| pending.is_pending(hart, source))
 }
+
+trait PendingStatus {
+    fn word(&self, word: u16) -> Option<u32>;
+}
+
+macro_rules! pending_status {
+    ($status:ident) => {
+        impl<P: Placement> PendingStatus for oer_esp32s31_pac::interrupt_core::$status<P> {
+            fn word(&self, word: u16) -> Option<u32> {
+                Some(match word {
+                    0 => self.read_int_status_reg_0().int_status_0(),
+                    1 => self.read_int_status_reg_1().int_status_1(),
+                    2 => self.read_int_status_reg_2().int_status_2(),
+                    3 => self.read_int_status_reg_3().int_status_3(),
+                    4 => self.read_int_status_reg_4().int_status_4(),
+                    5 => self.read_int_status_reg_5().int_status_5().get(),
+                    _ => return None,
+                })
+            }
+        }
+    };
+}
+
+include!(concat!(env!("OUT_DIR"), "/pending.rs"));
+
+#[cfg(test)]
+mod tests;
 
 /// Whether `source` is pending in `status`: source `32 * n + k` is bit `k`
 /// of the bank's status word `n`.
 ///
 /// SOURCE: ESP-IDF 4d59230d `interrupt_core0_reg.h`
 /// (`INTERRUPT_CORE0_INT_STATUS_REG_0..5`: sources 0 to 168, one bit each).
-fn pending_in<P: Placement>(status: &InterruptCore0Status<P>, source: u16) -> bool {
-    let word = match source / 32 {
-        0 => status.read_int_status_reg_0().int_status_0(),
-        1 => status.read_int_status_reg_1().int_status_1(),
-        2 => status.read_int_status_reg_2().int_status_2(),
-        3 => status.read_int_status_reg_3().int_status_3(),
-        4 => status.read_int_status_reg_4().int_status_4(),
-        5 => status.read_int_status_reg_5().int_status_5().get(),
-        _ => return false,
-    };
-    word & (1 << (source % 32)) != 0
+fn pending_in(status: &impl PendingStatus, source: u16) -> bool {
+    status
+        .word(source / 32)
+        .is_some_and(|word| word & (1 << (source % 32)) != 0)
 }
 
 impl InterruptBlocks {
     /// Split the root's partition: give the CLIC [`facts::LEVEL_BITS`] level bits,
-    /// keeping its other configuration fields, and publish hart 0's pending
+    /// keeping its other configuration fields, and publish every hart's pending
     /// sources and the observers of its routes and lines for a fatal path.
     /// Every route and line stays as it is until the router installs the
     /// controller.
@@ -91,20 +105,20 @@ impl InterruptBlocks {
     /// When the pending sources were published before: the root splits the
     /// partition once.
     pub fn new(peripherals: InterruptMatrixPeripherals) -> Self {
+        let pending = take_pending!(peripherals);
         let InterruptMatrixPeripherals {
             clic,
             mut clic_observer,
             interrupt_core0,
             interrupt_core0_observer,
-            interrupt_core0_status,
             interrupt_core1,
-            interrupt_core1_status,
+            ..
         } = peripherals;
         assert!(
             PENDING.get().is_none(),
-            "the root publishes hart 0's pending sources once"
+            "the root publishes the pending sources once"
         );
-        let _ = PENDING.get_or_init(|| interrupt_core0_status);
+        let _ = PENDING.get_or_init(|| pending);
         set_level_bits(&mut clic_observer);
         // Published beside the pending sources, which the assertion above
         // finds unpublished: the observers are not installed either.
@@ -116,7 +130,6 @@ impl InterruptBlocks {
             controller: InterruptController::new(interrupt_core0, clic),
             hart1: Hart1Interrupts {
                 _routes: interrupt_core1,
-                _pending: interrupt_core1_status,
             },
         }
     }
@@ -216,13 +229,13 @@ pub fn fatal_view<R>(
         .map(|held| held.value)
 }
 
-/// Hart 1's interrupt-matrix bank and its pending sources. Hart 1 runs no
+/// Hart 1's interrupt-matrix route bank. Its read-only pending sources are
+/// published with every hart's status. Hart 1 runs no
 /// code (the staged runtime refuses `cpu1-runs`): nothing writes the bank,
 /// and holding it keeps every other owner from it.
 #[must_use = "dropping hart 1's bank permanently loses its routes"]
 pub struct Hart1Interrupts {
     _routes: InterruptCore1,
-    _pending: InterruptCore1Status,
 }
 
 /// Hart 0's interrupt-matrix bank and the CLIC hart 0 reaches, the router's

@@ -46,6 +46,8 @@ mod doorbell;
 #[cfg(feature = "chip")]
 mod executor;
 pub mod hardware;
+#[cfg(feature = "chip")]
+mod hart_binding;
 #[cfg(any(feature = "chip", test))]
 mod poll_stamp;
 #[cfg(feature = "port-slots")]
@@ -62,6 +64,8 @@ pub mod task;
 mod time_driver;
 #[cfg(any(feature = "chip", test))]
 mod timer_queue;
+#[cfg(any(feature = "chip", test))]
+mod urgent_sources;
 
 #[cfg(feature = "chip")]
 pub use doorbell::{Doorbell, DoorbellAcknowledger, DoorbellLine, LineAcknowledger};
@@ -71,6 +75,8 @@ pub use executor::{Executor, InterruptExecutor, interrupt_handler, ready_peers, 
 pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
 #[cfg(feature = "chip")]
 pub use time_driver::{alarm_interrupt, bind, init};
+#[cfg(feature = "chip")]
+pub use urgent_sources::{UrgentSource, UrgentSources};
 
 #[cfg(any(all(oer_profile, feature = "chip"), test))]
 pub mod timer_observation;

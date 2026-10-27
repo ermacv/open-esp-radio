@@ -190,26 +190,31 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
     let software = runtime.software_interrupts;
+    let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        (),
     );
     if RadioTasks::radio_actor(&radio, actor).is_err() {
         fail("radio-actor-start");
     }
     let (console, pads) = usb::open(adopted.router(), interrupts.console_usb);
     let executor = Executor::<0>::new(software.line0);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
     let rng = Rng::new(runtime.entropy, EmbassyClock);
     let watchdog = runtime.watchdogs.rtc;
     executor.run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        (),
         move |spawner| {
             let boot = Boot {
                 console,

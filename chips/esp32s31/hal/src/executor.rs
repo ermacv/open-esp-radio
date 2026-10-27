@@ -1,26 +1,25 @@
 //! The executor's platform contract on this chip (`oer-espressif-executor`'s
 //! `ExecutorPlatform`): the source identities of the software interrupt
 //! lines and the system timer's comparators, from the PAC's interrupt
-//! parts, the pending read of hart 0's interrupt-matrix bank and whether a
-//! debugger is attached to hart 0.
+//! parts, and pending/debug reads selected by a checked hart identity.
 
 use oer_esp32s31_pac::{bus_monitor::DebugModeStatus, ownership::DebugPeripherals};
 use oer_memory::zeroed::ZeroedOnce;
 use oer_mmio::InterruptSource;
 
 use crate::platform::{
-    FromCpu0Irq, FromCpu1Irq, FromCpu2Irq, FromCpu3Irq, SystimerAlarm0, SystimerAlarm1,
+    FromCpu0Irq, FromCpu1Irq, FromCpu2Irq, FromCpu3Irq, Hart, SystimerAlarm0, SystimerAlarm1,
     SystimerAlarm2, interrupt_controller,
 };
 
 /// The chip's executor platform.
 pub struct Platform;
 
-/// Hart 0's debug status, published once by the stage-two split of the
+/// Per-hart debug status, published once by the stage-two split of the
 /// reset root ([`publish_debug_status`]), before any executor exists.
 static DEBUG: ZeroedOnce<DebugModeStatus> = ZeroedOnce::new();
 
-/// Publish hart 0's debug status for [`Platform::debugger_connected`], from
+/// Publish the per-hart debug status for [`Platform::debugger_connected`], from
 /// the root's partition.
 ///
 /// # Panics
@@ -47,14 +46,14 @@ impl Platform {
         <SystimerAlarm2 as InterruptSource>::SOURCE,
     ];
 
-    /// Whether `source` is pending at hart 0's bank, the hart stage two
-    /// runs on, without changing its route.
+    /// Whether `source` is pending at the checked hart's bank, without
+    /// changing its route. The caller supplies its current hart's identity.
     #[inline(always)]
-    pub fn is_pending(source: u16) -> bool {
-        interrupt_controller::is_pending(source)
+    pub fn is_pending(hart: Hart, source: u16) -> bool {
+        interrupt_controller::is_pending(hart, source)
     }
 
-    /// Whether a debugger is attached to hart 0: its debug module is
+    /// Whether a debugger is attached to the checked hart: its debug module is
     /// active, so a wait for an interrupt would stall the debugger's
     /// access. The stage-two root publishes the status before any executor
     /// can wait; unpublished, no debugger is known.
@@ -64,16 +63,16 @@ impl Platform {
     /// `DEBUG_MODULE_ACTIVE`) and ESP-IDF 4d59230d
     /// `components/soc/esp32s31/include/soc/assist_debug_reg.h:11-14`.
     #[inline(always)]
-    pub fn debugger_connected() -> bool {
-        DEBUG.get().is_some_and(debug_module_active)
+    pub fn debugger_connected(hart: Hart) -> bool {
+        DEBUG
+            .get()
+            .is_some_and(|status| debug_module_active(status, hart))
     }
 }
 
-/// Whether hart 0's debug module is active in `status`.
-fn debug_module_active<P: oer_mmio::Placement>(status: &DebugModeStatus<P>) -> bool {
-    status
-        .read_debug_mode(crate::platform::BOOT_HART.index())
-        .debug_module_active()
+/// Whether the selected hart's debug module is active in `status`.
+fn debug_module_active<P: oer_mmio::Placement>(status: &DebugModeStatus<P>, hart: Hart) -> bool {
+    status.read_debug_mode(hart.index()).debug_module_active()
 }
 
 #[cfg(test)]
@@ -103,22 +102,37 @@ mod tests {
     }
 
     #[test]
-    fn a_debugger_is_attached_while_hart_0_s_debug_module_is_active() {
-        use oer_esp32s31_pac::{bus_monitor::DebugModeStatus, instances};
-        // SOURCE: ESP-IDF 4d59230d `bus_monitor_reg.h:562-580`:
-        // `CORE_0_DEBUG_MODE` at 0x64, `DEBUG_MODULE_ACTIVE` bit 1.
-        let mut words = std::vec![0_u32; instances::bus_monitor::SIZE / 4];
-        words[0x64 / 4] = 0b01;
-        let status = DebugModeStatus::host(&mut words).expect("memory holds the block");
-        assert!(!super::debug_module_active(&status), "debug mode alone");
-        words[0x64 / 4] = 0b10;
-        let status = DebugModeStatus::host(&mut words).expect("memory holds the block");
-        assert!(super::debug_module_active(&status));
+    fn debugger_activity_is_local_to_the_selected_hart() {
+        use crate::platform::Hart;
+        use oer_esp32s31_pac::{
+            bus_monitor::{DebugModeStatus, debug_mode},
+            instances,
+        };
+        for active in Hart::ALL {
+            let mut words = std::vec![0_u32; instances::bus_monitor::SIZE / 4];
+            let index = (debug_mode::OFFSET + active.get() * debug_mode::STRIDE) / 4;
+            words[index] = debug_mode::DEBUG_MODE_MASK;
+            let status = DebugModeStatus::host(&mut words).expect("memory holds the block");
+            assert!(
+                !super::debug_module_active(&status, active),
+                "debug mode alone"
+            );
+            words[index] = debug_mode::DEBUG_MODULE_ACTIVE_MASK;
+            let status = DebugModeStatus::host(&mut words).expect("memory holds the block");
+            for observed in Hart::ALL {
+                assert_eq!(
+                    super::debug_module_active(&status, observed),
+                    observed == active
+                );
+            }
+        }
     }
 
     #[test]
     fn nothing_is_pending_before_the_bank_is_published() {
         // The host test binary never splits the root's interrupt matrix.
-        assert!(!Platform::is_pending(68));
+        for hart in crate::platform::Hart::ALL {
+            assert!(!Platform::is_pending(hart, 68));
+        }
     }
 }

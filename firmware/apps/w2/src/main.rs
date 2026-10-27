@@ -166,11 +166,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     ) else {
         fail("wifi-route")
     };
-    let bell = irq::ImageDoorbell(Doorbell::new::<FromCpu3Irq>(line, &bound));
+    let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
+    let bell = irq::ImageDoorbell(bell);
+    let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
-        adopted.router(),
+        hart,
+        router,
         interrupts.radio,
         software.irq2,
+        urgent,
     );
     let (sender, receiver) = REPORT.init(AffineSpscQueue::new()).split();
     if RadioTasks::radio_actor(&radio, actor).is_err() {
@@ -195,15 +199,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     }
     let (console, pads) = usb::open(adopted.router(), interrupts.console_usb);
     let executor = Executor::<0>::new(software.line0);
-    let mut router = match adopted.enable_interrupts() {
+    let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
     executor.run(
+        &hart,
         &mut router,
         interrupts.wake,
         software.irq0,
+        urgent,
         move |spawner| {
             if AppTasks::reporting(spawner, console, pads, receiver).is_err()
                 || AppTasks::rtc_watchdog(spawner, watchdog).is_err()

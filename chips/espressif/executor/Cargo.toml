@@ -16,6 +16,7 @@ port-slots = ["dep:oer-radio-port"]
 esp32s31 = [
     "chip",
     "dep:oer-esp32s31-hal",
+    "dep:oer-espressif-staged-runtime",
 ]
 # The executor and time driver, which a chip feature selects.
 chip = [
@@ -40,6 +41,7 @@ oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = t
 oer-riscv = { path = "../../../portable/riscv", optional = true }
 oer-mmio = { path = "../../../portable/mmio", optional = true }
 oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
+oer-espressif-staged-runtime = { path = "../staged-runtime", features = ["esp32s31"], optional = true }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 tempfile = "=3.27.0"
