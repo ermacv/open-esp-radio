@@ -534,7 +534,8 @@ impl TaskOwner {
     }
 
     /// Admit the release of the controller output: no controller-time
-    /// request is in flight. Touches no register.
+    /// request is in flight. Then retain the task bank's preflight observation;
+    /// writes nothing.
     ///
     /// # Errors
     ///
@@ -545,7 +546,9 @@ impl TaskOwner {
         if self.time_latch.in_flight() {
             return Err(BluetoothControllerOutputReleaseError::ControllerTimePending);
         }
-        Ok(BluetoothOutputReleaseAdmitted { _private: () })
+        Ok(BluetoothOutputReleaseAdmitted {
+            task: self.interrupt_observation(),
+        })
     }
 
     /// After the handler's idle sample, check that no scheduler list names
@@ -570,7 +573,8 @@ impl TaskOwner {
         _masked: BluetoothDynamicSourcesMasked,
     ) -> BluetoothSchedulerRunDisabled {
         self.registers.disable_scheduler_run();
-        BluetoothSchedulerRunDisabled { _private: () }
+        let task = observation::task(&self.registers.bluetooth.btmac_ble_phy_init);
+        BluetoothSchedulerRunDisabled { task }
     }
 
     /// Reunite a quiescent, untouched task with the exact inactive interrupt
@@ -1407,11 +1411,11 @@ impl InterruptRegistersOwner {
     ) -> Result<BluetoothOutputIdleSampled, BluetoothControllerOutputReleaseError> {
         let busy = self.release_busy_sample(settle)?;
         self.registers
-            .sample_idle_output(busy, self.fault_acknowledged)?;
+            .sample_idle_output(busy, self.fault_acknowledged, _admitted.task)?;
         Ok(BluetoothOutputIdleSampled { _private: () })
     }
 
-    /// Mask the dynamic scheduler sources and fence, once the task found no
+    /// Mask the sourced terminal-cleanup sources and fence, once the task found no
     /// list head published.
     pub fn mask_output_dynamic_sources(
         &mut self,
@@ -1421,7 +1425,7 @@ impl InterruptRegistersOwner {
         BluetoothDynamicSourcesMasked { _private: () }
     }
 
-    /// Acknowledge the dynamic sources and release the controller output,
+    /// Acknowledge saved primary/NRT samples and release the controller output,
     /// once the task disabled RUN, on a fresh idle BUSY sample within
     /// `settle` with no fault pending or acknowledged. Faults are never
     /// cleared.
@@ -1437,7 +1441,7 @@ impl InterruptRegistersOwner {
     ) -> Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError> {
         let busy = self.release_busy_sample(settle)?;
         self.registers
-            .release_idle_output(busy, self.fault_acknowledged)?;
+            .release_idle_output(busy, self.fault_acknowledged, _run.task)?;
         self.released = true;
         Ok(BluetoothOutputReleased { _private: () })
     }
@@ -1478,7 +1482,7 @@ impl InterruptRegistersOwner {
 #[derive(Debug)]
 #[must_use = "the admission feeds the handler's idle sample"]
 pub struct BluetoothOutputReleaseAdmitted {
-    _private: (),
+    task: BluetoothTaskInterruptObservation,
 }
 
 /// The handler sampled an idle scheduler without a fault.
@@ -1506,7 +1510,7 @@ pub struct BluetoothDynamicSourcesMasked {
 #[derive(Debug)]
 #[must_use = "the disabled RUN admits the handler's release"]
 pub struct BluetoothSchedulerRunDisabled {
-    _private: (),
+    task: BluetoothTaskInterruptObservation,
 }
 
 /// The handler released the controller output of its epoch.
@@ -1520,7 +1524,12 @@ pub struct BluetoothOutputReleased {
 impl BluetoothOutputReleaseAdmitted {
     #[doc(hidden)]
     pub const fn for_host_test() -> Self {
-        Self { _private: () }
+        Self {
+            task: BluetoothTaskInterruptObservation {
+                enable: 0,
+                opaque_state: 0,
+            },
+        }
     }
 }
 
@@ -1552,7 +1561,12 @@ impl BluetoothDynamicSourcesMasked {
 impl BluetoothSchedulerRunDisabled {
     #[doc(hidden)]
     pub const fn for_host_test() -> Self {
-        Self { _private: () }
+        Self {
+            task: BluetoothTaskInterruptObservation {
+                enable: 0,
+                opaque_state: 0,
+            },
+        }
     }
 }
 
@@ -2430,5 +2444,7 @@ fn test_ready<F: core::future::Future>(future: F) -> F::Output {
     }
 }
 
+mod interrupt_policy;
 mod observation;
+pub use interrupt_policy::{BluetoothInterruptPolicyFault, BluetoothInterruptPolicyObservation};
 pub use observation::{BluetoothInterruptObservation, BluetoothTaskInterruptObservation};

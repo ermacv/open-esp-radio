@@ -494,6 +494,15 @@ its model and conformance case.
   stable count and low raw word into continuous time. Sample gaps
   may span multiple raw periods; P3 still services each hardware wrap. Terminal
   output release masks and clears overflow before the bank leaves the handler.
+  Admission checks all controller enables before HAL/PHY initialization against
+  the explicit production baseline, dynamic and task-lifecycle set; an enable
+  outside that set is a named `ForeignEnable` fault. Release retains the existing
+  handler/task step order, extends masks to the sourced feature lanes and
+  task17, acknowledges primary/NRT W1C samples and the task WT bank, and checks
+  all enable/pending observations before the gate closes. Nonzero readback is
+  `ReleaseNotQuiet`. Both faults retain all bank observations and quarantine
+  owners through `fatal::reset_recording`; B0 reuses its 44-byte BLE gate slot.
+  These sequential reads do not prove producer shutdown or name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`). The port boundary follows the
   OpenThread radio platform: the backend executes acknowledgement, CSMA-CA
   and the cipher as advertised capabilities; retries, the pending-table

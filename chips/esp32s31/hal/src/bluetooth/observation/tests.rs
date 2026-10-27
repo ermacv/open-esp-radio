@@ -59,14 +59,14 @@ fn task_bank_preserves_the_complete_enable_image() {
 }
 
 #[test]
-fn opaque_task_state_retains_only_the_modeled_lanes() {
+fn opaque_task_state_retains_the_complete_sourced_word() {
     check_images(
         |image| {
             let mut memory = words(image);
             let task =
                 bt_mac::BtmacBlePhyInit::host(&mut memory).expect("memory holds the instance");
-            opaque_task_state(task.read_word_04bc_opaque())
+            task.read_bluetooth_task_diagnostic_image()
         },
-        bt_mac::word_04bc_opaque::FIELDS,
+        u32::MAX,
     );
 }

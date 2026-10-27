@@ -894,6 +894,21 @@ owners. MMIO outside the restricted PAC must use typed accessors. Missing
 register fields are reviewed in `chips/<chip>/registers/` and regenerated
 into the PAC, never reconstructed with local masks in a HAL or adapter.
 
+Bluetooth admission checks every enable bank before HAL/PHY initialization can
+mask inherited lanes. `ForeignEnable` retains the complete primary enable,
+status and NRT words and the task enable/opaque-state view. The typed production
+set covers baseline fault/overflow, dynamic scheduler and task14 lifecycle
+lanes. Terminal release extends the existing handler mask to sourced feature
+lanes and the existing task RUN-disable step to all task masks, including
+unnamed task17. Exact primary/NRT W1C samples and the sourced task WT all-lane
+strobe precede zero-readback admission; `ReleaseNotQuiet` retains any residual
+state. No step of the alternating close protocol is reordered. Both named
+faults quarantine the task/IRQ owners and reach safe `fatal::reset_recording`.
+The same 44-byte BLE gate slot uses a reason-specific eight-word payload;
+next-boot output reports every observed bank. No new unsafe or retained
+allocation is involved. Bank1[0,2] and task17 remain opaque with their existing
+SOURCEs. Sequential readback is not a producer-drain proof.
+
 Bluetooth controller-time overflow stays with the primary IRQ bank owner.
 Preparation arms bank-one `CONTROLLER_TIME_OVERFLOW` in baseline `0x1302`;
 P3 acknowledges its saved snapshot and publishes a checked wrap count as a
@@ -943,7 +958,7 @@ B0 procedure logs them and includes them in its run report.
 The handler permanently retains a copyable, read-only `BtdmLpTimerStatus`
 capability for the side-effect-free LP cause word, independent of the timer's
 runtime-control owner. A vacant timer with nonzero LP status is an invariant
-failure. `GateFault` retains the full entry LP cause, both NRT cause words
+failure. `GateFault::Invariant` retains the full entry LP cause, both NRT cause words
 when the bank is present (explicitly unavailable otherwise), the timer phase,
 and the stopped-timer fault's pending bytes and raw unexpected status.
 The first fault is published once; subsequent service returns it without

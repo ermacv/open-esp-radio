@@ -200,7 +200,9 @@ Start:
    first client registers/calibrates the PHY, later clients retain its RF epoch;
 2. settle due shared tracking, enter Bluetooth common power without Wi-Fi
    reset, then enable the Bluetooth clocks;
-3. bind the arena through the scoped factory, initialize Controller HAL,
+3. bind the arena through the scoped factory, admit all inherited interrupt
+   enables against the HAL's typed production set before any HAL/PHY enable
+   write, then initialize Controller HAL,
    scheduler and modem low-power hardware, and enter Bluetooth coexistence;
 4. join BTBB and the PHY client set, finish initial/due tracking, then consume
    `BluetoothRfReady` to initialize the BLE PHY and public address;
@@ -225,7 +227,9 @@ Stop:
 2. `shutdown::retire` checks the workers and the stopped scheduler, releases
    the Controller output in alternating steps (the handler's idle sample, the
    task's list heads, the handler's mask, the task's RUN disable, the
-   handler's release), closes the bank's gate (the released bank and the
+   handler's release). Those steps also mask the sourced feature lanes and
+   task17, acknowledge primary/NRT W1C samples and the separate task WT bank, and
+   require zero enable/pending readback before closing the bank's gate (the released bank and the
    channel endpoint leave the handler), reunites both quiet channel endpoints
    and has the handler stop the counter and both measured LP delivery lanes. A fault the handler
    acknowledged during the epoch refuses the release. Return the retired
@@ -270,3 +274,15 @@ and serves correlated clock requests through the mailbox.
 `firmware/apps/b0` composes actor join/tracking, the interrupt gate, H4
 Reset/Rand and 1M DTM commands, End, leave/reset and arena return. Its
 two-boot RF/count gate is qualified; hardware port conformance is unqualified.
+
+The production interrupt set is bank0 baseline15 and dynamic21/27/28, bank1
+baseline1/8/9/12 and dynamic3, and task14's pre-RUN/terminal lifecycle.
+Task14 has no vendor scan-truncation runtime consumer here. Inherited enables
+outside that explicit set cause `ForeignEnable` before initialization can
+silently remove them. Terminal nonzero readback is `ReleaseNotQuiet`.
+Both faults retain primary enables/status/NRT and task enable/opaque state.
+The gate publishes the first fault once and serves no later hardware or queue
+operation; the HAL/driver owners remain quarantined. B0 calls safe
+`fatal::reset_recording`, reusing its 44-byte BLE gate record, and prints all
+banks on the next boot. Opaque bank1[0,2] and task17 retain their sourced
+positional names; this policy assigns them no event identity.

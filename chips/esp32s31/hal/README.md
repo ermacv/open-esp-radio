@@ -97,8 +97,14 @@ The interrupt bank clears and enables baseline images `0x8000` / `0x1302`,
 including `CONTROLLER_TIME_OVERFLOW` in bank one. A primary status snapshot
 carries this normal event separately from fault and dynamic scheduler sources.
 CONTROL0 starts BTLC. CONTROL1/2 do not lower an enabled pending cause, so
-release masks and clears overflow before those commands and masks the remaining
-baseline sources, preserving unrelated enables. Masking alone retains pending.
+terminal release masks the baseline, dynamic and sourced ISO/coex/CIG/CC
+feature enable lanes in its existing handler mask step. The task's RUN-disable
+step masks all task enables, including opaque task17, and strobes the sourced
+all-lane task WT acknowledgement. The handler acknowledges exact saved primary/NRT
+W1C images before CONTROL1/2, then verifies the complete primary
+ENA/status/NRT views together with the task's post-mask/ack observation.
+Any remaining enable or pending view is `ReleaseNotQuiet`, carrying all eight
+words; no release proof is minted. Masking alone retains pending.
 SOURCE: `BLOB_LIBBTDM_BASELINE_IRQ_CURRENT` (N5),
 `HW9_S31_BTLC_START_20261027`, `HW9_S31_MAC_RELEASE_20261027`,
 `HW9_S31_MAC_MASK_ACK_20261027` and
@@ -188,11 +194,28 @@ futures own that custody and return the domain with their typed result.
 Bluetooth task and interrupt owners expose `interrupt_observation(&self)`
 for value-only diagnostic reads. The interrupt owners return
 all modeled primary enable/status and NRT words; the task owner returns its
-complete enable word and only the modeled opaque +0x4bc lanes. Dynamic
+complete enable word and the complete opaque +0x4bc word through a sourced
+whole-word read; its unmodeled bits retain no event meaning. Dynamic
 enables are subsets of the primary words. These sequential reads grant no
 acknowledgement or release proof and do not establish a task cause/output
 mapping. Comparison code may borrow the existing owner for these reads;
-production does not call the observation methods. Read side effects of the
-opaque +0x4bc view are not established; it is read only by diagnostics.
+production reads them before HAL/PHY initialization and at terminal release.
+Before the first production enable write, `admit_interrupts` requires every
+lane outside the typed production set to be zero: bank0 baseline15 and dynamic
+21/27/28, bank1 baseline1/8/9/12 and dynamic3, and task14's scheduler lifecycle.
+Task14 is acknowledged before RUN and at terminal stop; this policy supplies
+no vendor scan-truncation runtime consumer. A foreign enable, including opaque
+bank1[0,2] or task17, is `ForeignEnable` with all eight source words.
+Read side effects of the opaque +0x4bc view remain unestablished.
 Its cited sources establish use, not read safety, and HW25 did not read it
 on the board.
+
+Admission and terminal readback faults retain their owners and reach the
+image's retained reset path. B0 stores all eight words in its existing 44-byte
+BLE gate record with reason-specific payloads; the next boot prints them.
+Readback is sequential, not an atomic cross-bank sample or proof that every
+producer is stopped. The stop sequence keeps its handler/task order.
+SOURCE: `BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027`,
+`BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027`,
+`BLOB_S31_BT_TASK17_SELECTION_SCOPE_20261027`,
+`HW25_S31_BLE_INHERITED_20261027`, `HW25_S31_BLE_RELEASE_20261027`.
