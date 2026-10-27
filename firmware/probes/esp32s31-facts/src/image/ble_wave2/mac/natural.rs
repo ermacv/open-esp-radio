@@ -2,9 +2,11 @@
 //! No VALUE/UPDATE writes, timer seeding, RF, scheduler RUN or interrupt service.
 use super::{Session, all_mask, command, emit, enable, finish, sample, window};
 
-// SOURCE: owner authorization 2026-10-27, hw-btlc-natural-wrap task.
-// Read-back must establish XTAL / 1 before using the nominal 40 MHz reference.
+// SOURCE: ESP-IDF 4d59230d soc/esp32s31/include/soc/clk_tree_defs.h:125-127,
+// also used by the production boot clock owner. Read-back must establish
+// XTAL / 1 before using this nominal reference.
 const CPU_HZ: u64 = 40_000_000;
+// SOURCE: owner authorization 2026-10-27, hw-btlc-natural-wrap task.
 const JOURNAL_SECONDS: u64 = 90;
 const ACK_SECONDS: u64 = 2250;
 const END_SECONDS: u64 = 2280;
