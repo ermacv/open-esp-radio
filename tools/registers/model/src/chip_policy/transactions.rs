@@ -962,6 +962,22 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             let owner = self.owner(entity, target, None)?;
             self.take(entity, &[owner], false)?;
         }
+        for read in &file.register_image_reads {
+            let entity = read.name.as_str();
+            self.begin(entity, &read.sources)?;
+            let target = Target::Word(self.element(entity, &read.register)?);
+            self.reads_freely(entity, target)?;
+            if self.word(entity, target)?.register.width != 32 {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Transaction(
+                        "a register image read names one 32-bit word".to_owned(),
+                    ),
+                ));
+            }
+            let owner = self.owner(entity, target, None)?;
+            self.take(entity, &[owner], false)?;
+        }
         for read in &file.partition_image_reads {
             let entity = read.name.as_str();
             self.begin(entity, &read.sources)?;

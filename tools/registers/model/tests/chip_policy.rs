@@ -2620,3 +2620,76 @@ fn referenced_ranges_bound_writes_and_cannot_be_shifted_or_redeclared() -> TestR
     assert!(matches!(kind_of(&fixture)?, ErrorKind::WriteConstraint(_)));
     Ok(())
 }
+
+fn register_image_read(register: &str) -> String {
+    format!(
+        "\n[[register-image-reads]]\nname = \"read_image\"\nregister = \"{register}\"\nsources = [\"SRC_DRIVER\"]\n"
+    )
+}
+
+#[test]
+fn register_image_read_accepts_split_fields_on_the_existing_owner() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(&register_image_read("TIMER0.CONFIG"))?;
+    assert_eq!(
+        fixture.load()?.owner("read_image"),
+        Some(PartId {
+            partition: 0,
+            part: 0
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn register_image_read_rejects_side_effects_and_unreadable_words() -> TestResult {
+    for register in ["TIMER0.FIFO", "TIMER0.LOAD", "TIMER0.WO"] {
+        let fixture = Fixture::new()?;
+        fixture.append(&register_image_read(register))?;
+        assert!(
+            matches!(kind_of(&fixture)?, ErrorKind::Register(_)),
+            "{register}"
+        );
+    }
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"CONFIG\"\noffset = 0x00",
+            "name = \"CONFIG\"\noffset = 0x00\nread-side-effect = { sources = [\"SRC_HEADER\"] }",
+        )?
+        .append(&register_image_read("TIMER0.CONFIG"))?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Register(_)));
+    Ok(())
+}
+
+#[test]
+fn register_image_read_rejects_templates_and_unclaimed_words() -> TestResult {
+    for (register, unclaimed) in [("TIMER0.ALARM_%s", false), ("TIMER2.VALUE", true)] {
+        let fixture = Fixture::new()?;
+        fixture.append(&register_image_read(register))?;
+        let error = kind_of(&fixture)?;
+        assert!(
+            if unclaimed {
+                matches!(error, ErrorKind::ReachesUnclaimed(_))
+            } else {
+                matches!(error, ErrorKind::Transaction(_))
+            },
+            "{register}: {error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn register_image_read_requires_evidence_and_a_unique_name() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(&register_image_read("TIMER0.CONFIG").replace("SRC_DRIVER", "MISSING"))?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::UnknownSource(_)));
+    let fixture = Fixture::new()?;
+    fixture
+        .append(&register_image_read("TIMER0.CONFIG"))?
+        .append(&register_image_read("TIMER0.VALUE"))?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Duplicate(_)));
+    Ok(())
+}

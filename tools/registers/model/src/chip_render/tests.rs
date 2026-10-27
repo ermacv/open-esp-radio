@@ -1613,3 +1613,66 @@ fn indexed_fields_follow_the_block_prefix_rule() {
     }"#,
     );
 }
+
+fn with_register_image_read() -> String {
+    rendered_with(&[(
+        "policy.toml",
+        "chip = \"testchip\"\n",
+        "chip = \"testchip\"\n\n[[register-image-reads]]\nname = \"read_event_image\"\nregister = \"RADIO1.RAD_EVENTS\"\nsources = [\"SRC_DRIVER\"]\n",
+    )])
+}
+
+#[test]
+fn a_register_image_read_keeps_unknown_bits_and_read_only_ownership() {
+    let output = run(
+        &with_register_image_read(),
+        r#"
+fn main() {
+    let mut memory = [0_u32; 0x40];
+    memory[0x0c / 4] = 0xfedc_ba98;
+    let before = memory;
+    {
+        let owner = radio::SecondEvents::host(&mut memory).expect("memory holds the block");
+        let copy = owner;
+        let whole: u32 = owner.read_event_image();
+        println!("{whole:08x} {:08x}", copy.read_event_image());
+    }
+    assert_eq!(memory, before);
+}
+"#,
+    );
+    assert_eq!(output.trim(), "fedcba98 fedcba98");
+}
+
+#[test]
+fn a_register_image_read_is_unavailable_on_other_owners() {
+    let error = refused(
+        &with_register_image_read(),
+        r#"
+fn main() {
+    let mut memory = [0_u32; 0x40];
+    let other = radio::Second::host(&mut memory).expect("memory holds the block");
+    let _ = other.read_event_image();
+}
+"#,
+    );
+    assert!(
+        error.contains("no method named `read_event_image`"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_register_image_read_grants_no_status_writer() {
+    let error = refused(
+        &with_register_image_read(),
+        r#"
+fn main() {
+    let mut memory = [0_u32; 0x40];
+    let mut owner = radio::SecondEvents::host(&mut memory).expect("memory holds the block");
+    owner.write_events(|_| {});
+}
+"#,
+    );
+    assert!(error.contains("no method named `write_events`"), "{error}");
+}

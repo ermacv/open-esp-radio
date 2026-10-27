@@ -729,7 +729,7 @@ it alone. Transactions name `INSTANCE.REGISTER` and
 `INSTANCE.REGISTER.FIELD` of the root, a template key for every element
 (`MODEM_ETM.CH%s_EVENT.ID`), and take no `peripheral` or `exposure`. The
 kinds are `interrupt-snapshots` (`status`, optional `events`), `field-reads`,
-`full-register-reads`, `partition-image-reads`, `full-register-writes`,
+`full-register-reads`, `register-image-reads`, `partition-image-reads`, `full-register-writes`,
 `pointer-fields`, `zero-based-field-writes` (`fields`),
 `sampled-bit-zero-writes`, `zero-register-writes`,
 `fixed-register-images`, `fixed-register-sequences` (each step one
@@ -758,6 +758,20 @@ A non-whole-word fixed image of a readable hardware-updated register without a
 generic modify accessor renders a named configuration operation. It replaces
 the declared writable lanes and preserves undeclared and read-only bits. It
 does not grant arbitrary writes to hardware-updated fields.
+
+`register-image-reads` names one 32-bit `register` element, a transaction
+`name` and `sources`. It renders an infallible `&self -> u32` read on that
+word's existing owner, including a read-only owner. The word must read
+without a side effect. The returned image includes undeclared and reserved
+bits regardless of the field split; it grants no write or acknowledgement.
+It adds no access to other words or owners. For example:
+
+```toml
+[[register-image-reads]]
+name = "read_timer_status_image"
+register = "TIMER.STATUS"
+sources = ["SRC_TIMER_STATUS_CONSUMER"]
+```
 
 The shapes and inputs:
 

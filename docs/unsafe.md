@@ -82,7 +82,12 @@ Typed register blocks are generated without `unsafe`: `cargo registers
 generate --chip <chip>` renders every MMIO block type of the chip's register
 model, with the owners of its policy's parts, into the chip PAC's
 `generated.rs`. The unsafe code under a typed block is `oer-mmio`
-(`portable/mmio`) alone, and the PAC root's one claim; `oer-mmio` holds
+(`portable/mmio`) alone, and the PAC root's one claim. A policy
+`register-image-reads` operation reads one side-effect-free 32-bit word
+through its existing owner, including
+a read-only owner, and returns the complete `u32` without decoding, masking,
+writing or acknowledging it. Splitting fields grants no additional register
+authority or unsafe access. `oer-mmio` holds
 only volatile register words and their access authority (DMA addresses and
 volatile DMA-memory cells live in `oer-memory`):
 

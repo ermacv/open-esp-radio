@@ -14,6 +14,7 @@
 //! - a write from zero storing sourced `whole-word-bits` beside its fields;
 //! - a field-or-modify of a pointer field: the vendor's OR of a typed
 //!   reference's image into a fresh read;
+//! - a register image read: one side-effect-free word, whole and undecoded;
 //! - a partition image read: on each part of the partition, a read-only
 //!   diagnostic image of the part's readable, side-effect-free words, raw.
 //! - a sourced zero publication to a read-observed word, without a load.
@@ -309,6 +310,25 @@ pub(super) fn render(
         .filter(|snapshot| mine(&snapshot.name))
     {
         render_snapshot(body, output, plan, owner, model, snapshot)?;
+    }
+    for read in file
+        .register_image_reads
+        .iter()
+        .filter(|read| mine(&read.name))
+    {
+        let target = element(&read.name, plan, owner, model, &read.register)?;
+        let call = target.read(&read.name, owner)?;
+        doc(
+            body,
+            "Read the complete word without decoding or acknowledging it, including undeclared and reserved bits",
+            &read.register,
+            &read.sources,
+        );
+        let _ = writeln!(
+            body,
+            "#[inline]\npub fn {}(&self) -> u32 {{\n{call}\n}}\n",
+            names::ident(&read.name)
+        );
     }
     for read in file
         .partition_image_reads
