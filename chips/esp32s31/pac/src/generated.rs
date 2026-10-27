@@ -34207,6 +34207,10 @@ pub mod bt_mac {
     }
 
     /// The `BtmacBlePhyInit` part of `BT_MAC`.
+    ///
+    /// BLE PHY/task registers, including the side-effect-free opaque task view at +0x4bc. This view grants no decoded cause or acknowledgement authority.
+    ///
+    /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS, S31_MMIO_DECLARED_201014BC.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct BtmacBlePhyInit<P: oer_mmio::Placement = oer_mmio::Fixed<0x20101000>>(
         oer_mmio::Block<P, BtmacBlePhyInitWords>,
@@ -34218,15 +34222,15 @@ pub mod bt_mac {
     impl oer_mmio::Registers for BtmacBlePhyInitWords {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
-            0x474, 0x4b4, 0x4b8, 0x538, 0x650, 0x654, 0x800, 0x858, 0x85c, 0x870, 0x874, 0x8a0,
-            0x8a4, 0x8a8, 0x8ac, 0x940, 0x94c, 0x950, 0x954, 0x958, 0x95c,
+            0x474, 0x4b4, 0x4b8, 0x4bc, 0x538, 0x650, 0x654, 0x800, 0x858, 0x85c, 0x870, 0x874,
+            0x8a0, 0x8a4, 0x8a8, 0x8ac, 0x940, 0x94c, 0x950, 0x954, 0x958, 0x95c,
         ];
     }
 
     impl oer_mmio::Words for BtmacBlePhyInitWords {
         const OWNED: &'static [usize] = &[
-            0x474, 0x4b4, 0x4b8, 0x538, 0x650, 0x654, 0x800, 0x858, 0x85c, 0x870, 0x874, 0x8a0,
-            0x8a4, 0x8a8, 0x8ac, 0x940, 0x94c, 0x950, 0x954, 0x958, 0x95c,
+            0x474, 0x4b4, 0x4b8, 0x4bc, 0x538, 0x650, 0x654, 0x800, 0x858, 0x85c, 0x870, 0x874,
+            0x8a0, 0x8a4, 0x8a8, 0x8ac, 0x940, 0x94c, 0x950, 0x954, 0x958, 0x95c,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -34310,6 +34314,12 @@ pub mod bt_mac {
             let mut triggers = interrupt_clear::T(0);
             change(&mut triggers);
             self.0.write::<0x4b8>(triggers.0);
+        }
+
+        /// Read `WORD_04BC_OPAQUE`.
+        #[inline]
+        pub fn read_word_04bc_opaque(&self) -> word_04bc_opaque::R {
+            word_04bc_opaque::R(self.0.read::<0x4bc>())
         }
 
         /// Read `CRC_CONFIG`.
