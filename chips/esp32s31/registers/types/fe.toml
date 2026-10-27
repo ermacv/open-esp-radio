@@ -76,14 +76,14 @@ completeness = "partial"
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
 [review.entity."WORD_0024_OPAQUE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027"]
 completeness = "unknown"
 
 [review.entity."WORD_0024_OPAQUE.BITS_0_2_OPAQUE"]
 sources = ["S31_MMIO_AUDIT_20100024", "S31_MMIO_DECLARED_20100024"]
 
 [review.entity."FREQUENCY_PARAMETER_1_STATUS"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT", "BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027"]
 completeness = "partial"
 
 [review.entity."FREQUENCY_PARAMETER_1_STATUS.BITS_0_1_OPAQUE"]
@@ -486,7 +486,7 @@ sources = ["S31_MMIO_USE_20100474"]
 sources = ["S31_MMIO_USE_20100474", "S31_MMIO_DECLARED_20100474"]
 
 [review.entity."ESTIMATOR_READY_STATUS.READY"]
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "HW19_S31_EST_INDICATIONS_20261027"]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "HW19_S31_EST_INDICATIONS_20261027", "BX12_S31_IQ_EST_READY_POLL_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -575,7 +575,7 @@ sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_TABLE_1"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET"]
+sources = ["ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET", "BLOB_BX16_ROM_PWDET_IMAGE_20261027"]
 completeness = "partial"
 
 [review.entity."POWER_DETECTOR_TABLE_1.BITS_0_7_OPAQUE"]
@@ -1224,7 +1224,7 @@ description = "Set and then cleared by complete phy_read_rf_freq_mem for one syn
 [[registers]]
 name = "WORD_0024_OPAQUE"
 offset = 0x24
-description = "Complete phy_freq_reg_init writes the full constant 0x19800249; no constituent electrical fields are public."
+description = "Complete phy_freq_reg_init writes the full constant 0x19800249; no constituent electrical fields are public. rom[]::phy_freq_reg_init+0x52 stores 0x19800249 at 0x20100024. Its positioned ones inside unassigned bits 31:3 are 0x19800248; all other bits of that range are zero in this image. The image does not identify constituent fields or reset values."
 
 [[registers.fields]]
 name = "BITS_0_2_OPAQUE"
@@ -1235,7 +1235,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "FREQUENCY_PARAMETER_1_STATUS"
 offset = 0x28
-description = "Complete phy_freq_reg_init writes 0x25824e58; phy_bb_init replaces the low baseband-mode field, and the open channel state machine samples bit 8 for the evidenced ready edge."
+description = "Complete phy_freq_reg_init writes 0x25824e58; phy_bb_init replaces the low baseband-mode field, and the open channel state machine samples bit 8 for the evidenced ready edge. rom[]::phy_freq_reg_init+0x5c stores 0x25824e58: unassigned bits 7:2 receive 0x16 and bits 22:21 receive zero. The getter at phy_get_freq_mem_param+0x16 excludes both ranges from its consumed mask. Their meaning and reset values remain unknown."
 
 [[registers.fields]]
 name = "BITS_0_1_OPAQUE"
@@ -1965,6 +1965,7 @@ description = "Complete phy_iq_est_enable tests bit 16 before leaving its readin
 name = "READY"
 bits = "16"
 class = "read-only"
+description = "Predicate polled by phy_iq_est_enable: an asserted sample exits its readiness loop; only a clear sample reaches the opaque FE+8d0 indication read. Routing to interrupt source123 or131 is unestablished. SOURCE: BX12_S31_IQ_EST_READY_POLL_20261027."
 
 [[registers.fields]]
 name = "BITS_0_15_OPAQUE"
@@ -2088,7 +2089,7 @@ class = "write-only"
 [[registers]]
 name = "POWER_DETECTOR_TABLE_1"
 offset = 0x814
-description = "Complete initialization writes 0x00ff0f64; TX-DC calibration temporarily replaces the low byte."
+description = "Complete initialization writes 0x00ff0f64; TX-DC calibration temporarily replaces the low byte. rom[]::phy_pwdet_reg_init+0x16 stores 0x00ff0f64: unassigned bits 31:24 receive zero, 23:16 receive 0xff and 15:8 receive 0x0f. The TXDC low-byte replacement preserves bits 31:8; no individual upper-lane role is established."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"

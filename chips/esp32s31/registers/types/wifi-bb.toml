@@ -169,10 +169,10 @@ sources = ["ROM_REV0_PHY_AGC"]
 accuracy = "exact"
 
 [review.entity."WORD_004C_OPAQUE"]
-sources = ["BLOB_LIBPP_BB_INTR_HANDL", "HW11_S31_BB_20261027"]
+sources = ["BLOB_LIBPP_BB_INTR_HANDL", "HW11_S31_BB_20261027", "BX12_S31_BB_HANDLER_INSTALL_20261027"]
 
 [review.entity."WORD_004C_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["BLOB_LIBPP_BB_INTR_HANDL"]
+sources = ["BLOB_LIBPP_BB_INTR_HANDL", "BX12_S31_BB_HANDLER_INSTALL_20261027"]
 
 [review.entity."WORD_0050_OPAQUE.NOISE_FLOOR"]
 sources = ["S31_MMIO_DECLARED_20107050"]
@@ -313,7 +313,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."RX_11B_WINDOW_CONTROL"]
-sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "BLOB_BX16_ROM_11B_WINDOW_IMAGE_20261027"]
 completeness = "unknown"
 
 [review.entity."RX_11B_WINDOW_CONTROL.BITS_0_8_OPAQUE"]
@@ -820,11 +820,11 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."BASEBAND_WATCHDOG_STATUS"]
-sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "HW11_S31_BB_20261027"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "HW11_S31_BB_20261027", "BX12_S31_BB_WATCHDOG_API_LANES_20261027"]
 completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_STATUS.STATUS"]
-sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "BX12_S31_BB_WATCHDOG_API_LANES_20261027"]
 
 [review.entity."WORD_0C14_OPAQUE"]
 sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
@@ -892,7 +892,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_INTERRUPT_ENABLE"]
-sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "HW11_S31_BB_20261027"]
+sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "HW11_S31_BB_20261027", "BX12_S31_BB_WATCHDOG_API_LANES_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -1291,7 +1291,7 @@ class = "write-only"
 [[registers]]
 name = "WORD_004C_OPAQUE"
 offset = 0x4c
-description = "Opaque word loaded by bb_intr_handl and observed as zero in the quiet HW11 session. Only those reads are established; write behavior and read side effects, including read-to-clear, are unknown. No side-effect-free read-only or source-123 acknowledgement contract is established. The unknown class deliberately exposes no PAC access until these semantics are resolved."
+description = "Opaque word loaded by bb_intr_handl and observed as zero in the quiet HW11 session. Only those reads are established; write behavior and read side effects, including read-to-clear, are unknown. No side-effect-free read-only or source-123 acknowledgement contract is established. The unknown class deliberately exposes no PAC access until these semantics are resolved. Its observed installer assigns the BB handler to external CPU ISR index9, without a source123 route in that body. This does not establish read-to-clear or safe read-only access. SOURCE: BX12_S31_BB_HANDLER_INSTALL_20261027."
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
@@ -1518,7 +1518,7 @@ description = "Reduced-interframe-space receive mode enable that complete phy_wi
 [[registers]]
 name = "RX_11B_WINDOW_CONTROL"
 offset = 0x104
-description = "Complete phy_bb_agc_reg_update writes the full word; phy_rx_11b_opt and phy_reg_update_new replace the same low nine-bit field with independently evidenced values."
+description = "Complete phy_bb_agc_reg_update writes the full word; phy_rx_11b_opt and phy_reg_update_new replace the same low nine-bit field with independently evidenced values. rom[]::phy_bb_agc_reg_update+0x80 stores 0x06acc7c8. The positioned ones in unassigned bits 31:9 are 0x06acc600; the remaining bits of that range are zero in this image. Later low-nine-bit replacements preserve the range without identifying its meaning."
 
 [[registers.fields]]
 name = "BITS_0_8_OPAQUE"
@@ -2330,13 +2330,13 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "BASEBAND_WATCHDOG_STATUS"
 offset = 0xc08
-description = "Complete phy_bb_wdt_get_status returns one unrestricted full-word read."
+description = "Unrestricted full-word value returned by phy_bb_wdt_get_status. Individual cause bits and the relation to source123, BB+4c and MAC watchdog11 are unestablished. SOURCE: BX12_S31_BB_WATCHDOG_API_LANES_20261027."
 
 [[registers.fields]]
 name = "STATUS"
 bits = "31:0"
 class = "read-only"
-description = "Complete unrestricted watchdog status value returned by phy_bb_wdt_get_status."
+description = "Unrestricted full-word value returned by phy_bb_wdt_get_status. Individual cause bits and the relation to source123, BB+4c and MAC watchdog11 are unestablished. SOURCE: BX12_S31_BB_WATCHDOG_API_LANES_20261027."
 
 [[registers]]
 name = "WORD_0C14_OPAQUE"
@@ -2431,7 +2431,7 @@ description = "Request clearing the watchdog timeout. In the cited quiet stand m
 name = "WATCHDOG_INTERRUPT_ENABLE"
 bits = "30"
 class = "plain"
-description = "Gate watchdog interrupt delivery independently of hardware reset. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026."
+description = "Lane replaced by the named phy_bb_wdt_int_enable helper, independently of reset-enable31. Its source123 output relationship, pending retention and complete output-stop effect are unestablished. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, BX12_S31_BB_WATCHDOG_API_LANES_20261027."
 
 [[registers.fields]]
 name = "WATCHDOG_RESET_ENABLE"

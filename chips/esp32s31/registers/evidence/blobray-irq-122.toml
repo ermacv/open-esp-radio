@@ -1,0 +1,26 @@
+# Reviewed scalar and access facts; symbol offsets are bytes from entry.
+schema = 1
+
+[[sources]]
+id = "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"
+description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. libpp[hal_tsf.o]::hal_pwr_interrupt_get_event+0x4 reads STATUS at 0x2010d8bc; hal_pwr_interrupt_clr_event+0x4 stores the complete argument to CLEAR at 0x2010d8c0. libpp[hal_pwr.o]::pwr_hal_get_intr_raw_signal+0x4 reads RAW at 0x2010d8b8. libpp[wdev.o]::wDev_ProcessFiq+0xa6..+0xb6 acknowledges saved STATUS, then saved RAW; dedicated low-TBTT, timer and cause19 dispatch sites are +0xba/+0xc8/+0x108. FIQ instruction flow is complete, call/value semantics partial. esp-rom-elfs 20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf, SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. rom[]::wDev_ProcessFiq@0x2f83885a+0xa6/+0xaa corroborates the STATUS/RAW stores. These sites do not prove every lane exists, clear effectiveness or all-producer shutdown."
+
+[[sources]]
+id = "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"
+description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete libpp[hal_pwr.o]::pwr_hal_set_beacon_filter_soc_wakeup_and_intr_enable+0x8/+0x14/+0x16/+0x1a forwards CLEAR readback with bit17 set before setting ENABLE17; its disable+0x8/+0x10 only removes ENABLE17. pwr_hal_set_mac_modem_beacon_miss_intr_enable at the same offsets selects bit19; its disable+0x8/+0x12 only removes ENABLE19. Neither leaf pair identifies cause18 or qualifies masked acknowledgement."
+
+[[sources]]
+id = "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"
+description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete libpp[hal_tsf.o]::hal_tsf_timer_set_target+0x0..+0x1e guards indices0..3 and publishes low32 then high3 at 0x2010d880+8*index and 0x2010d87c+8*index. hal_enable_tsf_timer+0x0..+0x36 selects IRQ bit7-index, updates CLEAR and ENABLE, then run31; hal_disable_tsf_timer+0x0..+0x2c stops run before masking without CLEAR. tsf_hal_set_timer_enable/disable+0x1e..+0x28 changes run31 only; paired tsf_hal_set_timer_rf_ctrl_enable/disable, tsf_hal_set_timer_modem_wakeup_enable/disable and tsf_hal_set_timer_soc_wakeup_enable/disable at +0x1e..+0x28 select28/29/30. IRQ-only tsf_hal_set_timer_intr_enable/disable+0xe..+0x26 accesses CLEAR before ENABLE; disable removes its selected bit from CLEAR readback. These access roles imply neither a safe CLEAR RMW contract nor hardware gate effects."
+
+[[sources]]
+id = "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"
+description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete libpp[hal_tsf.o]::tsf_hal_set_tbtt_enable/disable, tsf_hal_set_tbtt_rf_ctrl_enable/disable, tsf_hal_set_tbtt_modem_wakeup_enable/disable and tsf_hal_set_tbtt_soc_wakeup_enable/disable+0x1e..+0x28 select run26/RF25/modem28/SoC29 at 0x2010d858+8*index for domains0..3. tsf_hal_set_tbtt_early_time+0x22..+0x2c replaces low16. tsf_hal_set_tbtt_interval+0x20..+0x2c writes its 32-bit argument shifted right10 into low26 at 0x2010d85c+8*index, preserving high6; tsf_hal_get_tbtt_interval+0x20..+0x48 returns the word shifted left10. tsf_hal_set_tbtt_intr_enable/disable+0xe..+0x24 selects bit3-index, separately accessing CLEAR/ENABLE. Physical units, autonomous expiry and gate effects are unqualified."
+
+[[sources]]
+id = "BLOB_LIBPP_S31_TBTT_SHARED_LOAD_20261027"
+description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete libpp[hal_tsf.o]::tsf_hal_set_tbtt_start_time (size0x4a)+0x1a..+0x2e replaces shared 0x2010d82c[25:0] from argument TSF bits35:10 while preserving31:26; +0x34..+0x40 then sets 0x2010d814[8+index], guarded index0..3. hal_set_sta_tbtt+0x28..+0x50 corroborates domain0. This establishes shared staging and domain selection, not physical units, self-clear or completion."
+
+[[sources]]
+id = "BLOB_LIBPP_S31_BEACON_MISS_AUX_20261027"
+description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete libpp[hal_pwr.o]::pwr_hal_clear_mac_modem_beacon_miss_intr_filter+0x8..+0x10 sets 0x2010d834[25]; pwr_hal_get_mac_modem_state_sleep_limit_exceeded_status+0x4..+0xa returns26; pwr_hal_get_mac_modem_beacon_miss_limit_exceeded_status+0x4..+0xa returns27. The miss-counter and beacon-info clear leaves+0x8..+0x10 instead set29/31. Exact accessor roles do not establish pulse/W1C effects, status-write semantics or a complete producer reset."

@@ -1,0 +1,26 @@
+# Reviewed scalar and access facts; symbol offsets are bytes from entry.
+schema = 1
+
+[[sources]]
+id = "BX14_IEEE132_ED_START_4D59230D"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 derived ESP32-S31 reference build, vendor-firmware/esp32s31/ieee802154-reference/build/oer_ieee802154_vendor_reference.elf, SHA-256 3ace8cc6eddeae7ce6729b1522a27cd53336b4d168abfef1795c11c7ad3462b7. This is a derived reference, not a pinned prebuilt library. start_ed+0x1a/+0x28/+0x34 enables event6, writes the zero-extended16 argument into MAC+0x50[23:0] preserving31:24, then issues ED_START0x44. The complete leaf performs no status acknowledgement. Static local facts; not hardware shutdown qualification."
+
+[[sources]]
+id = "BX14_IEEE132_ED_STOP_4D59230D"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 derived ESP32-S31 reference build, vendor-firmware/esp32s31/ieee802154-reference/build/oer_ieee802154_vendor_reference.elf, SHA-256 3ace8cc6eddeae7ce6729b1522a27cd53336b4d168abfef1795c11c7ad3462b7. This is a derived reference, not a pinned prebuilt library. stop_ed+0x12/+0x14/+0x1a/+0x26 issues STOP0x45, reads status and acknowledges visible events intersected with0x50 (4/6), preserving the upper non-event portion. The complete leaf contains no idle/completion poll. Static local facts; not hardware shutdown qualification."
+
+[[sources]]
+id = "BX14_IEEE132_ISR_SAMPLE_4D59230D"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 derived ESP32-S31 reference build, vendor-firmware/esp32s31/ieee802154-reference/build/oer_ieee802154_vendor_reference.elf, SHA-256 3ace8cc6eddeae7ce6729b1522a27cd53336b4d168abfef1795c11c7ad3462b7. This is a derived reference, not a pinned prebuilt library. ieee802154_isr+0xe saves low14 events; +0x16/+0x20 samples RX/TX abort reasons; +0x2a/+0x30/+0x3a rereads status and acknowledges its intersection with the saved event mask, retaining upper non-event bits, before dispatch. The decoded CFG is complete; call/value semantics are partial. Static local facts; not hardware shutdown qualification."
+
+[[sources]]
+id = "BX14_IEEE132_ED_ABORT_CONSUMER_4D59230D"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 derived ESP32-S31 reference build, vendor-firmware/esp32s31/ieee802154-reference/build/oer_ieee802154_vendor_reference.elf, SHA-256 3ace8cc6eddeae7ce6729b1522a27cd53336b4d168abfef1795c11c7ad3462b7. This is a derived reference, not a pinned prebuilt library. ieee802154_isr+0x18a dispatches event4 using the sampled RX reason; isr_handle_rx_phase_rx_abort+0x2c/+0x30 selects reasons24/26 and +0x48 calls the ED-failure consumer. Reason25 name/enable geometry comes independently from the pinned public common LL, not this call. No separate ED-abort event is established. Static local facts; not hardware shutdown qualification."
+
+[[sources]]
+id = "BX14_IEEE132_ED_RESULT_4D59230D"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 derived ESP32-S31 reference build, vendor-firmware/esp32s31/ieee802154-reference/build/oer_ieee802154_vendor_reference.elf, SHA-256 3ace8cc6eddeae7ce6729b1522a27cd53336b4d168abfef1795c11c7ad3462b7. This is a derived reference, not a pinned prebuilt library. isr_handle_ed_done+0x34/+0x36/+0x3e consumes CCA result bit24 and +0x4c/+0x4e/+0x50/+0x52 consumes signed ED bits23:16. ieee802154_isr+0x12c/+0x140 selects this consumer for event6. Result-versus-IRQ visibility order is unknown. Static local facts; not hardware shutdown qualification."
+
+[[sources]]
+id = "BX14_IEEE132_UNCLASSIFIED_4D59230D"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 derived ESP32-S31 reference build, vendor-firmware/esp32s31/ieee802154-reference/build/oer_ieee802154_vendor_reference.elf, SHA-256 3ace8cc6eddeae7ce6729b1522a27cd53336b4d168abfef1795c11c7ad3462b7. This is a derived reference, not a pinned prebuilt library. ieee802154_mac_init+0x20/+0x38 enables all14 events then removes timer0, retaining7/10/13. ieee802154_isr+0xe reads them; +0x17c/+0x3c0 rejects residual events, with no dedicated cases in the decoded CFG. No individual producer/name for7/13 or clock-match10 start transaction is recovered. Static local facts; not hardware shutdown qualification."

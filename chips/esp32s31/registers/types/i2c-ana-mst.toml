@@ -43,10 +43,10 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."I2C0_CTRL.I2C0_BUSY"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD", "BX12_S31_I2C_HOST_PUBLICATION_20261027"]
 
 [review.entity."I2C0_CTRL.START_OR_RESET"]
-sources = ["ROM_REV0_PHY_I2C"]
+sources = ["ROM_REV0_PHY_I2C", "BX12_S31_I2C_HOST_PUBLICATION_20261027"]
 provenance = "observed"
 completeness = "partial"
 naming = "descriptive"
@@ -79,10 +79,10 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."I2C1_CTRL.I2C1_BUSY"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD", "BX12_S31_I2C_HOST_PUBLICATION_20261027"]
 
 [review.entity."I2C1_CTRL.START_OR_RESET"]
-sources = ["ROM_REV0_PHY_I2C"]
+sources = ["ROM_REV0_PHY_I2C", "BX12_S31_I2C_HOST_PUBLICATION_20261027"]
 provenance = "observed"
 completeness = "partial"
 naming = "descriptive"
@@ -305,12 +305,13 @@ class = "plain"
 name = "I2C0_BUSY"
 bits = "25"
 class = "read-only"
+description = "Host bit polled by the ROM command and conditional-reset paths before accepting completion. Its relationship to interrupt source131 is unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027."
 
 [[registers.fields]]
 name = "START_OR_RESET"
 bits = "26"
 class = "write-only"
-description = "The ESP-IDF header marks bit 26 reserved. The complete ROM phy_i2c_master_reset stores 0x04000000, this bit alone, to the word to reset the host, and no complete ROM body reads the bit; a start role and a read value are not established."
+description = "Bit included in ordinary ROM host-command publications and written alone to a busy host by the conditional master-reset path. The public header marks it reserved. Its independent trigger mechanism, readback and interrupt-acknowledgement semantics remain unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027."
 
 [[registers]]
 name = "I2C1_CTRL"
@@ -345,12 +346,13 @@ class = "plain"
 name = "I2C1_BUSY"
 bits = "25"
 class = "read-only"
+description = "Host bit polled by the ROM command and conditional-reset paths before accepting completion. Its relationship to interrupt source131 is unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027."
 
 [[registers.fields]]
 name = "START_OR_RESET"
 bits = "26"
 class = "write-only"
-description = "The ESP-IDF header marks bit 26 reserved. The complete ROM phy_i2c_master_reset stores 0x04000000, this bit alone, to the word to reset the host, and no complete ROM body reads the bit; a start role and a read value are not established."
+description = "Bit included in ordinary ROM host-command publications and written alone to a busy host by the conditional master-reset path. The public header marks it reserved. Its independent trigger mechanism, readback and interrupt-acknowledgement semantics remain unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027."
 
 [[registers.fields]]
 name = "BITS_27_31_OPAQUE"

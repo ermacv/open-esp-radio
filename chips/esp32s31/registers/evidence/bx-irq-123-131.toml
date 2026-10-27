@@ -1,0 +1,18 @@
+# Reviewed scalar and access facts; symbol offsets are bytes from entry.
+schema = 1
+
+[[sources]]
+id = "BX12_S31_I2C_HOST_PUBLICATION_20261027"
+description = "esp-rom-elfs 20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf, SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. rom[]::phy_chip_i2c_readReg_org@0x2f829ffa+0x22 publishes bit26 with the read command; +0x24/+0x26/+0x2a polls BUSY25 and +0x2e..+0x32 obtains DATA23:16. phy_i2c_paral_read@0x2f82a0fa+0x12/+0x1a publishes both hosts and +0x22/+0x32 polls each BUSY25. phy_chip_i2c_writeReg@0x2f82a30e+0x4c publishes write24 and26, then polls BUSY25 at +0x4e..+0x54. phy_i2c_master_reset@0x2f8260d0+0x36/+0x5e writes26 alone to a busy host before polling. Read-org and parallel-read are complete; write/reset wrappers retain unresolved function-table calls. Independent bit26 physics, readback and source131 acknowledgement are unknown."
+
+[[sources]]
+id = "BX12_S31_IQ_EST_READY_POLL_20261027"
+description = "esp-rom-elfs 20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf, SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. rom[]::phy_iq_est_enable@0x2f8289d4+0x88..+0x90 polls FE+0x47c[16]; an asserted sample exits. Only a clear sample reaches FE+0x8d0[21:20] at +0x9e..+0xa6. Instruction CFG is complete, with opaque delay-call semantics. No relationship to source123/131 output or acknowledgement is established."
+
+[[sources]]
+id = "BX12_S31_BB_WATCHDOG_API_LANES_20261027"
+description = "esp-rom-elfs 20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf, SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Complete rom[]::phy_bb_wdt_int_enable@0x2f8285d0+0x1a replaces BB+0xc40[30], phy_bb_wdt_rst_enable@0x2f8285b4+0x16 replaces31, and phy_bb_wdt_timeout_clear@0x2f8285f0+0xe sets29. Complete phy_bb_wdt_get_status@0x2f828604+0x4 returns unrestricted BB+0xc08. Helper roles do not decode causes or prove source123 wiring, pending-clear effectiveness or reset extent."
+
+[[sources]]
+id = "BX12_S31_BB_HANDLER_INSTALL_20261027"
+description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. libpp[if_hwctrl.o]::ic_bb_check_noise_init+0x28/+0x32/+0x36 supplies bb_intr_handl to OS-table slot16 with external CPU ISR index9, then +0x40..+0x48 enables mask0x200 through slot20; this body has no source-route call. Complete bb_intr_handl+0x4 loads BB+0x4c and discards the result. ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 wifi_os_adapter.h:34..35 and esp_adapter.c:176..183,704..705 identify CPU-handler installation/enable. A source123 route and read-acknowledgement semantics remain unestablished."

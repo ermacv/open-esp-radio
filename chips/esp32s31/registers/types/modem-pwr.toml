@@ -4,13 +4,13 @@ schema = 3
 
 [type]
 name = "MODEM_PWR"
-description = "The modem power-domain block at MODEM_PWR_BASE: the modem low-power timer and the Wi-Fi MAC's TSF, RTC timer, power interrupt, REGDMA and coexistence runtime words. Known only from vendor binaries.\n\nHP system-reset observations use the PAC-only facts probe on hart0 with hart1 already held. The probe preserves the successful production reset_recording path's reset-control register-effect order: UART0 restoration, hart1 boot-address zero, hart1 reset pulse, stall, device fence and SYS_SW_RST. The complete sequences differ: the probe samples LP state before those writes but publishes its retained SRAM record after UART0/boot-address/pulse/stall, whereas production invokes its record callback before them. The probe has no ClaimCell election or StopError handling and does not implement production's watchdog-fallback path; a failed hold check returns from the leaf with MIE cleared. These observations cover that successful register sequence and next ROM-loader entry, not full production fatal-path equivalence. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026; HW13_S31_BLE_LP_HP_RESTORE_20261026.\n\nWords 0x0-0x78: Sparse BTDM low-level runtime and sleep-control window. Complete ESP32-S31 functions prove only the recorded access directions, finite images, low-24-bit publications and four isolated RMW controls. The independently role-mapped runtime-timer start command is named; all other positional names deliberately avoid assigning undocumented peripheral semantics.\n\nWord 0x800: Free-running Wi-Fi MAC local-time counter, read-only and without read side effects. Complete libpp[lmac.o]::lmacAdjustTimestamp subtracts the receive timestamp a received frame carries from this word as the frame's age and, while the station slept, rewrites that timestamp as this word minus a TU-scaled sleep interval; libpp[pm_twt.o]::pm_twt_set_target_wdev_time, libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice read it as the MAC's current time. The PHY SDM deadline samples the same word. Its unit and rate against the system timer are not established.\n\nWords 0x80c-0x810: Station TSF activity status recovered from the complete no-call hal_is_sta_tsf_active leaf. The instruction body proves the address and bit geometry but not the hardware transition rules.\n\nWords 0x814-0x828: Shared TSF load and coherent station/SoftAP snapshot transaction.\n\nWord 0x82c: Station TBTT target word recovered from complete hal_set_sta_tbtt. The low 26-bit packing from the supplied 64-bit TSF value is exact; the hardware counter unit remains unnamed.\n\nWords 0x830-0x878: Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value.\n\nWord 0x83c: Shared WDEVPWR control word. The channel-change leaf proves the REGDMA selector, while complete modem-power leaves prove the wake-protect lead time and TBTT auto-period fields. Hardware interactions between these fields remain unqualified.\n\nWords 0x848-0x8d0: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x860-0x870: SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.\n\nWords 0x87c-0x880: Four-entry TSF timer bank recovered from all complete target, wakeup and enable/disable leaves. Each entry consists of one control word followed by its 32-bit target. The public index is guarded to zero through three by the target and timer-enable leaves; the dedicated wakeup leaves do not contain their own range check.\n\nWords 0x89c-0x8ac: Runtime receive-beacon and individual-TWT COEX/PTI words recovered from five complete hal_coex.o leaves. Register addresses, masks and RMW order are exact; fields whose electrical meaning is not established retain UNKNOWN names.\n\nWords 0x8b4-0x8c0: WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR."
+description = "The modem power-domain block at MODEM_PWR_BASE: the modem low-power timer and the Wi-Fi MAC's TSF, RTC timer, power interrupt, REGDMA and coexistence runtime words. Known only from vendor binaries.\n\nHP system-reset observations use the PAC-only facts probe on hart0 with hart1 already held. The probe preserves the successful production reset_recording path's reset-control register-effect order: UART0 restoration, hart1 boot-address zero, hart1 reset pulse, stall, device fence and SYS_SW_RST. The complete sequences differ: the probe samples LP state before those writes but publishes its retained SRAM record after UART0/boot-address/pulse/stall, whereas production invokes its record callback before them. The probe has no ClaimCell election or StopError handling and does not implement production's watchdog-fallback path; a failed hold check returns from the leaf with MIE cleared. These observations cover that successful register sequence and next ROM-loader entry, not full production fatal-path equivalence. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026; HW13_S31_BLE_LP_HP_RESTORE_20261026.\n\nWords 0x0-0x78: Sparse BTDM low-level runtime and sleep-control window. Complete ESP32-S31 functions prove only the recorded access directions, finite images, low-24-bit publications and four isolated RMW controls. The independently role-mapped runtime-timer start command is named; all other positional names deliberately avoid assigning undocumented peripheral semantics.\n\nWord 0x800: Free-running Wi-Fi MAC local-time counter, read-only and without read side effects. Complete libpp[lmac.o]::lmacAdjustTimestamp subtracts the receive timestamp a received frame carries from this word as the frame's age and, while the station slept, rewrites that timestamp as this word minus a TU-scaled sleep interval; libpp[pm_twt.o]::pm_twt_set_target_wdev_time, libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice read it as the MAC's current time. The PHY SDM deadline samples the same word. Its unit and rate against the system timer are not established.\n\nWords 0x80c-0x810: Station TSF activity status recovered from the complete no-call hal_is_sta_tsf_active leaf. The instruction body proves the address and bit geometry but not the hardware transition rules.\n\nWords 0x814-0x828: Shared TSF load and coherent station/SoftAP snapshot transaction.\n\nWord 0x82c: Shared TBTT staging word recovered from complete hal_set_sta_tbtt and tsf_hal_set_tbtt_start_time. The low 26-bit packing from the supplied 64-bit TSF value is exact; the hardware counter unit remains unnamed.\n\nWords 0x830-0x878: Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value.\n\nWord 0x83c: Shared WDEVPWR control word. The channel-change leaf proves the REGDMA selector, while complete modem-power leaves prove the wake-protect lead time and TBTT auto-period fields. Hardware interactions between these fields remain unqualified.\n\nWords 0x848-0x8d0: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x860-0x870: SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.\n\nWords 0x87c-0x880: Four-entry TSF timer bank recovered from all complete target, wakeup and enable/disable leaves. Each entry consists of one control word followed by its 32-bit target. The public index is guarded to zero through three by the target and timer-enable leaves; the dedicated wakeup leaves do not contain their own range check.\n\nWords 0x89c-0x8ac: Runtime receive-beacon and individual-TWT COEX/PTI words recovered from five complete hal_coex.o leaves. Register addresses, masks and RMW order are exact; fields whose electrical meaning is not established retain UNKNOWN names.\n\nWords 0x8b4-0x8c0: WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR."
 sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBPP_MAC_LOCAL_TIME", "BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_TSF", "ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015", "BLOB_LIBPP_HAL_INIT_TAIL", "BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_HAL_PWR", "HIL_OPEN_REGDMA_LINK4_2026_07_29", "S31_MMIO_MODEM_RADIO_CORE_MID", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
 
 [[interrupt-outputs]]
 name = "WIFI_PWR"
-description = "The Wi-Fi power interrupt: the status bank at offset 0x8b4."
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
+description = "The Wi-Fi power interrupt. ENABLE is at offset 0x8b4, RAW at 0x8b8, STATUS at 0x8bc and CLEAR at 0x8c0. Hardware output/mask/clear observations qualify only the explicitly tested causes."
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "HW8_S31_WIFI_TSF_MASK_20261026"]
 
 [[interrupt-outputs]]
 name = "LP_TIMER"
@@ -217,7 +217,7 @@ sources = ["S31_MMIO_USE_2010D810_RUN", "S31_MMIO_DECLARED_2010D810"]
 completeness = "partial"
 
 [review.entity."TSF_LOAD_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_TSF", "ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
+sources = ["BLOB_LIBPP_HAL_TSF", "ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015", "BLOB_LIBPP_S31_TBTT_SHARED_LOAD_20261027"]
 
 [review.entity."TSF_LOAD_CONTROL.SNAPSHOT_STATION_TSF"]
 sources = ["ROM_REV0_HAL_GET_STA_TSF"]
@@ -242,10 +242,6 @@ sources = ["BLOB_S31_TSF_COUNTER_SELECT_20261027"]
 
 [review.entity."TSF_LOAD_CONTROL.LOAD_TSF3"]
 sources = ["BLOB_S31_TSF_COUNTER_SELECT_20261027"]
-
-[review.entity."TSF_LOAD_CONTROL.BITS_9_31_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
-completeness = "partial"
 
 [review.entity."VALUE_LOW"]
 sources = ["BLOB_LIBPP_HAL_TSF"]
@@ -301,11 +297,11 @@ sources = ["S31_MMIO_USE_2010D828_RUN", "S31_MMIO_DECLARED_2010D828"]
 completeness = "partial"
 
 [review.entity."TARGET"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_S31_TBTT_SHARED_LOAD_20261027"]
 completeness = "unknown"
 
 [review.entity."TARGET.TSF_BITS_35_10"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_S31_TBTT_SHARED_LOAD_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -335,7 +331,7 @@ sources = ["S31_MMIO_USE_2010D830", "S31_MMIO_DECLARED_2010D830"]
 completeness = "partial"
 
 [review.entity."SOC_WAKEUP_CLEAR"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_PWR"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_PWR", "BLOB_LIBPP_S31_BEACON_MISS_AUX_20261027"]
 completeness = "unknown"
 
 [review.entity."SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_SYNC_LIMIT"]
@@ -372,10 +368,6 @@ sources = ["BLOB_LIBPP_HAL_PWR"]
 completeness = "unknown"
 
 [review.entity."SOC_WAKEUP_CLEAR.BITS_18_20_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D834", "S31_MMIO_DECLARED_2010D834"]
-completeness = "partial"
-
-[review.entity."SOC_WAKEUP_CLEAR.BITS_22_27_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D834", "S31_MMIO_DECLARED_2010D834"]
 completeness = "partial"
 
@@ -480,7 +472,8 @@ sources = ["S31_MMIO_USE_2010D854", "S31_MMIO_DECLARED_2010D854"]
 completeness = "partial"
 
 [review.entity."STA_TSF_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_TSF", "BLOB_LIBPP_HAL_PWR", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+sources = ["BLOB_LIBPP_HAL_TSF", "BLOB_LIBPP_HAL_PWR", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
 
 [review.entity."STA_TSF_CONTROL.STA_TSF_MODE"]
 sources = ["BLOB_LIBPP_HAL_TSF"]
@@ -492,7 +485,8 @@ sources = ["BLOB_LIBPP_HAL_PWR"]
 sources = ["BLOB_LIBPP_HAL_TSF"]
 
 [review.entity."STA_TSF_CONTROL.STA_TSF_WAKEUP_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF"]
+sources = ["BLOB_LIBPP_HAL_TSF", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
 
 [review.entity."STA_TSF_CONTROL.STA_TSF_ENABLE_HIGH"]
 sources = ["BLOB_LIBPP_HAL_TSF"]
@@ -502,14 +496,6 @@ sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
 completeness = "partial"
 
 [review.entity."STA_TSF_CONTROL.BIT_23_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
-completeness = "partial"
-
-[review.entity."STA_TSF_CONTROL.BIT_25_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
-completeness = "partial"
-
-[review.entity."STA_TSF_CONTROL.BIT_28_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
 completeness = "partial"
 
@@ -526,7 +512,7 @@ sources = ["S31_MMIO_USE_2010D85C_RUN", "S31_MMIO_DECLARED_2010D85C"]
 completeness = "partial"
 
 [review.entity."SOFTAP_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 completeness = "unknown"
 
 [review.entity."SOFTAP_CONTROL.BIT_30_OPAQUE"]
@@ -539,28 +525,16 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 accuracy = "unknown"
 completeness = "unknown"
 
-[review.entity."SOFTAP_CONTROL.BITS_0_29_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860"]
+[review.entity."SOFTAP_TBTT_INTERVAL"]
+sources = ["S31_MMIO_USE_2010D864", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 completeness = "partial"
 
-[review.entity."WORD_0864_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D864"]
-completeness = "partial"
-
-[review.entity."WORD_0864_OPAQUE.BITS_0_21_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D864", "S31_MMIO_DECLARED_2010D864"]
-completeness = "partial"
-
-[review.entity."WORD_0864_OPAQUE.BITS_30_31_OPAQUE"]
+[review.entity."SOFTAP_TBTT_INTERVAL.BITS_30_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D864_RUN", "S31_MMIO_DECLARED_2010D864"]
 completeness = "partial"
 
-[review.entity."WORD_0864_OPAQUE.BITS_22_25_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D864_TWO_DOMAIN"]
-completeness = "partial"
-
 [review.entity."NAN_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 completeness = "unknown"
 
 [review.entity."NAN_CONTROL.TSF_MODE"]
@@ -578,36 +552,16 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 accuracy = "unknown"
 completeness = "unknown"
 
-[review.entity."NAN_CONTROL.BITS_0_18_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
+[review.entity."NAN_TBTT_INTERVAL"]
+sources = ["S31_MMIO_USE_2010D86C", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 completeness = "partial"
 
-[review.entity."NAN_CONTROL.BITS_23_26_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
-completeness = "partial"
-
-[review.entity."NAN_CONTROL.BITS_28_30_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
-completeness = "partial"
-
-[review.entity."WORD_086C_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D86C"]
-completeness = "partial"
-
-[review.entity."WORD_086C_OPAQUE.BITS_0_21_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D86C", "S31_MMIO_DECLARED_2010D86C"]
-completeness = "partial"
-
-[review.entity."WORD_086C_OPAQUE.BITS_30_31_OPAQUE"]
+[review.entity."NAN_TBTT_INTERVAL.BITS_30_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D86C_RUN", "S31_MMIO_DECLARED_2010D86C"]
 completeness = "partial"
 
-[review.entity."WORD_086C_OPAQUE.BITS_22_25_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D86C_TWO_DOMAIN"]
-completeness = "partial"
-
 [review.entity."BTWT_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 completeness = "unknown"
 
 [review.entity."BTWT_CONTROL.TSF_MODE"]
@@ -625,32 +579,12 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 accuracy = "unknown"
 completeness = "unknown"
 
-[review.entity."BTWT_CONTROL.BITS_0_18_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
+[review.entity."BTWT_TBTT_INTERVAL"]
+sources = ["S31_MMIO_USE_2010D874", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 completeness = "partial"
 
-[review.entity."BTWT_CONTROL.BITS_23_26_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
-completeness = "partial"
-
-[review.entity."BTWT_CONTROL.BITS_28_30_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
-completeness = "partial"
-
-[review.entity."WORD_0874_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D874"]
-completeness = "partial"
-
-[review.entity."WORD_0874_OPAQUE.BITS_0_21_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D874", "S31_MMIO_DECLARED_2010D874"]
-completeness = "partial"
-
-[review.entity."WORD_0874_OPAQUE.BITS_30_31_OPAQUE"]
+[review.entity."BTWT_TBTT_INTERVAL.BITS_30_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D874_RUN", "S31_MMIO_DECLARED_2010D874"]
-completeness = "partial"
-
-[review.entity."WORD_0874_OPAQUE.BITS_22_25_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D874_TWO_DOMAIN"]
 completeness = "partial"
 
 [review.entity."SLOW_CLOCK_CALIBRATION"]
@@ -664,7 +598,7 @@ sources = ["S31_MMIO_USE_2010D878", "S31_MMIO_DECLARED_2010D878"]
 completeness = "partial"
 
 [review.entity."CONTROL%s"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 completeness = "unknown"
 
 [review.entity."CONTROL%s.TARGET_HIGH"]
@@ -672,13 +606,11 @@ sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_PM_TWT_TSF_TARGET"]
 completeness = "unknown"
 
 [review.entity."CONTROL%s.WAKEUP_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+completeness = "partial"
 
 [review.entity."CONTROL%s.TIMER_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
-
-[review.entity."CONTROL%s.BITS_28_29_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D87C_TWO_DOMAIN", "S31_MMIO_USE_2010D884_TWO_DOMAIN", "S31_MMIO_USE_2010D88C_TWO_DOMAIN", "S31_MMIO_USE_2010D894_TWO_DOMAIN"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 completeness = "partial"
 
 [review.entity."TARGET%s"]
@@ -751,19 +683,19 @@ sources = ["S31_MMIO_USE_2010D8AC", "S31_MMIO_DECLARED_2010D8AC"]
 completeness = "partial"
 
 [review.entity."ENABLE"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW26_S31_LOCAL_TBTT_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_1"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_0"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."ENABLE.BITS_8_16_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010D8B4"]
@@ -771,7 +703,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."ENABLE.BEACON_FILTER_WAKE"]
-sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "S31_MMIO_DECLARED_2010D8B4"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "S31_MMIO_DECLARED_2010D8B4", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -781,7 +713,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."ENABLE.BEACON_MISS"]
-sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "S31_MMIO_DECLARED_2010D8B4"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "S31_MMIO_DECLARED_2010D8B4", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -791,19 +723,19 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."RAW"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"]
 
 [review.entity."RAW.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."RAW.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."RAW.TSF_TIMER_1"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."RAW.TSF_TIMER_0"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."RAW.BITS_8_16_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010D8B8"]
@@ -831,19 +763,19 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_INTERRUPT_STATUS"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_1"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_0"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.BITS_8_16_OPAQUE"]
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
@@ -866,26 +798,26 @@ sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO
 completeness = "unknown"
 
 [review.entity."CLEAR"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_1"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_0"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."CLEAR.BITS_8_16_OPAQUE"]
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
 completeness = "unknown"
 
 [review.entity."CLEAR.BEACON_FILTER_WAKE"]
-sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 completeness = "unknown"
 
 [review.entity."CLEAR.BIT_18_OPAQUE"]
@@ -893,7 +825,7 @@ sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO
 completeness = "unknown"
 
 [review.entity."CLEAR.BEACON_MISS"]
-sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 completeness = "unknown"
 
 [review.entity."CLEAR.BITS_20_31_OPAQUE"]
@@ -914,6 +846,217 @@ completeness = "partial"
 
 [review.entity."WORD_0004_OPAQUE"]
 sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "HW2_S31_LP_STOP_WRAP_20261026", "HW6_S31_LP_QUIET_20261026", "HW9_S31_SHUTDOWN_ORDER_20261027"]
+
+[review.entity."CONTROL%s.RF_CONTROL_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D87C_TWO_DOMAIN", "S31_MMIO_USE_2010D884_TWO_DOMAIN", "S31_MMIO_USE_2010D88C_TWO_DOMAIN", "S31_MMIO_USE_2010D894_TWO_DOMAIN", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+completeness = "partial"
+
+[review.entity."CONTROL%s.MODEM_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D87C_TWO_DOMAIN", "S31_MMIO_USE_2010D884_TWO_DOMAIN", "S31_MMIO_USE_2010D88C_TWO_DOMAIN", "S31_MMIO_USE_2010D894_TWO_DOMAIN", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
+completeness = "partial"
+
+[review.entity."TSF_LOAD_CONTROL.LOAD_TSF1_TBTT_TARGET"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814", "BLOB_LIBPP_S31_TBTT_SHARED_LOAD_20261027"]
+completeness = "partial"
+
+[review.entity."TSF_LOAD_CONTROL.LOAD_TSF2_TBTT_TARGET"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814", "BLOB_LIBPP_S31_TBTT_SHARED_LOAD_20261027"]
+completeness = "partial"
+
+[review.entity."TSF_LOAD_CONTROL.LOAD_TSF3_TBTT_TARGET"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814", "BLOB_LIBPP_S31_TBTT_SHARED_LOAD_20261027"]
+completeness = "partial"
+
+[review.entity."TSF_LOAD_CONTROL.BITS_12_31_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
+completeness = "partial"
+
+[review.entity."TSF_LOAD_CONTROL.LOAD_STATION_TBTT_TARGET"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_SHARED_LOAD_20261027"]
+
+[review.entity."STA_TSF_CONTROL.TBTT_RF_CONTROL_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."STA_TSF_CONTROL.TBTT_MODEM_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."STA_TSF_CONTROL.STA_TBTT_AHEAD_TIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."STA_TSF_CONTROL.STA_TBTT_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."SOFTAP_CONTROL.TBTT_AHEAD_TIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."SOFTAP_CONTROL.BITS_16_24_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860"]
+completeness = "partial"
+
+[review.entity."SOFTAP_CONTROL.TBTT_RF_CONTROL_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."SOFTAP_CONTROL.TBTT_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."SOFTAP_CONTROL.BIT_27_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860"]
+completeness = "partial"
+
+[review.entity."SOFTAP_CONTROL.TBTT_MODEM_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."SOFTAP_CONTROL.TBTT_SOC_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.TBTT_AHEAD_TIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.BITS_16_18_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.BITS_23_24_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.TBTT_RF_CONTROL_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.TBTT_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.TBTT_MODEM_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.TBTT_SOC_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.BIT_30_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.TBTT_AHEAD_TIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.BITS_16_18_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.BITS_23_24_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.TBTT_RF_CONTROL_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.TBTT_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.TBTT_MODEM_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.TBTT_SOC_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.BIT_30_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
+completeness = "partial"
+
+[review.entity."SOFTAP_TBTT_INTERVAL.INTERVAL_TSF_BITS_35_10"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D864", "S31_MMIO_DECLARED_2010D864", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D864_TWO_DOMAIN"]
+completeness = "partial"
+
+[review.entity."NAN_TBTT_INTERVAL.INTERVAL_TSF_BITS_35_10"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D86C", "S31_MMIO_DECLARED_2010D86C", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D86C_TWO_DOMAIN"]
+completeness = "partial"
+
+[review.entity."BTWT_TBTT_INTERVAL.INTERVAL_TSF_BITS_35_10"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D874", "S31_MMIO_DECLARED_2010D874", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "S31_MMIO_USE_2010D874_TWO_DOMAIN"]
+completeness = "partial"
+
+[review.entity."SOC_WAKEUP_CLEAR.BITS_22_24_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D834", "S31_MMIO_DECLARED_2010D834"]
+completeness = "partial"
+
+[review.entity."SOC_WAKEUP_CLEAR.CLEAR_BEACON_MISS_INTERRUPT_FILTER"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D834", "S31_MMIO_DECLARED_2010D834", "BLOB_LIBPP_S31_BEACON_MISS_AUX_20261027"]
+completeness = "partial"
+
+[review.entity."SOC_WAKEUP_CLEAR.MODEM_SLEEP_LIMIT_EXCEEDED_STATUS"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D834", "S31_MMIO_DECLARED_2010D834", "BLOB_LIBPP_S31_BEACON_MISS_AUX_20261027"]
+completeness = "partial"
+
+[review.entity."SOC_WAKEUP_CLEAR.BEACON_MISS_LIMIT_EXCEEDED_STATUS"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D834", "S31_MMIO_DECLARED_2010D834", "BLOB_LIBPP_S31_BEACON_MISS_AUX_20261027"]
+completeness = "partial"
+
+[review.entity."ENABLE.TBTT_3"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."ENABLE.TBTT_2"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."ENABLE.TBTT_1"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."ENABLE.TBTT_0"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."RAW.TBTT_3"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."RAW.TBTT_2"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."RAW.TBTT_1"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."RAW.TBTT_0"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."POWER_INTERRUPT_STATUS.TBTT_3"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."POWER_INTERRUPT_STATUS.TBTT_2"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."POWER_INTERRUPT_STATUS.TBTT_1"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."POWER_INTERRUPT_STATUS.TBTT_0"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."CLEAR.TBTT_3"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."CLEAR.TBTT_2"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."CLEAR.TBTT_1"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
+
+[review.entity."CLEAR.TBTT_0"]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 
 [[registers]]
 name = "RUNTIME_TIMER_START_COMMAND"
@@ -1013,7 +1156,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0024_OPAQUE"
 offset = 0x24
-description = "The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the probe's HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, a retained nonzero software-pending sample followed by a new near compare (independently witnessed by CONTROL2 changing 0 to1) then conditional whole-word zero removed byte24/cause/output; CONTROL2 remained1. A zero sample skips the store and preserves the arrival, and zero before expiry permits the later compare. The delayed phases establish loss of the newer coalesced pending indication, not coincident arbitration or an execution of the production handler. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027."
+description = "The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the probe's HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, a retained nonzero software-pending sample followed by a new near compare (independently witnessed by CONTROL2 changing 0 to1) then conditional whole-word zero removed byte24/cause/output; CONTROL2 remained1. A zero sample skips the store and preserves the arrival, and zero before expiry permits the later compare. The delayed phases establish loss of the newer coalesced pending indication, not coincident arbitration or an execution of the production handler. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027. The pinned handler acknowledges with a complete zero store at +0x10; the immediate-deadline publisher stores complete one at +0x38. Both write bits 31:8 as zero. No meaning, reset value or per-bit side effect is established for those upper lanes. SOURCE: BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027."
 
 [[registers.fields]]
 name = "LOW_BYTE"
@@ -1024,7 +1167,7 @@ class = "plain"
 [[registers]]
 name = "WORD_002C_OPAQUE"
 offset = 0x2c
-description = "The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. One positively pending natural rollover, alone and with compare, read zero at the next ROM-loader entry after the probe's HP system reset and after clock-only access restoration, while the LP source selector/divider stayed zero. That first experiment acknowledged pending before source-clock restoration. A separate both-pending/quiet follow-up restored the LP XTAL/divider before any acknowledge, prepare or start; pending/cause/counter/output still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is distinct from the earlier BLE-timer/controller reset retention; no immediate reset-edge or POR value is established. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. On s31-c, exactly two natural wraps without intermediate acknowledgement again leave byte2c=1/cause2/source127 high. A retained nonzero first-wrap sample conditionally triggers one whole-word zero after the independently observed second crossing; byte/cause/output remain0 through4096 further cycles. No visible second credit or arbitrary wrap-capacity guarantee follows. SOURCE: HW22_S31_LP_TWO_WRAPS_20261027."
+description = "The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. One positively pending natural rollover, alone and with compare, read zero at the next ROM-loader entry after the probe's HP system reset and after clock-only access restoration, while the LP source selector/divider stayed zero. That first experiment acknowledged pending before source-clock restoration. A separate both-pending/quiet follow-up restored the LP XTAL/divider before any acknowledge, prepare or start; pending/cause/counter/output still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is distinct from the earlier BLE-timer/controller reset retention; no immediate reset-edge or POR value is established. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. On s31-c, exactly two natural wraps without intermediate acknowledgement again leave byte2c=1/cause2/source127 high. A retained nonzero first-wrap sample conditionally triggers one whole-word zero after the independently observed second crossing; byte/cause/output remain0 through4096 further cycles. No visible second credit or arbitrary wrap-capacity guarantee follows. SOURCE: HW22_S31_LP_TWO_WRAPS_20261027. The pinned handler stores complete zero at +0x20 and +0x52; the counter helper also stores complete zero at +0x32. These stores write bits 31:8 as zero without establishing their individual meaning or clearing behavior. SOURCE: BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027."
 
 [[registers.fields]]
 name = "LOW_BYTE"
@@ -1309,7 +1452,7 @@ description = "SoftAP TSF load request asserted after the two zero-value writes 
 name = "LOAD_STATION_TBTT_TARGET"
 bits = "8"
 class = "plain"
-description = "Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf set this bit after writing the station TBTT target."
+description = "Project-assigned name. Domain0 selector (bit8), set after the shared TARGET staging word receives TSF target bits 35:10. Self-clear and completion semantics are unproved."
 
 [[registers.fields]]
 name = "SNAPSHOT_TSF2"
@@ -1336,8 +1479,26 @@ class = "plain"
 description = "Generic counter-index 3 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027."
 
 [[registers.fields]]
-name = "BITS_9_31_OPAQUE"
-bits = "31:9"
+name = "LOAD_TSF1_TBTT_TARGET"
+bits = "9"
+class = "plain"
+description = "Project-assigned name. TBTT target-load selector for TSF domain 1, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved."
+
+[[registers.fields]]
+name = "LOAD_TSF2_TBTT_TARGET"
+bits = "10"
+class = "plain"
+description = "Project-assigned name. TBTT target-load selector for TSF domain 2, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved."
+
+[[registers.fields]]
+name = "LOAD_TSF3_TBTT_TARGET"
+bits = "11"
+class = "plain"
+description = "Project-assigned name. TBTT target-load selector for TSF domain 3, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved."
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
@@ -1418,7 +1579,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "TARGET"
 offset = 0x82c
-description = "Complete hal_set_sta_tbtt replaces bits 25:0 with bits 35:10 of the supplied station TSF value and preserves the high six bits."
+description = "Project-assigned name. Shared TBTT staging word: bits 35:10 of the supplied TSF target are staged in bits 25:0 here, preserving bits 31:26; the subsequent TSF_LOAD_CONTROL bit 8+domain selects the TBTT domain. Physical time units and load completion remain unestablished."
 
 [[registers.fields]]
 name = "TSF_BITS_35_10"
@@ -1526,10 +1687,28 @@ class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "BITS_22_27_OPAQUE"
-bits = "27:22"
+name = "BITS_22_24_OPAQUE"
+bits = "24:22"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "CLEAR_BEACON_MISS_INTERRUPT_FILTER"
+bits = "25"
+class = "plain"
+description = "Project-assigned name. Set by the separate miss-interrupt-filter-clear leaf, independently of interrupt CLEAR19 and counter/info clear29/31. Pulse/self-clear behavior is unknown."
+
+[[registers.fields]]
+name = "MODEM_SLEEP_LIMIT_EXCEEDED_STATUS"
+bits = "26"
+class = "plain"
+description = "Project-assigned name. Bit returned by the dedicated modem-state sleep-limit-exceeded getter. Write effects are unknown."
+
+[[registers.fields]]
+name = "BEACON_MISS_LIMIT_EXCEEDED_STATUS"
+bits = "27"
+class = "plain"
+description = "Project-assigned name. Bit returned by the dedicated modem beacon-miss-limit-exceeded getter. Write effects are unknown."
 
 [[registers]]
 name = "MODEM_SLEEP_LIMIT_CONTROL"
@@ -1720,7 +1899,7 @@ description = "hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears i
 name = "STA_TSF_WAKEUP_ENABLE"
 bits = "29"
 class = "plain"
-description = "hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE."
+description = "hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE. The generic TBTT SoC-wakeup leaves address this same bit for domain0."
 
 [[registers.fields]]
 name = "STA_TSF_ENABLE_HIGH"
@@ -1741,16 +1920,16 @@ class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "BIT_25_OPAQUE"
+name = "TBTT_RF_CONTROL_ENABLE"
 bits = "25"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Project-assigned name. TSF-domain0 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves."
 
 [[registers.fields]]
-name = "BIT_28_OPAQUE"
+name = "TBTT_MODEM_WAKEUP_ENABLE"
 bits = "28"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Project-assigned name. TSF-domain0 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves."
 
 [[registers.fields]]
 name = "BIT_30_OPAQUE"
@@ -1793,21 +1972,57 @@ bits = "31"
 class = "plain"
 
 [[registers.fields]]
-name = "BITS_0_29_OPAQUE"
-bits = "29:0"
+name = "TBTT_AHEAD_TIME"
+bits = "15:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
-
-[[registers]]
-name = "WORD_0864_OPAQUE"
-offset = 0x864
-description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+description = "Project-assigned name. TSF-domain1 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished."
 
 [[registers.fields]]
-name = "BITS_0_21_OPAQUE"
-bits = "21:0"
+name = "BITS_16_24_OPAQUE"
+bits = "24:16"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "TBTT_RF_CONTROL_ENABLE"
+bits = "25"
+class = "plain"
+description = "Project-assigned name. TSF-domain1 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves."
+
+[[registers.fields]]
+name = "TBTT_ENABLE"
+bits = "26"
+class = "plain"
+description = "Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal."
+
+[[registers.fields]]
+name = "BIT_27_OPAQUE"
+bits = "27"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "TBTT_MODEM_WAKEUP_ENABLE"
+bits = "28"
+class = "plain"
+description = "Project-assigned name. TSF-domain1 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves."
+
+[[registers.fields]]
+name = "TBTT_SOC_WAKEUP_ENABLE"
+bits = "29"
+class = "plain"
+description = "Project-assigned name. TSF-domain1 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves."
+
+[[registers]]
+name = "SOFTAP_TBTT_INTERVAL"
+offset = 0x864
+description = "Project-assigned name. Per-domain TBTT interval for TSF domain1. Low26 holds the shifted interval argument; high6 is preserved. Physical time units and runtime latch behavior are unestablished."
+
+[[registers.fields]]
+name = "INTERVAL_TSF_BITS_35_10"
+bits = "25:0"
+class = "plain"
+description = "Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished."
 
 [[registers.fields]]
 name = "BITS_30_31_OPAQUE"
@@ -1815,11 +2030,6 @@ bits = "31:30"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
-[[registers.fields]]
-name = "BITS_22_25_OPAQUE"
-bits = "25:22"
-class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers]]
 name = "NAN_CONTROL"
@@ -1845,33 +2055,63 @@ bits = "31"
 class = "plain"
 
 [[registers.fields]]
-name = "BITS_0_18_OPAQUE"
-bits = "18:0"
+name = "TBTT_AHEAD_TIME"
+bits = "15:0"
+class = "plain"
+description = "Project-assigned name. TSF-domain2 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished."
+
+[[registers.fields]]
+name = "BITS_16_18_OPAQUE"
+bits = "18:16"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "BITS_23_26_OPAQUE"
-bits = "26:23"
+name = "BITS_23_24_OPAQUE"
+bits = "24:23"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "BITS_28_30_OPAQUE"
-bits = "30:28"
+name = "TBTT_RF_CONTROL_ENABLE"
+bits = "25"
+class = "plain"
+description = "Project-assigned name. TSF-domain2 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves."
+
+[[registers.fields]]
+name = "TBTT_ENABLE"
+bits = "26"
+class = "plain"
+description = "Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal."
+
+[[registers.fields]]
+name = "TBTT_MODEM_WAKEUP_ENABLE"
+bits = "28"
+class = "plain"
+description = "Project-assigned name. TSF-domain2 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves."
+
+[[registers.fields]]
+name = "TBTT_SOC_WAKEUP_ENABLE"
+bits = "29"
+class = "plain"
+description = "Project-assigned name. TSF-domain2 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers]]
-name = "WORD_086C_OPAQUE"
+name = "NAN_TBTT_INTERVAL"
 offset = 0x86c
-description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+description = "Project-assigned name. Per-domain TBTT interval for TSF domain2. Low26 holds the shifted interval argument; high6 is preserved. Physical time units and runtime latch behavior are unestablished."
 
 [[registers.fields]]
-name = "BITS_0_21_OPAQUE"
-bits = "21:0"
+name = "INTERVAL_TSF_BITS_35_10"
+bits = "25:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished."
 
 [[registers.fields]]
 name = "BITS_30_31_OPAQUE"
@@ -1879,11 +2119,6 @@ bits = "31:30"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
-[[registers.fields]]
-name = "BITS_22_25_OPAQUE"
-bits = "25:22"
-class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers]]
 name = "BTWT_CONTROL"
@@ -1909,33 +2144,63 @@ bits = "31"
 class = "plain"
 
 [[registers.fields]]
-name = "BITS_0_18_OPAQUE"
-bits = "18:0"
+name = "TBTT_AHEAD_TIME"
+bits = "15:0"
+class = "plain"
+description = "Project-assigned name. TSF-domain3 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished."
+
+[[registers.fields]]
+name = "BITS_16_18_OPAQUE"
+bits = "18:16"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "BITS_23_26_OPAQUE"
-bits = "26:23"
+name = "BITS_23_24_OPAQUE"
+bits = "24:23"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "BITS_28_30_OPAQUE"
-bits = "30:28"
+name = "TBTT_RF_CONTROL_ENABLE"
+bits = "25"
+class = "plain"
+description = "Project-assigned name. TSF-domain3 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves."
+
+[[registers.fields]]
+name = "TBTT_ENABLE"
+bits = "26"
+class = "plain"
+description = "Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal."
+
+[[registers.fields]]
+name = "TBTT_MODEM_WAKEUP_ENABLE"
+bits = "28"
+class = "plain"
+description = "Project-assigned name. TSF-domain3 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves."
+
+[[registers.fields]]
+name = "TBTT_SOC_WAKEUP_ENABLE"
+bits = "29"
+class = "plain"
+description = "Project-assigned name. TSF-domain3 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers]]
-name = "WORD_0874_OPAQUE"
+name = "BTWT_TBTT_INTERVAL"
 offset = 0x874
-description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+description = "Project-assigned name. Per-domain TBTT interval for TSF domain3. Low26 holds the shifted interval argument; high6 is preserved. Physical time units and runtime latch behavior are unestablished."
 
 [[registers.fields]]
-name = "BITS_0_21_OPAQUE"
-bits = "21:0"
+name = "INTERVAL_TSF_BITS_35_10"
+bits = "25:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished."
 
 [[registers.fields]]
 name = "BITS_30_31_OPAQUE"
@@ -1943,11 +2208,6 @@ bits = "31:30"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
-[[registers.fields]]
-name = "BITS_22_25_OPAQUE"
-bits = "25:22"
-class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers]]
 name = "SLOW_CLOCK_CALIBRATION"
@@ -1983,19 +2243,25 @@ description = "Bits 34:32 of the 64-bit TSF target. Complete libpp[hal_tsf.o]::h
 name = "WAKEUP_ENABLE"
 bits = "30"
 class = "plain"
-description = "Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup."
+description = "Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup. The dedicated tsf_hal_set_timer_soc_wakeup enable/disable leaves identify this as the SoC-wakeup gate."
 
 [[registers.fields]]
 name = "TIMER_ENABLE"
 bits = "31"
 class = "plain"
-description = "Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer."
+description = "Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal."
 
 [[registers.fields]]
-name = "BITS_28_29_OPAQUE"
-bits = "29:28"
+name = "RF_CONTROL_ENABLE"
+bits = "28"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Project-assigned name. Per-timer RF-control gate set and cleared by the dedicated timer RF-control leaves; distinct from TIMER_ENABLE and the interrupt bank."
+
+[[registers.fields]]
+name = "MODEM_WAKEUP_ENABLE"
+bits = "29"
+class = "plain"
+description = "Project-assigned name. Per-timer modem-wakeup gate set and cleared by the dedicated timer modem-wakeup leaves."
 
 [[registers]]
 name = "TARGET%s"
@@ -2102,49 +2368,49 @@ description = "WDEVPWR_ENABLE diagnostic snapshot and writable event mask. Compl
 name = "TBTT_3"
 bits = "0"
 class = "plain"
-description = "Enable the TSF-3 TBTT event."
+description = "Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_2"
 bits = "1"
 class = "plain"
-description = "Enable the TSF-2 TBTT event."
+description = "Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_1"
 bits = "2"
 class = "plain"
-description = "Enable the TSF-1 TBTT event."
+description = "Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_0"
 bits = "3"
 class = "plain"
-description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027."
+description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
 bits = "4"
 class = "plain"
-description = "Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
+description = "Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "plain"
-description = "Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
+description = "Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
 bits = "6"
 class = "plain"
-description = "Enable the guarded TSF timer-one event."
+description = "Enable the guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations."
 
 [[registers.fields]]
 name = "TSF_TIMER_0"
 bits = "7"
 class = "plain"
-description = "Enable the guarded TSF timer-zero event."
+description = "Enable the guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations."
 
 [[registers.fields]]
 name = "BITS_8_16_OPAQUE"
@@ -2157,7 +2423,7 @@ write-range = { min = 0, max = 511 }
 name = "BEACON_FILTER_WAKE"
 bits = "17"
 class = "plain"
-description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset."
 
 [[registers.fields]]
 name = "BIT_18_OPAQUE"
@@ -2169,7 +2435,7 @@ description = "Independent event identity and dedicated enable writer are unknow
 name = "BEACON_MISS"
 bits = "19"
 class = "plain"
-description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset."
 
 [[registers.fields]]
 name = "BITS_20_31_OPAQUE"
@@ -2187,49 +2453,49 @@ description = "WDEVPWR_RAW diagnostic snapshot with the same event geometry as E
 name = "TBTT_3"
 bits = "0"
 class = "read-only"
-description = "Raw TSF-3 TBTT event."
+description = "Raw TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_2"
 bits = "1"
 class = "read-only"
-description = "Raw TSF-2 TBTT event."
+description = "Raw TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_1"
 bits = "2"
 class = "read-only"
-description = "Raw TSF-1 TBTT event."
+description = "Raw TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_0"
 bits = "3"
 class = "read-only"
-description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027."
+description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
 bits = "4"
 class = "read-only"
-description = "Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
+description = "Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "read-only"
-description = "Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
+description = "Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
 bits = "6"
 class = "read-only"
-description = "Raw guarded TSF timer-one event."
+description = "Raw guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations."
 
 [[registers.fields]]
 name = "TSF_TIMER_0"
 bits = "7"
 class = "read-only"
-description = "Raw guarded TSF timer-zero event."
+description = "Raw guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations."
 
 [[registers.fields]]
 name = "BITS_8_16_OPAQUE"
@@ -2270,49 +2536,49 @@ description = "Masked WDEVPWR event image returned by complete hal_pwr_interrupt
 name = "TBTT_3"
 bits = "0"
 class = "read-only"
-description = "Masked TSF-3 TBTT event."
+description = "Masked TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_2"
 bits = "1"
 class = "read-only"
-description = "Masked TSF-2 TBTT event."
+description = "Masked TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_1"
 bits = "2"
 class = "read-only"
-description = "Masked TSF-1 TBTT event."
+description = "Masked TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_0"
 bits = "3"
 class = "read-only"
-description = "Masked TSF-0 TBTT event. TSF 0 is the station TSF."
+description = "Masked TSF-0 TBTT event. TSF 0 is the station TSF. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
 bits = "4"
 class = "read-only"
-description = "Masked guarded TSF timer-three event."
+description = "Masked guarded TSF timer-three event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "read-only"
-description = "Masked guarded TSF timer-two event."
+description = "Masked guarded TSF timer-two event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
 bits = "6"
 class = "read-only"
-description = "Masked guarded TSF timer-one event."
+description = "Masked guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations."
 
 [[registers.fields]]
 name = "TSF_TIMER_0"
 bits = "7"
 class = "read-only"
-description = "Masked guarded TSF timer-zero event."
+description = "Masked guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations."
 
 [[registers.fields]]
 name = "BITS_8_16_OPAQUE"
@@ -2353,49 +2619,49 @@ description = "Write-one-to-clear event bank used by complete hal_pwr_interrupt_
 name = "TBTT_3"
 bits = "0"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-3 TBTT event."
+description = "Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_2"
 bits = "1"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-2 TBTT event."
+description = "Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_1"
 bits = "2"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-1 TBTT event."
+description = "Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TBTT_0"
 bits = "3"
 class = "write-one-to-clear"
-description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027."
+description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_3"
 bits = "4"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
+description = "Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
+description = "Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
 bits = "6"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-one event."
+description = "Acknowledge the guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations."
 
 [[registers.fields]]
 name = "TSF_TIMER_0"
 bits = "7"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-zero event."
+description = "Acknowledge the guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations."
 
 [[registers.fields]]
 name = "BITS_8_16_OPAQUE"
@@ -2407,7 +2673,7 @@ description = "Event identities unknown."
 name = "BEACON_FILTER_WAKE"
 bits = "17"
 class = "write-one-to-clear"
-description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset."
 
 [[registers.fields]]
 name = "BIT_18_OPAQUE"
@@ -2419,7 +2685,7 @@ description = "The vendor FIQ writes its complete sampled power STATUS and then 
 name = "BEACON_MISS"
 bits = "19"
 class = "write-one-to-clear"
-description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset."
 
 [[registers.fields]]
 name = "BITS_20_31_OPAQUE"
@@ -2459,10 +2725,10 @@ sources = ["HW9_S31_LP_CLEAR34_20261027"]
 sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "HW16_S31_LP_DELIVERY_20261026"]
 
 [review.entity."WORD_0024_OPAQUE"]
-sources = ["HW13_S31_BLE_LP_HP_RESET_20261026"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"]
 
 [review.entity."WORD_002C_OPAQUE"]
-sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"]
 
 [review.entity."WORD_0038_OPAQUE"]
 sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026"]

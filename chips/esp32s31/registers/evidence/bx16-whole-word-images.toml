@@ -1,0 +1,26 @@
+# Reviewed scalar and access facts; symbol offsets are bytes from entry.
+schema = 1
+
+[[sources]]
+id = "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"
+description = "esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, esp32s31/libbtdm_common.a, SHA-256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41. libbtdm_common[9.o]::r_sym_bt_atiitVoBKMplOJVvjTHP+0x10 stores a four-byte zero to0x2010d024 and +0x20/+0x52 to0x2010d02c. r_sym_bt_86dRVPWrmTMQpChjYeWi+0x38 stores complete one to0x2010d024. r_sym_bt_xPWv1Z87N9d40AR9yCcT+0x32/+0x36 stores complete zero to0x2010d02c and one to0x2010d024. All write31:8 zero; no upper-lane meaning, reset or per-bit acknowledgement contract follows."
+
+[[sources]]
+id = "BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027"
+description = "esp-rom-elfs 20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf, SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Complete rom[]::phy_freq_reg_init@0x2f824c46 (size0x60)+0x52 stores0x19800249 to0x20100024; +0x5c stores0x25824e58 to0x20100028. The first image has positioned ones0x19800248 within31:3; the second writes7:2=0x16 and22:21=0. Complete phy_get_freq_mem_param@0x2f824b2a (size0x3e)+0x06/+0x16 consumes only masks0x7/0xff9ffe00. These literal images supply no extra field, reset or side-effect contract."
+
+[[sources]]
+id = "BLOB_BX16_ROM_11B_WINDOW_IMAGE_20261027"
+description = "esp-rom-elfs 20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf, SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Complete rom[]::phy_bb_agc_reg_update@0x2f82860e (size0xa6)+0x80 stores0x06acc7c8 to0x20107104. Positioned ones in31:9 are0x06acc600. Complete phy_rx_11b_opt+0x68 replaces only mask0x1ff with0x1c8. esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, SHA-256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2. libphy[phy_init.o]::phy_reg_update_new+0x36 replaces only mask0x1ff with0x1c0. Both preserve31:9 without assigning their meaning or reset."
+
+[[sources]]
+id = "BLOB_BX16_ROM_PWDET_IMAGE_20261027"
+description = "esp-rom-elfs 20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf, SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Complete rom[]::phy_pwdet_reg_init@0x2f82634a (size0x5c)+0x16 stores0x00ff0f64 to0x20100814:31:24=0,23:16=0xff,15:8=0x0f. esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, SHA-256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2. libphy[phy_tx_cal.o]::phy_txdc_cal_pwdet_init+0x3c replaces low8 with0xf0 preserving31:8. Upper fields, physical units and reset are unestablished."
+
+[[sources]]
+id = "BLOB_BX16_LIBBLE_ABORT_IMAGE_20261027"
+description = "esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, esp32s31/libble_app.a, SHA-256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723. libble_app[ble_70.o]::r_sym_ble_nENHlP4KBuQYlFVffaR5+0x8e stores0x00ff0002 to0x201018ac; connSim_1.o::sym_connSim_Dzx5u6gHUrhrEF6GLX1p+0x4e stores0x00ff0003. ble_3.o::r_sym_ble_mLYtT1I4BQmunJL36NqV+0xd6/+0x172 changes only bit1. Both full images write23:16=0xff and31:24/15:2=0. They do not identify any upper opcode/mask or grant arbitrary writes."
+
+[[sources]]
+id = "BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027"
+description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete libpp[hal_mac.o]::mac_last_rxbuf_init (size0xd2) stores four-byte0x0000ffff to0x2010415c/+0x24,0x20104160/+0x3c,0x20104164/+0x54 and0xffffffff to0x20104168/+0x74,0x2010416c/+0x8e (address/symbol-offset pairs). Thus15:12 are one in elements0..4,31:16 zero in0..2 and one in3..4. These images do not define upper-field boundaries, resets, sentinels or side effects; no element5 claim is made."

@@ -1456,7 +1456,7 @@ provenance = "derived"
 completeness = "partial"
 
 [review.entity."CONNECTION_ABORT_CONTROL"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_CONNECTION_ABORT_CONTROL"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_CONNECTION_ABORT_CONTROL", "BLOB_BX16_LIBBLE_ABORT_IMAGE_20261027"]
 completeness = "partial"
 
 [review.entity."CONNECTION_ABORT_CONTROL.CUSTOM_OPCODE_ENABLED"]
@@ -4249,7 +4249,7 @@ description = "Aborted-opcode byte selector; the exact hardware matching behavio
 [[registers]]
 name = "CONNECTION_ABORT_CONTROL"
 offset = 0x8ac
-description = "Connection aborted-opcode control. BLE PHY initialization and the default aborted-opcode path write 0x00FF0002, while the custom-opcode path writes 0x00FF0003. Connection link-state refresh independently replaces bit 1 from its two private control flags."
+description = "Connection aborted-opcode control. BLE PHY initialization and the default aborted-opcode path write 0x00FF0002, while the custom-opcode path writes 0x00FF0003. Connection link-state refresh independently replaces bit 1 from its two private control flags. The PHY initializer stores 0x00ff0002 at symbol+0x8e. The default and custom abort images share unassigned bits 23:16 equal to 0xff and bits 31:24 and 15:2 equal to zero. This does not identify an upper opcode or mask field."
 
 [[registers.fields]]
 name = "CUSTOM_OPCODE_ENABLED"
