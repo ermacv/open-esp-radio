@@ -890,7 +890,9 @@ digital initialization and `2150` after primary prepare. 212 retains its
 record at `2180`–`2183`, validity/reset cause at `218f`, and `2190` after
 access clocks. The loader and access-clock prefix are explicit differences
 from a pristine POR read and the production platform/RF lifecycle. 211
-reproduces the cited digital register subsequence; it does not claim full
+reproduces the cited digital register subsequence, then disables the BT watchdog
+after the `2150` snapshot (`215f` records its readback) for debugger dwell.
+It does not claim full
 production controller/HCI admission or RF readiness.
 
 214–217 emit `21a0` initial state, `21a8` initial CC0 crossing when applicable,
