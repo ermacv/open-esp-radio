@@ -523,7 +523,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 completeness = "unknown"
 
 [review.entity."SOFTAP_CONTROL.BIT_30_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D860"]
+sources = ["S31_MMIO_DECLARED_2010D860", "VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -1760,6 +1760,7 @@ description = "Complete hal_disable_softap_tsf clears bits 31:30. Generic TSF en
 name = "BIT_30_OPAQUE"
 bits = "30"
 class = "plain"
+description = "hal_mac_tsf_reset clears this bit together with TSF_ENABLE (bit 31), requests the SoftAP TSF load, then sets both bits. hal_disable_softap_tsf also clears the pair. This is a directly observed coupled start/stop lane; its individual hardware function remains unknown. SOURCE: VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL."
 
 [[registers.fields]]
 name = "TSF_ENABLE"

@@ -2529,7 +2529,7 @@ description = "Shared PBus/FE word. Selector 1 reads result window 0 for non-pat
 name = "RESULT_WINDOW_0_RX_DCO"
 bits = "8:0"
 class = "read-only"
-description = "Nine-bit BB group image in phy_pbus_print; phy_pbus_rd selects this window for selector 1, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
+description = "Project-assigned name. It reflects use by our RX-DCO calibration. The vendor phy_pbus_print group is BB; phy_pbus_rd selects this nine-bit window for selector 1, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS."
 
 [[registers.fields]]
 name = "BITS_9_17_OPAQUE"

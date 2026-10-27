@@ -2,7 +2,7 @@ schema = 1
 
 [layout]
 name = "BLE_DEVICE_TABLE_ENTRY"
-description = "One eight-byte device-table entry shared by the filter accept list and resolving list. Address bytes are least significant first."
+description = "One eight-byte device-table entry shared by the filter accept list and periodic list; the separate 64-byte IRK resolving-list allocation has another format. Address bytes are least significant first."
 size = 8
 align = 4
 
@@ -27,10 +27,10 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "RESOLVING_LIST_MEMBER"
+name = "PERIODIC_LIST_MEMBER"
 bits = "0"
 writer = "cpu"
-description = "Entry belongs to the resolving list."
+description = "Membership flag used by the vendor periodic-list add/remove/clear helpers. This is distinct from the separate IRK resolving list; the physical filtering effect remains unqualified. SOURCE: VENDOR_BLE_DEVICE_LIST_FLAGS."
 
 [[layout.words.fields]]
 name = "ACCEPT_LIST_MEMBER"
@@ -89,3 +89,11 @@ provenance = "derived"
 accuracy = "positional"
 completeness = "partial"
 naming = "opaque"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.PERIODIC_LIST_MEMBER"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE", "VENDOR_BLE_DEVICE_LIST_FLAGS"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"

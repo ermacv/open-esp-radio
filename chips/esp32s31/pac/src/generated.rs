@@ -28961,7 +28961,7 @@ pub mod bt_mac {
 
     /// The `WORD_0474_OPAQUE` register.
     ///
-    /// Vendor ble_radio_crc_state reads this word after +0x470 and prints nonzero values; its return derives from +0x470. ble_radio_events_clear and PHY monitoring initialization store whole-word zero here. CRC diagnostic/event state is an inference from those accessor roles; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE.
+    /// The exact-body-matched ble_radio_crc_state helper reads this word after +0x470 and prints nonzero values; its return derives from +0x470. The exact-body-matched ble_radio_events_clear helper stores whole-word zero. Current root r_sym_ble_D7WjPzItc9OF8YS067Wq also stores zero at +0x26; its historical r_ble_phy_monitor_bb_sync name is only a dominant correspondence (745098 ppm, about 74.51%), not an exact match. CRC diagnostic/event state is an inference; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE.
     pub mod word_0474_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -28983,7 +28983,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Vendor ble_radio_crc_state reads this word after +0x470 and prints nonzero values; its return derives from +0x470. ble_radio_events_clear and PHY monitoring initialization store whole-word zero here. CRC diagnostic/event state is an inference from those accessor roles; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE.
+            /// The exact-body-matched ble_radio_crc_state helper reads this word after +0x470 and prints nonzero values; its return derives from +0x470. The exact-body-matched ble_radio_events_clear helper stores whole-word zero. Current root r_sym_ble_D7WjPzItc9OF8YS067Wq also stores zero at +0x26; its historical r_ble_phy_monitor_bb_sync name is only a dominant correspondence (745098 ppm, about 74.51%), not an exact match. CRC diagnostic/event state is an inference; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE.
             #[inline]
             pub const fn bits_0_31_opaque(self) -> u32 {
                 self.0
@@ -28994,7 +28994,7 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Vendor ble_radio_crc_state reads this word after +0x470 and prints nonzero values; its return derives from +0x470. ble_radio_events_clear and PHY monitoring initialization store whole-word zero here. CRC diagnostic/event state is an inference from those accessor roles; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE.
+            /// The exact-body-matched ble_radio_crc_state helper reads this word after +0x470 and prints nonzero values; its return derives from +0x470. The exact-body-matched ble_radio_events_clear helper stores whole-word zero. Current root r_sym_ble_D7WjPzItc9OF8YS067Wq also stores zero at +0x26; its historical r_ble_phy_monitor_bb_sync name is only a dominant correspondence (745098 ppm, about 74.51%), not an exact match. CRC diagnostic/event state is an inference; neither one Boolean CRC-success/error flag nor per-bit W1C semantics is established. SOURCE: VENDOR_BLE_CRC_DIAGNOSTIC_STATE.
             #[inline]
             pub const fn bits_0_31_opaque(&self) -> u32 {
                 self.0
@@ -70040,7 +70040,7 @@ pub mod fe {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Nine-bit BB group image in phy_pbus_print; phy_pbus_rd selects this window for selector 1, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS.
+            /// Project-assigned name. It reflects use by our RX-DCO calibration. The vendor phy_pbus_print group is BB; phy_pbus_rd selects this nine-bit window for selector 1, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS.
             #[inline]
             pub const fn result_window_0_rx_dco(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0)
@@ -70075,7 +70075,7 @@ pub mod fe {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Nine-bit BB group image in phy_pbus_print; phy_pbus_rd selects this window for selector 1, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS.
+            /// Project-assigned name. It reflects use by our RX-DCO calibration. The vendor phy_pbus_print group is BB; phy_pbus_rd selects this nine-bit window for selector 1, path other than 1. The diagnostic group name and address/shift mapping are direct; individual sub-bit meanings, units and signedness remain unknown. SOURCE: ROM_REV0_PHY_PBUS, VENDOR_PHY_PBUS_GROUPS.
             #[inline]
             pub const fn result_window_0_rx_dco(&self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0)
@@ -131119,7 +131119,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BIT_30_OPAQUE` field.
+            /// hal_mac_tsf_reset clears this bit together with TSF_ENABLE (bit 31), requests the SoftAP TSF load, then sets both bits. hal_disable_softap_tsf also clears the pair. This is a directly observed coupled start/stop lane; its individual hardware function remains unknown. SOURCE: VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL.
             #[inline]
             pub const fn bit_30_opaque(self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -131142,7 +131142,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BIT_30_OPAQUE` field.
+            /// hal_mac_tsf_reset clears this bit together with TSF_ENABLE (bit 31), requests the SoftAP TSF load, then sets both bits. hal_disable_softap_tsf also clears the pair. This is a directly observed coupled start/stop lane; its individual hardware function remains unknown. SOURCE: VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL.
             #[inline]
             pub const fn bit_30_opaque(&self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -139972,7 +139972,7 @@ pub mod modem_syscon {
                 oer_mmio::Bits::truncate(self.0 >> 14)
             }
 
-            /// The `BIT_28_OPAQUE` field.
+            /// Direct operation: ROM phy_mac_enable_bb performs a fresh-read RMW of bit 28 before its operations on WIFI_ENABLE (bit 1). MAC/BB interface enable is an inference (I) from that named sequence, not a proved electrical identity. SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
             #[inline]
             pub const fn bit_28_opaque(self) -> bool {
                 (self.0 & 0x10000000) != 0
@@ -140055,7 +140055,7 @@ pub mod modem_syscon {
                 oer_mmio::Bits::truncate(self.0 >> 14)
             }
 
-            /// The `BIT_28_OPAQUE` field.
+            /// Direct operation: ROM phy_mac_enable_bb performs a fresh-read RMW of bit 28 before its operations on WIFI_ENABLE (bit 1). MAC/BB interface enable is an inference (I) from that named sequence, not a proved electrical identity. SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
             #[inline]
             pub const fn bit_28_opaque(&self) -> bool {
                 (self.0 & 0x10000000) != 0
@@ -253423,7 +253423,7 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `TRACK_ENABLE` field.
+            /// Enable argument published by phy_bb_txpwr_track at bit 0; it is independent of the opaque initialization and curve lanes. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn track_enable(self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -253435,13 +253435,13 @@ pub mod wifi_bb {
                 TrackEnable::from_field(self.0)
             }
 
-            /// The `BITS_1_4_OPAQUE` field.
+            /// phy_bb_txpwr_track clears this configuration lane independently of TRACK_ENABLE. Its individual hardware meaning and units are unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_1_4_opaque(self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0 >> 1)
             }
 
-            /// The `BITS_5_9_OPAQUE` field.
+            /// phy_bb_txpwr_track selects the five-bit initialization image 0x1f. Threshold/curve configuration is an inference; physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_5_9_opaque(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 5)
@@ -253452,7 +253452,7 @@ pub mod wifi_bb {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `TRACK_ENABLE` field.
+            /// Enable argument published by phy_bb_txpwr_track at bit 0; it is independent of the opaque initialization and curve lanes. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn track_enable(&self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -253464,13 +253464,13 @@ pub mod wifi_bb {
                 TrackEnable::from_field(self.0)
             }
 
-            /// The `BITS_1_4_OPAQUE` field.
+            /// phy_bb_txpwr_track clears this configuration lane independently of TRACK_ENABLE. Its individual hardware meaning and units are unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_1_4_opaque(&self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0 >> 1)
             }
 
-            /// The `BITS_5_9_OPAQUE` field.
+            /// phy_bb_txpwr_track selects the five-bit initialization image 0x1f. Threshold/curve configuration is an inference; physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_5_9_opaque(&self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 5)
@@ -253551,31 +253551,31 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BIT_0_OPAQUE` field.
+            /// phy_bb_txpwr_track clears this bit before publishing the packed tracking curve. It is not established as an independent power gate. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bit_0_opaque(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// The `BIT_1_OPAQUE` field.
+            /// phy_bb_txpwr_track clears this bit before publishing the packed tracking curve. It is not established as an independent power gate. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bit_1_opaque(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// The `BITS_7_14_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_7_14_opaque(self) -> u8 {
                 (self.0 >> 7) as u8
             }
 
-            /// The `BITS_15_22_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_15_22_opaque(self) -> u8 {
                 (self.0 >> 15) as u8
             }
 
-            /// The `BITS_23_30_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_23_30_opaque(self) -> u8 {
                 (self.0 >> 23) as u8
@@ -253586,31 +253586,31 @@ pub mod wifi_bb {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BIT_0_OPAQUE` field.
+            /// phy_bb_txpwr_track clears this bit before publishing the packed tracking curve. It is not established as an independent power gate. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bit_0_opaque(&self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// The `BIT_1_OPAQUE` field.
+            /// phy_bb_txpwr_track clears this bit before publishing the packed tracking curve. It is not established as an independent power gate. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bit_1_opaque(&self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// The `BITS_7_14_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_7_14_opaque(&self) -> u8 {
                 (self.0 >> 7) as u8
             }
 
-            /// The `BITS_15_22_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_15_22_opaque(&self) -> u8 {
                 (self.0 >> 15) as u8
             }
 
-            /// The `BITS_23_30_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_23_30_opaque(&self) -> u8 {
                 (self.0 >> 23) as u8
@@ -253698,25 +253698,25 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
                 self.0 as u8
             }
 
-            /// The `BITS_8_15_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
                 (self.0 >> 8) as u8
             }
 
-            /// The `BITS_16_23_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
                 (self.0 >> 16) as u8
             }
 
-            /// The `BITS_24_31_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
                 (self.0 >> 24) as u8
@@ -253727,25 +253727,25 @@ pub mod wifi_bb {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// The `BITS_8_15_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
                 (self.0 >> 8) as u8
             }
 
-            /// The `BITS_16_23_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
                 (self.0 >> 16) as u8
             }
 
-            /// The `BITS_24_31_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
                 (self.0 >> 24) as u8
@@ -253812,13 +253812,13 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
                 self.0 as u8
             }
 
-            /// The `BITS_8_15_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
                 (self.0 >> 8) as u8
@@ -253829,13 +253829,13 @@ pub mod wifi_bb {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_7_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// The `BITS_8_15_OPAQUE` field.
+            /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
                 (self.0 >> 8) as u8
@@ -262014,7 +262014,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Upper state participates in the complete-word zero test in wDev_AppendRxBlocks before LAST sampling and reload repair. A nonzero upper state is not an empty queue even when ADDRESS_LOW is zero; it is not established as additional address bits. SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS.
+            /// wDev_AppendRxBlocks compares the entire RX_NEXT_DESCRIPTOR word with zero after reload completion, before the path that samples LAST and may repair RX_DESCRIPTOR_BASE. The compared image includes this upper range. No separate upper-state or additional-address-bit identity is established. SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS.
             #[inline]
             pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -302666,14 +302666,14 @@ pub mod analog_i2c {
 
             /// The register's byte.
             ///
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES.
             pub const ADDRESS: Address = Address::new(0x62, 0xd);
 
             /// Width of `BITS_0_7_OPAQUE`.
             pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
             /// Greatest field image.
             pub const BITS_0_7_OPAQUE_MAX: u8 = 255;
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES.
             pub const BITS_0_7_OPAQUE: Field = match Field::new(Address::new(0x62, 0xd), 7, 0) {
                 Some(field) => field,
                 None => panic!("the model's field lies in its byte"),
@@ -302856,14 +302856,14 @@ pub mod analog_i2c {
 
             /// The register's byte.
             ///
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES.
             pub const ADDRESS: Address = Address::new(0x62, 0x15);
 
             /// Width of `BITS_0_7_OPAQUE`.
             pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
             /// Greatest field image.
             pub const BITS_0_7_OPAQUE_MAX: u8 = 255;
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES.
             pub const BITS_0_7_OPAQUE: Field = match Field::new(Address::new(0x62, 0x15), 7, 0) {
                 Some(field) => field,
                 None => panic!("the model's field lies in its byte"),
@@ -304363,14 +304363,14 @@ pub mod analog_i2c {
 
             /// The register's byte.
             ///
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027.
+            /// SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027, VENDOR_PHY_ANALOG_INITIALIZATION_CODES.
             pub const ADDRESS: Address = Address::new(0x6b, 0x8);
 
             /// Width of `BITS_0_7_OPAQUE`.
             pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
             /// Greatest field image.
             pub const BITS_0_7_OPAQUE_MAX: u8 = 255;
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES.
             pub const BITS_0_7_OPAQUE: Field = match Field::new(Address::new(0x6b, 0x8), 7, 0) {
                 Some(field) => field,
                 None => panic!("the model's field lies in its byte"),
@@ -304485,14 +304485,14 @@ pub mod analog_i2c {
 
             /// The register's byte.
             ///
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES.
             pub const ADDRESS: Address = Address::new(0x6b, 0xd);
 
             /// Width of `BITS_0_7_OPAQUE`.
             pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
             /// Greatest field image.
             pub const BITS_0_7_OPAQUE_MAX: u8 = 255;
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: VENDOR_PHY_ANALOG_INITIALIZATION_CODES.
             pub const BITS_0_7_OPAQUE: Field = match Field::new(Address::new(0x6b, 0xd), 7, 0) {
                 Some(field) => field,
                 None => panic!("the model's field lies in its byte"),
@@ -309780,7 +309780,7 @@ pub mod layouts {
         pub const BITS_0_15_OPAQUE_WIDTH: u32 = 16;
         /// Greatest unsigned image of `BITS_0_15_OPAQUE`.
         pub const BITS_0_15_OPAQUE_MAX: u32 = 0xffff;
-        /// Opaque: meaning not established. The vendor sm_num_match helper compares this halfword with a per-link configuration tag when configuration byte 23 enables matching; sm_num_set derives the tag from scheduler item +0x20 low 12 bits. The open RX owner arms 0xffff and checks the produced tag. This is a direct software association, not an established free-running time epoch. Hardware production, recycling retention and alias behavior after 4096 allocations remain unqualified. SOURCE: VENDOR_BLE_RX_AUXILIARY_TAG.
+        /// Opaque: meaning not established. The current helper, mapped to historical sm_num_match only by a similar correspondence (941176 ppm, about 94.12%; not exact-body), compares this halfword with a per-link configuration tag when configuration byte 23 enables matching; sm_num_set derives the tag from scheduler item +0x20 low 12 bits. The open RX owner arms 0xffff and checks the produced tag. This is a direct software association, not an established free-running time epoch. Hardware production, recycling retention and alias behavior after 4096 allocations remain unqualified. SOURCE: VENDOR_BLE_RX_AUXILIARY_TAG.
         ///
         /// `BITS_0_15_OPAQUE`, bits 15:0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
         /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX, VENDOR_BLE_RX_AUXILIARY_TAG.
@@ -313204,10 +313204,10 @@ pub mod layouts {
         pub const BITS_28_31_OPAQUE_WIDTH: u32 = 4;
         /// Greatest unsigned image of `BITS_28_31_OPAQUE`.
         pub const BITS_28_31_OPAQUE_MAX: u32 = 0xf;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. Direct (D) role reset images: advertising 0xe, passive scanning 0x4, DTM and connection 0x0. These are role-dependent nibble images retained around RX-header publication; individual bit meanings remain unknown. SOURCE: VENDOR_BLE_ROLE_RX_PATH_IMAGES.
         ///
         /// `BITS_28_31_OPAQUE`, bits 31:28; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_LINK_STATE.
+        /// SOURCE: VENDOR_BLE_ROLE_RX_PATH_IMAGES.
         pub const fn bits_28_31_opaque(self) -> u8 {
             (self.0 >> 28) as u8
         }
@@ -319968,7 +319968,7 @@ pub mod layouts {
         }
     }
 
-    /// One eight-byte device-table entry shared by the filter accept list and resolving list. Address bytes are least significant first.
+    /// One eight-byte device-table entry shared by the filter accept list and periodic list; the separate 64-byte IRK resolving-list allocation has another format. Address bytes are least significant first.
     ///
     /// 8 bytes, aligned to 4; its zero bytes are an all-zero structure.
     /// SOURCE: BLOB_LIBBLE_DEVICE_TABLE.
@@ -320053,20 +320053,20 @@ pub mod layouts {
             self.0
         }
 
-        /// Width of `RESOLVING_LIST_MEMBER` in bits.
-        pub const RESOLVING_LIST_MEMBER_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `RESOLVING_LIST_MEMBER`.
-        pub const RESOLVING_LIST_MEMBER_MAX: u32 = 0x1;
-        /// Project-assigned name. Entry belongs to the resolving list.
+        /// Width of `PERIODIC_LIST_MEMBER` in bits.
+        pub const PERIODIC_LIST_MEMBER_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `PERIODIC_LIST_MEMBER`.
+        pub const PERIODIC_LIST_MEMBER_MAX: u32 = 0x1;
+        /// Project-assigned name. Membership flag used by the vendor periodic-list add/remove/clear helpers. This is distinct from the separate IRK resolving list; the physical filtering effect remains unqualified. SOURCE: VENDOR_BLE_DEVICE_LIST_FLAGS.
         ///
-        /// `RESOLVING_LIST_MEMBER`, bit 0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_DEVICE_TABLE.
-        pub const fn resolving_list_member(self) -> bool {
+        /// `PERIODIC_LIST_MEMBER`, bit 0; written by the CPU.
+        /// SOURCE: BLOB_LIBBLE_DEVICE_TABLE, VENDOR_BLE_DEVICE_LIST_FLAGS.
+        pub const fn periodic_list_member(self) -> bool {
             self.0 & 0x1 != 0
         }
 
-        /// This value with `RESOLVING_LIST_MEMBER` set to `value`.
-        pub const fn with_resolving_list_member(self, value: bool) -> Self {
+        /// This value with `PERIODIC_LIST_MEMBER` set to `value`.
+        pub const fn with_periodic_list_member(self, value: bool) -> Self {
             if value {
                 Self(self.0 | 0x1)
             } else {
@@ -320351,10 +320351,10 @@ pub mod layouts {
         pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `BITS_0_7_OPAQUE`.
         pub const BITS_0_7_OPAQUE_MAX: u32 = 0xff;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. Direct (D) initialization image: the allocator clears the 0x1c-byte workspace, then writes byte 0x01 at workspace +0x08. Its selection as ordinary-role disabled CTE configuration is inference; inner bit meanings remain unknown. SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES.
         ///
         /// `BITS_0_7_OPAQUE`, bits 7:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
+        /// SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES.
         pub const fn bits_0_7_opaque(self) -> u8 {
             (self.0 & 0xff) as u8
         }
@@ -320503,10 +320503,10 @@ pub mod layouts {
         pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
         /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
         pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. Direct (D) initialization image: the allocator clears the 0x1c-byte workspace, then writes word 0x00000001 at workspace +0x0c. The no-sample-buffer path publishes this member as its fallback descriptor; disabled ordinary-role CTE interpretation is inference, and inner bit meanings remain unknown. SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES.
         ///
         /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
+        /// SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES.
         pub const fn bits_0_31_opaque(self) -> u32 {
             self.0
         }
@@ -320867,10 +320867,10 @@ pub mod layouts {
         pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `BITS_0_7_OPAQUE`.
         pub const BITS_0_7_OPAQUE_MAX: u32 = 0xff;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. Direct (D) initialization image: the allocator clears the 0x1c-byte workspace, then writes byte 0x01 at workspace +0x08. Its selection as ordinary-role disabled CTE configuration is inference; inner bit meanings remain unknown. SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES.
         ///
         /// `BITS_0_7_OPAQUE`, bits 7:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
+        /// SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES.
         pub const fn bits_0_7_opaque(self) -> u8 {
             (self.0 & 0xff) as u8
         }
@@ -320954,10 +320954,10 @@ pub mod layouts {
         pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
         /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
         pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. Direct (D) initialization image: the allocator clears the 0x1c-byte workspace, then writes word 0x00000001 at workspace +0x0c. The no-sample-buffer path publishes this member as its fallback descriptor; disabled ordinary-role CTE interpretation is inference, and inner bit meanings remain unknown. SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES.
         ///
         /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
+        /// SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES.
         pub const fn bits_0_31_opaque(self) -> u32 {
             self.0
         }

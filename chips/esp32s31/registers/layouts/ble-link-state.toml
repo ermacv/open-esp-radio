@@ -103,7 +103,7 @@ name = "BITS_28_31_OPAQUE"
 opaque = true
 bits = "31:28"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Direct (D) role reset images: advertising 0xe, passive scanning 0x4, DTM and connection 0x0. These are role-dependent nibble images retained around RX-header publication; individual bit meanings remain unknown. SOURCE: VENDOR_BLE_ROLE_RX_PATH_IMAGES."
 
 [[layout.words]]
 name = "CONTROL_POLICY"
@@ -677,3 +677,11 @@ sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLE_LINK_STATE.RX_PATH.BITS_28_31_OPAQUE"
+sources = ["VENDOR_BLE_ROLE_RX_PATH_IMAGES"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

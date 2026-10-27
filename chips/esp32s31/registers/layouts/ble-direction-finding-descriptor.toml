@@ -31,7 +31,7 @@ name = "BITS_0_31_OPAQUE"
 opaque = true
 bits = "31:0"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Direct (D) initialization image: the allocator clears the 0x1c-byte workspace, then writes word 0x00000001 at workspace +0x0c. The no-sample-buffer path publishes this member as its fallback descriptor; disabled ordinary-role CTE interpretation is inference, and inner bit meanings remain unknown. SOURCE: VENDOR_BLE_DF_INITIAL_IMAGES."
 
 [[layout.words]]
 fields = []
@@ -56,3 +56,11 @@ opaque = true
 offset = 0x0c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0000_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["VENDOR_BLE_DF_INITIAL_IMAGES"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

@@ -183,7 +183,7 @@ opaque = true
 bits = "15:0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "The vendor sm_num_match helper compares this halfword with a per-link configuration tag when configuration byte 23 enables matching; sm_num_set derives the tag from scheduler item +0x20 low 12 bits. The open RX owner arms 0xffff and checks the produced tag. This is a direct software association, not an established free-running time epoch. Hardware production, recycling retention and alias behavior after 4096 allocations remain unqualified. SOURCE: VENDOR_BLE_RX_AUXILIARY_TAG."
+description = "The current helper, mapped to historical sm_num_match only by a similar correspondence (941176 ppm, about 94.12%; not exact-body), compares this halfword with a per-link configuration tag when configuration byte 23 enables matching; sm_num_set derives the tag from scheduler item +0x20 low 12 bits. The open RX owner arms 0xffff and checks the produced tag. This is a direct software association, not an established free-running time epoch. Hardware production, recycling retention and alias behavior after 4096 allocations remain unqualified. SOURCE: VENDOR_BLE_RX_AUXILIARY_TAG."
 
 [[layout.bytes]]
 name = "PDU_HEADER"
