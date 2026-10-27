@@ -172,11 +172,9 @@ fn default_task_stack(source: &mut dyn Source, facts: &mut Facts) -> Result<()> 
         oer_espressif_facts::platform_dir(&facts.id)
     );
     let text = source.read(&policy)?;
-    let defaults = oer_espressif_facts::generate::default_task_stack_bytes(
-        &text,
-        interrupts.harts.len() as u32,
-    )
-    .map_err(|error| format!("{policy}: {error}"))?;
+    let harts = u32::try_from(interrupts.harts.len())?;
+    let defaults = oer_espressif_facts::generate::default_task_stack_bytes(&text, harts)
+        .map_err(|error| format!("{policy}: {error}"))?;
     let placement = facts
         .placement
         .as_mut()

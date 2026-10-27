@@ -637,7 +637,7 @@ impl StackPolicy {
                 .irq_stack_guard_bytes
                 .get(&hart)
                 .ok_or("missing hart guard")?;
-            if bytes <= *guard || bytes % 16 != 0 {
+            if bytes <= *guard || bytes % *guard != 0 {
                 return Err("interrupt stack allocation does not fit the guard contract".into());
             }
             total += u64::from(bytes);
@@ -1005,7 +1005,8 @@ mod tests {
     #[test]
     fn bad_or_unaffordable_allocations_are_refused() {
         let base = profile();
-        for bytes in [0, 4096, 65537, u32::MAX - 15] {
+        let maximum = base.facts.interrupts.as_ref().unwrap().irq_stack_bytes;
+        for bytes in [0, 4096, maximum + 16, 65537, u32::MAX - 15] {
             assert!(policy(Some(bytes)).runtime_profile(&base).is_err());
         }
     }

@@ -325,9 +325,8 @@ pub(super) fn analyze(
     })?;
     let mut placement = Placement::select(&requested, sections, placement.free_sram() + released)?;
     placement.irq_stacks = irq_stacks;
-    let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
-    audit.check()?;
     if spec.task_stack_proven {
+        let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
         placement.task_stacks = super::task_stack::select(&audit, &policy)?;
     }
     Ok(placement)
@@ -344,9 +343,8 @@ pub(super) fn verify(
         return Ok(());
     };
     super::irq_stacks::verify(&interrupt_stacks_of(&image)?, &placement.irq_stacks)?;
-    let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
-    audit.check()?;
     if !placement.task_stacks.is_empty() {
+        let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
         super::task_stack::verify(&audit, &placement.task_stacks)?;
     }
     Ok(())

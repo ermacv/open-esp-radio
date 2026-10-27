@@ -86,7 +86,7 @@ irq-stack-margin-percent = 10
 level-writers = []
 
 # The staged runtime's placement contract (chips/espressif/staged-layout/linker/runtime):
-# code, data and the the boot hart task stack in PSRAM; interrupt entries, vector
+# code, data and the per-hart task stacks in PSRAM; interrupt entries, vector
 # tables, interrupt stacks, critical code and data, DMA data and the panic
 # entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
 # A rule with `per-hart = true` stands once for each of the chip's harts,

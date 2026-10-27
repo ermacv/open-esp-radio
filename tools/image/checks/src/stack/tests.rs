@@ -579,7 +579,7 @@ fn audit(
     image: &Image,
     stack: impl Fn(&StackPolicy) -> &TaskStack,
 ) -> Result<StackAudit> {
-    StackAudit::of(
+    let mut audit = StackAudit::of(
         image,
         policy,
         &[oer_chip_profile::policy::StackRoot {
@@ -587,7 +587,10 @@ fn audit(
             name: "test stack".into(),
             stack: stack(policy),
         }],
-    )
+    )?;
+    // This fixture declares hart zero as its boot hart without a chip contract.
+    audit.boot_hart = Some(0);
+    Ok(audit)
 }
 
 #[test]
@@ -781,16 +784,13 @@ fn image_without_storage() -> Image {
 }
 
 #[test]
-fn a_partial_hart_bound_is_rejected_with_its_unresolved_sites_reported() {
+fn a_partial_boot_hart_bound_warns_with_its_unresolved_sites_reported() {
     let policy_source = BASE.replace("\"runtime_main\"\nstorage", "\"indirect\"\nstorage");
     let (_directory, policy) = policy_with(&policy_source, ASM_REVIEW);
     let image = image(&program(false), &[("boot_stack", 0, 1024)]);
     let audit = audit(&policy, &image, |policy| policy.task_stack(0).unwrap()).unwrap();
-    let error = audit.check().unwrap_err().to_string();
-    assert!(
-        error.contains("every used hart needs a proven task bound"),
-        "{error}"
-    );
+    let warnings = audit.check().unwrap();
+    assert!(warnings.iter().any(|warning| warning.contains("16 + ?")));
     let report = audit.render();
     assert!(report.contains("needs 16 + ? bytes, partial"), "{report}");
     let site = TEXT + 4 * (6 + 3 + 3);
@@ -807,6 +807,32 @@ fn a_partial_hart_bound_is_rejected_with_its_unresolved_sites_reported() {
 }
 
 #[test]
+fn the_fact_boot_identity_selects_which_partial_task_bound_can_pass() {
+    let partial = BASE.replace("\"runtime_main\"\nstorage", "\"indirect\"\nstorage");
+    let (_directory, policy) = policy_with(&partial, ASM_REVIEW);
+    for harts in [3, 7] {
+        let boot = harts - 1;
+        let mut contract =
+            Contract::of(&oer_chip_profile::Profile::tracked("esp32s31").unwrap()).unwrap();
+        contract.interrupts.harts = (0..harts).collect();
+        contract.interrupts.boot_hart = boot;
+        let mut image = image_with_stack(1024);
+        image.contract = Some(contract);
+        for hart in 0..harts {
+            let root = oer_chip_profile::policy::StackRoot {
+                hart: Some(hart),
+                name: format!("hart {hart} task stack"),
+                stack: policy.task_stack(0).unwrap(),
+            };
+            let mut audit = StackAudit::of(&image, &policy, &[root]).unwrap();
+            assert_eq!(audit.check().is_ok(), hart == boot);
+            audit.declared_proven = true;
+            assert!(audit.check().is_err());
+        }
+    }
+}
+
+#[test]
 fn a_stack_declared_proven_fails_on_an_unresolved_path_and_otherwise_passes() {
     let partial = BASE.replace("\"runtime_main\"\nstorage", "\"indirect\"\nstorage");
     let (_directory, partial_policy) = policy_with(&partial, ASM_REVIEW);
@@ -815,7 +841,7 @@ fn a_stack_declared_proven_fails_on_an_unresolved_path_and_otherwise_passes() {
     audit.declared_proven = true;
     let error = audit.check().unwrap_err().to_string();
     assert!(
-        error.contains("every used hart needs a proven task bound"),
+        error.contains("image declares task-stack proven"),
         "{error}"
     );
     let site = TEXT + 4 * (6 + 3 + 3);
@@ -823,9 +849,9 @@ fn a_stack_declared_proven_fails_on_an_unresolved_path_and_otherwise_passes() {
         error.contains(&format!("{site:#010x} in indirect+0xc")),
         "{error}"
     );
-    // The complete-bound gate also covers allocations not sized from the bound.
+    // Without the declaration, the boot hart's partial bound is reported.
     audit.declared_proven = false;
-    assert!(audit.check().is_err());
+    assert!(!audit.check().unwrap().is_empty());
     // A fully resolved bound passes, and the report says it is declared.
     let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
     let mut full = audit_of(&policy, &image);
@@ -1309,7 +1335,7 @@ minimum_free_bytes = 16
             if !proven {
                 let error = result.unwrap_err().to_string();
                 assert!(
-                    error.contains("every used hart needs a proven task bound"),
+                    error.contains("a secondary hart runs only with a proven bound"),
                     "{error}"
                 );
             }

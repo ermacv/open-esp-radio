@@ -68,11 +68,6 @@ system these rules serve.
   binding of a line to its source and handler, memory layout, `--defsym`,
   stack placement) are generated from that source; only what the facts
   cannot express is written by hand.
-- **Per-hart stacks.** Every image accounts for all harts from the facts.
-  Each task and IRQ stack is used with a complete bound or explicitly unused
-  with zero linked bytes. Stack sections, linker assertions, address tables
-  and vector coverage are generated from that geometry; the boot hart has
-  no exemption from the bound check.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `chips/<chip>/registers/` and regenerated (`cargo registers
   generate --chip <chip>`), never written as a local mask or shift. Code

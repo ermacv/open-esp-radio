@@ -25,7 +25,15 @@ pub fn derive<'m>(
     let profile = Profile::load(Path::new("."), "esp32s31").map_err(|e| e.to_string())?;
     let policy = StackPolicy::load(Path::new("chips/esp32s31/platform/stack.toml"))
         .map_err(|e| e.to_string())?;
-    let task = &policy.stacks().map_err(|e| e.to_string())?.cpu0_task_stack;
+    let boot_hart = profile
+        .facts
+        .interrupts
+        .as_ref()
+        .ok_or("missing interrupt contract")?
+        .boot_hart;
+    let task = policy
+        .task_stack(boot_hart)
+        .ok_or("missing boot task stack")?;
     let task_bounds = match task.storage() {
         Storage::Symbol(name) => oer_analysis_elf::StorageBounds::symbol(image.file(), name)?,
         Storage::Range { bottom, top } => {

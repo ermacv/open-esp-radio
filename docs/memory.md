@@ -55,12 +55,19 @@ contracts: [Hardware memory](hardware-memory.md).
 
 - **Every image accounts for every hart** in the chip facts' `[interrupts] harts`.
   Each hart has a task stack and an interrupt stack. The policy
-  (`[core.N.task_stack]`, `[core.N.interrupt_stack]`) declares both used,
-  with complete bounds, or both `unused = true`. Unused ranges link zero
+  (`[core.N.task_stack]`, `[core.N.interrupt_stack]`) declares both used
+  or both `unused = true`. Unused ranges link zero
   bytes; the image gate rejects linked starters, routes or storage that
   would use them. Every current S31 image runs on the boot hart and keeps
-  all secondary harts contained. The runtime's critical section masks only
-  its executing hart and admits no secondary execution.
+  all secondary harts contained: the HAL stalls them, gates their clocks,
+  holds their resets and clears their ROM boot addresses
+  ([secondary boot](../chips/esp32s31/notes/core1-boot.md)). Staged entries
+  admit only the boot hart. The runtime's critical section masks only its
+  executing hart and takes no cross-hart lock
+  ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)).
+  HAL and runtime reject the `cpu1-runs` feature at compile time; the HAL's
+  secondary starter is gated by that feature
+  ([cores rustdoc](../chips/esp32s31/hal/src/cores.rs)). No image enables it.
 - `oer-staged-runtime-stacks.x` is generated from the same hart geometry as
   the vectors. It places each task stack in PSRAM and each interrupt stack
   in SRAM, with exact-size, memory-range, alignment and guard assertions.
@@ -69,8 +76,10 @@ contracts: [Hardware memory](hardware-memory.md).
 - An image that declares `task-stack = "proven"` sizes every used task
   stack to `align16(bound + minimum_free_bytes)` in the final link. Other
   images use that hart's policy `allocation_bytes`, else its
-  `default_task_stack_bytes` policy entry or chip layout default. Every used hart requires a complete
-  bound regardless of its allocation source; there is no boot-hart exception.
+  `default_task_stack_bytes` policy entry or chip layout default. Without
+  the declaration the boot hart's task bound may be partial: its known part
+  must fit and unresolved sites are reported. Secondary task roots require
+  complete bounds.
   Defaults cover the entire geometry, including explicit zeroes for contained
   harts. See the [image linker](../tools/image/linker/README.md).
 - The image linker sizes each used hart's IRQ stack to

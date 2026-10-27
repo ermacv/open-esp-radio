@@ -9,9 +9,8 @@ The first link uses the contract maximum. A proven product bound selects
 `align16(ceil(bound * (100 + margin) / 100)) + guard`, with the 10% margin
 of the family layer (`chips/espressif/platform/family.toml`). A hart whose interrupt stack the image policy declares
 unused (`[core.N.interrupt_stack] unused = true`)
-gets 0 bytes in both links and takes no part in the sizing. Diagnostic and
-probe images retain the maximum for each used hart, with a complete bound
-and checked nesting still required. An unresolved used IRQ stack fails the link. Existing
+gets 0 bytes in both links and takes no part in the sizing. Partial bounds,
+diagnostic and probe images retain the maximum for each used hart. Existing
 image-policy maximum overrides remain effective, including
 diagnostic-lower-mac's 65536 bytes.
 

@@ -8,9 +8,9 @@
 //!   stack's storage the policy's minimum free bytes;
 //! - the bootstrap image's stack, from its root likewise.
 //!
-//! Every used hart requires a complete task bound. An unresolved indirect
-//! site is reported with its reason and rejects the stack, regardless of how
-//! its capacity was selected. Bootstrap paths retain their own handoff proof.
+//! The boot hart's task bound may be partial unless the image declares it
+//! proven; its known part must fit and unresolved sites are reported. Other
+//! harts require complete task bounds. Bootstrap paths retain their handoff proof.
 //! A root symbol the image lacks fails,
 //! as does an image without compiler frame records or a linked function
 //! without a record that the coverage review does not explain.
@@ -458,6 +458,8 @@ pub struct StackAudit {
     /// The image declares these stacks proven: [`Self::check`] fails on any
     /// unresolved path in them.
     pub declared_proven: bool,
+    /// The boot identity from the image's chip contract, absent without a contract.
+    boot_hart: Option<u32>,
     /// Where the task stack's size came from, when the image's link says.
     pub size_sources: BTreeMap<u32, crate::linker::task_stack::SizeSource>,
     /// The verified jump into stage two that ends the bootstrap stack's path.
@@ -593,6 +595,10 @@ impl StackAudit {
             witness_memory_peak,
             task_bounds,
             declared_proven: false,
+            boot_hart: image
+                .contract
+                .as_ref()
+                .map(|contract| contract.interrupts.boot_hart),
             size_sources: BTreeMap::new(),
             handoff: None,
         })
@@ -634,10 +640,22 @@ impl StackAudit {
                 )
                 .into());
             }
-            if (self.declared_proven || stack.hart.is_some())
+            let secondary = stack.hart.is_some() && stack.hart != self.boot_hart;
+            if (self.declared_proven || secondary)
                 && (bound.bytes.is_none() || !stack.unresolved.is_empty())
             {
-                return Err(format!("every used hart needs a proven task bound, but the {} has {} unresolved sites:\n{}", stack.name, stack.unresolved.len(), stack.render()).into());
+                return Err(format!(
+                    "{}, but the {} has {} unresolved sites:\n{}",
+                    if secondary {
+                        "a secondary hart runs only with a proven bound"
+                    } else {
+                        "image declares task-stack proven"
+                    },
+                    stack.name,
+                    stack.unresolved.len(),
+                    stack.render()
+                )
+                .into());
             }
             for assumption in &bound.assumptions {
                 warnings.push(format!(

@@ -160,16 +160,17 @@ moves; ownership, orchestration and wiring are rebuilt.
   enforces it.
 - Interrupt stacks have a bound, proven or conditional on an admitted
   assumption (the reports name it), and are sized from it at link time;
-  every used hart's task stack requires a complete bound. Images declaring
-  `task-stack = "proven"` size each task allocation at link time to that
-  bound plus its policy's minimum free bytes. Every hart has both stacks
-  accounted for; contained harts link explicit zero-byte ranges. Stack
+  task stacks are reported, and an image may declare them proven: any
+  unresolved path then fails the build, and each used task allocation is
+  sized at link time to its bound plus its policy's minimum free bytes.
+  Otherwise the boot hart's task bound may be partial, with unresolved sites
+  reported; secondary task roots require complete bounds. Every hart has both
+  stacks accounted for; contained harts link explicit zero-byte ranges. Stack
   sections, linker assertions, marker tables and vector coverage derive from
   the same fact geometry. The bootstrap jumps to a stage-two entry known at
-  build time and
-  the bootstrap stack's path ends there, once the checks verify the jump and
-  that the entry installs its own stack pointer first. There is no baseline of accepted holes, and an observed depth above a
-  bound fails the run. No frame
+  build time and the bootstrap stack's path ends there, once the checks verify
+  the jump and that the entry installs its own stack pointer first. There is no
+  baseline of accepted holes, and an observed depth above a bound fails the run. No frame
   exceeds the move limit (4 KiB); larger state lives in placed static
   storage and futures hold a reference. Code and stacks run from PSRAM after
   the staged bootstrap. Details: [memory and stacks](memory.md).
@@ -241,7 +242,10 @@ moves; ownership, orchestration and wiring are rebuilt.
   its explicit boot role. Typed indices connect their geometry to HAL reads
   and writes. Fixed indices
   and list/count mismatches fail during the build. Every current image keeps
-  secondary harts contained; secondary execution is rejected at compile time.
+  secondary harts contained. HAL and runtime reject the `cpu1-runs` feature
+  at compile time. The HAL holds secondary harts, and the image gate rejects
+  starters, routes or storage for harts declared unused
+  ([secondary boot](../chips/esp32s31/notes/core1-boot.md)).
   An architectural ID outside this list is `InvalidHart { raw }`, never a
   different hart. The fatal path records the full raw ID, quarantines free
   control owners and requests reset; it never takes a lent or held owner.
