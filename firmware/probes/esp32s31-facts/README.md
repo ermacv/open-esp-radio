@@ -972,7 +972,7 @@ not use it as retirement or quiescence. SOURCE: `HW25_S31_BLE_LATCH_RESTART_2026
 
 ## PB-1 bank1 and divider399 LP facts
 
-Selections240–247 are explicit commands; request0 never runs them. They hold
+Selections240–248 are explicit commands; request0 never runs them. They hold
 hart1, mask CPU admission, publish no scheduler RUN or DMA and use no RF.
 LP commands use the existing advancing-BTLC prefix, positional ETM6/7
 (event46, tasks11/0f) and XTAL/divider399. CPU root0/divider0 with no
@@ -986,6 +986,7 @@ fractional numerator is required. They do not request PMU sleep.
 | 243 | Sourced sleep0 enable/disable helper and separate CONTROL25 clear/set, counter/reference brackets |
 | 244 | Upper0, each bit24–31 and upperff with fresh low24 compares in sourced CONTROL0/4 clear/set pair states |
 | 246 / 247 | The CONTROL0/4=1/1 width conditions alone / only remaining upper25–31 and upperff conditions |
+| 248 | One natural wrap solely for post-wrap reference and CONTROL25 clear/set with bit26 held1; no WHOLE or width repetition |
 | 245 | Software pending enabled/masked/unmasked and zero ack; exactly two natural LP wraps, with one zero ack between them; sleep0 reference observations near the first wrap |
 
 Selection245 requires explicit authorization for its two approximately167.8s
@@ -1022,3 +1023,11 @@ Wrap states2a200/210/220/230/240 are initial/first/ack/second/ack.
 Wrap journals2a2f0/2a3f0 contain last-before/first-after/elapsed-low;
 +1 contains elapsed-high/deadline-seconds/reference-observed. First-wrap
 reference blocks are journal+10/+20, in the same command-pair encoding.
+
+Selection248 requires one explicitly authorized additional approximately167.8s
+LP wrap. It uses the same190s bound and watchdog feed. The wrap journal is
+2b0f0/1 and near-wrap command blocks are2b100/110. Post-wrap reference is
+2b000/1, fresh enable command block2b010, CONTROL25-clear references2b020/22,
+CONTROL25-set references2b024/26, with crossing brackets2b029/2a. This
+isolates a sourced intermediate disable-helper state; bit26 remains1 during
+that CONTROL25 observation. Completion requires the same positive advance.

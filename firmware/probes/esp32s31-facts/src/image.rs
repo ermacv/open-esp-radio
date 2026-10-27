@@ -241,6 +241,10 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(pb1::width),
     },
     Probe {
+        id: 248,
+        run: Action::Thread(pb1::reference_wrap),
+    },
+    Probe {
         id: 247,
         run: Action::Thread(pb1::width_remaining),
     },

@@ -517,3 +517,40 @@ pub(super) fn whole(s: &mut Session<'_>) {
     state(s, 0x2a240);
     stop(s);
 }
+
+/// One additional natural wrap solely for the missing post-wrap reference
+/// and CONTROL25 bracket. No WHOLE acknowledgement or width series repeats.
+pub(super) fn reference_wrap(s: &mut Session<'_>) {
+    if !init(s) {
+        return;
+    }
+    if !natural_wrap(s, 0x2b0f0, true) {
+        stop(s);
+        return;
+    }
+    reference(s, 0x2b000);
+    command_observation(s, 0x2b010, true);
+    // This is the sourced disable helper's first update, held separately
+    // before bit26 is cleared, to distinguish the two controls.
+    s.ble.timer.modify_word_0078_opaque(|w| {
+        w.set_control_25(false);
+    });
+    reference(s, 0x2b020);
+    let origin = counter(s);
+    if !crossed(s, origin, 128, 0x2b029) {
+        stop(s);
+        return;
+    }
+    reference(s, 0x2b022);
+    s.ble.timer.modify_word_0078_opaque(|w| {
+        w.set_control_25(true);
+    });
+    reference(s, 0x2b024);
+    let origin = counter(s);
+    if !crossed(s, origin, 128, 0x2b02a) {
+        stop(s);
+        return;
+    }
+    reference(s, 0x2b026);
+    stop(s);
+}
