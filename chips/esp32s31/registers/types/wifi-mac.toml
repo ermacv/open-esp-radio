@@ -9712,14 +9712,14 @@ description = "Interrupt-enable bits whose event identities remain unknown."
 [[registers]]
 name = "RAW"
 offset = 0xc44
-description = "Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+description = "Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027."
 
 [[registers.fields]]
 name = "BITS_0_20_OPAQUE"
 bits = "20:0"
 class = "plain"
 write-range = { min = 0, max = 0x1fffff }
-description = "Raw event observations; identities are not independently decoded here."
+description = "Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027."
 
 [[registers.fields]]
 name = "FATAL_ASSERTION"

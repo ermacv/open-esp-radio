@@ -274968,7 +274968,7 @@ pub mod wifi_mac {
 
     /// The `RAW` register.
     ///
-    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027.
     pub mod raw {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -275004,7 +275004,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Raw event observations; identities are not independently decoded here.
+            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027.
             #[inline]
             pub const fn bits_0_20_opaque(self) -> oer_mmio::Bits<21> {
                 oer_mmio::Bits::truncate(self.0)
@@ -275027,7 +275027,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Raw event observations; identities are not independently decoded here.
+            /// Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027.
             #[inline]
             pub const fn bits_0_20_opaque(&self) -> oer_mmio::Bits<21> {
                 oer_mmio::Bits::truncate(self.0)

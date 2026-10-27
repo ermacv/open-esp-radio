@@ -9,25 +9,17 @@ use oer_esp32s31_hal::{
 use oer_memory::zeroed::ZeroedStatic;
 use oer_time::{Clock, Duration};
 
-const RECORDS: usize = 256;
-const WIDTH: usize = 48;
+#[path = "irq120/journal.rs"]
+mod journal;
+pub(super) use journal::Journal;
+use journal::WIDTH;
+
 const CAPTURE_MS: u32 = 700;
 const MASK_AFTER_MS: u32 = 250;
 
-#[derive(bytemuck::Zeroable)]
-pub(super) struct Journal {
-    rows: [[u32; WIDTH]; RECORDS],
-    used: usize,
-    previous: [u32; WIDTH],
-    scans: u32,
-    max_gap: u32,
-    last_end: u32,
+oer_memory::zeroed_static! {
+    static JOURNAL: ZeroedStatic<Journal> = zeroed in ".critical.bss.rx_irq120";
 }
-#[allow(unsafe_code, reason = "explicit SRAM journal placement in the probe")]
-// SAFETY: the runtime linker places and zeroes .critical.bss in internal SRAM.
-// ZeroedStatic admits the single thread borrower; no interrupt accesses it.
-#[unsafe(link_section = ".critical.bss.rx_irq120")]
-static JOURNAL: ZeroedStatic<Journal> = ZeroedStatic::new();
 
 fn done(storage: &Storage) -> Result<[u32; 2], &'static str> {
     let mut bitmap = 0_u32;
@@ -130,37 +122,6 @@ fn observe(
     ])
 }
 
-impl Journal {
-    fn record(
-        &mut self,
-        mut row: [u32; WIDTH],
-        phase: u32,
-        force: bool,
-    ) -> Result<(), &'static str> {
-        // Ignore timestamps and ordinal when comparing observations.
-        const VALUES: [usize; 35] = [
-            3, 4, 5, 6, 7, 9, 11, 13, 14, 15, 16, 18, 20, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-            32, 33, 34, 35, 36, 37, 38, 39, 41, 42, 44, 45,
-        ];
-        let changed = self.previous.get(1).copied() != Some(phase)
-            || VALUES.iter().any(|i| self.previous.get(*i) != row.get(*i));
-        *row.get_mut(0).ok_or("row-scan")? = self.scans;
-        *row.get_mut(1).ok_or("row-phase")? = phase;
-        let begin = *row.get(2).ok_or("row-begin")?;
-        if self.scans != 0 {
-            self.max_gap = self.max_gap.max(begin.wrapping_sub(self.last_end));
-        }
-        self.last_end = *row.get(47).ok_or("row-end")?;
-        self.previous = row;
-        self.scans = self.scans.saturating_add(1);
-        if force || changed {
-            *self.rows.get_mut(self.used).ok_or("irq120-journal-full")? = row;
-            self.used = self.used.saturating_add(1);
-        }
-        Ok(())
-    }
-}
-
 pub(super) fn take() -> Result<&'static mut Journal, &'static str> {
     JOURNAL.try_take().ok_or("irq120-journal-claimed")
 }
@@ -194,9 +155,7 @@ pub(super) fn collect(
     loop {
         // Preserve room for the stopped mask/unmask/selected-ack observations,
         // so a full live journal still gets dumped after stopping the producer.
-        if trace.used >= RECORDS.saturating_sub(10) {
-            return Err("irq120-journal-live-full");
-        }
+        trace.check_live_budget()?;
         let now = EmbassyClock.now();
         if !masked && now >= mask_at {
             irq.mask_all_mac_interrupts();
