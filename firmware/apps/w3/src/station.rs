@@ -249,7 +249,9 @@ pub struct Body {
 struct Callbacks;
 impl machine::StaCallbacks for Callbacks {
     // W3 admits open associations only; protected handshakes never use this.
-    fn nonce(&mut self) -> [u8; 32] { [0; 32] }
+    fn nonce(&mut self) -> [u8; 32] {
+        [0; 32]
+    }
     fn he_packet_padding(&self, _: &[u8]) -> backend_protection::HePacketPadding {
         backend_protection::HePacketPadding::None
     }
@@ -271,20 +273,25 @@ impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_> 
                 };
                 self.rx_reasons.set(self.rx_reasons.get() | bit);
             }
-            ServiceOutput::RxMsduRefused(_) => self.rx_reasons.set(self.rx_reasons.get() | (1u16 << 10)),
+            ServiceOutput::RxMsduRefused(_) => {
+                self.rx_reasons.set(self.rx_reasons.get() | (1u16 << 10))
+            }
             ServiceOutput::Notice(machine::StaNotice::Connected { .. }) => self.link.set(true),
             ServiceOutput::Notice(machine::StaNotice::Disconnected(_)) => {
                 self.link.set(false);
                 self.disconnected.set(true);
             }
-            ServiceOutput::CommandRefused(_) | ServiceOutput::TxRefused { .. } => self.failed.set(true),
+            ServiceOutput::CommandRefused(_) | ServiceOutput::TxRefused { .. } => {
+                self.failed.set(true)
+            }
             _ => {}
         }
     }
 }
 
 type Service<'id, Id> = StationService<'id, StationComposition<Id>, Callbacks, Rates, 1>;
-type Completed<'p, 'id, Id> = ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1>;
+type Completed<'p, 'id, Id> =
+    ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1>;
 type Io<'c, 'id, Id> = ServiceIo<'c, 'id, Caps, Output<'c>, 2, 8, 2, Child<Root<Id>, 8>>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, Id: SlotIdentity + 'id> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, Id>>>;
@@ -298,12 +305,14 @@ static SERVICE: ConstStaticCell<StaticPlace<Service<'static, radio::slot::Id>>> 
 const RX_BA_BANKS: usize = 8;
 const RX_BA_FRAMES: usize = port::TX_TICKETS;
 const _: () = assert!(
-    core::mem::size_of::<RxBlockAckStorage<'static, Family<radio::slot::Id>, RX_BA_BANKS, RX_BA_FRAMES>>() <= 2048,
+    core::mem::size_of::<
+        RxBlockAckStorage<'static, Family<radio::slot::Id>, RX_BA_BANKS, RX_BA_FRAMES>,
+    >() <= 2048,
     "the station RX BA owner including pending responses fits its 2 KiB PSRAM budget",
 );
-static RECEIVE: ConstStaticCell<StaticPlace<
-    RxBlockAckStorage<'static, Family<radio::slot::Id>, RX_BA_BANKS, RX_BA_FRAMES>,
->> = ConstStaticCell::new(StaticPlace::new());
+static RECEIVE: ConstStaticCell<
+    StaticPlace<RxBlockAckStorage<'static, Family<radio::slot::Id>, RX_BA_BANKS, RX_BA_FRAMES>>,
+> = ConstStaticCell::new(StaticPlace::new());
 
 static COMPLETED: ConstStaticCell<StaticPlace<Completed<'static, 'static, radio::slot::Id>>> =
     ConstStaticCell::new(StaticPlace::new());
@@ -460,7 +469,12 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let disconnected = core::cell::Cell::new(false);
         let failed = core::cell::Cell::new(false);
         let rx_reasons = core::cell::Cell::new(0u16);
-        let mut output = Output { link: &link, disconnected: &disconnected, failed: &failed, rx_reasons: &rx_reasons };
+        let mut output = Output {
+            link: &link,
+            disconnected: &disconnected,
+            failed: &failed,
+            rx_reasons: &rx_reasons,
+        };
         let mut io = ServiceIo {
             commands: command_receive,
             transmit: tx_receive,

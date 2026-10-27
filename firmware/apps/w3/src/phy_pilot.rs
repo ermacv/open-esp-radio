@@ -37,7 +37,8 @@ pub(crate) fn init(
     if HANDLER.install(handler).is_err() {
         reset(SarSetupFault::Storage(SarSetupStorage::Handler));
     }
-    let bound = router.bind(token, interrupt)
+    let bound = router
+        .bind(token, interrupt)
         .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     client.bind(bound)
 }

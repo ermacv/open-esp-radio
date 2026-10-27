@@ -78,7 +78,6 @@ pub struct SarAlarmWithoutBundle {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SarSetupFault {
     Storage(SarSetupStorage),
-    Binding(oer_interrupt_table::Error),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SarSetupStorage {

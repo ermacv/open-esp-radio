@@ -208,10 +208,15 @@ Executor and time-driver setup return route or counter-latch refusals through
 refusal cannot release those owners or authorize retry. Internal invariant
 failures carry a named `Fault` with the original observations. The terminal
 path masks execution through `fatal::reset_recording` and keeps all static,
-handler and interrupted task owners until reset. A named reason and four exact
-32-bit observation words reuse the existing panic slot, with its checksum and
-first-record retention; no retained bytes are added. Adoption prints this
-record through the early console and clears it only after successful output.
+handler and interrupted task owners until reset. A numeric reason code and four
+exact 32-bit observation words reuse the existing 148-byte panic slot under
+tag `NAMED_FAULT = 3`, with its checksum; no retained bytes are added. Capture
+reads no reason text, including from an interrupt. Adoption decodes the code
+in thread context, prints it through the early console and clears it only after
+successful output. The cell's claim lives in boot-zeroed SRAM and stays held
+through a fatal reset, preserving the current boot's first record. A fresh
+boot's first fatal claim replaces stale retained bytes even without previous
+record consumption or successful console output.
 Software lines use fallible static placement and one-time value publication,
 without a panicking initialization path or additional unsafe code.
 

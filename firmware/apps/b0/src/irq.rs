@@ -110,7 +110,8 @@ pub fn bind<C: Controller>(
             fault: &GATE_FAULT,
         },
     );
-    let bound = router.bind(token, part)
+    let bound = router
+        .bind(token, part)
         .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     let (doorbell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let doorbell = BELL.try_init(Bell(doorbell)).ok_or(BindError::Storage)?;

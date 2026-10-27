@@ -68,7 +68,7 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 mod binding;
-pub use binding::{BindError, BindFault, BindFaultKind, Quarantined};
+pub use binding::{BindError, BindFault, BindFaultCode, BindFaultKind, Quarantined};
 mod router;
 pub use router::{Bound, Controller, Error, EventAuthority, LineState, Router, Silent, Trigger};
 

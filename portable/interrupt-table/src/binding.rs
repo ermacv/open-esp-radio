@@ -3,6 +3,17 @@ use core::mem::ManuallyDrop;
 
 use crate::{Entry, Error, LineState};
 
+/// Numeric operation identity, safe to capture without reading cached text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum BindFaultCode {
+    Refused = 0,
+    StorageClaimed = 1,
+    HandlerOccupied = 2,
+    LineRefused = 3,
+    RouteRefused = 4,
+}
+
 /// The operation whose invariant failed after admission of a binding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BindFaultKind {
@@ -24,12 +35,12 @@ pub struct BindFault {
 impl BindFault {
     /// Four lossless diagnostic words: source/line/hart, error discriminant,
     /// and both error payload words. The operation is named by the reason.
-    pub fn diagnostic(self) -> (&'static str, [u32; 4]) {
+    pub fn diagnostic(self) -> (BindFaultCode, [u32; 4]) {
         let (name, words) = match self.kind {
-            BindFaultKind::StorageClaimed => ("BindingStorageClaimed", [0; 3]),
-            BindFaultKind::HandlerOccupied => ("BindingHandlerOccupied", [0; 3]),
-            BindFaultKind::LineRefused(error) => ("BindingLineRefused", error_words(error)),
-            BindFaultKind::RouteRefused(error) => ("BindingRouteRefused", error_words(error)),
+            BindFaultKind::StorageClaimed => (BindFaultCode::StorageClaimed, [0; 3]),
+            BindFaultKind::HandlerOccupied => (BindFaultCode::HandlerOccupied, [0; 3]),
+            BindFaultKind::LineRefused(error) => (BindFaultCode::LineRefused, error_words(error)),
+            BindFaultKind::RouteRefused(error) => (BindFaultCode::RouteRefused, error_words(error)),
         };
         let [tag, first, second] = words;
         (
@@ -58,14 +69,14 @@ pub enum BindError<E: Entry> {
 
 impl<E: Entry> BindError<E> {
     /// The entry identity and complete source observation for retained output.
-    pub fn diagnostic(&self) -> (&'static str, [u32; 4]) {
+    pub fn diagnostic(&self) -> (BindFaultCode, [u32; 4]) {
         match self {
             Self::Refused { error, .. } => {
                 let [tag, first, second] = error_words(*error);
                 // A refused source is in the Error payload. Low context bits
                 // are reserved here; no source observation is substituted.
                 (
-                    "BindingRefused",
+                    BindFaultCode::Refused,
                     [context(0, E::LINE, E::HART), tag, first, second],
                 )
             }

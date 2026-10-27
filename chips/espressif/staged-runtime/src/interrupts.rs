@@ -45,6 +45,6 @@ macro_rules! interrupt_table {
 #[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
 pub fn reset_binding<E: oer_interrupt_table::Entry>(error: oer_interrupt_table::BindError<E>) -> ! {
     let held = core::mem::ManuallyDrop::new(error);
-    let (name, observations) = held.diagnostic();
-    crate::panic::reset_fault(name, observations)
+    let (code, observations) = held.diagnostic();
+    crate::panic::reset_fault(code.into(), observations)
 }

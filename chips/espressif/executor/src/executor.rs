@@ -71,9 +71,13 @@ static READY: [Ready; SOFTWARE_INTERRUPT_COUNT] =
 #[unsafe(link_section = ".critical.data.executor")]
 static RUNNING: [Running; HARTS] = [const { Running::new() }; HARTS];
 
-/// Composition-owned urgent sources, published before an executor can poll.
-static URGENT: [OnceValue<&'static [u16]>; SOFTWARE_INTERRUPT_COUNT] =
-    [const { OnceValue::new() }; SOFTWARE_INTERRUPT_COUNT];
+oer_memory::zeroed_static! {
+    /// Composition-owned urgent sources, published before an executor can poll.
+    /// Placement: interrupt executors read this list reference from critical SRAM.
+    #[used]
+    static URGENT: [OnceValue<&'static [u16]>; SOFTWARE_INTERRUPT_COUNT] =
+        zeroed in ".critical.bss.executor";
+}
 
 /// The task each executor polls now; only that executor's context reads it,
 /// to name a polling task for its signals.

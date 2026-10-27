@@ -1,6 +1,6 @@
 //! Each injected fault owns its own entry, allocation and counter.
 use oer_interrupt_table::{
-    BindError, BindFault, BindFaultKind, Controller, Entry, Error, LineState, Router,
+    BindError, BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, LineState, Router,
 };
 use std::sync::{
     Arc, Mutex,
@@ -115,7 +115,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let error = fault(router.bind(tokens.storage, Owned(Arc::clone(&storage_drops))));
     assert_eq!(
         error.diagnostic(),
-        ("BindingStorageClaimed", [20 << 16, 0, 0, 0])
+        (BindFaultCode::StorageClaimed, [20 << 16, 0, 0, 0])
     );
     drop(error);
     assert_eq!(storage_drops.load(Ordering::Relaxed), 0);
@@ -128,7 +128,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let error = fault(router.bind(tokens.handler, Owned(Arc::clone(&handler_drops))));
     assert_eq!(
         error.diagnostic(),
-        ("BindingHandlerOccupied", [(21 << 16) | 1, 0, 0, 0])
+        (BindFaultCode::HandlerOccupied, [(21 << 16) | 1, 0, 0, 0])
     );
     drop(error);
     assert_eq!(handler_drops.load(Ordering::Relaxed), 0);
@@ -142,7 +142,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let error = fault(router.bind(tokens.line, Owned(Arc::clone(&line_drops))));
     assert_eq!(
         error.diagnostic(),
-        ("BindingLineRefused", [(22 << 16) | 2, 9, 22, 0])
+        (BindFaultCode::LineRefused, [(22 << 16) | 2, 9, 22, 0])
     );
     drop(error);
     assert_eq!(line_drops.load(Ordering::Relaxed), 0);
@@ -159,7 +159,10 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     ));
     assert_eq!(
         error.diagnostic(),
-        ("BindingRouteRefused", [(23 << 16) | 7, 4, 7, 255 << 8])
+        (
+            BindFaultCode::RouteRefused,
+            [(23 << 16) | 7, 4, 7, 255 << 8]
+        )
     );
     drop(error);
     assert_eq!(route_drops.load(Ordering::Relaxed), 0);
@@ -211,6 +214,6 @@ fn diagnostic_keeps_both_line_states_and_full_entry_identity() {
     };
     assert_eq!(
         fault.diagnostic(),
-        ("BindingLineRefused", [u32::MAX, 7, 254, 0xfd0a_fe0d])
+        (BindFaultCode::LineRefused, [u32::MAX, 7, 254, 0xfd0a_fe0d])
     );
 }

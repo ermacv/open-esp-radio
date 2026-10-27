@@ -130,6 +130,11 @@ release a secondary hart.
   fault with source observations, retaining its token and part in quarantine.
   The image records/resets through the existing retained slot, without
   publishing `Bound`, releasing owners or rolling back an unconfirmed write.
+  Fault capture stores numeric reasons without reading cached text. Next-boot
+  thread reporting decodes their names. The boot-zeroed claim preserves the
+  current boot's first fault while allowing it to replace an unconsumed record
+  from an older boot. Console and Wi-Fi input bind refusals terminate as image
+  configuration faults through this same path.
   The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.

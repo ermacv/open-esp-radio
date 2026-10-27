@@ -1,6 +1,7 @@
 //! Executor failures retain their observations and quarantine every owner.
 
 use core::mem::ManuallyDrop;
+use oer_espressif_staged_runtime::panic::FaultReason;
 use oer_interrupt_table::{Error, LineState};
 
 /// Source observations of an executor or time-driver invariant failure.
@@ -71,47 +72,63 @@ impl Fault {
     }
 
     /// A bounded diagnostic, without formatting or loss of source words.
-    pub fn diagnostic(self) -> (&'static str, [u32; 4]) {
+    pub fn diagnostic(self) -> (FaultReason, [u32; 4]) {
         match self {
-            Self::OutsideExecutor { running, level } => {
-                ("OutsideExecutor", [running.into(), level.into(), 0, 0])
+            Self::OutsideExecutor { running, level } => (
+                FaultReason::OutsideExecutor,
+                [running.into(), level.into(), 0, 0],
+            ),
+            Self::SignalContext { executor, running } => (
+                FaultReason::SignalContext,
+                [executor.into(), running.into(), 0, 0],
+            ),
+            Self::ExecutorClaimed { executor, stamp } => (
+                FaultReason::ExecutorClaimed,
+                [executor.into(), stamp as u32, 0, 0],
+            ),
+            Self::LinePublished { executor } => {
+                (FaultReason::LinePublished, [executor.into(), 0, 0, 0])
             }
-            Self::SignalContext { executor, running } => {
-                ("SignalContext", [executor.into(), running.into(), 0, 0])
+            Self::InvalidExecutor { executor } => {
+                (FaultReason::InvalidExecutor, [executor.into(), 0, 0, 0])
             }
-            Self::ExecutorClaimed { executor, stamp } => {
-                ("ExecutorClaimed", [executor.into(), stamp as u32, 0, 0])
+            Self::UrgentPublished { executor } => {
+                (FaultReason::UrgentPublished, [executor.into(), 0, 0, 0])
             }
-            Self::LinePublished { executor } => ("LinePublished", [executor.into(), 0, 0, 0]),
-            Self::InvalidExecutor { executor } => ("InvalidExecutor", [executor.into(), 0, 0, 0]),
-            Self::UrgentPublished { executor } => ("UrgentPublished", [executor.into(), 0, 0, 0]),
-            Self::CounterPublished => ("CounterPublished", [0; 4]),
-            Self::CounterLatchStuck => ("CounterLatchStuck", [0; 4]),
-            Self::TimerInstalled { writer } => ("TimerInstalled", [writer.into(), 0, 0, 0]),
-            Self::TimerNotInstalled => ("TimerNotInstalled", [0; 4]),
+            Self::CounterPublished => (FaultReason::CounterPublished, [0; 4]),
+            Self::CounterLatchStuck => (FaultReason::CounterLatchStuck, [0; 4]),
+            Self::TimerInstalled { writer } => {
+                (FaultReason::TimerInstalled, [writer.into(), 0, 0, 0])
+            }
+            Self::TimerNotInstalled => (FaultReason::TimerNotInstalled, [0; 4]),
             Self::TimerBinding {
                 executor,
                 comparator,
                 previous,
             } => (
-                "TimerBinding",
+                FaultReason::TimerBinding,
                 [executor.into(), comparator.into(), previous.into(), 0],
             ),
-            Self::TimerBankUnavailable { comparator } => {
-                ("TimerBankUnavailable", [comparator.into(), 0, 0, 0])
-            }
-            Self::AlarmHart { expected, actual } => {
-                ("AlarmHart", [expected.into(), actual as u32, 0, 0])
-            }
+            Self::TimerBankUnavailable { comparator } => (
+                FaultReason::TimerBankUnavailable,
+                [comparator.into(), 0, 0, 0],
+            ),
+            Self::AlarmHart { expected, actual } => (
+                FaultReason::AlarmHart,
+                [expected.into(), actual as u32, 0, 0],
+            ),
             Self::MissingComparator {
                 executor,
                 comparator,
             } => (
-                "MissingComparator",
+                FaultReason::MissingComparator,
                 [executor.into(), comparator.into(), 0, 0],
             ),
             Self::Route { executor, error } => route_diagnostic(executor, error),
-            Self::Binding(fault) => fault.diagnostic(),
+            Self::Binding(fault) => {
+                let (code, words) = fault.diagnostic();
+                (code.into(), words)
+            }
         }
     }
 
@@ -120,8 +137,8 @@ impl Fault {
     pub fn reset(self) -> ! {
         #[cfg(target_arch = "riscv32")]
         {
-            let (name, observations) = self.diagnostic();
-            oer_espressif_staged_runtime::panic::reset_fault(name, observations)
+            let (reason, observations) = self.diagnostic();
+            oer_espressif_staged_runtime::panic::reset_fault(reason, observations)
         }
         #[cfg(not(target_arch = "riscv32"))]
         oer_esp32s31_hal::cores::fatal(|_| ())
@@ -168,19 +185,19 @@ fn line(state: LineState) -> u32 {
         | (u32::from(state.control) << 8)
 }
 
-fn route_diagnostic(executor: u8, error: Error) -> (&'static str, [u32; 4]) {
+fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {
     let executor = executor.into();
     match error {
         Error::WrongControlBits { actual, expected } => (
-            "RouteWrongControlBits",
+            FaultReason::RouteWrongControlBits,
             [executor, actual.into(), expected.into(), 0],
         ),
         Error::WrongInterruptCount { actual, expected } => (
-            "RouteWrongInterruptCount",
+            FaultReason::RouteWrongInterruptCount,
             [executor, actual.into(), expected.into(), 0],
         ),
         Error::WrongLevelBits { actual, expected } => (
-            "RouteWrongLevelBits",
+            FaultReason::RouteWrongLevelBits,
             [executor, actual.into(), expected.into(), 0],
         ),
         Error::WrongHart {
@@ -188,12 +205,15 @@ fn route_diagnostic(executor: u8, error: Error) -> (&'static str, [u32; 4]) {
             hart,
             current,
         } => (
-            "RouteWrongHart",
+            FaultReason::RouteWrongHart,
             [executor, source.into(), hart.into(), current.into()],
         ),
-        Error::NotInTable { source } => ("RouteNotInTable", [executor, source.into(), 0, 0]),
+        Error::NotInTable { source } => (
+            FaultReason::RouteNotInTable,
+            [executor, source.into(), 0, 0],
+        ),
         Error::ForeignRoute { source, line } => (
-            "RouteForeignRoute",
+            FaultReason::RouteForeignRoute,
             [executor, source.into(), line.into(), 0],
         ),
         Error::WrongLine {
@@ -201,13 +221,19 @@ fn route_diagnostic(executor: u8, error: Error) -> (&'static str, [u32; 4]) {
             state,
             expected,
         } => (
-            "RouteWrongLine",
+            FaultReason::RouteWrongLine,
             [executor, index.into(), line(state), line(expected)],
         ),
-        Error::NoSuchSource { source } => ("RouteNoSuchSource", [executor, source.into(), 0, 0]),
-        Error::NoSuchLine { line } => ("RouteNoSuchLine", [executor, line.into(), 0, 0]),
-        Error::NoSuchLevel { level } => ("RouteNoSuchLevel", [executor, level.into(), 0, 0]),
-        Error::Bindable { source } => ("RouteBindable", [executor, source.into(), 0, 0]),
+        Error::NoSuchSource { source } => (
+            FaultReason::RouteNoSuchSource,
+            [executor, source.into(), 0, 0],
+        ),
+        Error::NoSuchLine { line } => (FaultReason::RouteNoSuchLine, [executor, line.into(), 0, 0]),
+        Error::NoSuchLevel { level } => (
+            FaultReason::RouteNoSuchLevel,
+            [executor, level.into(), 0, 0],
+        ),
+        Error::Bindable { source } => (FaultReason::RouteBindable, [executor, source.into(), 0, 0]),
     }
 }
 
@@ -247,14 +273,17 @@ mod tests {
                 current: 0xfd,
             },
         };
-        assert_eq!(fault.diagnostic(), ("RouteWrongHart", [3, 65535, 254, 253]));
+        assert_eq!(
+            fault.diagnostic(),
+            (FaultReason::RouteWrongHart, [3, 65535, 254, 253])
+        );
         let fault = Fault::ExecutorClaimed {
             executor: 2,
             stamp: 0xfedc_ba98,
         };
         assert_eq!(
             fault.diagnostic(),
-            ("ExecutorClaimed", [2, 0xfedc_ba98, 0, 0])
+            (FaultReason::ExecutorClaimed, [2, 0xfedc_ba98, 0, 0])
         );
     }
 }

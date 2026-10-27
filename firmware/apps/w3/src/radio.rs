@@ -1,4 +1,5 @@
 //! P2 owns the S31 device, its DMA and the port registration.
+use crate::Rng;
 use crate::irq::{B, N, Q, S, TX};
 use crate::station::ImageComposition;
 use crate::{W3Config, irq};
@@ -7,7 +8,6 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use crate::Rng;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{

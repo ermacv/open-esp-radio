@@ -49,6 +49,7 @@ oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [dev-dependencies]
 oer-esp32s31-hal = { path = "../../esp32s31/hal" }
+oer-espressif-staged-runtime = { path = "../staged-runtime" }
 oer-interrupt-table = { path = "../../../portable/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 

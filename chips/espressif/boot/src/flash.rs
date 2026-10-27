@@ -211,7 +211,7 @@ where
     registers.configure_read(Access::new(), flash.commands.get(mode));
     let mut chunk_address = address;
     for chunk in destination.chunks_mut(CHUNK_WORDS) {
-        // A chunk holds at most sixteen words: its bytes fit.
+        // A chunk holds at most CHUNK_WORDS words: its bytes fit.
         let chunk_bytes = (chunk.len() * 4) as u32;
         registers.set_transfer(Access::new(), chunk_address, chunk_bytes);
         deadline.poll(wait, || registers.start(Access::new()).ok())?;
@@ -307,7 +307,7 @@ pub struct TuningWaits {
 /// SOURCE: esp-hal 1f646c5 `esp-hal/src/flash/tuning.rs:6-23`.
 pub const fn page_count(region: TuningRegion, capacity: u32, candidates: usize) -> Option<usize> {
     if candidates == 0
-        || candidates > 16
+        || candidates > u16::BITS as usize
         || !region.physical_start.is_multiple_of(TUNING_PAGE_BYTES)
         || !region.virtual_start.is_multiple_of(TUNING_PAGE_BYTES)
     {
@@ -341,7 +341,7 @@ pub const fn select_window(mask: u16, candidates: usize) -> Option<usize> {
     let mut current_start = 0;
     let mut current_len = 0;
     let mut candidate = 0;
-    while candidate < candidates && candidate < 16 {
+    while candidate < candidates && candidate < u16::BITS as usize {
         if mask & (1 << candidate) != 0 {
             if current_len == 0 {
                 current_start = candidate;
@@ -402,7 +402,7 @@ where
         xip,
     } = owners;
     let candidates = timings.len();
-    if candidates == 0 || candidates > 16 {
+    if candidates == 0 || candidates > u16::BITS as usize {
         return Err(FlashFailure::TuningRegion.into());
     }
     let pages = page_count(region, flash.capacity, candidates).ok_or(FlashFailure::TuningRegion)?;

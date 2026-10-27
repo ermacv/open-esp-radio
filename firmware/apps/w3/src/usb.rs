@@ -53,6 +53,7 @@ pub(crate) fn open<C: Controller>(
 ) -> Result<(Console, UsbPads), &'static str> {
     let (endpoint, interrupt, pads) = retire_early_writer().map_err(|_| "console")?;
     let bound = router
-        .bind(token, interrupt).unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
+        .bind(token, interrupt)
+        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
     Ok((Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads))
 }
