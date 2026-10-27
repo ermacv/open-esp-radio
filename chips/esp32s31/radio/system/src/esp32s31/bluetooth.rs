@@ -5,6 +5,7 @@ use oer_esp32s31_hal::{
     bluetooth::{ClockedOwner, ColdOwner, PoweredOwner},
     domain::{BluetoothClient, CoexAbsent, Coexisting, CommonPower, PlatformClockProvider},
 };
+use oer_esp32s31_phy::executor::boundary::Boundary;
 use oer_esp32s31_phy::{
     PhyTargetObserver,
     bluetooth_client::{
@@ -136,7 +137,7 @@ where
             returned: join,
             cause: Failure::Poisoned(bluetooth_poison(RequestKind::Join, cause)),
         };
-        crate::boundary::shared(shared.track_tick())
+        Boundary::new(shared.track_tick())
             .await
             .map_err(|Fault(cause)| failed(cause))?;
         let cold = self
@@ -217,7 +218,7 @@ where
             return Err(failed(PoisonCause::Custody));
         }
         // Re-evaluate due tracking, including work already serviced for Wi-Fi.
-        crate::boundary::shared(shared.track_tick())
+        Boundary::new(shared.track_tick())
             .await
             .map_err(|Fault(cause)| failed(cause))?;
         let member = self
@@ -252,7 +253,7 @@ where
         if self.installation != Some(installation) || !self.controller.is_retired(installation.0) {
             return poisoned(PoisonCause::Custody);
         }
-        if let Err(Fault(cause)) = crate::boundary::shared(shared.track_tick()).await {
+        if let Err(Fault(cause)) = Boundary::new(shared.track_tick()).await {
             return poisoned(cause);
         }
         let Some(task) = self.controller.task_owner() else {

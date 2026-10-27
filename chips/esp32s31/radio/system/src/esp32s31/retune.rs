@@ -30,13 +30,13 @@ pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>
         let channel = crate::channel::lower_wifi_channel(channel.channel());
         let mut platform = ();
         let hardware = wifi.channel_transaction(&mut platform, transaction);
-        select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
+        core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
             timer,
             channel.channel_or_frequency,
             channel.cbw,
             hardware,
             observer,
-        )
+        ))
         .await
     }
 }

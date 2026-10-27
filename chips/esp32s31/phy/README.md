@@ -145,6 +145,17 @@ payload. The domain identity is affine and permanently claimed: equal
 registration epochs do not authorize a foreign return. Successful reunion
 consumes both halves, so a stale return token cannot remain live.
 
+Registration, RF wake and RF close construct their async state directly in
+their enclosing place and use the same `executor::boundary::Boundary` as
+the radio actor. Registration transfers typed `Placed` custody between retained fields;
+its constructor detaches the owned transaction before the first poll.
+Owned lifecycle futures pin their borrowed PHY children in their retained
+state and await pinned references. The radio backend pins the owned
+operations in the same way. Completed child results remain in placed fields
+of that retained state; only their exclusive `Placed` loans cross the poll
+boundary. Reunion and backend return handling consume those loans in separate
+non-inlined functions, keeping whole result temporaries out of poll frames.
+
 Dropping either half, or a pending lifecycle/tracking future even before
 its first poll, quarantines all payloads without dropping their owners or
 restoring registers. Its named fault retains the cancelled operation

@@ -407,11 +407,11 @@ pub struct TickStamped<B>(pub B);
 
 impl<B: PhyDomain> PhyDomain for TickStamped<B> {
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
-        self.0.prepare().await
+        core::pin::pin!(self.0.prepare()).await
     }
 
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault> {
-        self.0.close_rf(last).await
+        core::pin::pin!(self.0.close_rf(last)).await
     }
 
     fn tracking_deadline(&self) -> Option<oer_time::Instant> {
@@ -420,7 +420,7 @@ impl<B: PhyDomain> PhyDomain for TickStamped<B> {
 
     async fn track_tick(&mut self) -> Result<(), Fault> {
         let start = micros_low();
-        let result = self.0.track_tick().await;
+        let result = core::pin::pin!(self.0.track_tick()).await;
         log_tick(start, micros_low(), result.is_ok());
         result
     }
@@ -433,19 +433,19 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>> ClientBackend<K, S> for Tic
         phy: PhyPreparation,
         lp: &LpClock<S>,
     ) -> Result<K::Joined, Failed<K::JoinReturned>> {
-        self.0.enter(join, phy, lp).await
+        core::pin::pin!(self.0.enter(join, phy, lp)).await
     }
 
     async fn track(&mut self, track: K::Track) -> Result<K::Tracked, Failed<K::TrackReturned>> {
-        self.0.track(track).await
+        core::pin::pin!(self.0.track(track)).await
     }
 
     async fn retune(&mut self, retune: K::Retune) -> Result<K::Retuned, Failed<K::RetuneReturned>> {
-        self.0.retune(retune).await
+        core::pin::pin!(self.0.retune(retune)).await
     }
 
     async fn exit(&mut self, leave: K::Leave) -> (K::Left, Exit) {
-        self.0.exit(leave).await
+        core::pin::pin!(self.0.exit(leave)).await
     }
 }
 

@@ -14,6 +14,7 @@
 //! states; a `ClientFailed` site says why the shared domain is not touched.
 
 use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_esp32s31_phy::executor::boundary::Boundary;
 
 use oer_esp32s31_hal::ieee80211::init::{MacCoexPti, initialize_wifi_mac};
 use oer_esp32s31_hal::{
@@ -43,6 +44,8 @@ use oer_esp32s31_radio_client::{
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
+
+use crate::owned_operation;
 
 use crate::{
     ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain,
@@ -355,16 +358,17 @@ where
             Rf::Closed => {
                 // Any failure, a rejection included, leaves the domain's
                 // state unknown to the actor: it poisons.
-                {
-                    let (radio, result) = wake_concurrent_rf::<_, RomShortDelay>(
-                        &self.timer,
-                        require_radio(self.radio.take(), self.radio_fault),
-                        &self.clocks,
-                    )
-                    .await;
-                    self.radio = Some(radio);
-                    result
-                }
+                let mut operation = core::pin::pin!(wake_concurrent_rf::<_, RomShortDelay>(
+                    &self.timer,
+                    require_radio(self.radio.take(), self.radio_fault),
+                    &self.clocks,
+                ));
+                owned_operation::run(
+                    operation.as_mut(),
+                    &mut self.radio,
+                    owned_operation::restore,
+                )
+                .await
                 .map_err(|error| Fault(rf_cause(error)))?;
                 self.rf = Rf::Open;
                 Ok(PhyPreparation::Woke {
@@ -376,22 +380,20 @@ where
                     .registration
                     .take()
                     .ok_or(Fault(PoisonCause::Custody))?;
-                let registration = {
-                    let (radio, result) = register_concurrent_phy::<_, (), RomShortDelay, O>(
+                let mut platform = ();
+                let mut operation =
+                    core::pin::pin!(register_concurrent_phy::<_, (), RomShortDelay, O>(
                         &self.timer,
                         require_radio(self.radio.take(), self.radio_fault),
-                        &mut (),
+                        &mut platform,
                         &self.clocks,
                         config,
                         self.observer.clone(),
-                    )
-                    .await;
-                    self.radio = Some(radio);
-                    result
-                }
-                .map_err(|failure| Fault(registration_cause(&failure)))?;
+                    ));
+                let outcome =
+                    owned_operation::run(operation.as_mut(), &mut self.radio, finish_registration)
+                        .await?;
                 self.rf = Rf::Open;
-                let outcome = registration.outcome();
                 Ok(PhyPreparation::Registered {
                     calibration_path: outcome.calibration_path,
                     micros: self.micros_since(start),
@@ -404,13 +406,18 @@ where
 
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault> {
         let LastClientLeft(()) = last;
-        let (radio, result) = close_concurrent_rf::<_, (), RomShortDelay>(
+        let mut platform = ();
+        let mut operation = core::pin::pin!(close_concurrent_rf::<_, (), RomShortDelay>(
             &self.timer,
             require_radio(self.radio.take(), self.radio_fault),
-            &mut (),
+            &mut platform,
+        ));
+        let result = owned_operation::run(
+            operation.as_mut(),
+            &mut self.radio,
+            owned_operation::restore,
         )
         .await;
-        self.radio = Some(radio);
         match result {
             Ok(()) => {
                 self.rf = Rf::Closed;
@@ -439,18 +446,20 @@ where
     async fn track_tick(&mut self) -> Result<(), Fault> {
         // A rejected tick (the tracking clock ran backwards) would fall due
         // again at once; it poisons like a failed one.
-        let result = {
-            let (radio, result) = track_concurrent_phy::<_, (), RomShortDelay, O>(
-                require_radio(self.radio.take(), self.radio_fault),
-                &mut (),
-                &self.timer,
-                self.observer.clone(),
-                &mut self.pilot,
-            )
-            .await;
-            self.radio = Some(radio);
-            result
-        }
+        let mut platform = ();
+        let mut operation = core::pin::pin!(track_concurrent_phy::<_, (), RomShortDelay, O>(
+            require_radio(self.radio.take(), self.radio_fault),
+            &mut platform,
+            &self.timer,
+            self.observer.clone(),
+            &mut self.pilot,
+        ));
+        let result = owned_operation::run(
+            operation.as_mut(),
+            &mut self.radio,
+            owned_operation::restore,
+        )
+        .await
         .map(|_tick| ())
         .map_err(|error| Fault(tracking_cause(error)));
         #[cfg(feature = "bluetooth")]
@@ -476,7 +485,7 @@ where
     ) -> Result<WifiJoined, Failed<WifiReturned>> {
         #[cfg(feature = "bluetooth")]
         if self.bluetooth_attached {
-            if let Err(Fault(cause)) = crate::boundary::shared(self.track_tick()).await {
+            if let Err(Fault(cause)) = Boundary::new(self.track_tick()).await {
                 return Err(Failed {
                     returned: <Wifi as oer_esp32s31_radio_client::Client>::join_returned(join),
                     cause: wifi_poisoned(RequestKind::Join, cause),
@@ -580,7 +589,7 @@ where
     async fn track(&mut self, track: WifiTrack) -> Result<WifiTracked, Failed<WifiClocked>> {
         #[cfg(feature = "bluetooth")]
         if self.bluetooth_attached {
-            if let Err(Fault(cause)) = crate::boundary::shared(self.track_tick()).await {
+            if let Err(Fault(cause)) = Boundary::new(self.track_tick()).await {
                 return Err(Failed {
                     returned: track.wifi,
                     cause: wifi_poisoned(RequestKind::Track, cause),
@@ -603,15 +612,23 @@ where
         };
         let tracking_micros = if self.wifi.tracking_due {
             let start = self.timer.now();
-            let (radio, result) = maintain_concurrent_phy::<_, (), RomShortDelay, O>(
-                &self.timer,
-                require_radio(self.radio.take(), self.radio_fault),
-                &mut (),
-                self.observer.clone(),
-                &mut self.pilot,
-            )
-            .await;
-            self.radio = Some(radio);
+            let mut platform = ();
+            let result = {
+                let mut operation =
+                    core::pin::pin!(maintain_concurrent_phy::<_, (), RomShortDelay, O>(
+                        &self.timer,
+                        require_radio(self.radio.take(), self.radio_fault),
+                        &mut platform,
+                        self.observer.clone(),
+                        &mut self.pilot,
+                    ));
+                owned_operation::run(
+                    operation.as_mut(),
+                    &mut self.radio,
+                    owned_operation::restore,
+                )
+                .await
+            };
             match result {
                 Ok(_outcome) => {
                     self.wifi.tracking_due = false;
@@ -644,16 +661,23 @@ where
         let mut platform = ();
         let transaction = require_radio(self.radio.take(), self.radio_fault)
             .detach(oer_esp32s31_hal::domain::transaction::Operation::Channel);
-        let channel = wifi.channel_transaction(&mut platform, transaction);
-        let (radio, selected) = select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
-            &self.timer,
-            lowered.channel_or_frequency,
-            lowered.cbw,
-            channel,
-            &mut observer,
-        )
-        .await;
-        self.radio = Some(radio);
+        let selected = {
+            let channel = wifi.channel_transaction(&mut platform, transaction);
+            let mut operation =
+                core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
+                    &self.timer,
+                    lowered.channel_or_frequency,
+                    lowered.cbw,
+                    channel,
+                    &mut observer,
+                ));
+            owned_operation::run(
+                operation.as_mut(),
+                &mut self.radio,
+                owned_operation::restore,
+            )
+            .await
+        };
         if let Err(error) = selected {
             let cause = match error {
                 ConcurrentWifiChannelError::Rejected(_) => {
@@ -757,7 +781,7 @@ where
     async fn retune(&mut self, retune: WifiRetune) -> Result<WifiRetuned, Failed<WifiClocked>> {
         #[cfg(feature = "bluetooth")]
         if self.bluetooth_attached {
-            if let Err(Fault(cause)) = crate::boundary::shared(self.track_tick()).await {
+            if let Err(Fault(cause)) = Boundary::new(self.track_tick()).await {
                 return Err(Failed {
                     returned: retune.wifi,
                     cause: wifi_poisoned(RequestKind::Retune, cause),
@@ -827,7 +851,7 @@ where
     async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {
         #[cfg(feature = "bluetooth")]
         if self.bluetooth_attached {
-            if let Err(Fault(cause)) = crate::boundary::shared(self.track_tick()).await {
+            if let Err(Fault(cause)) = Boundary::new(self.track_tick()).await {
                 return (
                     oer_esp32s31_radio_client::wifi::WifiLeft {
                         wifi: oer_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),
@@ -899,6 +923,23 @@ fn vacant_wifi<B: PlatformClockBackend>(
 mod bluetooth;
 #[cfg(feature = "bluetooth")]
 pub use bluetooth::BluetoothAttachment;
+
+// Project the registration diagnostic before returning to the actor poll.
+#[inline(never)]
+fn finish_registration<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+    destination: &mut Option<RadioDomain<B, ConcurrentPhy>>,
+    returned: oer_memory::Placed<
+        '_,
+        (
+            RadioDomain<B, ConcurrentPhy>,
+            Result<oer_esp32s31_phy::ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+        ),
+    >,
+) -> Result<oer_esp32s31_phy::PhyRegisterOutcome, Fault> {
+    let registration = owned_operation::restore(destination, returned)
+        .map_err(|failure| Fault(registration_cause(&failure)))?;
+    Ok(registration.outcome())
+}
 
 // An absent domain means an owned operation has not returned. Its original
 // diagnostic capability retains the source owner even after cancellation.

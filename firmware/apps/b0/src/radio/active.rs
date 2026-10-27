@@ -55,7 +55,7 @@ pub(super) async fn run<'a, 'loan: 'a, 'p: 'loan, 'e: 'loan>(
             Either::Second(result) => result,
         }
     });
-    actor.run_until(operation.as_mut()).await
+    core::pin::pin!(actor.run_until(operation.as_mut())).await
 }
 
 pub(super) fn timer_step(

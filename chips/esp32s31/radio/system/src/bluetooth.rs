@@ -106,11 +106,11 @@ where
             let mut served = false;
             if let Some((request, responder)) = self.actor.inbox.take() {
                 // Same receiver/backend type as a Wi-Fi-only composition.
-                responder.answer(boundary::shared(self.actor.serve(request)).await);
+                responder.answer(Boundary::new(self.actor.serve(request)).await);
                 served = true;
             }
             if let Some((request, responder)) = self.inbox.take() {
-                responder.answer(boundary::shared(self.serve(request)).await);
+                responder.answer(Boundary::new(self.serve(request)).await);
                 served = true;
             }
             if served {
@@ -119,10 +119,10 @@ where
             let deadline = (self.actor.core.tracking_active())
                 .then(|| self.actor.backend.tracking_deadline())
                 .flatten();
-            let wait = boundary::shared(self.actor.wait(deadline));
+            let wait = Boundary::new(self.actor.wait(deadline));
             match select(next.as_mut(), wait).await {
                 Either::First(out) => return out,
-                Either::Second(true) => boundary::shared(self.actor.tick()).await,
+                Either::Second(true) => Boundary::new(self.actor.tick()).await,
                 Either::Second(false) => {}
             }
         }
@@ -142,7 +142,7 @@ where
                         cause: Failure::Refused,
                     }));
                 }
-                let phy = match boundary::shared(self.actor.backend.prepare()).await {
+                let phy = match Boundary::new(self.actor.backend.prepare()).await {
                     Ok(phy) => phy,
                     Err(Fault(cause)) => {
                         let poison = self.actor.core.poison(Poison {
@@ -179,7 +179,7 @@ where
                     }
                     Err(Failed { returned, cause }) => {
                         if matches!(self.actor.core.failed_enter(cause), Action::CloseRf) {
-                            boundary::shared(self.actor.close_rf()).await;
+                            Boundary::new(self.actor.close_rf()).await;
                         }
                         Err(Failed {
                             returned,
@@ -231,7 +231,7 @@ where
                     leaving.await
                 };
                 if matches!(self.actor.core.exited(exit), Action::CloseRf) {
-                    boundary::shared(self.actor.close_rf()).await;
+                    Boundary::new(self.actor.close_rf()).await;
                 }
                 Answer::Leave(Left {
                     payload,

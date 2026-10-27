@@ -41,6 +41,7 @@
 use core::{convert::Infallible, future::poll_fn};
 
 use embassy_futures::select::{Either, select};
+use oer_esp32s31_phy::executor::boundary::Boundary;
 use oer_esp32s31_radio_client::{
     ActorEnd, Answer, Client, ClientInbox, DomainHealth, Doorbell, Failed, Failure, Joined,
     Leaving, Left, LpClock, LpSource, MemberMint, PhyPreparation, Poison, PoisonCause,
@@ -118,7 +119,9 @@ pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
 }
 
 mod actor_core;
-mod boundary;
+mod deadline;
+#[cfg(any(target_arch = "riscv32", test))]
+mod owned_operation;
 use actor_core::{Action, ActorCore};
 
 /// The radio system's actor for the client `K`.
@@ -170,7 +173,7 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
                 Some(deadline) => {
                     if let Either::Second(()) = select(rung, self.timer.wait_until(deadline)).await
                     {
-                        boundary::shared(self.tick()).await;
+                        Boundary::new(self.tick()).await;
                     }
                 }
             }
@@ -190,12 +193,12 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     #[inline(always)]
     async fn wait(&self, deadline: Option<oer_time::Instant>) -> bool {
         let rung = poll_fn(|cx| self.doorbell.poll_rung(cx));
-        let timer = boundary::Deadline::new(deadline.map(|at| self.timer.wait_until(at)));
+        let timer = deadline::Deadline::new(deadline.map(|at| self.timer.wait_until(at)));
         matches!(select(rung, timer).await, Either::Second(()))
     }
 
     async fn tick(&mut self) {
-        if let Err(Fault(cause)) = self.backend.track_tick().await {
+        if let Err(Fault(cause)) = Boundary::new(self.backend.track_tick()).await {
             self.core.poison(Poison {
                 origin: PoisonOrigin::TrackingTick,
                 cause,
@@ -221,7 +224,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                         cause: Failure::Refused,
                     }));
                 }
-                let phy = match boundary::shared(self.backend.prepare()).await {
+                let phy = match Boundary::new(self.backend.prepare()).await {
                     Ok(phy) => phy,
                     Err(Fault(cause)) => {
                         let poison = self.core.poison(Poison {
@@ -237,25 +240,27 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                 let epoch = self
                     .core
                     .prepared(matches!(phy, PhyPreparation::AlreadyOpen));
-                Answer::Join(match self.backend.enter(join, phy, &self.lp).await {
-                    Ok(payload) => {
-                        self.core.joined();
-                        Ok(Joined {
-                            member: self.core.mint.untracked(),
-                            epoch,
-                            payload,
-                        })
-                    }
-                    Err(Failed { returned, cause }) => {
-                        if matches!(self.core.failed_enter(cause), Action::CloseRf) {
-                            boundary::shared(self.close_rf()).await;
+                Answer::Join(
+                    match Boundary::new(self.backend.enter(join, phy, &self.lp)).await {
+                        Ok(payload) => {
+                            self.core.joined();
+                            Ok(Joined {
+                                member: self.core.mint.untracked(),
+                                epoch,
+                                payload,
+                            })
                         }
-                        Err(Failed {
-                            returned,
-                            cause: self.core.failure(cause),
-                        })
-                    }
-                })
+                        Err(Failed { returned, cause }) => {
+                            if matches!(self.core.failed_enter(cause), Action::CloseRf) {
+                                Boundary::new(self.close_rf()).await;
+                            }
+                            Err(Failed {
+                                returned,
+                                cause: self.core.failure(cause),
+                            })
+                        }
+                    },
+                )
             }
             Request::Track(member, track) => {
                 if let Some(poison) = self.core.poisoned() {
@@ -264,7 +269,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                         cause: Failure::Poisoned(poison),
                     }));
                 }
-                Answer::Track(match self.backend.track(track).await {
+                Answer::Track(match Boundary::new(self.backend.track(track)).await {
                     Ok(payload) => {
                         self.core.tracked();
                         Ok(TrackedMember {
@@ -288,7 +293,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                         cause: Failure::Poisoned(poison),
                     }));
                 }
-                Answer::Retune(match self.backend.retune(retune).await {
+                Answer::Retune(match Boundary::new(self.backend.retune(retune)).await {
                     Ok(payload) => Ok(oer_esp32s31_radio_client::RetunedMember { member, payload }),
                     Err(Failed { returned, cause }) => {
                         self.core.failed(cause);
@@ -302,9 +307,9 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
             Request::Leave(member, leave) => {
                 self.core.leaving(matches!(member, Leaving::Tracked(_)));
                 self.core.mint.retire(member);
-                let (payload, exit) = self.backend.exit(leave).await;
+                let (payload, exit) = Boundary::new(self.backend.exit(leave)).await;
                 if matches!(self.core.exited(exit), Action::CloseRf) {
-                    boundary::shared(self.close_rf()).await;
+                    Boundary::new(self.close_rf()).await;
                 }
                 Answer::Leave(Left {
                     payload,
@@ -315,7 +320,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     }
 
     async fn close_rf(&mut self) {
-        let result = self.backend.close_rf(LastClientLeft(())).await;
+        let result = Boundary::new(self.backend.close_rf(LastClientLeft(()))).await;
         self.core.closed(result);
     }
 }
