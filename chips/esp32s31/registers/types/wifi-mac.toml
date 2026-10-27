@@ -328,23 +328,23 @@ completeness = "complete"
 sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 
 [review.entity."RX_NEXT_DESCRIPTOR"]
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+sources = ["HW18_RX_HEAD_LEADING_PRESERVATION_20261027", "HW18_RX_COMMITTED_PREFIX_20261027", "HW18_RX_UNCOMMITTED_WRITES_20261027", "HW18_RX_FCS_CORRELATION_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 accuracy = "exact"
 completeness = "complete"
 
 [review.entity."RX_NEXT_DESCRIPTOR.ADDRESS_LOW"]
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+sources = ["HW18_RX_HEAD_LEADING_PRESERVATION_20261027", "HW18_RX_COMMITTED_PREFIX_20261027", "HW18_RX_UNCOMMITTED_WRITES_20261027", "HW18_RX_FCS_CORRELATION_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 
 [review.entity."RX_NEXT_DESCRIPTOR.BITS_20_31_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20104088", "ROM_REV0_WDEV_APPEND_RX_BLOCKS"]
 
 [review.entity."RX_LAST_DESCRIPTOR"]
-sources = ["ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+sources = ["HW18_RX_COMMITTED_PREFIX_20261027", "HW18_RX_UNCOMMITTED_WRITES_20261027", "HW18_RX_FCS_CORRELATION_20261027", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 accuracy = "exact"
 completeness = "complete"
 
 [review.entity."RX_LAST_DESCRIPTOR.ADDRESS_LOW"]
-sources = ["ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+sources = ["HW18_RX_COMMITTED_PREFIX_20261027", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 
 [review.entity."RX_LAST_DESCRIPTOR.BITS_20_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010408C", "S31_MMIO_DECLARED_2010408C"]
@@ -2414,7 +2414,7 @@ accuracy = "exact"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
 
 [review.entity."STATUS"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
+sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2424,7 +2424,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"
 accuracy = "exact"
 
 [review.entity."STATUS.RX_ASSOCIATED_AUXILIARY_5"]
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
+sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
 provenance = "observed"
 accuracy = "exact"
 
@@ -2463,7 +2463,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL",
 accuracy = "exact"
 
 [review.entity."STATUS.RX_SUCCESS"]
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ"]
+sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2501,7 +2501,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL",
 accuracy = "exact"
 
 [review.entity."STATUS.RX_ASSOCIATED_AUXILIARY_24"]
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
+sources = ["HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
 provenance = "observed"
 accuracy = "exact"
 
@@ -6715,7 +6715,7 @@ pointer = { points-to = "WIFI_RX_DMA_DESCRIPTOR", placement = "dma-window", enco
 [[registers]]
 name = "RX_NEXT_DESCRIPTOR"
 offset = 0x88
-description = "Complete hardware current/next descriptor word. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom[]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE."
+description = "Hardware current/next descriptor observation, not an exclusive live-write target: its sampled address can stay fixed while words in later buffers change without descriptor/cursor commit. In 23 sampled uncommitted-write clusters on one s31-b board with 128-byte buffers, the head leading word stays unchanged and changes start at the linked successor (0 after R, 3 after 2, 6 after 5); whole-head freshness and general release safety do not follow. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom[]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE."
 
 [[registers.fields]]
 name = "ADDRESS_LOW"
@@ -9749,7 +9749,7 @@ description = "Masked event bits whose identities remain unknown."
 name = "RX_ASSOCIATED_AUXILIARY_5"
 bits = "5"
 class = "read-only"
-description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity."
+description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity. The grouped pending-STATUS observation establishes that at least one of auxiliary bits 5/24 was pending; it does not identify this lane independently or prove both."
 
 [[registers.fields]]
 name = "BIT_6_OPAQUE"
@@ -9797,7 +9797,7 @@ description = "Masked event bit enabled by the complete cold receive mask; its e
 name = "RX_SUCCESS"
 bits = "14"
 class = "read-only"
-description = "Successfully received frame is ready for the RX completion path."
+description = "RX success event used to schedule descriptor service; it does not by itself establish payload durability or IRQ-to-DMA ordering."
 
 [[registers.fields]]
 name = "STA_BEACON_FILTER"
@@ -9845,7 +9845,7 @@ description = "Masked event bit enabled by the complete cold receive mask; its e
 name = "RX_ASSOCIATED_AUXILIARY_24"
 bits = "24"
 class = "read-only"
-description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity."
+description = "Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity. The grouped pending-STATUS observation establishes that at least one of auxiliary bits 5/24 was pending; it does not identify this lane independently or prove both."
 
 [[registers.fields]]
 name = "BITS_25_26_OPAQUE"

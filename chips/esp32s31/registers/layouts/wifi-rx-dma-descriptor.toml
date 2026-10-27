@@ -4,12 +4,17 @@ schema = 1
 name = "WIFI_RX_DMA_DESCRIPTOR"
 description = """
 The 12-byte node the Wi-Fi RX DMA walker follows: the control word, the
-buffer address and the link to the next node."""
+buffer address and the link to the next node. Buffers can receive repeated
+writes without visible CONTROL or walker-cursor commit. A changed leading
+word alone is not established as a consumption or accepted-frame predicate.
+In 23 sampled uncommitted-write clusters on one board, the current NEXT
+head's leading word stays unchanged and changes start at its linked successor;
+this does not establish whole-head freshness or general detach/recycle safety."""
 size = 12
 align = 4
 
 [layout.review]
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+sources = ["HW18_RX_HEAD_LEADING_PRESERVATION_20261027", "HW18_RX_OWNER_BARRIER_20261027", "HW18_RX_COMMITTED_PREFIX_20261027", "HW18_RX_FCS_CORRELATION_20261027", "HW18_RX_UNCOMMITTED_WRITES_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -31,7 +36,7 @@ access = "shared"
 name = "OWNER"
 bits = "31"
 writer = "cpu"
-description = "1: the walker may fill this descriptor; it stops at one with 0 without writing it, and a reload doorbell after the bit is set again resumes it there. The hardware checks it and never clears it: completion is RX_DONE. It does not check the bit of LAST when a doorbell follows LAST's link."
+description = "1: the walker may fill this descriptor; 0 is the CPU barrier. A bounded live-store experiment leaves every word at and beyond the first CPU-owned barrier unchanged while preceding buffers receive repeated writes and buffer-full/FCS counters rise. This supports the barrier on one s31-b rev0 board, with three channel-13 beacons, first barrier at node 12, FCS=9 and buffer-full=8; it is not a universal prefetch or detach-release proof. A reload doorbell after the bit is set again resumes there. Hardware completion is RX_DONE, not OWNER clearing. It does not check the bit of LAST when a doorbell follows LAST's link."
 
 [[layout.words.fields]]
 name = "RX_DONE"
@@ -40,17 +45,24 @@ writer = "hardware"
 description = "Set by the hardware on a receive unit's terminal descriptor when the unit completes; a walk is delimited by it through the saved LAST. Software clears it on rearm."
 
 [[layout.words.fields]]
-name = "BIT_29_OPAQUE"
-opaque = true
+name = "SOSF"
 bits = "29"
-writer = "cpu"
-description = "Vendor sosf bit, cleared on rearm. The acronym and its hardware effects are not established."
+writer = "phased"
+phases = [{ name = "arm-rearm", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Vendor sosf bit, initialized/cleared by software on arm/rearm. Its acronym, hardware effects and relation to frame boundaries are unknown. It reads zero on all sampled nodes in all three bounded 32-by-128-byte, three-beacon captures on s31-b rev0, including repeated writes correlated with FCS errors. The receive phase conservatively permits an unknown hardware writer; no hardware store to this bit is established, and setting it to one is untested."
+
+[[layout.words.fields]]
+name = "OFFSET"
+bits = "28"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Vendor offset bit, initialized by software through the control image. It reads zero on all sampled nodes in all three bounded 32-by-128-byte, three-beacon captures on s31-b rev0, including repeated writes correlated with FCS errors. The receive phase conservatively permits an unknown hardware writer; no hardware store to this bit is established. Its encoding, units and effect when set are unknown; it is not an established completion marker."
 
 [[layout.words.fields]]
 name = "LENGTH"
 bits = "27:14"
 writer = "hardware"
-description = "The bytes the hardware wrote into the buffer; software sets it to SIZE when it arms the descriptor."
+description = "Received byte count on a terminal descriptor. Software arms LENGTH with SIZE; an unchanged nonterminal value establishes neither a hardware writeback nor consumption or accepted-frame membership."
 
 [[layout.words.fields]]
 name = "SIZE"
@@ -91,7 +103,7 @@ completeness = "complete"
 
 [[review]]
 entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.OWNER"
-sources = ["HIL_W1_OWNER_BIT_2026_10_18"]
+sources = ["HW18_RX_OWNER_BARRIER_20261027", "HW18_RX_CHAIN_20261027", "HIL_W1_OWNER_BIT_2026_10_18"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -99,7 +111,7 @@ naming = "descriptive"
 
 [[review]]
 entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.RX_DONE"
-sources = ["ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_OWNER_BIT_2026_10_18"]
+sources = ["HW18_RX_CHAIN_20261027", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_OWNER_BIT_2026_10_18"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -107,7 +119,7 @@ naming = "descriptive"
 
 [[review]]
 entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.LENGTH"
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18"]
+sources = ["HW18_RX_CHAIN_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -121,10 +133,27 @@ accuracy = "exact"
 completeness = "complete"
 naming = "descriptive"
 
+# SOURCE: the bounded captures leave SOSF/OFFSET physical meanings unresolved.
 [[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.BIT_29_OPAQUE"
-sources = ["VENDOR_WIFI_RX_IDENTITIES", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18"]
-provenance = "derived"
+entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.SOSF"
+sources = ["HW18_RX_COMMITTED_PREFIX_20261027", "VENDOR_WIFI_RX_IDENTITIES", "BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18", "HW18_RX_CHAIN_20261027", "HW18_RX_FCS_CORRELATION_20261027"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_RX_DMA_DESCRIPTOR.NEXT.ADDRESS"
+sources = ["HW18_RX_COMMITTED_PREFIX_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27", "HW18_RX_CHAIN_20261027"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.OFFSET"
+sources = ["HW18_RX_COMMITTED_PREFIX_20261027", "VENDOR_WIFI_RX_IDENTITIES", "BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES", "HW18_RX_CHAIN_20261027", "HW18_RX_FCS_CORRELATION_20261027"]
+provenance = "observed"
 accuracy = "positional"
 completeness = "unknown"
-naming = "opaque"
+naming = "descriptive"

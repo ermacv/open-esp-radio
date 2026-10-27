@@ -17,7 +17,7 @@ fn an_rx_control_word_reads_back_what_its_builders_set() {
         .with_owner(true);
     assert!(armed.owner());
     assert!(!armed.rx_done());
-    assert!(!armed.bit_29_opaque());
+    assert!(!armed.sosf());
     assert_eq!((armed.size(), armed.length()), (1664, 1664));
 
     let done = armed.with_rx_done(true).with_length(268).expect("268 fits");

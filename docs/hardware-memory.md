@@ -95,10 +95,19 @@ bits = "30"
 writer = "hardware"
 
 [[layout.words.fields]]
-name = "BIT_29_OPAQUE"
+name = "SOSF"
 bits = "29"
-writer = "cpu"
-description = "Cleared when the node is rearmed; meaning unknown."
+writer = "phased"
+phases = [{ name = "arm-rearm", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Vendor sosf bit, cleared on rearm. The receive phase conservatively permits an unknown hardware writer; no store or physical effect is established."
+
+# SOURCE: BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES in the S31 register model.
+[[layout.words.fields]]
+name = "OFFSET"
+bits = "28"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Vendor offset bit; encoding, units and effect unknown. The receive phase conservatively permits an unknown hardware writer; no store is established."
 
 [[layout.words.fields]]
 name = "LENGTH"

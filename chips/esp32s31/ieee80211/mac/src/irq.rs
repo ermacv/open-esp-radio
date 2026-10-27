@@ -104,7 +104,9 @@ pub trait MacInterrupt: sealed::Sealed {
     fn mask_rx_delivery(&mut self);
     /// Enable the RX delivery group and leave every other source as it is.
     fn unmask_rx_delivery(&mut self);
-    /// Mask every source; a latched event stays latched.
+    /// Mask every source without acknowledging it. Producer-stopped RX-group
+    /// STATUS replay is observed; RAW retention and other causes are unqualified.
+    /// SOURCE: `HW18_RX_MASK_STATUS_20261027` in the register model.
     fn mask_all(&mut self);
     fn acknowledge(&mut self, snapshot: Self::Snapshot);
     /// Acknowledge only the captured RAW events of the masked bank.

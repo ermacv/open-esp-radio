@@ -533,9 +533,14 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
 
     /// Mask every MAC interrupt source without acknowledging one.
     ///
-    /// Publishes the all-zero ENABLE image, then orders the write. A
-    /// event is not acknowledged. [`Self::unmask_rx_delivery_interrupts`]
-    /// afterwards restores only the RX delivery group.
+    /// Publishes the all-zero ENABLE image, then orders the write, without
+    /// acknowledging pending events. The tested RX_SUCCESS/combined-auxiliary
+    /// STATUS observation was hidden under the code-requested mask in
+    /// run `hw18-20261027-rx-radio-01-s31b` (ENABLE was not read back);
+    /// [`Self::unmask_rx_delivery_interrupts`] restores only the RX group.
+    /// RAW retention and other causes are not qualified by the RX observation.
+    ///
+    /// SOURCE: `HW18_RX_MASK_STATUS_20261027` in the register model.
     pub fn mask_all_mac_interrupts(&mut self) {
         publish_mac_interrupt_mask(&mut self.mac, MacInterruptMask::NONE);
         oer_riscv::fence();
@@ -599,9 +604,11 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
 
     /// Restore the RX delivery group while preserving the current mask.
     ///
-    /// A latched RX status which arrived while masked becomes visible through
-    /// the level CPU route after this ordered write, so the task does not need
-    /// to fabricate a hardware completion edge.
+    /// Pending RX_SUCCESS and at least one auxiliary cause reappeared in STATUS
+    /// after this write in the short producer-stopped observation. That run
+    /// did not observe RAW, CPU delivery, or IRQ-to-DMA ordering.
+    ///
+    /// SOURCE: `HW18_RX_MASK_STATUS_20261027` in the register model.
     pub fn unmask_rx_delivery_interrupts(&mut self) {
         self.set_rx_delivery_interrupts(true);
     }
