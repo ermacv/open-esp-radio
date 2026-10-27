@@ -54,6 +54,9 @@ boundaries and stop edges leave its local graph open. Unresolved callees
 still leave the stack bound unresolved. Captured indexed
 addresses require the same complete read-only table and target proofs as
 straight-line dispatches; relocation labels alone do not prove immutability.
+Conditional branches out of a function count as tail transfers, like direct
+jumps: their destination's bound counts below the source's retained stack
+depth. Missing entries, interior targets and unknown frames remain unresolved.
 
 Only `oer-memory` defines `unsafe impl Sync` or `Send`; the layer test
 `unsafe_sync_and_send_impls_stay_in_oer_memory` maintains the shrinking
