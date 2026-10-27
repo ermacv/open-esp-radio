@@ -41,10 +41,30 @@ pub enum BluetoothControllerOutputReleaseError {
 trait BankControl {
     fn fault_acknowledged(&self) -> bool;
     fn observation(&self) -> crate::bluetooth::BluetoothInterruptObservation;
+    fn acknowledge_nrt(&mut self) -> Result<(), BluetoothNrtInterruptFault>;
     fn mask_dynamic(&mut self);
     fn clear_pending(&mut self);
     fn release_output(&mut self);
     fn fence(&mut self);
+}
+
+fn acknowledge_nrt(
+    bank: &mut impl BankControl,
+    task_enable: u32,
+) -> Result<(), BluetoothControllerOutputReleaseError> {
+    bank.acknowledge_nrt().map_err(|fault| {
+        let mut primary = bank.observation();
+        // Preserve the exact refused pair, rather than later diagnostic reads.
+        [primary.nrt_0, primary.nrt_1] = fault.snapshots;
+        BluetoothControllerOutputReleaseError::InterruptPolicy(
+            crate::bluetooth::BluetoothInterruptPolicyFault::ReleaseNotQuiet(
+                crate::bluetooth::BluetoothInterruptPolicyObservation {
+                    primary,
+                    task_enable,
+                },
+            ),
+        )
+    })
 }
 
 /// The task's side of the release: the scheduler's list heads and RUN.
@@ -116,6 +136,7 @@ fn mask(
     // HW32_S31_BT_OUTPUT_OBSERVER_20261027 (PR #757): tested pending is
     // hidden/retained under the mask; reopening raises matrix124 and modem
     // wake vector0x10 even at MAP0. Fault lanes are not hardware-qualified.
+    acknowledge_nrt(bank, task_enable)?;
     check_visible_faults(bank, task_enable)?;
     if bank.fault_acknowledged() {
         return Err(BluetoothControllerOutputReleaseError::InterruptFault);
@@ -163,6 +184,7 @@ fn release(
     bank.clear_pending();
     bank.release_output();
     bank.fence();
+    acknowledge_nrt(bank, task_enable)?;
     crate::bluetooth::BluetoothInterruptPolicyObservation {
         primary: bank.observation(),
         task_enable,
@@ -183,6 +205,14 @@ impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
     }
     fn fault_acknowledged(&self) -> bool {
         self.fault_acknowledged
+    }
+
+    fn acknowledge_nrt(&mut self) -> Result<(), BluetoothNrtInterruptFault> {
+        // SOURCE: BLOB_S31_BLE_NRT_DISPOSITION_20261027 and
+        // BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT: the default NRT profile has no
+        // consumer beyond this sampled acknowledgement, including at release.
+        let _acknowledged = capture_nrt_and_acknowledge(self.bank)?;
+        Ok(())
     }
 
     fn mask_dynamic(&mut self) {
@@ -306,7 +336,8 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
         )
     }
 
-    /// Mask all sourced terminal-cleanup sources and fence.
+    /// Acknowledge admitted sampled NRT, check visible faults, then mask all
+    /// sourced terminal-cleanup sources and fence.
     pub(crate) fn mask_output_dynamic_sources(
         &mut self,
         fault_acknowledged: bool,
@@ -323,7 +354,8 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
 
     /// Discard the fixed non-fault primary/NRT subset under the mask when a BUSY
     /// sample taken after RUN was disabled is idle and no fault is pending
-    /// or was acknowledged. Masked STATUS does not prove pending is absent.
+    /// or was acknowledged. Acknowledge sampled NRT with runtime admission
+    /// before final confirmation. Masked STATUS does not prove pending is absent.
     pub(crate) fn release_idle_output(
         &mut self,
         busy: BluetoothSchedulerBusyObservation,

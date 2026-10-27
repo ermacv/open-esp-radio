@@ -14,6 +14,8 @@ struct Model {
     sticky_pending: bool,
     sticky_enable: bool,
     fault_after_mask: Option<[u32; 2]>,
+    nrt_after_release: Option<[u32; 2]>,
+    nrt_after_sample: Option<[u32; 2]>,
     head: Option<BluetoothSchedulerHardwareListIndex>,
     run_enabled: bool,
     output_live: bool,
@@ -40,6 +42,8 @@ impl Model {
             sticky_pending: false,
             sticky_enable: false,
             fault_after_mask: None,
+            nrt_after_release: None,
+            nrt_after_sample: None,
             head: None,
             run_enabled: true,
             output_live: true,
@@ -67,6 +71,27 @@ impl BankControl for Bank<'_> {
         let mut model = self.0.borrow_mut();
         model.events.push("fault history");
         model.acknowledged_fault
+    }
+    fn acknowledge_nrt(&mut self) -> Result<(), BluetoothNrtInterruptFault> {
+        let mut model = self.0.borrow_mut();
+        model.events.extend(["sample nrt0", "sample nrt1"]);
+        let snapshots = [model.raw.primary.nrt_0, model.raw.primary.nrt_1];
+        if let Some([bank0, bank1]) = model.nrt_after_sample.take() {
+            model.raw.primary.nrt_0 |= bank0;
+            model.raw.primary.nrt_1 |= bank1;
+        }
+        acknowledge_nrt_if_admitted(snapshots, || {
+            if snapshots == [0, 0] {
+                return;
+            }
+            model.events.extend(["ack nrt0", "ack nrt1", "nrt fence"]);
+            if !model.sticky_pending {
+                model.raw.primary.status_0 &= !snapshots[0];
+                model.raw.primary.status_1 &= !snapshots[1];
+                model.raw.primary.nrt_0 &= !snapshots[0];
+                model.raw.primary.nrt_1 &= !snapshots[1];
+            }
+        })
     }
     fn mask_dynamic(&mut self) {
         let mut model = self.0.borrow_mut();
@@ -97,6 +122,10 @@ impl BankControl for Bank<'_> {
         let mut model = self.0.borrow_mut();
         model.output_live = false;
         model.events.push("release");
+        if let Some([bank0, bank1]) = model.nrt_after_release.take() {
+            model.raw.primary.nrt_0 |= bank0;
+            model.raw.primary.nrt_1 |= bank1;
+        }
     }
     fn fence(&mut self) {
         self.0.borrow_mut().events.push("bank fence");
@@ -241,6 +270,8 @@ fn visible_fault_checks_precede_mask_and_fixed_clear_follows_task_disable() {
         [
             "observe",
             "fault history",
+            "sample nrt0",
+            "sample nrt1",
             "observe",
             "fault history",
             "mask",
@@ -253,10 +284,140 @@ fn visible_fault_checks_precede_mask_and_fixed_clear_follows_task_disable() {
             "clear",
             "release",
             "bank fence",
+            "sample nrt0",
+            "sample nrt1",
             "observe"
         ]
     );
     assert_eq!(model.inspected.len(), 16);
+}
+
+#[test]
+fn nrt_outside_fixed_cleanup_is_acknowledged_before_mask_and_final_confirmation() {
+    let model = RefCell::new(Model::idle());
+    let pending = [0x4, bank::irq_enable_1::BIT_2_OPAQUE_MASK];
+    {
+        let mut m = model.borrow_mut();
+        [m.raw.primary.nrt_0, m.raw.primary.nrt_1] = pending;
+        m.nrt_after_release = Some(pending);
+    }
+    assert_eq!(release_all(&model, false, false), Ok(()));
+    let m = model.borrow();
+    assert_eq!([m.raw.primary.nrt_0, m.raw.primary.nrt_1], [0, 0]);
+    assert!(!m.output_live);
+    assert_eq!(
+        m.events,
+        [
+            "observe",
+            "fault history",
+            "sample nrt0",
+            "sample nrt1",
+            "ack nrt0",
+            "ack nrt1",
+            "nrt fence",
+            "observe",
+            "fault history",
+            "mask",
+            "bank fence",
+            "observe",
+            "disable run",
+            "task fence",
+            "observe",
+            "fault history",
+            "clear",
+            "release",
+            "bank fence",
+            "sample nrt0",
+            "sample nrt1",
+            "ack nrt0",
+            "ack nrt1",
+            "nrt fence",
+            "observe",
+        ]
+    );
+}
+
+fn forbidden_nrt_pairs() -> [[u32; 2]; 5] {
+    // Each pair also includes an admitted lane in the other bank: admission
+    // must refuse both acknowledgements, preserving the complete pair.
+    [
+        [bank::irq_clear_0::SOURCE_15_MASK, 0x4],
+        [0x4, bank::irq_clear_1::CONTROLLER_TIME_OVERFLOW_MASK],
+        [0x4, bank::irq_clear_1::SOURCE_8_MASK],
+        [0x4, bank::irq_clear_1::SOURCE_9_MASK],
+        [0x4, bank::irq_clear_1::SOURCE_12_MASK],
+    ]
+}
+
+#[test]
+fn nrt_fault_and_overflow_lanes_still_refuse_the_idle_sample_without_writes() {
+    for pending in forbidden_nrt_pairs() {
+        let model = RefCell::new(Model::idle());
+        {
+            let mut m = model.borrow_mut();
+            [m.raw.primary.nrt_0, m.raw.primary.nrt_1] = pending;
+        }
+        assert_eq!(
+            release_all(&model, false, false),
+            Err(policy_error(model.borrow().visible()))
+        );
+        assert_eq!(model.borrow().events, ["observe"]);
+        assert!(model.borrow().output_live && model.borrow().run_enabled);
+    }
+}
+
+#[test]
+fn both_release_nrt_transactions_refuse_fault_and_overflow_without_either_ack() {
+    for pending in forbidden_nrt_pairs() {
+        for final_check in [false, true] {
+            let model = RefCell::new(Model::idle());
+            let task = model.borrow().raw.task_enable;
+            sample_idle(&mut Bank(&model), busy(false), task).unwrap();
+            if final_check {
+                mask(&mut Bank(&model), task).unwrap();
+                disable_run(&mut Task(&model));
+                model.borrow_mut().nrt_after_release = Some(pending);
+            } else {
+                let mut m = model.borrow_mut();
+                [m.raw.primary.nrt_0, m.raw.primary.nrt_1] = pending;
+            }
+            // A later diagnostic read includes another arrival; the fault must
+            // retain the exact refused pair instead of replacing its image.
+            model.borrow_mut().nrt_after_sample = Some([0x80, 0]);
+            let result = if final_check {
+                release(&mut Bank(&model), busy(false), 0)
+            } else {
+                mask(&mut Bank(&model), task)
+            };
+            let mut observed = model.borrow().visible();
+            [observed.primary.nrt_0, observed.primary.nrt_1] = pending;
+            assert_eq!(result, Err(policy_error(observed)));
+            assert!(!model.borrow().events.contains(&"ack nrt0"));
+            assert!(!model.borrow().events.contains(&"ack nrt1"));
+            if !final_check {
+                assert!(!model.borrow().events.contains(&"mask"));
+            }
+        }
+    }
+}
+
+#[test]
+fn an_nrt_arrival_after_the_final_sample_is_not_acknowledged_and_blocks_release() {
+    let model = RefCell::new(Model::idle());
+    let task = model.borrow().raw.task_enable;
+    mask(&mut Bank(&model), task).unwrap();
+    disable_run(&mut Task(&model));
+    {
+        let mut m = model.borrow_mut();
+        // The final sampled pair is nonzero. Only that pair may be cleared.
+        m.nrt_after_release = Some([0x4, 0]);
+        m.nrt_after_sample = Some([0x80, 0]);
+    }
+    assert_eq!(
+        release(&mut Bank(&model), busy(false), 0),
+        Err(policy_error(model.borrow().visible()))
+    );
+    assert_eq!(model.borrow().raw.primary.nrt_0, 0x80);
 }
 #[test]
 fn masking_hides_but_retains_pending_and_fixed_w1c_clears_it_without_reopening() {

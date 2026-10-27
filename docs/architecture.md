@@ -496,12 +496,16 @@ its model and conformance case.
   output release masks and clears overflow before the bank leaves the handler.
   Admission checks primary/task enables before HAL/PHY initialization against
   the explicit production baseline, dynamic and task-lifecycle set; an enable
-  outside that set is a named `ForeignEnable` fault. Release retains the existing
-  handler/task step order, extends masks to sourced feature lanes and
-  task17, checks visible faults immediately before masking, writes fixed
-  non-fault primary/NRT W1C images under the mask and acknowledges the task WT
-  bank. Fault lanes are excluded from unconditional W1C, so arrivals after the
-  check remain retained. Release verifies zero primary/task enables and rejects
+  outside that set is a named `ForeignEnable` fault. Release alternates handler
+  and task steps, masks sourced feature lanes and task17, and acknowledges sampled
+  NRT with the runtime transaction before the
+  last visible fault check preceding masking and before final release confirmation.
+  NRT admission refuses both writes for a pair containing a shared primary fault
+  or overflow clear lane; release retains that exact pair in `ReleaseNotQuiet`.
+  Other sampled NRT lanes are acknowledged even outside the fixed cleanup subset.
+  Release writes fixed non-fault primary/NRT W1C images under the mask and
+  acknowledges the task WT bank. Fault lanes are excluded from unconditional W1C,
+  so arrivals after the check remain retained. Release verifies zero primary/task enables and rejects
   residual visible status as `ReleaseNotQuiet`. It never reopens ENA or changes
   matrix routing; masked pending is not observable and no zero-pending proof
   follows. Bank1 CC0/CC1/overflow have hw32 masked-W1C coverage; bank0/NRT

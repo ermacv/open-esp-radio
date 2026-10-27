@@ -900,8 +900,12 @@ enables, masked status, NRT words and task enables. The opaque task +0x4bc
 word is diagnostic-only; production never reads it. The typed production set
 covers baseline fault/overflow, dynamic scheduler and task14 lifecycle lanes.
 Terminal masking covers sourced primary feature lanes and all task enables,
-including unnamed task17. A fresh visible-fault check precedes masking;
-fixed non-fault W1C images are written under the mask after task RUN-disable,
+including unnamed task17. The runtime affine NRT transaction runs before the
+last visible-fault check preceding masking and before final release confirmation.
+It acknowledges admitted sampled lanes, including those outside the fixed cleanup
+subset; a pair containing shared primary fault/overflow lanes refuses both writes
+and returns `ReleaseNotQuiet` with its exact snapshots and primary/task observations.
+Fixed non-fault W1C images are written under the mask after task RUN-disable,
 followed by CONTROL1/2 and zero-enable verification. No enable is reopened and
 no matrix route changes. Bank0[15] and bank1[8/9/12] are absent from the fixed
 images, so a late masked fault is never blindly erased. Task acknowledgement
@@ -936,8 +940,9 @@ prints the diagnostic. No additional unsafe sharing is involved.
 
 NRT acknowledgement checks the exact sampled pair against shared primary
 fault and overflow clear lanes before either clear. A pair containing one returns a
-named fault preserving both words; the gate quarantines its owners and B0
-records the later pair separately from the entry observations in the same
+named fault preserving both words. Runtime capture reports `BluetoothNrtInterruptFault`;
+terminal release reports `ReleaseNotQuiet` with that pair in its policy observation.
+The gate quarantines its owners and B0 records the fault observations in the same
 44-byte slot before `fatal::reset_recording`. NRT cannot consume a primary
 overflow observation or blindly clear a primary fault. Arrivals absent from
 the affine sample are not included in its acknowledgement.

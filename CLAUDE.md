@@ -55,9 +55,12 @@ system these rules serve.
   API input: STOP, report its typed security error to the environment, deliver
   the received frame without an ACK and select the next operation. It neither
   publishes the ACK to DMA nor records/resets.
-  BLE terminal output release checks visible faults before masking, then uses
-  sourced fixed W1C images for the non-fault primary/NRT subset and the sourced
-  task WT strobe. It never reopens enables or changes matrix routing for
+  BLE terminal output release acknowledges sampled NRT with runtime admission
+  before the last visible fault check preceding masking and before final release
+  confirmation. Fault/overflow NRT pairs stay unacknowledged and return
+  `ReleaseNotQuiet`, as does residual visible status. Under the mask, release
+  uses sourced fixed non-fault primary/NRT W1C images and the sourced task WT
+  strobe. It never reopens enables or changes matrix routing for
   observation. It verifies zero enables; hidden pending is not observable.
   Fault lanes stay excluded from unconditional W1C, including NRT admission to
   the shared clear words ([HAL transactions](chips/esp32s31/hal/README.md)).
