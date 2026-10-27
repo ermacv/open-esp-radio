@@ -24,6 +24,7 @@ mod lp_softreset;
 mod radio_local;
 #[path = "sar.rs"]
 mod sar;
+mod timg_arbitration;
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
 const CPU_LINE: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
@@ -133,6 +134,9 @@ extern "C" fn facts_irq() {
     let cycle = oer_riscv::cycle32();
     IRQ_CYCLE.store(cycle, Ordering::Relaxed);
     IRQ_PC.store(oer_riscv::read_mepc() as u32, Ordering::Relaxed);
+    if timg_arbitration::interrupt() {
+        return;
+    }
     if generic::interrupt() {
         IRQ_COUNT.fetch_add(1, Ordering::Relaxed);
         return;
@@ -216,6 +220,34 @@ enum Action {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 190,
+        run: Action::Thread(timg_arbitration::reload_rate),
+    },
+    Probe {
+        id: 191,
+        run: Action::Thread(timg_arbitration::intervals),
+    },
+    Probe {
+        id: 192,
+        run: Action::Thread(timg_arbitration::pending_rearm),
+    },
+    Probe {
+        id: 193,
+        run: Action::Thread(timg_arbitration::equal_below),
+    },
+    Probe {
+        id: 194,
+        run: Action::Thread(timg_arbitration::running_past),
+    },
+    Probe {
+        id: 195,
+        run: Action::Thread(timg_arbitration::timer_low),
+    },
+    Probe {
+        id: 196,
+        run: Action::Thread(timg_arbitration::timer_high),
+    },
     Probe {
         id: 14,
         run: Action::Thread(opaque_wave2::i2c),
