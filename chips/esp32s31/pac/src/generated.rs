@@ -128271,7 +128271,7 @@ pub mod modem_lpcon {
 ///
 /// The modem power-domain block at MODEM_PWR_BASE: the modem low-power timer and the Wi-Fi MAC's TSF, RTC timer, power interrupt, REGDMA and coexistence runtime words. Known only from vendor binaries.
 /// HP system-reset observations use the PAC-only facts probe on hart0 with hart1 already held. The probe preserves the successful production reset_recording path's reset-control register-effect order: UART0 restoration, hart1 boot-address zero, hart1 reset pulse, stall, device fence and SYS_SW_RST. The complete sequences differ: the probe samples LP state before those writes but publishes its retained SRAM record after UART0/boot-address/pulse/stall, whereas production invokes its record callback before them. The probe has no ClaimCell election or StopError handling and does not implement production's watchdog-fallback path; a failed hold check returns from the leaf with MIE cleared. These observations cover that successful register sequence and next ROM-loader entry, not full production fatal-path equivalence. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026; HW13_S31_BLE_LP_HP_RESTORE_20261026.
-/// Words 0x0-0x78: Sparse BTDM low-level runtime and sleep-control window. Complete ESP32-S31 functions prove only the recorded access directions, finite images, low-24-bit publications and four isolated RMW controls. The independently role-mapped runtime-timer start command is named; all other positional names deliberately avoid assigning undocumented peripheral semantics.
+/// Words 0x0-0x78: Sparse BTDM low-level runtime and sleep-control window. Complete ESP32-S31 functions prove only the recorded access directions, finite images, low-24-bit publications and four isolated RMW controls. Named fields retain only the independently measured delivery, status and sleep-flag roles; positional names retain unknown peripheral semantics.
 /// Word 0x800: Free-running Wi-Fi MAC local-time counter, read-only and without read side effects. Complete libpp[lmac.o]::lmacAdjustTimestamp subtracts the receive timestamp a received frame carries from this word as the frame's age and, while the station slept, rewrites that timestamp as this word minus a TU-scaled sleep interval; libpp[pm_twt.o]::pm_twt_set_target_wdev_time, libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice read it as the MAC's current time. The PHY SDM deadline samples the same word. Its unit and rate against the system timer are not established.
 /// Words 0x80c-0x810: Station TSF activity status recovered from the complete no-call hal_is_sta_tsf_active leaf. The instruction body proves the address and bit geometry but not the hardware transition rules.
 /// Words 0x814-0x828: Shared TSF load and coherent station/SoftAP snapshot transaction.
@@ -128426,34 +128426,34 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x10;
 
-        /// Width of `BIT_1_OPAQUE` in bits.
-        pub const BIT_1_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_1_OPAQUE`.
-        pub const BIT_1_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_1_OPAQUE`.
-        pub const BIT_1_OPAQUE_MASK: u32 = 0x2;
+        /// Width of `ROLLOVER_DELIVERY_SET` in bits.
+        pub const ROLLOVER_DELIVERY_SET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ROLLOVER_DELIVERY_SET`.
+        pub const ROLLOVER_DELIVERY_SET_MAX: u32 = 0x1;
+        /// Positioned bits of `ROLLOVER_DELIVERY_SET`.
+        pub const ROLLOVER_DELIVERY_SET_MASK: u32 = 0x2;
 
-        /// Width of `BIT_18_OPAQUE` in bits.
-        pub const BIT_18_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_18_OPAQUE`.
-        pub const BIT_18_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_18_OPAQUE`.
-        pub const BIT_18_OPAQUE_MASK: u32 = 0x40000;
+        /// Width of `COMPARE_SOFTWARE_DELIVERY_SET` in bits.
+        pub const COMPARE_SOFTWARE_DELIVERY_SET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `COMPARE_SOFTWARE_DELIVERY_SET`.
+        pub const COMPARE_SOFTWARE_DELIVERY_SET_MAX: u32 = 0x1;
+        /// Positioned bits of `COMPARE_SOFTWARE_DELIVERY_SET`.
+        pub const COMPARE_SOFTWARE_DELIVERY_SET_MASK: u32 = 0x40000;
 
         /// The value written to the register.
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Set `BIT_1_OPAQUE`.
+            /// Set `ROLLOVER_DELIVERY_SET`.
             #[inline]
-            pub fn set_bit_1_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_rollover_delivery_set(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
                 self
             }
 
-            /// Set `BIT_18_OPAQUE`.
+            /// Set `COMPARE_SOFTWARE_DELIVERY_SET`.
             #[inline]
-            pub fn set_bit_18_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_compare_software_delivery_set(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffbffff) | (u32::from(value) << 18);
                 self
             }
@@ -128532,21 +128532,21 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x1c;
 
-        /// Width of `BITS_0_7_OPAQUE` in bits.
-        pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MASK: u32 = 0xff;
+        /// Width of `SLEEP16_FLAG_BYTE` in bits.
+        pub const SLEEP16_FLAG_BYTE_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `SLEEP16_FLAG_BYTE`.
+        pub const SLEEP16_FLAG_BYTE_MAX: u32 = 0xff;
+        /// Positioned bits of `SLEEP16_FLAG_BYTE`.
+        pub const SLEEP16_FLAG_BYTE_MASK: u32 = 0xff;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
             #[inline]
-            pub const fn bits_0_7_opaque(self) -> u8 {
+            pub const fn sleep16_flag_byte(self) -> u8 {
                 self.0 as u8
             }
         }
@@ -128555,15 +128555,15 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
             #[inline]
-            pub const fn bits_0_7_opaque(&self) -> u8 {
+            pub const fn sleep16_flag_byte(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// Set `BITS_0_7_OPAQUE`.
+            /// Set `SLEEP16_FLAG_BYTE`.
             #[inline]
-            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_sleep16_flag_byte(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xffffff00) | u32::from(value);
                 self
             }
@@ -128582,21 +128582,21 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x20;
 
-        /// Width of `BITS_0_7_OPAQUE` in bits.
-        pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MASK: u32 = 0xff;
+        /// Width of `SLEEP17_FLAG_BYTE` in bits.
+        pub const SLEEP17_FLAG_BYTE_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `SLEEP17_FLAG_BYTE`.
+        pub const SLEEP17_FLAG_BYTE_MAX: u32 = 0xff;
+        /// Positioned bits of `SLEEP17_FLAG_BYTE`.
+        pub const SLEEP17_FLAG_BYTE_MASK: u32 = 0xff;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
             #[inline]
-            pub const fn bits_0_7_opaque(self) -> u8 {
+            pub const fn sleep17_flag_byte(self) -> u8 {
                 self.0 as u8
             }
         }
@@ -128605,15 +128605,15 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
             #[inline]
-            pub const fn bits_0_7_opaque(&self) -> u8 {
+            pub const fn sleep17_flag_byte(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// Set `BITS_0_7_OPAQUE`.
+            /// Set `SLEEP17_FLAG_BYTE`.
             #[inline]
-            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_sleep17_flag_byte(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xffffff00) | u32::from(value);
                 self
             }
@@ -128767,7 +128767,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0030_OPAQUE` register.
     ///
-    /// The boolean sleep-control helper stores complete zero on both branches. No read or inner state encoding is established. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030.
+    /// The boolean sleep-control helper stores complete zero on both branches. No read or inner state encoding is established. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030. The sleep0 nonzero branch pairs ETM+0x110 bit26, sleep-bank+0x40 bit0, +0x78 bit26 set, whole-word +0x30 zero and +0x78 bit25 set. Its zero branch clears +0x78 bit25, issues +0x44 bit0, clears +0x78 bit26, issues ETM+0x114 bit26, zeroes +0x30 and sets +0x78 bit25. No independently recovered completion observer is established. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
     pub mod word_0030_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -128831,7 +128831,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0038_OPAQUE` register.
     ///
-    /// A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested BLE-timer/controller reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix 127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. After the separately tested probe's hart0 HP system reset, real compare, natural rollover, both and quiet scenarios all read zero at the next ROM-loader entry before prepare, with matrix source127 low. Clock-only access restoration did not recover the old causes. A fresh software publication and bit18 enable gave 0x40000/source127 high. The LP source selector/divider remained zero during this access-gate restoration; a separate both-pending/quiet follow-up restored the LP XTAL/divider without acknowledge, prepare or start and still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This establishes the next-entry view, not the instantaneous reset state or all production boot paths. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026.
+    /// A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images were observed, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested BLE-timer/controller reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix 127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. After the separately tested probe's hart0 HP system reset, real compare, natural rollover, both and quiet scenarios all read zero at the next ROM-loader entry before prepare, with matrix source127 low. Clock-only access restoration did not recover the old causes. A fresh software publication and bit18 enable gave 0x40000/source127 high. The LP source selector/divider remained zero during this access-gate restoration; a separate both-pending/quiet follow-up restored the LP XTAL/divider without acknowledge, prepare or start and still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This establishes the next-entry view, not the instantaneous reset state or all production boot paths. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. The ISR consumes a full 32-bit nonzero predicate without decoding every cause. The four measured whole-word images are finite observations, not an exhaustive value dictionary. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027.
     pub mod word_0038_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -128841,67 +128841,74 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x38;
 
-        /// Width of `BITS_0_31_OPAQUE` in bits.
-        pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
-        pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `BITS_0_31_OPAQUE`.
-        pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
+        /// Width of `BIT_0_OPAQUE` in bits.
+        pub const BIT_0_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MASK: u32 = 0x1;
 
-        /// The declared values of the `BITS_0_31_OPAQUE` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Bits0_31Opaque {
-            Inactive = 0x0,
-            RolloverPending = 0x2,
-            CompareSoftwarePending = 0x40000,
-            BothMeasuredPending = 0x40002,
-        }
+        /// Width of `ROLLOVER_STATUS` in bits.
+        pub const ROLLOVER_STATUS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ROLLOVER_STATUS`.
+        pub const ROLLOVER_STATUS_MAX: u32 = 0x1;
+        /// Positioned bits of `ROLLOVER_STATUS`.
+        pub const ROLLOVER_STATUS_MASK: u32 = 0x2;
 
-        impl Bits0_31Opaque {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
+        /// Width of `BITS_2_17_OPAQUE` in bits.
+        pub const BITS_2_17_OPAQUE_WIDTH: u32 = 16;
+        /// Greatest unsigned image of `BITS_2_17_OPAQUE`.
+        pub const BITS_2_17_OPAQUE_MAX: u32 = 0xffff;
+        /// Positioned bits of `BITS_2_17_OPAQUE`.
+        pub const BITS_2_17_OPAQUE_MASK: u32 = 0x3fffc;
 
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
-            }
+        /// Width of `COMPARE_SOFTWARE_STATUS` in bits.
+        pub const COMPARE_SOFTWARE_STATUS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `COMPARE_SOFTWARE_STATUS`.
+        pub const COMPARE_SOFTWARE_STATUS_MAX: u32 = 0x1;
+        /// Positioned bits of `COMPARE_SOFTWARE_STATUS`.
+        pub const COMPARE_SOFTWARE_STATUS_MASK: u32 = 0x40000;
 
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0x0 => Some(Self::Inactive),
-                    0x2 => Some(Self::RolloverPending),
-                    0x40000 => Some(Self::CompareSoftwarePending),
-                    0x40002 => Some(Self::BothMeasuredPending),
-                    _ => None,
-                }
-            }
-        }
+        /// Width of `BITS_19_31_OPAQUE` in bits.
+        pub const BITS_19_31_OPAQUE_WIDTH: u32 = 13;
+        /// Greatest unsigned image of `BITS_19_31_OPAQUE`.
+        pub const BITS_19_31_OPAQUE_MAX: u32 = 0x1fff;
+        /// Positioned bits of `BITS_19_31_OPAQUE`.
+        pub const BITS_19_31_OPAQUE_MASK: u32 = 0xfff80000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_31_OPAQUE` field.
+            /// Individual cause identity unknown. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026.
             #[inline]
-            pub const fn bits_0_31_opaque(self) -> u32 {
-                self.0
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
             }
 
-            /// The `BITS_0_31_OPAQUE` field as its declared value, if it is one.
+            /// Status observed for the tested natural rollover under its matching delivery enable. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026.
             #[inline]
-            pub const fn bits_0_31_opaque_variant(self) -> Option<Bits0_31Opaque> {
-                Bits0_31Opaque::from_bits(self.0)
+            pub const fn rollover_status(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Individual cause identities unknown. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026.
+            #[inline]
+            pub const fn bits_2_17_opaque(self) -> u16 {
+                (self.0 >> 2) as u16
+            }
+
+            /// Status observed for the tested compare/software pending cause under its matching delivery enable. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026.
+            #[inline]
+            pub const fn compare_software_status(self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Individual cause identities unknown. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026.
+            #[inline]
+            pub const fn bits_19_31_opaque(self) -> oer_mmio::Bits<13> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
             }
         }
     }
@@ -129166,7 +129173,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). First-timer and wake-timer activation set CONTROL0/4 together; sleep/removal paths clear both before testing CONTROL2 and, when set, freshly rereading the word to publish CONTROL1. Joint use identifies neither an IRQ mask nor a PMU wake-enable role. SOURCE: BX4_S31_LP_MODE58_USERS_20261027.
             #[inline]
             pub const fn control_0(self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -129178,7 +129185,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027.
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027. First-timer and wake-timer activation set CONTROL0/4 together; sleep/removal paths clear both before testing CONTROL2 and, when set, freshly rereading the word to publish CONTROL1. Joint use identifies neither an IRQ mask nor a PMU wake-enable role. SOURCE: BX4_S31_LP_MODE58_USERS_20261027.
             #[inline]
             pub const fn control_4(self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -129201,7 +129208,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). First-timer and wake-timer activation set CONTROL0/4 together; sleep/removal paths clear both before testing CONTROL2 and, when set, freshly rereading the word to publish CONTROL1. Joint use identifies neither an IRQ mask nor a PMU wake-enable role. SOURCE: BX4_S31_LP_MODE58_USERS_20261027.
             #[inline]
             pub const fn control_0(&self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -129213,7 +129220,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027.
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027. First-timer and wake-timer activation set CONTROL0/4 together; sleep/removal paths clear both before testing CONTROL2 and, when set, freshly rereading the word to publish CONTROL1. Joint use identifies neither an IRQ mask nor a PMU wake-enable role. SOURCE: BX4_S31_LP_MODE58_USERS_20261027.
             #[inline]
             pub const fn control_4(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -129263,7 +129270,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0064_OPAQUE` register.
     ///
-    /// One complete runtime function reads the complete word and publishes complete dynamic images. The image remains a register-level fact.
+    /// The sleep-enable path reads the complete word and replaces the near-boundary target with a value truncated to24 bits before a 32-bit store. No counter-unit or PMU wake-route claim follows. SOURCE: BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027.
     pub mod word_0064_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00ffffff;
@@ -129273,21 +129280,21 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x64;
 
-        /// Width of `BITS_0_23_OPAQUE` in bits.
-        pub const BITS_0_23_OPAQUE_WIDTH: u32 = 24;
-        /// Greatest unsigned image of `BITS_0_23_OPAQUE`.
-        pub const BITS_0_23_OPAQUE_MAX: u32 = 0xffffff;
-        /// Positioned bits of `BITS_0_23_OPAQUE`.
-        pub const BITS_0_23_OPAQUE_MASK: u32 = 0xffffff;
+        /// Width of `SLEEP16_TARGET` in bits.
+        pub const SLEEP16_TARGET_WIDTH: u32 = 24;
+        /// Greatest unsigned image of `SLEEP16_TARGET`.
+        pub const SLEEP16_TARGET_MAX: u32 = 0xffffff;
+        /// Positioned bits of `SLEEP16_TARGET`.
+        pub const SLEEP16_TARGET_MASK: u32 = 0xffffff;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Low24 target of the tested sleep16 local flag. The near-boundary publication truncates the replacement to24 bits before a full-word store. SOURCE: BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
             #[inline]
-            pub const fn bits_0_23_opaque(self) -> oer_mmio::Bits<24> {
+            pub const fn sleep16_target(self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
         }
@@ -129296,15 +129303,15 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Low24 target of the tested sleep16 local flag. The near-boundary publication truncates the replacement to24 bits before a full-word store. SOURCE: BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026.
             #[inline]
-            pub const fn bits_0_23_opaque(&self) -> oer_mmio::Bits<24> {
+            pub const fn sleep16_target(&self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set `BITS_0_23_OPAQUE`.
+            /// Set `SLEEP16_TARGET`.
             #[inline]
-            pub fn set_bits_0_23_opaque(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
+            pub fn set_sleep16_target(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
                 self.0 = (self.0 & 0xff000000) | value.get();
                 self
             }
@@ -129313,7 +129320,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0068_OPAQUE` register.
     ///
-    /// Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31. In the tested setup with advancing completed BTLC captures, digital/ETM clocks live, ETM channels6/7 enabled and the ETM bit11 command issued, sleep17 enable plus a verified future-target crossing sets the low byte20 even with sleep0/16 disabled. The BTLC/ETM prerequisites were not varied independently. No readback, counter unit or PMU wake-route equation is established. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026.
+    /// Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31. In the tested setup with advancing completed BTLC captures, digital/ETM clocks live, ETM channels6/7 enabled and the ETM bit11 command issued, sleep17 enable plus a verified future-target crossing sets the low byte20 even with sleep0/16 disabled. The BTLC/ETM prerequisites were not varied independently. No readback, counter unit or PMU wake-route equation is established. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026. The runtime-derived image is truncated to24 bits before a 32-bit store with upper8 zero and no preceding read of this word. SOURCE: BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027.
     pub mod word_0068_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00ffffff;
@@ -129323,20 +129330,20 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x68;
 
-        /// Width of `BITS_0_23_OPAQUE` in bits.
-        pub const BITS_0_23_OPAQUE_WIDTH: u32 = 24;
-        /// Greatest unsigned image of `BITS_0_23_OPAQUE`.
-        pub const BITS_0_23_OPAQUE_MAX: u32 = 0xffffff;
-        /// Positioned bits of `BITS_0_23_OPAQUE`.
-        pub const BITS_0_23_OPAQUE_MASK: u32 = 0xffffff;
+        /// Width of `SLEEP17_TARGET` in bits.
+        pub const SLEEP17_TARGET_WIDTH: u32 = 24;
+        /// Greatest unsigned image of `SLEEP17_TARGET`.
+        pub const SLEEP17_TARGET_MAX: u32 = 0xffffff;
+        /// Positioned bits of `SLEEP17_TARGET`.
+        pub const SLEEP17_TARGET_MASK: u32 = 0xffffff;
 
         /// The value written to the register.
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Set `BITS_0_23_OPAQUE`.
+            /// Set `SLEEP17_TARGET`.
             #[inline]
-            pub fn set_bits_0_23_opaque(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
+            pub fn set_sleep17_target(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
                 self.0 = (self.0 & 0xff000000) | value.get();
                 self
             }
@@ -129345,7 +129352,7 @@ pub mod modem_pwr {
 
     /// The `WORD_006C_OPAQUE` register.
     ///
-    /// Low24 is the compare target; the upper byte remains opaque. Runtime paths read this word and publish complete or low24 images. With XTAL/divider1, CONTROL4=0 and either CONTROL0 state, each upper bit24-31 individually and all together read back0 after publication and do not suppress the positive future low24 compare. This qualifies the tested comparison as24-bit; no universal upper-byte meaning is assigned. SOURCE: HW22_S31_LP_COMPARE_WIDTH_20261027. In the tested CONTROL0=1/CONTROL4=0, XTAL/divider1 setup, a positive software pending byte is conditionally zeroed before programming each target and issuing bit18. Future targets origin+2048 and origin+64 (still26 ticks ahead at the latter post-enable sample) produce byte24=1/CONTROL2=1/cause0x40000/source127 high. Target origin-64, already102 ticks behind at the post-enable sample, produces no indication through4096 counter ticks; a fresh future target subsequently delivers. This is a finite past-target observation, not a same-cycle priority or universal deadline-admission bound. SOURCE: HW22_S31_LP_REARM_20261027.
+    /// Low24 is the compare target; the upper byte remains opaque. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. With XTAL/divider1, CONTROL4=0 and either CONTROL0 state, each upper bit24-31 individually and all together read back0 after publication and do not suppress the positive future low24 compare. This qualifies the tested comparison as24-bit; no universal upper-byte meaning is assigned. SOURCE: HW22_S31_LP_COMPARE_WIDTH_20261027. In the tested CONTROL0=1/CONTROL4=0, XTAL/divider1 setup, a positive software pending byte is conditionally zeroed before programming each target and issuing bit18. Future targets origin+2048 and origin+64 (still26 ticks ahead at the latter post-enable sample) produce byte24=1/CONTROL2=1/cause0x40000/source127 high. Target origin-64, already102 ticks behind at the post-enable sample, produces no indication through4096 counter ticks; a fresh future target subsequently delivers. This is a finite past-target observation, not a same-cycle priority or universal deadline-admission bound. SOURCE: HW22_S31_LP_REARM_20261027.
     pub mod word_006c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -129374,13 +129381,13 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027.
+            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027.
             #[inline]
             pub const fn compare_target(self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027.
+            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
                 (self.0 >> 24) as u8
@@ -129391,13 +129398,13 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027.
+            /// Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027.
             #[inline]
             pub const fn compare_target(&self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027.
+            /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
                 (self.0 >> 24) as u8
@@ -129457,19 +129464,19 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `CONTROL_25` field.
+            /// Set after each sleep0 branch zeroes +0x30; cleared first on its disable branch. The updates do not identify a BUSY, DONE or capture-trigger function. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
             #[inline]
             pub const fn control_25(self) -> bool {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Consumed as the low part of a runtime LP-time reference reconstructed with the sampled counter epoch and an epoch correction when the low counter precedes it. The capture producer and any completion relation are unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
             #[inline]
             pub const fn bits_0_23_opaque(self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set by the sleep0 enable branch and cleared by its disable branch. Sleep-disable tests this bit for an assertion before invoking the disable helper; this is no completion polling loop. Individual electrical effect is unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
             #[inline]
             pub const fn bit_26_opaque(self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -129480,19 +129487,19 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `CONTROL_25` field.
+            /// Set after each sleep0 branch zeroes +0x30; cleared first on its disable branch. The updates do not identify a BUSY, DONE or capture-trigger function. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
             #[inline]
             pub const fn control_25(&self) -> bool {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Consumed as the low part of a runtime LP-time reference reconstructed with the sampled counter epoch and an epoch correction when the low counter precedes it. The capture producer and any completion relation are unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
             #[inline]
             pub const fn bits_0_23_opaque(&self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set by the sleep0 enable branch and cleared by its disable branch. Sleep-disable tests this bit for an assertion before invoking the disable helper; this is no completion polling loop. Individual electrical effect is unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027.
             #[inline]
             pub const fn bit_26_opaque(&self) -> bool {
                 (self.0 & 0x04000000) != 0
@@ -134085,7 +134092,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Event identities unknown.
+            /// Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027.
             #[inline]
             pub const fn bits_8_16_opaque(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
@@ -134097,7 +134104,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
+            /// Independent event identity unknown. Inspected guarded TBTT/TSF and dedicated beacon interrupt writers preserve ENABLE18. The vendor beacon-memory RX selector tests RAW17/18 with MAC STATUS14, not ENABLE18; its hardware relation to this lane is unqualified. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027; BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -134109,7 +134116,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00080000) != 0
             }
 
-            /// Event identities unknown.
+            /// Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027.
             #[inline]
             pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -134168,7 +134175,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Event identities unknown.
+            /// Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027.
             #[inline]
             pub const fn bits_8_16_opaque(&self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
@@ -134180,7 +134187,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
+            /// Independent event identity unknown. Inspected guarded TBTT/TSF and dedicated beacon interrupt writers preserve ENABLE18. The vendor beacon-memory RX selector tests RAW17/18 with MAC STATUS14, not ENABLE18; its hardware relation to this lane is unqualified. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027; BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(&self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -134192,7 +134199,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00080000) != 0
             }
 
-            /// Event identities unknown.
+            /// Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027.
             #[inline]
             pub const fn bits_20_31_opaque(&self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -134447,7 +134454,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Event identities unknown.
+            /// Individual event identities and producers unknown. On a nonempty vendor FIQ pass the complete sampled RAW word is forwarded to CLEAR before power-bank dispatch; RAW alone is excluded from the aggregate nonempty test. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027.
             #[inline]
             pub const fn bits_8_16_opaque(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
@@ -134471,7 +134478,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00080000) != 0
             }
 
-            /// Event identities unknown.
+            /// Individual event identities and producers unknown. On a nonempty vendor FIQ pass the complete sampled RAW word is forwarded to CLEAR before power-bank dispatch; RAW alone is excluded from the aggregate nonempty test. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027.
             #[inline]
             pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -134635,7 +134642,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Event identities unknown.
+            /// Individual event identities and producers unknown. The vendor FIQ includes these lanes in its full STATUS nonempty test and sampled acknowledgement; it has no separately selected service for them. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027.
             #[inline]
             pub const fn bits_8_16_opaque(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
@@ -134659,7 +134666,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00080000) != 0
             }
 
-            /// Event identities unknown.
+            /// Individual event identities and producers unknown. The vendor FIQ includes these lanes in its full STATUS nonempty test and sampled acknowledgement; it has no separately selected service for them. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027.
             #[inline]
             pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -134823,7 +134830,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Event identities unknown.
+            /// The vendor FIQ forwards these lanes from complete sampled power STATUS and RAW images. Named TBTT/TSF and beacon interrupt helpers can also forward unchanged CLEAR readback lanes. Individual event identities, readback semantics and positive per-lane clearing are unqualified. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027.
             #[inline]
             pub const fn bits_8_16_opaque(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
@@ -134835,7 +134842,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// The vendor FIQ writes its complete sampled power STATUS and then RAW through this bank before selecting the RAW17/18 beacon-memory RX path. This includes sampled RAW18 even when absent from STATUS; it is an observed software acknowledgement, not a positive silicon-clear qualification. Independent cause unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
+            /// The vendor FIQ forwards sampled STATUS18 and RAW18 to CLEAR before its joint RAW17/18 beacon-memory selector. Named low-lane and beacon interrupt helpers also preserve this lane from CLEAR readback in their full stores. Independent cause, readback semantics and positive silicon clearing remain unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -134847,7 +134854,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00080000) != 0
             }
 
-            /// Event identities unknown.
+            /// The vendor FIQ forwards these lanes from complete sampled power STATUS and RAW images. Named TBTT/TSF and beacon interrupt helpers can also forward unchanged CLEAR readback lanes. Individual event identities, readback semantics and positive per-lane clearing are unqualified. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027.
             #[inline]
             pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -134985,7 +134992,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Event identities unknown.
+            /// The vendor FIQ forwards these lanes from complete sampled power STATUS and RAW images. Named TBTT/TSF and beacon interrupt helpers can also forward unchanged CLEAR readback lanes. Individual event identities, readback semantics and positive per-lane clearing are unqualified. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027.
             #[inline]
             pub const fn bits_8_16_opaque(&self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
@@ -135015,7 +135022,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// The vendor FIQ writes its complete sampled power STATUS and then RAW through this bank before selecting the RAW17/18 beacon-memory RX path. This includes sampled RAW18 even when absent from STATUS; it is an observed software acknowledgement, not a positive silicon-clear qualification. Independent cause unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
+            /// The vendor FIQ forwards sampled STATUS18 and RAW18 to CLEAR before its joint RAW17/18 beacon-memory selector. Named low-lane and beacon interrupt helpers also preserve this lane from CLEAR readback in their full stores. Independent cause, readback semantics and positive silicon clearing remain unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027.
             #[inline]
             pub const fn bit_18_opaque(&self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -135045,7 +135052,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Event identities unknown.
+            /// The vendor FIQ forwards these lanes from complete sampled power STATUS and RAW images. Named TBTT/TSF and beacon interrupt helpers can also forward unchanged CLEAR readback lanes. Individual event identities, readback semantics and positive per-lane clearing are unqualified. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027.
             #[inline]
             pub const fn bits_20_31_opaque(&self) -> oer_mmio::Bits<12> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -136198,7 +136205,7 @@ pub mod modem_pwr {
 
         /// Mask the sources of `0xffffffff` in `MODEM_PWR.ENABLE`, keeping every other bit, then acknowledge them (`MODEM_PWR.CLEAR`).
         ///
-        /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT, HW8_S31_WIFI_TSF_MASK_20261026.
+        /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT, HW8_S31_WIFI_TSF_MASK_20261026, POLICY_S31_PWR_BANK_CLEAR_SCOPE_20261027.
         #[inline]
         pub fn clear_all_mac_power_interrupts(&mut self) {
             self.0.write::<0x8b4>(0);
@@ -136649,7 +136656,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_001C_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+        /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS, BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_001c(&mut self) {
             self.0.write::<0x1c>(0x00000000);
@@ -136657,7 +136664,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_0020_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+        /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS, BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_0020(&mut self) {
             self.0.write::<0x20>(0x00000000);
@@ -136766,6 +136773,14 @@ pub mod modem_pwr {
         #[inline]
         pub fn read_word_0038_opaque(&self) -> word_0038_opaque::R {
             word_0038_opaque::R(self.0.read::<0x38>())
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_0038_OPAQUE`).
+        ///
+        /// SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027, HW_BLE_LP_CAUSES_2026_10_26.
+        #[inline]
+        pub fn read_bluetooth_modem_lp_status(&self) -> u32 {
+            self.0.read::<0x38>()
         }
     }
 }
@@ -143019,7 +143034,7 @@ pub mod pmu {
 
     /// The `HP_ACTIVE_HP_CK_POWER` register.
     ///
-    /// Active-state high-power clock and analog-I2C power control. The public struct calls low4 reserved, but the pinned complete ROM clock leaf explicitly sets them; its direct use overrides that reserved claim on low4 only.
+    /// Active-state high-power clock and analog-I2C power control. Rev0 ROM sets bits3:0 and bit22 together in one preserving RMW. Low4 remains positional and opaque despite the public header reserved classification. SOURCE: BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4.
     pub mod hp_active_hp_ck_power {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x7ff8000f;
@@ -143039,40 +143054,6 @@ pub mod pmu {
         pub const BITS_0_3_OPAQUE_MAX: u32 = 0xf;
         /// Positioned bits of `BITS_0_3_OPAQUE`.
         pub const BITS_0_3_OPAQUE_MASK: u32 = 0xf;
-
-        /// The declared values of the `BITS_0_3_OPAQUE` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Bits0_3Opaque {
-            /// Complete low-nibble image published by the rev0 ROM front-end/baseband clock leaf.
-            RomRequired = 0xf,
-        }
-
-        impl Bits0_3Opaque {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
-            }
-
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0xf => Some(Self::RomRequired),
-                    _ => None,
-                }
-            }
-        }
 
         /// Width of `HP_ACTIVE_XPD_XTALX2` in bits.
         pub const HP_ACTIVE_XPD_XTALX2_WIDTH: u32 = 1;
@@ -143163,16 +143144,10 @@ pub mod pmu {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Low-nibble image set by complete rev0 ROM phy_open_fe_bb_clk; individual bit semantics remain unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Bits 3:0 set together to 0xf by rev0 ROM phy_open_fe_bb_clk+0x34, alongside bit22. Individual physical effects and necessity are unknown; the public header labels this region reserved.
             #[inline]
             pub const fn bits_0_3_opaque(self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// The `BITS_0_3_OPAQUE` field as its declared value, if it is one.
-            #[inline]
-            pub const fn bits_0_3_opaque_variant(self) -> Option<Bits0_3Opaque> {
-                Bits0_3Opaque::from_bits(self.0 & 0xf)
             }
 
             /// need_des
@@ -143252,16 +143227,10 @@ pub mod pmu {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Low-nibble image set by complete rev0 ROM phy_open_fe_bb_clk; individual bit semantics remain unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
+            /// Bits 3:0 set together to 0xf by rev0 ROM phy_open_fe_bb_clk+0x34, alongside bit22. Individual physical effects and necessity are unknown; the public header labels this region reserved.
             #[inline]
             pub const fn bits_0_3_opaque(&self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// The `BITS_0_3_OPAQUE` field as its declared value, if it is one.
-            #[inline]
-            pub const fn bits_0_3_opaque_variant(&self) -> Option<Bits0_3Opaque> {
-                Bits0_3Opaque::from_bits(self.0 & 0xf)
             }
 
             /// need_des
@@ -143338,8 +143307,8 @@ pub mod pmu {
 
             /// Set `BITS_0_3_OPAQUE`.
             #[inline]
-            pub fn set_bits_0_3_opaque(&mut self, value: Bits0_3Opaque) -> &mut Self {
-                self.0 = (self.0 & 0xfffffff0) | value.bits();
+            pub fn set_bits_0_3_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff0) | value.get();
                 self
             }
 

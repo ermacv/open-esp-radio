@@ -96,10 +96,7 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         t.read_word_0048_opaque().counter_low().get(),
-        s.ble
-            .timer_status
-            .read_word_0038_opaque()
-            .bits_0_31_opaque(),
+        s.ble.timer_status.read_bluetooth_modem_lp_status(),
         s.interrupt_matrix
             .interrupt_core0_status
             .read_int_status_reg_3()
@@ -107,8 +104,8 @@ fn state(s: &Session<'_>, tag: u32) {
     );
     emit(
         tag + 1,
-        u32::from(t.read_word_001c_opaque().bits_0_7_opaque()),
-        u32::from(t.read_word_0020_opaque().bits_0_7_opaque()),
+        u32::from(t.read_word_001c_opaque().sleep16_flag_byte()),
+        u32::from(t.read_word_0020_opaque().sleep17_flag_byte()),
         u32::from(t.read_word_0024_opaque().low_byte()),
     );
     let m = t.read_word_0058_opaque();
@@ -215,13 +212,13 @@ fn run(s: &mut Session<'_>, stimulus: Stimulus) {
             }),
             Stimulus::Sleep16 => {
                 s.ble.timer.modify_word_0064_opaque(|w| {
-                    w.set_bits_0_23_opaque(Bits::truncate(target));
+                    w.set_sleep16_target(Bits::truncate(target));
                 });
                 s.ble.timer.enable_bluetooth_lp_sleep_16();
             }
             Stimulus::Sleep17 => {
                 s.ble.timer.write_word_0068_opaque(|w| {
-                    w.set_bits_0_23_opaque(Bits::truncate(target));
+                    w.set_sleep17_target(Bits::truncate(target));
                 });
                 s.ble.timer.enable_bluetooth_lp_sleep_17();
             }

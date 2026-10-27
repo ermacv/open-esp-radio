@@ -103,9 +103,8 @@ impl Sar {
         });
 
         p.pmu_radio.modify_hp_active_hp_ck_power(|w| {
-            w.set_bits_0_3_opaque(
-                oer_esp32s31_pac::pmu::hp_active_hp_ck_power::Bits0_3Opaque::RomRequired,
-            );
+            // SOURCE: BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4; observed configuration image.
+            w.set_bits_0_3_opaque(Bits::constant::<0xf>());
             w.set_hp_active_xpd_bb_i2c(true);
         });
 

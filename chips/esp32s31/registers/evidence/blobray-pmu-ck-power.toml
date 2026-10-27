@@ -1,0 +1,19 @@
+# Reviewed access and consumer facts; binary offsets are relative to symbol entry.
+schema = 1
+
+[[sources]]
+id = "BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4"
+description = "SOURCE: Blobray, esp-rom-elfs release20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf SHA-256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Complete rom[]::phy_open_fe_bb_clk@0x2f823ec0 size0x38 loads0x2070401c at+0x2a and stores at+0x34, setting mask0x0040000f and preserving its complement. Low4/bit22 of the load are overwritten without a software sink in this leaf. Preceding stores are FE0x20100400 at+0x08, FE0x20100800 at+0x1c, BB0x20107c80 at+0x26. Individual low4 effects, necessity, reset and silicon latch behavior remain unknown. Report: oer-notes/research/bx-pmu-ck-power.md."
+
+[[sources]]
+id = "BLOB_LIBPHY_S31_FE_BB_LIFECYCLE"
+description = "SOURCE: Blobray, esp-phy-lib20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a SHA-256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2. phy_init.o::phy_rf_init+0x0a and phy_wakeup_init+0x34 reference the open leaf; phy_xpd_rf_new+0x5e references close, with relocations four bytes earlier. The .iram1 section symbol starts are0xa8 for wakeup and0x230 for xpd; RF-init starts at zero in its section. Complete phy_close_fe_bb_clk size0x20 has four FE/BB accesses, stores at+0x04/+0x12/+0x1a, and no PMU access. This is no transitive-lifecycle absence proof. Report: oer-notes/research/bx-pmu-ck-power.md."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_PMU_ACTIVE_CK_PRESERVE"
+description = "SOURCE: ESP-IDF4d59230ddff16327812782151ef0afef202dc6d7, components/esp_hw_support/port/esp32s31/pmu_init.c::pmu_hp_system_init:80-86 active branch uses components/esp_hal_pmu/esp32s31/include/hal/pmu_ll.h::pmu_ll_hp_set_ana_i2c_power:142-147, updating22/20/21 rather than assigning the whole clk_power word. components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h cpll/xtalx2/bbpll/apll/mpll enable/disable leaves at98/109,120/131,163/174,185/196,207/218 update only their named upper fields. These inspected source operations preserve low4; a zero-initialized parameter struct does not establish low4 zeroing or its physical meanings. Report: oer-notes/research/bx-pmu-ck-power.md."
+
+[[sources]]
+id = "HW10_S31_PMU_ACTIVE_ICG_STARTUP_20261026"
+kind = "unattested-hil-observation"
+description = "SOURCE: oer-notes/research/hw-radio-start.md, runs hw10-20261026-radio-start-23-fe-clock/cpu-stop.log lease#870, 25-active-icg/fw.log/source.patch lease#873 and27-beacons/console.log/beacons.json lease#875. The witnessed BB store stalls before the CK_POWER load; early map/code2/modem-update/sleep-update publication permits startup and14 matching beacons with progressing sequence/timestamps in that baseline. This supports bounded HAL ordering only, without low4 differentials, separate-update necessity or sustained-radio qualification. The diagnostic journal still reports its recorded capacity failure. Report: oer-notes/research/bx-pmu-ck-power.md."

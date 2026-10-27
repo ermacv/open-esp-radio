@@ -254,7 +254,7 @@ fn execute_modem_lp_timer_stopped_interrupt(
     BluetoothModemLpTimerStoppedInterruptObservation,
     BluetoothModemLpTimerStoppedInterruptFault,
 > {
-    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::Bits0_31Opaque;
+    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::ROLLOVER_STATUS_MASK;
     let status = transaction.read_status();
     let pending = transaction.sample_pending();
     if pending.state_0024() != 0 {
@@ -262,8 +262,7 @@ fn execute_modem_lp_timer_stopped_interrupt(
             BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending { status, pending },
         );
     }
-    if status != Bits0_31Opaque::Inactive.bits() && status != Bits0_31Opaque::RolloverPending.bits()
-    {
+    if status != 0 && status != ROLLOVER_STATUS_MASK {
         return Err(
             BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus { status, pending },
         );
@@ -621,7 +620,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerTransaction for HardwareModemLpTimerTra
 
     fn enable_rollover(&mut self) {
         self.registers.write_word_0010_opaque(|w| {
-            w.set_bit_1_opaque(true);
+            w.set_rollover_delivery_set(true);
         });
     }
 
@@ -645,7 +644,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerStopTransaction
         ModemLpTimerTransaction::sample_pending(self)
     }
     fn read_status(&mut self) -> u32 {
-        self.status.read_word_0038_opaque().bits_0_31_opaque()
+        self.status.read_bluetooth_modem_lp_status()
     }
     fn clear_rollover(&mut self) {
         self.registers.clear_bluetooth_modem_lp_timer_state_002c();
@@ -663,7 +662,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerInterruptTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
     fn read_status_0038(&mut self) -> u32 {
-        self.status.read_word_0038_opaque().bits_0_31_opaque()
+        self.status.read_bluetooth_modem_lp_status()
     }
 
     fn read_value_006c(&mut self) -> u32 {
@@ -746,7 +745,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerRuntimeTransaction
 
     fn trigger_timer_command(&mut self) {
         self.registers.write_word_0010_opaque(|w| {
-            w.set_bit_18_opaque(true);
+            w.set_compare_software_delivery_set(true);
         });
     }
 
