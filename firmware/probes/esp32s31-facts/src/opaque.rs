@@ -2,6 +2,7 @@
 //! SOURCE: oer-notes research/opaque-blobray-{ble,wifi}.md and
 //! irq-blobray-wifi.md (P0, P-BA, BB-L, P-TSENS).
 use super::{Bits, Index, Session, contain, emit, pac};
+use pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
 
 /// Additional MAC owners; shared PHY/analog/clock owners are borrowed from
 /// `Session::sar`, like the BLE and local-timer leaves.
@@ -40,7 +41,9 @@ fn prepare(s: &mut Session<'_>) {
     s.sar.radio.hp_sys_clkrst_radio.modify_modem_ctrl0(|w| {
         w.set_reg_modem_clk_en(pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled);
     });
-    s.sar.radio.pmu_radio.select_hp_active_modem_icg();
+    s.sar.radio.pmu_radio.modify_hp_active_icg_modem(|w| {
+        w.set_hp_active_dig_icg_modem_code(HpActiveDigIcgModemCode::Active);
+    });
     s.sar
         .radio
         .modem_syscon_radio

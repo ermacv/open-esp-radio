@@ -2,6 +2,7 @@
 //! SOURCE: oer-notes/research/opaque-blobray-wifi.md P-I2C.
 use super::{Bits, Session, contain, emit, pac};
 use pac::analog_i2c::{self, Address, Host, Profile};
+use pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
 
 // Probe-only command deadline: 1 ms at the verified 40 MHz CPU XTAL.
 const COMMAND_CYCLES: u32 = 40_000;
@@ -23,7 +24,9 @@ fn prepare(s: &mut Session<'_>) {
     // SOURCE: hal/src/power.rs execute_owned; modem/ops.rs. Preserve its
     // PMU update -> APB -> maps -> source -> BB reset -> clocks order only.
     // MPLL reference counting and the separate RF-init graph are not run.
-    s.sar.radio.pmu_radio.select_hp_active_modem_icg();
+    s.sar.radio.pmu_radio.modify_hp_active_icg_modem(|w| {
+        w.set_hp_active_dig_icg_modem_code(HpActiveDigIcgModemCode::Active);
+    });
     s.sar
         .radio
         .pmu_radio

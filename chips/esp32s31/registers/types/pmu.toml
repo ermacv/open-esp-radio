@@ -100,10 +100,10 @@ sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [review.entity."HP_ACTIVE_ICG_MODEM"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"]
 
 [review.entity."HP_ACTIVE_ICG_MODEM.HP_ACTIVE_DIG_ICG_MODEM_CODE"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"]
 
 [review.entity."HP_ACTIVE_HP_CK_POWER"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
@@ -282,8 +282,8 @@ reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "HP_ACTIVE_DIG_ICG_MODEM_CODE"
 bits = "31:30"
 class = "plain"
-description = "Two-bit active-state modem clock-gating code; official ESP-HAL publishes code two for the active configuration."
-values = [{ name = "ACTIVE", value = 2, description = "Active-state modem clock-gating code published by official ESP-HAL." }]
+description = "Active-state modem clock bitmap selector. The SDK selects bitmap position two; per-domain state maps and module gates determine delivered clocks."
+values = [{ name = "ACTIVE", value = 2, description = "SDK active-state bitmap position." }]
 write-values-only = true
 
 [[registers]]

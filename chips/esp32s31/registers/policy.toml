@@ -3395,13 +3395,6 @@ whole-word = true
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
 
 [[fixed-register-images]]
-name = "select_hp_active_modem_icg"
-register = "PMU.HP_ACTIVE_ICG_MODEM"
-value = 0x80000000
-whole-word = true
-sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "S31_PMU_HEADERS"]
-
-[[fixed-register-images]]
 name = "apply_modem_icg_selection"
 register = "PMU.IMM_MODEM_ICG"
 value = 0x80000000
@@ -3764,6 +3757,12 @@ name = "prepare_modem_syscon_clock_map"
 fields = [{ field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_ZB_ST_MAP", source-bit-offset = 8 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_FE_ST_MAP", source-bit-offset = 12 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_BT_ST_MAP", source-bit-offset = 16 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_WIFI_ST_MAP", source-bit-offset = 20 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_MODEM_PERI_ST_MAP", source-bit-offset = 24 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_MODEM_APB_ST_MAP", source-bit-offset = 28 }]
 value = 0x64646400
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
+
+[[field-replace-modifies]]
+name = "select_hp_active_modem_icg"
+fields = [{ field = "PMU.HP_ACTIVE_ICG_MODEM.HP_ACTIVE_DIG_ICG_MODEM_CODE", source-bit-offset = 0 }]
+value = 2
+sources = ["ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG", "S31_PMU_HEADERS"]
 
 [[field-replace-modifies]]
 name = "configure_bluetooth_cte_six_buffer_limit"

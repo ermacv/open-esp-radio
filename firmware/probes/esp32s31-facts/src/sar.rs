@@ -3,6 +3,7 @@
 //! phy/clock/ops.rs, phy/i2c/master.rs, phy/baseband/ops.rs and
 //! oer-notes/research/opaque-blobray-phy.md (P-SAR-HOLD / P-SAR-EDGE).
 use super::{Bits, emit, pac};
+use pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
 use pac::{fe, wifi_bb};
 
 include!("sar_prepare.rs");
@@ -95,7 +96,9 @@ impl Sar {
     }
     fn prerequisites(&mut self) -> bool {
         let p = &mut self.radio;
-        p.pmu_radio.select_hp_active_modem_icg();
+        p.pmu_radio.modify_hp_active_icg_modem(|w| {
+            w.set_hp_active_dig_icg_modem_code(HpActiveDigIcgModemCode::Active);
+        });
 
         p.pmu_radio.trigger_imm_modem_icg_update_dig_icg_modem_en();
 

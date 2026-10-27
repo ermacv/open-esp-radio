@@ -211,7 +211,11 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     #[doc(hidden)]
     pub fn select_hp_active_modem_icg(&mut self) {
-        self.peripherals.pmu_radio.select_hp_active_modem_icg();
+        // SOURCE: ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
+        use oer_esp32s31_pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
+        self.peripherals.pmu_radio.modify_hp_active_icg_modem(|w| {
+            w.set_hp_active_dig_icg_modem_code(HpActiveDigIcgModemCode::Active);
+        });
     }
 
     #[doc(hidden)]
@@ -340,6 +344,43 @@ mod tests {
     use super::*;
     use oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadioWords;
     use oer_mmio::Registers;
+
+    #[test]
+    fn active_icg_selection_preserves_inherited_bits_and_other_pmu_words() {
+        use oer_esp32s31_pac::pmu::{PmuRadio, hp_active_icg_modem};
+
+        for (inherited, selected) in [
+            (0x0000_0000, 0x8000_0000),
+            (0x4000_0000, 0x8000_0000),
+            (0x8000_0000, 0x8000_0000),
+            (0xc000_0000, 0x8000_0000),
+            (0xffff_ffff, 0xbfff_ffff),
+            (0x5555_5555, 0x9555_5555),
+            (0xaaaa_aaaa, 0xaaaa_aaaa),
+        ] {
+            crate::phy::registers::host::with_registers(inherited, |registers| {
+                registers.select_hp_active_modem_icg();
+                let pmu = &registers.peripherals.pmu_radio;
+                assert_eq!(
+                    pmu.read_hp_active_icg_modem()
+                        .hp_active_dig_icg_modem_code_variant(),
+                    Some(hp_active_icg_modem::HpActiveDigIcgModemCode::Active),
+                );
+                for (index, &offset) in
+                    PmuRadio::<oer_mmio::Host<'_>>::RADIO_PHY_REGISTER_IMAGE_OFFSETS
+                        .iter()
+                        .enumerate()
+                {
+                    let expected = if offset == hp_active_icg_modem::OFFSET as u32 {
+                        selected
+                    } else {
+                        inherited
+                    };
+                    assert_eq!(pmu.radio_phy_register_image(index), Some(expected));
+                }
+            });
+        }
+    }
 
     #[test]
     fn source_readback_accepts_the_pinned_open_state_only() {

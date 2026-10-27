@@ -1,0 +1,6 @@
+# Reviewed register evidence: active-state modem clock selection.
+schema = 1
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/esp_hal_pmu/esp32s31/include/hal/pmu_ll.h:77-80 (pmu_ll_hp_set_icg_modem) assigns only the icg_modem.code field, bits 31:30 per components/soc/esp32s31/register/soc/pmu_struct.h, preserving reserved bits 29:0. components/esp_hw_support/port/esp32s31/pmu_param.c:128-133 selects the active bitmap position, defined as 2 in components/esp_hal_pmu/include/hal/pmu_types.h:34-36. components/esp_hw_support/port/esp32s31/pmu_init.c:93,137-138 publishes the selector before the modem-code update and sleep-switch update. These are source-level field and ordering contracts, not a silicon measurement."
