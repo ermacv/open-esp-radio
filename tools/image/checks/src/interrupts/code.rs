@@ -96,6 +96,24 @@ pub struct CodePlacement {
 }
 
 impl CodePlacement {
+    /// The full code inventory of every declared interrupt handler, on every
+    /// hart. Include executor tasks as the handler audit did before; the
+    /// exception and panic entry paths have their own audits.
+    pub(super) fn handler_code(
+        &self,
+        analysis: &Analysis,
+        names: &BTreeMap<u32, String>,
+        memory: &Memory,
+    ) -> super::HandlerCode {
+        let reached = self
+            .contexts
+            .iter()
+            .filter(|context| context.level != 0)
+            .flat_map(|context| context.strict.union(&context.tasks).copied())
+            .collect();
+        super::handler_code(analysis, &reached, names, memory)
+    }
+
     /// The resolved strict functions still in cached memory, by address and size.
     /// The image linker consumes this same partition as the final check.
     pub fn strict_cached(&self) -> impl Iterator<Item = (u32, u32)> + '_ {

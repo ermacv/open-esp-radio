@@ -824,12 +824,6 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
     };
     let harts =
         oer_analysis_riscv_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
-    let reached: BTreeSet<u32> = harts
-        .iter()
-        .flat_map(|hart| hart.levels.iter())
-        .flat_map(|level| level.bound.reached.iter().copied())
-        .collect();
-    let interrupt_code = handler_code(analysis, &reached, names, &contract.memory);
     let panic_code = panic_path_code(
         analysis,
         names,
@@ -848,6 +842,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         &mut keep,
         &mut control,
     )?;
+    let interrupt_code = code_placement.handler_code(analysis, names, &contract.memory);
     let parsed = oer_analysis_elf::Elf::parse(elf)?;
     let code_sections: Vec<_> = parsed
         .sections()
