@@ -328,12 +328,12 @@ completeness = "complete"
 sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 
 [review.entity."RX_NEXT_DESCRIPTOR"]
-sources = ["HW18_RX_COMMITTED_PREFIX_20261027", "HW18_RX_UNCOMMITTED_WRITES_20261027", "HW18_RX_FCS_CORRELATION_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+sources = ["HW18_RX_HEAD_LEADING_PRESERVATION_20261027", "HW18_RX_COMMITTED_PREFIX_20261027", "HW18_RX_UNCOMMITTED_WRITES_20261027", "HW18_RX_FCS_CORRELATION_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 accuracy = "exact"
 completeness = "complete"
 
 [review.entity."RX_NEXT_DESCRIPTOR.ADDRESS_LOW"]
-sources = ["HW18_RX_COMMITTED_PREFIX_20261027", "HW18_RX_UNCOMMITTED_WRITES_20261027", "HW18_RX_FCS_CORRELATION_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+sources = ["HW18_RX_HEAD_LEADING_PRESERVATION_20261027", "HW18_RX_COMMITTED_PREFIX_20261027", "HW18_RX_UNCOMMITTED_WRITES_20261027", "HW18_RX_FCS_CORRELATION_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 
 [review.entity."RX_NEXT_DESCRIPTOR.BITS_20_31_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20104088", "ROM_REV0_WDEV_APPEND_RX_BLOCKS"]
@@ -6715,7 +6715,7 @@ pointer = { points-to = "WIFI_RX_DMA_DESCRIPTOR", placement = "dma-window", enco
 [[registers]]
 name = "RX_NEXT_DESCRIPTOR"
 offset = 0x88
-description = "Hardware current/next descriptor observation, not an exclusive live-write target: its sampled address can stay fixed while words in later buffers change without descriptor/cursor commit. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom[]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE."
+description = "Hardware current/next descriptor observation, not an exclusive live-write target: its sampled address can stay fixed while words in later buffers change without descriptor/cursor commit. In 23 sampled uncommitted-write clusters on one s31-b board with 128-byte buffers, the head leading word stays unchanged and changes start at the linked successor (0 after R, 3 after 2, 6 after 5); whole-head freshness and general release safety do not follow. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom[]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE."
 
 [[registers.fields]]
 name = "ADDRESS_LOW"

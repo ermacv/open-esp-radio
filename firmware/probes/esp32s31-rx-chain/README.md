@@ -74,6 +74,20 @@ identify a rejected/aborted producer or prove rollback.
 The descriptor alone does not mark nonterminal consumption. The repeated dirty
 writes also leave the sentinel's validity as a consumption predicate unproved.
 
+SOURCE[`HW18_RX_HEAD_LEADING_PRESERVATION_20261027`] records 23 observed
+uncommitted-write clusters: 13 with the production sentinel and 10 with the
+CPU barriers. Both finite captures use one s31-b rev0 board, channel 13,
+32×128-byte ring nodes plus R, and three accepted beacons with a
+three-terminal/700-ms bound, without take/recycle/rearm. The barrier capture
+has FCS=9 and buffer-full=8, with its first OWNER=0 node at index 12.
+No selected cluster changes the leading word of the current sampled NEXT
+head: changes start at its linked successor, node 0 after R, node 3 after
+NEXT=2, or node 6 after NEXT=5. These are clusters, not independently identified
+peer frames, and whole-head preservation is unmeasured. A head can already
+be dirty from an earlier series before becoming NEXT.
+The result narrows the observed rejected-write footprint; it neither validates
+sentinel accepted-frame membership nor proves arbitrary in-flight detach/recycle safety.
+
 The capture stops at the first frame limit or deadline. If trace capacity is
 exhausted, collection stops, then emits the retained rows and stopped-buffer
 dumps before returning a failed verdict. A pass means bounded collection

@@ -535,8 +535,8 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     ///
     /// Publishes the all-zero ENABLE image, then orders the write, without
     /// acknowledging pending events. The tested RX_SUCCESS/combined-auxiliary
-    /// STATUS observation was hidden under the code-requested mask (R1 did
-    /// not read ENABLE back);
+    /// STATUS observation was hidden under the code-requested mask in
+    /// run `hw18-20261027-rx-radio-01-s31b` (ENABLE was not read back);
     /// [`Self::unmask_rx_delivery_interrupts`] restores only the RX group.
     /// RAW retention and other causes are not qualified by the RX observation.
     ///

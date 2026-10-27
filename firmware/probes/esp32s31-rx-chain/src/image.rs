@@ -766,9 +766,9 @@ async fn run(
     if let Err(reason) = trace.scan(storage, &mut access, true, &mut mac_irq) {
         observation = Err(reason);
     }
-    // No take/recycle is performed. Unlike the earlier masked capture, this
-    // correlation mode acknowledges STATUS during RX. These final phases read
-    // enable state; they need not reproduce the earlier pending replay.
+    // No take/recycle is performed. STATUS is acknowledged during RX.
+    // These final phases read enable state and any remaining pending STATUS;
+    // a zero sample does not establish retention of an unacknowledged event.
     mac_irq.mask_all_mac_interrupts();
     let masked_status = mac_irq.mac_interrupt_status().observation();
     let masked_enable = enable_tag(mac_irq.mac_interrupt_enable());
