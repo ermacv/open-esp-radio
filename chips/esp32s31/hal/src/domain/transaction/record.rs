@@ -1,6 +1,6 @@
 //! Fixed-size retained diagnostic codec shared by image compositions.
 use super::{Fault, FaultReason, Operation, SarSetupFault, SarTransferFault};
-use core::fmt::{self, Write};
+use core::fmt;
 const MAGIC: u32 = 0x5054_5802;
 
 /// Sixteen retained bytes: version, operation/reason, epoch and checksum.
@@ -50,7 +50,7 @@ impl FaultRecord {
             .fold(MAGIC, |sum, word| (sum ^ word).wrapping_mul(0x0100_0193))
     }
     /// Report a valid record; failed output retains it for the next boot.
-    pub fn report(&mut self, write: impl FnMut(&[u8]) -> bool) -> fmt::Result {
+    pub fn report(&mut self, mut write: impl FnMut(&[u8]) -> bool) -> fmt::Result {
         if self.magic != MAGIC || self.checksum != self.checksum() {
             return Ok(());
         }
@@ -86,21 +86,35 @@ impl FaultRecord {
                 _ => return Ok(()),
             };
         }
-        struct Output<F>(F);
-        impl<F: FnMut(&[u8]) -> bool> Write for Output<F> {
-            fn write_str(&mut self, text: &str) -> fmt::Result {
-                if (self.0)(text.as_bytes()) {
-                    Ok(())
-                } else {
-                    Err(fmt::Error)
-                }
+        // Keep every output call static: `core::fmt::write` erases both the
+        // writer and argument formatters, leaving unresolved boot-stack calls.
+        let mut emit = |bytes: &[u8]| {
+            if write(bytes) {
+                Ok(())
+            } else {
+                Err(fmt::Error)
             }
+        };
+        let mut digits = [b'0'; u32::MAX.ilog10() as usize + 1];
+        let mut registration = self.registration;
+        for digit in digits.iter_mut().rev() {
+            *digit = b'0'.wrapping_add((registration % 10) as u8);
+            registration /= 10;
         }
-        writeln!(
-            Output(write),
-            "previous PHY transaction fault reason={reason} operation={operation} registration={}",
-            self.registration
-        )?;
+        let mut decimal = digits.as_slice();
+        while let [b'0', rest @ ..] = decimal {
+            if rest.is_empty() {
+                break;
+            }
+            decimal = rest;
+        }
+        emit(b"previous PHY transaction fault reason=")?;
+        emit(reason.as_bytes())?;
+        emit(b" operation=")?;
+        emit(operation.as_bytes())?;
+        emit(b" registration=")?;
+        emit(decimal)?;
+        emit(b"\n")?;
         self.magic = 0;
         Ok(())
     }
@@ -223,6 +237,55 @@ mod tests {
         let text = std::string::String::from_utf8(bytes).unwrap();
         assert!(text.contains("reason=SarAlarmWithoutBundle operation=none"));
         assert_eq!(core::mem::size_of::<FaultRecord>(), 16);
+    }
+    #[test]
+    fn decimal_output_is_exact_and_each_refused_chunk_retains_the_record() {
+        for registration in [0, 1, 9, 10, 99, 100, 999_999_999, 1_000_000_000, u32::MAX] {
+            let mut original = FaultRecord {
+                magic: MAGIC,
+                reason: 1,
+                registration,
+                checksum: 0,
+            };
+            original.checksum = original.checksum();
+            let expected = std::format!(
+                "previous PHY transaction fault reason=Cancelled operation=register registration={registration}\n"
+            );
+            let mut record = original;
+            let mut chunks = std::vec::Vec::new();
+            record
+                .report(|chunk| {
+                    chunks.push(chunk.to_vec());
+                    true
+                })
+                .unwrap();
+            assert_eq!(chunks.concat(), expected.as_bytes());
+            assert_eq!(record.magic, 0);
+            for refused in 0..chunks.len() {
+                let mut record = original;
+                let mut attempted = 0;
+                assert!(
+                    record
+                        .report(|_| {
+                            let accepted = attempted != refused;
+                            attempted += 1;
+                            accepted
+                        })
+                        .is_err()
+                );
+                assert_eq!(attempted, refused + 1, "stop at the refused chunk");
+                assert_eq!(record.magic, MAGIC, "retain until the newline succeeds");
+                let mut replay = std::vec::Vec::new();
+                record
+                    .report(|chunk| {
+                        replay.extend_from_slice(chunk);
+                        true
+                    })
+                    .unwrap();
+                assert_eq!(replay, expected.as_bytes());
+                assert_eq!(record.magic, 0);
+            }
+        }
     }
     #[test]
     fn corrupted_record_is_not_reported() {
