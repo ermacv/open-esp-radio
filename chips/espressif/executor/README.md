@@ -137,3 +137,18 @@ setup returns its acknowledger before the image binds the handler's part,
 and its ringing half only after.
 Constructors consume owned HAL parts from the reset root; only the PAC root
 claims hardware.
+
+## Setup and invariant failures
+
+`init`, `bind`, `ComparatorWriter::adopt`, `InterruptExecutor::start` and
+`Executor::run` return `Result` for counter-latch and routing refusals. A
+`Failure<T>` retains its inputs in quarantine even when dropped; the image
+calls its never-returning `reset` to record the named `Fault` through the
+staged runtime's `fatal::reset_recording`. Successful thread execution has
+`Infallible` as its return value. Every firmware caller handles the refusal.
+
+Duplicate publication, missing timer ownership, foreign cooperative context
+and invalid wake indices are named faults. No task, handler, comparator or
+line owner is released on their terminal path. Four diagnostic words and the
+reason reuse the runtime's retained panic slot; the next boot prints them,
+retaining the record if console output is refused.

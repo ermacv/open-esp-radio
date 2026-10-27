@@ -165,8 +165,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    ).unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1).unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
@@ -186,7 +186,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         interrupts.radio,
         software.irq2,
         urgent,
-    );
+    ).unwrap_or_else(|failure| failure.reset());
     let mut rng = Rng::new(runtime.entropy, EmbassyClock);
     let seed = (u64::from(rng.random()) << 32) | u64::from(rng.random());
     let entropy = rng.random();
@@ -222,7 +222,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
-    executor.run(
+    match executor.run(
         &hart,
         &mut router,
         interrupts.wake,
@@ -236,7 +236,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
                 fail("task-start");
             }
         },
-    )
+    ).unwrap_or_else(|failure| failure.reset()) {}
 }
 
 /// Feed the RTC watchdog for good: the image resets when this executor stops

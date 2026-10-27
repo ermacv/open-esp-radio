@@ -214,8 +214,8 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         tokens.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), tokens.app_alarm, timer.alarm1);
+    ).unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), tokens.app_alarm, timer.alarm1).unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let Ok(bound) = irq::bind(
         adopted.router(),
@@ -232,7 +232,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let urgent = bound.urgent;
     let _ = bridge::clock_state();
     let (hart, router) = adopted.parts();
-    let radio = X::new(software.line2).start(hart, router, tokens.radio, software.irq2, urgent);
+    let radio = X::new(software.line2).start(hart, router, tokens.radio, software.irq2, urgent).unwrap_or_else(|failure| failure.reset());
     let Some(arena) = ARENA.take() else {
         crate::fail("arena")
     };
@@ -268,7 +268,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let rng = host::Rng::new(runtime.entropy, EmbassyClock);
     let watchdog = runtime.watchdogs.rtc;
-    app.run(
+    match app.run(
         &hart,
         &mut router,
         tokens.wake,
@@ -290,7 +290,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
                 crate::fail("app-tasks");
             }
         },
-    )
+    ).unwrap_or_else(|failure| failure.reset()) {}
 }
 async fn hold<T>(owner: &mut T) -> ! {
     core::hint::black_box(owner);

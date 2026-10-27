@@ -26,6 +26,7 @@
 
 use core::{marker::PhantomData, task::Waker};
 
+use crate::{Failure, Fault};
 use oer_memory::{ContextCell, ContextProof};
 
 use embassy_time_driver::Driver;
@@ -134,32 +135,42 @@ const fn comparator_of_source(source: u16) -> u8 {
 ///
 /// Call it before interrupts are enabled.
 ///
-/// # Panics
-///
-/// When the time driver was installed already, or the table routes the
-/// source to another core.
+/// # Errors
+/// A stuck counter latch or refused route returns the supplied inputs in
+/// quarantine. Duplicate installation records a fault and resets.
 pub fn init<const WRITER_SWI: u8, A, C>(
     systimer: crate::systimer::SystemTimer,
     router: &mut oer_interrupt_table::Router<C>,
     alarm: A,
     part: A::Part,
-) where
+) -> Result<(), Failure<(Option<crate::systimer::SystemTimer>, A, A::Part)>>
+where
     A: Entry,
     A::Part: AlarmPart,
     C: oer_interrupt_table::Controller,
 {
-    let bank = ComparatorWriter::adopt(systimer);
-    assert!(
-        BANK.install(BANK_STORAGE.init(bank)).is_ok(),
-        "the SYSTIMER bank owner is already installed"
-    );
-    assert!(
-        WRITER
-            .compare_exchange(NO_EXECUTOR, WRITER_SWI, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok(),
-        "the time driver is installed already"
-    );
-    bind::<WRITER_SWI, A, C>(router, alarm, part);
+    let writer = WRITER.load(Ordering::Acquire);
+    if writer != NO_EXECUTOR {
+        Fault::TimerInstalled { writer }.reset();
+    }
+    let bank = match ComparatorWriter::adopt(systimer) {
+        Ok(bank) => bank,
+        Err(failure) => return Err(failure.map_owners(|timer| (Some(timer), alarm, part))),
+    };
+    let storage = match BANK_STORAGE.try_uninit() {
+        Some(storage) => storage,
+        None => Fault::TimerInstalled { writer }.reset(),
+    };
+    if BANK.install(storage.write(bank)).is_err() {
+        Fault::TimerInstalled { writer }.reset();
+    }
+    if let Err(writer) =
+        WRITER.compare_exchange(NO_EXECUTOR, WRITER_SWI, Ordering::AcqRel, Ordering::Acquire)
+    {
+        Fault::TimerInstalled { writer }.reset();
+    }
+    bind::<WRITER_SWI, A, C>(router, alarm, part)
+        .map_err(|failure| failure.map_owners(|refused| (None, refused.token, refused.part)))
 }
 
 /// Give executor `SWI` the comparator of `alarm`'s source, whose table entry
@@ -167,15 +178,15 @@ pub fn init<const WRITER_SWI: u8, A, C>(
 ///
 /// Call it after [`init`] and before interrupts are enabled.
 ///
-/// # Panics
-///
-/// When the executor or the comparator is bound already, or the table routes
-/// the source to another core.
+/// # Errors
+/// A refused route returns its token and part in quarantine. Duplicate
+/// assignment or an unavailable timer bank records a fault and resets.
 pub fn bind<const SWI: u8, A, C>(
     router: &mut oer_interrupt_table::Router<C>,
     alarm: A,
     mut part: A::Part,
-) where
+) -> Result<(), Failure<oer_interrupt_table::Refused<A>>>
+where
     A: Entry,
     A::Part: AlarmPart,
     C: oer_interrupt_table::Controller,
@@ -193,38 +204,68 @@ pub fn bind<const SWI: u8, A, C>(
         );
         comparator
     };
-    assert!(
-        WRITER.load(Ordering::Acquire) != NO_EXECUTOR,
-        "the time driver is not installed"
-    );
-    assert!(
-        COMPARATOR_OF[SWI as usize]
-            .compare_exchange(
-                NO_COMPARATOR,
-                comparator,
-                Ordering::AcqRel,
-                Ordering::Acquire
-            )
-            .is_ok()
-            && EXECUTOR_OF[comparator as usize]
-                .compare_exchange(NO_EXECUTOR, SWI, Ordering::AcqRel, Ordering::Acquire)
-                .is_ok(),
-        "executor {SWI} or comparator {comparator} is bound already"
-    );
-    // Setup still owns the bank and the alarm part before this alarm's
-    // route is enabled.
-    assert!(
-        BANK.with(|bank| bank.bind(&mut part)).is_some(),
-        "the SYSTIMER bank is installed before binding"
-    );
-    assert_eq!(
-        A::HART as usize,
-        crate::chip::current_core(),
-        "alarm route is on this hart"
-    );
-    if let Err(error) = router.bind(alarm, part) {
-        panic!("time driver alarm {comparator}: {error:?}");
+    if WRITER.load(Ordering::Acquire) == NO_EXECUTOR {
+        Fault::TimerNotInstalled.reset();
     }
+    if let Err(previous) = COMPARATOR_OF[SWI as usize].compare_exchange(
+        NO_COMPARATOR,
+        comparator,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    ) {
+        Fault::TimerBinding {
+            executor: SWI,
+            comparator,
+            previous,
+        }
+        .reset();
+    }
+    if let Err(previous) = EXECUTOR_OF[comparator as usize].compare_exchange(
+        NO_EXECUTOR,
+        SWI,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    ) {
+        Fault::TimerBinding {
+            executor: SWI,
+            comparator,
+            previous,
+        }
+        .reset();
+    }
+    let actual = crate::chip::current_core();
+    if A::HART as usize != actual {
+        return Err(Failure::new(
+            Fault::AlarmHart {
+                expected: A::HART,
+                actual,
+            },
+            oer_interrupt_table::Refused {
+                error: oer_interrupt_table::Error::WrongHart {
+                    source: <A::Part as oer_interrupt_table::InterruptSource>::SOURCE,
+                    hart: A::HART,
+                    current: actual as u8,
+                },
+                token: alarm,
+                part,
+            },
+        ));
+    }
+    if BANK.with(|bank| bank.bind(&mut part)).is_none() {
+        Fault::TimerBankUnavailable { comparator }.reset();
+    }
+    router
+        .bind(alarm, part)
+        .map(|_bound| ())
+        .map_err(|refused| {
+            Failure::new(
+                Fault::Route {
+                    executor: SWI,
+                    error: refused.error,
+                },
+                refused,
+            )
+        })
 }
 
 /// Program `comparator` for `deadline` (microseconds), in the writer's
@@ -237,10 +278,12 @@ fn program(comparator: Comparator, deadline: u64) {
             .saturating_mul(crate::chip::TICKS_PER_MICROSECOND)
             .min(TICK_MASK)
     });
-    assert!(
-        BANK.with(|bank| bank.program(comparator, ticks)).is_some(),
-        "only the SYSTIMER writer programs the bank"
-    );
+    if BANK.with(|bank| bank.program(comparator, ticks)).is_none() {
+        Fault::TimerBankUnavailable {
+            comparator: comparator as u8,
+        }
+        .reset();
+    }
 }
 
 /// Mark executor `swi`'s task ready, in its context before it polls.
@@ -404,7 +447,16 @@ impl Driver for EmbassyTimeDriver {
             .get(usize::from(swi))
             .and_then(|assignment| Comparator::from_index(assignment.load(Ordering::Acquire)))
         else {
-            panic!("executor {swi} has no timer comparator");
+            let comparator = COMPARATOR_OF
+                .get(usize::from(swi))
+                .map_or(NO_COMPARATOR, |assignment| {
+                    assignment.load(Ordering::Acquire)
+                });
+            Fault::MissingComparator {
+                executor: swi,
+                comparator,
+            }
+            .reset();
         };
         let registered = with_slot(swi, |slot| {
             #[cfg(oer_profile)]

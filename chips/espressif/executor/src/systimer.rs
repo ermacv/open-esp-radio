@@ -23,11 +23,8 @@ impl ComparatorWriter {
     /// Consume the running timer without resetting its counter or clock:
     /// publish the counter latch and return the comparator owner, which
     /// cannot be cloned or obtained a second time.
-    pub fn adopt(systimer: SystemTimer) -> Self {
-        crate::chip::install_counter(systimer.counter);
-        Self {
-            timer: systimer.comparators,
-        }
+    pub fn adopt(systimer: SystemTimer) -> Result<Self, crate::Failure<SystemTimer>> {
+        crate::chip::install_counter(systimer).map(|timer| Self { timer })
     }
 
     /// Bind `alarm`'s comparator in one-shot mode before its handler's

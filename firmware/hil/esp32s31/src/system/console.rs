@@ -53,16 +53,18 @@ pub(crate) fn start<C: oer_interrupt_table::Controller>(
     #[cfg(not(feature = "usb-jtag-off"))]
     let _pads = pads;
     CONSOLE.start(boot);
-    executor.run(hart, router, wake, line, (), |spawner| {
-        WatchdogTasks::test_watchdog(spawner, service).expect("system watchdog test task");
-        WatchdogTasks::panic_on_request(spawner).expect("panic task");
-        #[cfg(feature = "usb-jtag-off")]
-        WatchdogTasks::disable_on_request(spawner, pads).expect("USB switch task");
-        WatchdogTasks::run(spawner, usb, boot).expect("system console task");
-        if WatchdogTasks::rtc_watchdog(spawner, rtc_watchdog).is_err() {
-            crate::fail(crate::fatal::Failure::TaskAllocation);
-        }
-    });
+    match executor
+        .run(hart, router, wake, line, (), |spawner| {
+            WatchdogTasks::test_watchdog(spawner, service).expect("system watchdog test task");
+            WatchdogTasks::panic_on_request(spawner).expect("panic task");
+            #[cfg(feature = "usb-jtag-off")]
+            WatchdogTasks::disable_on_request(spawner, pads).expect("USB switch task");
+            WatchdogTasks::run(spawner, usb, boot).expect("system console task");
+            if WatchdogTasks::rtc_watchdog(spawner, rtc_watchdog).is_err() {
+                crate::fail(crate::fatal::Failure::TaskAllocation);
+            }
+        })
+        .unwrap_or_else(|failure| failure.reset()) {};
 }
 
 fn queue_test(

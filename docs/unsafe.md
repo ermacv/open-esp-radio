@@ -203,6 +203,18 @@ contains no register owner or waker; copying it permits both local executors
 to observe the same urgent source. A sealed `UrgentSources` contract accepts
 that observation or `()`; executor startup cannot take a raw numeric list.
 
+Executor and time-driver setup return route or counter-latch refusals through
+`Result`. Each `Failure<T>` holds its inputs in `ManuallyDrop`; dropping a
+refusal cannot release those owners or authorize retry. Internal invariant
+failures carry a named `Fault` with the original observations. The terminal
+path masks execution through `fatal::reset_recording` and keeps all static,
+handler and interrupted task owners until reset. A named reason and four exact
+32-bit observation words reuse the existing panic slot, with its checksum and
+first-record retention; no retained bytes are added. Adoption prints this
+record through the early console and clears it only after successful output.
+Software lines use fallible static placement and one-time value publication,
+without a panicking initialization path or additional unsafe code.
+
 The generated Rust MTVT is one immutable array of aligned per-hart rows.
 Its one unsafe attribute owns the SRAM section. The table and trap assembly
 share a module/codegen unit; the existing `global_asm!` exports `_runtime_mtvt`

@@ -1,6 +1,7 @@
 #![no_std]
 #![cfg_attr(test, feature(type_alias_impl_trait))]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(not(test), deny(clippy::panic, clippy::expect_used))]
 #![deny(
     clippy::unwrap_used,
     clippy::unreachable,
@@ -45,6 +46,10 @@ mod deadline_cell;
 mod doorbell;
 #[cfg(feature = "chip")]
 mod executor;
+#[cfg(any(feature = "chip", test))]
+mod fault;
+#[cfg(any(feature = "chip", test))]
+pub use fault::{Failure, Fault};
 pub mod hardware;
 #[cfg(feature = "chip")]
 mod hart_binding;

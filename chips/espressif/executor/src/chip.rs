@@ -2,9 +2,10 @@
 //! the HAL's executor contract and architectural CSR instructions.
 
 use crate::hardware::ExecutorPlatform;
+use crate::{Failure, Fault};
 use oer_esp32s31_hal::executor::Platform as Chip;
 pub(crate) use oer_esp32s31_hal::platform;
-use oer_memory::zeroed::ZeroedOnce;
+use oer_memory::{OnceValue, StaticRef};
 
 use crate::software_line::{SoftwareLine, serve};
 use platform::system_timer::counter;
@@ -71,21 +72,30 @@ pub(crate) fn interrupt_level() -> u8 {
 
 /// The shared counter latch every context reads, published once by the time
 /// driver's handoff.
-static COUNTER: ZeroedOnce<platform::SystimerCounter> = ZeroedOnce::new();
+static COUNTER: StaticRef<platform::SystimerCounter> = StaticRef::new();
+static COUNTER_STORAGE: static_cell::StaticCell<platform::SystimerCounter> =
+    static_cell::StaticCell::new();
 
 /// Publish the counter latch, from the system timer's handoff, once its
 /// latch has settled within its bound ([`counter::check`]).
 ///
-/// # Panics
-/// When it is published already or its latch never settles (a fault of the
-/// system timer): the boundary at which the clock's reads become infallible.
-pub(crate) fn install_counter(counter: platform::SystimerCounter) {
-    assert!(COUNTER.get().is_none(), "the counter is published once");
-    assert!(
-        counter::check(&counter).is_ok(),
-        "the system timer's counter latch settles"
-    );
-    let _ = COUNTER.get_or_init(|| counter);
+/// # Errors
+/// A latch that does not settle returns the complete timer to its caller.
+pub(crate) fn install_counter(
+    systimer: crate::systimer::SystemTimer,
+) -> Result<platform::SystimerComparators, Failure<crate::systimer::SystemTimer>> {
+    if COUNTER.get().is_some() {
+        Fault::CounterPublished.reset();
+    }
+    if counter::check(&systimer.counter).is_err() {
+        return Err(Failure::new(Fault::CounterLatchStuck, systimer));
+    }
+    let storage = match COUNTER_STORAGE.try_uninit() {
+        Some(storage) => storage,
+        None => Fault::CounterPublished.reset(),
+    };
+    COUNTER.set(storage.write(systimer.counter));
+    Ok(systimer.comparators)
 }
 
 /// The system timer's counter, in microseconds: a verified read, or the
@@ -152,47 +162,52 @@ impl SoftwareLine for Line {
 }
 
 macro_rules! own_line {
-    ($variant:ident, $block:ident, $take:ident, $storage:ident) => {
-        static $storage: ZeroedOnce<platform::$block> = ZeroedOnce::new();
+    ($number:literal, $variant:ident, $block:ident, $take:ident, $storage:ident) => {
+        static $storage: static_cell::StaticCell<platform::$block> = static_cell::StaticCell::new();
 
         /// Publish a line moved from the single reset root, once.
         pub(crate) fn $take(block: platform::$block) -> Line {
-            assert!($storage.get().is_none(), "the line owner is published once");
-            Line::$variant($storage.get_or_init(|| block))
+            let storage = match $storage.try_uninit() {
+                Some(storage) => storage,
+                None => Fault::LinePublished { executor: $number }.reset(),
+            };
+            Line::$variant(storage.write(block))
         }
     };
 }
 
-own_line!(Zero, FromCpu0, own_line_0, LINE0);
-own_line!(One, FromCpu1, own_line_1, LINE1);
-own_line!(Two, FromCpu2, own_line_2, LINE2);
-own_line!(Three, FromCpu3, own_line_3, LINE3);
+own_line!(0, Zero, FromCpu0, own_line_0, LINE0);
+own_line!(1, One, FromCpu1, own_line_1, LINE1);
+own_line!(2, Two, FromCpu2, own_line_2, LINE2);
+own_line!(3, Three, FromCpu3, own_line_3, LINE3);
 
 // Each executor's line, published once for wakers; only the line's handler
 // lowers it. Boot lowers the line before it is published.
-static LINES: [ZeroedOnce<Line>; SOFTWARE_INTERRUPT_COUNT] =
-    [const { ZeroedOnce::new() }; SOFTWARE_INTERRUPT_COUNT];
+static LINES: [OnceValue<Line>; SOFTWARE_INTERRUPT_COUNT] =
+    [const { OnceValue::new() }; SOFTWARE_INTERRUPT_COUNT];
 
 /// Install software interrupt `swi`'s line for its executor.
 ///
-/// # Panics
-/// When the line is installed already.
 pub(crate) fn install_line(swi: usize, line: Line) {
-    line.lower();
     let Some(slot) = LINES.get(swi) else {
-        panic!("no such software interrupt");
+        Fault::InvalidExecutor {
+            executor: swi as u8,
+        }
+        .reset();
     };
-    assert!(
-        slot.get().is_none(),
-        "software interrupt owner is already installed"
-    );
-    let _ = slot.get_or_init(|| line);
+    line.lower();
+    if slot.set(line).is_err() {
+        Fault::LinePublished {
+            executor: swi as u8,
+        }
+        .reset();
+    }
 }
 
 /// Software interrupt `swi`'s installed line: none before its executor or
 /// doorbell took it, when there is nothing it could wake.
-fn line(swi: u8) -> Option<&'static Line> {
-    LINES.get(usize::from(swi)).and_then(ZeroedOnce::get)
+fn line(swi: u8) -> Option<Line> {
+    LINES.get(usize::from(swi)).and_then(OnceValue::get)
 }
 
 /// Raise software interrupt `swi`; a line no executor took yet has no
@@ -211,7 +226,7 @@ pub(crate) fn raise_interrupt(swi: u8) {
 #[inline(always)]
 pub(crate) fn serve_interrupt<R>(swi: u8, drain: impl FnOnce() -> R) -> R {
     match line(swi) {
-        Some(line) => serve(line, drain),
+        Some(line) => serve(&line, drain),
         None => drain(),
     }
 }

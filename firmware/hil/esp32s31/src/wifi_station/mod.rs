@@ -142,8 +142,10 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.alarm, timer.alarm1);
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.alarm, timer.alarm1)
+        .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
@@ -157,13 +159,9 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let bell = irq::ImageDoorbell(bell);
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2).start(
-        hart,
-        router,
-        interrupts.radio,
-        software.irq2,
-        urgent,
-    );
+    let radio = InterruptExecutor::<2>::new(software.line2)
+        .start(hart, router, interrupts.radio, software.irq2, urgent)
+        .unwrap_or_else(|failure| failure.reset());
     let mut rng = crate::Rng::new(runtime.entropy, EmbassyClock);
     if !rng.status().is_healthy() {
         crate::fail(crate::fatal::Failure::EntropySource);
@@ -209,28 +207,30 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
     };
     let watchdog = runtime.watchdogs.rtc;
-    executor.run(
-        &hart,
-        &mut router,
-        interrupts.wake,
-        software.irq0,
-        urgent,
-        move |spawner| {
-            let console_work = CONSOLE_WORK.take().future(|| console_future(usb, boot));
-            if AppTasks::console(spawner, console_work).is_err() {
-                crate::fail(crate::fatal::Failure::TaskAllocation);
-            }
-            let station_work = STATION_WORK
-                .take()
-                .future(|| station_work_future(frontend_channel, station, seed, nonces));
-            if AppTasks::station_task(spawner, station_work).is_err() {
-                crate::fail(crate::fatal::Failure::TaskAllocation);
-            }
-            if AppTasks::rtc_watchdog(spawner, watchdog).is_err() {
-                crate::fail(crate::fatal::Failure::TaskAllocation);
-            }
-        },
-    )
+    match executor
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            urgent,
+            move |spawner| {
+                let console_work = CONSOLE_WORK.take().future(|| console_future(usb, boot));
+                if AppTasks::console(spawner, console_work).is_err() {
+                    crate::fail(crate::fatal::Failure::TaskAllocation);
+                }
+                let station_work = STATION_WORK
+                    .take()
+                    .future(|| station_work_future(frontend_channel, station, seed, nonces));
+                if AppTasks::station_task(spawner, station_work).is_err() {
+                    crate::fail(crate::fatal::Failure::TaskAllocation);
+                }
+                if AppTasks::rtc_watchdog(spawner, watchdog).is_err() {
+                    crate::fail(crate::fatal::Failure::TaskAllocation);
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {}
 }
 
 async fn radio_actor(actor: &'static mut Actor) {

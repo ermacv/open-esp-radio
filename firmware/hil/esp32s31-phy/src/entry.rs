@@ -210,17 +210,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio_alarm,
         timer.alarm0,
-    );
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
+        .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
-    let radio_spawner = InterruptExecutor::<2>::new(software.line2).start(
-        hart,
-        router,
-        interrupts.radio,
-        software.irq2,
-        (),
-    );
+    let radio_spawner = InterruptExecutor::<2>::new(software.line2)
+        .start(hart, router, interrupts.radio, software.irq2, ())
+        .unwrap_or_else(|failure| failure.reset());
     if RadioTasks::serve_radio(&radio_spawner, radio).is_err() {
         fail("task-start");
     }
@@ -239,21 +237,23 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
-    Executor::<0>::new(software.line0).run(
-        &hart,
-        &mut router,
-        interrupts.wake,
-        software.irq0,
-        (),
-        move |spawner| {
-            if AppTasks::console(spawner, usb, boot, chip).is_err()
-                || AppTasks::dispatch(spawner, poster).is_err()
-                || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
-            {
-                fail("task-start");
-            }
-        },
-    );
+    match Executor::<0>::new(software.line0)
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            (),
+            move |spawner| {
+                if AppTasks::console(spawner, usb, boot, chip).is_err()
+                    || AppTasks::dispatch(spawner, poster).is_err()
+                    || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
+                {
+                    fail("task-start");
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {};
 }
 
 /// Halt the image on a failed boot step, its reason on the console while
