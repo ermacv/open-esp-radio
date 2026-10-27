@@ -44,7 +44,15 @@ fn a_reset_from_zero_requests_the_softap_load_and_enables_both_bits() {
         .wifi_mac_aux_tsf_control
         .read_softap_control();
     assert!(control.tsf_enable() && control.bit_30_opaque());
-    assert_eq!(control.bits_0_29_opaque().get(), 0);
+    assert_eq!(control.tbtt_ahead_time(), 0);
+    assert_eq!(control.bits_16_24_opaque().get(), 0);
+    assert!(
+        !(control.tbtt_rf_control_enable()
+            || control.tbtt_enable()
+            || control.bit_27_opaque()
+            || control.tbtt_modem_wakeup_enable()
+            || control.tbtt_soc_wakeup_enable())
+    );
     let load = owners
         .registers
         .mac
@@ -68,5 +76,13 @@ fn a_stop_clears_both_high_control_bits() {
         .wifi_mac_aux_tsf_control
         .read_softap_control();
     assert!(!(control.tsf_enable() || control.bit_30_opaque()));
-    assert_eq!(control.bits_0_29_opaque().get(), 0x3fff_ffff);
+    assert_eq!(control.tbtt_ahead_time(), u16::MAX);
+    assert_eq!(control.bits_16_24_opaque().get(), 0x1ff);
+    assert!(
+        control.tbtt_rf_control_enable()
+            && control.tbtt_enable()
+            && control.bit_27_opaque()
+            && control.tbtt_modem_wakeup_enable()
+            && control.tbtt_soc_wakeup_enable()
+    );
 }

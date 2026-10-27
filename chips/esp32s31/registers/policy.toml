@@ -1272,8 +1272,8 @@ reason = "Observed in vendor sources for bit-use coverage only: no transaction o
 
 [[unclaimed]]
 instance = "MODEM_PWR"
-registers = ["WORD_0848_OPAQUE", "WORD_0850_OPAQUE", "WORD_0864_OPAQUE", "WORD_086C_OPAQUE", "WORD_0874_OPAQUE", "WORD_08D0_OPAQUE"]
-reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+registers = ["WORD_0848_OPAQUE", "WORD_0850_OPAQUE", "SOFTAP_TBTT_INTERVAL", "NAN_TBTT_INTERVAL", "BTWT_TBTT_INTERVAL", "WORD_08D0_OPAQUE"]
+reason = "Unclaimed auxiliary modem words and TBTT domain1-3 intervals; no production owner is assigned."
 
 [[unclaimed]]
 instance = "MODEM_TIMER"
@@ -2875,14 +2875,14 @@ name = "clear_bluetooth_modem_lp_timer_state_0024"
 register = "MODEM_PWR.WORD_0024_OPAQUE"
 value = 0
 whole-word = true
-sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26"]
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"]
 
 [[fixed-register-images]]
 name = "clear_bluetooth_modem_lp_timer_state_002c"
 register = "MODEM_PWR.WORD_002C_OPAQUE"
 value = 0
 whole-word = true
-sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26"]
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"]
 
 [[fixed-register-images]]
 name = "publish_ble_positional_word_1ff0_image_0"
@@ -2935,7 +2935,9 @@ name = "clear_all_mac_power_interrupts"
 register = "MODEM_PWR.CLEAR"
 value = 0xffffffff
 masks = "MODEM_PWR.ENABLE"
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "HW8_S31_WIFI_TSF_MASK_20261026"]
+# Whole-bank values are project policy; HW8 qualifies timer0/1 masking
+# and timer0 masked all-clear only, not all-producer shutdown.
 
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_0"
@@ -2956,7 +2958,7 @@ name = "frequency_parameter_0"
 register = "FE.WORD_0024_OPAQUE"
 value = 0x19800249
 whole-word = true
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027"]
 
 [[fixed-register-images]]
 name = "open_frontend_clock_gates"
@@ -3039,7 +3041,7 @@ name = "publish_bluetooth_modem_lp_timer_software_pending"
 register = "MODEM_PWR.WORD_0024_OPAQUE"
 value = 1
 whole-word = true
-sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"]
 
 [[fixed-register-images]]
 name = "disable_bluetooth_modem_lp_timer_compare"
@@ -3107,7 +3109,7 @@ name = "publish_ble_phy_init_value_04ac"
 register = "BT_MAC.CONNECTION_ABORT_CONTROL"
 value = 0x00ff0002
 whole-word = true
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_BX16_LIBBLE_ABORT_IMAGE_20261027"]
 
 [[fixed-register-images]]
 name = "publish_ble_phy_init_value_045c"
@@ -3187,7 +3189,9 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 name = "mask_mac_power_interrupts"
 register = "MODEM_PWR.ENABLE"
 value = 0
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
+# Whole-bank values are project policy; HW8 qualifies timer0/1 masking
+# and timer0 masked all-clear only, not all-producer shutdown.
 
 [[fixed-register-images]]
 name = "mask_mac_interrupts"
@@ -3293,7 +3297,7 @@ name = "initialize_rx_11b_window_control"
 register = "WIFI_BB.RX_11B_WINDOW_CONTROL"
 value = 0x06acc7c8
 whole-word = true
-sources = ["ROM_REV0_PHY_AGC"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_BX16_ROM_11B_WINDOW_IMAGE_20261027"]
 
 [[fixed-register-images]]
 name = "initialize_rx_11b_path_control_1"
@@ -3327,7 +3331,7 @@ name = "initialize_power_detector_table_1"
 register = "FE.POWER_DETECTOR_TABLE_1"
 value = 0x00ff0f64
 whole-word = true
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_POWER_DETECTOR", "BLOB_BX16_ROM_PWDET_IMAGE_20261027"]
 
 [[fixed-register-images]]
 name = "mac_ack_cck_rate_table"
@@ -3346,7 +3350,7 @@ name = "frequency_parameter_1_initialization"
 register = "FE.FREQUENCY_PARAMETER_1_STATUS"
 value = 0x25824e58
 whole-word = true
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027"]
 
 [[fixed-register-images]]
 name = "clear_tx_gain_compensation"
@@ -3474,7 +3478,7 @@ sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 [[fixed-register-sequences]]
 name = "initialize_mac_last_rx_buffer_entries"
 steps = [{ register = "WIFI_MAC.ENTRY_CONTROL0", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A0", value = 0x00000608 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B0", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL1", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A1", value = 0x00000808 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B1", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL2", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A2", value = 0x00008e88 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B2", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL3", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A3", value = 0x44004300 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B3", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL4", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A4", value = 0x43004400 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B4", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL5", value = 0x00023011 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A5", value = 1 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B5", value = 0x000000ff }]
-sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT", "BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027"]
 
 [[masked-register-modifies]]
 name = "publish_bluetooth_device_table_entry_count"

@@ -31146,7 +31146,7 @@ pub mod bt_mac {
 
     /// The `CONNECTION_ABORT_CONTROL` register.
     ///
-    /// Connection aborted-opcode control. BLE PHY initialization and the default aborted-opcode path write 0x00FF0002, while the custom-opcode path writes 0x00FF0003. Connection link-state refresh independently replaces bit 1 from its two private control flags.
+    /// Connection aborted-opcode control. BLE PHY initialization and the default aborted-opcode path write 0x00FF0002, while the custom-opcode path writes 0x00FF0003. Connection link-state refresh independently replaces bit 1 from its two private control flags. The PHY initializer stores 0x00ff0002 at symbol+0x8e. The default and custom abort images share unassigned bits 23:16 equal to 0xff and bits 31:24 and 15:2 equal to zero. This does not identify an upper opcode or mask field.
     pub mod connection_abort_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00000003;
@@ -34601,7 +34601,7 @@ pub mod bt_mac {
 
         /// Write the vendor's whole-word image `0x00ff0002`, undeclared bits included (`BT_MAC.CONNECTION_ABORT_CONTROL`).
         ///
-        /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
+        /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS, BLOB_BX16_LIBBLE_ABORT_IMAGE_20261027.
         #[inline]
         pub fn publish_ble_phy_init_value_04ac(&mut self) {
             self.0.write::<0x8ac>(0x00ff0002);
@@ -64196,7 +64196,7 @@ pub mod fe {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// Complete phy_freq_reg_init writes the full constant 0x19800249; no constituent electrical fields are public.
+    /// Complete phy_freq_reg_init writes the full constant 0x19800249; no constituent electrical fields are public. rom[]::phy_freq_reg_init+0x52 stores 0x19800249 at 0x20100024. Its positioned ones inside unassigned bits 31:3 are 0x19800248; all other bits of that range are zero in this image. The image does not identify constituent fields or reset values.
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00000007;
@@ -64228,7 +64228,7 @@ pub mod fe {
 
     /// The `FREQUENCY_PARAMETER_1_STATUS` register.
     ///
-    /// Complete phy_freq_reg_init writes 0x25824e58; phy_bb_init replaces the low baseband-mode field, and the open channel state machine samples bit 8 for the evidenced ready edge.
+    /// Complete phy_freq_reg_init writes 0x25824e58; phy_bb_init replaces the low baseband-mode field, and the open channel state machine samples bit 8 for the evidenced ready edge. rom[]::phy_freq_reg_init+0x5c stores 0x25824e58: unassigned bits 7:2 receive 0x16 and bits 22:21 receive zero. The getter at phy_get_freq_mem_param+0x16 excludes both ranges from its consumed mask. Their meaning and reset values remain unknown.
     pub mod frequency_parameter_1_status {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xff9fff03;
@@ -67526,7 +67526,7 @@ pub mod fe {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `READY` field.
+            /// Predicate polled by phy_iq_est_enable: an asserted sample exits its readiness loop; only a clear sample reaches the opaque FE+8d0 indication read. Routing to interrupt source123 or131 is unestablished. SOURCE: BX12_S31_IQ_EST_READY_POLL_20261027.
             #[inline]
             pub const fn ready(self) -> bool {
                 (self.0 & 0x00010000) != 0
@@ -68050,7 +68050,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_TABLE_1` register.
     ///
-    /// Complete initialization writes 0x00ff0f64; TX-DC calibration temporarily replaces the low byte.
+    /// Complete initialization writes 0x00ff0f64; TX-DC calibration temporarily replaces the low byte. rom[]::phy_pwdet_reg_init+0x16 stores 0x00ff0f64: unassigned bits 31:24 receive zero, 23:16 receive 0xff and 15:8 receive 0x0f. The TXDC low-byte replacement preserves bits 31:8; no individual upper-lane role is established.
     pub mod power_detector_table_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -71898,7 +71898,7 @@ pub mod fe {
 
         /// Write the vendor's whole-word image `0x00ff0f64`, undeclared bits included (`FE.POWER_DETECTOR_TABLE_1`).
         ///
-        /// SOURCE: ROM_REV0_PHY_POWER_DETECTOR.
+        /// SOURCE: ROM_REV0_PHY_POWER_DETECTOR, BLOB_BX16_ROM_PWDET_IMAGE_20261027.
         #[inline]
         pub fn initialize_power_detector_table_1(&mut self) {
             self.0.write::<0x814>(0x00ff0f64);
@@ -72607,7 +72607,7 @@ pub mod fe {
 
         /// Write the vendor's whole-word image `0x19800249`, undeclared bits included (`FE.WORD_0024_OPAQUE`).
         ///
-        /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
+        /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027.
         #[inline]
         pub fn frequency_parameter_0(&mut self) {
             self.0.write::<0x24>(0x19800249);
@@ -72615,7 +72615,7 @@ pub mod fe {
 
         /// Write the vendor's whole-word image `0x25824e58`, undeclared bits included (`FE.FREQUENCY_PARAMETER_1_STATUS`).
         ///
-        /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
+        /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027.
         #[inline]
         pub fn frequency_parameter_1_initialization(&mut self) {
             self.0.write::<0x28>(0x25824e58);
@@ -103680,7 +103680,7 @@ pub mod i2c_ana_mst {
                 (self.0 & 0x01000000) != 0
             }
 
-            /// The `I2C0_BUSY` field.
+            /// Host bit polled by the ROM command and conditional-reset paths before accepting completion. Its relationship to interrupt source131 is unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027.
             #[inline]
             pub const fn i2c0_busy(self) -> bool {
                 (self.0 & 0x02000000) != 0
@@ -103818,7 +103818,7 @@ pub mod i2c_ana_mst {
                 (self.0 & 0x01000000) != 0
             }
 
-            /// The `I2C1_BUSY` field.
+            /// Host bit polled by the ROM command and conditional-reset paths before accepting completion. Its relationship to interrupt source131 is unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027.
             #[inline]
             pub const fn i2c1_busy(self) -> bool {
                 (self.0 & 0x02000000) != 0
@@ -107077,7 +107077,7 @@ pub mod ieee802154 {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range.
+            /// Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range. Compiled start_ed writes the zero-extended low16 argument into this low24 field while preserving bits 31:24. No physical time unit is inferred from the store.
             #[inline]
             pub const fn duration(self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
@@ -107094,7 +107094,7 @@ pub mod ieee802154 {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range.
+            /// Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range. Compiled start_ed writes the zero-extended low16 argument into this low24 field while preserving bits 31:24. No physical time unit is inferred from the store.
             #[inline]
             pub const fn duration(&self) -> oer_mmio::Bits<24> {
                 oer_mmio::Bits::truncate(self.0)
@@ -107650,13 +107650,13 @@ pub mod ieee802154 {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// The `ED_DONE` field.
+            /// Set by compiled start_ed before duration programming and ED_START. Enabling is separate from clearing a previous completion.
             #[inline]
             pub const fn ed_done(self) -> bool {
                 (self.0 & 0x00000040) != 0
             }
 
-            /// Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.
+            /// Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. Included in the compiled fourteen-bit startup/read/ack image; no individual producer or physical meaning recovered. Explicit model gap; no isolated hardware qualification.
             #[inline]
             pub const fn events_7(self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -107674,7 +107674,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// The `CLOCK_COUNT_MATCH` field.
+            /// Named by the public LL and included in compiled startup enable, but not serviced by a dedicated ISR case. Producer controls and hardware mask/clear/full-stop behavior remain unknown.
             #[inline]
             pub const fn clock_count_match(self) -> bool {
                 (self.0 & 0x00000400) != 0
@@ -107692,7 +107692,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00001000) != 0
             }
 
-            /// Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.
+            /// Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. Included in the compiled fourteen-bit startup/read/ack image; no individual producer or physical meaning recovered. Explicit model gap; no isolated hardware qualification.
             #[inline]
             pub const fn events_13(self) -> bool {
                 (self.0 & 0x00002000) != 0
@@ -107739,13 +107739,13 @@ pub mod ieee802154 {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// The `ED_DONE` field.
+            /// Set by compiled start_ed before duration programming and ED_START. Enabling is separate from clearing a previous completion.
             #[inline]
             pub const fn ed_done(&self) -> bool {
                 (self.0 & 0x00000040) != 0
             }
 
-            /// Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.
+            /// Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. Included in the compiled fourteen-bit startup/read/ack image; no individual producer or physical meaning recovered. Explicit model gap; no isolated hardware qualification.
             #[inline]
             pub const fn events_7(&self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -107763,7 +107763,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// The `CLOCK_COUNT_MATCH` field.
+            /// Named by the public LL and included in compiled startup enable, but not serviced by a dedicated ISR case. Producer controls and hardware mask/clear/full-stop behavior remain unknown.
             #[inline]
             pub const fn clock_count_match(&self) -> bool {
                 (self.0 & 0x00000400) != 0
@@ -107781,7 +107781,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00001000) != 0
             }
 
-            /// Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.
+            /// Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. Included in the compiled fourteen-bit startup/read/ack image; no individual producer or physical meaning recovered. Explicit model gap; no isolated hardware qualification.
             #[inline]
             pub const fn events_13(&self) -> bool {
                 (self.0 & 0x00002000) != 0
@@ -107889,7 +107889,7 @@ pub mod ieee802154 {
 
     /// The `EVENT_STATUS` register.
     ///
-    /// Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model. For tested local timer bits 8/9, reads are masked by EVENT_ENABLE: masked expiry/pending reads zero and output132 is low, but enabling reveals retained pending and raises output even with a parked route. A positive snapshot retained across masking does acknowledge its event while masked; selective enabled W1C preserves the other timer bit. This does not qualify other event lanes. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026.
+    /// Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; the compiled ISR saves the fourteen-bit visible event image, samples RX/TX abort reasons, rereads status and writes the intersection with its saved event mask. Production's affine acknowledgement writes its retained sample instead. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival priority and vendor-reread versus saved-sample equivalence remain unqualified. For tested local timer bits 8/9, reads are masked by EVENT_ENABLE: masked expiry/pending reads zero and output132 is low, but enabling reveals retained pending and raises output even with a parked route. A positive snapshot retained across masking does acknowledge its event while masked; selective enabled W1C preserves the other timer bit. This does not qualify other event lanes. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026.
     pub mod event_status {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00003fff;
@@ -108030,7 +108030,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// For ED_COEX_REJECT reason 26, ENA=0 hides this status while retaining pending, which reappears on unmask. A retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027.
+            /// For ED_COEX_REJECT reason 26, ENA=0 hides this status while retaining pending, which reappears on unmask. A retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027. This event's compiled RX-phase consumer uses RX_STATUS.ABORT_REASON; ED-abort/coexistence-reject outcomes use that path. A separate ED-abort event lane is not established.
             #[inline]
             pub const fn rx_abort(self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -108042,13 +108042,13 @@ pub mod ieee802154 {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// The `ED_DONE` field.
+            /// Event6 selects the ED/CCA result consumer. ED stop selects visible events4/6 for acknowledgement after STOP. IRQ-versus-result ordering and STOP drain remain unqualified.
             #[inline]
             pub const fn ed_done(self) -> bool {
                 (self.0 & 0x00000040) != 0
             }
 
-            /// Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.
+            /// Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. Included in the compiled fourteen-bit startup/read/ack image; no individual producer or physical meaning recovered. Explicit model gap; no isolated hardware qualification.
             #[inline]
             pub const fn events_7(self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -108066,7 +108066,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// The `CLOCK_COUNT_MATCH` field.
+            /// Named by the public LL and included in compiled startup enable, but not serviced by a dedicated ISR case. Producer controls and hardware mask/clear/full-stop behavior remain unknown.
             #[inline]
             pub const fn clock_count_match(self) -> bool {
                 (self.0 & 0x00000400) != 0
@@ -108084,7 +108084,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00001000) != 0
             }
 
-            /// Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.
+            /// Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. Included in the compiled fourteen-bit startup/read/ack image; no individual producer or physical meaning recovered. Explicit model gap; no isolated hardware qualification.
             #[inline]
             pub const fn events_13(self) -> bool {
                 (self.0 & 0x00002000) != 0
@@ -108162,7 +108162,7 @@ pub mod ieee802154 {
                 }
             }
 
-            /// For ED_COEX_REJECT reason 26, ENA=0 hides this status while retaining pending, which reappears on unmask. A retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027.
+            /// For ED_COEX_REJECT reason 26, ENA=0 hides this status while retaining pending, which reappears on unmask. A retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027. This event's compiled RX-phase consumer uses RX_STATUS.ABORT_REASON; ED-abort/coexistence-reject outcomes use that path. A separate ED-abort event lane is not established.
             #[inline]
             pub const fn rx_abort(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -108192,7 +108192,7 @@ pub mod ieee802154 {
                 }
             }
 
-            /// The `ED_DONE` field.
+            /// Event6 selects the ED/CCA result consumer. ED stop selects visible events4/6 for acknowledgement after STOP. IRQ-versus-result ordering and STOP drain remain unqualified.
             #[inline]
             pub const fn ed_done(&self) -> bool {
                 (self.0 & 0x00000040) != 0
@@ -108207,7 +108207,7 @@ pub mod ieee802154 {
                 }
             }
 
-            /// Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.
+            /// Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. Included in the compiled fourteen-bit startup/read/ack image; no individual producer or physical meaning recovered. Explicit model gap; no isolated hardware qualification.
             #[inline]
             pub const fn events_7(&self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -108252,7 +108252,7 @@ pub mod ieee802154 {
                 }
             }
 
-            /// The `CLOCK_COUNT_MATCH` field.
+            /// Named by the public LL and included in compiled startup enable, but not serviced by a dedicated ISR case. Producer controls and hardware mask/clear/full-stop behavior remain unknown.
             #[inline]
             pub const fn clock_count_match(&self) -> bool {
                 (self.0 & 0x00000400) != 0
@@ -108297,7 +108297,7 @@ pub mod ieee802154 {
                 }
             }
 
-            /// Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.
+            /// Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. Included in the compiled fourteen-bit startup/read/ack image; no individual producer or physical meaning recovered. Explicit model gap; no isolated hardware qualification.
             #[inline]
             pub const fn events_13(&self) -> bool {
                 (self.0 & 0x00002000) != 0
@@ -109793,7 +109793,7 @@ pub mod ieee802154 {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// The `ABORT_REASON` field.
+            /// Sampled by the compiled ISR before event acknowledgement; reasons24/26 can select the ED-failure consumer. This is a reason code, not a per-event pending bitmap.
             #[inline]
             pub const fn abort_reason(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 4)
@@ -127754,7 +127754,7 @@ pub mod modem_lpcon {
 /// Word 0x800: Free-running Wi-Fi MAC local-time counter, read-only and without read side effects. Complete libpp[lmac.o]::lmacAdjustTimestamp subtracts the receive timestamp a received frame carries from this word as the frame's age and, while the station slept, rewrites that timestamp as this word minus a TU-scaled sleep interval; libpp[pm_twt.o]::pm_twt_set_target_wdev_time, libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice read it as the MAC's current time. The PHY SDM deadline samples the same word. Its unit and rate against the system timer are not established.
 /// Words 0x80c-0x810: Station TSF activity status recovered from the complete no-call hal_is_sta_tsf_active leaf. The instruction body proves the address and bit geometry but not the hardware transition rules.
 /// Words 0x814-0x828: Shared TSF load and coherent station/SoftAP snapshot transaction.
-/// Word 0x82c: Station TBTT target word recovered from complete hal_set_sta_tbtt. The low 26-bit packing from the supplied 64-bit TSF value is exact; the hardware counter unit remains unnamed.
+/// Word 0x82c: Shared TBTT staging word recovered from complete hal_set_sta_tbtt and tsf_hal_set_tbtt_start_time. The low 26-bit packing from the supplied 64-bit TSF value is exact; the hardware counter unit remains unnamed.
 /// Words 0x830-0x878: Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value.
 /// Word 0x83c: Shared WDEVPWR control word. The channel-change leaf proves the REGDMA selector, while complete modem-power leaves prove the wake-protect lead time and TBTT auto-period fields. Hardware interactions between these fields remain unqualified.
 /// Words 0x848-0x8d0: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.
@@ -128101,7 +128101,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the probe's HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, a retained nonzero software-pending sample followed by a new near compare (independently witnessed by CONTROL2 changing 0 to1) then conditional whole-word zero removed byte24/cause/output; CONTROL2 remained1. A zero sample skips the store and preserves the arrival, and zero before expiry permits the later compare. The delayed phases establish loss of the newer coalesced pending indication, not coincident arbitration or an execution of the production handler. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027.
+    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. In a phased local compare experiment, a cause arriving after an earlier byte-zero read was removed by a later whole-word zero; clear before expiry still allowed the subsequent cause. This is not a coincident set/clear priority measurement. SOURCE: HW8_S31_LP_PHASED_ACK_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. A positively pending real compare, alone and with rollover, read zero at the next ROM-loader entry after the probe's HP system reset. Clock-only access restoration without LP prepare, reset, clear, start or enable did not recover it. Fresh software pending then read one and delivered only after bit18 enable. The immediate reset-edge state and ROM initialization effects are not separated. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. With CONTROL0=1/CONTROL4=0 and XTAL/divider1, a retained nonzero software-pending sample followed by a new near compare (independently witnessed by CONTROL2 changing 0 to1) then conditional whole-word zero removed byte24/cause/output; CONTROL2 remained1. A zero sample skips the store and preserves the arrival, and zero before expiry permits the later compare. The delayed phases establish loss of the newer coalesced pending indication, not coincident arbitration or an execution of the production handler. SOURCE: HW22_S31_LP_CONDITIONAL_ACK_20261027. The pinned handler acknowledges with a complete zero store at +0x10; the immediate-deadline publisher stores complete one at +0x38. Both write bits 31:8 as zero. No meaning, reset value or per-bit side effect is established for those upper lanes. SOURCE: BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -128196,7 +128196,7 @@ pub mod modem_pwr {
 
     /// The `WORD_002C_OPAQUE` register.
     ///
-    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. One positively pending natural rollover, alone and with compare, read zero at the next ROM-loader entry after the probe's HP system reset and after clock-only access restoration, while the LP source selector/divider stayed zero. That first experiment acknowledged pending before source-clock restoration. A separate both-pending/quiet follow-up restored the LP XTAL/divider before any acknowledge, prepare or start; pending/cause/counter/output still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is distinct from the earlier BLE-timer/controller reset retention; no immediate reset-edge or POR value is established. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. On s31-c, exactly two natural wraps without intermediate acknowledgement again leave byte2c=1/cause2/source127 high. A retained nonzero first-wrap sample conditionally triggers one whole-word zero after the independently observed second crossing; byte/cause/output remain0 through4096 further cycles. No visible second credit or arbitrary wrap-capacity guarantee follows. SOURCE: HW22_S31_LP_TWO_WRAPS_20261027.
+    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Two natural wraps without acknowledgement left one visible byte-one indication; one subsequent zero cleared it and status/output, with no second credit observed over 4096 cycles. A retained first-wrap sample therefore does not protect a later wrap from that zero. Arbitrary larger wrap counts and coincident set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026, HW8_S31_LP_TWO_WRAPS_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. A positive pending byte was cleared by whole-word zero while delivery was disabled; enabling its lane afterward did not redeliver. SOURCE: HW9_S31_LP_MASKED_ZERO_20261027. One positively pending natural rollover, alone and with compare, read zero at the next ROM-loader entry after the probe's HP system reset and after clock-only access restoration, while the LP source selector/divider stayed zero. That first experiment acknowledged pending before source-clock restoration. A separate both-pending/quiet follow-up restored the LP XTAL/divider before any acknowledge, prepare or start; pending/cause/counter/output still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is distinct from the earlier BLE-timer/controller reset retention; no immediate reset-edge or POR value is established. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. On s31-c, exactly two natural wraps without intermediate acknowledgement again leave byte2c=1/cause2/source127 high. A retained nonzero first-wrap sample conditionally triggers one whole-word zero after the independently observed second crossing; byte/cause/output remain0 through4096 further cycles. No visible second credit or arbitrary wrap-capacity guarantee follows. SOURCE: HW22_S31_LP_TWO_WRAPS_20261027. The pinned handler stores complete zero at +0x20 and +0x52; the counter helper also stores complete zero at +0x32. These stores write bits 31:8 as zero without establishing their individual meaning or clearing behavior. SOURCE: BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
     pub mod word_002c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -129215,12 +129215,33 @@ pub mod modem_pwr {
         /// Positioned bits of `LOAD_TSF3`.
         pub const LOAD_TSF3_MASK: u32 = 0x80;
 
-        /// Width of `BITS_9_31_OPAQUE` in bits.
-        pub const BITS_9_31_OPAQUE_WIDTH: u32 = 23;
-        /// Greatest unsigned image of `BITS_9_31_OPAQUE`.
-        pub const BITS_9_31_OPAQUE_MAX: u32 = 0x7fffff;
-        /// Positioned bits of `BITS_9_31_OPAQUE`.
-        pub const BITS_9_31_OPAQUE_MASK: u32 = 0xfffffe00;
+        /// Width of `LOAD_TSF1_TBTT_TARGET` in bits.
+        pub const LOAD_TSF1_TBTT_TARGET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LOAD_TSF1_TBTT_TARGET`.
+        pub const LOAD_TSF1_TBTT_TARGET_MAX: u32 = 0x1;
+        /// Positioned bits of `LOAD_TSF1_TBTT_TARGET`.
+        pub const LOAD_TSF1_TBTT_TARGET_MASK: u32 = 0x200;
+
+        /// Width of `LOAD_TSF2_TBTT_TARGET` in bits.
+        pub const LOAD_TSF2_TBTT_TARGET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LOAD_TSF2_TBTT_TARGET`.
+        pub const LOAD_TSF2_TBTT_TARGET_MAX: u32 = 0x1;
+        /// Positioned bits of `LOAD_TSF2_TBTT_TARGET`.
+        pub const LOAD_TSF2_TBTT_TARGET_MASK: u32 = 0x400;
+
+        /// Width of `LOAD_TSF3_TBTT_TARGET` in bits.
+        pub const LOAD_TSF3_TBTT_TARGET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LOAD_TSF3_TBTT_TARGET`.
+        pub const LOAD_TSF3_TBTT_TARGET_MAX: u32 = 0x1;
+        /// Positioned bits of `LOAD_TSF3_TBTT_TARGET`.
+        pub const LOAD_TSF3_TBTT_TARGET_MASK: u32 = 0x800;
+
+        /// Width of `BITS_12_31_OPAQUE` in bits.
+        pub const BITS_12_31_OPAQUE_WIDTH: u32 = 20;
+        /// Greatest unsigned image of `BITS_12_31_OPAQUE`.
+        pub const BITS_12_31_OPAQUE_MAX: u32 = 0xfffff;
+        /// Positioned bits of `BITS_12_31_OPAQUE`.
+        pub const BITS_12_31_OPAQUE_MASK: u32 = 0xfffff000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -129251,7 +129272,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf set this bit after writing the station TBTT target.
+            /// Project-assigned name. Domain0 selector (bit8), set after the shared TARGET staging word receives TSF target bits 35:10. Self-clear and completion semantics are unproved.
             #[inline]
             pub const fn load_station_tbtt_target(self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -129281,10 +129302,28 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
+            /// Project-assigned name. TBTT target-load selector for TSF domain 1, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved.
+            #[inline]
+            pub const fn load_tsf1_tbtt_target(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Project-assigned name. TBTT target-load selector for TSF domain 2, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved.
+            #[inline]
+            pub const fn load_tsf2_tbtt_target(self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Project-assigned name. TBTT target-load selector for TSF domain 3, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved.
+            #[inline]
+            pub const fn load_tsf3_tbtt_target(self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_9_31_opaque(self) -> oer_mmio::Bits<23> {
-                oer_mmio::Bits::truncate(self.0 >> 9)
+            pub const fn bits_12_31_opaque(self) -> oer_mmio::Bits<20> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
             }
         }
 
@@ -129316,7 +129355,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf set this bit after writing the station TBTT target.
+            /// Project-assigned name. Domain0 selector (bit8), set after the shared TARGET staging word receives TSF target bits 35:10. Self-clear and completion semantics are unproved.
             #[inline]
             pub const fn load_station_tbtt_target(&self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -129346,10 +129385,28 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
+            /// Project-assigned name. TBTT target-load selector for TSF domain 1, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved.
+            #[inline]
+            pub const fn load_tsf1_tbtt_target(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Project-assigned name. TBTT target-load selector for TSF domain 2, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved.
+            #[inline]
+            pub const fn load_tsf2_tbtt_target(&self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Project-assigned name. TBTT target-load selector for TSF domain 3, set after the shared TARGET staging word is written by tsf_hal_set_tbtt_start_time. Self-clear and completion semantics are unproved.
+            #[inline]
+            pub const fn load_tsf3_tbtt_target(&self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_9_31_opaque(&self) -> oer_mmio::Bits<23> {
-                oer_mmio::Bits::truncate(self.0 >> 9)
+            pub const fn bits_12_31_opaque(&self) -> oer_mmio::Bits<20> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
             }
 
             /// Set `SNAPSHOT_STATION_TSF`.
@@ -129415,10 +129472,31 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_9_31_OPAQUE`.
+            /// Set `LOAD_TSF1_TBTT_TARGET`.
             #[inline]
-            pub fn set_bits_9_31_opaque(&mut self, value: oer_mmio::Bits<23>) -> &mut Self {
-                self.0 = (self.0 & 0x000001ff) | (value.get() << 9);
+            pub fn set_load_tsf1_tbtt_target(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+                self
+            }
+
+            /// Set `LOAD_TSF2_TBTT_TARGET`.
+            #[inline]
+            pub fn set_load_tsf2_tbtt_target(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffbff) | (u32::from(value) << 10);
+                self
+            }
+
+            /// Set `LOAD_TSF3_TBTT_TARGET`.
+            #[inline]
+            pub fn set_load_tsf3_tbtt_target(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffff7ff) | (u32::from(value) << 11);
+                self
+            }
+
+            /// Set `BITS_12_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_12_31_opaque(&mut self, value: oer_mmio::Bits<20>) -> &mut Self {
+                self.0 = (self.0 & 0x00000fff) | (value.get() << 12);
                 self
             }
         }
@@ -129708,7 +129786,7 @@ pub mod modem_pwr {
 
     /// The `TARGET` register.
     ///
-    /// Complete hal_set_sta_tbtt replaces bits 25:0 with bits 35:10 of the supplied station TSF value and preserves the high six bits.
+    /// Project-assigned name. Shared TBTT staging word: bits 35:10 of the supplied TSF target are staged in bits 25:0 here, preserving bits 31:26; the subsequent TSF_LOAD_CONTROL bit 8+domain selects the TBTT domain. Physical time units and load completion remain unestablished.
     pub mod target {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -130011,12 +130089,33 @@ pub mod modem_pwr {
         /// Positioned bits of `BITS_18_20_OPAQUE`.
         pub const BITS_18_20_OPAQUE_MASK: u32 = 0x1c0000;
 
-        /// Width of `BITS_22_27_OPAQUE` in bits.
-        pub const BITS_22_27_OPAQUE_WIDTH: u32 = 6;
-        /// Greatest unsigned image of `BITS_22_27_OPAQUE`.
-        pub const BITS_22_27_OPAQUE_MAX: u32 = 0x3f;
-        /// Positioned bits of `BITS_22_27_OPAQUE`.
-        pub const BITS_22_27_OPAQUE_MASK: u32 = 0xfc00000;
+        /// Width of `BITS_22_24_OPAQUE` in bits.
+        pub const BITS_22_24_OPAQUE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `BITS_22_24_OPAQUE`.
+        pub const BITS_22_24_OPAQUE_MAX: u32 = 0x7;
+        /// Positioned bits of `BITS_22_24_OPAQUE`.
+        pub const BITS_22_24_OPAQUE_MASK: u32 = 0x1c00000;
+
+        /// Width of `CLEAR_BEACON_MISS_INTERRUPT_FILTER` in bits.
+        pub const CLEAR_BEACON_MISS_INTERRUPT_FILTER_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CLEAR_BEACON_MISS_INTERRUPT_FILTER`.
+        pub const CLEAR_BEACON_MISS_INTERRUPT_FILTER_MAX: u32 = 0x1;
+        /// Positioned bits of `CLEAR_BEACON_MISS_INTERRUPT_FILTER`.
+        pub const CLEAR_BEACON_MISS_INTERRUPT_FILTER_MASK: u32 = 0x2000000;
+
+        /// Width of `MODEM_SLEEP_LIMIT_EXCEEDED_STATUS` in bits.
+        pub const MODEM_SLEEP_LIMIT_EXCEEDED_STATUS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `MODEM_SLEEP_LIMIT_EXCEEDED_STATUS`.
+        pub const MODEM_SLEEP_LIMIT_EXCEEDED_STATUS_MAX: u32 = 0x1;
+        /// Positioned bits of `MODEM_SLEEP_LIMIT_EXCEEDED_STATUS`.
+        pub const MODEM_SLEEP_LIMIT_EXCEEDED_STATUS_MASK: u32 = 0x4000000;
+
+        /// Width of `BEACON_MISS_LIMIT_EXCEEDED_STATUS` in bits.
+        pub const BEACON_MISS_LIMIT_EXCEEDED_STATUS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_MISS_LIMIT_EXCEEDED_STATUS`.
+        pub const BEACON_MISS_LIMIT_EXCEEDED_STATUS_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_MISS_LIMIT_EXCEEDED_STATUS`.
+        pub const BEACON_MISS_LIMIT_EXCEEDED_STATUS_MASK: u32 = 0x8000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -130079,8 +130178,26 @@ pub mod modem_pwr {
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_22_27_opaque(self) -> oer_mmio::Bits<6> {
+            pub const fn bits_22_24_opaque(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Project-assigned name. Set by the separate miss-interrupt-filter-clear leaf, independently of interrupt CLEAR19 and counter/info clear29/31. Pulse/self-clear behavior is unknown.
+            #[inline]
+            pub const fn clear_beacon_miss_interrupt_filter(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Bit returned by the dedicated modem-state sleep-limit-exceeded getter. Write effects are unknown.
+            #[inline]
+            pub const fn modem_sleep_limit_exceeded_status(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. Bit returned by the dedicated modem beacon-miss-limit-exceeded getter. Write effects are unknown.
+            #[inline]
+            pub const fn beacon_miss_limit_exceeded_status(self) -> bool {
+                (self.0 & 0x08000000) != 0
             }
         }
 
@@ -130144,8 +130261,26 @@ pub mod modem_pwr {
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_22_27_opaque(&self) -> oer_mmio::Bits<6> {
+            pub const fn bits_22_24_opaque(&self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Project-assigned name. Set by the separate miss-interrupt-filter-clear leaf, independently of interrupt CLEAR19 and counter/info clear29/31. Pulse/self-clear behavior is unknown.
+            #[inline]
+            pub const fn clear_beacon_miss_interrupt_filter(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Bit returned by the dedicated modem-state sleep-limit-exceeded getter. Write effects are unknown.
+            #[inline]
+            pub const fn modem_sleep_limit_exceeded_status(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. Bit returned by the dedicated modem beacon-miss-limit-exceeded getter. Write effects are unknown.
+            #[inline]
+            pub const fn beacon_miss_limit_exceeded_status(&self) -> bool {
+                (self.0 & 0x08000000) != 0
             }
 
             /// Set `BEACON_FILTER_FORCE_SYNC_LIMIT`.
@@ -130217,10 +130352,31 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_22_27_OPAQUE`.
+            /// Set `BITS_22_24_OPAQUE`.
             #[inline]
-            pub fn set_bits_22_27_opaque(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & 0xf03fffff) | (value.get() << 22);
+            pub fn set_bits_22_24_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xfe3fffff) | (value.get() << 22);
+                self
+            }
+
+            /// Set `CLEAR_BEACON_MISS_INTERRUPT_FILTER`.
+            #[inline]
+            pub fn set_clear_beacon_miss_interrupt_filter(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `MODEM_SLEEP_LIMIT_EXCEEDED_STATUS`.
+            #[inline]
+            pub fn set_modem_sleep_limit_exceeded_status(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `BEACON_MISS_LIMIT_EXCEEDED_STATUS`.
+            #[inline]
+            pub fn set_beacon_miss_limit_exceeded_status(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xf7ffffff) | (u32::from(value) << 27);
                 self
             }
         }
@@ -130990,19 +131146,19 @@ pub mod modem_pwr {
         /// Positioned bits of `BIT_23_OPAQUE`.
         pub const BIT_23_OPAQUE_MASK: u32 = 0x800000;
 
-        /// Width of `BIT_25_OPAQUE` in bits.
-        pub const BIT_25_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_25_OPAQUE`.
-        pub const BIT_25_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_25_OPAQUE`.
-        pub const BIT_25_OPAQUE_MASK: u32 = 0x2000000;
+        /// Width of `TBTT_RF_CONTROL_ENABLE` in bits.
+        pub const TBTT_RF_CONTROL_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_RF_CONTROL_ENABLE`.
+        pub const TBTT_RF_CONTROL_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_RF_CONTROL_ENABLE`.
+        pub const TBTT_RF_CONTROL_ENABLE_MASK: u32 = 0x2000000;
 
-        /// Width of `BIT_28_OPAQUE` in bits.
-        pub const BIT_28_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_28_OPAQUE`.
-        pub const BIT_28_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_28_OPAQUE`.
-        pub const BIT_28_OPAQUE_MASK: u32 = 0x10000000;
+        /// Width of `TBTT_MODEM_WAKEUP_ENABLE` in bits.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_MODEM_WAKEUP_ENABLE`.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_MODEM_WAKEUP_ENABLE`.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_MASK: u32 = 0x10000000;
 
         /// Width of `BIT_30_OPAQUE` in bits.
         pub const BIT_30_OPAQUE_WIDTH: u32 = 1;
@@ -131052,7 +131208,7 @@ pub mod modem_pwr {
                 (self.0 & 0x08000000) != 0
             }
 
-            /// hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE.
+            /// hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE. The generic TBTT SoC-wakeup leaves address this same bit for domain0.
             #[inline]
             pub const fn sta_tsf_wakeup_enable(self) -> bool {
                 (self.0 & 0x20000000) != 0
@@ -131076,15 +131232,15 @@ pub mod modem_pwr {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain0 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves.
             #[inline]
-            pub const fn bit_25_opaque(self) -> bool {
+            pub const fn tbtt_rf_control_enable(self) -> bool {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain0 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
             #[inline]
-            pub const fn bit_28_opaque(self) -> bool {
+            pub const fn tbtt_modem_wakeup_enable(self) -> bool {
                 (self.0 & 0x10000000) != 0
             }
 
@@ -131135,7 +131291,7 @@ pub mod modem_pwr {
                 (self.0 & 0x08000000) != 0
             }
 
-            /// hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE.
+            /// hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE. The generic TBTT SoC-wakeup leaves address this same bit for domain0.
             #[inline]
             pub const fn sta_tsf_wakeup_enable(&self) -> bool {
                 (self.0 & 0x20000000) != 0
@@ -131159,15 +131315,15 @@ pub mod modem_pwr {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain0 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves.
             #[inline]
-            pub const fn bit_25_opaque(&self) -> bool {
+            pub const fn tbtt_rf_control_enable(&self) -> bool {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain0 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
             #[inline]
-            pub const fn bit_28_opaque(&self) -> bool {
+            pub const fn tbtt_modem_wakeup_enable(&self) -> bool {
                 (self.0 & 0x10000000) != 0
             }
 
@@ -131240,16 +131396,16 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BIT_25_OPAQUE`.
+            /// Set `TBTT_RF_CONTROL_ENABLE`.
             #[inline]
-            pub fn set_bit_25_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_tbtt_rf_control_enable(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
                 self
             }
 
-            /// Set `BIT_28_OPAQUE`.
+            /// Set `TBTT_MODEM_WAKEUP_ENABLE`.
             #[inline]
-            pub fn set_bit_28_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_tbtt_modem_wakeup_enable(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
                 self
             }
@@ -131365,12 +131521,54 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_ENABLE`.
         pub const TSF_ENABLE_MASK: u32 = 0x80000000;
 
-        /// Width of `BITS_0_29_OPAQUE` in bits.
-        pub const BITS_0_29_OPAQUE_WIDTH: u32 = 30;
-        /// Greatest unsigned image of `BITS_0_29_OPAQUE`.
-        pub const BITS_0_29_OPAQUE_MAX: u32 = 0x3fffffff;
-        /// Positioned bits of `BITS_0_29_OPAQUE`.
-        pub const BITS_0_29_OPAQUE_MASK: u32 = 0x3fffffff;
+        /// Width of `TBTT_AHEAD_TIME` in bits.
+        pub const TBTT_AHEAD_TIME_WIDTH: u32 = 16;
+        /// Greatest unsigned image of `TBTT_AHEAD_TIME`.
+        pub const TBTT_AHEAD_TIME_MAX: u32 = 0xffff;
+        /// Positioned bits of `TBTT_AHEAD_TIME`.
+        pub const TBTT_AHEAD_TIME_MASK: u32 = 0xffff;
+
+        /// Width of `BITS_16_24_OPAQUE` in bits.
+        pub const BITS_16_24_OPAQUE_WIDTH: u32 = 9;
+        /// Greatest unsigned image of `BITS_16_24_OPAQUE`.
+        pub const BITS_16_24_OPAQUE_MAX: u32 = 0x1ff;
+        /// Positioned bits of `BITS_16_24_OPAQUE`.
+        pub const BITS_16_24_OPAQUE_MASK: u32 = 0x1ff0000;
+
+        /// Width of `TBTT_RF_CONTROL_ENABLE` in bits.
+        pub const TBTT_RF_CONTROL_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_RF_CONTROL_ENABLE`.
+        pub const TBTT_RF_CONTROL_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_RF_CONTROL_ENABLE`.
+        pub const TBTT_RF_CONTROL_ENABLE_MASK: u32 = 0x2000000;
+
+        /// Width of `TBTT_ENABLE` in bits.
+        pub const TBTT_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_ENABLE`.
+        pub const TBTT_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_ENABLE`.
+        pub const TBTT_ENABLE_MASK: u32 = 0x4000000;
+
+        /// Width of `BIT_27_OPAQUE` in bits.
+        pub const BIT_27_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_27_OPAQUE`.
+        pub const BIT_27_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_27_OPAQUE`.
+        pub const BIT_27_OPAQUE_MASK: u32 = 0x8000000;
+
+        /// Width of `TBTT_MODEM_WAKEUP_ENABLE` in bits.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_MODEM_WAKEUP_ENABLE`.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_MODEM_WAKEUP_ENABLE`.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_MASK: u32 = 0x10000000;
+
+        /// Width of `TBTT_SOC_WAKEUP_ENABLE` in bits.
+        pub const TBTT_SOC_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_SOC_WAKEUP_ENABLE`.
+        pub const TBTT_SOC_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_SOC_WAKEUP_ENABLE`.
+        pub const TBTT_SOC_WAKEUP_ENABLE_MASK: u32 = 0x20000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -131389,10 +131587,46 @@ pub mod modem_pwr {
                 (self.0 & 0x80000000) != 0
             }
 
+            /// Project-assigned name. TSF-domain1 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
+            #[inline]
+            pub const fn tbtt_ahead_time(self) -> u16 {
+                self.0 as u16
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_0_29_opaque(self) -> oer_mmio::Bits<30> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn bits_16_24_opaque(self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Project-assigned name. TSF-domain1 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves.
+            #[inline]
+            pub const fn tbtt_rf_control_enable(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal.
+            #[inline]
+            pub const fn tbtt_enable(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_27_opaque(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain1 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_modem_wakeup_enable(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain1 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_soc_wakeup_enable(self) -> bool {
+                (self.0 & 0x20000000) != 0
             }
         }
 
@@ -131412,10 +131646,46 @@ pub mod modem_pwr {
                 (self.0 & 0x80000000) != 0
             }
 
+            /// Project-assigned name. TSF-domain1 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
+            #[inline]
+            pub const fn tbtt_ahead_time(&self) -> u16 {
+                self.0 as u16
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_0_29_opaque(&self) -> oer_mmio::Bits<30> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn bits_16_24_opaque(&self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Project-assigned name. TSF-domain1 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves.
+            #[inline]
+            pub const fn tbtt_rf_control_enable(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal.
+            #[inline]
+            pub const fn tbtt_enable(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_27_opaque(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain1 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_modem_wakeup_enable(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain1 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_soc_wakeup_enable(&self) -> bool {
+                (self.0 & 0x20000000) != 0
             }
 
             /// Set `BIT_30_OPAQUE`.
@@ -131432,19 +131702,61 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_0_29_OPAQUE`.
+            /// Set `TBTT_AHEAD_TIME`.
             #[inline]
-            pub fn set_bits_0_29_opaque(&mut self, value: oer_mmio::Bits<30>) -> &mut Self {
-                self.0 = (self.0 & 0xc0000000) | value.get();
+            pub fn set_tbtt_ahead_time(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & 0xffff0000) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_16_24_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_24_opaque(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                self.0 = (self.0 & 0xfe00ffff) | (value.get() << 16);
+                self
+            }
+
+            /// Set `TBTT_RF_CONTROL_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_rf_control_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `TBTT_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `BIT_27_OPAQUE`.
+            #[inline]
+            pub fn set_bit_27_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xf7ffffff) | (u32::from(value) << 27);
+                self
+            }
+
+            /// Set `TBTT_MODEM_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_modem_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `TBTT_SOC_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_soc_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
                 self
             }
         }
     }
 
-    /// The `WORD_0864_OPAQUE` register.
+    /// The `SOFTAP_TBTT_INTERVAL` register.
     ///
-    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established.
-    pub mod word_0864_opaque {
+    /// Project-assigned name. Per-domain TBTT interval for TSF domain1. Low26 holds the shifted interval argument; high6 is preserved. Physical time units and runtime latch behavior are unestablished.
+    pub mod softap_tbtt_interval {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xc3ffffff;
         /// The register's width in bits.
@@ -131453,12 +131765,12 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x864;
 
-        /// Width of `BITS_0_21_OPAQUE` in bits.
-        pub const BITS_0_21_OPAQUE_WIDTH: u32 = 22;
-        /// Greatest unsigned image of `BITS_0_21_OPAQUE`.
-        pub const BITS_0_21_OPAQUE_MAX: u32 = 0x3fffff;
-        /// Positioned bits of `BITS_0_21_OPAQUE`.
-        pub const BITS_0_21_OPAQUE_MASK: u32 = 0x3fffff;
+        /// Width of `INTERVAL_TSF_BITS_35_10` in bits.
+        pub const INTERVAL_TSF_BITS_35_10_WIDTH: u32 = 26;
+        /// Greatest unsigned image of `INTERVAL_TSF_BITS_35_10`.
+        pub const INTERVAL_TSF_BITS_35_10_MAX: u32 = 0x3ffffff;
+        /// Positioned bits of `INTERVAL_TSF_BITS_35_10`.
+        pub const INTERVAL_TSF_BITS_35_10_MASK: u32 = 0x3ffffff;
 
         /// Width of `BITS_30_31_OPAQUE` in bits.
         pub const BITS_30_31_OPAQUE_WIDTH: u32 = 2;
@@ -131467,21 +131779,14 @@ pub mod modem_pwr {
         /// Positioned bits of `BITS_30_31_OPAQUE`.
         pub const BITS_30_31_OPAQUE_MASK: u32 = 0xc0000000;
 
-        /// Width of `BITS_22_25_OPAQUE` in bits.
-        pub const BITS_22_25_OPAQUE_WIDTH: u32 = 4;
-        /// Greatest unsigned image of `BITS_22_25_OPAQUE`.
-        pub const BITS_22_25_OPAQUE_MAX: u32 = 0xf;
-        /// Positioned bits of `BITS_22_25_OPAQUE`.
-        pub const BITS_22_25_OPAQUE_MASK: u32 = 0x3c00000;
-
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
             #[inline]
-            pub const fn bits_0_21_opaque(self) -> oer_mmio::Bits<22> {
+            pub const fn interval_tsf_bits_35_10(self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
@@ -131490,21 +131795,15 @@ pub mod modem_pwr {
             pub const fn bits_30_31_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 30)
             }
-
-            /// Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_22_25_opaque(self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 22)
-            }
         }
 
         /// The register's value while it is changed.
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain1 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
             #[inline]
-            pub const fn bits_0_21_opaque(&self) -> oer_mmio::Bits<22> {
+            pub const fn interval_tsf_bits_35_10(&self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
@@ -131514,16 +131813,10 @@ pub mod modem_pwr {
                 oer_mmio::Bits::truncate(self.0 >> 30)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set `INTERVAL_TSF_BITS_35_10`.
             #[inline]
-            pub const fn bits_22_25_opaque(&self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 22)
-            }
-
-            /// Set `BITS_0_21_OPAQUE`.
-            #[inline]
-            pub fn set_bits_0_21_opaque(&mut self, value: oer_mmio::Bits<22>) -> &mut Self {
-                self.0 = (self.0 & 0xffc00000) | value.get();
+            pub fn set_interval_tsf_bits_35_10(&mut self, value: oer_mmio::Bits<26>) -> &mut Self {
+                self.0 = (self.0 & 0xfc000000) | value.get();
                 self
             }
 
@@ -131531,13 +131824,6 @@ pub mod modem_pwr {
             #[inline]
             pub fn set_bits_30_31_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
                 self.0 = (self.0 & 0x3fffffff) | (value.get() << 30);
-                self
-            }
-
-            /// Set `BITS_22_25_OPAQUE`.
-            #[inline]
-            pub fn set_bits_22_25_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xfc3fffff) | (value.get() << 22);
                 self
             }
         }
@@ -131611,26 +131897,61 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_ENABLE_HIGH`.
         pub const TSF_ENABLE_HIGH_MASK: u32 = 0x80000000;
 
-        /// Width of `BITS_0_18_OPAQUE` in bits.
-        pub const BITS_0_18_OPAQUE_WIDTH: u32 = 19;
-        /// Greatest unsigned image of `BITS_0_18_OPAQUE`.
-        pub const BITS_0_18_OPAQUE_MAX: u32 = 0x7ffff;
-        /// Positioned bits of `BITS_0_18_OPAQUE`.
-        pub const BITS_0_18_OPAQUE_MASK: u32 = 0x7ffff;
+        /// Width of `TBTT_AHEAD_TIME` in bits.
+        pub const TBTT_AHEAD_TIME_WIDTH: u32 = 16;
+        /// Greatest unsigned image of `TBTT_AHEAD_TIME`.
+        pub const TBTT_AHEAD_TIME_MAX: u32 = 0xffff;
+        /// Positioned bits of `TBTT_AHEAD_TIME`.
+        pub const TBTT_AHEAD_TIME_MASK: u32 = 0xffff;
 
-        /// Width of `BITS_23_26_OPAQUE` in bits.
-        pub const BITS_23_26_OPAQUE_WIDTH: u32 = 4;
-        /// Greatest unsigned image of `BITS_23_26_OPAQUE`.
-        pub const BITS_23_26_OPAQUE_MAX: u32 = 0xf;
-        /// Positioned bits of `BITS_23_26_OPAQUE`.
-        pub const BITS_23_26_OPAQUE_MASK: u32 = 0x7800000;
+        /// Width of `BITS_16_18_OPAQUE` in bits.
+        pub const BITS_16_18_OPAQUE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `BITS_16_18_OPAQUE`.
+        pub const BITS_16_18_OPAQUE_MAX: u32 = 0x7;
+        /// Positioned bits of `BITS_16_18_OPAQUE`.
+        pub const BITS_16_18_OPAQUE_MASK: u32 = 0x70000;
 
-        /// Width of `BITS_28_30_OPAQUE` in bits.
-        pub const BITS_28_30_OPAQUE_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `BITS_28_30_OPAQUE`.
-        pub const BITS_28_30_OPAQUE_MAX: u32 = 0x7;
-        /// Positioned bits of `BITS_28_30_OPAQUE`.
-        pub const BITS_28_30_OPAQUE_MASK: u32 = 0x70000000;
+        /// Width of `BITS_23_24_OPAQUE` in bits.
+        pub const BITS_23_24_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_23_24_OPAQUE`.
+        pub const BITS_23_24_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_23_24_OPAQUE`.
+        pub const BITS_23_24_OPAQUE_MASK: u32 = 0x1800000;
+
+        /// Width of `TBTT_RF_CONTROL_ENABLE` in bits.
+        pub const TBTT_RF_CONTROL_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_RF_CONTROL_ENABLE`.
+        pub const TBTT_RF_CONTROL_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_RF_CONTROL_ENABLE`.
+        pub const TBTT_RF_CONTROL_ENABLE_MASK: u32 = 0x2000000;
+
+        /// Width of `TBTT_ENABLE` in bits.
+        pub const TBTT_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_ENABLE`.
+        pub const TBTT_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_ENABLE`.
+        pub const TBTT_ENABLE_MASK: u32 = 0x4000000;
+
+        /// Width of `TBTT_MODEM_WAKEUP_ENABLE` in bits.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_MODEM_WAKEUP_ENABLE`.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_MODEM_WAKEUP_ENABLE`.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_MASK: u32 = 0x10000000;
+
+        /// Width of `TBTT_SOC_WAKEUP_ENABLE` in bits.
+        pub const TBTT_SOC_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_SOC_WAKEUP_ENABLE`.
+        pub const TBTT_SOC_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_SOC_WAKEUP_ENABLE`.
+        pub const TBTT_SOC_WAKEUP_ENABLE_MASK: u32 = 0x20000000;
+
+        /// Width of `BIT_30_OPAQUE` in bits.
+        pub const BIT_30_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MASK: u32 = 0x40000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -131661,22 +131982,52 @@ pub mod modem_pwr {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain2 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
-            pub const fn bits_0_18_opaque(self) -> oer_mmio::Bits<19> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn tbtt_ahead_time(self) -> u16 {
+                self.0 as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_23_26_opaque(self) -> oer_mmio::Bits<4> {
+            pub const fn bits_16_18_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_24_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 23)
             }
 
+            /// Project-assigned name. TSF-domain2 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves.
+            #[inline]
+            pub const fn tbtt_rf_control_enable(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal.
+            #[inline]
+            pub const fn tbtt_enable(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain2 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_modem_wakeup_enable(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain2 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_soc_wakeup_enable(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_28_30_opaque(self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0 >> 28)
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
             }
         }
 
@@ -131708,22 +132059,52 @@ pub mod modem_pwr {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain2 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
-            pub const fn bits_0_18_opaque(&self) -> oer_mmio::Bits<19> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn tbtt_ahead_time(&self) -> u16 {
+                self.0 as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_23_26_opaque(&self) -> oer_mmio::Bits<4> {
+            pub const fn bits_16_18_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_24_opaque(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 23)
             }
 
+            /// Project-assigned name. TSF-domain2 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves.
+            #[inline]
+            pub const fn tbtt_rf_control_enable(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal.
+            #[inline]
+            pub const fn tbtt_enable(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain2 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_modem_wakeup_enable(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain2 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_soc_wakeup_enable(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_28_30_opaque(&self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0 >> 28)
+            pub const fn bit_30_opaque(&self) -> bool {
+                (self.0 & 0x40000000) != 0
             }
 
             /// Set `TSF_MODE`.
@@ -131747,33 +132128,68 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_0_18_OPAQUE`.
+            /// Set `TBTT_AHEAD_TIME`.
             #[inline]
-            pub fn set_bits_0_18_opaque(&mut self, value: oer_mmio::Bits<19>) -> &mut Self {
-                self.0 = (self.0 & 0xfff80000) | value.get();
+            pub fn set_tbtt_ahead_time(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & 0xffff0000) | u32::from(value);
                 self
             }
 
-            /// Set `BITS_23_26_OPAQUE`.
+            /// Set `BITS_16_18_OPAQUE`.
             #[inline]
-            pub fn set_bits_23_26_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xf87fffff) | (value.get() << 23);
+            pub fn set_bits_16_18_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xfff8ffff) | (value.get() << 16);
                 self
             }
 
-            /// Set `BITS_28_30_OPAQUE`.
+            /// Set `BITS_23_24_OPAQUE`.
             #[inline]
-            pub fn set_bits_28_30_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
-                self.0 = (self.0 & 0x8fffffff) | (value.get() << 28);
+            pub fn set_bits_23_24_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xfe7fffff) | (value.get() << 23);
+                self
+            }
+
+            /// Set `TBTT_RF_CONTROL_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_rf_control_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `TBTT_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `TBTT_MODEM_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_modem_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `TBTT_SOC_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_soc_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `BIT_30_OPAQUE`.
+            #[inline]
+            pub fn set_bit_30_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
                 self
             }
         }
     }
 
-    /// The `WORD_086C_OPAQUE` register.
+    /// The `NAN_TBTT_INTERVAL` register.
     ///
-    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established.
-    pub mod word_086c_opaque {
+    /// Project-assigned name. Per-domain TBTT interval for TSF domain2. Low26 holds the shifted interval argument; high6 is preserved. Physical time units and runtime latch behavior are unestablished.
+    pub mod nan_tbtt_interval {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xc3ffffff;
         /// The register's width in bits.
@@ -131782,12 +132198,12 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x86c;
 
-        /// Width of `BITS_0_21_OPAQUE` in bits.
-        pub const BITS_0_21_OPAQUE_WIDTH: u32 = 22;
-        /// Greatest unsigned image of `BITS_0_21_OPAQUE`.
-        pub const BITS_0_21_OPAQUE_MAX: u32 = 0x3fffff;
-        /// Positioned bits of `BITS_0_21_OPAQUE`.
-        pub const BITS_0_21_OPAQUE_MASK: u32 = 0x3fffff;
+        /// Width of `INTERVAL_TSF_BITS_35_10` in bits.
+        pub const INTERVAL_TSF_BITS_35_10_WIDTH: u32 = 26;
+        /// Greatest unsigned image of `INTERVAL_TSF_BITS_35_10`.
+        pub const INTERVAL_TSF_BITS_35_10_MAX: u32 = 0x3ffffff;
+        /// Positioned bits of `INTERVAL_TSF_BITS_35_10`.
+        pub const INTERVAL_TSF_BITS_35_10_MASK: u32 = 0x3ffffff;
 
         /// Width of `BITS_30_31_OPAQUE` in bits.
         pub const BITS_30_31_OPAQUE_WIDTH: u32 = 2;
@@ -131796,21 +132212,14 @@ pub mod modem_pwr {
         /// Positioned bits of `BITS_30_31_OPAQUE`.
         pub const BITS_30_31_OPAQUE_MASK: u32 = 0xc0000000;
 
-        /// Width of `BITS_22_25_OPAQUE` in bits.
-        pub const BITS_22_25_OPAQUE_WIDTH: u32 = 4;
-        /// Greatest unsigned image of `BITS_22_25_OPAQUE`.
-        pub const BITS_22_25_OPAQUE_MAX: u32 = 0xf;
-        /// Positioned bits of `BITS_22_25_OPAQUE`.
-        pub const BITS_22_25_OPAQUE_MASK: u32 = 0x3c00000;
-
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
             #[inline]
-            pub const fn bits_0_21_opaque(self) -> oer_mmio::Bits<22> {
+            pub const fn interval_tsf_bits_35_10(self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
@@ -131819,21 +132228,15 @@ pub mod modem_pwr {
             pub const fn bits_30_31_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 30)
             }
-
-            /// Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_22_25_opaque(self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 22)
-            }
         }
 
         /// The register's value while it is changed.
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain2 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
             #[inline]
-            pub const fn bits_0_21_opaque(&self) -> oer_mmio::Bits<22> {
+            pub const fn interval_tsf_bits_35_10(&self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
@@ -131843,16 +132246,10 @@ pub mod modem_pwr {
                 oer_mmio::Bits::truncate(self.0 >> 30)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set `INTERVAL_TSF_BITS_35_10`.
             #[inline]
-            pub const fn bits_22_25_opaque(&self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 22)
-            }
-
-            /// Set `BITS_0_21_OPAQUE`.
-            #[inline]
-            pub fn set_bits_0_21_opaque(&mut self, value: oer_mmio::Bits<22>) -> &mut Self {
-                self.0 = (self.0 & 0xffc00000) | value.get();
+            pub fn set_interval_tsf_bits_35_10(&mut self, value: oer_mmio::Bits<26>) -> &mut Self {
+                self.0 = (self.0 & 0xfc000000) | value.get();
                 self
             }
 
@@ -131860,13 +132257,6 @@ pub mod modem_pwr {
             #[inline]
             pub fn set_bits_30_31_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
                 self.0 = (self.0 & 0x3fffffff) | (value.get() << 30);
-                self
-            }
-
-            /// Set `BITS_22_25_OPAQUE`.
-            #[inline]
-            pub fn set_bits_22_25_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xfc3fffff) | (value.get() << 22);
                 self
             }
         }
@@ -131940,26 +132330,61 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_ENABLE_HIGH`.
         pub const TSF_ENABLE_HIGH_MASK: u32 = 0x80000000;
 
-        /// Width of `BITS_0_18_OPAQUE` in bits.
-        pub const BITS_0_18_OPAQUE_WIDTH: u32 = 19;
-        /// Greatest unsigned image of `BITS_0_18_OPAQUE`.
-        pub const BITS_0_18_OPAQUE_MAX: u32 = 0x7ffff;
-        /// Positioned bits of `BITS_0_18_OPAQUE`.
-        pub const BITS_0_18_OPAQUE_MASK: u32 = 0x7ffff;
+        /// Width of `TBTT_AHEAD_TIME` in bits.
+        pub const TBTT_AHEAD_TIME_WIDTH: u32 = 16;
+        /// Greatest unsigned image of `TBTT_AHEAD_TIME`.
+        pub const TBTT_AHEAD_TIME_MAX: u32 = 0xffff;
+        /// Positioned bits of `TBTT_AHEAD_TIME`.
+        pub const TBTT_AHEAD_TIME_MASK: u32 = 0xffff;
 
-        /// Width of `BITS_23_26_OPAQUE` in bits.
-        pub const BITS_23_26_OPAQUE_WIDTH: u32 = 4;
-        /// Greatest unsigned image of `BITS_23_26_OPAQUE`.
-        pub const BITS_23_26_OPAQUE_MAX: u32 = 0xf;
-        /// Positioned bits of `BITS_23_26_OPAQUE`.
-        pub const BITS_23_26_OPAQUE_MASK: u32 = 0x7800000;
+        /// Width of `BITS_16_18_OPAQUE` in bits.
+        pub const BITS_16_18_OPAQUE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `BITS_16_18_OPAQUE`.
+        pub const BITS_16_18_OPAQUE_MAX: u32 = 0x7;
+        /// Positioned bits of `BITS_16_18_OPAQUE`.
+        pub const BITS_16_18_OPAQUE_MASK: u32 = 0x70000;
 
-        /// Width of `BITS_28_30_OPAQUE` in bits.
-        pub const BITS_28_30_OPAQUE_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `BITS_28_30_OPAQUE`.
-        pub const BITS_28_30_OPAQUE_MAX: u32 = 0x7;
-        /// Positioned bits of `BITS_28_30_OPAQUE`.
-        pub const BITS_28_30_OPAQUE_MASK: u32 = 0x70000000;
+        /// Width of `BITS_23_24_OPAQUE` in bits.
+        pub const BITS_23_24_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_23_24_OPAQUE`.
+        pub const BITS_23_24_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_23_24_OPAQUE`.
+        pub const BITS_23_24_OPAQUE_MASK: u32 = 0x1800000;
+
+        /// Width of `TBTT_RF_CONTROL_ENABLE` in bits.
+        pub const TBTT_RF_CONTROL_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_RF_CONTROL_ENABLE`.
+        pub const TBTT_RF_CONTROL_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_RF_CONTROL_ENABLE`.
+        pub const TBTT_RF_CONTROL_ENABLE_MASK: u32 = 0x2000000;
+
+        /// Width of `TBTT_ENABLE` in bits.
+        pub const TBTT_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_ENABLE`.
+        pub const TBTT_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_ENABLE`.
+        pub const TBTT_ENABLE_MASK: u32 = 0x4000000;
+
+        /// Width of `TBTT_MODEM_WAKEUP_ENABLE` in bits.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_MODEM_WAKEUP_ENABLE`.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_MODEM_WAKEUP_ENABLE`.
+        pub const TBTT_MODEM_WAKEUP_ENABLE_MASK: u32 = 0x10000000;
+
+        /// Width of `TBTT_SOC_WAKEUP_ENABLE` in bits.
+        pub const TBTT_SOC_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TBTT_SOC_WAKEUP_ENABLE`.
+        pub const TBTT_SOC_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `TBTT_SOC_WAKEUP_ENABLE`.
+        pub const TBTT_SOC_WAKEUP_ENABLE_MASK: u32 = 0x20000000;
+
+        /// Width of `BIT_30_OPAQUE` in bits.
+        pub const BIT_30_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MASK: u32 = 0x40000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -131990,22 +132415,52 @@ pub mod modem_pwr {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain3 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
-            pub const fn bits_0_18_opaque(self) -> oer_mmio::Bits<19> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn tbtt_ahead_time(self) -> u16 {
+                self.0 as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_23_26_opaque(self) -> oer_mmio::Bits<4> {
+            pub const fn bits_16_18_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_24_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 23)
             }
 
+            /// Project-assigned name. TSF-domain3 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves.
+            #[inline]
+            pub const fn tbtt_rf_control_enable(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal.
+            #[inline]
+            pub const fn tbtt_enable(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain3 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_modem_wakeup_enable(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain3 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_soc_wakeup_enable(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_28_30_opaque(self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0 >> 28)
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
             }
         }
 
@@ -132037,22 +132492,52 @@ pub mod modem_pwr {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain3 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
-            pub const fn bits_0_18_opaque(&self) -> oer_mmio::Bits<19> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn tbtt_ahead_time(&self) -> u16 {
+                self.0 as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_23_26_opaque(&self) -> oer_mmio::Bits<4> {
+            pub const fn bits_16_18_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_24_opaque(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 23)
             }
 
+            /// Project-assigned name. TSF-domain3 TBTT RF-control gate independently set/cleared by the dedicated TBTT RF-control leaves.
+            #[inline]
+            pub const fn tbtt_rf_control_enable(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal.
+            #[inline]
+            pub const fn tbtt_enable(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain3 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_modem_wakeup_enable(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. TSF-domain3 TBTT SoC-wakeup gate independently set/cleared by the dedicated TBTT SoC-wakeup leaves.
+            #[inline]
+            pub const fn tbtt_soc_wakeup_enable(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_28_30_opaque(&self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0 >> 28)
+            pub const fn bit_30_opaque(&self) -> bool {
+                (self.0 & 0x40000000) != 0
             }
 
             /// Set `TSF_MODE`.
@@ -132076,33 +132561,68 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_0_18_OPAQUE`.
+            /// Set `TBTT_AHEAD_TIME`.
             #[inline]
-            pub fn set_bits_0_18_opaque(&mut self, value: oer_mmio::Bits<19>) -> &mut Self {
-                self.0 = (self.0 & 0xfff80000) | value.get();
+            pub fn set_tbtt_ahead_time(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & 0xffff0000) | u32::from(value);
                 self
             }
 
-            /// Set `BITS_23_26_OPAQUE`.
+            /// Set `BITS_16_18_OPAQUE`.
             #[inline]
-            pub fn set_bits_23_26_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xf87fffff) | (value.get() << 23);
+            pub fn set_bits_16_18_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xfff8ffff) | (value.get() << 16);
                 self
             }
 
-            /// Set `BITS_28_30_OPAQUE`.
+            /// Set `BITS_23_24_OPAQUE`.
             #[inline]
-            pub fn set_bits_28_30_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
-                self.0 = (self.0 & 0x8fffffff) | (value.get() << 28);
+            pub fn set_bits_23_24_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xfe7fffff) | (value.get() << 23);
+                self
+            }
+
+            /// Set `TBTT_RF_CONTROL_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_rf_control_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `TBTT_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `TBTT_MODEM_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_modem_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `TBTT_SOC_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_tbtt_soc_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `BIT_30_OPAQUE`.
+            #[inline]
+            pub fn set_bit_30_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
                 self
             }
         }
     }
 
-    /// The `WORD_0874_OPAQUE` register.
+    /// The `BTWT_TBTT_INTERVAL` register.
     ///
-    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established.
-    pub mod word_0874_opaque {
+    /// Project-assigned name. Per-domain TBTT interval for TSF domain3. Low26 holds the shifted interval argument; high6 is preserved. Physical time units and runtime latch behavior are unestablished.
+    pub mod btwt_tbtt_interval {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xc3ffffff;
         /// The register's width in bits.
@@ -132111,12 +132631,12 @@ pub mod modem_pwr {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x874;
 
-        /// Width of `BITS_0_21_OPAQUE` in bits.
-        pub const BITS_0_21_OPAQUE_WIDTH: u32 = 22;
-        /// Greatest unsigned image of `BITS_0_21_OPAQUE`.
-        pub const BITS_0_21_OPAQUE_MAX: u32 = 0x3fffff;
-        /// Positioned bits of `BITS_0_21_OPAQUE`.
-        pub const BITS_0_21_OPAQUE_MASK: u32 = 0x3fffff;
+        /// Width of `INTERVAL_TSF_BITS_35_10` in bits.
+        pub const INTERVAL_TSF_BITS_35_10_WIDTH: u32 = 26;
+        /// Greatest unsigned image of `INTERVAL_TSF_BITS_35_10`.
+        pub const INTERVAL_TSF_BITS_35_10_MAX: u32 = 0x3ffffff;
+        /// Positioned bits of `INTERVAL_TSF_BITS_35_10`.
+        pub const INTERVAL_TSF_BITS_35_10_MASK: u32 = 0x3ffffff;
 
         /// Width of `BITS_30_31_OPAQUE` in bits.
         pub const BITS_30_31_OPAQUE_WIDTH: u32 = 2;
@@ -132125,21 +132645,14 @@ pub mod modem_pwr {
         /// Positioned bits of `BITS_30_31_OPAQUE`.
         pub const BITS_30_31_OPAQUE_MASK: u32 = 0xc0000000;
 
-        /// Width of `BITS_22_25_OPAQUE` in bits.
-        pub const BITS_22_25_OPAQUE_WIDTH: u32 = 4;
-        /// Greatest unsigned image of `BITS_22_25_OPAQUE`.
-        pub const BITS_22_25_OPAQUE_MAX: u32 = 0xf;
-        /// Positioned bits of `BITS_22_25_OPAQUE`.
-        pub const BITS_22_25_OPAQUE_MASK: u32 = 0x3c00000;
-
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
             #[inline]
-            pub const fn bits_0_21_opaque(self) -> oer_mmio::Bits<22> {
+            pub const fn interval_tsf_bits_35_10(self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
@@ -132148,21 +132661,15 @@ pub mod modem_pwr {
             pub const fn bits_30_31_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 30)
             }
-
-            /// Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_22_25_opaque(self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 22)
-            }
         }
 
         /// The register's value while it is changed.
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. TSF-domain3 interval low26: setter publishes its 32-bit argument shifted right ten, preserving high6; getter returns the word shifted left ten. Physical time units and runtime latch behavior are unestablished.
             #[inline]
-            pub const fn bits_0_21_opaque(&self) -> oer_mmio::Bits<22> {
+            pub const fn interval_tsf_bits_35_10(&self) -> oer_mmio::Bits<26> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
@@ -132172,16 +132679,10 @@ pub mod modem_pwr {
                 oer_mmio::Bits::truncate(self.0 >> 30)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set `INTERVAL_TSF_BITS_35_10`.
             #[inline]
-            pub const fn bits_22_25_opaque(&self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 22)
-            }
-
-            /// Set `BITS_0_21_OPAQUE`.
-            #[inline]
-            pub fn set_bits_0_21_opaque(&mut self, value: oer_mmio::Bits<22>) -> &mut Self {
-                self.0 = (self.0 & 0xffc00000) | value.get();
+            pub fn set_interval_tsf_bits_35_10(&mut self, value: oer_mmio::Bits<26>) -> &mut Self {
+                self.0 = (self.0 & 0xfc000000) | value.get();
                 self
             }
 
@@ -132189,13 +132690,6 @@ pub mod modem_pwr {
             #[inline]
             pub fn set_bits_30_31_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
                 self.0 = (self.0 & 0x3fffffff) | (value.get() << 30);
-                self
-            }
-
-            /// Set `BITS_22_25_OPAQUE`.
-            #[inline]
-            pub fn set_bits_22_25_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xfc3fffff) | (value.get() << 22);
                 self
             }
         }
@@ -132314,12 +132808,19 @@ pub mod modem_pwr {
         /// Positioned bits of `TIMER_ENABLE`.
         pub const TIMER_ENABLE_MASK: u32 = 0x80000000;
 
-        /// Width of `BITS_28_29_OPAQUE` in bits.
-        pub const BITS_28_29_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_28_29_OPAQUE`.
-        pub const BITS_28_29_OPAQUE_MAX: u32 = 0x3;
-        /// Positioned bits of `BITS_28_29_OPAQUE`.
-        pub const BITS_28_29_OPAQUE_MASK: u32 = 0x30000000;
+        /// Width of `RF_CONTROL_ENABLE` in bits.
+        pub const RF_CONTROL_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `RF_CONTROL_ENABLE`.
+        pub const RF_CONTROL_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `RF_CONTROL_ENABLE`.
+        pub const RF_CONTROL_ENABLE_MASK: u32 = 0x10000000;
+
+        /// Width of `MODEM_WAKEUP_ENABLE` in bits.
+        pub const MODEM_WAKEUP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `MODEM_WAKEUP_ENABLE`.
+        pub const MODEM_WAKEUP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `MODEM_WAKEUP_ENABLE`.
+        pub const MODEM_WAKEUP_ENABLE_MASK: u32 = 0x20000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132332,22 +132833,28 @@ pub mod modem_pwr {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup.
+            /// Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup. The dedicated tsf_hal_set_timer_soc_wakeup enable/disable leaves identify this as the SoC-wakeup gate.
             #[inline]
             pub const fn wakeup_enable(self) -> bool {
                 (self.0 & 0x40000000) != 0
             }
 
-            /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer.
+            /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal.
             #[inline]
             pub const fn timer_enable(self) -> bool {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. Per-timer RF-control gate set and cleared by the dedicated timer RF-control leaves; distinct from TIMER_ENABLE and the interrupt bank.
             #[inline]
-            pub const fn bits_28_29_opaque(self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 28)
+            pub const fn rf_control_enable(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. Per-timer modem-wakeup gate set and cleared by the dedicated timer modem-wakeup leaves.
+            #[inline]
+            pub const fn modem_wakeup_enable(self) -> bool {
+                (self.0 & 0x20000000) != 0
             }
         }
 
@@ -132361,22 +132868,28 @@ pub mod modem_pwr {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup.
+            /// Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup. The dedicated tsf_hal_set_timer_soc_wakeup enable/disable leaves identify this as the SoC-wakeup gate.
             #[inline]
             pub const fn wakeup_enable(&self) -> bool {
                 (self.0 & 0x40000000) != 0
             }
 
-            /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer.
+            /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal.
             #[inline]
             pub const fn timer_enable(&self) -> bool {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. Per-timer RF-control gate set and cleared by the dedicated timer RF-control leaves; distinct from TIMER_ENABLE and the interrupt bank.
             #[inline]
-            pub const fn bits_28_29_opaque(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 28)
+            pub const fn rf_control_enable(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. Per-timer modem-wakeup gate set and cleared by the dedicated timer modem-wakeup leaves.
+            #[inline]
+            pub const fn modem_wakeup_enable(&self) -> bool {
+                (self.0 & 0x20000000) != 0
             }
 
             /// Set `TARGET_HIGH`.
@@ -132400,10 +132913,17 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_28_29_OPAQUE`.
+            /// Set `RF_CONTROL_ENABLE`.
             #[inline]
-            pub fn set_bits_28_29_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & 0xcfffffff) | (value.get() << 28);
+            pub fn set_rf_control_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `MODEM_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_modem_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
                 self
             }
         }
@@ -132996,49 +133516,49 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Enable the TSF-3 TBTT event.
+            /// Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_3(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Enable the TSF-2 TBTT event.
+            /// Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_2(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Enable the TSF-1 TBTT event.
+            /// Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_1(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
+            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Enable the guarded TSF timer-one event.
+            /// Enable the guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_1(self) -> bool {
                 (self.0 & 0x00000040) != 0
             }
 
-            /// Enable the guarded TSF timer-zero event.
+            /// Enable the guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_0(self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -133050,7 +133570,7 @@ pub mod modem_pwr {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
             pub const fn beacon_filter_wake(self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -133062,7 +133582,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00040000) != 0
             }
 
-            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
             pub const fn beacon_miss(self) -> bool {
                 (self.0 & 0x00080000) != 0
@@ -133079,49 +133599,49 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Enable the TSF-3 TBTT event.
+            /// Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_3(&self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Enable the TSF-2 TBTT event.
+            /// Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_2(&self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Enable the TSF-1 TBTT event.
+            /// Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_1(&self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
+            /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_0(&self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_3(&self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_2(&self) -> bool {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Enable the guarded TSF timer-one event.
+            /// Enable the guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_1(&self) -> bool {
                 (self.0 & 0x00000040) != 0
             }
 
-            /// Enable the guarded TSF timer-zero event.
+            /// Enable the guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_0(&self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -133133,7 +133653,7 @@ pub mod modem_pwr {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
             pub const fn beacon_filter_wake(&self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -133145,7 +133665,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00040000) != 0
             }
 
-            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
             pub const fn beacon_miss(&self) -> bool {
                 (self.0 & 0x00080000) != 0
@@ -133358,49 +133878,49 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Raw TSF-3 TBTT event.
+            /// Raw TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_3(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Raw TSF-2 TBTT event.
+            /// Raw TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_2(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Raw TSF-1 TBTT event.
+            /// Raw TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_1(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
+            /// Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBTT0 pending survives interrupt masking; a retained positive sample clears it under the mask. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Raw guarded TSF timer-one event.
+            /// Raw guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_1(self) -> bool {
                 (self.0 & 0x00000040) != 0
             }
 
-            /// Raw guarded TSF timer-zero event.
+            /// Raw guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_0(self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -133546,49 +134066,49 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Masked TSF-3 TBTT event.
+            /// Masked TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_3(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Masked TSF-2 TBTT event.
+            /// Masked TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_2(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Masked TSF-1 TBTT event.
+            /// Masked TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_1(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Masked TSF-0 TBTT event. TSF 0 is the station TSF.
+            /// Masked TSF-0 TBTT event. TSF 0 is the station TSF. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Masked guarded TSF timer-three event.
+            /// Masked guarded TSF timer-three event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Masked guarded TSF timer-two event.
+            /// Masked guarded TSF timer-two event. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Masked guarded TSF timer-one event.
+            /// Masked guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_1(self) -> bool {
                 (self.0 & 0x00000040) != 0
             }
 
-            /// Masked guarded TSF timer-zero event.
+            /// Masked guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_0(self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -133734,49 +134254,49 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Acknowledge the TSF-3 TBTT event.
+            /// Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_3(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Acknowledge the TSF-2 TBTT event.
+            /// Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_2(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// Acknowledge the TSF-1 TBTT event.
+            /// Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_1(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
+            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_0(self) -> bool {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-one event.
+            /// Acknowledge the guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_1(self) -> bool {
                 (self.0 & 0x00000040) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-zero event.
+            /// Acknowledge the guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_0(self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -133788,7 +134308,7 @@ pub mod modem_pwr {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
             pub const fn beacon_filter_wake(self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -133800,7 +134320,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00040000) != 0
             }
 
-            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
             pub const fn beacon_miss(self) -> bool {
                 (self.0 & 0x00080000) != 0
@@ -133824,7 +134344,7 @@ pub mod modem_pwr {
                 self.0 == 0
             }
 
-            /// Acknowledge the TSF-3 TBTT event.
+            /// Acknowledge the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_3(&self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -133839,7 +134359,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the TSF-2 TBTT event.
+            /// Acknowledge the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_2(&self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -133854,7 +134374,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the TSF-1 TBTT event.
+            /// Acknowledge the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_1(&self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -133869,7 +134389,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027.
+            /// Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A positive TBTT0 sample retained before masking acknowledges the local pending event while masked. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tbtt_0(&self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -133884,7 +134404,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_3(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -133899,7 +134419,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
+            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane.
             #[inline]
             pub const fn tsf_timer_2(&self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133914,7 +134434,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-one event.
+            /// Acknowledge the guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_1(&self) -> bool {
                 (self.0 & 0x00000040) != 0
@@ -133929,7 +134449,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-zero event.
+            /// Acknowledge the guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
             pub const fn tsf_timer_0(&self) -> bool {
                 (self.0 & 0x00000080) != 0
@@ -133959,7 +134479,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
             pub const fn beacon_filter_wake(&self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -133989,7 +134509,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
             pub const fn beacon_miss(&self) -> bool {
                 (self.0 & 0x00080000) != 0
@@ -135157,7 +135677,7 @@ pub mod modem_pwr {
 
         /// Mask the sources of `0xffffffff` in `MODEM_PWR.ENABLE`, keeping every other bit, then acknowledge them (`MODEM_PWR.CLEAR`).
         ///
-        /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT.
+        /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT, HW8_S31_WIFI_TSF_MASK_20261026.
         #[inline]
         pub fn clear_all_mac_power_interrupts(&mut self) {
             self.0.write::<0x8b4>(0);
@@ -135536,7 +136056,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_0024_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26.
+        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_0024(&mut self) {
             self.0.write::<0x24>(0x00000000);
@@ -135544,7 +136064,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_002C_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26.
+        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, HW_BLE_LP_CAUSES_2026_10_26, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_002c(&mut self) {
             self.0.write::<0x2c>(0x00000000);
@@ -135584,7 +136104,7 @@ pub mod modem_pwr {
 
         /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0024_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT.
+        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT, BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027.
         #[inline]
         pub fn publish_bluetooth_modem_lp_timer_software_pending(&mut self) {
             self.0.write::<0x24>(0x00000001);
@@ -251512,7 +252032,7 @@ pub mod wifi_bb {
 
     /// The `WORD_004C_OPAQUE` register.
     ///
-    /// Opaque word loaded by bb_intr_handl and observed as zero in the quiet HW11 session. Only those reads are established; write behavior and read side effects, including read-to-clear, are unknown. No side-effect-free read-only or source-123 acknowledgement contract is established. The unknown class deliberately exposes no PAC access until these semantics are resolved.
+    /// Opaque word loaded by bb_intr_handl and observed as zero in the quiet HW11 session. Only those reads are established; write behavior and read side effects, including read-to-clear, are unknown. No side-effect-free read-only or source-123 acknowledgement contract is established. The unknown class deliberately exposes no PAC access until these semantics are resolved. Its observed installer assigns the BB handler to external CPU ISR index9, without a source123 route in that body. This does not establish read-to-clear or safe read-only access. SOURCE: BX12_S31_BB_HANDLER_INSTALL_20261027.
     pub mod word_004c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -252389,7 +252909,7 @@ pub mod wifi_bb {
 
     /// The `RX_11B_WINDOW_CONTROL` register.
     ///
-    /// Complete phy_bb_agc_reg_update writes the full word; phy_rx_11b_opt and phy_reg_update_new replace the same low nine-bit field with independently evidenced values.
+    /// Complete phy_bb_agc_reg_update writes the full word; phy_rx_11b_opt and phy_reg_update_new replace the same low nine-bit field with independently evidenced values. rom[]::phy_bb_agc_reg_update+0x80 stores 0x06acc7c8. The positioned ones in unassigned bits 31:9 are 0x06acc600; the remaining bits of that range are zero in this image. Later low-nine-bit replacements preserve the range without identifying its meaning.
     pub mod rx_11b_window_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000001ff;
@@ -256224,7 +256744,7 @@ pub mod wifi_bb {
 
     /// The `BASEBAND_WATCHDOG_STATUS` register.
     ///
-    /// Complete phy_bb_wdt_get_status returns one unrestricted full-word read.
+    /// Unrestricted full-word value returned by phy_bb_wdt_get_status. Individual cause bits and the relation to source123, BB+4c and MAC watchdog11 are unestablished. SOURCE: BX12_S31_BB_WATCHDOG_API_LANES_20261027.
     pub mod baseband_watchdog_status {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -256246,7 +256766,7 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Complete unrestricted watchdog status value returned by phy_bb_wdt_get_status.
+            /// Unrestricted full-word value returned by phy_bb_wdt_get_status. Individual cause bits and the relation to source123, BB+4c and MAC watchdog11 are unestablished. SOURCE: BX12_S31_BB_WATCHDOG_API_LANES_20261027.
             #[inline]
             pub const fn status(self) -> u32 {
                 self.0
@@ -256661,7 +257181,7 @@ pub mod wifi_bb {
                 (self.0 & 0x20000000) != 0
             }
 
-            /// Gate watchdog interrupt delivery independently of hardware reset. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
+            /// Lane replaced by the named phy_bb_wdt_int_enable helper, independently of reset-enable31. Its source123 output relationship, pending retention and complete output-stop effect are unestablished. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, BX12_S31_BB_WATCHDOG_API_LANES_20261027.
             #[inline]
             pub const fn watchdog_interrupt_enable(self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -256690,7 +257210,7 @@ pub mod wifi_bb {
                 (self.0 & 0x20000000) != 0
             }
 
-            /// Gate watchdog interrupt delivery independently of hardware reset. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
+            /// Lane replaced by the named phy_bb_wdt_int_enable helper, independently of reset-enable31. Its source123 output relationship, pending retention and complete output-stop effect are unestablished. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, BX12_S31_BB_WATCHDOG_API_LANES_20261027.
             #[inline]
             pub const fn watchdog_interrupt_enable(&self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -258093,7 +258613,7 @@ pub mod wifi_bb {
 
         /// Write the vendor's whole-word image `0x06acc7c8`, undeclared bits included (`WIFI_BB.RX_11B_WINDOW_CONTROL`).
         ///
-        /// SOURCE: ROM_REV0_PHY_AGC.
+        /// SOURCE: ROM_REV0_PHY_AGC, BLOB_BX16_ROM_11B_WINDOW_IMAGE_20261027.
         #[inline]
         pub fn initialize_rx_11b_window_control(&mut self) {
             self.0.write::<0x104>(0x06acc7c8);
@@ -265205,7 +265725,7 @@ pub mod wifi_mac {
 
     /// The `ENTRY_PARAMETER_B%s` register.
     ///
-    /// Third full-word image for each of six entries.
+    /// Third full-word image for each of six entries. The pinned mac_last_rxbuf_init writes complete 0x0000ffff images to elements 0, 1 and 2 and complete 0xffffffff images to elements 3 and 4. Bits 15:12 are therefore written one in all five elements; bits 31:16 are zero for elements 0..2 and one for elements 3..4. These initialization images do not establish upper field boundaries, reset values or sentinel semantics.
     pub mod entry_parameter_b {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00000fff;
@@ -297364,7 +297884,7 @@ pub mod wifi_mac {
 
         /// Write the vendor's whole-word image `0x0000ffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B0`).
         ///
-        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT, BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027.
         #[inline]
         pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b0(&mut self) {
             self.0.write::<0x15c>(0x0000ffff);
@@ -297372,7 +297892,7 @@ pub mod wifi_mac {
 
         /// Write the vendor's whole-word image `0x0000ffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B1`).
         ///
-        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT, BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027.
         #[inline]
         pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b1(&mut self) {
             self.0.write::<0x160>(0x0000ffff);
@@ -297380,7 +297900,7 @@ pub mod wifi_mac {
 
         /// Write the vendor's whole-word image `0x0000ffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B2`).
         ///
-        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT, BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027.
         #[inline]
         pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b2(&mut self) {
             self.0.write::<0x164>(0x0000ffff);
@@ -297388,7 +297908,7 @@ pub mod wifi_mac {
 
         /// Write the vendor's whole-word image `0xffffffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B3`).
         ///
-        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT, BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027.
         #[inline]
         pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b3(&mut self) {
             self.0.write::<0x168>(0xffffffff);
@@ -297396,7 +297916,7 @@ pub mod wifi_mac {
 
         /// Write the vendor's whole-word image `0xffffffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B4`).
         ///
-        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT, BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027.
         #[inline]
         pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b4(&mut self) {
             self.0.write::<0x16c>(0xffffffff);

@@ -821,7 +821,7 @@ accuracy = "exact"
 sources = ["S31_MMIO_DECLARED_20104140"]
 
 [review.entity."ENTRY_PARAMETER_B%s"]
-sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT", "BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027"]
 provenance = "observed"
 accuracy = "exact"
 
@@ -7345,7 +7345,7 @@ write-range = { min = 0x0, max = 0xffffffff }
 name = "ENTRY_PARAMETER_B%s"
 offset = 0x15c
 dim = { count = 6, stride = 0x4 }
-description = "Third full-word image for each of six entries."
+description = "Third full-word image for each of six entries. The pinned mac_last_rxbuf_init writes complete 0x0000ffff images to elements 0, 1 and 2 and complete 0xffffffff images to elements 3 and 4. Bits 15:12 are therefore written one in all five elements; bits 31:16 are zero for elements 0..2 and one for elements 3..4. These initialization images do not establish upper field boundaries, reset values or sentinel semantics."
 
 [[registers.fields]]
 name = "BITS_0_11_OPAQUE"
