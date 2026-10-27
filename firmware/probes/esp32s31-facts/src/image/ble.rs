@@ -30,6 +30,7 @@ pub(super) struct Ble {
     pub positional: pac::bt_mac::BleHwPositionalWord1ff0,
     pub etm: pac::modem_etm::ModemEtmBluetooth,
     pub task_irq: pac::bt_mac::BtmacBlePhyInit,
+    pub scheduler: pac::btdm::BtdmSchedulerTable,
 }
 const COUNTER_MAX: u32 = pac::modem_pwr::word_0048_opaque::COUNTER_LOW_MAX;
 const HALF: u32 = (COUNTER_MAX / 2) + 1;
