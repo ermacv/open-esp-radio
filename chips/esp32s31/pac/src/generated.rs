@@ -132884,7 +132884,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// Independent event identity and dedicated enable writer are unknown. The vendor beacon-memory RX selector uses power RAW17/18 with MAC STATUS14, so this use does not require ENABLE18 to be set. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
+            /// Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -132967,7 +132967,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00020000) != 0
             }
 
-            /// Independent event identity and dedicated enable writer are unknown. The vendor beacon-memory RX selector uses power RAW17/18 with MAC STATUS14, so this use does not require ENABLE18 to be set. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
+            /// Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
             #[inline]
             pub const fn bit_18_opaque(&self) -> bool {
                 (self.0 & 0x00040000) != 0
@@ -275463,7 +275463,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer and independent clear/retention behavior remain unknown; software must not treat it as RX ownership or work multiplicity. Grouped pending-STATUS evidence alone cannot identify this lane. A bounded passive-beacon capture has no recorded positive lane24 sample, so it supplies no positive W1C24 or delivery-mask test. SOURCE: HW20_RX_AUXILIARY_OBSERVATION_20261027. The vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch; RX_SUCCESS alone selects ordinary RX service. No independent bit24 producer or task action is recovered from that FIQ. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
+            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its physical producer and independent clear/retention behavior remain unknown; software must not treat it as RX ownership or work multiplicity. Grouped pending-STATUS evidence alone cannot identify this lane. A bounded passive-beacon capture has no recorded positive lane24 sample, so it supplies no positive W1C24 or delivery-mask test. SOURCE: HW20_RX_AUXILIARY_OBSERVATION_20261027. The vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch; MAC STATUS14 with neither power RAW17 nor RAW18 selects lmacProcessRxSucData. No independent bit24 producer or task action is recovered from that FIQ. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
             #[inline]
             pub const fn rx_associated_auxiliary_24(self) -> bool {
                 (self.0 & 0x01000000) != 0

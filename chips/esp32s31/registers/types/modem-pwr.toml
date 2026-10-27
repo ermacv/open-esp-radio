@@ -2132,7 +2132,7 @@ description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "plain"
-description = "Independent event identity and dedicated enable writer are unknown. The vendor beacon-memory RX selector uses power RAW17/18 with MAC STATUS14, so this use does not require ENABLE18 to be set. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
+description = "Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BEACON_MISS"
