@@ -851,3 +851,46 @@ read. PMU/LPCON images are reconstructed only from typed getters and generated
 field geometry; reserved bits are unobserved. These snapshots neither
 acknowledge PMU state nor change any wake enable. A zero PMU cause while awake
 is not proof of absent silicon wake routing or a successful sleep/wake cycle.
+
+## Generic interrupt follow-up
+
+Selections 220–229 use the same PAC claim and existing clock setup. They are
+short local register experiments, with RF gates closed, no DMA publication,
+no radio traffic and hart1 contained. They do not qualify a production image.
+
+| Selection | Question |
+| --- | --- |
+| 220 / 221 | Load/snapshot generic counter2 / counter3 and arm its timer: positive RAW, mask, retained-sample CLR and unmask |
+| 222 | Station TBTT from a local loaded target: the same mask/CLR sequence |
+| 223 / 224 | Digital ED completion / ED followed by STOP: event visibility and clear with enable zero/one |
+| 225 | First post-loader USB RAW/ST/ENA observation; enable OUT/IN and clear the sampled console events |
+| 226 | One host OUT byte after 225, retained-sample masked CLR with FIFO still occupied; two consumed IN publications; explicitly seeded SOF enable preservation |
+| 227 | Fresh target0 expiry after CLR, acknowledgement after expiry, then CLR/rearm and another fresh expiry |
+| 228 | Targets0/1 at the same programmed tick; target0 CLR must preserve target1 |
+| 229 | Unit0 LOAD near the low-word and full counter boundaries; target0 across each boundary with CLR before counting |
+
+Run 225 before 226 in one loader session. Send exactly one host OUT byte
+between those commands while halted; keep a host IN reader open for 226.
+The inherited SOF case is explicitly constructed, not an observation of a
+boot image. The endpoint enable RMW and console-only acknowledgement reproduce
+the production register effects without a HAL dependency.
+
+Radio waits are bounded by 200,000 CPU cycles. SYSTIMER/USB waits are bounded
+by 2,000,000 cycles each, and ordinary observations by 4096 cycles. ED energy
+values without RF calibration are not measurements. A completed leaf without
+a positive cause establishes no mask/clear relation for that cause.
+Wi-Fi wave2 RAW records compact timer2/timer3/TBTT0 as bits0/1/2; STATUS and
+matrix words retain their physical bits. IEEE records compact ED_DONE/RX_ABORT
+as bits0/1, with enables encoded identically; the following record contains
+RX abort reason and MAC state. Generic USB/SYSTIMER records retain the existing
+encodings. Selection229 records the seeded and later full counter values and
+a separate observed-boundary flag; an early RAW is not a fresh post-wrap expiry.
+
+Run `hw26-20261027-generic-04` (s31-c, lease #917) observes positive local
+timer2/3 with their own counter snapshots; run02/#915 observes local TBTT0.
+All three retain RAW under mask and clear from a retained positive sample
+while masked. Run01/#913 separately establishes RX_ABORT reason26
+(ED_COEX_REJECT), positive USB OUT and fresh IN events, and the three ordered
+SYSTIMER cases. ED_DONE/ED_STOP, other event lanes and exact coincident
+set/clear priority remain unqualified. See the
+[research report](/home/ermacv/dev/oer-notes/research/hw-irq-generic-2.md).

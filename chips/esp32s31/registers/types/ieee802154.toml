@@ -80,7 +80,7 @@ completeness = "complete"
 naming = "vendor"
 
 [review.entity."EVENT_ENABLE"]
-sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "esp-idf-7b9cc1ac-ieee802154-common-ll", "HW8_S31_IEEE_MASKED_STATUS_20261026"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "esp-idf-7b9cc1ac-ieee802154-common-ll", "HW8_S31_IEEE_MASKED_STATUS_20261026", "HW26_S31_IEEE_ABORT_20261027"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -108,7 +108,7 @@ sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE8
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.RX_ABORT"]
-sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25", "HW26_S31_IEEE_ABORT_20261027"]
 
 [review.entity."EVENT_STATUS.TX_ABORT"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
@@ -806,7 +806,7 @@ write-range = { min = 0x0, max = 0xffff }
 [[registers]]
 name = "EVENT_ENABLE"
 offset = 0x60
-description = "Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions. For tested local timer bits 8/9, clearing the enable hides EVENT_STATUS and lowers output132 while retaining pending for unmask; EVENT_STATUS readback is not the raw pending state. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026."
+description = "Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions. For tested local timer bits 8/9, clearing the enable hides EVENT_STATUS and lowers output132 while retaining pending for unmask; EVENT_STATUS readback is not the raw pending state. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026. The same mask/hide/retain behavior is observed for RX_ABORT with ED_COEX_REJECT reason26; ED_DONE and other reasons remain unqualified. SOURCE: HW26_S31_IEEE_ABORT_20261027."
 reserved = { mask = 0xffffc000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 
 [[registers.fields]]
@@ -884,7 +884,7 @@ description = "Partition of the open vendor events field, bits 13:13; no individ
 [[registers]]
 name = "EVENT_STATUS"
 offset = 0x64
-description = "Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model. For tested local timer bits 8/9, reads are masked by EVENT_ENABLE: masked expiry/pending reads zero and output132 is low, but enabling reveals retained pending and raises output even with a parked route. A zero snapshot taken while masked does not clear hidden pending. A positive snapshot retained across masking does acknowledge its event while masked; selective enabled W1C preserves the other timer bit. This does not qualify other event lanes. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026."
+description = "Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model. For tested local timer bits 8/9, reads are masked by EVENT_ENABLE: masked expiry/pending reads zero and output132 is low, but enabling reveals retained pending and raises output even with a parked route. A positive snapshot retained across masking does acknowledge its event while masked; selective enabled W1C preserves the other timer bit. This does not qualify other event lanes. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026."
 reserved = { mask = 0xffffc000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 
 [[registers.fields]]
@@ -911,6 +911,7 @@ class = "write-one-to-clear"
 name = "RX_ABORT"
 bits = "4"
 class = "write-one-to-clear"
+description = "For ED_COEX_REJECT reason 26, ENA=0 hides this status while retaining pending, which reappears on unmask. A retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027."
 
 [[registers.fields]]
 name = "TX_ABORT"

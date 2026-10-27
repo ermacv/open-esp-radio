@@ -11,7 +11,11 @@ pub(super) struct Radio {
     pub load: pac::modem_pwr::WifiMacTsfLoad,
     pub rtc: pac::modem_pwr::WifiMacRtcTimerUpdate,
     pub aux: pac::modem_pwr::WifiMacAuxTsfControl,
+    pub idle: pac::ieee802154::SharedBasebandResetIdleStatus,
+    pub tbtt: pac::modem_pwr::WifiMacStaTbttTarget,
 }
+pub(super) mod wave2;
+
 const LOCAL_LIMIT: u32 = 200_000;
 const TIMER0: Index<{ pac::modem_pwr::control::COUNT }> = Index::constant::<0>();
 const TIMER1: Index<{ pac::modem_pwr::control::COUNT }> = Index::constant::<1>();
@@ -183,7 +187,7 @@ fn zb_start(s: &mut Session<'_>, second: bool) {
     oer_riscv::fence();
 }
 
-pub(super) fn ieee_timers(s: &mut Session<'_>) {
+fn ieee_prepare(s: &mut Session<'_>) {
     prepare(s);
     // SOURCE: HAL modem::ops IEEE MAC/APB clocks and reset order. No RF gate,
     // PHY calibration, RX_START, ED_START or TX_START is needed for this leaf.
@@ -207,6 +211,10 @@ pub(super) fn ieee_timers(s: &mut Session<'_>) {
     s.sar.radio.modem_syscon_radio.modify_modem_rst_conf(|w| {
         w.set_rst_zbmac_apb(pac::modem_syscon::modem_rst_conf::RstZbmacApb::Released);
     });
+}
+
+pub(super) fn ieee_timers(s: &mut Session<'_>) {
+    ieee_prepare(s);
     zb_mask(s, false);
     zb_clear(s);
     zb_state(s, 0x8210);
@@ -353,7 +361,7 @@ fn wifi_start(s: &mut Session<'_>, second: bool) {
     oer_riscv::fence();
 }
 
-pub(super) fn wifi_timers(s: &mut Session<'_>) {
+fn wifi_prepare(s: &mut Session<'_>) {
     prepare(s);
     // SOURCE: HAL platform::system_timer::open_clock. The ROM leaves these
     // bus/function gates closed; bootstrap normally opens them before MAC use.
@@ -447,6 +455,10 @@ pub(super) fn wifi_timers(s: &mut Session<'_>) {
         s.radio.local_time.read_counter().value(),
         u32::from(s.radio.load.read_tsf_load_control().load_station_tsf()),
     );
+}
+
+pub(super) fn wifi_timers(s: &mut Session<'_>) {
+    wifi_prepare(s);
     wifi_state(s, 0x8310);
     wifi_start(s, false);
     wifi_state(s, 0x8320); // RAW with ENA=0

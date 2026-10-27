@@ -333,9 +333,12 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
 
     /// Mask every MAC event at the end of a session, fenced: the MAC raises
     /// no interrupt until [`enable_events`](Self::enable_events) runs again.
-    /// Timer pending is retained but hidden from status reads under mask;
-    /// stop and acknowledge timer producers before masking their events.
-    /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
+    /// Timer pending and the tested RX_ABORT for ED_COEX_REJECT (reason 26)
+    /// are retained but hidden from EVENT_STATUS reads under mask. Stop and
+    /// acknowledge timer producers before masking their events. A positive
+    /// abort sample saved before masking can acknowledge that event under mask.
+    /// SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026;
+    /// HW26_S31_IEEE_ABORT_20261027 (RX_ABORT reason 26 only).
     pub fn mask_events(&mut self) {
         self.mask_all_events();
         oer_riscv::fence();

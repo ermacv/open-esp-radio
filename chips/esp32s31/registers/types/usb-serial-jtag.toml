@@ -43,7 +43,7 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
 
 [review.entity."INT_ENA"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG", "HW7_S31_USB_20261026", "HW26_S31_USB_EVENTS_20261027"]
 
 [review.entity."INT_ENA.SERIAL_OUT_RECV_PKT_INT_ENA"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
@@ -74,6 +74,9 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "
 
 [review.entity."CONF0.USB_PAD_ENABLE"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
+
+[review.entity."INT_RAW.SERIAL_OUT_RECV_PKT_INT_RAW"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG", "HW26_S31_USB_EVENTS_20261027"]
 
 [[registers]]
 name = "EP1"
@@ -137,13 +140,13 @@ description = "The raw interrupt bit turns to high level when SOF frame is recei
 name = "SERIAL_OUT_RECV_PKT_INT_RAW"
 bits = "2"
 class = "write-one-to-clear"
-description = "The raw interrupt bit turns to high level when Serial Port OUT Endpoint received one packet."
+description = "The raw interrupt bit turns to high level when Serial Port OUT Endpoint received one packet. One received host OUT byte latches this event. ENA=0 retains it; retained-sample CLR while masked removes it even while the OUT FIFO remains occupied, without reassertion over4096 cycles. SOURCE: HW26_S31_USB_EVENTS_20261027."
 
 [[registers.fields]]
 name = "SERIAL_IN_EMPTY_INT_RAW"
 bits = "3"
 class = "write-one-to-clear"
-description = "Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026."
+description = "Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026. Two consumed IN publications separated by CLR independently relatch this event; FIFO availability alone stays quiet in the sampled window. SOURCE: HW26_S31_USB_EVENTS_20261027."
 
 [[registers.fields]]
 name = "PID_ERR_INT_RAW"
@@ -323,7 +326,7 @@ description = "The raw interrupt status bit for the USB_SERIAL_JTAG_SET_LINE_COD
 [[registers]]
 name = "INT_ENA"
 offset = 0x10
-description = "Interrupt enable status register. Interrupt enables of the serial endpoints."
+description = "Interrupt enable status register. Interrupt enables of the serial endpoints. In the s31-a HW7 sessions, the first probe observation after ROM-download/RAM-loader entry saw ENA=ST=0. In the s31-c hw26-20261027-generic-01 session, the first USB observation after ROM RAM loading and local digital-radio setup, before probe USB writes, saw ENA=ST=0x0c. The enable-image writer is unknown; neither session establishes a loader write or an all-boot-path value. SOURCE: HW7_S31_USB_20261026; HW26_S31_USB_EVENTS_20261027. An explicitly seeded SOF enable survives endpoint-only enable RMW and console-only CLR, leaving source2 repeatedly deliverable; that SOF enable is not a boot observation. SOURCE: HW26_S31_USB_EVENTS_20261027."
 reset = { value = 0x0 }
 reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"] }
 
@@ -1170,4 +1173,4 @@ clear = "INT_CLR"
 sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
 
 [review.entity."INT_RAW.SERIAL_IN_EMPTY_INT_RAW"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "HW7_S31_USB_20261026"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "HW7_S31_USB_20261026", "HW26_S31_USB_EVENTS_20261027"]
