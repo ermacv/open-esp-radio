@@ -83,6 +83,18 @@ esp_err_t esp_intr_free(intr_handle_t handle)
     return ESP_OK;
 }
 
+esp_err_t esp_intr_disable(intr_handle_t handle)
+{
+    uint64_t args[1] = { (uint64_t)(uintptr_t)handle };
+    return (esp_err_t)oer_host_record("esp_intr_disable", args, 1, 0);
+}
+
+esp_err_t esp_intr_enable(intr_handle_t handle)
+{
+    uint64_t args[1] = { (uint64_t)(uintptr_t)handle };
+    return (esp_err_t)oer_host_record("esp_intr_enable", args, 1, 0);
+}
+
 /* Received and transmitted frames are `[length, psdu...]`; the PHR length
  * counts the two trailing bytes, which the receiver replaces by RSSI/LQI. */
 static uint32_t frame_bytes(const uint8_t *frame)

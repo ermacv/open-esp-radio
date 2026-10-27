@@ -7,12 +7,12 @@ description = "SOURCE: pinned ESP32-S31 rev0 ROM (esp-rom-elfs 20260528, ROM ELF
 
 [[sources]]
 id = "S31_CACHE_LINE_GEOMETRY"
-description = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:31,45,160-166: L1 instruction/data cache lines contain 64 bytes."
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:31,45,160-166: L1 instruction/data cache lines contain 64 bytes."
 
 [[sources]]
 id = "S31_PSRAM_SYNC_COMMAND_CODES"
-description = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:70-362: octal synchronous PSRAM read command 0x0000 and write command 0x8080 in the cache SRAM command words."
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:70-362: octal synchronous PSRAM read command 0x0000 and write command 0x8080 in the cache SRAM command words."
 
 [[sources]]
 id = "S31_MMU_TABLE_GEOMETRY"
-description = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/soc/esp32s31/include/soc/ext_mem_defs.h:85 (SOC_MMU_ENTRY_NUM): the flash and PSRAM MMU tables each contain 1024 entries. The page size is selected by the boot profile; physical-page widths are in MMU_ITEM_CONTENT.PADDR."
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/soc/esp32s31/include/soc/ext_mem_defs.h:85 (SOC_MMU_ENTRY_NUM): the flash and PSRAM MMU tables each contain 1024 entries. The page size is selected by the boot profile; physical-page widths are in MMU_ITEM_CONTENT.PADDR."

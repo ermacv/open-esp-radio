@@ -5,8 +5,8 @@ use crate::CoexEventId;
 pub const COEX_TIMER_COUNT: usize = 5;
 
 // Complete `coex_core_timer_idx_get` switch image of esp-coex-lib
-// c758e7b56e0fa22177a0539796e1df59978dc322 (`esp32s31/libcoexist.a` sha256
-// 13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147,
+// fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9 (`esp32s31/libcoexist.a` sha256
+// 01c1b4f2b86cbc3024a2b51f3f104ea7937fc721a4ee57b53146fea6608836bb,
 // `coexist_core.o` `.rodata.CSWTCH.31`). Element zero corresponds to event
 // one; 0xff means that the event has no hardware timer. Event 48 selects
 // timer 5, which the radio arbiter reserves for the PHY grant-protect request.
@@ -119,8 +119,8 @@ pub enum CoexClient {
 }
 
 // Complete `coex_core_request` request-kind switch image of esp-coex-lib
-// c758e7b56e0fa22177a0539796e1df59978dc322 (`esp32s31/libcoexist.a` sha256
-// 13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147,
+// fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9 (`esp32s31/libcoexist.a` sha256
+// 01c1b4f2b86cbc3024a2b51f3f104ea7937fc721a4ee57b53146fea6608836bb,
 // `coexist_core.o` `.rodata.CSWTCH.27`). Element `k` is the timer client
 // field value `coex_hw_timer_set` receives for request kind `k`; request kind
 // 2 is the PHY grant-protect request the radio arbiter programs itself.

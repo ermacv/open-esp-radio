@@ -116,8 +116,11 @@ of chips/esp32s31/hal; each names the ROM function it follows.
 5. esp32s31-bt-lib
 ------------------
 
-Source:    https://github.com/espressif/esp32s31-bt-lib at 10c50778
-License:   none
+Source:    https://github.com/espressif/esp32s31-bt-lib at 7a85006f35f6839ae7ea5adee16e68a757759196
+License:   Apache-2.0 (current binary distribution)
+
+Existing derivations from unlicensed revision 10c50778 retain their source
+attribution and the facts-only restrictions in docs/source-policy.md.
 
 The Bluetooth LE hardware engine (the S31 driver, the HAL's controller-memory
 engine, the PAC's Bluetooth initialization and the HAL's scheduler locks) keeps what it

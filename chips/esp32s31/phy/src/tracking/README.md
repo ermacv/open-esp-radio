@@ -152,7 +152,7 @@ calibration, or after TX PBus clearing and before calibration bandwidth setup.
 This register operation is not a substitute for physical maintenance admission.
 
 The vendor RX branch and shared TX branch each acquire and release grant
-protection separately, as does RFPLL. The pinned `libcoexist.a` (`c758e7b5`)
+protection separately, as does RFPLL. The pinned `libcoexist.a` (`fa152b3b`)
 provides strong hooks that request/release an event through the coex timer
 engine. OER follows those brackets: the calibration and RFPLL transitions emit
 `SetGrantProtect` at the same positions, and the target port executes them

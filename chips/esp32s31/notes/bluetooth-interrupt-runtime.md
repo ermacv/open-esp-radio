@@ -10,11 +10,11 @@ after a bounded delay.
 ## Pinned inputs
 
 - public Controller archive
-  [`espressif/esp32s31-bt-lib@10c507788e9da0993709cf82e405c896561172d8`](https://github.com/espressif/esp32s31-bt-lib/tree/10c507788e9da0993709cf82e405c896561172d8),
+  [`espressif/esp32s31-bt-lib@7a85006f35f6839ae7ea5adee16e68a757759196`](https://github.com/espressif/esp32s31-bt-lib/tree/7a85006f35f6839ae7ea5adee16e68a757759196),
   `libbtdm_common.a` SHA-256
-  `389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41` and
+  `838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0` and
   `libble_app.a` SHA-256
-  `e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723`, the
+  `e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6`, the
   single pin of `chips/esp32s31/vendor/artifacts.toml`, for the reference
   gate, the linear broker and the finished-list path;
 - earlier public Controller archive, for the remaining rows:
@@ -40,22 +40,22 @@ inputs. The table below records only the distilled control and MMIO facts.
 
 | Body | Size | Recovered contract |
 | --- | ---: | --- |
-| `r_sym_bt_R9GZfnUbtn7k6mHtoZbv` | 186 bytes (10c5077) | Primary ISR: masked sample, shared W1C acknowledgement, HAL broker entry 0, dynamic scheduler suffix, HAL broker entry 1. |
+| `r_sym_bt_R9GZfnUbtn7k6mHtoZbv` | 186 bytes (7a85006f) | Primary ISR: masked sample, shared W1C acknowledgement, HAL broker entry 0, dynamic scheduler suffix, HAL broker entry 1. |
 | `r_sym_bt_hkluARKZBNTcJqMeSNys` | 190 bytes | Primary fault prefix: tests exactly bank-zero source 15 and bank-one sources 9, 8 and 12 in that order; source 9 reads `0x2010_11c8/11cc` and source 12 reads `0x2010_1070` before asserting. |
-| `r_sym_bt_OBoFn3bgoHEVQdNFtCsb` | 100 bytes (10c5077) | Linear broker dispatch: a table holds a halfword entry count and one pointer per entry to a halfword-counted callback list; it calls that entry's callbacks in order and stops when one returns nonzero. The tables are assembled at link time from `.subinfo` descriptors whose first byte is the entry index, replacing the run-time registration walk of 7f20740. |
+| `r_sym_bt_OBoFn3bgoHEVQdNFtCsb` | 100 bytes (7a85006f) | Linear broker dispatch: a table holds a halfword entry count and one pointer per entry to a halfword-counted callback list; it calls that entry's callbacks in order and stops when one returns nonzero. The tables are assembled at link time from `.subinfo` descriptors whose first byte is the entry index, replacing the run-time registration walk of 7f20740. |
 | `r_sym_bt_MDZbajeLxsB0cvuBOREd` / `r_sym_bt_2VbAPsx8lRNZdbVZTEOe` | complete leaves | Read `0x2010_105c/1068`, then copy both images to `0x2010_1058/1064`. |
 | `r_sym_bt_6lAYUFKOuBLyOZ6Kvsv5` / `r_sym_bt_Ak3CRkSbyZRhUlneqclG` / `r_sym_bt_DOVkQWJHjeuid8jcS9Bq` | 24 / 24 / 16 bytes | Enable, disable and W1C the exact dynamic images `0x1820_0000` and `0x0000_0008`. |
 | `r_sym_bt_37HcX0qW6j1XVtKakUIG` / `r_sym_bt_zczKhmPr5kLPCXpBc7GE` | 80 / 92 bytes | Decode `SCHEDULER_STATE`; the boolean consumed by deferred-work construction is exactly bit 31 AND bit 29. |
 | `r_sym_bt_iFvwGI2tL5M1WM3fIkHq` | 12 bytes | Instruction-identical to same-chip named `r_btdm_sched_get_current_link_index`: one `SCHEDULER_STATE` read returns exactly the zero-based hardware-list index in bits 23:20. |
 | `r_sym_bt_iEsFo1nbR5S71P2lMKhY` / `r_sym_bt_gs5GeSH15pdzrMDbb7oK` | 90 / 78 bytes | Build one static deferred event, optionally set its one-bit argument, and optionally publish the decoded state through entry three of `_btdm_sched_linear_broker_ram`. |
 | `r_sym_bt_uNi9OHmE7XdXfGqTelU5` | 106 bytes | Same-chip named `r_btdm_recycle_in_task`: consume and clear the marker, drain scheduler work, then dispatch entry two of the linker-assembled `_btdm_sched_linear_broker_flash` table with argument zero; this is a drain event, not one callback per hardware edge. |
-| `r_sym_bt_E8c5Eimm0z6kYe9v4wHr` / `r_sym_bt_YRnBzKlWCjsIbotqvNyS` | 334 / 562 bytes (10c5077) | Insert a scheduler item through its `+0x54` intrusive link into the manager-root completion queue; task-side removal/reordering calls the insertion path. This proves a software producer, not a hardware completion FIFO. |
-| `r_sym_bt_WHYoiw8ufY0AEM2KSRK1` | 122 bytes (10c5077) | Same-chip named `r_btdm_sched_pop_executed_sch`: on every worker pop attempt, copy the low halfword from `0x2010_125c` to a zero-high image at `0x2010_1260`, merge the pending finished-list mask, synchronously dispatch it through entry five of the scheduler flash broker table when nonzero and then attempt a software completed-list pop. |
-| `brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV` / `r_sym_bt_M9nG353V0svWrv1l1zGw` | 458 / 324 bytes (10c5077) | Same-chip named `r_sched_txn_onSchedHwListDone` and `r_btdm_sched_pick_finished_items`: walk set finished-list bits, unlink matching scheduler items from the hardware-linked list and append them to the software completed queue through `item+0x54`. The first is the BLE subscriber of scheduler flash broker entry five; the BR/EDR subscriber of the same entry is the unobfuscated `btdm_common_sched_bredr_on_sched_hw_list_done`. |
+| `r_sym_bt_E8c5Eimm0z6kYe9v4wHr` / `r_sym_bt_YRnBzKlWCjsIbotqvNyS` | 334 / 562 bytes (7a85006f) | Insert a scheduler item through its `+0x54` intrusive link into the manager-root completion queue; task-side removal/reordering calls the insertion path. This proves a software producer, not a hardware completion FIFO. |
+| `r_sym_bt_WHYoiw8ufY0AEM2KSRK1` | 122 bytes (7a85006f) | Same-chip named `r_btdm_sched_pop_executed_sch`: on every worker pop attempt, copy the low halfword from `0x2010_125c` to a zero-high image at `0x2010_1260`, merge the pending finished-list mask, synchronously dispatch it through entry five of the scheduler flash broker table when nonzero and then attempt a software completed-list pop. |
+| `brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV` / `r_sym_bt_M9nG353V0svWrv1l1zGw` | 458 / 324 bytes (7a85006f) | Same-chip named `r_sched_txn_onSchedHwListDone` and `r_btdm_sched_pick_finished_items`: walk set finished-list bits, unlink matching scheduler items from the hardware-linked list and append them to the software completed queue through `item+0x54`. The first is the BLE subscriber of scheduler flash broker entry five; the BR/EDR subscriber of the same entry is the unobfuscated `btdm_common_sched_bredr_on_sched_hw_list_done`. |
 | `r_sym_bt_QsLKLOCC2pct4rL8uFBN` | 130 bytes | Same-chip named `r_btdm_recycle_process_dequeued_sch`: clear the dequeued link image, recover its link-state pointer and invoke the item-specific recycle callback stored at `item+0x58`. |
-| `brk_sym_sched_hOsJ4rGq1XjiY7GjHycG` | 176 bytes (10c5077) | Subscriber of entry five of the linker-assembled `_btdm_sched_linear_broker_ram` table, which `r_btdm_sched_check_remaining_entries` (`r_sym_bt_JlzTzVlQIZe4wkwwENZs`) dispatches; it checks the active BLE scheduler entries and asserts on an inconsistent one. |
-| `brk_sym_scan_tdX6OLWyRKYxelkB8vZ1` | 10c5077 | Subscriber of entry three of `_btdm_sched_linear_broker_ram`, which `r_btdm_recycle_in_isr` (`r_sym_bt_iEsFo1nbR5S71P2lMKhY`) dispatches. It calls `r_sym_ble_Cnmfhv0PX8NAIxKVSVUs` and `r_ble_lll_scan_chk_resume` (`r_sym_ble_jQKuzvSTa70k58IPazik`), which retries the scanner restart while it returns `-2`, increasing the delay in steps of 100. |
-| `r_sym_nrtIsr_kgxM2CJfVperrlVjmB4B` | 70 bytes (10c5077) | NRT ISR: raw sample at `0x2010_1340/1348`, shared W1C acknowledgement, then entry zero of the linker-assembled `_nrtIsr_linear_broker_flash` table with the two-word snapshot. No pinned archive member subscribes to that table, so the dispatch has no callback. |
+| `brk_sym_sched_hOsJ4rGq1XjiY7GjHycG` | 176 bytes (7a85006f) | Subscriber of entry five of the linker-assembled `_btdm_sched_linear_broker_ram` table, which `r_btdm_sched_check_remaining_entries` (`r_sym_bt_JlzTzVlQIZe4wkwwENZs`) dispatches; it checks the active BLE scheduler entries and asserts on an inconsistent one. |
+| `brk_sym_scan_tdX6OLWyRKYxelkB8vZ1` | 7a85006f | Subscriber of entry three of `_btdm_sched_linear_broker_ram`, which `r_btdm_recycle_in_isr` (`r_sym_bt_iEsFo1nbR5S71P2lMKhY`) dispatches. It calls `r_sym_ble_Cnmfhv0PX8NAIxKVSVUs` and `r_ble_lll_scan_chk_resume` (`r_sym_ble_jQKuzvSTa70k58IPazik`), which retries the scanner restart while it returns `-2`, increasing the delay in steps of 100. |
+| `r_sym_nrtIsr_kgxM2CJfVperrlVjmB4B` | 70 bytes (7a85006f) | NRT ISR: raw sample at `0x2010_1340/1348`, shared W1C acknowledgement, then entry zero of the linker-assembled `_nrtIsr_linear_broker_flash` table with the two-word snapshot. No pinned archive member subscribes to that table, so the dispatch has no callback. |
 
 ## Exact primary suffix
 

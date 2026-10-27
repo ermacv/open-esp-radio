@@ -8,4 +8,4 @@ description = "s31-c, hw5-20261026-density-04, lease 793: public psram::bring_up
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L616"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:616, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). spimem_flash_ll_set_addr_bitlen sets cache_usr_addr_4byte when the address length is 32 bits, separately from usr_addr_bitlen and usr_addr."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d, esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:614, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). spimem_flash_ll_set_addr_bitlen sets cache_usr_addr_4byte when the address length is 32 bits, separately from usr_addr_bitlen and usr_addr."

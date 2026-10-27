@@ -18,12 +18,12 @@ moved. The open contracts at the end of this page remain hardware questions.
 ## Pinned public inputs
 
 - ESP32-S31 Controller archive
-  [`espressif/esp32s31-bt-lib@10c507788e9da0993709cf82e405c896561172d8`](https://github.com/espressif/esp32s31-bt-lib/tree/10c507788e9da0993709cf82e405c896561172d8),
+  [`espressif/esp32s31-bt-lib@7a85006f35f6839ae7ea5adee16e68a757759196`](https://github.com/espressif/esp32s31-bt-lib/tree/7a85006f35f6839ae7ea5adee16e68a757759196),
   the single pin of `chips/esp32s31/vendor/artifacts.toml`:
   `libbtdm_common.a` SHA-256
-  `389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41`
+  `838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0`
   (scheduler member `18.o`) and `libble_app.a` SHA-256
-  `e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723`
+  `e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6`
   (member `sched_3.o`);
 - same-chip role-name reference only:
   [`espressif/esp32s31-bt-lib@31c30949541a5d3abd4043a1cb66d55aa55577dd`](https://github.com/espressif/esp32s31-bt-lib/tree/31c30949541a5d3abd4043a1cb66d55aa55577dd),
@@ -41,7 +41,10 @@ source name or on an identical relocation-normalized body, and later revisions
 keep generated names stable; the pinned `libble_app.a` renamed the scheduler
 transaction functions again, and the tool pairs them by body and call graph.
 The last column gives the weakest evidence step of each name's chain. Every
-body was read in its pinned form.
+body was read in its pinned form. Name continuity through a stable opaque
+symbol does not establish body equivalence: the current cancellation body is
+`0x2b2` bytes and has no pre-loop hardware-head/time guard; its final head read
+is at `+0x1f2`. The open executor retains its own bounded cancellation policy.
 
 `r_sym_bt_DPWY0umixzmXEaFuUyCI` is `r_btdm_sched_run`: its revision-`5e37d4d`
 body is identical to the initial one. Revision `7729629` moved that body into
@@ -61,7 +64,7 @@ and made `r_btdm_sched_run` its caller.
 | `r_btdm_sched_remove_unshareable_entries` | `r_sym_bt_E8c5Eimm0z6kYe9v4wHr` | exact body |
 | `r_btdm_sched_rm_item_directly` | `r_sym_bt_hddDtuOCoB0U4KYRErRq` | exact body |
 | `r_btdm_sched_delete_from_list` | `r_sym_bt_KmzLfKJ5UUi7zkqz1Nwn` | exact body |
-| `r_btdm_sched_delete_specified_items` | `r_sym_bt_qkNMymdnaJnYUfzpKgEp` | exact body |
+| `r_btdm_sched_delete_specified_items` | `r_sym_bt_qkNMymdnaJnYUfzpKgEp` | role name retained; current control flow changed |
 | `r_btdm_sched_search_deleted_items` | `r_sym_bt_1Q7VVJH4siSgF2fbAf3f` | exact body |
 | `r_btdm_sched_skip_specified_sch` | `r_sym_bt_DkrQYQcoyzIHdYi0CzWE` | similar body |
 | `r_btdm_sched_stop` | `r_sym_bt_74l62ZLsZuXg67pPHSd7` | exact body |
@@ -339,9 +342,10 @@ phases and then notifies the recycle path:
 - Hardware skip, for a list with a hardware index. While the scheduler is
   idle the hardware head is republished from the software head unless sleep
   policy is enabled. While BUSY, once the lock and modify engines are idle,
-  the unexecuted chained items that do not start after the hardware head
-  (read once, before the hold; every unexecuted item when it is empty) are
-  skipped through `r_btdm_hal_link_skip_specified_tl`. Skip result 0 is
+  unexecuted chained items are skipped through
+  `r_btdm_hal_link_skip_specified_tl`. The current body omits the pre-loop
+  hardware-head/time guard; the open executor separately retains that guard
+  as its cancellation policy. Skip result 0 is
   treated as impossible, and results 2 and 4 end the skipping.
 - Hold. When the environment enables lock-modify, the skips run inside a
   hold: the list index in `0x2010_136c` bits 7:4, the value `0x80` in

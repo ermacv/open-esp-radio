@@ -31,8 +31,9 @@ pub const RSN_STA_MESSAGE1_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Complete window after the original Message 2 transmission.
 ///
-/// SOURCE: complete `libwpa_supplicant.a[wpa.c.obj]::
-/// wpa_supplicant_process_1_of_4` emits one Message 2 and does not register a
+/// SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d,
+/// components/wpa_supplicant/src/rsn_supp/wpa.c::wpa_supplicant_process_1_of_4
+/// emits one Message 2 and does not register a
 /// retransmission timeout. A repeated Message 1 instead re-enters through
 /// `wpa_sm_rx_eapol` and produces another Message 2. The six-second value
 /// covers two three-second hardware receive windows without

@@ -1,7 +1,7 @@
 //! Frame retransmission, ported from OpenThread `SubMac::HandleTransmitDone`
 //! (`src/core/mac/sub_mac.cpp` at OpenThread
 //! `43cc05a9bcf780bd758bad53d897e2d88cf8cb75`, the submodule of ESP-IDF
-//! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`) with the configuration
+//! `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`) with the configuration
 //! ESP-IDF builds it with: the defaults of `src/core/config/mac.h` (sha256
 //! `09637e77eab8a3f90de41b19eff2e0b19a1fd9b61e7b12d0994d4757682e109a`), which
 //! ESP-IDF's `openthread-core-esp32x-*-config.h` leave unchanged.

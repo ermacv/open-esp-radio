@@ -46,10 +46,11 @@ pub const fn wifi_event(operation: WifiOperation) -> Option<CoexEventId> {
 /// transmission and reception level 2 (event 42) and the ACK level 2.
 ///
 /// SOURCE(esp32s31, esp32c5): esp-coex-lib
-/// `c758e7b56e0fa22177a0539796e1df59978dc322` `coexist_api.o`, whose body is
+/// `fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9` `coexist_api.o`, whose body is
 /// equal in `esp32s31/libcoexist.a` sha256
-/// `13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147` and
+/// `01c1b4f2b86cbc3024a2b51f3f104ea7937fc721a4ee57b53146fea6608836bb` and
 /// `esp32c5/libcoexist.a` sha256
+/// (esp-coex-lib `c758e7b56e0fa22177a0539796e1df59978dc322`)
 /// `de883d649e4e2e9407a6ab0dc28d5d2aa4cd8d30d0071abfe5a9183348ceb627`;
 /// ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
 /// `esp_ieee802154_util.c` (`s_coex_config`).

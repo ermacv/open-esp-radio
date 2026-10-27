@@ -1,6 +1,6 @@
 # ESP32-S31 BLE PHY register initialization
 
-Source: `esp32s31-bt-lib` `libble_app.a` (pin `10c50778`), member `ble_70.o`
+Source: `esp32s31-bt-lib` `libble_app.a` (pin `7a85006f`), member `ble_70.o`
 `r_sym_ble_nENHlP4KBuQYlFVffaR5` (role `r_ble_phy_init_registers`) with its
 callees (roles `r_ble_phy_ramup_time_set`, `r_ble_phy_monitor_bb_sync`,
 `r_ble_hw_resolv_list_set`); from a vendor-code analysis (record outside
@@ -28,7 +28,7 @@ order:
   writes 91 over the rodata default 90; CCA, which would override it, is off.
   The body uses the byte minus one (written `T` below).
 - Environment address: a word-aligned SRAM object. The body publishes the raw
-  addresses of members `+0x2c` and `+0x4d`.
+  addresses of members `+0x2c` and `+0x51`.
 - Resolving list: its SRAM address, published in compressed form (bits 19:0).
 - Configuration word: Controller configuration `+0x40`, the rodata default of
   `sym_controller_jqcSm1kAtUzAMoyGlaKq` (member `controller_1.o`); nothing
@@ -83,7 +83,7 @@ carried between operations on the same register.
 | 49 | `0x2010_11f0` | `GPIO_DIAG_ARGUMENT_1` | fixed image |
 | 50 | `0x2010_1248` | `GPIO_DIAG_CONTROL` | fixed image |
 | 51 | modem ETM | event 8 to task 20 | route and enable one channel |
-| 52 | `0x2010_124c` | Controller `WORD_024C` | environment address `+0x4d` |
+| 52 | `0x2010_124c` | Controller `WORD_024C` | environment address `+0x51` |
 
 Notes:
 

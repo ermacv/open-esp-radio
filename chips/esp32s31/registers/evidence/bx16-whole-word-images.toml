@@ -3,7 +3,7 @@ schema = 1
 
 [[sources]]
 id = "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"
-description = "esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, esp32s31/libbtdm_common.a, SHA-256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41. libbtdm_common[9.o]::r_sym_bt_atiitVoBKMplOJVvjTHP+0x10 stores a four-byte zero to0x2010d024 and +0x20/+0x52 to0x2010d02c. r_sym_bt_86dRVPWrmTMQpChjYeWi+0x38 stores complete one to0x2010d024. r_sym_bt_xPWv1Z87N9d40AR9yCcT+0x32/+0x36 stores complete zero to0x2010d02c and one to0x2010d024. All write31:8 zero; no upper-lane meaning, reset or per-bit acknowledgement contract follows."
+description = "esp32s31-bt-lib 7a85006f35f6839ae7ea5adee16e68a757759196, esp32s31/libbtdm_common.a, SHA-256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0. libbtdm_common[9.o]::r_sym_bt_atiitVoBKMplOJVvjTHP+0x10 stores a four-byte zero to0x2010d024 and +0x20/+0x52 to0x2010d02c. r_sym_bt_86dRVPWrmTMQpChjYeWi+0x38 stores complete one to0x2010d024. r_sym_bt_xPWv1Z87N9d40AR9yCcT+0x32/+0x36 stores complete zero to0x2010d02c and one to0x2010d024. All write31:8 zero; no upper-lane meaning, reset or per-bit acknowledgement contract follows."
 
 [[sources]]
 id = "BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027"
@@ -19,8 +19,8 @@ description = "esp-rom-elfs 20260528, ESP32-S31 rev0 esp32s31_rev0_rom.elf, SHA-
 
 [[sources]]
 id = "BLOB_BX16_LIBBLE_ABORT_IMAGE_20261027"
-description = "esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, esp32s31/libble_app.a, SHA-256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723. libble_app[ble_70.o]::r_sym_ble_nENHlP4KBuQYlFVffaR5+0x8e stores0x00ff0002 to0x201018ac; connSim_1.o::sym_connSim_Dzx5u6gHUrhrEF6GLX1p+0x4e stores0x00ff0003. ble_3.o::r_sym_ble_mLYtT1I4BQmunJL36NqV+0xd6/+0x172 changes only bit1. Both full images write23:16=0xff and31:24/15:2=0. They do not identify any upper opcode/mask or grant arbitrary writes."
+description = "esp32s31-bt-lib 7a85006f35f6839ae7ea5adee16e68a757759196, esp32s31/libble_app.a, SHA-256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6. libble_app[ble_70.o]::r_sym_ble_nENHlP4KBuQYlFVffaR5+0x8e stores0x00ff0002 to0x201018ac; connSim_1.o::sym_connSim_Dzx5u6gHUrhrEF6GLX1p+0x4e stores0x00ff0003. ble_3.o::r_sym_ble_mLYtT1I4BQmunJL36NqV+0xd6/+0x172 changes only bit1. Both full images write23:16=0xff and31:24/15:2=0. They do not identify any upper opcode/mask or grant arbitrary writes."
 
 [[sources]]
 id = "BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027"
-description = "esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, SHA-256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete libpp[hal_mac.o]::mac_last_rxbuf_init (size0xd2) stores four-byte0x0000ffff to0x2010415c/+0x24,0x20104160/+0x3c,0x20104164/+0x54 and0xffffffff to0x20104168/+0x74,0x2010416c/+0x8e (address/symbol-offset pairs). Thus15:12 are one in elements0..4,31:16 zero in0..2 and one in3..4. These images do not define upper-field boundaries, resets, sentinels or side effects; no element5 claim is made."
+description = "esp32-wifi-lib f856b5db55cb18e2d1826044430f3f4089e47cf9, esp32s31/libpp.a, SHA-256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391. Complete libpp[hal_mac.o]::mac_last_rxbuf_init (size0xd2) stores four-byte0x0000ffff to0x2010415c/+0x24,0x20104160/+0x3c,0x20104164/+0x54 and0xffffffff to0x20104168/+0x74,0x2010416c/+0x8e (address/symbol-offset pairs). Thus15:12 are one in elements0..4,31:16 zero in0..2 and one in3..4. These images do not define upper-field boundaries, resets, sentinels or side effects; no element5 claim is made."

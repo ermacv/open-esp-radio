@@ -317,11 +317,11 @@ pub struct PhyClientState {
     epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
     // Last tracking time per class; `None`: never tracked in this
     // registration epoch, so the first acquisition is due at once. SOURCE:
-    // ESP-IDF v6.1 components/esp_phy/src/phy_common.c:41,44 keeps
+    // ESP-IDF 4d80c1b2 components/esp_phy/src/phy_common.c:60,63 keeps
     // `s_wifi_prev_timestamp` and `s_bt_154_prev_timestamp` in file statics
     // zeroed only at boot, written only in `phy_track_pll_internal`
-    // (:89,96), and `esp_phy_enable` calls `phy_track_pll()` at once
-    // (phy_init.c:399), so the vendor's survive disable and enable; here each
+    // (:112,119), and `esp_phy_enable` calls `phy_track_pll()` at once
+    // (phy_init.c:366), so the vendor's survive disable and enable; here each
     // registration epoch starts untracked.
     wifi_previous_micros: Option<u64>,
     bluetooth_ieee802154_previous_micros: Option<u64>,

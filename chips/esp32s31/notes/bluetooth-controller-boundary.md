@@ -25,7 +25,7 @@ The hashes cover the complete raw files used for this review.
 | [`components/bt/porting_btdm/controller/btdm_common/src/btdm_osal_freertos.c`](https://github.com/espressif/esp-idf/blob/aeab6dcfbeb44aba4b1f8ed102e3086172833153/components/bt/porting_btdm/controller/btdm_common/src/btdm_osal_freertos.c#L84-L291) | FreeRTOS event queues and ISR wake behavior | `436d009f67fbe7c83fa367a6b80dbf87316727605e751febc03c5118a669b5c8` |
 | [`components/bt/porting_btdm/controller/btdm_common/src/btdm_osal_freertos.c`](https://github.com/espressif/esp-idf/blob/aeab6dcfbeb44aba4b1f8ed102e3086172833153/components/bt/porting_btdm/controller/btdm_common/src/btdm_osal_freertos.c#L1084-L1093) | vendor task creation | same file/hash as above |
 | [`components/bt/porting_btdm/controller/btdm_common/src/btdm_osal_freertos.c`](https://github.com/espressif/esp-idf/blob/aeab6dcfbeb44aba4b1f8ed102e3086172833153/components/bt/porting_btdm/controller/btdm_common/src/btdm_osal_freertos.c#L1107-L1137) | level-3 interrupt allocation, optional IRAM flag and pinned-core routing | same file/hash as above |
-| [`components/soc/esp32s31/include/soc/interrupts.h`](https://github.com/espressif/esp-idf/blob/aeab6dcfbeb44aba4b1f8ed102e3086172833153/components/soc/esp32s31/include/soc/interrupts.h#L139-L153) | Bluetooth MAC CPU sources 124 and 133 | `1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d` |
+| [`components/soc/esp32s31/include/soc/interrupts.h`](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/soc/esp32s31/include/soc/interrupts.h#L139) | Bluetooth MAC CPU sources 124 and 133 | `1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d` |
 | [`components/bt/porting_btdm/transport/src/hci_transport.c`](https://github.com/espressif/esp-idf/blob/aeab6dcfbeb44aba4b1f8ed102e3086172833153/components/bt/porting_btdm/transport/src/hci_transport.c#L23-L103) | HCI command/ACL/event routing | `db3fea7daa8d313e16f570eac6dc7e87a860edf03e896af49cce9d5dd7d13b45` |
 | [`components/bt/porting_btdm/transport/src/hci_transport.c`](https://github.com/espressif/esp-idf/blob/aeab6dcfbeb44aba4b1f8ed102e3086172833153/components/bt/porting_btdm/transport/src/hci_transport.c#L214-L291) | transport selection, callback registration and teardown | same file/hash as above |
 | [`components/esp_hw_support/port/esp32s31/Kconfig.mac`](https://github.com/espressif/esp-idf/blob/aeab6dcfbeb44aba4b1f8ed102e3086172833153/components/esp_hw_support/port/esp32s31/Kconfig.mac) | default two-universal-address policy and Bluetooth final-octet offset | `7b2e44be28d7b51e459ca5a407bf33430c543849836cfa479f2657d7e9fbdd10` |
@@ -118,14 +118,14 @@ over any simultaneous scheduler wake.
 
 The BLE PHY environment is an address-owned hardware object, not a vendor
 configuration ABI. Complete allocator `r_sym_ble_ragNLqDkbVnj7GUutTgs`
-(`r_ble_phy_env_init`) requests one `0x80`-byte environment, then stores
+(`r_ble_phy_env_init`) requests one `0x84`-byte environment, then stores
 separately zeroed allocations of `0x28`, `2 * 0x04` and `0x04` bytes through
 pointer fields `+0x30`, `+0x34` and `+0x38`. It then records the BTBB
-transmit-power table: its address at `+0x48`, its length at `+0x4c` and the
-sign-extended first and last levels at `+0x78` and `+0x7c`.
+transmit-power table: its address at `+0x4c`, its length at `+0x50` and the
+sign-extended first and last levels at `+0x7c` and `+0x80`.
 `r_sym_ble_eRawefsj3HtGBKxFAm81` later fills the forty per-channel bytes
-`+0x4d..+0x75`; the register-init body publishes the raw addresses of members
-`+0x2c` and `+0x4d`. The open memory owner therefore replaces those
+`+0x51..+0x79`; the register-init body publishes the raw addresses of members
+`+0x2c` and `+0x51`. The open memory owner therefore replaces those
 allocations with one zero-based static graph that also retains the
 transmit-power table, and installs the three proven internal pointers and the
 table record. Resolving-list setup calls

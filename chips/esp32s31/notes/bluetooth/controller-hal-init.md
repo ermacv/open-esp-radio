@@ -1,6 +1,6 @@
 # ESP32-S31 Bluetooth Controller HAL initialization
 
-Source: `esp32s31-bt-lib` `libbtdm_common.a` (pin `10c50778`), member `7.o`
+Source: `esp32s31-bt-lib` `libbtdm_common.a` (pin `7a85006f`), member `7.o`
 `r_sym_bt_aGdrujd2MUAzWYH75baR` with its configuration setter and byte-scaling
 helper, and the caller `r_btdm_task_init` in member `20.o`; from a
 vendor-code analysis (record outside this repository).

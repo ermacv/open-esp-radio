@@ -23,7 +23,7 @@ const KEY_ID_MODE_1: u8 = 0x08;
 /// ESP-IDF's OpenThread port keeps them for its driver callback
 /// (`otPlatRadioSetMacKey`, `otPlatRadioSetMacFrameCounter` and
 /// `enh_ack_set_security_addr_and_key` of `esp_openthread_radio.c` at ESP-IDF
-/// `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`).
+/// `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`).
 ///
 /// The frame counter is the stack's single MAC frame counter; transmissions
 /// the stack secures take theirs from [`Self::take_frame_counter`] too.

@@ -415,9 +415,9 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     ///
     /// SOURCE: complete current `r_sym_bt_qkNMymdnaJnYUfzpKgEp`, carried by
     /// `oer-vendor-lineage` from same-chip named
-    /// `r_btdm_sched_delete_specified_items`, reads the head once after a set
-    /// diagnostic BUSY sample and compares chained item start times against
-    /// it before skipping them.
+    /// `r_btdm_sched_delete_specified_items`, retains a final hardware-list head read at +0x1f2. Its former
+    /// pre-loop head/time guard is absent. This open observation supports the
+    /// cancellation policy; it does not reproduce that removed vendor guard.
     pub fn observe_scheduler_hardware_list_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,

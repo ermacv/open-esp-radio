@@ -3,11 +3,11 @@ schema = 1
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_LP_SYSTEM_REG"
-description = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/soc/esp32s31/register/soc/lp_system_reg.h:47-120,754-764 (Apache-2.0 OR MIT): SYS_CTRL offset 0x8, every field's access and reset; BOOT_ADDR_HP_CORE1 offset 0x164, full-width R/W, reset zero. SYS_CTRL bits 13:12 have no declared field."
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/soc/esp32s31/register/soc/lp_system_reg.h:47-120,754-764 (Apache-2.0 OR MIT): SYS_CTRL offset 0x8, every field's access and reset; BOOT_ADDR_HP_CORE1 offset 0x164, full-width R/W, reset zero. SYS_CTRL bits 13:12 have no declared field."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_LP_SYSTEM_BASE"
-description = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/soc/esp32s31/register/soc/reg_base.h:83: DR_REG_LP_SYS_BASE is 0x20700000."
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/soc/esp32s31/register/soc/reg_base.h:83: DR_REG_LP_SYS_BASE is 0x20700000."
 
 [[sources]]
 id = "ROM_REV0_CORE_BOOT_ADDRESS"

@@ -289,8 +289,8 @@ pub fn parse_open_authentication_response(
 /// relationship with a Deauthentication frame.
 ///
 /// SOURCE(esp32s31): complete
-/// `libnet80211[ieee80211_sta.o]::sta_recv_mgmt`: branches `.L731`
-/// (Disassociation) and `.L737` (Deauthentication) read the reason code at
+/// `libnet80211[ieee80211_sta.o]::sta_recv_mgmt`: branches `sta_recv_mgmt+0x9ba`
+/// (Disassociation) and `sta_recv_mgmt+0x8c6` (Deauthentication) read the reason code at
 /// management-body offset zero (`frame + 24`) and immediately call
 /// `ieee80211_sta_new_state(g_ic, 0, (reason << 8) | subtype)`.
 #[deny(

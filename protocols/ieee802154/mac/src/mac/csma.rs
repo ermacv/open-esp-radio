@@ -1,7 +1,7 @@
 //! Unslotted CSMA-CA backoff, ported from OpenThread `SubMac`
 //! (`src/core/mac/sub_mac.cpp` and `sub_mac.hpp` at OpenThread
 //! `43cc05a9bcf780bd758bad53d897e2d88cf8cb75`, the submodule of ESP-IDF
-//! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`; sha256
+//! `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`; sha256
 //! `14a28df2416d94b11bdd7684552f9aba9eaea355538a3567334d98f775c9b3f0` and
 //! `cba6e34f18d2e8deb8e037820a0a83c20ae9cb854cb106b581521b1249bfab5b`).
 //!

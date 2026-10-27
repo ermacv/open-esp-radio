@@ -4,108 +4,108 @@ schema = 1
 
 [[sources]]
 id = "ESP_IDF_4D59230D_HAL_ESP32S31_INCLUDE_HAL_RNG_LL_H_L163"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf-clocks:components/hal/esp32s31/include/hal/rng_ll.h:163 (file sha256 92439ba1ff719ad824d7568dd1107aabdf52f81a91b3573254c0f8cb104dd187), Apache-2.0: rng_ll_enable initializes LP clocks/reset, sampling, conditioning and startup/continuous health tests."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf-clocks:components/hal/esp32s31/include/hal/rng_ll.h:163 (file sha256 92439ba1ff719ad824d7568dd1107aabdf52f81a91b3573254c0f8cb104dd187), Apache-2.0: rng_ll_enable initializes LP clocks/reset, sampling, conditioning and startup/continuous health tests."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1950"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1950 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: FUNC_CTRL offset from the block base."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1950 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: FUNC_CTRL offset from the block base."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1951"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1951 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M0_FUNC_EN is R/W, reset one, at bit 0."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1951 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M0_FUNC_EN is R/W, reset one, at bit 0."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1958"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1958 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M1_FUNC_EN is R/W, reset one, at bit 1."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1958 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M1_FUNC_EN is R/W, reset one, at bit 1."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1965"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1965 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M2_FUNC_EN is R/W, reset one, at bit 2."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1965 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M2_FUNC_EN is R/W, reset one, at bit 2."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1972"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1972 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M3_FUNC_EN is R/W, reset one, at bit 3."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1972 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M3_FUNC_EN is R/W, reset one, at bit 3."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1979"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1979 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M4_FUNC_EN is R/W, reset one, at bit 4."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1979 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M4_FUNC_EN is R/W, reset one, at bit 4."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1986"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1986 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M5_FUNC_EN is R/W, reset one, at bit 5."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1986 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M5_FUNC_EN is R/W, reset one, at bit 5."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1993"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1993 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M6_FUNC_EN is R/W, reset one, at bit 6."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_reg.h:1993 (file sha256 ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4), Apache-2.0: M6_FUNC_EN is R/W, reset one, at bit 6."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_STRUCT_H_L161"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_struct.h:161 (file sha256 6cbae1777d8c61cb95a8b5e81a2506fbf22552f163b01c3caa41eea77cffa711), Apache-2.0: FUNC_CTRL bits 31:7 are reserved."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_apm_struct.h:161 (file sha256 6cbae1777d8c61cb95a8b5e81a2506fbf22552f163b01c3caa41eea77cffa711), Apache-2.0: FUNC_CTRL bits 31:7 are reserved."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1214"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1214 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: FUNC_CTRL offset from the block base."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1214 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: FUNC_CTRL offset from the block base."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1215"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1215 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M0_FUNC_EN is R/W, reset one, at bit 0."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1215 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M0_FUNC_EN is R/W, reset one, at bit 0."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1222"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1222 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M1_FUNC_EN is R/W, reset one, at bit 1."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1222 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M1_FUNC_EN is R/W, reset one, at bit 1."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1229"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1229 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M2_FUNC_EN is R/W, reset one, at bit 2."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1229 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M2_FUNC_EN is R/W, reset one, at bit 2."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1236"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1236 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M3_FUNC_EN is R/W, reset one, at bit 3."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1236 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M3_FUNC_EN is R/W, reset one, at bit 3."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1243"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1243 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M4_FUNC_EN is R/W, reset one, at bit 4."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1243 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M4_FUNC_EN is R/W, reset one, at bit 4."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1250"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1250 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M5_FUNC_EN is R/W, reset one, at bit 5."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_reg.h:1250 (file sha256 ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553), Apache-2.0: M5_FUNC_EN is R/W, reset one, at bit 5."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_STRUCT_H_L173"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_struct.h:173 (file sha256 9cfe4bbb4855b4a10a199f594874e083280135dc4272d4eb0bf38b139fd910eb), Apache-2.0: FUNC_CTRL bits 31:6 are reserved."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/hp_mem_apm_struct.h:173 (file sha256 9cfe4bbb4855b4a10a199f594874e083280135dc4272d4eb0bf38b139fd910eb), Apache-2.0: FUNC_CTRL bits 31:6 are reserved."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L1005"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:1005 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: M2_FUNC_EN is R/W, reset one, at bit 2."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:1005 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: M2_FUNC_EN is R/W, reset one, at bit 2."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L1012"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:1012 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: M3_FUNC_EN is R/W, reset one, at bit 3."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:1012 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: M3_FUNC_EN is R/W, reset one, at bit 3."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L990"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:990 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: FUNC_CTRL offset from the block base."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:990 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: FUNC_CTRL offset from the block base."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L991"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:991 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: M0_FUNC_EN is R/W, reset one, at bit 0."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:991 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: M0_FUNC_EN is R/W, reset one, at bit 0."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L998"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:998 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: M1_FUNC_EN is R/W, reset one, at bit 1."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_reg.h:998 (file sha256 6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825), Apache-2.0: M1_FUNC_EN is R/W, reset one, at bit 1."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_STRUCT_H_L149"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_struct.h:149 (file sha256 3266161329c38a107371e88b41965508e9280f54b90b53f8bf5e2753ee7108d4), Apache-2.0: FUNC_CTRL bits 31:4 are reserved."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/lp_apm_struct.h:149 (file sha256 3266161329c38a107371e88b41965508e9280f54b90b53f8bf5e2753ee7108d4), Apache-2.0: FUNC_CTRL bits 31:4 are reserved."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L55"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:55 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: HP_APM base address."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:55 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: HP_APM base address."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L56"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:56 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: HP_MEM_APM base address."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:56 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: HP_MEM_APM base address."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L91"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:91 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: LP_APM base address."
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:91 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: LP_APM base address."

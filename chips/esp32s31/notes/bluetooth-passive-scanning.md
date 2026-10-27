@@ -14,9 +14,9 @@ require distinct contracts.
 ## Pinned identity evidence
 
 - ESP32-S31 Controller archive
-  [`espressif/esp32s31-bt-lib@10c507788e9da0993709cf82e405c896561172d8`](https://github.com/espressif/esp32s31-bt-lib/tree/10c507788e9da0993709cf82e405c896561172d8),
+  [`espressif/esp32s31-bt-lib@7a85006f35f6839ae7ea5adee16e68a757759196`](https://github.com/espressif/esp32s31-bt-lib/tree/7a85006f35f6839ae7ea5adee16e68a757759196),
   `libble_app.a` SHA-256
-  `e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723`;
+  `e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6`;
 - same-chip role-name reference only:
   [`espressif/esp32s31-bt-lib@31c30949541a5d3abd4043a1cb66d55aa55577dd`](https://github.com/espressif/esp32s31-bt-lib/tree/31c30949541a5d3abd4043a1cb66d55aa55577dd),
   whose unobfuscated names reach the pinned symbols through the reviewed
@@ -263,12 +263,14 @@ object or epoch field is reproduced.
 ## Restricted passive-1M reset profile
 
 The pinned `r_ble_lll_scan_reset_link_state` body
-(`r_sym_ble_KkAldzIlkQuEkNQp1g6q`) is `0x4ac` bytes; the named initial body
-supplies only its role name. Reducing the pinned body to
+(`r_sym_ble_KkAldzIlkQuEkNQp1g6q`) is `0x478` bytes; the named initial body
+supplies only its role name. The current body changes private option and
+`+0x18`/`+0x48` transforms; whole-profile equivalence is not established.
+The open profile restricts operation to
 passive scanning, public own-address type, accept-all filter policy, disabled
-resolving and the already selected standalone Controller options removes the
-initiator, active-scan, privacy and periodic-synchronization branches. The
-remaining hardware-consumed link-state projection is finite:
+resolving and the selected standalone Controller options. Initiator,
+active-scan, privacy and periodic-synchronization branches are excluded. The
+open hardware-consumed link-state projection is finite:
 
 - the low 20 bits at `+0x08` receive the compressed first RX-header address;
   the no-TX low-20-bit position at `+0x00` remains empty;
@@ -314,11 +316,12 @@ accelerator transaction remains required later for privacy-capable active
 scanning and initiating, where the HAL writes it over the generated field
 accessors rather than recreating it above the HAL.
 
-Starting from the open driver's zero-based private allocation, the complete
-restricted reset therefore has the following exact nonzero link-state words.
-This table is a reviewed SRAM-codec input, not a public descriptor ABI:
+Starting from the open driver's zero-based private allocation, its restricted
+image has the following link-state words. This is the open SRAM-codec input.
+Comparison with the current vendor standalone profile remains unqualified,
+including the changed private `+0x18` and `+0x48` transforms:
 
-| Link-state word | Restricted passive-1M image |
+| Link-state word | Open passive-1M image |
 | ---: | ---: |
 | `+0x00` | `0x1ff00000` |
 | `+0x08` | `0x4ff00000` plus the bound RX-head low-20-bit link |

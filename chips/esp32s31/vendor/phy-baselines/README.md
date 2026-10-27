@@ -6,6 +6,16 @@ not raw calibration objects, console logs or vendor code. Board sections use
 stand labels such as `s31-a` and `s31-b`; the label-to-MAC binding stays in the
 private stand file.
 
+The retained `4d59230ddff16327812782151ef0afef202dc6d7/wifi-cold.json`
+describes captures with that revision's vendor pins and application. It is
+an observation of those inputs only. The current ESP-IDF revision
+`4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d` has no recorded baseline.
+`cargo vendor-check phy-baseline check` therefore reports INCOMPLETE with
+an explicit missing-current-revision reason. It selects only the current
+revision's path; it does not select an older document or claim MATCH from
+byte-identical libphy. An explicitly supplied reference must still pass
+every revision, recipe and capture identity check.
+
 ```console
 cargo vendor-check phy-baseline generate --source s31-a=/path/to/run-a --source s31-b=/path/to/run-b --source s31-b=/path/to/additional-run-b
 cargo hil run phy-recorded-calibration-cold --chip esp32s31 --board s31-b

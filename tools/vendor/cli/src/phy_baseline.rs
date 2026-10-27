@@ -5,7 +5,7 @@ use oer_vendor_phy_esp32s31::{
     baseline::{self, Check, Reference, Signature},
     compare::Verdict,
 };
-use std::{path::PathBuf, process::ExitCode};
+use std::{path::Path, path::PathBuf, process::ExitCode};
 
 #[derive(Args)]
 pub struct Arguments {
@@ -83,8 +83,10 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
         } => {
             let checked = (|| -> Result<Check> {
                 let signature = Signature::current(&ctx.root)?;
-                let reference =
-                    Reference::read(&reference.unwrap_or_else(|| signature.path(&ctx.root)))?;
+                let reference = read_reference(
+                    &reference.unwrap_or_else(|| signature.path(&ctx.root)),
+                    &signature.idf_revision,
+                )?;
                 let (identity, production) =
                     baseline::runs::production(&run, &board, reference.channel)?;
                 Ok(reference.check(
@@ -109,6 +111,23 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
         }
     }
 }
+
+fn read_reference(path: &Path, revision: &str) -> Result<Reference> {
+    Reference::read(path).map_err(|error| {
+        if error
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+        {
+            format!(
+                "no PHY baseline for current ESP-IDF revision {revision}: {}",
+                path.display()
+            )
+            .into()
+        } else {
+            error
+        }
+    })
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,6 +135,17 @@ mod tests {
     struct Cli {
         #[command(flatten)]
         args: Arguments,
+    }
+    #[test]
+    fn absent_current_reference_is_explicitly_incomplete() {
+        let directory = tempfile::tempdir().expect("own directory");
+        let revision = "current-revision";
+        let path = directory.path().join(revision).join("wifi-cold.json");
+        let error = read_reference(&path, revision).expect_err("no reference exists");
+        let checked = Check::incomplete(error);
+        assert_eq!(checked.verdict, Verdict::Incomplete);
+        assert!(checked.reasons[0].contains("no PHY baseline for current ESP-IDF revision"));
+        assert!(checked.reasons[0].contains(revision));
     }
     #[test]
     fn explicit_sources_and_offline_check_are_distinct_commands() {

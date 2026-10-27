@@ -374,8 +374,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // the ESP32-S31 rev0 authentication capture has filter image 0x0001_c387.
         //
         // SOURCE: `libnet80211.a[ieee80211_supplicant.o]`
-        // `wifi_set_rx_policy`, jump-table case six at `.L255` through
-        // `.L262`; `libpp.a[if_hwctrl.o]`
+        // `wifi_set_rx_policy`, jump-table case six at `.L272` through
+        // `.L279`; `libpp.a[if_hwctrl.o]`
         // `ic_set_rx_policy_ubssid_check`; a station authentication capture on
         // hardware.
         let filters = &mut self.mac.wifi_mac_rx_filter;

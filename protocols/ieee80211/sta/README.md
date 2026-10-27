@@ -270,7 +270,7 @@ as a changed link.
 GTK wire IDs include zero. IEEE 802.11-2020, 12.7.2 (EAPOL-Key frames),
 defines the GTK KDE's two-bit KeyID. Frame addressing distinguishes PTK
 and GTK. The pinned
-[ESP-IDF parser](https://github.com/espressif/esp-idf/blob/4d59230ddff16327812782151ef0afef202dc6d7/components/wpa_supplicant/src/rsn_supp/wpa.c#L1064)
+[ESP-IDF parser](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/wpa_supplicant/src/rsn_supp/wpa.c#L1064)
 also accepts all four IDs. `GroupKeyId::select` addresses four protocol
 records; physical slots come from the backend's pool. The wire ID does not
 prescribe a hardware slot layout or narrow the portable WPA2 receive contract. Legacy WPA/TKIP and mesh

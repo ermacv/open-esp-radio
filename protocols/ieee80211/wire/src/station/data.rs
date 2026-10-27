@@ -276,7 +276,7 @@ impl StaProtectedEthernetFrame {
     /// immediately before it. The caller may release the second frame as soon
     /// as this method returns successfully.
     ///
-    /// SOURCE(esp32s31): complete `libnet80211[ieee80211_output.o]::ieee80211_encap_amsdu`. Its `.L940` branch uses `memmove` to grow the
+    /// SOURCE(esp32s31): complete `libnet80211[ieee80211_output.o]::ieee80211_encap_amsdu`. Its `ieee80211_encap_amsdu+0xa8` branch uses `memmove` to grow the
     /// first cache ESF in place; `.L950` copies the following ESF body into
     /// that allocation and calls `libnet80211[ieee80211_output.o]::ieee80211_recycle_cache_eb` immediately.
     /// Thus vendor A-MSDU construction copies between netstack owners; only

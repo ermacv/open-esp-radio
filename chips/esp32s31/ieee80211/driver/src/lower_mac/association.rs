@@ -1,7 +1,7 @@
 //! S31 has one SPP bit per interface; every key borrows that interface's owner.
 //!
 //! Ending is synchronous after the complete key bank returns. At wifi-lib pin
-//! af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, `wDev_remove_KeyEntry` clears its
+//! f856b5db55cb18e2d1826044430f3f4089e47cf9, `wDev_remove_KeyEntry` clears its
 //! software slot maps and tail-calls `hal_crypto_clr_key_entry`. The latter
 //! clears validity and all ten key words, without changing INTERFACE_CONTROL.
 //! Thus KeyRemoved has already completed every hardware operation. With no

@@ -23,7 +23,7 @@ SOURCE: `rom` of `vendor/artifacts.toml` (`esp32s31_rev0_rom.elf`, SHA-256
 - So a released core 1 waits in ROM, on the ROM's stack, with no interrupt
   source routed to it, and leaves ROM only through a non-zero boot address.
 
-SOURCE: ESP-IDF `4d59230ddff16327812782151ef0afef202dc6d7`,
+SOURCE: ESP-IDF `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`,
 `components/esp_system/port/cpu_start.c`: `call_start_cpu0` clears the address
 (`ets_set_appcpu_boot_addr(0)`) first thing; `start_other_core` is the one
 place that starts core 1 (`esp_cpu_unstall(1)`, clock and reset release,

@@ -8,7 +8,7 @@
 //! Wi-Fi is initialized.
 //!
 //! Source: reviewed evidence `ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK`, ESP-IDF
-//! revision `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe` (Apache-2.0),
+//! revision `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d` (Apache-2.0),
 //! `components/esp_hw_support/modem/port/esp32s31/`
 //! `modem_clock_impl.c` (`*_CLOCK_DEPS`, `modem_clock_get_module_deps`, the
 //! per-device `modem_clock_*_configure` actions and the I2C-master refcount

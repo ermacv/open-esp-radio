@@ -1,14 +1,14 @@
 //! Static storage retained by the ESP32-S31 BLE PHY engine.
 //!
 //! The recovered register-initialization transaction publishes two addresses:
-//! a `0x80`-byte BLE environment, three tables referenced by its positional
+//! a `0x84`-byte BLE environment, three tables referenced by its positional
 //! pointer fields, and a controller-SRAM resolving-list object allocated in
 //! `0x40`-byte units. The BLE PHY module initialization copies the reviewed
 //! channel-frequency and receive packet-start calibration tables into those
 //! allocations and records the BTBB transmit-power table: its address at
-//! `+0x48`, its length at `+0x4c` and its first and last levels at `+0x78` and
-//! `+0x7c`. The register transaction publishes the environment members at
-//! `+0x2c` and `+0x4d`. This module owns the complete recovered allocation
+//! `+0x4c`, its length at `+0x50` and its first and last levels at `+0x7c` and
+//! `+0x80`. The register transaction publishes the environment members at
+//! `+0x2c` and `+0x51`. This module owns the complete recovered allocation
 //! graph and its stable location. It
 //! deliberately does not assign semantics to still-unrecovered words or grant
 //! MMIO publication authority.
@@ -393,6 +393,14 @@ impl BlePhyEngineCpuOwned {
         bytes.extend(
             storage
                 .environment
+                .word_0048_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
                 .tx_power_levels()
                 .read()
                 .bits()
@@ -402,14 +410,6 @@ impl BlePhyEngineCpuOwned {
             storage
                 .environment
                 .tx_power_level_count()
-                .read()
-                .bits()
-                .to_le_bytes(),
-        );
-        bytes.extend(
-            storage
-                .environment
-                .word_0050_opaque()
                 .read()
                 .bits()
                 .to_le_bytes(),
@@ -482,6 +482,14 @@ impl BlePhyEngineCpuOwned {
             storage
                 .environment
                 .word_0074_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0078_opaque()
                 .read()
                 .bits()
                 .to_le_bytes(),
@@ -710,16 +718,16 @@ impl BlePhyEngineCpuOwned {
             .write(BlePhyEnvironmentWord0044Opaque::from_bits(0xa5a5_a5a5));
         storage
             .environment
+            .word_0048_opaque()
+            .write(BlePhyEnvironmentWord0048Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
             .tx_power_levels()
             .write(BlePhyEnvironmentTxPowerLevels::from_bits(0xa5a5_a5a5));
         storage
             .environment
             .tx_power_level_count()
             .write(BlePhyEnvironmentTxPowerLevelCount::from_bits(0xa5a5_a5a5));
-        storage
-            .environment
-            .word_0050_opaque()
-            .write(BlePhyEnvironmentWord0050Opaque::from_bits(0xa5a5_a5a5));
         storage
             .environment
             .word_0054_opaque()
@@ -756,6 +764,10 @@ impl BlePhyEngineCpuOwned {
             .environment
             .word_0074_opaque()
             .write(BlePhyEnvironmentWord0074Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0078_opaque()
+            .write(BlePhyEnvironmentWord0078Opaque::from_bits(0xa5a5_a5a5));
         storage
             .environment
             .tx_power_first_level()
@@ -874,7 +886,7 @@ impl BlePhyEngineStorage {
     }
 
     fn initialize_lookup_tables(&mut self) {
-        // SOURCE: BLOB_LIBBLE_MEMORY_PHY_LOOKUPS, bt-lib pin 10c50778;
+        // SOURCE: BLOB_LIBBLE_MEMORY_PHY_LOOKUPS, bt-lib pin 7a85006f;
         // generated BLE_PHY_* byte layouts and notes/bluetooth-controller-boundary.md.
         let mut frequencies =
             BlePhyChannelFrequencyOffsetsMut::new(&mut self.channel_frequency_offsets_mhz);

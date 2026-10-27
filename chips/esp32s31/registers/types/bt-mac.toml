@@ -2160,7 +2160,7 @@ description = "Second controller interrupt-enable bank. The current vendor pin c
 name = "CONTROLLER_TIME_OVERFLOW"
 bits = "1"
 class = "plain"
-description = "The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. CONTROL1/2 do not lower an enabled pending overflow; release masks and clears this cause. SOURCE: HW9_S31_MAC_RELEASE_20261027; HW9_S31_MAC_MASK_ACK_20261027; HW12_S31_BLE_OVERFLOW_ACK_20261026. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026. A natural unseeded wrap and delayed positive acknowledgement were also observed in the digital setup. SOURCE: HW27_S31_BTLC_NATURAL_20261027."
+description = "The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. CONTROL1/2 do not lower an enabled pending overflow; release masks and clears this cause. SOURCE: HW9_S31_MAC_RELEASE_20261027; HW9_S31_MAC_MASK_ACK_20261027; HW12_S31_BLE_OVERFLOW_ACK_20261026. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 7a85006f35f6839ae7ea5adee16e68a757759196, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026. A natural unseeded wrap and delayed positive acknowledgement were also observed in the digital setup. SOURCE: HW27_S31_BTLC_NATURAL_20261027."
 
 [[registers.fields]]
 name = "SOURCE_3"
@@ -3124,8 +3124,8 @@ description = "Complete BLE PHY initialization writes a runtime-derived complete
 name = "ADDRESS"
 bits = "31:0"
 class = "write-only"
-description = "CPU address published for the BLE PHY environment member at +0x4d."
-pointer = { points-to = "BLE_PHY_ENVIRONMENT", placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"], member-offset = 0x4d }
+description = "CPU address published for the BLE PHY environment member at +0x51."
+pointer = { points-to = "BLE_PHY_ENVIRONMENT", placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"], member-offset = 0x51 }
 
 [[registers]]
 name = "HAL_INIT_SCHEDULER_CONTROL"

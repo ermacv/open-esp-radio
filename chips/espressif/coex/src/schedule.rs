@@ -7,8 +7,8 @@
 //! slice, and the hardware arbitrates by priority.
 //!
 //! This module is the executor-neutral state of `coex_schm_env` of esp-coex-lib
-//! c758e7b56e0fa22177a0539796e1df59978dc322 (`esp32s31/libcoexist.a` sha256
-//! 13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147). A
+//! fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9 (`esp32s31/libcoexist.a` sha256
+//! 01c1b4f2b86cbc3024a2b51f3f104ea7937fc721a4ee57b53146fea6608836bb). A
 //! runtime owner arms the phase timer each [`CoexPhaseStep`] requests and
 //! delivers its notifications; the vendor does both from its timer task and
 //! under its schedule lock.

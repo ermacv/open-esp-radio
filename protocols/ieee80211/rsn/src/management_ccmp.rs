@@ -15,7 +15,7 @@
 //! `libnet80211.a[ieee80211_sta.o]::sta_recv_mgmt` and
 //! `libnet80211.a[ieee80211_crypto_ccmp.o]::ieee80211_ccmp_decrypt`.
 //!
-//! At esp32-wifi-lib revision `af55a0ca258ce9d791d1661d7c2bbb65f08c0c21`,
+//! At esp32-wifi-lib revision `f856b5db55cb18e2d1826044430f3f4089e47cf9`,
 //! the latter function requires Extended IV at offsets `0x58..0x60`, then
 //! rejects a nonzero reserved CCMP octet (`ccmp[2]`) or any reserved Key ID
 //! bits (`ccmp[3] & 0x1f`) at `0x98..0xc6`. Either violation returns `-1`

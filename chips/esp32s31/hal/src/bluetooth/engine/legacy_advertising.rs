@@ -44,10 +44,10 @@ pub const BLUETOOTH_LEGACY_ADVERTISING_TX_PACKET_BYTES: usize =
     BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + BLUETOOTH_LEGACY_ADVERTISING_MAX_PAYLOAD_BYTES;
 
 const ITEMS: usize = BLUETOOTH_LEGACY_ADVERTISING_SCHEDULER_ITEM_CAPACITY;
-/// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, allocation/reset profile (bt-lib pin 10c50778).
+/// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, allocation/reset profile (bt-lib pin 7a85006f).
 const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
     BleLinkStateSequencePolicy::ZERO.with_bits_9_12_opaque_constant::<0xf>();
-/// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, scheduler allocation (bt-lib pin 10c50778).
+/// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, scheduler allocation (bt-lib pin 7a85006f).
 const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
     BleSchedulerItemHardwareNext::ZERO.with_bits_20_21_opaque_constant::<0x1>();
 

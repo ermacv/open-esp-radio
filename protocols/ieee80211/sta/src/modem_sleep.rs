@@ -18,7 +18,7 @@
 //! monitoring are separate features and absent here.
 //!
 //! SOURCE: complete pinned `libpp.a[pm.o]` and `libpp.a[pm_coex.o]` of
-//! espressif/esp32-wifi-lib `af55a0ca`; each method names the function it
+//! espressif/esp32-wifi-lib `f856b5db`; each method names the function it
 //! follows.
 
 use oer_ieee80211_wire::tsf::TsfInstant;
@@ -1542,7 +1542,7 @@ impl ModemSleep {
     /// change under max-modem reprograms the TBTT at the next beacon.
     ///
     /// SOURCE(esp32s31): complete pinned `libpp[pm.o]::pm_scale_listen_interval`
-    /// at esp32-wifi-lib `af55a0ca`: `wifi_nvs_get_sta_listen_interval() *
+    /// at esp32-wifi-lib `f856b5db`: `wifi_nvs_get_sta_listen_interval() *
     /// 102400 / g_pm[52]` truncated to 16 bits (0 becomes 1), the rounding
     /// against `g_pm[11]`, and on a change the store to `g_pm[34]` with,
     /// for sleep type 2, `g_pm[18] = 1` and the coexistence power update

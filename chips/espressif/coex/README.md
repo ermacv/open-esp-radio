@@ -1,7 +1,7 @@
 # Espressif coexistence policy
 
 `oer-espressif-coex` is the coexistence policy the Espressif chips share,
-recovered from esp-coex-lib `c758e7b5`: the 49-event priority table
+recovered from ESP32-S31 esp-coex-lib `fa152b3b`: the 49-event priority table
 (`CoexPtiTable`, equal in the pinned ESP32-S31 and ESP32-C5 archives) with
 the IEEE 802.15.4 levels it resolves, the timer programming sequence, clock
 conversion, event-to-timer mapping and software schedule state. It owns no
@@ -40,7 +40,7 @@ not of the row.
 
 ## Time-slice schedule
 
-`CoexSchedule` is the recovered `coex_schm_env` of esp-coex-lib `c758e7b5`.
+`CoexSchedule` is the recovered `coex_schm_env` of ESP32-S31 esp-coex-lib `fa152b3b`.
 Each radio publishes status bits (`set_status_bits`, `clear_status_bits`);
 the status words select one of the 107 recovered schemes of
 `coexist_scheme.o`, exactly as `coex_schm_status_change` does. The compiled
