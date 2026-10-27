@@ -219,6 +219,46 @@ enum Action {
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
     Probe {
+        id: 220,
+        run: Action::Thread(radio_local::wave2::wifi2),
+    },
+    Probe {
+        id: 221,
+        run: Action::Thread(radio_local::wave2::wifi3),
+    },
+    Probe {
+        id: 222,
+        run: Action::Thread(radio_local::wave2::tbtt),
+    },
+    Probe {
+        id: 223,
+        run: Action::Thread(radio_local::wave2::ed),
+    },
+    Probe {
+        id: 224,
+        run: Action::Thread(radio_local::wave2::ed_stop),
+    },
+    Probe {
+        id: 225,
+        run: Action::Thread(generic::wave2::usb_setup),
+    },
+    Probe {
+        id: 226,
+        run: Action::Thread(generic::wave2::usb_packet),
+    },
+    Probe {
+        id: 227,
+        run: Action::Thread(generic::wave2::expiry),
+    },
+    Probe {
+        id: 228,
+        run: Action::Thread(generic::wave2::simultaneous),
+    },
+    Probe {
+        id: 229,
+        run: Action::Thread(generic::wave2::wrap),
+    },
+    Probe {
         id: 190,
         run: Action::Thread(timg_arbitration::reload_rate),
     },
@@ -588,6 +628,8 @@ extern "C" fn facts_main() -> ! {
             load: p.wifi_mac.wifi_mac_tsf_load,
             rtc: p.wifi_mac.wifi_mac_rtc_timer_update,
             aux: p.wifi_mac.wifi_mac_aux_tsf_control,
+            tbtt: p.wifi_mac.wifi_mac_sta_tbtt_target,
+            idle: p.shared_radio.shared_baseband_reset_idle_status,
         },
         generic: generic::Hardware {
             usb: p.usb_serial_jtag.usb_serial_jtag_task,

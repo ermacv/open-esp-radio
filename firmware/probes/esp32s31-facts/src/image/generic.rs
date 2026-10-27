@@ -20,6 +20,8 @@ pub(super) struct Hardware {
 }
 // Only the masked thread publishes/revokes this exclusive handler loan.
 static CLIC: AtomicPtr<pac::clic::Clic> = AtomicPtr::new(ptr::null_mut());
+pub(super) mod wave2;
+
 const LIMIT: u32 = 2_000_000;
 
 pub(super) fn interrupt() -> bool {

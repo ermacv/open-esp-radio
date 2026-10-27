@@ -133020,13 +133020,13 @@ pub mod modem_pwr {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Enable the guarded TSF timer-three event.
+            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
+            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133103,13 +133103,13 @@ pub mod modem_pwr {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Enable the guarded TSF timer-three event.
+            /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(&self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
+            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(&self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133382,13 +133382,13 @@ pub mod modem_pwr {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Raw guarded TSF timer-three event.
+            /// Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
+            /// Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133758,13 +133758,13 @@ pub mod modem_pwr {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-three event.
+            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
+            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133884,7 +133884,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-three event.
+            /// Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_3(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -133899,7 +133899,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
+            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027.
             #[inline]
             pub const fn tsf_timer_2(&self) -> bool {
                 (self.0 & 0x00000020) != 0

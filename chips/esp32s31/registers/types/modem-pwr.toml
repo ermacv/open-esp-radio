@@ -754,10 +754,10 @@ completeness = "partial"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW26_S31_LOCAL_TBTT_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
@@ -794,10 +794,10 @@ completeness = "unknown"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027"]
 
 [review.entity."RAW.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."RAW.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."RAW.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
@@ -869,10 +869,10 @@ completeness = "unknown"
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_3"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027", "HW26_S31_TSF_TIMERS23_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
@@ -2126,13 +2126,13 @@ description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a 
 name = "TSF_TIMER_3"
 bits = "4"
 class = "plain"
-description = "Enable the guarded TSF timer-three event."
+description = "Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "plain"
-description = "Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027."
+description = "Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
@@ -2211,13 +2211,13 @@ description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF. Local station TBT
 name = "TSF_TIMER_3"
 bits = "4"
 class = "read-only"
-description = "Raw guarded TSF timer-three event."
+description = "Raw guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "read-only"
-description = "Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027."
+description = "Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
@@ -2377,13 +2377,13 @@ description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF. A pos
 name = "TSF_TIMER_3"
 bits = "4"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-three event."
+description = "Acknowledge the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_2"
 bits = "5"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027."
+description = "Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
