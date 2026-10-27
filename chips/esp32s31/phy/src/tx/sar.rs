@@ -44,14 +44,15 @@ enum State {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Event {
-    WaitAt(Instant),
+    Wait { at: Instant, delay: Duration },
     Complete(Result<Sample, Error>),
 }
 
 /// SOURCE: rev0 ROM `phy_pwdet_tone_start`: tone arm, minimum 1 us,
 /// SAR trigger, minimum 2 us, ready observation, optional clear, result read.
-/// Each event executes at most one bounded atom; lateness never shortens the
-/// next minimum wait. HW17 (`research/hw-sar-hold.md`) qualifies retained
+/// Each event executes at most one bounded atom. Edge events return a fresh
+/// relative minimum interval; the driver arms it without subtracting a clock.
+/// HW17 (`research/hw-sar-hold.md`) qualifies retained
 /// ready/result through 100 us. A ready sample succeeds even after the limit;
 /// an unready sample then fails without consuming invalid data.
 pub(crate) struct Engine {
@@ -79,9 +80,19 @@ impl Engine {
                     return self.complete(Err(Error::DeadlineOverflow));
                 };
                 self.state = State::Trigger(at);
-                Event::WaitAt(at)
+                Event::Wait {
+                    at,
+                    delay: SAMPLE_INTERVAL,
+                }
             }
-            State::Trigger(at) if now < at => Event::WaitAt(at),
+            State::Trigger(at) if now < at => Event::Wait {
+                at,
+                delay: Duration::from_micros(
+                    at.saturating_duration_since(now)
+                        .as_micros()
+                        .saturating_add(1),
+                ),
+            },
             State::Trigger(_) => {
                 let Some(at) = now.checked_add(Duration::from_micros(2)) else {
                     return self.complete(Err(Error::DeadlineOverflow));
@@ -101,9 +112,19 @@ impl Engine {
                     started: at,
                     deadline,
                 };
-                Event::WaitAt(at)
+                Event::Wait {
+                    at,
+                    delay: Duration::from_micros(2),
+                }
             }
-            State::Observe { at, .. } if now < at => Event::WaitAt(at),
+            State::Observe { at, .. } if now < at => Event::Wait {
+                at,
+                delay: Duration::from_micros(
+                    at.saturating_duration_since(now)
+                        .as_micros()
+                        .saturating_add(1),
+                ),
+            },
             State::Observe {
                 started, deadline, ..
             } => {
@@ -129,7 +150,10 @@ impl Engine {
                         started,
                         deadline,
                     };
-                    Event::WaitAt(at)
+                    Event::Wait {
+                        at,
+                        delay: SAMPLE_INTERVAL,
+                    }
                 }
             }
             State::Complete(result) => Event::Complete(result),

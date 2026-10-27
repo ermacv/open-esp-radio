@@ -338,7 +338,10 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
   timers and polls the actor. The direct maintenance TXDC/PWDET path submits
   each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
   performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
-  2 µs wait and timer-driven readiness samples. It judges ready before checking
+  2 µs wait and timer-driven readiness samples. Edge steps return fixed relative
+  1/2 µs intervals, reloaded after the hardware action without subtracting a
+  later clock reading. A microsecond boundary cannot consume part of a minimum;
+  interrupt latency and programming overhead can lengthen it. It judges ready before checking
   the 40 µs not-ready limit. It never polls a future. Other PHY leaves and the
   registration graph remain async.
   The actor arms before depositing an affine bundle into an `oer-memory`
@@ -350,7 +353,14 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
   acknowledges RAW through CLR before every step, and returns custody through
   a one-slot reply cell and an `IrqSignal` declared with `FromExecutorLevel`.
   Startup stops/masks T0 and explicitly clears stale RAW before unmasking;
-  rearming alone does not clear it. The image uses the measured S31 hart0 P2
+  rearming alone does not clear it. A pending event without a bundle is a named
+  `SarAlarmWithoutBundle` fault retaining RAW/ST and request/reply lengths;
+  the image keeps the owners quarantined and records/resets. Cancellation of
+  the lifecycle future likewise retains any in-flight alarm until reset;
+  terminal completion already stops/masks it before reply. The leaf's async
+  suspension count is unchanged: a reply wait replaces its timer wait.
+  `Client::sample` validates/registers its receiving context in one `poll_fn`
+  and waits for the reply in another. The image uses the measured S31 hart0 P2
   pair, line 17 before 16 (HW23_S31_P2_ARBITRATION_20261027), and moves P1
   entries to lines 40–42 preserving their relative order. This observation
   qualifies only the P2 pair, not the other lines or levels. A higher-priority

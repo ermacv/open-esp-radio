@@ -21,6 +21,7 @@ pin-project-lite = "0.2.17"
 oer-esp32s31-hal = { path = "../hal" }
 
 [dev-dependencies]
+oer-interrupt-table = { path = "../../../portable/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-esp32s31-hal = { path = "../hal", features = ["test-support"] }
 

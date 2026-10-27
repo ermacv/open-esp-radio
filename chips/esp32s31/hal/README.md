@@ -56,8 +56,13 @@ CLIC geometry. SOURCE for priority/ID arbitration:
 section 2.8.2.5, p.86. `HW23_S31_P2_ARBITRATION_20261027` confirms line17
 before16 on S31 hart0 at P2, with TIMG0/FROM_CPU2 assigned both ways and
 both positively pending before admission. Other pairs, levels and sustained
-fairness remain unmeasured. No production image binds or arms T0;
-PHY uses the existing P2 executor.
+fairness remain unmeasured. Nine images bind TIMG0 T0 for the production
+SAR/PWDET pilot: W0–W3, B0, the Wi-Fi-station HIL profile, lower-MAC HIL,
+PHY HIL and the RX-chain probe. Their permanent P2 `Exempt(ExecutorLevel)`
+handler uses line 16 below FROM_CPU2 line 17. Startup stops/masks and CLR-clears
+stale RAW; the actor arms before depositing the owned PHY bundle, and the
+handler acknowledges before each step/rearm. Completion stops/masks T0 before
+returning the bundle and raising the same-level reply signal.
 
 ## Platform clocks
 

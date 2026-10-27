@@ -6,8 +6,10 @@ use core::{
     task::{Context, Poll},
 };
 use oer_esp32s31_hal::{
-    domain::transaction::{FaultHandle, PhyHardware, PhyTransaction, SarTransferFault},
-    platform::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmProgram},
+    domain::transaction::{
+        FaultHandle, PhyHardware, PhyTransaction, SarAlarmWithoutBundle, SarTransferFault,
+    },
+    platform::timg0_alarm::{InvalidDelay, Observation, Timg0AlarmInterrupt, Timg0AlarmProgram},
 };
 use oer_interrupt_table::{
     Bound, Entry,
@@ -16,17 +18,17 @@ use oer_interrupt_table::{
 use oer_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor};
 use oer_time::{Clock, Duration};
 
-type Queue<I> = AffineSpscQueue<Bundle<I>, 1, CompactSpscCursor>;
-type Sender<I> = AffineSpscSender<'static, Bundle<I>, 1, CompactSpscCursor>;
-type Receiver<I> = AffineSpscReceiver<'static, Bundle<I>, 1, CompactSpscCursor>;
-struct Bundle<I: Entry + 'static> {
+type Queue<B, A> = AffineSpscQueue<Bundle<B, A>, 1, CompactSpscCursor>;
+type Sender<B, A> = AffineSpscSender<'static, Bundle<B, A>, 1, CompactSpscCursor>;
+type Receiver<B, A> = AffineSpscReceiver<'static, Bundle<B, A>, 1, CompactSpscCursor>;
+struct Bundle<B, A> {
     phy: PhyTransaction,
-    alarm: Timg0AlarmProgram,
-    bound: Bound<I>,
+    alarm: A,
+    bound: B,
     engine: Engine,
     result: Option<Result<Sample, Error>>,
 }
-impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Bundle<I> {
+impl<B, A: Program<B>> Bundle<B, A> {
     fn arm(&mut self, delay: Duration) {
         if self.alarm.arm_after(delay, &self.bound).is_err() {
             self.phy
@@ -36,25 +38,27 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Bundle<I> {
     }
 }
 /// Permanent one-slot request and return cells; endpoints are split once.
-pub struct Cells<I: Entry + 'static> {
-    request: Queue<I>,
-    reply: Queue<I>,
+pub struct Cells<B: 'static, A: 'static = Timg0AlarmProgram> {
+    request: Queue<B, A>,
+    reply: Queue<B, A>,
 }
-impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Cells<I> {
+impl<B: 'static, A: 'static> Cells<B, A> {
     pub const fn new() -> Self {
         Self {
             request: Queue::new(),
             reply: Queue::new(),
         }
     }
-    /// Startup stops/masks the program and explicitly CLR-acknowledges stale
-    /// RAW before a request may unmask. Rearm itself does not clear RAW.
-    pub fn split<E: SignalExecutor>(
+    fn split_with<E: SignalExecutor>(
         &'static mut self,
-        mut alarm: Timg0AlarmProgram,
-        interrupt: &mut Timg0AlarmInterrupt,
+        mut alarm: A,
+        interrupt: &mut impl Acknowledge,
         signal: &'static IrqSignal<E>,
-    ) -> (UnboundClient<I, E>, Interrupt<I, E>) {
+        orphaned: fn(SarAlarmWithoutBundle) -> !,
+    ) -> (UnboundClient<B, E, A>, Interrupt<B, E, A>)
+    where
+        A: Program<B>,
+    {
         alarm.disarm();
         let _stale = interrupt.acknowledge();
         let (send, receive) = self.request.split();
@@ -71,30 +75,73 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Cells<I> {
                 send: return_send,
                 signal,
                 active: None,
+                orphaned,
             },
         )
     }
 }
-impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Default for Cells<I> {
+impl<B: 'static, A: 'static> Default for Cells<B, A> {
     fn default() -> Self {
         Self::new()
     }
 }
+impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Cells<Bound<I>> {
+    /// Startup stops/masks the program and CLR-acknowledges stale RAW before
+    /// unmask. The image's terminal reporter retains an orphan event's data.
+    pub fn split<E: SignalExecutor>(
+        &'static mut self,
+        alarm: Timg0AlarmProgram,
+        interrupt: &mut Timg0AlarmInterrupt,
+        signal: &'static IrqSignal<E>,
+        orphaned: fn(SarAlarmWithoutBundle) -> !,
+    ) -> (UnboundClient<Bound<I>, E>, Interrupt<Bound<I>, E>) {
+        self.split_with(alarm, interrupt, signal, orphaned)
+    }
+}
+
+// Hardware effects are separate from the custody protocol. Host models run
+// the same Client, Bundle and Interrupt paths with virtual alarm/SAR edges.
+trait Program<B> {
+    fn arm_after(&mut self, delay: Duration, bound: &B) -> Result<(), InvalidDelay>;
+    fn disarm(&mut self);
+}
+impl<I: Entry<Part = Timg0AlarmInterrupt>> Program<Bound<I>> for Timg0AlarmProgram {
+    fn arm_after(&mut self, delay: Duration, bound: &Bound<I>) -> Result<(), InvalidDelay> {
+        self.arm_after(delay, bound)
+    }
+    fn disarm(&mut self) {
+        self.disarm();
+    }
+}
+trait Acknowledge {
+    fn acknowledge(&mut self) -> Observation;
+}
+impl Acknowledge for Timg0AlarmInterrupt {
+    fn acknowledge(&mut self) -> Observation {
+        self.acknowledge()
+    }
+}
+
 /// No alarm may be armed until the image has bound its permanent IRQ owner.
-pub struct UnboundClient<I: Entry + 'static, E: SignalExecutor> {
-    alarm: Timg0AlarmProgram,
-    send: Sender<I>,
-    receive: Receiver<I>,
+pub struct UnboundClient<B: 'static, E: SignalExecutor, A: 'static = Timg0AlarmProgram> {
+    alarm: A,
+    send: Sender<B, A>,
+    receive: Receiver<B, A>,
     signal: &'static IrqSignal<E>,
 }
-impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> UnboundClient<I, E> {
-    pub fn bind(self, bound: Bound<I>) -> Client<I, E> {
+impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> UnboundClient<Bound<I>, E> {
+    pub fn bind(self, bound: Bound<I>) -> Client<Bound<I>, E> {
         const {
             assert!(matches!(
                 I::CLASS,
                 oer_interrupt_table::Class::ExemptExecutorLevel
             ));
         }
+        self.into_client(bound)
+    }
+}
+impl<B: 'static, E: SignalExecutor, A: 'static> UnboundClient<B, E, A> {
+    fn into_client(self, bound: B) -> Client<B, E, A> {
         Client {
             alarm: Some((self.alarm, bound)),
             send: self.send,
@@ -106,10 +153,10 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> UnboundC
 /// The actor's program owner between requests. A waiting lifecycle future
 /// retains the exact DetachedRadioDomain, so cancellation resets even while
 /// the PHY half is in one of the cells or the handler.
-pub struct Client<I: Entry + 'static, E: SignalExecutor> {
-    alarm: Option<(Timg0AlarmProgram, Bound<I>)>,
-    send: Sender<I>,
-    receive: Receiver<I>,
+pub struct Client<B: 'static, E: SignalExecutor, A: 'static = Timg0AlarmProgram> {
+    alarm: Option<(A, B)>,
+    send: Sender<B, A>,
+    receive: Receiver<B, A>,
     signal: &'static IrqSignal<E>,
 }
 /// The one public leaf submission contract; the production client moves
@@ -121,7 +168,7 @@ pub trait Service {
         clear_tone: bool,
     ) -> impl Future<Output = (PhyTransaction, Result<Sample, Error>)>;
 }
-impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> Service for Client<I, E> {
+impl<B: 'static, E: SignalExecutor, A: Program<B> + 'static> Service for Client<B, E, A> {
     async fn sample(
         &mut self,
         phy: PhyTransaction,
@@ -183,16 +230,31 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> Service 
 }
 /// State lent only to the P2 TIMG0 handler; the table retains the interrupt
 /// part independently for the entire image. No task poll or waker is called.
-pub struct Interrupt<I: Entry + 'static, E: SignalExecutor> {
-    active: Option<Bundle<I>>,
-    receive: Receiver<I>,
-    send: Sender<I>,
+pub struct Interrupt<B: 'static, E: SignalExecutor, A: 'static = Timg0AlarmProgram> {
+    active: Option<Bundle<B, A>>,
+    orphaned: fn(SarAlarmWithoutBundle) -> !,
+    receive: Receiver<B, A>,
+    send: Sender<B, A>,
     signal: &'static IrqSignal<E>,
 }
-impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> Interrupt<I, E> {
+impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> Interrupt<Bound<I>, E> {
     #[cfg(target_arch = "riscv32")]
     pub fn service(&mut self, interrupt: &mut Timg0AlarmInterrupt, clock: &impl Clock) {
-        if !interrupt.acknowledge().pending {
+        self.service_with(interrupt, |engine, phy| {
+            engine.advance(clock, phy.hardware_mut())
+        });
+    }
+}
+impl<B: 'static, E: SignalExecutor, A: 'static> Interrupt<B, E, A> {
+    fn service_with(
+        &mut self,
+        interrupt: &mut impl Acknowledge,
+        advance: impl FnOnce(&mut Engine, &mut PhyTransaction) -> Event,
+    ) where
+        A: Program<B>,
+    {
+        let observation = interrupt.acknowledge();
+        if !observation.pending {
             return;
         }
         let Some(mut bundle) = self
@@ -200,14 +262,20 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> Interrup
             .take()
             .or_else(|| self.receive.try_receive().ok())
         else {
-            return;
+            // Startup and completion stop/mask the program. An acknowledged
+            // event without custody is impossible; retain every owner in
+            // place while the image records these observations and resets.
+            (self.orphaned)(SarAlarmWithoutBundle {
+                observation,
+                requests: self.receive.len(),
+                replies: self.send.len(),
+            });
         };
-        match bundle.engine.advance(clock, bundle.phy.hardware_mut()) {
-            Event::WaitAt(at) => {
-                bundle.arm(
-                    at.saturating_duration_since(clock.now())
-                        .max(Duration::from_micros(1)),
-                );
+        match advance(&mut bundle.engine, &mut bundle.phy) {
+            Event::Wait { delay, .. } => {
+                // A fresh relative interval after the edge: no second clock
+                // read can eat a tick from the vendor's 1/2-us minimum.
+                bundle.arm(delay);
                 self.active = Some(bundle);
             }
             Event::Complete(result) => {

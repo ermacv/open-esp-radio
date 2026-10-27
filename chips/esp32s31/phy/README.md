@@ -324,15 +324,28 @@ stays in the waiting future, retaining cancellation and clock obligations;
 calibration state is outside the transferred hardware half. Between events
 the handler retains the active bundle in its own cell. Completion returns it
 through a one-slot queue and a same-level `IrqSignal<InterruptExecutor<2>>`
-declared with `FromExecutorLevel`. Only the actor's reply wait is async.
+declared with `FromExecutorLevel`. The leaf still suspends asynchronously at
+its submission boundary: `Client::sample` has one `poll_fn` to validate/register
+the executor context and one to wait for the reply. The async leaf-step count
+is unchanged: the reply wait replaces the readiness-timer wait.
 The table permanently binds TIMG0's interrupt owner as `Exempt(ExecutorLevel)`.
 Startup masks and CLR-clears old RAW; the handler acknowledges each event
 before rearming. Rearm does not acknowledge old pending. The measured S31 P2
 pair assigns FROM_CPU2 line 17 ahead of TIMG0 line 16; other pairs/levels are
 unqualified by that measurement. P1 entries use 40–42, retaining their order.
 Each event performs one bounded I/O atom. The vendor's tone/trigger minima
-are 1/2 µs from the actual edge, so late service never shortens the next wait.
-Readiness retries use TIMG0 at 1 µs intervals under our 40 µs engineering limit;
+are 1/2 µs. The machine returns those fixed relative intervals after tone arm
+and SAR trigger; the handler reloads them after the edge without subtracting a
+second clock reading. Crossing a microsecond boundary between the edge and
+rearm cannot shorten either interval. Handler lateness and programming overhead
+lengthen the wait; no upper latency bound is claimed.
+An acknowledged event without a request or active bundle records
+`SarAlarmWithoutBundle` with the sampled RAW/ST and both queue lengths. All
+owners remain held while the image retains the reason and resets. Cancelling
+the waiting lifecycle future records its admitted operation; an in-flight
+alarm remains quarantined until reset, while completion already stopped/masked
+it before publishing the reply.
+Readiness retries rearm TIMG0 for 1 µs under our 40 µs engineering limit;
 the ROM reference supplies no readiness deadline. Other PHY children,
 including cold registration's existing graph bindings, remain async. The
 handler does not call cooperative admission or a task waker. The current P2

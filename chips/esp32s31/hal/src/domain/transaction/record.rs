@@ -38,6 +38,7 @@ impl FaultRecord {
             }
             FaultReason::SarSetup(SarSetupFault::Storage(_)) => 16,
             FaultReason::SarSetup(SarSetupFault::Binding(_)) => 17,
+            FaultReason::SarAlarmWithoutBundle(_) => 18,
         };
         self.registration = fault.registration.map_or(0, |epoch| epoch.get());
         self.checksum = self.checksum();
@@ -71,6 +72,7 @@ impl FaultRecord {
             15 => ("SarForeignReunion", "maintain"),
             16 => ("SarSetupStorage", "none"),
             17 => ("SarSetupBinding", "none"),
+            18 => ("SarAlarmWithoutBundle", "none"),
             _ => return Ok(()),
         };
         if (9..=15).contains(&(self.reason & 0xff)) {
@@ -195,6 +197,32 @@ mod tests {
             assert!(text.contains(&std::format!("operation={expected}")));
             assert_eq!(core::mem::size_of::<FaultRecord>(), 16);
         }
+    }
+    #[test]
+    fn alarm_without_bundle_survives_retained_output_in_four_words() {
+        let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
+        record.record(Fault {
+            reason: FaultReason::SarAlarmWithoutBundle(super::super::SarAlarmWithoutBundle {
+                observation: crate::platform::timg0_alarm::Observation {
+                    pending: true,
+                    asserted: false,
+                },
+                requests: 0,
+                replies: 1,
+            }),
+            registration: None,
+        });
+        assert!(record.report(|_| false).is_err());
+        let mut bytes = std::vec::Vec::new();
+        record
+            .report(|chunk| {
+                bytes.extend_from_slice(chunk);
+                true
+            })
+            .unwrap();
+        let text = std::string::String::from_utf8(bytes).unwrap();
+        assert!(text.contains("reason=SarAlarmWithoutBundle operation=none"));
+        assert_eq!(core::mem::size_of::<FaultRecord>(), 16);
     }
     #[test]
     fn corrupted_record_is_not_reported() {

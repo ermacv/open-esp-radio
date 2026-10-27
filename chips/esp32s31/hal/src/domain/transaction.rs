@@ -44,6 +44,7 @@ pub enum FaultReason {
         fault: SarTransferFault,
     },
     SarSetup(SarSetupFault),
+    SarAlarmWithoutBundle(SarAlarmWithoutBundle),
 }
 
 /// Failed SAR custody edge, retaining the source observation in session RAM.
@@ -65,6 +66,14 @@ pub enum SarTransferFault {
         expected_owner: usize,
         received_owner: usize,
     },
+}
+/// A sampled T0 event despite startup/completion having stopped delivery.
+/// The image retains all owners and records this terminal reason.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SarAlarmWithoutBundle {
+    pub observation: crate::platform::timg0_alarm::Observation,
+    pub requests: usize,
+    pub replies: usize,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SarSetupFault {

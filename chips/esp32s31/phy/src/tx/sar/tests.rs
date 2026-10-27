@@ -53,22 +53,34 @@ fn vendor_minimum_waits_are_measured_from_the_actual_edge() {
     let mut engine = Engine::new(true);
     assert_eq!(
         engine.advance(&clock, &mut io),
-        Event::WaitAt(Instant::from_micros(1))
+        Event::Wait {
+            at: Instant::from_micros(1),
+            delay: Duration::from_micros(1)
+        }
     );
     // Early/duplicate events do not consume a minimum wait or issue I/O.
     assert_eq!(
         engine.advance(&clock, &mut io),
-        Event::WaitAt(Instant::from_micros(1))
+        Event::Wait {
+            at: Instant::from_micros(1),
+            delay: Duration::from_micros(2)
+        }
     );
     clock.advance(Duration::from_micros(20)).unwrap();
     assert_eq!(
         engine.advance(&clock, &mut io),
-        Event::WaitAt(Instant::from_micros(22))
+        Event::Wait {
+            at: Instant::from_micros(22),
+            delay: Duration::from_micros(2)
+        }
     );
     clock.advance(Duration::from_micros(1)).unwrap();
     assert_eq!(
         engine.advance(&clock, &mut io),
-        Event::WaitAt(Instant::from_micros(22))
+        Event::Wait {
+            at: Instant::from_micros(22),
+            delay: Duration::from_micros(2)
+        }
     );
     assert_eq!(io.events.borrow().len(), 2);
     clock.advance(Duration::from_micros(1)).unwrap();
@@ -129,7 +141,7 @@ fn not_ready_rearms_at_one_microsecond_and_stops_at_the_limit() {
     let mut engine = Engine::new(true);
     let result = loop {
         match engine.advance(&clock, &mut io) {
-            Event::WaitAt(at) => {
+            Event::Wait { at, .. } => {
                 clock
                     .advance(at.saturating_duration_since(clock.now()))
                     .unwrap();
@@ -171,12 +183,18 @@ fn minimum_wait_starts_after_the_mmio_edge_finishes() {
     let mut engine = Engine::new(false);
     assert_eq!(
         engine.advance(&clock, &mut io),
-        Event::WaitAt(Instant::from_micros(6))
+        Event::Wait {
+            at: Instant::from_micros(6),
+            delay: Duration::from_micros(1)
+        }
     );
     clock.advance(Duration::from_micros(1)).unwrap();
     assert_eq!(
         engine.advance(&clock, &mut io),
-        Event::WaitAt(Instant::from_micros(13))
+        Event::Wait {
+            at: Instant::from_micros(13),
+            delay: Duration::from_micros(2)
+        }
     );
     assert_eq!(clock.now(), Instant::from_micros(11));
 }
@@ -187,7 +205,7 @@ fn ready_exactly_at_the_limit_succeeds() {
     let mut engine = Engine::new(false);
     loop {
         match engine.advance(&clock, &mut io) {
-            Event::WaitAt(at) => {
+            Event::Wait { at, .. } => {
                 clock
                     .advance(at.saturating_duration_since(clock.now()))
                     .unwrap();

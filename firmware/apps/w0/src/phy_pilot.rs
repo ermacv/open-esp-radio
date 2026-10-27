@@ -11,10 +11,10 @@ use oer_memory::HandlerCell;
 use static_cell::StaticCell;
 
 type X = InterruptExecutor<2>;
-pub(crate) type Client = sar_pilot::Client<crate::PhyToken, X>;
-type Handler = sar_pilot::Interrupt<crate::PhyToken, X>;
+pub(crate) type Client = sar_pilot::Client<oer_interrupt_table::Bound<crate::PhyToken>, X>;
+type Handler = sar_pilot::Interrupt<oer_interrupt_table::Bound<crate::PhyToken>, X>;
 oer_espressif_staged_runtime::placed_static! {
-    static CELLS: StaticCell<sar_pilot::Cells<crate::PhyToken>> = StaticCell::new(), in critical_data "phy_pilot";
+    static CELLS: StaticCell<sar_pilot::Cells<oer_interrupt_table::Bound<crate::PhyToken>>> = StaticCell::new(), in critical_data "phy_pilot";
     static STATE: StaticCell<Handler> = StaticCell::new(), in critical_data "phy_pilot";
     static HANDLER: HandlerCell<Handler> = HandlerCell::new(), in critical_data "phy_pilot";
     static REPLY: IrqSignal<X> = IrqSignal::new::<FromExecutorLevel<crate::PhyToken>, crate::RadioToken>(), in critical_data "phy_pilot";
@@ -30,7 +30,12 @@ pub(crate) fn init(
     let Some(cells) = CELLS.try_init_with(sar_pilot::Cells::new) else {
         reset(SarSetupFault::Storage(SarSetupStorage::Cells));
     };
-    let (client, handler) = cells.split(parts.program, &mut interrupt, &REPLY);
+    let (client, handler) = cells.split(parts.program, &mut interrupt, &REPLY, |fault| {
+        oer_espressif_staged_runtime::phy_fault::reset(Fault {
+            reason: FaultReason::SarAlarmWithoutBundle(fault),
+            registration: None,
+        })
+    });
     let Some(handler) = STATE.try_init_with(|| handler) else {
         reset(SarSetupFault::Storage(SarSetupStorage::State));
     };
