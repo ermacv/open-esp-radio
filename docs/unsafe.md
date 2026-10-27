@@ -348,7 +348,7 @@ authority for acknowledgement. Same-lane recurrence is not an event count.
 SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`, retained-snapshot
 and selective-W1C phases, [PR #689](https://github.com/ermacv/open-esp-radio/pull/689).
 
-Wi-Fi RX completed byte views and ring-owned guard preparation consume
+Wi-Fi RX completed byte views and ring-owned return-state normalization consume
 crate-private affine grants. A sealed binding pairs one arena with its live
 or halted ring after identity admission, or takes the pair directly from a retained completed
 owner. `with_bound_buffers` gives the ring and its storage access an invariant,
@@ -362,14 +362,13 @@ The retained single-descriptor read keeps its already validated buffer pointer;
 other reads use the descriptor binding. Read grants cannot authorize rearm.
 One unsafe read-binding constructor retains the completion owner's loan.
 Detachment consumes the completed owner inside the byte core.
-The two byte-cell accesses, detached-buffer handoff, volatile guard observation
-and two sharing implementations form the memory boundary. Completion
-observations precede grants, and the leading guard is restored before
-publication. That four-byte word lies inside the descriptor's advertised
-capacity; backing storage covers that capacity, with no trailing guard word.
-Constructor, pre-publication byte views and DMA placement enforce this
-geometry at monomorphization, including storage initialized as zero bytes
-without calling `new`.
+The completed byte-cell view, detached-buffer handoff and two sharing
+implementations form the memory boundary. Completion observations precede
+grants. Preparation and recycle normalize affine return states and publish
+descriptors without reading or painting buffer bytes. Backing storage covers
+the nonzero advertised capacity; constructor, pre-publication byte views and
+DMA placement enforce this geometry at monomorphization, including storage
+initialized as zero bytes without calling `new`.
 Accepted RX units contain every descriptor from the software cursor through
 its first terminal `RX_DONE`, bounded by the frozen LAST. Lengths and metadata
 come from that descriptor interval alone; buffer contents never select a
@@ -378,15 +377,17 @@ rule. Admission preview refuses chains and reserved-descriptor tails before
 reading bytes. R remains in the accepted-unit cursor until its terminal has
 been observed, unless the epoch resumes at a retained ring NEXT; its leading
 word cannot establish a continuation.
-The leading observation is used only to detect a late write into retired R,
-which keeps the existing Corrupt/reset quarantine path. Its baseline is
-restored when R's link is cleared even if its old bytes were rejected traffic.
+After R's link is cleared, `RX_DONE` or LAST naming R keeps the existing
+Corrupt/reset quarantine path; byte contents are never a late-write detector.
 The general hardware premise is that LAST releases exact accepted prefixes
 with fresh head metadata and excludes later writes into released storage.
-SOURCE: `oer-notes/research/hw-rx-radio.md`, R3 A(2),
-`hw18-20261027-rx-radio-03-s31b`: three exact prefixes and nine stable committed
-buffers support this premise in that capture; arbitrary in-flight detach and
-recycle remain unmeasured. No buffer-content fallback supplies this proof.
+SOURCE[HW18_RX_COMMITTED_PREFIX_20261027] in
+`chips/esp32s31/registers/evidence/hw-rx-radio.toml`, run
+`hw18-20261027-rx-radio-03-s31b`: the cold prefix R,0,1 and the next two exact
+prefixes support cursor membership in that capture. The nine committed
+buffers remain stable until stop. Foreign nodes released by LAST are excluded
+by the exact-prefix assumption, not by a software content test. Arbitrary
+in-flight detach and recycle remain unmeasured.
 Compiler fixtures build internal callers against the actual HAL source;
 weakened-bound controls confirm every callback escape case detects a regression.
 

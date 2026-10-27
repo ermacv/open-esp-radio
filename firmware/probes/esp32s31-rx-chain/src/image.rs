@@ -39,8 +39,6 @@ use oer_radio_regulatory::{Country, RegulatoryDomain};
 use oer_time::{Clock, Duration, Timer};
 use static_cell::StaticCell;
 
-use oer_esp32s31_hal::ieee80211::dma::rx_ring::RX_BUFFER_SENTINEL;
-
 const COUNT: usize = 32;
 const BUFFER: usize = 128;
 const NODES: usize = COUNT + 1;
@@ -303,7 +301,9 @@ fn read_word(
 
 fn pattern(index: usize, word: usize) -> u32 {
     if word == 0 && !CPU_NODES.contains(&index) {
-        RX_BUFFER_SENTINEL
+        // SOURCE[HW18_RX_OWNER_BARRIER_20261027]: this diagnostic's initial
+        // leading pattern, independent of production ring preparation.
+        0xdead_beef
     } else {
         0xa500_0000 | ((index as u32) << 12) | (word as u32)
     }

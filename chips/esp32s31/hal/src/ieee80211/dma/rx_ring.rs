@@ -17,15 +17,6 @@ use crate::ieee80211::dma::{
     rx_dma::{RxDescriptorAddresses, RxDma, RxDmaBinding},
 };
 
-/// Leading marker for the retired reserved descriptor's late-write detector.
-///
-/// SOURCE\[ROM_REV0_WDEV_APPEND_RX_BLOCKS]: `esp32s31_rev0_rom.elf`,
-/// `rom[]::wDev_AppendRxBlocks` at `0x2f838a7e`, complete size `0x132`, writes
-/// `0xdead_beef` at `buffer` and `buffer + descriptor_capacity`. This ring uses
-/// only the leading word inside the advertised capacity; it needs no trailing
-/// marker. Accepted-frame membership never depends on this value.
-pub const RX_BUFFER_SENTINEL: u32 = 0xdead_beef;
-
 /// Immutable descriptor-to-buffer address authority for one DMA lifecycle:
 /// per descriptor, the typed DMA address of its bound buffer.
 pub type RxDmaBufferAddresses<const COUNT: usize> = crate::dma_address::PlacedAddresses<COUNT>;
@@ -684,18 +675,6 @@ impl<'id, 'loan> ScopedRing<'id, super::rx_storage::buffers::CompletedRead<'loan
     }
 }
 
-/// The reserved descriptor's buffer, as the live ring needs it.
-///
-/// The storage arena implements it over R's buffer, which is never one of
-/// the ring's buffers and is never leased.
-pub(crate) trait RxReservedBuffer<'id> {
-    /// Whether DMA overwrote the buffer's leading recycle guard.
-    fn guard_overwritten(&self) -> bool;
-    /// Restore the leading recycle guard. Called only after the walker finished
-    /// writing the buffer.
-    fn restore_guard(&self, grant: RecycleGrant<'id, '_, Rearm, true>) -> Result<(), RxRingError>;
-}
-
 /// Validated descriptor memory and private DMA binding, before BASE.
 /// Only the MAC HAL can promote this capability after opening common gates.
 pub struct RxRingPrepared<'a, const COUNT: usize> {
@@ -752,6 +731,8 @@ pub struct RxRingStopped<'a, const COUNT: usize> {
 
 /// The accepted-unit cursor includes R until its terminal is observed, or
 /// until a retained NEXT starts the epoch directly in the ring.
+/// SOURCE\[HW18_RX_COMMITTED_PREFIX_20261027]: the cold accepted prefix is
+/// R,0,1; a nonterminal R belongs to that first unit regardless of its bytes.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ReservedCursor {
     Pending,
@@ -930,11 +911,9 @@ impl<'id, 'a, const COUNT: usize>
     /// cold list beginning at the retained hardware cursor, or descriptor zero
     /// when the preceding list was exhausted, behind the reserved descriptor.
     ///
-    /// `prepare_buffer` must restore any buffer-side DMA contract for `index`;
-    /// for the S31 RX layout this means the leading `0xdead_beef` sentinel, and
-    /// `prepare_reserved_buffer` does the same for the reserved descriptor's
-    /// buffer at `reserved_buffer_address`. Both are invoked only while the
-    /// walker is confirmed stopped.
+    /// The preparation callbacks normalize each buffer's affine return state
+    /// before descriptor publication. They run only while the walker is
+    /// confirmed stopped and leave the buffer bytes unchanged.
     ///
     /// The later core-ready publication is the epoch's only `RX_DESCRIPTOR_BASE` write:
     /// BASE = R, `R.next` = the ring head, R armed with its own buffer. A
@@ -1252,27 +1231,22 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
     ///
     /// Before the first ring take a frame may land in R: the cold
     /// publication points the walker at it. Such a landing is counted and
-    /// dropped uncopied, and R's ownership word and buffer guards are
-    /// rearmed. That rewrite is safe: `RX_DONE` on R means the DMA finished
+    /// dropped uncopied, and R's ownership word is rearmed. That rewrite is
+    /// safe: `RX_DONE` on R means the DMA finished
     /// with R's buffer, and R's link, which the walker follows next, is not
-    /// touched. A frame still being written into R (guard overwritten, no
-    /// `RX_DONE`) is left alone; the accepted descriptor cursor, rather than
-    /// buffer contents, accounts for its first take.
+    /// touched. Without `RX_DONE`, the accepted descriptor cursor accounts
+    /// for R at the first ring take; its bytes supply no membership evidence.
     ///
-    /// After the first take nothing names R: any write into it (`RX_DONE`,
-    /// an overwritten guard, LAST naming R) is a late landing. It is counted
-    /// and fails closed: the arena needs a radio reset.
-    pub(crate) fn observe_reserved_owned<M: RxDma, B: RxReservedBuffer<'id>>(
-        self,
-        mmio: &mut M,
-        buffer: &B,
-    ) -> Result<(), RxRingError> {
+    /// After the first take nothing names R: `RX_DONE` or LAST naming R
+    /// is a late landing. It is counted and fails closed: the arena needs a
+    /// radio reset.
+    pub(crate) fn observe_reserved_owned<M: RxDma>(self, mmio: &mut M) -> Result<(), RxRingError> {
         let reserved = self.ring.table.reserved();
         let word0 = reserved.word0();
         if !self.ring.reserved_left() {
             if word0.rx_done() {
                 increment_saturating(&self.ring.arena.reserved_landings);
-                if let Err(error) = self.rearm_reserved(word0, buffer) {
+                if let Err(error) = self.rearm_reserved(word0) {
                     self.ring.require_reset();
                     return Err(error);
                 }
@@ -1281,10 +1255,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
             return Ok(());
         }
         let reserved_low = self.ring.binding.reserved_address() & RX_DESCRIPTOR_ADDRESS_LOW_MASK;
-        if word0.rx_done()
-            || buffer.guard_overwritten()
-            || mmio.last_descriptor_low() == reserved_low
-        {
+        if word0.rx_done() || mmio.last_descriptor_low() == reserved_low {
             increment_saturating(&self.ring.arena.reserved_late_landings);
             self.ring.require_reset();
             return Err(RxRingError::Corrupt);
@@ -1292,14 +1263,9 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         Ok(())
     }
 
-    /// Rearm R's buffer guards and, after a terminal landing, its ownership
-    /// word. R's link is not touched.
-    fn rearm_reserved<B: RxReservedBuffer<'id>>(
-        &self,
-        word0: WifiRxDmaDescriptorControl,
-        buffer: &B,
-    ) -> Result<(), RxRingError> {
-        buffer.restore_guard(RecycleGrant::new(COUNT))?;
+    /// Rearm R's ownership word after a terminal landing, preserving its link
+    /// and bytes.
+    fn rearm_reserved(&self, word0: WifiRxDmaDescriptorControl) -> Result<(), RxRingError> {
         if word0.rx_done() {
             self.ring
                 .table
@@ -1322,10 +1288,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
     /// re-enter the ring through a stale head. R belongs to this accepted
     /// interval only if the epoch started at R and no R terminal preceded it.
     /// Buffer writes, including stale rejected writes, do not establish this.
-    fn leave_reserved<B: RxReservedBuffer<'id>>(
-        &mut self,
-        buffer: &B,
-    ) -> Result<bool, RxRingError> {
+    fn leave_reserved(&mut self) -> Result<bool, RxRingError> {
         let reserved = self.ring.table.reserved();
         let word0 = reserved.word0();
         let landed = word0.rx_done();
@@ -1333,8 +1296,9 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         if landed || continued {
             increment_saturating(&self.ring.arena.reserved_landings);
         }
-        // Reset the late-write detector even if R only contains rejected data.
-        self.rearm_reserved(word0, buffer)?;
+        if landed {
+            self.rearm_reserved(word0)?;
+        }
         reserved.publish_next(None);
         self.ring.reserved_cursor = ReservedCursor::Left;
         Ok(continued)
@@ -1577,8 +1541,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// independently of the leading bytes in every buffer. Membership is the
     /// exact prefix from the accepted-unit cursor to that first terminal.
     ///
-    /// SOURCE: `hw-rx-radio.md`, R3 A(2), run
-    /// `hw18-20261027-rx-radio-03-s31b`: three accepted chains start at the
+    /// SOURCE\[HW18_RX_COMMITTED_PREFIX_20261027]: in run
+    /// `hw18-20261027-rx-radio-03-s31b`, three accepted chains start at the
     /// previous NEXT and contain exactly that prefix. The general invariant
     /// that LAST never releases foreign prefix nodes remains an assumption.
     pub(crate) fn completed_unit_frontier_through_cursor(
@@ -1604,6 +1568,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         }
     }
 
+    /// SOURCE\[HW18_RX_COMMITTED_PREFIX_20261027]: NEXT=R starts the first
+    /// accepted prefix at R; only a terminal in R ends its membership there.
     pub(crate) fn unit_continues_reserved(&self) -> bool {
         self.reserved_cursor == ReservedCursor::Pending && !self.table.reserved().word0().rx_done()
     }
@@ -1706,14 +1672,10 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
     /// generation takes nothing. A saturated producer cannot extend this
     /// ownership transfer to a later completion epoch: that needs a later
     /// cursor.
-    pub(crate) fn take_completed_unit_owned<B>(
+    pub(crate) fn take_completed_unit_owned(
         mut self,
         cursor: RxFrozenCursor,
-        reserved: &B,
-    ) -> Result<Option<RxCompletedUnit>, RxRingError>
-    where
-        B: RxReservedBuffer<'id>,
-    {
+    ) -> Result<Option<RxCompletedUnit>, RxRingError> {
         let Some(descriptor_limit) = self.ring.frozen_cursor_descriptor_limit(cursor) else {
             return Ok(None);
         };
@@ -1721,7 +1683,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
             return Ok(None);
         };
         if !self.ring.reserved_left() {
-            unit.continues_reserved_landing = self.leave_reserved(reserved)?;
+            unit.continues_reserved_landing = self.leave_reserved()?;
         }
         Ok(Some(unit))
     }
@@ -1822,10 +1784,9 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
     /// showed that executing the complete poll/copy path from PSRAM capped
     /// useful UDP RX near 65 Mbit/s.
     #[inline(never)]
-    pub(crate) fn take_completed_owned<B: RxReservedBuffer<'id>>(
+    pub(crate) fn take_completed_owned(
         mut self,
         index: usize,
-        reserved: &B,
     ) -> Option<RxCompletedDescriptor> {
         if index >= COUNT {
             return None;
@@ -1840,7 +1801,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         }
         self.ring.validate_descriptor_image(RingIndex::checked(index)?).ok()?;
         let descriptor_address = descriptor_address(self.ring.descriptor_table.base(), index).ok()?;
-        if !self.ring.reserved_left() && self.leave_reserved(reserved).is_err() {
+        if !self.ring.reserved_left() && self.leave_reserved().is_err() {
             self.ring.require_reset();
             return None;
         }
@@ -2106,7 +2067,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         if requested_group_size - 1 > accepted_distance {
             // A completed-looking descriptor beyond the accepted hardware
             // tail is not part of the live list. Reject the complete
-            // transaction before modifying buffer guards or descriptor words.
+            // transaction before modifying buffer ownership or descriptor words.
             self.ring.require_reset();
             return Err(RxRingError::Corrupt);
         }
@@ -2156,7 +2117,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
                 return Err(RxRingError::Corrupt);
             }
             // Validate every value needed by the later publication before a
-            // buffer guard is modified. Hardware is already excluded from
+            // buffer return state is modified. Hardware is already excluded from
             // the observed group, so these images remain stable until rearm.
             rx_rearm_word(word0).ok_or(RxRingError::Size)?;
             if step + 1 < group_size {
@@ -2193,7 +2154,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
             let index = self.ring.recycle_start.advance(step);
             if let Err(error) = prepare_buffer(RecycleGrant::new(index.get())) {
                 // The completed-unit token has already been consumed and an
-                // earlier callback may have changed buffer-side guards. That
+                // earlier callback may have changed buffer return states. That
                 // partial transaction cannot be reconstructed from the next
                 // service pass, so fail closed instead of leaving a silent
                 // observed-mask dead-end.
@@ -2866,22 +2827,6 @@ fn relink_rotated_ring<const COUNT: usize>(
             .ok_or(RxRingError::Address)?;
         descriptors[index.get()].publish_owned(word0, buffer, next);
     }
-    Ok(())
-}
-
-/// Restores the leading guard word used to observe RX buffer writes.
-///
-/// SOURCE\[ROM_REV0_WDEV_APPEND_RX_BLOCKS] for the leading sentinel value.
-///
-/// `capacity` is the byte count published in the DMA descriptor and includes
-/// the four-byte leading guard. `buffer` must contain at least that many
-/// bytes; all bytes after the leading guard are preserved.
-pub fn prepare_recycled_buffer(buffer: &mut [u8], capacity: usize) -> Result<(), RxRingError> {
-    if capacity < core::mem::size_of::<u32>() || capacity > buffer.len() {
-        return Err(RxRingError::Size);
-    }
-    let sentinel = RX_BUFFER_SENTINEL.to_le_bytes();
-    buffer[..sentinel.len()].copy_from_slice(&sentinel);
     Ok(())
 }
 

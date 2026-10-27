@@ -128,15 +128,14 @@ impl RxDma for MockRxDma {
 }
 
 #[test]
-fn arena_initializes_in_its_final_location_and_recycles_one_buffer() {
+fn arena_initializes_zeroed_bytes_in_its_final_location() {
     let mut storage = RxDmaStorage::<2, 16, 16, HostDma>::new();
 
     assert_eq!(storage.descriptors().len(), 2);
     assert_eq!(storage.buffers().len(), 2);
     assert_eq!(storage.buffers().as_ptr().addr() & 3, 0);
 
-    storage.prepare_unpublished_buffer(0).unwrap();
-    assert!(!storage.buffers()[0].leading_guard_overwritten());
+    assert_eq!(storage.buffer_mut(0).unwrap(), &[0; 16]);
 }
 
 #[test]
@@ -908,6 +907,7 @@ fn ring_after_exhausted_reload_rering() -> (
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = crate::ieee80211::dma::rx_dma::model::RxWalkerModel::new();
+    mmio.next_descriptor_low = base & ADDRESS_LOW_MASK;
     let prepared = placed
         .prepare_ring(&mut mmio)
         .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
@@ -973,7 +973,7 @@ fn exhausted_reload_records_the_rering_facts() {
             last_next_low: base & ADDRESS_LOW_MASK,
             last_last_low: None,
             base_writes: 1,
-            reserved_landings: 1,
+            reserved_landings: 0,
             reserved_late_landings: 0,
             walker_on_detached: 0,
         }
@@ -1036,7 +1036,7 @@ fn exhausted_list_uses_descriptor_lengths_despite_dirty_prefix_bytes() {
     assert_eq!(live.reload_evidence().reload_rerings, 0);
 
     // The accepted interval is 1..=3. Rejected traffic dirtied one, while
-    // two still begins with the sentinel (which can also be received data).
+    // two still contains zeroed bytes.
     // Neither leading word changes descriptor membership or segment lengths.
     storage
         .dma_write(
@@ -1923,7 +1923,6 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
             "descriptor {index} is rearmed"
         );
     }
-    assert!(!storage.buffers()[0].leading_guard_overwritten());
     assert!(live.topology_snapshot().valid);
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
     assert!(live.try_stop(&mut mmio).is_ok());
@@ -2226,107 +2225,128 @@ fn base_names_only_the_reserved_descriptor_once_per_epoch_across_full_ring_relea
 }
 
 #[test]
-fn dirty_r_after_its_terminal_does_not_make_the_ring_frame_a_continuation() {
-    let mut ring = Walked::<4>::start();
-    assert!(ring.land(4, true));
-    ring.storage
-        .observe_reserved(&mut ring.live, &mut ring.walker)
+fn retained_ring_next_ignores_stale_bytes_in_r() {
+    let mut storage = Box::new(RxDmaStorage::<4, 16, 16, HostDma>::new());
+    // Old bytes are present before placement and preparation. The retained
+    // hardware NEXT already names the ring, so R is outside this epoch's unit.
+    storage.reserved_buffer.cpu_owned_mut().fill(0x31);
+    let placed = place(Box::leak(storage));
+    let storage = placed.storage();
+    let base = placed.descriptor_base();
+    let mut walker = crate::ieee80211::dma::rx_dma::model::RxWalkerModel::new();
+    walker.next_descriptor_low = base & ADDRESS_LOW_MASK;
+    let mut live = placed
+        .prepare_ring(&mut walker)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut walker))
+        .unwrap()
+        .try_start(&mut walker)
+        .map_err(|(_, error)| error)
         .unwrap();
-    // R's terminal already advanced the accepted-unit cursor into the ring.
-    // A dirty leading word cannot put R back into that interval.
-    ring.storage
-        .dma_write(
-            &ring.live,
-            ring.storage.reserved_descriptor().buffer_address(),
-            &[0x31; 4],
-        )
-        .unwrap();
-    assert!(ring.land(8, true));
-    let cursor = ring.live.freeze_cursor(&mut ring.walker).unwrap();
-    let unit = ring
-        .storage
-        .take_completed_unit(&mut ring.live, cursor)
+    let table = storage.walker_table().unwrap();
+    assert!(matches!(
+        walker.land(table, 8, true),
+        crate::ieee80211::dma::rx_dma::model::RxWalkerLanding::Landed(_)
+    ));
+    let cursor = live.freeze_cursor(&mut walker).unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, cursor)
         .unwrap()
         .unwrap();
     assert_eq!(unit.descriptor_count(), 1);
     assert_eq!(unit.total_length(), 8);
     assert!(!unit.metadata().continues_reserved_landing());
     unit.retain_for_deferred_recycle();
-    ring.storage
-        .observe_reserved(&mut ring.live, &mut ring.walker)
+    storage.observe_reserved(&mut live, &mut walker).unwrap();
+    assert_eq!(live.reload_evidence().reserved_landings, 0);
+    let mut bytes = [0; 16];
+    storage
+        .dma_read(
+            &live,
+            storage.reserved_descriptor().buffer_address(),
+            &mut bytes,
+        )
         .unwrap();
-    assert_eq!(ring.live.reload_evidence().reserved_landings, 1);
-    assert_eq!(ring.storage.lifecycle_state(), RxDmaArenaState::Live);
-    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+    assert_eq!(
+        bytes, [0x31; 16],
+        "R's old bytes survive preparation and departure"
+    );
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(live.try_stop(&mut walker).is_ok());
 }
 
 #[test]
-fn dirty_prefix_inside_last_is_one_descriptor_interval_through_the_first_terminal() {
-    let mut ring = Walked::<8>::start();
-    assert!(ring.land(4, true));
-    ring.storage
-        .observe_reserved(&mut ring.live, &mut ring.walker)
-        .unwrap();
-    // Abandoned data changes buffers 0 and 1 before acceptance. A received
-    // leading word equal to the sentinel must not split the accepted prefix.
-    for index in 0..2 {
+fn descriptor_interval_is_independent_of_dirty_buffer_contents() {
+    // Include both the former marker and many other leading words. No land()
+    // helper writes bytes after these patterns have been supplied.
+    for leading in [0_u32, 0xdead_beef, 0xffff_ffff, 0xa5a5_a5a5, 0x1234_5678] {
+        let mut ring = Walked::<8>::start();
+        assert!(ring.land(4, true));
         ring.storage
-            .dma_write(
-                &ring.live,
-                ring.storage.descriptors()[index].buffer_address(),
-                &[0x32; 16],
-            )
+            .observe_reserved(&mut ring.live, &mut ring.walker)
             .unwrap();
+        let mut contents = [leading as u8; 16];
+        contents[..4].copy_from_slice(&leading.to_le_bytes());
+        for index in 0..2 {
+            ring.storage
+                .dma_write(
+                    &ring.live,
+                    ring.storage.descriptors()[index].buffer_address(),
+                    &contents,
+                )
+                .unwrap();
+        }
+        // Only descriptors establish completion. Under the exact-prefix
+        // hardware assumption, 0..=2 is this accepted unit, whatever bytes its
+        // nonterminals contain; a later terminal inside LAST is a separate unit.
+        for (index, length, terminal) in
+            [(0, 16, false), (1, 16, false), (2, 8, true), (3, 4, true)]
+        {
+            ring.storage.descriptors()[index].write_word0(
+                crate::ieee80211::dma::descriptor::rx_landed_word(16, length, terminal),
+            );
+        }
+        ring.walker.set_cursor(ring.base, 3, Some(4));
+        let cursor = ring.live.freeze_cursor(&mut ring.walker).unwrap();
+        let frontier = ring
+            .storage
+            .first_completed_unit_frontier_through_cursor(&ring.live, cursor)
+            .unwrap();
+        assert_eq!((frontier.unit_count, frontier.descriptor_count), (1, 3));
+        let unit = ring
+            .storage
+            .take_completed_unit(&mut ring.live, cursor)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (
+                unit.head_index(),
+                unit.descriptor_count(),
+                unit.total_length()
+            ),
+            (0, 3, 40)
+        );
+        assert_eq!(unit.metadata().descriptor_address(), ring.base);
+        for step in 0..2 {
+            assert_eq!(unit.segment(step), Some(&contents[..]));
+        }
+        assert_eq!(unit.segment(2).unwrap().len(), 8);
+        unit.retain_for_deferred_recycle();
+        let unit = ring
+            .storage
+            .take_completed_unit(&mut ring.live, cursor)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (
+                unit.head_index(),
+                unit.descriptor_count(),
+                unit.total_length()
+            ),
+            (3, 1, 4)
+        );
+        unit.retain_for_deferred_recycle();
+        assert!(ring.live.try_stop(&mut ring.walker).is_ok());
     }
-    assert!(ring.land(16, false));
-    ring.storage
-        .dma_write(
-            &ring.live,
-            ring.storage.descriptors()[0].buffer_address(),
-            &RX_BUFFER_SENTINEL.to_le_bytes(),
-        )
-        .unwrap();
-    assert!(ring.land(16, false));
-    assert!(ring.land(8, true));
-    // A later terminal inside the same LAST must stay a separate unit.
-    assert!(ring.land(4, true));
-    let cursor = ring.live.freeze_cursor(&mut ring.walker).unwrap();
-    let frontier = ring
-        .storage
-        .first_completed_unit_frontier_through_cursor(&ring.live, cursor)
-        .unwrap();
-    assert_eq!((frontier.unit_count, frontier.descriptor_count), (1, 3));
-    let unit = ring
-        .storage
-        .take_completed_unit(&mut ring.live, cursor)
-        .unwrap()
-        .unwrap();
-    assert_eq!(unit.head_index(), 0);
-    assert_eq!(unit.descriptor_count(), 3);
-    assert_eq!(unit.total_length(), 40);
-    assert_eq!(unit.metadata().descriptor_address(), ring.base);
-    assert_eq!(
-        (0..3)
-            .map(|step| unit.segment(step).unwrap().len())
-            .collect::<std::vec::Vec<_>>(),
-        [16, 16, 8]
-    );
-    unit.retain_for_deferred_recycle();
-    let unit = ring
-        .storage
-        .take_completed_unit(&mut ring.live, cursor)
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        (
-            unit.head_index(),
-            unit.descriptor_count(),
-            unit.total_length()
-        ),
-        (3, 1, 4)
-    );
-    unit.retain_for_deferred_recycle();
-    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
 }
 
 #[test]
@@ -2399,7 +2419,6 @@ fn a_cold_landing_is_dropped_and_r_next_clears_only_at_the_first_ring_take() {
         .unwrap();
     assert_eq!(ring.live.reload_evidence().reserved_landings, 1);
     assert_eq!(reserved.word0(), armed);
-    assert!(!ring.storage.reserved_buffer.leading_guard_overwritten());
     assert_eq!(
         reserved.next_address(),
         ring.base,
@@ -2466,7 +2485,6 @@ fn a_frame_continuing_from_r_into_the_head_is_taken_as_its_tail() {
     assert!(unit.metadata().continues_reserved_landing());
     unit.retain_for_deferred_recycle();
     assert_eq!(ring.live.reload_evidence().reserved_landings, 1);
-    assert!(!ring.storage.reserved_buffer.leading_guard_overwritten());
     assert_eq!(ring.storage.reserved_descriptor().next_address(), 0);
     ring.storage
         .observe_reserved(&mut ring.live, &mut ring.walker)
@@ -2478,7 +2496,7 @@ fn a_frame_continuing_from_r_into_the_head_is_taken_as_its_tail() {
 #[test]
 fn a_late_landing_in_r_is_counted_and_fails_closed() {
     const COUNT: usize = 4;
-    for late in 0..3 {
+    for late in 0..2 {
         let mut ring = Walked::<COUNT>::start();
         assert!(ring.land(4, true));
         assert!(ring.land(4, true));
@@ -2492,10 +2510,6 @@ fn a_late_landing_in_r_is_counted_and_fails_closed() {
         let reserved = ring.storage.reserved_descriptor();
         match late {
             0 => reserved.write_word0(reserved.word0().with_rx_done(true)),
-            1 => ring
-                .storage
-                .dma_write(&ring.live, reserved.buffer_address(), &[0xa5; 4])
-                .unwrap(),
             _ => ring.walker.last_descriptor_low = ring.reserved_address() & ADDRESS_LOW_MASK,
         }
         assert_eq!(
@@ -3024,7 +3038,6 @@ fn stopped_ring_grants_restore_returned_buffers_before_a_new_recycle_epoch() {
         .unwrap();
     drop(unit.detach_single(&mut ring.walker).unwrap());
     assert_eq!(ring.storage.released_buffer_count(), 1);
-    assert!(ring.storage.buffers()[0].leading_guard_overwritten());
 
     let halted = ring
         .live
@@ -3037,10 +3050,12 @@ fn stopped_ring_grants_restore_returned_buffers_before_a_new_recycle_epoch() {
         .map_err(|(_, error)| error)
         .unwrap();
     assert_eq!(ring.storage.released_buffer_count(), 0);
-    assert!(ring.storage.buffers().iter().all(|buffer| {
-        buffer.state() == ExternalRxReturnState::Attached && !buffer.leading_guard_overwritten()
-    }));
-    assert!(!ring.storage.reserved_buffer.leading_guard_overwritten());
+    assert!(
+        ring.storage
+            .buffers()
+            .iter()
+            .all(|buffer| { buffer.state() == ExternalRxReturnState::Attached })
+    );
     assert!(stopped.topology_snapshot().valid);
     let mut live = stopped
         .try_start(&mut ring.walker)

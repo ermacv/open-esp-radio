@@ -3,7 +3,7 @@ use crate::ieee80211::dma::rx_ring::{ReadOnly, Rearm, ScopedBuffers};
 use core::{cell::UnsafeCell, marker::PhantomData, ptr::NonNull};
 use oer_memory::{ExternalRxBuffer, ExternalRxReturn, ExternalRxReturnState};
 
-/// One aligned DMA-visible buffer with a leading recycle guard inside its capacity.
+/// One aligned DMA-visible buffer and its affine return state.
 #[repr(C, align(4))]
 #[derive(bytemuck::Zeroable)]
 pub struct RxDmaBuffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
@@ -15,8 +15,8 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     pub(super) const fn check_geometry() {
         const {
             assert!(
-                BUFFER_SIZE >= core::mem::size_of::<u32>() && STORAGE_SIZE >= BUFFER_SIZE,
-                "RX DMA capacity includes its leading guard and fits its backing"
+                BUFFER_SIZE != 0 && STORAGE_SIZE >= BUFFER_SIZE,
+                "RX DMA capacity is nonzero and fits its backing"
             );
         }
     }
@@ -36,11 +36,6 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
             .expect("the selected RX DMA prefix has the exact declared size")
     }
 
-    pub(super) fn cpu_owned_storage_mut(&mut self) -> &mut [u8; STORAGE_SIZE] {
-        Self::check_geometry();
-        self.0.get_mut()
-    }
-
     /// Borrow bytes while the retained completion excludes descriptor recycle.
     #[allow(unsafe_code, reason = "completed grant proves CPU read ownership")]
     fn completed(&self) -> &[u8; BUFFER_SIZE] {
@@ -50,7 +45,6 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
         unsafe { &*self.0.get().cast::<[u8; BUFFER_SIZE]>() }
     }
 
-    #[allow(unsafe_code, reason = "ring grant owns the DMA buffer transition")]
     fn prepare_for_recycle(&self) -> Result<(), RxRingError> {
         match self.1.state() {
             ExternalRxReturnState::Attached => {}
@@ -58,10 +52,7 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
                 return Err(RxRingError::BufferOwnershipConflict);
             }
         }
-        // SAFETY: the scoped storage operation selected this grant's allocation.
-        // Its callback-scoped grant excludes DMA and other CPU access until the
-        // guard writes end; the state check excludes a detached upper owner.
-        unsafe { prepare_recycled_buffer(&mut *self.0.get(), BUFFER_SIZE) }
+        Ok(())
     }
 
     /// Normalize an observed buffer before a role-neutral frontier republishes
@@ -110,21 +101,6 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
             .reattach()
             .map_err(|_| RxRingError::BufferOwnershipConflict)?;
         self.prepare_for_recycle()
-    }
-
-    /// Whether DMA has overwritten the leading recycle guard.
-    ///
-    /// This is observation only: it never transfers buffer ownership. It is
-    /// used only to detect a late write into the retired reserved buffer.
-    /// It establishes neither accepted-frame membership nor a segment length.
-    #[allow(
-        unsafe_code,
-        reason = "volatile read observes the asynchronous DMA writer"
-    )]
-    pub(crate) fn leading_guard_overwritten(&self) -> bool {
-        // SAFETY: volatile access models the asynchronous DMA writer. The
-        // result only diagnoses a late write; it grants no byte access.
-        unsafe { self.0.get().cast::<u32>().read_volatile() != RX_BUFFER_SENTINEL }
     }
 }
 
@@ -322,17 +298,6 @@ impl<'id, 's, const B: usize, const S: usize> ScopedBuffers<'id, &'s RxDmaBuffer
         self.source().completed()
     }
 }
-impl<'id, const N: usize, const B: usize, const S: usize, D: DmaSpace>
-    super::super::rx_ring::RxReservedBuffer<'id> for ScopedBuffers<'id, &RxDmaStorage<N, B, S, D>>
-{
-    fn guard_overwritten(&self) -> bool {
-        self.source().reserved_buffer.leading_guard_overwritten()
-    }
-    fn restore_guard(&self, grant: RecycleGrant<'id, '_, Rearm, true>) -> Result<(), RxRingError> {
-        self.prepare_for_recycle(grant)
-    }
-}
-
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
     RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {

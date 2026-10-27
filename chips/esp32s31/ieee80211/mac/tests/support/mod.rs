@@ -250,18 +250,12 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
             .unwrap();
     }
 
-    /// The leading recycle guard of descriptor `index`'s buffer, as the
-    /// DMA engine sees it.
-    pub(super) fn dma_guard(&self, live: &RxRingLive<'_, COUNT>, index: usize) -> [u8; 4] {
+    /// The leading bytes of descriptor `index`'s buffer, as DMA sees them.
+    pub(super) fn leading_bytes(&self, live: &RxRingLive<'_, COUNT>, index: usize) -> [u8; 4] {
         let mut leading = [0; 4];
         let address = self.buffers[index];
         self.storage.dma_read(live, address, &mut leading).unwrap();
         leading
-    }
-
-    /// Whether descriptor `index`'s buffer carries its leading recycle guard.
-    pub(super) fn guard_restored(&self, live: &RxRingLive<'_, COUNT>, index: usize) -> bool {
-        self.dma_guard(live, index) == RX_BUFFER_SENTINEL.to_le_bytes()
     }
 }
 
