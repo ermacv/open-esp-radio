@@ -967,13 +967,31 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             self.begin(entity, &read.sources)?;
             let target = Target::Word(self.element(entity, &read.register)?);
             self.reads_freely(entity, target)?;
-            if self.word(entity, target)?.register.width != 32 {
+            let word = self.word(entity, target)?;
+            if word.register.width != 32 {
                 return Err(self.error(
                     entity,
                     ErrorKind::Transaction(
                         "a register image read names one 32-bit word".to_owned(),
                     ),
                 ));
+            }
+            for field in word.fields() {
+                self.class(
+                    entity,
+                    field,
+                    matches!(
+                        field.class,
+                        FieldClass::Plain
+                            | FieldClass::ReadOnly
+                            | FieldClass::ReadObserved
+                            | FieldClass::SetOnly
+                            | FieldClass::SelfClearing
+                            | FieldClass::HardwareWritten
+                            | FieldClass::DebugOnly
+                    ),
+                    "a register image read",
+                )?;
             }
             let owner = self.owner(entity, target, None)?;
             self.take(entity, &[owner], false)?;

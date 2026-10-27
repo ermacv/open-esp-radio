@@ -729,8 +729,8 @@ it alone. Transactions name `INSTANCE.REGISTER` and
 `INSTANCE.REGISTER.FIELD` of the root, a template key for every element
 (`MODEM_ETM.CH%s_EVENT.ID`), and take no `peripheral` or `exposure`. The
 kinds are `interrupt-snapshots` (`status`, optional `events`), `field-reads`,
-`full-register-reads`, `register-image-reads`, `partition-image-reads`, `full-register-writes`,
-`pointer-fields`, `zero-based-field-writes` (`fields`),
+`full-register-reads`, `register-image-reads`, `partition-image-reads`,
+`full-register-writes`, `pointer-fields`, `zero-based-field-writes` (`fields`),
 `sampled-bit-zero-writes`, `zero-register-writes`,
 `fixed-register-images`, `fixed-register-sequences` (each step one
 element), `masked-register-modifies`, `field-or-modifies`,
@@ -762,9 +762,15 @@ does not grant arbitrary writes to hardware-updated fields.
 `register-image-reads` names one 32-bit `register` element, a transaction
 `name` and `sources`. It renders an infallible `&self -> u32` read on that
 word's existing owner, including a read-only owner. The word must read
-without a side effect. The returned image includes undeclared and reserved
-bits regardless of the field split; it grants no write or acknowledgement.
-It adds no access to other words or owners. For example:
+without a side effect, and every declared field must have a defined
+observational class: `plain`, `read-only`, `read-observed`, `set-only`,
+`self-clearing`, `hardware-written` or `debug-only`. A `write-only`,
+`write-trigger`, `write-one-to-clear`, `read-clears` or `unknown` field
+rejects the whole word, including when other fields are readable. FIFO and
+other read side effects also reject it. Undeclared and reserved bits remain
+in the returned image, without assigning them a meaning; an explicitly
+`unknown` field does not grant observation. The read grants no write,
+acknowledgement or access to other words or owners. For example:
 
 ```toml
 [[register-image-reads]]
