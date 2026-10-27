@@ -29,7 +29,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     if let Some(record) = previous {
         let _ = diagnostics::emit_previous_panic(
             |bytes| {
-                if usb_serial_jtag::early_text(bytes) { Ok(()) } else { Err(()) }
+                if usb_serial_jtag::early_text(bytes) {
+                    Ok(())
+                } else {
+                    Err(())
+                }
             },
             &record,
         );

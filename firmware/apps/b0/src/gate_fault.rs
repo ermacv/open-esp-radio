@@ -283,7 +283,7 @@ pub(crate) fn report_previous() {
     struct Early;
     impl Write for Early {
         fn write_str(&mut self, text: &str) -> fmt::Result {
-            crate::usb::early_text(text.as_bytes());
+            let _ = oer_esp32s31_hal::usb_serial_jtag::early_text(text.as_bytes());
             Ok(())
         }
     }

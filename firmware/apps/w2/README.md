@@ -17,6 +17,8 @@ values, the stand SSID and the lab's explicit 10 dBm cap configure only
 this build. `cargo fw build w2` produces an unconfigured image that reports
 `OER-RESULT: fail w2 unconfigured`. eFuse is read only, including the
 station address; identities in console reports are masked.
+The build selects a separate unconfigured entry with no tasks or interrupt
+bindings. Only the configured composition declares executor task poll records.
 
 `cargo fw build w2 --analysis` builds the configured scanner for analysis
 with a fixed fictitious identity: channel 1, locally administered BSSID

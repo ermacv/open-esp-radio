@@ -14,6 +14,7 @@ const COUNTRY: &str = "OER_W2_COUNTRY";
 const CAP: &str = "OER_W2_POWER_CAP_DBM";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rustc-check-cfg=cfg(oer_w2_configured)");
     if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
         oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w2")?;
     }
@@ -40,6 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_else(|| panic!("{COUNTRY} is no two uppercase letters"));
             let cap = cap.parse::<i8>().expect("W2 cap is an integer dBm");
             assert_eq!(cap, 10, "W2 uses the explicit 10 dBm lab profile");
+            println!("cargo:rustc-cfg=oer_w2_configured");
             format!(
                 "Some(crate::W2Config {{ channel: {channel}, stand: [{}], ssid: &[{}], country: *b\"{}\", cap_dbm: {cap} }})",
                 octets(&stand),

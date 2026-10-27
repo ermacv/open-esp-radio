@@ -1,5 +1,6 @@
 use std::{env, fs, path::PathBuf};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rustc-check-cfg=cfg(oer_b0_configured)");
     if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
         oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-b0")?;
     }
@@ -17,6 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "B0 country is two uppercase letters"
             );
             let cap = cap.parse::<i8>().expect("B0 cap is integer dBm");
+            println!("cargo:rustc-cfg=oer_b0_configured");
             format!("Some(crate::Profile {{country:*b\"{country}\",cap_dbm:{cap}}})")
         }
         _ => panic!("B0 country and power cap are supplied together"),
