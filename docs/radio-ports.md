@@ -17,11 +17,13 @@ selection, reordering, sequence numbers, scanning, beacons, power-save policy)
 lies above it, in portable code. A backend that also performs work above the
 port reports it in its capabilities, and the portable owner delegates instead
 of doing it. For IEEE 802.11 one publication is one hardware transmission
-attempt and the caller chooses the retry plan; the contention draw and the
-numbering of protected MPDUs are the two exceptions the backend always does
-below the port. For IEEE 802.15.4 the acknowledgement (frame pending and the
-enhanced ACK's contents), CSMA-CA and the cipher run below the port from
-tables and parameters the core sets through it; frame retries stay above.
+attempt and the caller chooses the retry plan; the backend always draws
+contention below the port. The core allocates protected MPDU packet numbers
+before handoff; the backend formats the supplied PN with the installed key ID
+in the CCMP header, which retries retain. For IEEE 802.15.4 the acknowledgement
+(frame pending and the enhanced ACK's contents), CSMA-CA and the cipher run
+below the port from tables and parameters the core sets through it; frame
+retries stay above.
 For Bluetooth LE the backend reports its event timing allowances, and the
 link layer above the port decides how long each event may last.
 
