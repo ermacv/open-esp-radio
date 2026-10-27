@@ -1034,6 +1034,9 @@ that CONTROL25 observation. Completion requires the same positive advance.
 
 ## Local TBTT and interrupt observers
 
+Archived HW30 captures use selectors240–253 with their matching archived ELFs.
+The current registry uses selectors260–273.
+
 Selections 260–273 are explicit short PAC-only leaves with RF/DMA closed,
 CPU admission masked and hart1 contained. Each new leaf first validates both
 CLIC positive-edge observers with FROM_CPU2 while IE remains zero. Radio
