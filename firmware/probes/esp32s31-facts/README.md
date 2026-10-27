@@ -763,6 +763,44 @@ transferred to the corrected prefix or production. No statistical series or
 full calibration is added to resolve that limitation.
 
 
+## LP conditional acknowledgement and rearm
+
+Selections180–182 are finite source127 experiments with CPU interrupts masked,
+XTAL/divider1, CONTROL0=1 and CONTROL4=0. They use the session's existing PAC
+owners, no RF, scheduler RUN or DMA. Selections183–189 are unassigned.
+
+| Selection | Operation |
+| --- | --- |
+| 180 | Once each: sample0/arrival/skip-store; sample1/arrival/zero-store; sample1/zero-store/arrival. A software cause seeds the old1; the independently cleared CONTROL2 latch witnesses the new hardware compare. |
+| 181 | Exactly two natural wraps without intermediate ack; retained first-wrap nonzero sample conditionally authorizes zero after the second crossing. Each wait stops at40M cycles. |
+| 182 | Positive software cause/conditional ack, then targets at origin+2048, origin+64 and origin−64; each observation stops at200k cycles. A final future target tests recovery after the past target. |
+
+State tags encode `(counter, cause, matrix_bank3)` and tag+1 encodes
+`(byte24, byte2c, CONTROL2)`. Compare bases are0x18000/18100/18200:
+offset0 is initial state; +2 is `(target, counter_before_enable,
+counter_after_enable)`; +3 is `(saved_byte, counter_before_sample,
+latch_after_sample)`; +4 is `(arrival_before_ack, counter_before_ack,
+counter_after_ack)`; +5 is `(ack_bracket_cycles, store_taken, target)`;
++6 is eventual-latch success. State offsets10/20 are after ack and after
+4096 additional cycles. No output records occur between the saved byte read
+and conditional ack; the deliberate latch poll separates those phases.
+
+Wrap states0x18300/18310 precede ack after crossings1/2; 18320/18330 follow
+ack immediately/after4096 cycles. Tags18340/18341 are `(saved_byte, wrapped,
+wait_cycles)`; 18350/18351 are `(last_counter_before_wrap, first_counter_after,
+counter_after_ack)`. Rearm bases18400/18500/18600 use state offsets0/10;
++2 is the enable bracket above; +3 is `(saved_byte, origin, modular_offset)`;
++4 is `(progressed4096, current_counter, poll_cycles)`. Final recovery uses
+18700/18710 and18702; 18703 is `(latch_success, counter, 0)`.
+Common180f0 records `(CPU_root, integer_divider, fractional_numerator)`;
+180f1 records `(CPLL_feedback_divider, reference_divider, counter_max)`.
+
+Completion is not success: require sample-before-target/latch0, a positive
+subsequent latch/crossing, and the recorded byte/cause/output transitions.
+These phased orderings do not establish simultaneous set/clear priority,
+arbitrary wrap capacity, product IRQ latency or a production service bound.
+Silicon evidence: `oer-notes/research/hw-lp127-ack-race.md`.
+
 ## Awake BLE LP wake-route observations
 
 Selections 170/171/172 use one near compare / sleep16 / sleep17 target crossing
