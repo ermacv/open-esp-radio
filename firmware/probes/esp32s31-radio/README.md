@@ -55,7 +55,7 @@ selections and estimator window 1000 are decimal.
 | `152a/152c/152e` | after bit18 clear/set, after final read0, after restoration |
 | each frequency tag +1 | `(bit18,FREQUENCY_READY,mcycle)`; these are later reads, not an atomic snapshot |
 | `1624/1626/1628/162c` | `(requested address,returned result,mcycle)` |
-| `1530` | first low entry decoded as `(analog block,register,data)`; it must identify the production BBTOP03 command before high-address/reset tests continue |
+| `1530` | `(first low result,initializer's block-byte reference,match)`; the observed mode0 reference is `67`, rather than the full three-byte command |
 
 P-EST reopens the internal tone, RX/TX clocks and ten forced PBus paths of
 `phy/src/analog/crystal_duty.rs::XtalDutyPrepareTransition`, using the default
@@ -73,8 +73,9 @@ opaque pair's value. No per-chain saturation identity is asserted.
 
 P-FREQ captures quiet control/read-mode state, holds hardware updates, reads
 addresses 0/400/0 in mode0, issues the separate two-fresh-RMW bit18 clear/set,
-then reads0 again. The first result must decode as the BBTOP03 command actually
-published by cold production initialization; equal uninitialized values are
+then reads0 again. The first result must match the initialized BBTOP command's
+low-byte reference observed in `hw19-20261027-est-freq-01`; no universal read-mode
+or memory-bank geometry is inferred from that reference. Equal uninitialized values are
 not a positive control. Restoration changes only the saved selection and
 ownership lanes, preserving unrelated fields; it emits no write or
 channel-switch pulse. Only the sourced READY field is observed: no guessed
@@ -88,7 +89,7 @@ further PBus publications and requires the disposable session's host reset.
 Return codes: 1 unknown selection, 2/3 calibration-clock acquire/release,
 4 absent session, 5 unavailable short settle, 6 PBus timeout, 7 already enabled
 estimator, 8/9 RX-DCO save/restore refusal, 10 unavailable diagnostic word,
-11 active frequency pulse, 12 low-entry identity mismatch. Calibration failure
+11 active frequency pulse, 12 low-entry reference mismatch, 14 restoration mismatch. Calibration failure
 uses reason6 in its selection150 record and halts; it does not install an epoch.
 Code13 refuses a comparison session that has not completed full calibration,
 before any sheet MMIO.

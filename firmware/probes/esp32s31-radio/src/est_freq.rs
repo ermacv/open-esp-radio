@@ -254,18 +254,15 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
             emit(tag + 0x100, u32::from(address), value, oer_riscv::cycle32());
             observation(phy, tag)?;
             if tag == 0x1524 {
-                use oer_esp32s31_hal::{
-                    layouts::PhyFrequencyI2cCommandCommand, phy::i2c::analog_i2c,
-                };
-                let command = PhyFrequencyI2cCommandCommand::from_bits(value);
+                use oer_esp32s31_hal::phy::i2c::analog_i2c;
                 let expected = analog_i2c::bbtop::shared_rx_gain_calibration_enable::ADDRESS;
-                emit(
-                    0x1530,
-                    u32::from(command.block()),
-                    u32::from(command.register()),
-                    u32::from(command.data()),
-                );
-                if command.block() != expected.block() || command.register() != expected.index() {
+                // SOURCE: hw19-20261027-est-freq-01, freq/freq-repeat, tag1624;
+                // oer-notes/research/hw-est-freq.md. Mode0 returned 0x67 from
+                // the initialized low entry, not the complete 24-bit command.
+                // This positive reference does not assign a general memory-bank geometry.
+                let reference = u32::from(expected.block());
+                emit(0x1530, value, reference, u32::from(value == reference));
+                if value != reference {
                     return Err(12);
                 }
             }
