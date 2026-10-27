@@ -198,7 +198,12 @@ its loads, and a flag it holds decides a branch. A lost or stale
 `mepc`/`mcause`/`tcontrol`, a wrong `sp`, an early or repeated `MIE`, a
 deeper exit, the FPU left on or touched, another CSR written or a register
 not restored fails the check (`trap_exit_tests.rs` checks the staged
-runtime's own `vectors.s`).
+runtime's own `vectors.s`). The compiler fixture reuses the runtime's
+`global_asm!` invocation, `TrapFrame` declaration, architectural definitions
+and generated Rust vector tables and markers. Its operands therefore come
+from the same `size_of`, `offset_of` and constants as the runtime. Mutations
+name the assembly's operands and must match before compilation; the entry
+and exit checks reject the resulting machine code.
 
 Facts outside the machine code close indirect sites through
 `Analysis::bound_with` and its `Resolutions`, which apply only where the
