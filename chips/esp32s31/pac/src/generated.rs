@@ -127147,7 +127147,7 @@ pub mod modem_lpcon {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `MODEM_INTR_VECTOR` field.
+            /// With inherited wake enables 0x3fff, the tested near LP compare yields 0x80 together with cause 0x40000/source 127; all-ones +0x34 returns these observations to zero. In the tested XTAL/divider-1 setup with +0x10 bits 1/18 issued, isolated sleep16/17 flags leave this vector zero. This does not qualify PMU wake: WAKEUP_ENA and all sampled PMU causes remain zero while awake. SOURCE: HW21_S31_LP_AWAKE_ROUTE_20261027.
             #[inline]
             pub const fn modem_intr_vector(self) -> oer_mmio::Bits<14> {
                 oer_mmio::Bits::truncate(self.0)
@@ -128533,7 +128533,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027.
             #[inline]
             pub const fn control_4(self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -128568,7 +128568,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027.
             #[inline]
             pub const fn control_4(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -152103,7 +152103,7 @@ pub mod pmu {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// need_des
+            /// Wakeup-cause observation. The short awake compare/sleep16/sleep17 observations read zero with WAKEUP_ENA=0 and all modeled HP/LP RAW/ST/ENA fields zero, despite a positive compare LPCON vector 0x80. No sleep/wake transition or absent-route conclusion follows. SOURCE: HW21_S31_LP_AWAKE_ROUTE_20261027.
             #[inline]
             pub const fn wakeup_cause(self) -> u32 {
                 self.0

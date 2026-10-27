@@ -2884,7 +2884,7 @@ reset = { value = 0x0 }
 name = "WAKEUP_CAUSE"
 bits = "31:0"
 class = "read-only"
-description = "need_des"
+description = "Wakeup-cause observation. The short awake compare/sleep16/sleep17 observations read zero with WAKEUP_ENA=0 and all modeled HP/LP RAW/ST/ENA fields zero, despite a positive compare LPCON vector 0x80. No sleep/wake transition or absent-route conclusion follows. SOURCE: HW21_S31_LP_AWAKE_ROUTE_20261027."
 
 [[registers]]
 name = "SLP_WAKEUP_STATUS1"
@@ -4174,3 +4174,6 @@ name = "CLK_EN"
 bits = "31"
 class = "plain"
 description = "need_des"
+
+[review.entity."SLP_WAKEUP_STATUS0.WAKEUP_CAUSE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "HW21_S31_LP_AWAKE_ROUTE_20261027"]
