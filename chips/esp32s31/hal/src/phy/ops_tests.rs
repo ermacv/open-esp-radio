@@ -50,7 +50,7 @@ fn estimator_indications_keep_the_pair_even_when_ready() {
 }
 
 #[test]
-fn estimator_restoration_returns_saved_fields_and_preserves_other_changes() {
+fn estimator_restoration_returns_saved_fields_and_enable_state() {
     let mut memory = vec![0; instances::fe::SIZE.div_ceil(4)];
     let mut estimator = PhyIqEstimatorOracle::host(&mut memory).expect("host block");
     iq::configure(&mut estimator, 123);

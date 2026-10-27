@@ -194,8 +194,13 @@ pub fn build(
     stand: Option<&Stand>,
     analysis: bool,
     enforced: Enforced,
+    binary: Option<&str>,
 ) -> Result<ImageBundle> {
-    let bundle = oer_image_build::build(&spec(root, image, stand, analysis, enforced)?)?;
+    let mut specification = spec(root, image, stand, analysis, enforced)?;
+    if let Some(binary) = binary {
+        specification.application.binary = binary.to_owned();
+    }
+    let bundle = oer_image_build::build(&specification)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }

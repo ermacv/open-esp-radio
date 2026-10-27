@@ -294,7 +294,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
         Some(image::Stand::W2(config)) => Some(config.clone()),
         _ => None,
     };
-    image::build(root, image, built.as_ref(), false, Enforced::Reported)?;
+    image::build(root, image, built.as_ref(), false, Enforced::Reported, None)?;
     let leased = leased(root, &stand, &board)?;
     write_image(root, image, &board.id, &leased)?;
     let run = root
@@ -498,13 +498,33 @@ pub fn power_cycle(root: &Path, selector: &str) -> Result<()> {
 }
 
 /// `cargo fw build IMAGE [--analysis]`.
-pub fn build(root: &Path, image_name: &str, analysis: bool) -> Result<()> {
+fn build_enforcement(package: &str, diagnostic: bool) -> Result<Enforced> {
+    if diagnostic {
+        if !package.starts_with(oer_image_build::probe::PROBE_PACKAGE_PREFIX) {
+            return Err("--diagnostic is restricted to firmware/probes packages".into());
+        }
+        Ok(Enforced::Reported)
+    } else {
+        Ok(Enforced::Only(
+            [Check::Frames, Check::Interrupts, Check::Panics].into(),
+        ))
+    }
+}
+
+pub fn build(
+    root: &Path,
+    image_name: &str,
+    analysis: bool,
+    binary: Option<&str>,
+    diagnostic: bool,
+) -> Result<()> {
     let bundle = image::build(
         root,
         image_name,
         None,
         analysis,
-        Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into()),
+        build_enforcement(&image::package(root, image_name)?, diagnostic)?,
+        binary,
     )?;
     for segment in bundle.segments() {
         eprintln!(
@@ -538,6 +558,19 @@ pub fn router_ready() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reported_build_checks_require_an_explicit_probe_request() {
+        assert!(matches!(
+            build_enforcement("oer-firmware-apps-w0", false).unwrap(),
+            Enforced::Only(_)
+        ));
+        assert!(build_enforcement("oer-firmware-apps-w0", true).is_err());
+        assert!(matches!(
+            build_enforcement("oer-firmware-probes-esp32s31-radio", true).unwrap(),
+            Enforced::Reported
+        ));
+    }
 
     #[test]
     fn verdicts_are_read_from_the_marker() {

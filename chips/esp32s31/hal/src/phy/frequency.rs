@@ -20,6 +20,26 @@ pub struct ReadConfiguration {
     number: oer_esp32s31_pac::fe::i2c_number_control::R,
 }
 
+/// Read selection and ownership, without assigning the dual-use high bit a role.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReadConfigurationFields {
+    pub address_low: u16,
+    pub high_address_or_reset: bool,
+    pub read_mode: u8,
+    pub hardware_disabled: bool,
+}
+
+impl ReadConfiguration {
+    pub fn fields(&self) -> ReadConfigurationFields {
+        ReadConfigurationFields {
+            address_low: self.control.bits_8_17_opaque().get() as u16,
+            high_address_or_reset: self.control.bit_18_opaque(),
+            read_mode: self.number.memory_read_mode().get() as u8,
+            hardware_disabled: self.control.hardware_frequency_disable(),
+        }
+    }
+}
+
 /// Ordered observations; READY is the only sourced completion indication here.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Observation {

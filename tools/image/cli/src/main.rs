@@ -50,6 +50,12 @@ enum Command {
     /// the stand.
     Build {
         image: String,
+        /// Select another binary of the image package.
+        #[arg(long)]
+        bin: Option<String>,
+        /// Package an unqualified firmware/probes image with reported checks.
+        #[arg(long)]
+        diagnostic: bool,
         /// Use a fixed fictitious stand configuration (w0 through w3).
         /// The bundle in target/fw/<image>-analysis/ cannot be flashed.
         #[arg(long)]
@@ -177,7 +183,12 @@ fn main() -> ExitCode {
                         observations,
                     },
             } => return w3::check_files(&console, &observations),
-            Command::Build { image, analysis } => command::build(&root, &image, analysis)?,
+            Command::Build {
+                image,
+                analysis,
+                bin,
+                diagnostic,
+            } => command::build(&root, &image, analysis, bin.as_deref(), diagnostic)?,
             Command::Sizes {
                 base,
                 head,
@@ -255,6 +266,19 @@ mod tests {
         for command in ["flash", "run"] {
             assert!(parse(&format!("fw {command} w2 --board b1 --analysis")).is_err());
         }
+    }
+
+    #[test]
+    fn build_selects_a_companion_binary_explicitly() {
+        let command = parse(
+            "fw build ../probes/esp32s31-radio --bin oer-firmware-probes-esp32s31-radio-hardware",
+        )
+        .unwrap()
+        .command;
+        assert!(
+            matches!(command, Command::Build { bin: Some(name), .. } if name == "oer-firmware-probes-esp32s31-radio-hardware")
+        );
+        assert!(parse("fw run w0 --board s31-a --bin another").is_err());
     }
 
     #[test]

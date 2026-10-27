@@ -16,7 +16,26 @@ pub struct Configuration {
     control: oer_esp32s31_pac::fe::estimator_control::R,
 }
 
+/// The named software fields of an estimator configuration observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ConfigurationFields {
+    pub configuration_code: u8,
+    pub control_code: u8,
+    pub window: u16,
+    pub start_enabled: bool,
+    pub measurement_enabled: bool,
+}
+
 impl Configuration {
+    pub fn fields(&self) -> ConfigurationFields {
+        ConfigurationFields {
+            configuration_code: self.config.bits_26_27_opaque().get() as u8,
+            control_code: self.control.bits_19_20_opaque().get() as u8,
+            window: self.control.bits_2_16_opaque().get() as u16,
+            start_enabled: self.control.start_enable(),
+            measurement_enabled: self.control.measurement_enable(),
+        }
+    }
     /// Whether either measurement phase was enabled at capture.
     pub fn enabled(&self) -> bool {
         self.control.start_enable() || self.control.measurement_enable()

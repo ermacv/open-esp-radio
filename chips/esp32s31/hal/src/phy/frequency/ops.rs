@@ -41,8 +41,8 @@ pub fn restore_read_configuration<P: PhyPlacement>(
 // image geometry are generated from the register model, never a local address map.
 const fn image_index(offsets: &[u32], offset: usize) -> usize {
     let mut index = 0;
-    while let Some(value) = offsets.get(index) {
-        if *value as usize == offset {
+    while index < offsets.len() {
+        if offsets[index] as usize == offset {
             return index;
         }
         index += 1;

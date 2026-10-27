@@ -140,6 +140,7 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
                 ]
                 .into(),
             ),
+            None,
         )?;
         // Start the bounded subscription after compilation, while the old
         // image is still selected. It must cover flash, the workload and

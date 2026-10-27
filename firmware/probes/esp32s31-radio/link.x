@@ -47,6 +47,7 @@ SECTIONS
   {
     *(.sbss .sbss.*)
     *(.bss .bss.*)
+    *(.critical.bss .critical.bss.*)
     *(COMMON)
   } > TRACE
 
