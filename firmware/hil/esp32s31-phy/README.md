@@ -92,6 +92,9 @@ waits and a finite observation budget. Register indices come from the published
 model, never arbitrary host addresses; the host requests only MMIO indices the
 reference could read at the same lifecycle point.
 
+Startup publishes the executor's system counter before drawing the boot identity.
+The RNG's inter-read settle uses that advancing clock even before executors start.
+
 The image uses existing staged boot and chip placement/stack policies. It has
 no retained diagnostic post-mortem store; base boot evidence retains the actual
 reset reason code. Build audit reports state unresolved stack-call sites.

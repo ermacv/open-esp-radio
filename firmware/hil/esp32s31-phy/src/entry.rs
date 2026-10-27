@@ -183,6 +183,18 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ConcurrentPhy::new(),
         oer_espressif_staged_runtime::phy_fault::identity(),
     );
+    // RNG's inter-read settle needs an advancing clock before executor startup.
+    let timer = runtime.system_timer;
+    oer_espressif_executor::init::<2, _, _>(
+        oer_espressif_executor::systimer::SystemTimer {
+            comparators: timer.comparators,
+            counter: timer.counter,
+        },
+        adopted.router(),
+        interrupts.radio_alarm,
+        timer.alarm0,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let mut rng = Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
     let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
@@ -201,17 +213,6 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     #[cfg(feature = "diagnostic-radio-health")]
     radio.set_health_boot(boot);
-    let timer = runtime.system_timer;
-    oer_espressif_executor::init::<2, _, _>(
-        oer_espressif_executor::systimer::SystemTimer {
-            comparators: timer.comparators,
-            counter: timer.counter,
-        },
-        adopted.router(),
-        interrupts.radio_alarm,
-        timer.alarm0,
-    )
-    .unwrap_or_else(|failure| failure.reset());
     oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
         .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
