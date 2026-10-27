@@ -1,11 +1,11 @@
 #![no_std]
-use oer_esp32s31_hal::platform::{SystimerAlarm0, timg0_alarm::Timg0Alarm};
+use oer_esp32s31_hal::platform::{SystimerAlarm0, timg0_alarm::{Timg0AlarmProgram, Timg0AlarmInterrupt}};
 use oer_interrupt_table::Silent;
 use oer_time::Duration;
 
 pub fn arm(
-    timer: &mut Timg0Alarm,
-    _own: &Silent<Timg0Alarm>,
+    timer: &mut Timg0AlarmProgram,
+    _own: &Silent<Timg0AlarmInterrupt>,
     _other: &Silent<SystimerAlarm0>,
 ) {
     #[cfg(ui_reject)]

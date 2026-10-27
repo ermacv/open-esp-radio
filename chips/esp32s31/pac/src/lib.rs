@@ -18,12 +18,12 @@
 //! memory layouts and the analog-I2C dictionary. It has no logic: every
 //! sequence, poll and policy over it is the HAL's.
 //!
-//! T0's counter cannot write the group's interrupt bank:
+//! T0's movable program part cannot acknowledge the permanent IRQ owner's cause:
 //!
 //! ```compile_fail,E0599
 //! # use oer_esp32s31_pac::timg::Timg0Timer0;
-//! fn enable(mut timer: Timg0Timer0) {
-//!     timer.modify_int_ena_timers(|w| { w.set_t0_int_ena(true); });
+//! fn clear(mut timer: Timg0Timer0) {
+//!     timer.trigger_int_clr_timers_t0_int_clr();
 //! }
 //! ```
 //!
@@ -35,6 +35,15 @@
 //!     timer.hp_sys_clkrst_timg0.modify_timergrp0_ctrl0(|w| {
 //!         w.set_reg_timergrp0_rst_en(true);
 //!     });
+//! }
+//! ```
+//!
+//! The permanent IRQ part cannot change the movable program owner's enable:
+//!
+//! ```compile_fail,E0599
+//! # use oer_esp32s31_pac::timg::Timg0InterruptBank;
+//! fn enable(mut irq: Timg0InterruptBank) {
+//!     irq.modify_int_ena_timers(|w| { w.set_t0_int_ena(true); });
 //! }
 //! ```
 //!

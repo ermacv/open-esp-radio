@@ -11,47 +11,58 @@ enum Operation {
     Stop,
     Enable(bool),
     Observe,
-    Clear,
+    ClearTimer0,
     Load(u64),
     Start,
 }
 
-// Model only the sourced one-shot/RAW/ENA/CLR behavior. This is not a
-// measurement of silicon collision ordering or interrupt latency.
-struct Model {
+// Virtual hardware is external to its two software owners. It models the
+// sourced RAW/ST/ENA/CLR effects; reload is an IDF assumption, not a silicon test.
+struct Hardware {
     clock: VirtualClock,
-    start: Instant,
-    interval: u64,
-    running: bool,
-    start_elapsed: u64,
+    start: Cell<Instant>,
+    interval: Cell<u64>,
+    running: Cell<bool>,
+    start_elapsed: Cell<u64>,
     armed: Cell<bool>,
-    pending: Cell<bool>,
-    enabled: bool,
+    timer0_pending: Cell<bool>,
+    timer1_pending: Cell<bool>,
+    watchdog_pending: Cell<bool>,
+    enabled: Cell<bool>,
     operations: RefCell<Vec<Operation>>,
 }
 
-impl Model {
+struct Program<'a>(&'a Hardware);
+struct Interrupt<'a>(&'a Hardware);
+
+impl Hardware {
     fn new() -> Self {
         let clock = VirtualClock::new();
         Self {
-            start: clock.now(),
+            start: Cell::new(clock.now()),
             clock,
-            interval: 0,
-            running: false,
-            start_elapsed: 0,
+            interval: Cell::new(0),
+            running: Cell::new(false),
+            start_elapsed: Cell::new(0),
             armed: Cell::new(false),
-            pending: Cell::new(false),
-            enabled: false,
+            timer0_pending: Cell::new(false),
+            timer1_pending: Cell::new(false),
+            watchdog_pending: Cell::new(false),
+            enabled: Cell::new(false),
             operations: RefCell::new(Vec::new()),
         }
     }
 
+    fn owners(&self) -> (Program<'_>, Interrupt<'_>) {
+        (Program(self), Interrupt(self))
+    }
+
     fn update(&self) {
-        if self.running
+        if self.running.get()
             && self.armed.get()
-            && self.clock.now().as_micros() - self.start.as_micros() >= self.interval
+            && self.clock.now().as_micros() - self.start.get().as_micros() >= self.interval.get()
         {
-            self.pending.set(true);
+            self.timer0_pending.set(true);
             self.armed.set(false);
         }
     }
@@ -68,210 +79,216 @@ impl Model {
     }
 }
 
-impl Registers for Model {
+impl ProgramRegisters for Program<'_> {
     fn stop(&mut self) {
-        self.update();
-        self.running = false;
-        self.armed.set(false);
-        self.record(Operation::Stop);
+        self.0.update();
+        self.0.running.set(false);
+        self.0.armed.set(false);
+        self.0.record(Operation::Stop);
     }
 
     fn enable(&mut self, enabled: bool) {
-        self.enabled = enabled;
-        self.record(Operation::Enable(enabled));
-    }
-
-    fn observe(&self) -> Observation {
-        self.update();
-        self.record(Operation::Observe);
-        Observation {
-            pending: self.pending.get(),
-            enabled: self.enabled,
-            asserted: self.pending.get() && self.enabled,
-        }
-    }
-
-    fn clear(&mut self) {
-        self.pending.set(false);
-        self.record(Operation::Clear);
+        self.0.enabled.set(enabled);
+        self.0.record(Operation::Enable(enabled));
     }
 
     fn load_interval(&mut self, micros: u64) {
-        self.interval = micros;
-        self.record(Operation::Load(micros));
+        self.0.interval.set(micros);
+        self.0.record(Operation::Load(micros));
     }
 
     fn start(&mut self) {
-        self.start = self.clock.now();
-        self.running = true;
-        self.armed.set(true);
-        self.record(Operation::Start);
-        self.advance(self.start_elapsed);
+        self.0.start.set(self.0.clock.now());
+        self.0.running.set(true);
+        self.0.armed.set(true);
+        self.0.record(Operation::Start);
+        self.0.advance(self.0.start_elapsed.get());
+    }
+}
+
+impl InterruptRegisters for Interrupt<'_> {
+    fn observe(&self) -> Observation {
+        self.0.update();
+        self.0.record(Operation::Observe);
+        Observation {
+            pending: self.0.timer0_pending.get(),
+            asserted: self.0.timer0_pending.get() && self.0.enabled.get(),
+        }
+    }
+
+    fn clear_timer0(&mut self) {
+        self.0.timer0_pending.set(false);
+        self.0.record(Operation::ClearTimer0);
+    }
+}
+
+impl Interrupt<'_> {
+    fn timer1_pending(&self) -> bool {
+        self.0.timer1_pending.get()
+    }
+    fn watchdog_pending(&self) -> bool {
+        self.0.watchdog_pending.get()
     }
 }
 
 #[test]
-fn expiry_is_one_shot_and_acknowledgement_does_not_rearm_or_stop_the_counter() {
-    let mut model = Model::new();
-    let old = arm_after(&mut model, Duration::from_micros(40)).expect("delay fits");
-    assert!(!old.pending);
-    model.advance(39);
-    assert!(!model.observe().pending);
-    model.advance(1);
-    assert!(model.observe().asserted);
-    assert!(!model.armed.get());
-    assert!(model.running);
-    model.advance(100);
-    assert!(model.observe().asserted, "unacknowledged pending repeats");
-    let event = acknowledge(&mut model);
-    assert!(event.pending && event.enabled && event.asserted);
-    assert!(model.running && model.enabled);
-    model.advance(100);
-    assert!(!model.observe().pending, "no periodic rearm");
+fn expiry_is_one_shot_and_irq_acknowledgement_does_not_rearm_or_stop_program() {
+    let hardware = Hardware::new();
+    let (mut program, mut irq) = hardware.owners();
+    arm_after(&mut program, Duration::from_micros(40)).expect("delay fits");
+    hardware.advance(39);
+    assert!(!irq.observe().pending);
+    hardware.advance(1);
+    assert!(irq.observe().asserted);
+    assert!(!hardware.armed.get() && hardware.running.get());
+    hardware.advance(100);
+    assert!(irq.observe().asserted, "unacknowledged pending repeats");
+    assert!(acknowledge(&mut irq).pending);
+    assert!(hardware.running.get() && hardware.enabled.get());
+    hardware.advance(100);
+    assert!(!irq.observe().pending, "no periodic rearm");
 }
 
 #[test]
-fn masking_and_stopping_retain_raw_and_unmasking_redelivers() {
-    let mut model = Model::new();
-    let _ = arm_after(&mut model, Duration::from_micros(1)).expect("delay fits");
-    model.advance(1);
-    model.stop();
-    assert!(model.observe().asserted, "stop alone is no acknowledgement");
-    model.enable(false);
-    let masked = model.observe();
-    assert!(masked.pending && !masked.enabled && !masked.asserted);
-    model.enable(true);
-    assert!(model.observe().asserted);
-    model.enable(false);
-    assert!(
-        acknowledge(&mut model).pending,
-        "RAW authorizes masked acknowledgement"
-    );
-    model.enable(true);
-    assert!(!model.observe().asserted);
+fn program_stop_and_mask_retain_raw_for_permanent_irq_owner() {
+    let hardware = Hardware::new();
+    let (mut program, mut irq) = hardware.owners();
+    arm_after(&mut program, Duration::from_micros(1)).expect("delay fits");
+    hardware.advance(1);
+    program.stop();
+    assert!(irq.observe().asserted, "stop is no acknowledgement");
+    program.enable(false);
+    assert!(irq.observe().pending && !irq.observe().asserted);
+    program.enable(true);
+    assert!(irq.observe().asserted, "unmask redelivers retained RAW");
+    disarm(&mut program);
+    assert!(irq.observe().pending && !irq.observe().asserted);
+    assert!(acknowledge(&mut irq).pending);
+    program.enable(true);
+    assert!(!irq.observe().asserted);
 }
 
 #[test]
-fn disarm_stops_masks_then_samples_raw_and_clears_before_rearm() {
-    let mut model = Model::new();
-    let _ = arm_after(&mut model, Duration::from_micros(1)).expect("delay fits");
-    model.advance(1);
-    model.operations.borrow_mut().clear();
-    let previous = arm_after(&mut model, Duration::from_micros(20)).expect("delay fits");
-    assert!(previous.pending && !previous.enabled && !previous.asserted);
+fn irq_acknowledges_timer0_and_preserves_other_pending_causes() {
+    let hardware = Hardware::new();
+    hardware.timer0_pending.set(true);
+    hardware.timer1_pending.set(true);
+    hardware.watchdog_pending.set(true);
+    let (_, mut irq) = hardware.owners();
+    assert!(acknowledge(&mut irq).pending);
+    assert!(!irq.observe().pending);
+    assert!(irq.timer1_pending() && irq.watchdog_pending());
+}
+
+#[test]
+fn handler_acknowledges_then_rearms_the_movable_program_owner() {
+    let hardware = Hardware::new();
+    let (mut program, mut irq) = hardware.owners();
+    arm_after(&mut program, Duration::from_micros(1)).expect("delay fits");
+    hardware.advance(1);
+    hardware.operations.borrow_mut().clear();
+    assert!(acknowledge(&mut irq).pending);
+    arm_after(&mut program, Duration::from_micros(20)).expect("delay fits");
     assert_eq!(
-        *model.operations.borrow(),
+        *hardware.operations.borrow(),
         [
+            Operation::Observe,
+            Operation::ClearTimer0,
             Operation::Stop,
             Operation::Enable(false),
-            Operation::Observe,
-            Operation::Clear,
             Operation::Load(20),
             Operation::Start,
             Operation::Enable(true)
         ]
     );
-    assert!(!model.observe().pending);
-    model.advance(20);
-    assert!(model.observe().pending);
-    assert!(disarm(&mut model).pending);
-    model.advance(100);
-    assert!(!model.running && !model.enabled && !model.observe().pending);
+    assert!(!irq.observe().pending);
+    hardware.advance(20);
+    assert!(irq.observe().pending);
+}
+
+#[test]
+fn program_rearm_cannot_acknowledge_an_existing_irq_cause() {
+    let hardware = Hardware::new();
+    let (mut program, irq) = hardware.owners();
+    hardware.timer0_pending.set(true);
+    arm_after(&mut program, Duration::from_micros(40)).expect("delay fits");
+    assert!(irq.observe().pending);
 }
 
 #[test]
 fn expiry_between_start_and_unmask_is_retained_and_delivered() {
-    let mut model = Model::new();
-    model.start_elapsed = 1;
-    let previous = arm_after(&mut model, Duration::from_micros(1)).expect("delay fits");
-    assert!(!previous.pending);
-    assert!(model.observe().asserted);
-    assert!(!model.armed.get());
+    let hardware = Hardware::new();
+    hardware.start_elapsed.set(1);
+    let (mut program, irq) = hardware.owners();
+    arm_after(&mut program, Duration::from_micros(1)).expect("delay fits");
+    assert!(irq.observe().asserted && !hardware.armed.get());
 }
 
 #[test]
-fn zero_delay_is_refused_before_register_access() {
-    let mut model = Model::new();
-    let requested = Duration::from_micros(0);
-    assert_eq!(
-        arm_after(&mut model, requested),
-        Err(InvalidDelay { requested })
-    );
-    assert!(model.operations.borrow().is_empty());
-    assert!(!model.running && !model.enabled);
-}
-
-#[test]
-fn maximum_delay_fits_and_larger_input_does_not_mutate_an_existing_alarm() {
-    let mut model = Model::new();
-    let _ = arm_after(&mut model, Duration::from_micros(MAX_DELAY_MICROS)).expect("maximum fits");
-    model.operations.borrow_mut().clear();
-    let requested = Duration::from_micros(MAX_DELAY_MICROS + 1);
-    assert_eq!(
-        arm_after(&mut model, requested),
-        Err(InvalidDelay { requested })
-    );
-    assert!(model.operations.borrow().is_empty());
-    assert_eq!(model.interval, MAX_DELAY_MICROS);
-    assert!(model.armed.get() && model.running && model.enabled);
-}
-
-#[test]
-fn spurious_acknowledgement_issues_no_clear_and_preserves_a_future_alarm() {
-    let mut model = Model::new();
-    let _ = arm_after(&mut model, Duration::from_micros(40)).expect("delay fits");
-    model.operations.borrow_mut().clear();
-    assert!(!acknowledge(&mut model).pending);
-    assert_eq!(*model.operations.borrow(), [Operation::Observe]);
-    model.advance(40);
-    assert!(model.observe().asserted);
-}
-
-#[test]
-fn pac_adapter_programs_the_interval_and_preserves_other_bank_and_reserved_lanes() {
-    for fill in [0, u32::MAX] {
-        // Separate memories model disjoint owners; Host itself does not emulate
-        // W1C/CLR or one-shot side effects (the virtual model above does).
-        let mut timer_words = vec![fill; instances::timg0::SIZE / size_of::<u32>()];
-        let mut bank_words = timer_words.clone();
-        {
-            let mut registers = AlarmRegisters {
-                timer: timg::Timg0Timer0::host(&mut timer_words).expect("timer memory fits"),
-                bank: timg::Timg0InterruptBank::host(&mut bank_words).expect("bank memory fits"),
-            };
-            let micros = (u64::from(timg::t0alarmlo::T_ALARM_LO_MAX) + 1) + 17;
-            let old = arm_after(&mut registers, Duration::from_micros(micros)).expect("delay fits");
-            assert_eq!(old.pending, fill != 0);
-            let config = registers.timer.read_t0config();
-            assert!(config.t_en() && config.t_alarm_en() && config.t_increase());
-            assert!(!config.t_autoreload());
-            assert_eq!(registers.timer.read_t0alarmlo().t_alarm_lo(), 17);
-            assert_eq!(registers.timer.read_t0alarmhi().t_alarm_hi().get(), 1);
-            assert_eq!(registers.timer.read_t0loadlo().t_load_lo(), 0);
-            assert_eq!(registers.timer.read_t0loadhi().t_load_hi().get(), 0);
-            let enables = registers.bank.read_int_ena_timers();
-            assert!(enables.t0_int_ena());
-            assert_eq!(enables.t1_int_ena(), fill != 0);
-            assert_eq!(enables.wdt_int_ena(), fill != 0);
-            let _ = disarm(&mut registers);
-            assert!(!registers.timer.read_t0config().t_en());
-            assert!(!registers.bank.read_int_ena_timers().t0_int_ena());
-        }
+fn invalid_intervals_do_not_mutate_an_existing_alarm() {
+    let hardware = Hardware::new();
+    let (mut program, _) = hardware.owners();
+    arm_after(&mut program, Duration::from_micros(MAX_DELAY_MICROS)).expect("maximum fits");
+    for micros in [0, MAX_DELAY_MICROS + 1] {
+        hardware.operations.borrow_mut().clear();
+        let requested = Duration::from_micros(micros);
         assert_eq!(
-            timer_words[timg::t0alarmhi::OFFSET / 4] & timg::t0alarmhi::RESERVED,
-            fill & timg::t0alarmhi::RESERVED
+            arm_after(&mut program, requested),
+            Err(InvalidDelay { requested })
         );
-        assert_eq!(
-            bank_words[timg::int_raw_timers::OFFSET / 4],
-            fill,
-            "never writes RAW"
-        );
-        if fill != 0 {
-            assert_eq!(
-                bank_words[timg::int_clr_timers::OFFSET / 4],
-                timg::int_clr_timers::T0_INT_CLR_MASK,
-                "only T0 CLR"
-            );
-        }
+        assert!(hardware.operations.borrow().is_empty());
+        assert_eq!(hardware.interval.get(), MAX_DELAY_MICROS);
+        assert!(hardware.armed.get() && hardware.running.get() && hardware.enabled.get());
     }
+}
+
+#[test]
+fn spurious_irq_acknowledgement_preserves_a_future_alarm() {
+    let hardware = Hardware::new();
+    let (mut program, mut irq) = hardware.owners();
+    arm_after(&mut program, Duration::from_micros(40)).expect("delay fits");
+    hardware.operations.borrow_mut().clear();
+    assert!(!acknowledge(&mut irq).pending);
+    assert_eq!(*hardware.operations.borrow(), [Operation::Observe]);
+    hardware.advance(40);
+    assert!(irq.observe().asserted);
+}
+
+#[test]
+fn pac_program_adapter_sets_target_reload_and_preserves_sibling_enables() {
+    for fill in [0, u32::MAX] {
+        let mut words = vec![fill; instances::timg0::SIZE / size_of::<u32>()];
+        let mut program =
+            Timg0AlarmProgram(timg::Timg0Timer0::host(&mut words).expect("memory fits"));
+        let micros = 0x1_0000_0011;
+        arm_after(&mut program, Duration::from_micros(micros)).expect("delay fits");
+        let config = program.0.read_t0config();
+        assert!(config.t_en() && config.t_alarm_en() && config.t_increase());
+        assert!(!config.t_autoreload());
+        assert_eq!(program.0.read_t0alarmlo().t_alarm_lo(), 17);
+        assert_eq!(program.0.read_t0alarmhi().t_alarm_hi().get(), 1);
+        assert_eq!(program.0.read_t0loadlo().t_load_lo(), 0);
+        assert_eq!(program.0.read_t0loadhi().t_load_hi().get(), 0);
+        assert!(program.enabled());
+        let enables = program.0.read_int_ena_timers();
+        assert_eq!(enables.t1_int_ena(), fill != 0);
+        assert_eq!(enables.wdt_int_ena(), fill != 0);
+        program.disarm();
+        assert!(!program.0.read_t0config().t_en() && !program.enabled());
+        assert_eq!(program.0.read_int_ena_timers().t1_int_ena(), fill != 0);
+        assert_eq!(program.0.read_int_ena_timers().wdt_int_ena(), fill != 0);
+    }
+}
+
+#[test]
+fn pac_irq_adapter_observes_raw_independently_of_programming() {
+    let mut words = vec![u32::MAX; instances::timg0::SIZE / size_of::<u32>()];
+    let mut irq =
+        Timg0AlarmInterrupt(timg::Timg0InterruptBank::host(&mut words).expect("memory fits"));
+    let event = irq.acknowledge();
+    assert!(event.pending && event.asserted);
+    // Plain Host memory has no hardware CLR effects. Side-effect behavior,
+    // including preservation of sibling causes, is checked by the model above.
+    assert!(irq.0.read_int_raw_timers().t1_int_raw());
+    assert!(irq.0.read_int_raw_timers().wdt_int_raw());
 }

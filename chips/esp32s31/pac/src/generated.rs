@@ -238389,11 +238389,11 @@ pub mod timg {
 
     impl oer_mmio::Registers for Timg0Timer0Words {
         type Sharing = oer_mmio::sharing::Owned;
-        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20];
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x70];
     }
 
     impl oer_mmio::Words for Timg0Timer0Words {
-        const OWNED: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20];
+        const OWNED: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x70];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -238507,6 +238507,21 @@ pub mod timg {
             self.0.write::<0x20>(value);
         }
 
+        /// Read `INT_ENA_TIMERS`.
+        #[inline]
+        pub fn read_int_ena_timers(&self) -> int_ena_timers::R {
+            int_ena_timers::R(self.0.read::<0x70>())
+        }
+
+        /// Read `INT_ENA_TIMERS`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_int_ena_timers(&mut self, change: impl FnOnce(&mut int_ena_timers::W)) {
+            let mut value = int_ena_timers::W(self.0.read::<0x70>());
+            change(&mut value);
+            self.0.write::<0x70>(value.0);
+        }
+
         /// Apply the fixed configuration `0x40051000`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
         ///
         /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
@@ -238546,7 +238561,7 @@ pub mod timg {
 
     /// The `Timg0InterruptBank` part of `TIMG0`.
     ///
-    /// The group's whole interrupt enable and status words and T0's acknowledgement strobe. T0 is the only interrupt consumer; the watchdog uses reset actions, and T1/WDT CLR strobes remain unclaimed.
+    /// The group's whole raw/masked status words and T0's acknowledgement strobe; the program owner holds the enable word. T0 is the only interrupt consumer; the watchdog uses reset actions, and T1/WDT CLR strobes remain unclaimed.
     ///
     /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW7_S31_TIMG0_20261026.
     #[must_use = "dropping a register owner permanently loses its register authority"]
@@ -238559,11 +238574,11 @@ pub mod timg {
 
     impl oer_mmio::Registers for Timg0InterruptBankWords {
         type Sharing = oer_mmio::sharing::Owned;
-        const WORDS: &'static [usize] = &[0x70, 0x74, 0x78, 0x7c];
+        const WORDS: &'static [usize] = &[0x74, 0x78, 0x7c];
     }
 
     impl oer_mmio::Words for Timg0InterruptBankWords {
-        const OWNED: &'static [usize] = &[0x70, 0x74, 0x78, 0x7c];
+        const OWNED: &'static [usize] = &[0x74, 0x78, 0x7c];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -238591,21 +238606,6 @@ pub mod timg {
     }
 
     impl<P: oer_mmio::Placement> Timg0InterruptBank<P> {
-        /// Read `INT_ENA_TIMERS`.
-        #[inline]
-        pub fn read_int_ena_timers(&self) -> int_ena_timers::R {
-            int_ena_timers::R(self.0.read::<0x70>())
-        }
-
-        /// Read `INT_ENA_TIMERS`, change fields and write it back; every other bit keeps
-        /// the value read, every write-trigger field is zero.
-        #[inline]
-        pub fn modify_int_ena_timers(&mut self, change: impl FnOnce(&mut int_ena_timers::W)) {
-            let mut value = int_ena_timers::W(self.0.read::<0x70>());
-            change(&mut value);
-            self.0.write::<0x70>(value.0);
-        }
-
         /// Read `INT_RAW_TIMERS`.
         #[inline]
         pub fn read_int_raw_timers(&self) -> int_raw_timers::R {
@@ -300416,7 +300416,7 @@ pub mod ownership {
         pub lp_wdt_swd: super::rtc_wdt::LpWdtSwd,
     }
 
-    /// Timer group zero's T0 counter and one-shot alarm, and the group's interrupt bank retained together by the HAL alarm owner. Each ENA/RAW/ST word has one bank owner; only T0's CLR strobe is claimed. WatchdogPeripherals retains the group clock/reset word.
+    /// Timer group zero's movable T0 program owner (counter, alarm, load and whole ENA word) and permanent interrupt owner (whole RAW/ST words and only T0 CLR). Each word has one owner. WatchdogPeripherals retains the group clock/reset word.
     pub struct TimerGroup0Peripherals {
         /// The `Timg0Timer0` part.
         pub timg0_timer0: super::timg::Timg0Timer0,

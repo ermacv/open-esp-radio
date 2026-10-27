@@ -626,7 +626,7 @@ fn t0_state(s: &Session<'_>, tag: u32) {
     let bank = &s.generic.timer.timg0_interrupt_bank;
     let r = bank.read_int_raw_timers();
     let t = bank.read_int_st_timers();
-    let e = bank.read_int_ena_timers();
+    let e = timer.read_int_ena_timers();
     emit(
         tag,
         pack([r.t0_int_raw(), r.t1_int_raw(), r.wdt_int_raw()]),
@@ -643,12 +643,9 @@ fn t0_state(s: &Session<'_>, tag: u32) {
     );
 }
 fn t0_ena(s: &mut Session<'_>, enable: bool) {
-    s.generic
-        .timer
-        .timg0_interrupt_bank
-        .modify_int_ena_timers(|w| {
-            w.set_t0_int_ena(enable);
-        });
+    s.generic.timer.timg0_timer0.modify_int_ena_timers(|w| {
+        w.set_t0_int_ena(enable);
+    });
 }
 fn t0_clear(s: &mut Session<'_>) {
     s.generic
@@ -705,7 +702,7 @@ pub(super) fn timer0(s: &mut Session<'_>) {
     let w1 = s.generic.watchdog.read_wdtconfig1();
     let w2 = s.generic.watchdog.read_wdtconfig2();
     let clock = s.generic.watchdog_clock.read_timergrp0_ctrl0();
-    let ena = s.generic.timer.timg0_interrupt_bank.read_int_ena_timers();
+    let ena = s.generic.timer.timg0_timer0.read_int_ena_timers();
     emit(
         0x7000,
         pack([
@@ -836,7 +833,7 @@ pub(super) fn timer0(s: &mut Session<'_>) {
             after.reg_timergrp0_wdt_src_sel() == clock.reg_timergrp0_wdt_src_sel(),
             s.generic
                 .timer
-                .timg0_interrupt_bank
+                .timg0_timer0
                 .read_int_ena_timers()
                 .wdt_int_ena()
                 == ena.wdt_int_ena(),
