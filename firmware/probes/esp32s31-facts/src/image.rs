@@ -259,6 +259,10 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(lp_ack_race::rearm),
     },
     Probe {
+        id: 183,
+        run: Action::Thread(lp_ack_race::compare_width),
+    },
+    Probe {
         id: 14,
         run: Action::Thread(opaque_wave2::i2c),
     },

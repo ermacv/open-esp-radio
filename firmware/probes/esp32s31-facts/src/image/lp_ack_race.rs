@@ -226,3 +226,64 @@ pub(super) fn rearm(s: &mut Session<'_>) {
     state(s, 0x18710);
     stop(s);
 }
+
+/// One future low target for each distinct upper-word image in each mode.
+/// Stop on the first missing compare; never wait a counter period to retry it.
+pub(super) fn compare_width(s: &mut Session<'_>) {
+    init(s);
+    const LOW_WIDTH: u32 = super::pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH;
+    const WORD_WIDTH: u32 = super::pac::modem_pwr::word_006c_opaque::BITS_0_31_OPAQUE_WIDTH;
+    const UPPER_WIDTH: u32 = WORD_WIDTH - LOW_WIDTH;
+    for mode in 0..2 {
+        // Baseline zero, each upper bit separately, then all upper bits.
+        for trial in 0..UPPER_WIDTH + 2 {
+            let tag = 0x18800 + mode * 0x200 + trial * 0x10;
+            park(s);
+            s.ble.timer.modify_word_0058_opaque(|w| {
+                w.set_control_0(mode != 0);
+            });
+            oer_riscv::fence();
+            let old = byte(s);
+            let old_latch = latch(s);
+            let upper = if trial == 0 {
+                0
+            } else if trial == UPPER_WIDTH + 1 {
+                !MAX
+            } else {
+                1_u32 << (LOW_WIDTH + trial - 1)
+            };
+            let origin = counter(s);
+            let low = origin.wrapping_add(2048) & MAX;
+            let image = low | upper;
+            s.ble.timer.modify_word_006c_opaque(|w| {
+                w.set_bits_0_31_opaque(image);
+            });
+            let readback = s.ble.timer.read_word_006c_opaque().bits_0_31_opaque();
+            let before = counter(s);
+            s.ble.timer.write_word_0010_opaque(|w| {
+                w.set_bit_18_opaque(true);
+            });
+            oer_riscv::fence();
+            let after = counter(s);
+            let start = oer_riscv::cycle32();
+            let mut crossed = false;
+            while oer_riscv::cycle32().wrapping_sub(start) < SHORT {
+                if counter(s).wrapping_sub(origin) & MAX >= 4096 {
+                    crossed = true;
+                    break;
+                }
+            }
+            let elapsed = oer_riscv::cycle32().wrapping_sub(start);
+            emit(tag, image, readback, origin);
+            emit(tag + 1, before, after, u32::from(crossed));
+            state(s, tag + 2);
+            emit(tag + 4, old.into(), u32::from(old_latch), elapsed);
+            if !crossed || old != 0 || old_latch || byte(s) == 0 {
+                emit(0x18ee, mode, trial, image);
+                stop(s);
+                return;
+            }
+        }
+    }
+    stop(s);
+}

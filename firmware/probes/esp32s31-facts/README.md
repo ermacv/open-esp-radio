@@ -767,13 +767,14 @@ full calibration is added to resolve that limitation.
 
 Selections180–182 are finite source127 experiments with CPU interrupts masked,
 XTAL/divider1, CONTROL0=1 and CONTROL4=0. They use the session's existing PAC
-owners, no RF, scheduler RUN or DMA. Selections183–189 are unassigned.
+owners, no RF, scheduler RUN or DMA. Selections184–189 are unassigned.
 
 | Selection | Operation |
 | --- | --- |
 | 180 | Once each: sample0/arrival/skip-store; sample1/arrival/zero-store; sample1/zero-store/arrival. A software cause seeds the old1; the independently cleared CONTROL2 latch witnesses the new hardware compare. |
 | 181 | Exactly two natural wraps without intermediate ack; retained first-wrap nonzero sample conditionally authorizes zero after the second crossing. Each wait stops at40M cycles. |
 | 182 | Positive software cause/conditional ack, then targets at origin+2048, origin+64 and origin−64; each observation stops at200k cycles. A final future target tests recovery after the past target. |
+| 183 | Width observation: baseline upper0, each bit24–31 individually, then all upper bits; one fresh origin+2048 target per image in each CONTROL0 state. Stop on the first missing compare; each crossing poll stops at200k cycles. |
 
 State tags encode `(counter, cause, matrix_bank3)` and tag+1 encodes
 `(byte24, byte2c, CONTROL2)`. Compare bases are0x18000/18100/18200:
@@ -799,6 +800,16 @@ Completion is not success: require sample-before-target/latch0, a positive
 subsequent latch/crossing, and the recorded byte/cause/output transitions.
 These phased orderings do not establish simultaneous set/clear priority,
 arbitrary wrap capacity, product IRQ latency or a production service bound.
+Selection183 uses the same XTAL/divider1 setup with CONTROL4=0 and both
+CONTROL0=0/1. It explicitly observes upper-bit write/readback and future
+compare delivery. Tags are `0x18800 + mode*0x200 + trial*0x10`: offset0 is
+`(written_image, readback_image, origin)`; +1 is `(counter_before_enable,
+counter_after_enable, progressed4096)`; +2/+3 are the state pair above;
++4 is `(initial_byte24, initial_CONTROL2, poll_cycles)`. Trials0/1–8/9 are
+upper0/bits24–31/all upper bits. Tag18ee `(mode,trial,image)` is a failed
+precondition or missing compare even with the ordinary completion marker.
+At most104 records and20 distinct conditions; no wrap wait, statistical
+baseline or production low-power clock equivalence is claimed.
 Silicon evidence: `oer-notes/research/hw-lp127-ack-race.md`.
 
 ## Awake BLE LP wake-route observations
