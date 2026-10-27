@@ -10,8 +10,22 @@ fn sample(s: &mut Session<'_>) -> Option<u32> {
     });
     oer_riscv::fence();
     let start = oer_riscv::cycle32();
-    while s.ble.core.read_btlc_timer_control().latch_request() {
-        if oer_riscv::cycle32().wrapping_sub(start) >= LIMIT {
+    loop {
+        let control = s.ble.core.read_btlc_timer_control();
+        if !control.latch_request() {
+            break;
+        }
+        let elapsed = oer_riscv::cycle32().wrapping_sub(start);
+        if elapsed >= LIMIT {
+            // Retain the actual final poll, rather than a later read whose
+            // self-clearing request may already differ. The capture read is
+            // later and is explicitly not an accepted completed latch.
+            emit(
+                0x91fd,
+                u32::from(control.latch_request()),
+                elapsed,
+                s.ble.core.read_btlc_timer_capture_0().value(),
+            );
             return None;
         }
     }
