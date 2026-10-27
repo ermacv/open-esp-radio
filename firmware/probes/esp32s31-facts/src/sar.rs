@@ -44,7 +44,7 @@ impl Sar {
             distinct: false,
         }
     }
-    fn clock(&mut self) -> bool {
+    pub(super) fn clock(&mut self) -> bool {
         // SOURCE: production hal/src/boot/clock.rs::CpuFrequency::from_dividers.
         let root = self
             .boot

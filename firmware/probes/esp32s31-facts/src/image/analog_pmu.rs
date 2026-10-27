@@ -81,6 +81,9 @@ fn prepare(s: &mut Session<'_>, lanes: u32) -> bool {
     if !opaque::xtal_cpu(s) {
         return false;
     }
+    if !s.sar.clock() {
+        return false;
+    }
     state(s, 0x3100);
     // Existing short transport prefix, without PHY calibration or TSENS writes.
     opaque_wave2::prepare(s);
@@ -156,7 +159,7 @@ fn step(s: &mut Session<'_>, value: u8, lanes: u32, pattern: u32, inject: bool) 
             injection_at(s, lanes, pattern, us, start);
         }
     }
-    let end = if inject { 550 } else { 500 };
+    let end = if inject { 530 } else { 500 };
     for us in (30..=end).step_by(10) {
         until(start, us);
         sample(s, tag, start);

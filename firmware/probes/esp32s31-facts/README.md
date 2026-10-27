@@ -1093,7 +1093,7 @@ Selections 250–264 are cold omission/injection arms. Groups of five select
 bit23, bit9 and the ordered pair; the five patterns are no injection, one,
 one followed immediately by zero, repeated ones at +50 µs and at +500 µs.
 The first injection follows the 20-µs sample of the DAC11 step, whose window
-extends through 550 µs. The DAC15 return step has no new injection. Each
+extends through 530 µs. The DAC15 return step has no new injection. Each
 command emits at most 127 of the existing 128 four-word records. Clock,
 power and reset state precede/follow each command; CTRL and CLK_CONF are
 sampled together in each observation. `0x31ee` reports an unqualified setup,
