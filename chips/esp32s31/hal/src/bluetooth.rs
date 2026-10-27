@@ -547,7 +547,7 @@ impl TaskOwner {
             return Err(BluetoothControllerOutputReleaseError::ControllerTimePending);
         }
         Ok(BluetoothOutputReleaseAdmitted {
-            task: self.interrupt_observation(),
+            task_enable: self.interrupt_enable_image(),
         })
     }
 
@@ -573,8 +573,8 @@ impl TaskOwner {
         _masked: BluetoothDynamicSourcesMasked,
     ) -> BluetoothSchedulerRunDisabled {
         self.registers.disable_scheduler_run();
-        let task = observation::task(&self.registers.bluetooth.btmac_ble_phy_init);
-        BluetoothSchedulerRunDisabled { task }
+        let task_enable = self.interrupt_enable_image();
+        BluetoothSchedulerRunDisabled { task_enable }
     }
 
     /// Reunite a quiescent, untouched task with the exact inactive interrupt
@@ -1411,7 +1411,7 @@ impl InterruptRegistersOwner {
     ) -> Result<BluetoothOutputIdleSampled, BluetoothControllerOutputReleaseError> {
         let busy = self.release_busy_sample(settle)?;
         self.registers
-            .sample_idle_output(busy, self.fault_acknowledged, _admitted.task)?;
+            .sample_idle_output(busy, self.fault_acknowledged, _admitted.task_enable)?;
         Ok(BluetoothOutputIdleSampled { _private: () })
     }
 
@@ -1427,8 +1427,8 @@ impl InterruptRegistersOwner {
 
     /// Acknowledge saved primary/NRT samples and release the controller output,
     /// once the task disabled RUN, on a fresh idle BUSY sample within
-    /// `settle` with no fault pending or acknowledged. Faults are never
-    /// cleared.
+    /// `settle` with no visible fault pending or acknowledged. Masked STATUS
+    /// does not prove pending is absent.
     ///
     /// # Errors
     ///
@@ -1441,7 +1441,7 @@ impl InterruptRegistersOwner {
     ) -> Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError> {
         let busy = self.release_busy_sample(settle)?;
         self.registers
-            .release_idle_output(busy, self.fault_acknowledged, _run.task)?;
+            .release_idle_output(busy, self.fault_acknowledged, _run.task_enable)?;
         self.released = true;
         Ok(BluetoothOutputReleased { _private: () })
     }
@@ -1482,7 +1482,7 @@ impl InterruptRegistersOwner {
 #[derive(Debug)]
 #[must_use = "the admission feeds the handler's idle sample"]
 pub struct BluetoothOutputReleaseAdmitted {
-    task: BluetoothTaskInterruptObservation,
+    task_enable: u32,
 }
 
 /// The handler sampled an idle scheduler without a fault.
@@ -1510,7 +1510,7 @@ pub struct BluetoothDynamicSourcesMasked {
 #[derive(Debug)]
 #[must_use = "the disabled RUN admits the handler's release"]
 pub struct BluetoothSchedulerRunDisabled {
-    task: BluetoothTaskInterruptObservation,
+    task_enable: u32,
 }
 
 /// The handler released the controller output of its epoch.
@@ -1524,12 +1524,7 @@ pub struct BluetoothOutputReleased {
 impl BluetoothOutputReleaseAdmitted {
     #[doc(hidden)]
     pub const fn for_host_test() -> Self {
-        Self {
-            task: BluetoothTaskInterruptObservation {
-                enable: 0,
-                opaque_state: 0,
-            },
-        }
+        Self { task_enable: 0 }
     }
 }
 
@@ -1561,12 +1556,7 @@ impl BluetoothDynamicSourcesMasked {
 impl BluetoothSchedulerRunDisabled {
     #[doc(hidden)]
     pub const fn for_host_test() -> Self {
-        Self {
-            task: BluetoothTaskInterruptObservation {
-                enable: 0,
-                opaque_state: 0,
-            },
-        }
+        Self { task_enable: 0 }
     }
 }
 

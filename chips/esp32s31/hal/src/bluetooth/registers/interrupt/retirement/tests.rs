@@ -29,10 +29,7 @@ impl Model {
                     nrt_0: 0,
                     nrt_1: 0,
                 },
-                task: crate::bluetooth::BluetoothTaskInterruptObservation {
-                    enable: 0,
-                    opaque_state: 0,
-                },
+                task_enable: 0,
             },
             sticky: false,
             head: None,
@@ -70,7 +67,7 @@ impl BankControl for Bank<'_> {
     }
     fn clear_pending(
         &mut self,
-        _: crate::bluetooth::BluetoothTaskInterruptObservation,
+        _: u32,
     ) -> Result<(), crate::bluetooth::BluetoothInterruptPolicyFault> {
         let mut model = self.0.borrow_mut();
         assert!(!model.dynamic_enabled && !model.run_enabled);
@@ -104,10 +101,7 @@ impl TaskControl for Task<'_> {
     fn disable_run(&mut self) {
         let mut model = self.0.borrow_mut();
         model.run_enabled = false;
-        model.observed.task.enable = 0;
-        if !model.sticky {
-            model.observed.task.opaque_state = 0;
-        }
+        model.observed.task_enable = 0;
         model.writes.push("disable run");
     }
     fn fence(&mut self) {
@@ -126,12 +120,12 @@ fn release_all(
     preflight: bool,
     after_fence: bool,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
-    let task = model.borrow().observed.task;
+    let task = model.borrow().observed.task_enable;
     sample_idle(&mut Bank(model), busy(preflight), task)?;
     confirm_heads_absent(&mut Task(model))?;
     mask(&mut Bank(model));
     disable_run(&mut Task(model));
-    let task = model.borrow().observed.task;
+    let task = model.borrow().observed.task_enable;
     release(&mut Bank(model), busy(after_fence), task)
 }
 
@@ -210,7 +204,7 @@ fn idle_output_release_keeps_the_reviewed_write_order_across_both_sides() {
 #[test]
 fn the_idle_sample_writes_nothing_and_each_sample_is_fresh() {
     let model = RefCell::new(Model::idle());
-    let task = model.borrow().observed.task;
+    let task = model.borrow().observed.task_enable;
     assert_eq!(sample_idle(&mut Bank(&model), busy(false), task), Ok(()));
     assert!(model.borrow().writes.is_empty());
     assert_eq!(
@@ -233,9 +227,8 @@ fn feature_task17_and_pending_are_cleared_before_release_is_confirmed() {
         m.observed.primary.status_1 = bank::irq_enable_1::SOURCE_4_MASK;
         m.observed.primary.nrt_0 = 0x100;
         m.observed.primary.nrt_1 = 0x2000;
-        m.observed.task.enable =
+        m.observed.task_enable =
             bank::interrupt_enable::SOURCE_17_MASK | bank::interrupt_enable::SCHEDULER_RUN_MASK;
-        m.observed.task.opaque_state = bank::interrupt_enable::SOURCE_17_MASK;
     }
     assert_eq!(release_all(&model, false, false), Ok(()));
     assert_eq!(model.borrow().observed.confirm_released(), Ok(()));
@@ -308,7 +301,7 @@ fn typed_register_masks_remove_the_cleanup_features_and_task17() {
         primary: crate::bluetooth::observation::primary(
             &interrupts.peripherals.bluetooth_interrupt_bank,
         ),
-        task: crate::bluetooth::observation::task(&task.bluetooth.btmac_ble_phy_init),
+        task_enable: crate::bluetooth::observation::task_enable(&task.bluetooth.btmac_ble_phy_init),
     };
     assert_eq!(observed.confirm_released(), Ok(()));
 }

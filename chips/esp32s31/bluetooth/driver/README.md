@@ -229,7 +229,7 @@ Stop:
    task's list heads, the handler's mask, the task's RUN disable, the
    handler's release). Those steps also mask the sourced feature lanes and
    task17, acknowledge primary/NRT W1C samples and the separate task WT bank, and
-   require zero enable/pending readback before closing the bank's gate (the released bank and the
+   reject nonzero observed enables/status before closing the bank's gate (the released bank and the
    channel endpoint leave the handler), reunites both quiet channel endpoints
    and has the handler stop the counter and both measured LP delivery lanes. A fault the handler
    acknowledged during the epoch refuses the release. Return the retired
@@ -280,9 +280,18 @@ baseline1/8/9/12 and dynamic3, and task14's pre-RUN/terminal lifecycle.
 Task14 has no vendor scan-truncation runtime consumer here. Inherited enables
 outside that explicit set cause `ForeignEnable` before initialization can
 silently remove them. Terminal nonzero readback is `ReleaseNotQuiet`.
-Both faults retain primary enables/status/NRT and task enable/opaque state.
+Both faults retain primary enables/status/NRT and task enables. Production
+never reads the opaque task +0x4bc word; that view is diagnostic-only.
 The gate publishes the first fault once and serves no later hardware or queue
 operation; the HAL/driver owners remain quarantined. B0 calls safe
 `fatal::reset_recording`, reusing its 44-byte BLE gate record, and prints all
 banks on the next boot. Opaque bank1[0,2] and task17 retain their sourced
 positional names; this policy assigns them no event identity.
+
+Primary STATUS is masked by ENA. Zero STATUS readback after masking does not
+prove that hidden retained pending was acknowledged, and fault checks cannot
+see masked causes. The gate's current close protocol supplies no matrix-route
+closure capability to the handler. The separate CTE +0x4c4/+0x4c8/+0x4cc bank
+is outside admission/release: production publishes the disabled CTE baseline
+and has no CTE interrupt consumer (SOURCE: `BLOB_LIBBLE_PHY_INIT_REGISTERS`,
+`BLOB_LIBBLE_HW_CTE_RING_CONTROL`).

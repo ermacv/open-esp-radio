@@ -12,13 +12,8 @@ const MAGIC: u32 = 0x4247_4601;
 struct Record {
     magic: u32,
     reason: u32,
-    timer: u32,
-    lp: u32,
-    nrt_present: u32,
-    nrt: [u32; 2],
-    stopped_status: u32,
-    pending_0024: u32,
-    pending_002c: u32,
+    /// Reason-tagged encoded payload; each codec names its own source words.
+    payload: [u32; 8],
     checksum: u32,
 }
 
@@ -52,22 +47,25 @@ impl Record {
             GateFaultReason::NrtControllerTimeOverflow(cause) => cause.snapshots[1],
             _ => 0,
         };
+        let [nrt0, nrt1] = observation.nrt_status.unwrap_or_default();
         let mut record = Self {
             magic: MAGIC,
             reason,
-            timer: match observation.timer {
-                GateTimerState::Vacant => 0,
-                GateTimerState::Ready => 1,
-                GateTimerState::AwaitingPlan => 2,
-                GateTimerState::Stopped => 3,
-            },
-            lp: observation.lp_status,
-            nrt_present: u32::from(observation.nrt_status.is_some()),
-            nrt: observation.nrt_status.unwrap_or_default(),
-            stopped_status,
-            pending_0024: pending
-                .map_or(captured_inputs, |pending| u32::from(pending.state_0024())),
-            pending_002c: pending.map_or(0, |pending| u32::from(pending.state_002c())),
+            payload: [
+                match observation.timer {
+                    GateTimerState::Vacant => 0,
+                    GateTimerState::Ready => 1,
+                    GateTimerState::AwaitingPlan => 2,
+                    GateTimerState::Stopped => 3,
+                },
+                observation.lp_status,
+                u32::from(observation.nrt_status.is_some()),
+                nrt0,
+                nrt1,
+                stopped_status,
+                pending.map_or(captured_inputs, |pending| u32::from(pending.state_0024())),
+                pending.map_or(0, |pending| u32::from(pending.state_002c())),
+            ],
             checksum: 0,
         };
         record.checksum = record.sum();
@@ -76,18 +74,7 @@ impl Record {
 
     fn sum(&self) -> u32 {
         let mut sum = 0x811c_9dc5_u32;
-        for word in [
-            self.magic,
-            self.reason,
-            self.timer,
-            self.lp,
-            self.nrt_present,
-            self.nrt[0],
-            self.nrt[1],
-            self.stopped_status,
-            self.pending_0024,
-            self.pending_002c,
-        ] {
+        for word in [self.magic, self.reason].into_iter().chain(self.payload) {
             sum = (sum ^ word).wrapping_mul(0x0100_0193);
         }
         sum
@@ -96,12 +83,14 @@ impl Record {
     /// Consumes the record once, rejecting cold, partial or corrupt writes.
     fn take(&mut self) -> Option<Self> {
         let payload_valid = if matches!(self.reason, 10 | 11) {
-            true // all eight policy observation words are arbitrary u32 images
+            let [_, _, _, _, _, _, _, reserved] = self.payload;
+            reserved == 0 // the seven policy words are full-width images
         } else {
-            self.timer <= 3
-                && self.nrt_present <= 1
-                && (matches!(self.reason, 7 | 9) || self.pending_0024 <= u32::from(u8::MAX))
-                && self.pending_002c <= u32::from(u8::MAX)
+            let [timer, _, nrt_present, _, _, _, pending_0024, pending_002c] = self.payload;
+            timer <= 3
+                && nrt_present <= 1
+                && (matches!(self.reason, 7 | 9) || pending_0024 <= u32::from(u8::MAX))
+                && pending_002c <= u32::from(u8::MAX)
         };
         let valid = self.magic == MAGIC
             && self.checksum == self.sum()
@@ -130,27 +119,40 @@ impl fmt::Display for Record {
             _ => return Err(fmt::Error),
         };
         if matches!(self.reason, 10 | 11) {
+            let [
+                ena0,
+                ena1,
+                status0,
+                status1,
+                nrt0,
+                nrt1,
+                task_enable,
+                _reserved,
+            ] = self.payload;
             return write!(
                 f,
-                "OER-B0-FAULT: bluetooth-interrupt-policy reason={reason} ena0={:#010x} ena1={:#010x} status0={:#010x} status1={:#010x} nrt0={:#010x} nrt1={:#010x} task-enable={:#010x} task-state={:#010x}",
-                self.timer,
-                self.lp,
-                self.nrt_present,
-                self.nrt[0],
-                self.nrt[1],
-                self.stopped_status,
-                self.pending_0024,
-                self.pending_002c
+                "OER-B0-FAULT: bluetooth-interrupt-policy reason={reason} ena0={:#010x} ena1={:#010x} status0={:#010x} status1={:#010x} nrt0={:#010x} nrt1={:#010x} task-enable={:#010x}",
+                ena0, ena1, status0, status1, nrt0, nrt1, task_enable
             );
         }
         if self.reason == 8 {
+            let [_, raw_ticks, _, _, _, overflows, scale_shift, _] = self.payload;
             return write!(
                 f,
-                "OER-B0-FAULT: bluetooth-controller-time reason={reason} overflows={:#010x} raw-ticks={:#010x} scale-shift={}",
-                self.stopped_status, self.lp, self.pending_0024
+                "OER-B0-FAULT: bluetooth-controller-time reason={reason} overflows={overflows:#010x} raw-ticks={raw_ticks:#010x} scale-shift={scale_shift}"
             );
         }
-        let timer = match self.timer {
+        let [
+            timer,
+            lp,
+            nrt_present,
+            nrt0,
+            nrt1,
+            stopped_status,
+            pending_0024,
+            pending_002c,
+        ] = self.payload;
+        let timer = match timer {
             0 => "vacant",
             1 => "ready",
             2 => "awaiting-plan",
@@ -160,10 +162,10 @@ impl fmt::Display for Record {
         write!(
             f,
             "OER-B0-FAULT: bluetooth-gate reason={reason} timer={timer} lp={:#010x}",
-            self.lp
+            lp
         )?;
-        if self.nrt_present == 1 {
-            write!(f, " nrt={:#010x},{:#010x}", self.nrt[0], self.nrt[1])?;
+        if nrt_present == 1 {
+            write!(f, " nrt={:#010x},{:#010x}", nrt0, nrt1)?;
         } else {
             f.write_str(" nrt=unavailable")?;
         }
@@ -171,21 +173,21 @@ impl fmt::Display for Record {
             write!(
                 f,
                 " stopped-status={:#010x} pending0024={:#04x} pending002c={:#04x}",
-                self.stopped_status, self.pending_0024, self.pending_002c
+                stopped_status, pending_0024, pending_002c
             )?;
         }
         if self.reason == 7 {
             write!(
                 f,
                 " overflows={:#010x} captured-inputs={:#010x}",
-                self.stopped_status, self.pending_0024
+                stopped_status, pending_0024
             )?;
         }
         if self.reason == 9 {
             write!(
                 f,
                 " nrt-captured={:#010x},{:#010x}",
-                self.stopped_status, self.pending_0024
+                stopped_status, pending_0024
             )?;
         }
         Ok(())
@@ -200,18 +202,21 @@ impl Record {
             BluetoothInterruptPolicyFault::ReleaseNotQuiet(_) => 11,
         };
         let o = fault.observation();
-        // Reuse every payload word of the 44-byte slot; no gate-entry sample
+        // Encode the source words in the 44-byte slot; no gate-entry sample
         // exists for pre-initialization admission. The reason selects this layout.
         let mut record = Self {
             magic: MAGIC,
             reason,
-            timer: o.primary.enable_0,
-            lp: o.primary.enable_1,
-            nrt_present: o.primary.status_0,
-            nrt: [o.primary.status_1, o.primary.nrt_0],
-            stopped_status: o.primary.nrt_1,
-            pending_0024: o.task.enable,
-            pending_002c: o.task.opaque_state,
+            payload: [
+                o.primary.enable_0,
+                o.primary.enable_1,
+                o.primary.status_0,
+                o.primary.status_1,
+                o.primary.nrt_0,
+                o.primary.nrt_1,
+                o.task_enable,
+                0, // reserved: no opaque task-status read in production
+            ],
             checksum: 0,
         };
         record.checksum = record.sum();
@@ -225,13 +230,16 @@ impl Record {
         let mut record = Self {
             magic: MAGIC,
             reason: 8,
-            timer: 0,
-            lp: fault.raw_ticks,
-            nrt_present: 0,
-            nrt: [0; 2],
-            stopped_status: fault.overflows,
-            pending_0024: u32::from(fault.scale.shift_image()),
-            pending_002c: 0,
+            payload: [
+                0,
+                fault.raw_ticks,
+                0,
+                0,
+                0,
+                fault.overflows,
+                u32::from(fault.scale.shift_image()),
+                0,
+            ],
             checksum: 0,
         };
         record.checksum = record.sum();
@@ -307,7 +315,7 @@ mod tests {
         // The record outlives both boot-local owners, just as the NOLOAD slot does.
         {
             let previous_boot = storage.borrow();
-            assert_eq!(previous_boot.lp, 0x40002);
+            assert_eq!(previous_boot.payload[1], 0x40002);
         }
         let record = storage.borrow_mut().take().expect("next boot's record");
         assert_eq!(
@@ -326,11 +334,11 @@ mod tests {
             },
         )));
         // Arbitrary retained bytes, including their high bits, are not booleans.
-        slot.pending_0024 = 0xa5;
-        slot.pending_002c = 0xe7;
+        slot.payload[6] = 0xa5;
+        slot.payload[7] = 0xe7;
         slot.checksum = slot.sum();
         let record = slot.take().unwrap();
-        assert_eq!(record.stopped_status, 0xfedcba98);
+        assert_eq!(record.payload[5], 0xfedcba98);
         assert!(
             record
                 .to_string()
@@ -347,8 +355,8 @@ mod tests {
             },
         )));
         let record = slot.take().unwrap();
-        assert_eq!(record.lp, 0x40002);
-        assert_eq!(record.stopped_status, 0x40000);
+        assert_eq!(record.payload[1], 0x40002);
+        assert_eq!(record.payload[5], 0x40000);
         assert!(record.to_string().contains("stopped-status=0x00040000"));
     }
 
@@ -360,7 +368,7 @@ mod tests {
         partial.checksum = 0;
         assert!(partial.take().is_none());
         let mut corrupt = Record::new(fault(GateFaultReason::WorkOccupied));
-        corrupt.nrt[1] ^= 0x80000000;
+        corrupt.payload[4] ^= 0x80000000;
         assert!(corrupt.take().is_none());
     }
 
@@ -465,7 +473,7 @@ mod interrupt_policy_tests {
     use super::*;
     use oer_esp32s31_hal::bluetooth::{
         BluetoothInterruptObservation, BluetoothInterruptPolicyFault,
-        BluetoothInterruptPolicyObservation, BluetoothTaskInterruptObservation,
+        BluetoothInterruptPolicyObservation,
     };
     #[test]
     fn every_bank_word_survives_the_existing_slot_and_is_reported_once() {
@@ -478,10 +486,7 @@ mod interrupt_policy_tests {
                 nrt_0: 0xdeadbeef,
                 nrt_1: 0xbadcaffe,
             },
-            task: BluetoothTaskInterruptObservation {
-                enable: 0x80020000,
-                opaque_state: 0x80000001,
-            },
+            task_enable: 0x80020000,
         };
         for cause in [
             BluetoothInterruptPolicyFault::ForeignEnable(observation),
@@ -491,7 +496,7 @@ mod interrupt_policy_tests {
             assert_eq!(core::mem::size_of::<Record>(), 44);
             let record = slot.take().unwrap();
             let text = record.to_string();
-            assert!(text.contains("ena0=0x81234567 ena1=0xfedcba98 status0=0x12345678 status1=0x87654321 nrt0=0xdeadbeef nrt1=0xbadcaffe task-enable=0x80020000 task-state=0x80000001"));
+            assert!(text.contains("ena0=0x81234567 ena1=0xfedcba98 status0=0x12345678 status1=0x87654321 nrt0=0xdeadbeef nrt1=0xbadcaffe task-enable=0x80020000"));
             assert!(slot.take().is_none());
         }
     }

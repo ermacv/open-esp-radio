@@ -44,7 +44,7 @@ trait BankControl {
     fn mask_dynamic(&mut self);
     fn clear_pending(
         &mut self,
-        task: crate::bluetooth::BluetoothTaskInterruptObservation,
+        task_enable: u32,
     ) -> Result<(), crate::bluetooth::BluetoothInterruptPolicyFault>;
     fn release_output(&mut self);
     fn fence(&mut self);
@@ -61,13 +61,13 @@ trait TaskControl {
 fn sample_idle(
     bank: &mut impl BankControl,
     busy: BluetoothSchedulerBusyObservation,
-    task: crate::bluetooth::BluetoothTaskInterruptObservation,
+    task_enable: u32,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
     use BluetoothControllerOutputReleaseError as Error;
     if busy.is_busy() {
         return Err(Error::SchedulerBusy);
     }
-    check_supported_pending(bank, task)?;
+    check_supported_pending(bank, task_enable)?;
     if bank.fault_pending() {
         return Err(Error::InterruptFault);
     }
@@ -76,13 +76,16 @@ fn sample_idle(
 
 fn check_supported_pending(
     bank: &impl BankControl,
-    task: crate::bluetooth::BluetoothTaskInterruptObservation,
+    task_enable: u32,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
     let primary = bank.observation();
     if crate::bluetooth::interrupt_policy::unsupported_primary_pending(primary) {
         return Err(BluetoothControllerOutputReleaseError::InterruptPolicy(
             crate::bluetooth::BluetoothInterruptPolicyFault::ReleaseNotQuiet(
-                crate::bluetooth::BluetoothInterruptPolicyObservation { primary, task },
+                crate::bluetooth::BluetoothInterruptPolicyObservation {
+                    primary,
+                    task_enable,
+                },
             ),
         ));
     }
@@ -117,7 +120,7 @@ fn disable_run(task: &mut impl TaskControl) {
 fn release(
     bank: &mut impl BankControl,
     busy: BluetoothSchedulerBusyObservation,
-    task: crate::bluetooth::BluetoothTaskInterruptObservation,
+    task_enable: u32,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
     use BluetoothControllerOutputReleaseError as Error;
     // Do not acknowledge a new fault or release output if execution changed
@@ -125,16 +128,17 @@ fn release(
     if busy.is_busy() {
         return Err(Error::SchedulerBusy);
     }
-    check_supported_pending(bank, task)?;
+    check_supported_pending(bank, task_enable)?;
     if bank.fault_pending() {
         return Err(Error::InterruptFault);
     }
-    bank.clear_pending(task).map_err(Error::InterruptPolicy)?;
+    bank.clear_pending(task_enable)
+        .map_err(Error::InterruptPolicy)?;
     bank.release_output();
     bank.fence();
     crate::bluetooth::BluetoothInterruptPolicyObservation {
         primary: bank.observation(),
-        task,
+        task_enable,
     }
     .confirm_released()
     .map_err(Error::InterruptPolicy)
@@ -197,10 +201,11 @@ impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
 
     fn clear_pending(
         &mut self,
-        task: crate::bluetooth::BluetoothTaskInterruptObservation,
+        task_enable: u32,
     ) -> Result<(), crate::bluetooth::BluetoothInterruptPolicyFault> {
         // SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ / HW9_S31_MAC_MASK_ACK_20261027:
-        // acknowledge each exact saved primary image while delivery is masked.
+        // STATUS is masked by ENA. These samples cannot reveal retained
+        // causes hidden by mask_dynamic; zero is not a pending-zero proof.
         let bank_0 = self.bank.sample_bluetooth_primary_interrupt_bank_0();
         let bank_1 = self.bank.sample_bluetooth_primary_interrupt_bank_1();
         self.bank
@@ -218,7 +223,10 @@ impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
             primary.nrt_1 = snapshots[1];
             return Err(
                 crate::bluetooth::BluetoothInterruptPolicyFault::ReleaseNotQuiet(
-                    crate::bluetooth::BluetoothInterruptPolicyObservation { primary, task },
+                    crate::bluetooth::BluetoothInterruptPolicyObservation {
+                        primary,
+                        task_enable,
+                    },
                 ),
             );
         }
@@ -260,8 +268,8 @@ impl<P: BluetoothPlacements> TaskControl for TaskHardware<'_, P> {
             w.set_bits_18_31_opaque(oer_mmio::Bits::constant::<0>());
         });
         // SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS: init publishes all task WT
-        // lanes together. Readback below checks this store's effect; it makes
-        // no universal silicon-clear claim and never reads/ORs a WT word.
+        // lanes together. The opaque task status is not read; this store makes
+        // no readback or universal silicon-clear claim and never reads/ORs a WT word.
         task.trigger_interrupt_clear(|t| {
             t.bit_0_opaque()
                 .bits_1_2_opaque(oer_mmio::Bits::constant::<0x3>())
@@ -298,7 +306,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
         &mut self,
         busy: BluetoothSchedulerBusyObservation,
         fault_acknowledged: bool,
-        task: crate::bluetooth::BluetoothTaskInterruptObservation,
+        task_enable: u32,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
         sample_idle(
             &mut BankHardware::<P> {
@@ -306,7 +314,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
                 fault_acknowledged,
             },
             busy,
-            task,
+            task_enable,
         )
     }
 
@@ -320,12 +328,12 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
 
     /// Acknowledge the saved primary/NRT sources and release the output when a BUSY
     /// sample taken after RUN was disabled is idle and no fault is pending
-    /// or was acknowledged. Faults are never cleared.
+    /// or was acknowledged. Masked STATUS does not prove pending is absent.
     pub(crate) fn release_idle_output(
         &mut self,
         busy: BluetoothSchedulerBusyObservation,
         fault_acknowledged: bool,
-        task: crate::bluetooth::BluetoothTaskInterruptObservation,
+        task_enable: u32,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
         release(
             &mut BankHardware::<P> {
@@ -333,7 +341,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
                 fault_acknowledged,
             },
             busy,
-            task,
+            task_enable,
         )
     }
 

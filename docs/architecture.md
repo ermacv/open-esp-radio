@@ -497,12 +497,16 @@ its model and conformance case.
   Admission checks all controller enables before HAL/PHY initialization against
   the explicit production baseline, dynamic and task-lifecycle set; an enable
   outside that set is a named `ForeignEnable` fault. Release retains the existing
-  handler/task step order, extends masks to the sourced feature lanes and
-  task17, acknowledges primary/NRT W1C samples and the task WT bank, and checks
-  all enable/pending observations before the gate closes. Nonzero readback is
-  `ReleaseNotQuiet`. Both faults retain all bank observations and quarantine
-  owners through `fatal::reset_recording`; B0 reuses its 44-byte BLE gate slot.
-  These sequential reads do not prove producer shutdown or name opaque causes.
+  handler/task step order, extends masks to sourced feature lanes and
+  task17, acknowledges saved primary/NRT status and the task WT bank, and
+  rejects nonzero observed enables/status as `ReleaseNotQuiet`. Primary STATUS
+  is masked by ENA: a zero masked read does not establish that retained pending
+  is zero. The opaque task +0x4bc view is diagnostic-only and is never read by
+  production. Both faults retain primary observations and task enables and
+  quarantine owners through `fatal::reset_recording`; B0 reuses its 44-byte
+  BLE gate slot. The separate CTE interrupt bank is outside this policy;
+  production has no enabled CTE interrupt consumer. These sequential reads
+  neither prove producer shutdown nor name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`). The port boundary follows the
   OpenThread radio platform: the backend executes acknowledgement, CSMA-CA
   and the cipher as advertised capabilities; retries, the pending-table

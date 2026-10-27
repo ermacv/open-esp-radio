@@ -9,10 +9,7 @@ fn quiet() -> BluetoothInterruptPolicyObservation {
             nrt_0: 0,
             nrt_1: 0,
         },
-        task: BluetoothTaskInterruptObservation {
-            enable: 0,
-            opaque_state: 0,
-        },
+        task_enable: 0,
     }
 }
 #[test]
@@ -31,7 +28,7 @@ fn every_foreign_enable_fault_keeps_all_banks() {
                     PRODUCTION.baseline_1.0 | PRODUCTION.dynamic_1.0
                 }
                 _ => {
-                    observed.task.enable = bit;
+                    observed.task_enable = bit;
                     PRODUCTION.task.0
                 }
             };
@@ -51,7 +48,7 @@ fn every_foreign_enable_fault_keeps_all_banks() {
 #[test]
 fn release_requires_every_enable_and_pending_view_to_be_zero() {
     assert_eq!(quiet().confirm_released(), Ok(()));
-    for bank in 0..8 {
+    for bank in 0..7 {
         let mut observed = quiet();
         let words = [
             &mut observed.primary.enable_0,
@@ -60,8 +57,7 @@ fn release_requires_every_enable_and_pending_view_to_be_zero() {
             &mut observed.primary.status_1,
             &mut observed.primary.nrt_0,
             &mut observed.primary.nrt_1,
-            &mut observed.task.enable,
-            &mut observed.task.opaque_state,
+            &mut observed.task_enable,
         ];
         *words.into_iter().nth(bank).unwrap() = 0x80000001;
         assert_eq!(

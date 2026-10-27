@@ -1,8 +1,5 @@
 //! Production interrupt admission and terminal readback policy.
-use super::{
-    BluetoothInterruptObservation, BluetoothTaskInterruptObservation, InterruptSetupOwner,
-    TaskOwner,
-};
+use super::{BluetoothInterruptObservation, InterruptSetupOwner, TaskOwner};
 use oer_esp32s31_pac::bt_mac;
 
 // These are policy sets, with geometry supplied by the PAC. Baseline faults
@@ -59,7 +56,7 @@ pub(super) const fn unsupported_primary_pending(primary: BluetoothInterruptObser
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothInterruptPolicyObservation {
     pub primary: BluetoothInterruptObservation,
-    pub task: BluetoothTaskInterruptObservation,
+    pub task_enable: u32,
 }
 
 /// An interrupt invariant failure. Owners must remain quarantined until reset.
@@ -82,14 +79,15 @@ impl BluetoothInterruptPolicyObservation {
     pub fn admit(self) -> Result<(), BluetoothInterruptPolicyFault> {
         if self.primary.enable_0 & !(PRODUCTION.baseline_0.0 | PRODUCTION.dynamic_0.0) != 0
             || self.primary.enable_1 & !(PRODUCTION.baseline_1.0 | PRODUCTION.dynamic_1.0) != 0
-            || self.task.enable & !PRODUCTION.task.0 != 0
+            || self.task_enable & !PRODUCTION.task.0 != 0
         {
             Err(BluetoothInterruptPolicyFault::ForeignEnable(self))
         } else {
             Ok(())
         }
     }
-    /// Verify all observed banks, including the separate NRT/task views.
+    /// Check the supplied primary/NRT status images and all enable words.
+    /// A masked STATUS image does not establish that retained pending is zero.
     pub fn confirm_released(self) -> Result<(), BluetoothInterruptPolicyFault> {
         if [
             self.primary.enable_0,
@@ -98,8 +96,7 @@ impl BluetoothInterruptPolicyObservation {
             self.primary.status_1,
             self.primary.nrt_0,
             self.primary.nrt_1,
-            self.task.enable,
-            self.task.opaque_state,
+            self.task_enable,
         ]
         .into_iter()
         .any(|word| word != 0)
@@ -116,7 +113,7 @@ impl InterruptSetupOwner {
     pub fn admit_interrupts(&self, task: &TaskOwner) -> Result<(), BluetoothInterruptPolicyFault> {
         BluetoothInterruptPolicyObservation {
             primary: self.interrupt_observation(),
-            task: task.interrupt_observation(),
+            task_enable: task.interrupt_enable_image(),
         }
         .admit()
     }

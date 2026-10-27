@@ -176,10 +176,7 @@ mod tests {
                 nrt_0: 0xdeadbeef,
                 nrt_1: 0xbadcaffe,
             },
-            task: BluetoothTaskInterruptObservation {
-                enable: 0x20000,
-                opaque_state: 0x2468,
-            },
+            task_enable: 0x20000,
         };
         let mut writes = 0;
         let result = ControllerHalInitialized::initialize_with(

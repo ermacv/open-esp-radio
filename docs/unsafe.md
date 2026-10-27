@@ -894,20 +894,23 @@ owners. MMIO outside the restricted PAC must use typed accessors. Missing
 register fields are reviewed in `chips/<chip>/registers/` and regenerated
 into the PAC, never reconstructed with local masks in a HAL or adapter.
 
-Bluetooth admission checks every enable bank before HAL/PHY initialization can
-mask inherited lanes. `ForeignEnable` retains the complete primary enable,
-status and NRT words and the task enable/opaque-state view. The typed production
-set covers baseline fault/overflow, dynamic scheduler and task14 lifecycle
-lanes. Terminal release extends the existing handler mask to sourced feature
-lanes and the existing task RUN-disable step to all task masks, including
-unnamed task17. Exact primary/NRT W1C samples and the sourced task WT all-lane
-strobe precede zero-readback admission; `ReleaseNotQuiet` retains any residual
-state. No step of the alternating close protocol is reordered. Both named
-faults quarantine the task/IRQ owners and reach safe `fatal::reset_recording`.
-The same 44-byte BLE gate slot uses a reason-specific eight-word payload;
-next-boot output reports every observed bank. No new unsafe or retained
-allocation is involved. Bank1[0,2] and task17 remain opaque with their existing
-SOURCEs. Sequential readback is not a producer-drain proof.
+Bluetooth admission checks primary and task enables before HAL/PHY
+initialization can mask inherited lanes. `ForeignEnable` retains primary
+enables, masked status, NRT words and task enables. The opaque task +0x4bc
+word is diagnostic-only; production never reads it. The typed production set
+covers baseline fault/overflow, dynamic scheduler and task14 lifecycle lanes.
+Terminal masking covers sourced primary feature lanes and all task enables,
+including unnamed task17. Primary/NRT acknowledgement consumes saved status
+images; task acknowledgement uses the sourced WT all-lane strobe. Masked
+primary STATUS zero does not prove hidden retained pending is absent, and
+fault checks only observe enabled lanes. `ReleaseNotQuiet` retains nonzero
+observations. Both named faults quarantine the task/IRQ owners and reach safe
+`fatal::reset_recording`. The same 44-byte BLE gate slot has a reason-tagged
+eight-word payload: seven policy source words and one reserved zero word.
+Next-boot output reports the observed banks. Bank1[0,2] and task17 remain
+opaque with their existing SOURCEs. CTE +0x4c4/+0x4c8/+0x4cc is outside this
+policy; production has no enabled CTE interrupt consumer. Sequential readback
+is not a producer-drain proof.
 
 Bluetooth controller-time overflow stays with the primary IRQ bank owner.
 Preparation arms bank-one `CONTROLLER_TIME_OVERFLOW` in baseline `0x1302`;

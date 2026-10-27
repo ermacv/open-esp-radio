@@ -1058,7 +1058,7 @@ fn unexpected_nrt_overflow_quarantines_the_bank_and_retains_the_exact_later_pair
 fn an_admission_policy_fault_is_absorbing_before_any_handler_register_access() {
     use bluetooth::{
         BluetoothInterruptObservation, BluetoothInterruptPolicyFault,
-        BluetoothInterruptPolicyObservation, BluetoothTaskInterruptObservation,
+        BluetoothInterruptPolicyObservation,
     };
     let mut harness = Harness::new();
     let observation = BluetoothInterruptPolicyObservation {
@@ -1070,10 +1070,7 @@ fn an_admission_policy_fault_is_absorbing_before_any_handler_register_access() {
             nrt_0: 0xdeadbeef,
             nrt_1: 0xbadcaffe,
         },
-        task: BluetoothTaskInterruptObservation {
-            enable: 0x20000,
-            opaque_state: 0x12345678,
-        },
+        task_enable: 0x20000,
     };
     let cause = observation.admit().unwrap_err();
     assert_eq!(
@@ -1103,10 +1100,7 @@ fn a_release_policy_fault_keeps_the_open_bank_and_stops_primary_and_nrt_service(
                 nrt_0: 0,
                 nrt_1: 0,
             },
-            task: bluetooth::BluetoothTaskInterruptObservation {
-                enable: 0,
-                opaque_state: 0,
-            },
+            task_enable: 0,
         },
     );
     harness.script(|model| model.policy_fault = Some(cause));

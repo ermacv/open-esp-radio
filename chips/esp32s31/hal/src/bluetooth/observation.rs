@@ -13,7 +13,7 @@ pub struct BluetoothInterruptObservation {
     pub nrt_1: u32,
 }
 /// Task-bank enable and complete opaque +0x4bc word.
-/// Read side effects of +0x4bc are not established; production checks it at admission and terminal release.
+/// Diagnostic-only: read side effects of +0x4bc are not established.
 /// No cause or CPU-output equation is implied.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothTaskInterruptObservation {
@@ -106,9 +106,14 @@ impl InterruptOutputReleasedOwner {
     }
 }
 impl TaskOwner {
+    /// Read all modeled task enables without accessing the opaque +0x4bc word.
+    pub fn interrupt_enable_image(&self) -> u32 {
+        task_enable(&self.registers.bluetooth.btmac_ble_phy_init)
+    }
+
     /// Read task enables and the complete opaque +0x4bc word.
-    /// Read side effects of +0x4bc are not established. This method emits no writes; production uses the modeled view
-    /// for admission and terminal release, without inferring an output equation.
+    /// Diagnostic-only: read side effects of +0x4bc are not established.
+    /// Production admission and release use only `interrupt_enable_image`.
     /// SOURCE: BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027 and
     /// S31_MMIO_USE_201014BC / S31_MMIO_DECLARED_201014BC (use, not read safety).
     /// Unmodeled lanes and event identity stay unknown; the sourced whole-word
@@ -122,9 +127,13 @@ pub(super) fn task<B: oer_mmio::Placement>(
     b: &pac::bt_mac::BtmacBlePhyInit<B>,
 ) -> BluetoothTaskInterruptObservation {
     BluetoothTaskInterruptObservation {
-        enable: interrupt_enable(b.read_interrupt_enable()),
+        enable: task_enable(b),
         opaque_state: b.read_bluetooth_task_diagnostic_image(),
     }
+}
+
+pub(super) fn task_enable<B: oer_mmio::Placement>(b: &pac::bt_mac::BtmacBlePhyInit<B>) -> u32 {
+    interrupt_enable(b.read_interrupt_enable())
 }
 
 #[cfg(test)]
