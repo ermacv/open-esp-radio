@@ -405,17 +405,21 @@ unchanged runtime set. Polling performs the same transaction with `Silent`
 before constructing the operational pair. Stale timer1 pending cannot run a
 new operation's callback. Lanes 7/10/13 are never enabled by startup; an
 unexpected visible startup sample is `Fault::StartupEvents`, masked and left
-unacknowledged with all owners retained. The existing 24-byte retained record
-also encodes this reason without an engine state. Deactivation issues STOP and
-both timer-stop commands, samples before masking and acknowledges its saved
-sample. Commands and selected acknowledgements do not prove producer drain.
+unacknowledged with all owners retained. Hidden pending and masked visibility
+are unmeasured for lanes 7/10/13; a sample without them does not prove their
+absence. A new 12-byte retained record encodes this reason without an engine
+state. Deactivation issues STOP and both timer-stop commands, samples before
+masking and acknowledges its saved sample. Commands and selected
+acknowledgements do not prove producer drain.
 Engine interrupt service rejects a sample containing lane 7, 10 or 13 with
 `Fault::UnhandledEvents` before acknowledgement or dispatch, preserving
 all named events, each unnamed lane and the entry state. The consuming
 engine/MAC owner becomes an absorbing quarantine with no recovery API.
 The PHY HIL image records the fault through safe `fatal::reset_recording`
-without dropping its quarantined owners; its 24-byte versioned/checksummed
-record prints at the next boot and remains retained on output refusal.
+without dropping its quarantined owners. The new record adds 12 bytes of
+retained data to the PHY HIL image: magic, a diagnostic word packing all fourteen
+event flags, state and reason, and checksum. It prints at the next boot and
+remains retained on output refusal.
 During ACK reception the engine stops timer0, samples and clears its event
 while enabled, then masks
 it. A new ACK wait enables and clears old pending while timer0 is stopped,

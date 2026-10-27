@@ -488,8 +488,48 @@ fn startup_exposes_only_handled_events_and_keeps_runtime_selection_unchanged() {
 
 #[test]
 fn unsupported_startup_observations_quarantine_both_polled_owners() {
+    assert_visible_startup_quarantine(true, true, true, true);
+}
+
+#[test]
+fn visible_startup_lane7_quarantines_without_acknowledgement() {
+    assert_visible_startup_quarantine(true, false, false, false);
+}
+
+#[test]
+fn visible_startup_lane10_quarantines_without_acknowledgement() {
+    assert_visible_startup_quarantine(false, true, false, false);
+}
+
+#[test]
+fn visible_startup_lane13_quarantines_without_acknowledgement() {
+    assert_visible_startup_quarantine(false, false, true, false);
+}
+
+fn assert_visible_startup_quarantine(events_7: bool, clock: bool, events_13: bool, other: bool) {
     let mut memory = HostMemory::filled(u32::MAX);
-    let (task, setup) = memory.owners();
+    let (task, mut setup) = memory.owners();
+    // Host memory stores the selected W1C image as the next visible read.
+    // This injects visible input; it does not model hidden hardware pending
+    // or establish masked visibility for the three unsupported lanes.
+    let visible = setup
+        .mac
+        .sample_event_status()
+        .retain_tx_done(other)
+        .retain_rx_done(other)
+        .retain_ack_tx_done(other)
+        .retain_ack_rx_done(other)
+        .retain_rx_abort(other)
+        .retain_tx_abort(other)
+        .retain_ed_done(other)
+        .retain_events_7(events_7)
+        .retain_timer0_overflow(other)
+        .retain_timer1_overflow(other)
+        .retain_clock_count_match(clock)
+        .retain_tx_sfd_done(other)
+        .retain_rx_sfd_done(other)
+        .retain_events_13(events_13);
+    setup.mac.acknowledge_event_status(visible);
     let (startup, interrupts) = setup.arm(task);
     let observed = interrupts.events().observation();
     let quarantine = match crate::ieee802154::ll::Ieee802154MacOwners::new(

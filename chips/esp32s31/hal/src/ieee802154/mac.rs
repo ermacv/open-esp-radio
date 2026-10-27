@@ -610,6 +610,9 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptInitialization
         self.task.enable_handled_events();
     }
     fn acknowledge_startup_events(&mut self, snapshot: Self::EventSnapshot) -> Result<(), Fault> {
+        // Reject unsupported lanes only when visible in this sample. Masked
+        // visibility/hidden pending is unmeasured for 7/10/13; an empty read
+        // cannot establish their absence.
         let observation = interrupt::observation(&snapshot);
         if observation.classification().is_err()
             || observation.contains(Ieee802154Event::ClockCountMatch)

@@ -126,7 +126,12 @@ returns the task owner with events masked. Thus inherited timer1 pending cannot
 invoke a new `receive_at` callback. The subsequent working event sets stay
 unchanged. Unexpected visible startup events remain unacknowledged and produce
 `Fault::StartupEvents`; their owners stay quarantined through retained reset.
-The existing 24-byte record carries that reason without an engine state.
+The new 12-byte record carries that reason without an engine state. Its
+magic, packed diagnostic and checksum add 12 retained bytes to the PHY HIL
+image. The diagnostic packs all fourteen event flags, state and reason;
+its positions are independent from hardware register encoding. Masked
+visibility and hidden pending are unmeasured for lanes 7/10/13: this check
+rejects only lanes visible in the sample, without proving hidden absence.
 Deactivation issues STOP and both timer-stop commands, samples, masks and
 acknowledges its saved sample. These commands and selected acknowledgements do
 not prove that every hardware producer drained.
@@ -136,7 +141,7 @@ or the unsupported clock-match event (10) with `Fault::UnhandledEvents` before a
 or dispatch, preserving the complete event sample and entry state. The combined
 MAC/engine owner consumes itself into absorbing `Quarantined` storage with no
 recovery operations. The S31 PHY HIL image calls `fatal::reset_recording` with
-those owners retained. Its 24-byte versioned/checksummed record reports the
+those owners retained. Its new 12-byte versioned/checksummed record reports the
 original fault at the next boot and survives console refusal.
 SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`,
 [PR #689](https://github.com/ermacv/open-esp-radio/pull/689): masking hides
