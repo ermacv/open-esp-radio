@@ -1330,7 +1330,7 @@ accuracy = "positional"
 completeness = "unknown"
 
 [review.entity."WORD_04BC_OPAQUE.BIT_3_OPAQUE"]
-sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027", "BLOB_S31_BT_TASK_TEST_ACK_20261027"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "BLOB_S31_BT_TASK_CLEAR_SELECTED_20261027"]
 provenance = "derived"
 accuracy = "positional"
 completeness = "unknown"
@@ -4136,7 +4136,7 @@ description = "Observed task-status positions; individual event identities unkno
 name = "BIT_3_OPAQUE"
 bits = "3"
 class = "read-only"
-description = "Selected by the registered PHY callback and after link-end polling in vendor test code; physical event and output relation unknown."
+description = "Read and tested as task status3 by the registered PHY callback ble_11.o::sym_ble_Qun3D1WqLBkiv6VJO9QH. The physical event and output relation remain unknown."
 
 [[registers.fields]]
 name = "BIT_4_OPAQUE"
@@ -4196,7 +4196,7 @@ description = "Part of the primary broker's selected diagnostic image; physical 
 name = "BIT_21_OPAQUE"
 bits = "21"
 class = "read-only"
-description = "Acknowledged by the primary ISOAL input-SDU consumer and its mask/ack lifecycle; exact physical condition unknown."
+description = "Read and tested as task status21 by ble_52.o::r_sym_ble_05WbVoys6tQqUYKk2rt0, reached from primary HAL entry0 through iso_2.o::brk_sym_iso_6SFIpEwXw1SsCdgfyN88. The exact physical condition and output relation remain unknown."
 
 [[registers.fields]]
 name = "BIT_24_OPAQUE"

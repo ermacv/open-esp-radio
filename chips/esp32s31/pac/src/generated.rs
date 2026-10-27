@@ -29809,7 +29809,7 @@ pub mod bt_mac {
                 oer_mmio::Bits::truncate(self.0 >> 1)
             }
 
-            /// Selected by the registered PHY callback and after link-end polling in vendor test code; physical event and output relation unknown.
+            /// Read and tested as task status3 by the registered PHY callback ble_11.o::sym_ble_Qun3D1WqLBkiv6VJO9QH. The physical event and output relation remain unknown.
             #[inline]
             pub const fn bit_3_opaque(self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -29869,7 +29869,7 @@ pub mod bt_mac {
                 (self.0 & 0x00100000) != 0
             }
 
-            /// Acknowledged by the primary ISOAL input-SDU consumer and its mask/ack lifecycle; exact physical condition unknown.
+            /// Read and tested as task status21 by ble_52.o::r_sym_ble_05WbVoys6tQqUYKk2rt0, reached from primary HAL entry0 through iso_2.o::brk_sym_iso_6SFIpEwXw1SsCdgfyN88. The exact physical condition and output relation remain unknown.
             #[inline]
             pub const fn bit_21_opaque(self) -> bool {
                 (self.0 & 0x00200000) != 0
