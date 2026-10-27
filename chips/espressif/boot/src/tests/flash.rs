@@ -295,7 +295,7 @@ struct Xip {
 }
 
 impl XipWindow for Xip {
-    fn word(&self, index: usize) -> u32 {
+    fn word(&self, index: usize) -> Result<u32, FlashFailure> {
         let mut model = self.model.borrow_mut();
         assert!(
             !model.fetch_suspended,
@@ -307,12 +307,12 @@ impl XipWindow for Xip {
         );
         model.xip_reads.push(index);
         let word = model.memory[(self.base / 4) as usize + index];
-        corrupt(
+        Ok(corrupt(
             word,
             model.cache_timing,
             model.cache_good,
             model.tuned_clock,
-        )
+        ))
     }
 }
 
@@ -417,6 +417,12 @@ fn the_tuning_region_holds_whole_pages_inside_the_flash_and_the_address_space() 
         bytes,
     };
     let capacity = 16 * 1024 * 1024;
+    for candidates in [0, 17, usize::MAX] {
+        assert_eq!(
+            page_count(region(0, 0x4200_0000, 16 * 4096), capacity, candidates),
+            None
+        );
+    }
     assert_eq!(
         page_count(region(0x10000, 0x4201_0000, 16 * 4096), capacity, 12),
         Some(16)
@@ -472,23 +478,31 @@ const REGION: TuningRegion = TuningRegion {
 };
 
 fn tune_on(model: &Shared, region: TuningRegion) -> Result<FlashTiming, BootFailure> {
+    let xip = Xip {
+        model: Rc::clone(model),
+        base: region.physical_start,
+    };
+    tune_with_xip(model, region, &xip)
+}
+
+fn tune_with_xip(
+    model: &Shared,
+    region: TuningRegion,
+    xip: &impl XipWindow,
+) -> Result<FlashTiming, BootFailure> {
     let clock = Rc::clone(&model.borrow().clock);
     let ticking = Ticking::new(&clock);
     let deadline = BootDeadline::start(&ticking, budget());
     let mut port = Port(Rc::clone(model));
     let mut flash_clock = FlashClock(Rc::clone(model));
     let mut fetch = Fetch(Rc::clone(model));
-    let xip = Xip {
-        model: Rc::clone(model),
-        base: region.physical_start,
-    };
     let mut scratch = vec![0; TUNING_SCRATCH_WORDS];
     tune(
         TuningOwners {
             flash: &mut port,
             clock: &mut flash_clock,
             cache: &mut fetch,
-            xip: &xip,
+            xip,
         },
         GEOMETRY,
         region,
@@ -607,9 +621,62 @@ fn a_page_that_reads_back_otherwise_at_the_chosen_timing_rolls_back() {
 struct Changed(Xip);
 
 impl XipWindow for Changed {
-    fn word(&self, index: usize) -> u32 {
-        let word = self.0.word(index);
-        if index == 0 { !word } else { word }
+    fn word(&self, index: usize) -> Result<u32, FlashFailure> {
+        let word = self.0.word(index)?;
+        Ok(if index == 0 { !word } else { word })
+    }
+}
+
+struct RefusingXip {
+    inner: Xip,
+    at: usize,
+}
+
+impl XipWindow for RefusingXip {
+    fn word(&self, index: usize) -> Result<u32, FlashFailure> {
+        if index == self.at {
+            Err(FlashFailure::XipOutside {
+                index,
+                words: self.at,
+            })
+        } else {
+            self.inner.word(index)
+        }
+    }
+}
+
+#[test]
+fn a_refused_xip_read_preserves_its_bounds_and_rolls_back_both_sweep_phases() {
+    // Candidate pages begin at page four. Page zero is only read during
+    // final verification, after applying the selected timing.
+    for at in [4 * 1024, 0] {
+        let clock = Rc::new(VirtualClock::new());
+        let model = model(&clock);
+        model.borrow_mut().direct_good = 0xfff;
+        model.borrow_mut().cache_good = 0xfff;
+        let xip = RefusingXip {
+            inner: Xip {
+                model: Rc::clone(&model),
+                base: REGION.physical_start,
+            },
+            at,
+        };
+        assert_eq!(
+            tune_with_xip(&model, REGION, &xip),
+            Err(BootFailure::Flash(FlashFailure::XipOutside {
+                index: at,
+                words: at,
+            }))
+        );
+        let ops = without_reads(&ops(&model));
+        assert_eq!(
+            &ops[ops.len() - 4..],
+            [Op::Suspend, Op::RestoreClock, Op::RestoreTiming, Op::Resume]
+        );
+        let model = model.borrow();
+        assert!(!model.tuned_clock);
+        assert!(!model.fetch_suspended);
+        assert!(!model.xip_reads.contains(&at));
     }
 }
 

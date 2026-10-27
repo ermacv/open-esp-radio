@@ -264,6 +264,11 @@ release a secondary hart.
   which lends the mapped region once as a static mutable byte slice. Staging
   validates, copies and checks the image through that slice and retains its
   payload loan until the cache publication and stage-two jump.
+  Flash tuning claims its SRAM scratch fallibly and checks each XIP word;
+  a refused read carries its index and region length through `BootFailure`.
+  All polling stays under the common boot deadline; failures use the
+  bootstrap's existing terminal report. It writes bounded decimal observations
+  directly, without formatter dispatch or another retained allocation.
   Stage two adopts the initialized platform without repeating cold boot.
   Its own traps, vectors, checked exits and the image's `critical-section`
   run on the typed interrupt controller. Each table entry moves its part

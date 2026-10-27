@@ -124,6 +124,11 @@ extern "C" fn bootstrap_main() -> ! {
         mmu::MmuTarget::Flash,
         tuning_virtual,
     ));
+    let scratch = checked(
+        FLASH_TUNING_SCRATCH
+            .try_take()
+            .ok_or(flash::FlashFailure::ScratchClaimed.into()),
+    );
     checked(flash::tune(
         flash::TuningOwners {
             flash: &mut hardware.flash,
@@ -138,7 +143,7 @@ extern "C" fn bootstrap_main() -> ! {
             bytes: size_of::<[u32; FLASH_TUNING_REFERENCE_WORDS]>() as u32,
         },
         &boot::FLASH_TIMING_CANDIDATES,
-        FLASH_TUNING_SCRATCH.take(),
+        scratch,
         boot::TUNING_WAITS,
         &deadline,
     ));

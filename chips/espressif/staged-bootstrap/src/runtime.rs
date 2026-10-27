@@ -151,7 +151,11 @@ pub fn stage<'a>(
     let destination = psram
         .get_mut(validated.payload.clone())
         .ok_or(StageError::Header)?;
-    destination.copy_from_slice(payload);
+    // The validated range and payload have the same checked length. Zip
+    // copies that complete range without a panicking slice-copy entry point.
+    for (byte, &source) in destination.iter_mut().zip(payload) {
+        *byte = source;
+    }
     psram
         .get_mut(validated.bss)
         .ok_or(StageError::Header)?
@@ -282,17 +286,9 @@ pub fn print(message: &'static str) {
 /// Report the typed cold-boot failure, retaining its observed density, and halt.
 #[cfg(target_arch = "riscv32")]
 pub fn fail_boot(error: oer_espressif_boot::BootFailure) -> ! {
-    use core::fmt::Write;
-
-    struct EarlyWriter;
-    impl core::fmt::Write for EarlyWriter {
-        fn write_str(&mut self, text: &str) -> core::fmt::Result {
-            early_text(text.as_bytes());
-            Ok(())
-        }
-    }
-
-    let _ = write!(EarlyWriter, "{}", BootFailureRecord(error));
+    BootFailureRecord(error).write(|bytes| {
+        let _ = early_text(bytes);
+    });
     halt()
 }
 
@@ -300,24 +296,52 @@ pub fn fail_boot(error: oer_espressif_boot::BootFailure) -> ! {
 struct BootFailureRecord(oer_espressif_boot::BootFailure);
 
 #[cfg(any(test, target_arch = "riscv32"))]
-impl core::fmt::Display for BootFailureRecord {
-    fn fmt(&self, output: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use oer_espressif_boot::{BootFailure, psram::PsramFailure};
+impl BootFailureRecord {
+    fn write(self, mut output: impl FnMut(&[u8])) {
+        use oer_espressif_boot::{BootFailure, FlashFailure, psram::PsramFailure};
 
-        write!(output, "OER_BOOT bootstrap=FAIL reason={}", self.0.reason())?;
+        output(b"OER_BOOT bootstrap=FAIL reason=");
+        output(self.0.reason().as_bytes());
         match self.0 {
             BootFailure::Psram(PsramFailure::DensityMismatch { found }) => {
-                write!(output, " found={found}")?;
+                output(b" found=");
+                decimal(found as usize, &mut output);
             }
             BootFailure::Psram(PsramFailure::UnsupportedDensity(code)) => {
-                write!(output, " code={code}")?;
+                output(b" code=");
+                decimal(code as usize, &mut output);
+            }
+            BootFailure::Flash(FlashFailure::XipOutside { index, words }) => {
+                output(b" index=");
+                decimal(index, &mut output);
+                output(b" words=");
+                decimal(words, &mut output);
             }
             _ => {}
         }
         if let Some(wait) = self.0.wait() {
-            write!(output, " wait={wait}")?;
+            output(b" wait=");
+            output(wait.as_bytes());
         }
-        output.write_str("\r\n")
+        output(b"\r\n");
+    }
+}
+
+#[cfg(any(test, target_arch = "riscv32"))]
+fn decimal(mut value: usize, output: &mut impl FnMut(&[u8])) {
+    // At most one decimal digit per bit, on both the host and the chip.
+    let mut digits = [b'0'; usize::BITS as usize];
+    let mut first = digits.len();
+    for digit in digits.iter_mut().rev() {
+        first -= 1;
+        *digit = b'0' + (value % 10) as u8;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+    for digit in digits.iter().skip(first) {
+        output(core::slice::from_ref(digit));
     }
 }
 

@@ -833,6 +833,12 @@ needs:
   Its `Staged` result retains the exclusive payload loan through publication
   and handoff. The bootstrap checks the physical PSRAM base before the probe
   and its flash source immediately after the probe, before header/CRC reads.
+  Payload copying iterates over the checked equal-length source and destination.
+  The tuning scratch uses a fallible exclusive claim. XIP reads return the
+  rejected index and reference length rather than panicking; the sweep and
+  verification propagate the typed boot failure through their existing
+  suspended-fetch rollback. The terminal boot report emits bytes directly
+  and keeps all boot owners on the diverging caller's stack.
 - A probe image is entered by the Blobray verifier through the exported
   symbols the vendor code calls (`_start`, `ets_delay_us`, the probe
   entries), with that code's C signatures, and keeps its fixtures in statics
