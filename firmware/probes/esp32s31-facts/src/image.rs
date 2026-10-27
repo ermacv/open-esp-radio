@@ -17,6 +17,7 @@ mod opaque;
 mod opaque_wave2;
 
 mod ble;
+mod ble_inherited;
 mod ble_wave2;
 mod generic;
 mod lp_ack_race;
@@ -265,6 +266,46 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 229,
         run: Action::Thread(generic::wave2::wrap),
+    },
+    Probe {
+        id: 210,
+        run: Action::Thread(ble_inherited::inherited),
+    },
+    Probe {
+        id: 211,
+        run: Action::Thread(ble_inherited::admission),
+    },
+    Probe {
+        id: 212,
+        run: Action::Thread(ble_inherited::software_reset),
+    },
+    Probe {
+        id: 213,
+        run: Action::Thread(ble_inherited::after_reset),
+    },
+    Probe {
+        id: 214,
+        run: Action::Thread(ble_inherited::empty_arrival),
+    },
+    Probe {
+        id: 215,
+        run: Action::Thread(ble_inherited::different_arrival),
+    },
+    Probe {
+        id: 216,
+        run: Action::Thread(ble_inherited::same_arrival),
+    },
+    Probe {
+        id: 217,
+        run: Action::Thread(ble_inherited::overflow_arrival),
+    },
+    Probe {
+        id: 218,
+        run: Action::Thread(ble_inherited::retention),
+    },
+    Probe {
+        id: 219,
+        run: Action::Thread(ble_inherited::finish),
     },
     Probe {
         id: 190,
@@ -657,6 +698,7 @@ extern "C" fn facts_main() -> ! {
             positional: p.bluetooth.ble_hw_positional_word1ff0,
             etm: p.modem_etm.modem_etm_bluetooth,
             task_irq: p.bluetooth.btmac_ble_phy_init,
+            scheduler: p.bluetooth.btdm_scheduler_table,
         },
         opaque: opaque::Hardware {
             block_ack: p.wifi_mac.wifi_mac_block_ack,
@@ -669,7 +711,9 @@ extern "C" fn facts_main() -> ! {
     // One take for the entire loader session. Commands reuse these owners;
     // the debugger never re-enters _start merely to select another leaf.
     let prior = retained_record();
-    let mut request = if lp_softreset::is_record(&prior) {
+    let mut request = if ble_inherited::is_record(&prior) {
+        213
+    } else if lp_softreset::is_record(&prior) {
         109
     } else if prior[0] == 0xfac70007 && prior[1] == 0x687731 {
         8
