@@ -98,6 +98,22 @@ fn closed_graph_keeps_the_shared_contract_for_every_edge_and_gap() {
 }
 
 #[test]
+fn continuations_must_be_local_and_conflicts_and_stops_always_stay_open() {
+    for relation in [EdgeKind::Fallthrough, EdgeKind::PossibleContinuation] {
+        assert!(observation(&[edge(0x1000, Some(0x1010), relation, false)]).closed_graph());
+        assert!(!observation(&[edge(0x1000, Some(0x1010), relation, true)]).closed_graph());
+    }
+    for relation in [EdgeKind::Conflict, EdgeKind::Stop] {
+        for target in [None, Some(0x1010)] {
+            for external in [false, true] {
+                assert!(!observation(&[edge(0x1000, target, relation, external)]).closed_graph());
+            }
+        }
+    }
+    assert!(observation(&[edge(0x1000, None, EdgeKind::Call, true)]).closed_graph());
+}
+
+#[test]
 fn closed_except_requires_only_the_external_unresolved_indirect_exit() {
     let exit = edge(0x1000, None, EdgeKind::Indirect, true);
     let observed = observation(&[exit.clone(), exit.clone()]);

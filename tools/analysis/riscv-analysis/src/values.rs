@@ -973,7 +973,7 @@ pub(super) fn analyze(
         &mut AdmittedVec::new(memory),
         edges
             .iter()
-            .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+            .all(|edge| writes::closes_local_edge(edge.target, edge.relation, edge.external)),
         None,
     )
 }
@@ -3015,9 +3015,9 @@ mod tests {
                 None,
                 None,
                 &mut AdmittedVec::new(&memory),
-                edges
-                    .iter()
-                    .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+                edges.iter().all(|edge| {
+                    writes::closes_local_edge(edge.target, edge.relation, edge.external)
+                }),
                 None,
             )
             .unwrap();
@@ -3560,7 +3560,7 @@ mod tests {
             &mut AdmittedVec::new(&memory),
             edges
                 .iter()
-                .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+                .all(|edge| writes::closes_local_edge(edge.target, edge.relation, edge.external)),
             None,
         )
         .unwrap();

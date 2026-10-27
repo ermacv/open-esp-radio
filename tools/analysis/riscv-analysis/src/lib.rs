@@ -635,7 +635,7 @@ fn analyze_pass<'m>(
                     }
                 }
             }
-            sink.closed &= writes::closes_local_edge(destination, relation);
+            sink.closed &= writes::closes_local_edge(destination, relation, external);
             edges.push(Edge {
                 from: offset,
                 target: destination,

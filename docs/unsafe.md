@@ -49,7 +49,9 @@ panics remains the code goal.
 Compiler-runtime coverage reviews explain missing frame metadata only; they
 supply no trusted frame size or callee bound. A frame without metadata needs
 complete local control flow and a known entry-relative stack pointer.
-Unresolved callees still leave the stack bound unresolved. Captured indexed
+Fall-through and call continuations outside the function, conflicting
+boundaries and stop edges leave its local graph open. Unresolved callees
+still leave the stack bound unresolved. Captured indexed
 addresses require the same complete read-only table and target proofs as
 straight-line dispatches; relocation labels alone do not prove immutability.
 

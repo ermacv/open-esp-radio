@@ -124,10 +124,12 @@ record, cross-checked with the deepest entry-relative `sp` the value analysis
 observes under the psABI's preserved `sp` (a deeper observation is an error);
 without a record, the observed depth counts only when the function's
 local control-flow graph is complete. Calls retain their continuation under
-the psABI even when their target is unresolved; this proves only the caller's
-frame. Its bound remains unknown until every callee is resolved and bounded.
-Decode gaps, unknown outgoing jumps and dynamic `sp` still prevent an observed
-frame. A sole open indirect exit whose value analysis
+the psABI even when their target is unresolved, provided that continuation
+stays inside the function; this proves only the caller's frame. Its bound
+remains unknown until every callee is resolved and bounded. Fall-through
+outside the function, conflicting instruction boundaries, stop edges, decode
+gaps, unknown outgoing jumps and dynamic `sp` prevent an observed frame.
+A sole open indirect exit whose value analysis
 proves every target external is fed back through `KnownJump` for one complete
 graph analysis; neither its frame nor its callees receive an assumed bound.
 Its transfers are every direct call and

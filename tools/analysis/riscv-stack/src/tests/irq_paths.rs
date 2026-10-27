@@ -31,6 +31,65 @@ fn an_external_long_call_does_not_obscure_the_local_frame() {
 }
 
 #[test]
+fn local_frame_admission_refuses_fall_off_the_function_end() {
+    for last in [
+        0x0000_0013,                // nop: fall through into the next function
+        BRANCH_NEXT,                // the branch's fall-through also leaves the function
+        call(TEXT + 12, TEXT + 16), // the call's continuation is outside
+    ] {
+        let image = executable(&[
+            Symbol {
+                name: "falls_off",
+                words: vec![SP_DOWN_16, SAVE_RA, 0x0000_0013, last],
+                frame: None,
+            },
+            leaf(None),
+        ]);
+        let analysis = analyze(&image, &[], &[]).unwrap();
+        // A fall-through would reach 16 + 32 bytes. Proving only the first
+        // function's 16-byte frame must not produce a complete 16-byte bound.
+        assert_eq!(analysis.functions[&(TEXT + 16)].frame, Some(32));
+        assert_eq!(analysis.functions[&TEXT].frame, None, "{last:#x}");
+        let bound = analysis.bound(TEXT, &mut ledger(), &mut || Ok(())).unwrap();
+        assert_eq!(bound.bytes, None, "{last:#x}");
+        assert!(bound.reasons().contains_key(&Reason::Unframed));
+    }
+}
+
+#[test]
+fn local_frame_admission_refuses_a_conflicting_instruction_boundary() {
+    let image = executable(&[Symbol {
+        name: "conflict",
+        words: vec![
+            SP_DOWN_16,
+            0x0000_0163, // beq zero, zero, 2: into this instruction's middle
+            SP_UP_16,
+            RET,
+        ],
+        frame: None,
+    }]);
+    let analysis = analyze(&image, &[], &[]).unwrap();
+    assert_eq!(analysis.functions[&TEXT].frame, None);
+    let bound = analysis.bound(TEXT, &mut ledger(), &mut || Ok(())).unwrap();
+    assert_eq!(bound.bytes, None);
+    assert!(bound.reasons().contains_key(&Reason::Unframed));
+}
+
+#[test]
+fn local_frame_admission_refuses_a_stop_edge() {
+    let image = executable(&[Symbol {
+        name: "stop",
+        words: vec![SP_DOWN_16, 0x0010_0073 /* ebreak */],
+        frame: None,
+    }]);
+    let analysis = analyze(&image, &[], &[]).unwrap();
+    assert_eq!(analysis.functions[&TEXT].frame, None);
+    let bound = analysis.bound(TEXT, &mut ledger(), &mut || Ok(())).unwrap();
+    assert_eq!(bound.bytes, None);
+    assert!(bound.reasons().contains_key(&Reason::Unframed));
+}
+
+#[test]
 fn a_local_frame_does_not_resolve_an_unknown_callee() {
     let image = executable(&[Symbol {
         name: "callback",

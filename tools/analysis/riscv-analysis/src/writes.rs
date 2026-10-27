@@ -355,18 +355,28 @@ impl<'m> Values<'m> {
 
 /// The same closure contract used by task publication: unknown calls retain
 /// their continuation, unknown non-calls can enter unobserved local blocks.
+/// Fall-through and call continuations must stay inside the function;
+/// conflicts and stops never close its graph.
 pub fn closes_local_graph(record: &FunctionRecord) -> bool {
     match record {
         FunctionRecord::Gap { reason, .. } => *reason == GapReason::Unvisited,
         FunctionRecord::Edge {
-            target, relation, ..
-        } => closes_local_edge(*target, *relation),
+            target,
+            relation,
+            external,
+            ..
+        } => closes_local_edge(*target, *relation, *external),
         _ => true,
     }
 }
 
-pub(crate) fn closes_local_edge(target: Option<u64>, relation: EdgeKind) -> bool {
+pub(crate) fn closes_local_edge(target: Option<u64>, relation: EdgeKind, external: bool) -> bool {
     !matches!(relation, EdgeKind::Conflict | EdgeKind::Stop)
+        && !(external
+            && matches!(
+                relation,
+                EdgeKind::Fallthrough | EdgeKind::PossibleContinuation
+            ))
         && (target.is_some()
             || matches!(relation, EdgeKind::Call | EdgeKind::Return | EdgeKind::Trap))
 }

@@ -5,6 +5,9 @@ for section-relative objects and image-addressed functions. It
 receives borrowed captured code, structural relocation records, an injected ISA
 port, working capacity, control and a result sink. It has no filesystem
 authority. Edges to callees never schedule analysis of another function.
+Local graph closure requires fall-through and call continuations to remain
+inside the function. Conflicting boundaries and stop edges stay open;
+an unknown callee alone does not open its caller's local graph.
 
 The private `values` module owns finite-lattice register states and a bounded
 fixed-point queue. It emits values and accesses only after convergence, through
