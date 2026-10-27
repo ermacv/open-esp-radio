@@ -167,7 +167,8 @@ Pin projection keeps the body at one address and reuses its storage for the
 returned output. Separate poll boundaries keep body and registration frames
 independent. Linked image analysis measures their actual compiler frames,
 future backing and all allocated sections, including one-time initialization.
-The [cost probe](examples/lifecycle_cost.rs) exercises two concrete backends.
+The host [cost probe](examples/lifecycle_cost.rs) exercises two concrete backends
+and reports their future sizes with `cargo run -p oer-radio-port --example lifecycle_cost`.
 
 UI cases and their positive twins cover closed identities, affine placement,
 foreign paths and resources, body-loan escape, quarantine and Joined. They

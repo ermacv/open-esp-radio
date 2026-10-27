@@ -69,7 +69,7 @@ fn compiler_imports_stay_in_the_reporter_and_its_private_bridge() {
 
 /// The packages below the unsafe boundary (`docs/unsafe.md`), by directory
 /// or, ending in `/`, by domain: the generated and the semantic PACs, the
-/// HAL, the platform, executor and adapter bindings, the volatile
+/// HAL, the platform and executor bindings, the volatile
 /// register-access core, the cores of memory the hardware shares, the host's operating-system bindings, the C-driver
 /// stand, and the bootstrap and probe images. Every other package forbids
 /// unsafe code.
@@ -81,7 +81,6 @@ const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/espressif/staged-layout",
     "chips/espressif/staged-runtime",
     "chips/espressif/executor",
-    "portable/embassy/",
     "portable/memory",
     "portable/mmio",
     "portable/riscv",
@@ -107,7 +106,6 @@ fn the_boundary_is_named_by_package_or_domain() {
     for package in [
         "chips/esp32s31/hal",
         "chips/espressif/staged-runtime",
-        "portable/embassy/net",
         "tools/os/serial",
         "firmware/probes/esp32s31-radio",
     ] {
@@ -117,6 +115,8 @@ fn the_boundary_is_named_by_package_or_domain() {
         "chips/esp32s31/bluetooth/driver",
         "chips/esp32s31/phy",
         "portable/trace",
+        "portable/embassy/net",
+        "portable/embassy/time",
         "tools/os/durable",
         "tools/hil/link",
         "firmware/apps/w1",

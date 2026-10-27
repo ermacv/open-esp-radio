@@ -72,6 +72,29 @@ fn rx_owner_survives_handoff_and_returns_to_rx_pool() {
 }
 
 #[test]
+fn copied_rx_is_independent_of_source_storage_until_the_packet_drops() {
+    let rx = allocator::<1>();
+    let mut resources = OwnedEndpointResources::<NoopRawMutex, 1, 1>::new();
+    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], rx);
+    radio.link_controller().set_link_up(true);
+    let publisher = radio.rx_publisher();
+    let mut source = [0x75; 60];
+
+    publisher.try_send(&source).unwrap();
+    source.fill(0x76);
+    let packet = device.receive().unwrap();
+    assert_eq!(&packet[..], &[0x75; 60]);
+    assert_eq!(
+        publisher.try_send(&source),
+        Err(RxEnqueueError::PoolExhausted)
+    );
+
+    drop(packet);
+    publisher.try_send(&source).unwrap();
+    assert_eq!(&device.receive().unwrap()[..], &source);
+}
+
+#[test]
 fn rx_readiness_waits_for_both_link_and_pool_capacity() {
     let rx = allocator::<1>();
     let held = rx.try_alloc().unwrap();

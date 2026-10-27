@@ -35,7 +35,7 @@ Git source and revision do.
 | Crate | Owns | Does not own |
 | --- | --- | --- |
 | `oer-network` (`protocols/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
-| `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, zero-copy RX adoption | radio scheduling, DMA descriptors |
+| `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools | radio scheduling, DMA descriptors |
 | `oer-ieee80211-datapath` | software/physical TX ownership traits, `TxQueues`, the airtime ledger | a concrete allocator, stack or executor |
 | `oer-ieee80211-softmac` | the TX cost model (`tx_cost`) and work receipts (`tx_work`) | hardware |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |
@@ -152,12 +152,9 @@ completions cannot bypass the settle interval.
 
 ## RX and wakes
 
-- RX is either copied into the endpoint's RX pool (`OwnedRxPublisher`) or
-  adopted without a copy from a detached DMA slot (`external_rx`). An adopted
-  packet keeps its physical DMA credit until the stack drops it, so the number
-  the network may hold is capped below the pool; the reserve above the cap lets
-  the driver keep staging a whole burst. Admission happens before the radio
-  rewrites the frame, so a refusal leaves it for the copying path.
+- RX is copied into the endpoint's RX pool (`OwnedRxPublisher`) before
+  publication. The network retains packet-pool storage independently of the
+  radio's DMA storage, and the packet returns to its pool when dropped.
 - Cross-domain wakes are hints over durable state: consumers check, arm and
   recheck before sleeping. An exhausted work budget self-wakes; real resource
   exhaustion waits for its credit-return edge. RX availability, general pool

@@ -8,19 +8,9 @@ The pinned Xarxa fork keeps packet-pool Waker registration in a separate
 typed Waker call scopes for the proven stack analysis without changing the
 register-then-recheck notification protocol.
 
-## Optional external RX
-
-`external-rx` enables `ExternalRxOrigin`, admission and accounting for detached
-DMA payloads. It forwards to `xarxa-driver/external-origin` and is disabled by
-default. Firmware images use ordinary packet pools; their packet release path
-then contains no external owner callback. Enable the feature to run the host
-external-adoption tests:
-
-```sh
-cargo test -p oer-embassy-net --features external-rx
-```
-
-The host CI runs both the default and external-RX feature sets.
+RX frames are copied into the endpoint's packet pool before publication.
+The adapter accepts packet-pool owners and forbids unsafe code; it does not
+adopt detached DMA storage.
 
 ## Known defects
 

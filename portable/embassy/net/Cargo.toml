@@ -7,18 +7,8 @@ license.workspace = true
 repository.workspace = true
 description = "Owned-packet boundary for the optimized open ESP radio Embassy/Xarxa integration"
 
-[features]
-# Detached DMA payload adoption is opt-in. Firmware images keep only pool
-# ownership; host integration tests exercise the external owner separately.
-external-rx = ["xarxa-driver/external-origin"]
-
-[[test]]
-name = "external_rx"
-required-features = ["external-rx"]
-
 [dependencies]
 embassy-sync = "0.8.0"
-oer-memory = { path = "../../memory" }
 oer-network = { path = "../../../protocols/network" }
 oer-ieee80211-datapath = { path = "../../../protocols/ieee80211/datapath" }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "ed9bf37f25c610566033e31abd14d7eb5096d93f", features = ["async"] }
