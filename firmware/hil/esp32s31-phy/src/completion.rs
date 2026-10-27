@@ -1,5 +1,6 @@
 //! Keep owned PHY results in the parent future until custody is returned.
 use core::{future::Future, mem::MaybeUninit, pin::Pin};
+use oer_esp32s31_phy::executor::boundary::Boundary;
 use oer_memory::Placed;
 
 // LLVM retains whole-future construction scratch even for uninitialized
@@ -22,7 +23,10 @@ where
 {
     async move {
         let mut completion = MaybeUninit::uninit();
-        let returned = oer_memory::poll_placed(operation, &mut completion).await;
+        // Borrow the existing owner through PHY's out-of-line poll boundary.
+        // Its reference is small; the owned future is never wrapped by value.
+        let mut operation = core::pin::pin!(Boundary::new(operation));
+        let returned = oer_memory::poll_placed(operation.as_mut(), &mut completion).await;
         finish(destination, returned)
     }
 }

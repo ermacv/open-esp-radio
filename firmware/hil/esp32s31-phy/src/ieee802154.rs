@@ -104,6 +104,8 @@ pub fn poll_deadline() -> Option<oer_time::Instant> {
 
 /// Serve the running engine's events and return its delivered slots. A
 /// slot the engine refuses fails the session, which its exit reports.
+// Keep MAC event scratch off unrelated Wi-Fi calibration/hold call chains.
+#[inline(never)]
 pub fn poll() {
     let _entered = ENGINE.with(|running| {
         if let Some(Running { engine, mut env }) = running.take() {

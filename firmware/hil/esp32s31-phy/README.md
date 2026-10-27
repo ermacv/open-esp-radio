@@ -101,6 +101,9 @@ storage; a separate completion frame returns domain custody and inspects the
 registration result in place before diagnostics or capture bring-up.
 Future construction and request handling have separate non-inlined frames, so
 their scratch does not remain live beneath calibration or tracking polls.
+Owned PHY polls use the existing PHY `Boundary` around pinned references, so
+each operation's scratch stays in its own poll frame. MAC event polling has
+its own frame as well.
 
 The image uses existing staged boot and chip placement/stack policies. It has
 no retained diagnostic post-mortem store; base boot evidence retains the actual

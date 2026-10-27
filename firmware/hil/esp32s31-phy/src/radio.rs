@@ -620,7 +620,12 @@ impl Radio {
                 observer,
                 pilot,
             )));
-            crate::hold::metrics::observe(future.as_mut(), &crate::PHY_CLOCK, &metrics).await
+            crate::hold::metrics::observe(
+                oer_esp32s31_phy::executor::boundary::Boundary::new(future.as_mut()),
+                &crate::PHY_CLOCK,
+                &metrics,
+            )
+            .await
         };
         self.domain = Some(domain);
         let (committed, failed) = match tracked {
