@@ -56,9 +56,18 @@ where
     D: PhyShortDelay + 'a,
     O: PhyTargetObserver + 'a,
 {
+    let fault = radio.fault_handle();
     let initial = radio.detach(Operation::Register);
     RegisterFuture {
-        future: execute_register::<B, P, D, O>(timer, initial, platform, clocks, config, observer),
+        future: execute_register::<B, P, D, O>(
+            timer,
+            Some(initial),
+            fault,
+            platform,
+            clocks,
+            config,
+            observer,
+        ),
     }
 }
 

@@ -62,14 +62,15 @@ async fn wait<B: PlatformClockBackend>(
 }
 async fn execute_register<B: PlatformClockBackend, P, D, O>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    initial: RadioTransaction<B, ConcurrentPhy>,
+    mut initial: Option<RadioTransaction<B, ConcurrentPhy>>,
+    fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     _: &mut P,
     _: &impl PlatformClockProvider<Backend = B>,
     _: PhyRegisterConfig,
     _: O,
 ) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ()>) {
     let _short_delay = core::marker::PhantomData::<D>;
-    wait(timer, initial).await
+    wait(timer, fault.require_owner(initial.take())).await
 }
 async fn execute_close<B: PlatformClockBackend, P, D>(
     timer: &impl oer_cooperate::CooperativeTimer,

@@ -383,15 +383,15 @@ where
                     let mut completion = core::mem::MaybeUninit::uninit();
                     let returned = {
                         let mut platform = ();
-                        let mut operation =
-                            core::pin::pin!(register_concurrent_phy::<_, (), RomShortDelay, O>(
-                                &self.timer,
-                                require_radio(self.radio.take(), self.radio_fault),
-                                &mut platform,
-                                &self.clocks,
-                                config,
-                                self.observer.clone(),
-                            ));
+                        let mut operation = core::pin::pin!(registration_future(
+                            &mut self.radio,
+                            self.radio_fault,
+                            &self.timer,
+                            &mut platform,
+                            &self.clocks,
+                            config,
+                            self.observer.clone(),
+                        ));
                         oer_memory::poll_placed(operation.as_mut(), &mut completion).await
                     };
                     finish_registration(&mut self.radio, returned)
@@ -921,6 +921,39 @@ fn vacant_wifi<B: PlatformClockBackend>(
 mod bluetooth;
 #[cfg(feature = "bluetooth")]
 pub use bluetooth::BluetoothAttachment;
+
+// Construct the owned child in its caller's return place. Taking the domain
+// here keeps the by-value constructor argument out of the actor's poll frame.
+#[inline(never)]
+fn registration_future<'a, C, T, O>(
+    slot: &'a mut Option<RadioDomain<C::Backend, ConcurrentPhy>>,
+    fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
+    timer: &'a T,
+    platform: &'a mut (),
+    clocks: &'a C,
+    config: PhyRegisterConfig,
+    observer: O,
+) -> impl core::future::Future<
+    Output = (
+        RadioDomain<C::Backend, ConcurrentPhy>,
+        Result<oer_esp32s31_phy::ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+    ),
+> + 'a
+where
+    C: PlatformClockProvider,
+    C::Backend: 'a,
+    T: oer_cooperate::CooperativeTimer,
+    O: PhyTargetObserver + 'a,
+{
+    register_concurrent_phy::<_, (), RomShortDelay, O>(
+        timer,
+        require_radio(slot.take(), fault),
+        platform,
+        clocks,
+        config,
+        observer,
+    )
+}
 
 // Project the registration diagnostic before returning to the actor poll.
 #[inline(never)]

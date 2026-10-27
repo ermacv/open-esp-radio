@@ -155,7 +155,8 @@ impl oer_diagnostics::DiagnosticPath for ConcurrentPhyTrackingError {
 )]
 async fn execute_register<'a, B: PlatformClockBackend + 'a, P, D, O>(
     timer: &'a impl oer_cooperate::CooperativeTimer,
-    initial: RadioTransaction<B, ConcurrentPhy>,
+    mut initial: Option<RadioTransaction<B, ConcurrentPhy>>,
+    fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     platform: &'a mut P,
     clocks: &'a impl PlatformClockProvider<Backend = B>,
     config: PhyRegisterConfig,
@@ -169,7 +170,7 @@ where
     O: PhyTargetObserver + 'a,
 {
     let mut preparation = core::mem::MaybeUninit::uninit();
-    let prepared = begin_concurrent_registration(initial, clocks, &mut preparation);
+    let prepared = begin_concurrent_registration(&mut initial, fault, clocks, &mut preparation);
     oer_memory::match_placed!(prepared, Result {
         Ok(transaction) => {
             let mut transaction = transaction;
@@ -193,7 +194,8 @@ where
 // Preparation and its working transaction stay in retained future storage.
 #[inline(never)]
 fn begin_concurrent_registration<'p, B: PlatformClockBackend>(
-    initial: RadioTransaction<B, ConcurrentPhy>,
+    initial: &mut Option<RadioTransaction<B, ConcurrentPhy>>,
+    fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     clocks: &impl PlatformClockProvider<Backend = B>,
     storage: &'p mut core::mem::MaybeUninit<
         Result<
@@ -206,7 +208,7 @@ fn begin_concurrent_registration<'p, B: PlatformClockBackend>(
     Result<RadioTransaction<B, ConcurrentPhy>, (RadioDomain<B, ConcurrentPhy>, ConcurrentPhyError)>,
 > {
     oer_memory::Placed::init(storage, |place| {
-        let mut radio = initial.reunite();
+        let mut radio = fault.require_owner(initial.take()).reunite();
         let rejection = match radio.attachment_mut().slot_mut() {
             Slot::Empty => None,
             Slot::Poisoned => Some(ConcurrentPhyError::Poisoned),
