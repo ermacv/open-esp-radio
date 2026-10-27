@@ -4,8 +4,8 @@ schema = 3
 
 [type]
 name = "MODEM_PWR"
-description = "The modem power-domain block at MODEM_PWR_BASE: the modem low-power timer and the Wi-Fi MAC's TSF, RTC timer, power interrupt, REGDMA and coexistence runtime words. Known only from vendor binaries.\n\nHP system-reset observations use the PAC-only facts probe on hart0 with hart1 already held. The probe preserves the successful production reset_recording path's reset-control register-effect order: UART0 restoration, hart1 boot-address zero, hart1 reset pulse, stall, device fence and SYS_SW_RST. The complete sequences differ: the probe samples LP state before those writes but publishes its retained SRAM record after UART0/boot-address/pulse/stall, whereas production invokes its record callback before them. The probe has no ClaimCell election or StopError handling and does not implement production's watchdog-fallback path; a failed hold check returns from the leaf with MIE cleared. These observations cover that successful register sequence and next ROM-loader entry, not full production fatal-path equivalence. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026; HW13_S31_BLE_LP_HP_RESTORE_20261026.\n\nWords 0x0-0x78: Sparse BTDM low-level runtime and sleep-control window. Complete ESP32-S31 functions prove only the recorded access directions, finite images, low-24-bit publications and four isolated RMW controls. The independently role-mapped runtime-timer start command is named; all other positional names deliberately avoid assigning undocumented peripheral semantics.\n\nWord 0x800: Free-running Wi-Fi MAC local-time counter, read-only and without read side effects. Complete libpp[lmac.o]::lmacAdjustTimestamp subtracts the receive timestamp a received frame carries from this word as the frame's age and, while the station slept, rewrites that timestamp as this word minus a TU-scaled sleep interval; libpp[pm_twt.o]::pm_twt_set_target_wdev_time, libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice read it as the MAC's current time. The PHY SDM deadline samples the same word. Its unit and rate against the system timer are not established.\n\nWords 0x80c-0x810: Station TSF activity status recovered from the complete no-call hal_is_sta_tsf_active leaf. The instruction body proves the address and bit geometry but not the hardware transition rules.\n\nWords 0x814-0x828: Shared TSF load and coherent station/SoftAP snapshot transaction.\n\nWord 0x82c: Shared TBTT staging word recovered from complete hal_set_sta_tbtt and tsf_hal_set_tbtt_start_time. The low 26-bit packing from the supplied 64-bit TSF value is exact; the hardware counter unit remains unnamed.\n\nWords 0x830-0x878: Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value.\n\nWord 0x83c: Shared WDEVPWR control word. The channel-change leaf proves the REGDMA selector, while complete modem-power leaves prove the wake-protect lead time and TBTT auto-period fields. Hardware interactions between these fields remain unqualified.\n\nWords 0x848-0x8d0: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x860-0x870: SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.\n\nWords 0x87c-0x880: Four-entry TSF timer bank recovered from all complete target, wakeup and enable/disable leaves. Each entry consists of one control word followed by its 32-bit target. The public index is guarded to zero through three by the target and timer-enable leaves; the dedicated wakeup leaves do not contain their own range check.\n\nWords 0x89c-0x8ac: Runtime receive-beacon and individual-TWT COEX/PTI words recovered from five complete hal_coex.o leaves. Register addresses, masks and RMW order are exact; fields whose electrical meaning is not established retain UNKNOWN names.\n\nWords 0x8b4-0x8c0: WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR."
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBPP_MAC_LOCAL_TIME", "BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_TSF", "ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015", "BLOB_LIBPP_HAL_INIT_TAIL", "BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_HAL_PWR", "HIL_OPEN_REGDMA_LINK4_2026_07_29", "S31_MMIO_MODEM_RADIO_CORE_MID", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+description = "The modem power-domain block at MODEM_PWR_BASE: the modem low-power timer and the Wi-Fi MAC's TSF, RTC timer, power interrupt, REGDMA and coexistence runtime words. Known only from vendor binaries.\n\nHP system-reset observations use the PAC-only facts probe on hart0 with hart1 already held. The probe preserves the successful production reset_recording path's reset-control register-effect order: UART0 restoration, hart1 boot-address zero, hart1 reset pulse, stall, device fence and SYS_SW_RST. The complete sequences differ: the probe samples LP state before those writes but publishes its retained SRAM record after UART0/boot-address/pulse/stall, whereas production invokes its record callback before them. The probe has no ClaimCell election or StopError handling and does not implement production's watchdog-fallback path; a failed hold check returns from the leaf with MIE cleared. These observations cover that successful register sequence and next ROM-loader entry, not full production fatal-path equivalence. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026; HW13_S31_BLE_LP_HP_RESTORE_20261026.\n\nWords 0x0-0x78: Sparse BTDM low-level runtime and sleep-control window. Complete ESP32-S31 functions prove only the recorded access directions, finite images, low-24-bit publications and four isolated RMW controls. Named fields retain only the independently measured delivery, status and sleep-flag roles; positional names retain unknown peripheral semantics.\n\nWord 0x800: Free-running Wi-Fi MAC local-time counter, read-only and without read side effects. Complete libpp[lmac.o]::lmacAdjustTimestamp subtracts the receive timestamp a received frame carries from this word as the frame's age and, while the station slept, rewrites that timestamp as this word minus a TU-scaled sleep interval; libpp[pm_twt.o]::pm_twt_set_target_wdev_time, libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice read it as the MAC's current time. The PHY SDM deadline samples the same word. Its unit and rate against the system timer are not established.\n\nWords 0x80c-0x810: Station TSF activity status recovered from the complete no-call hal_is_sta_tsf_active leaf. The instruction body proves the address and bit geometry but not the hardware transition rules.\n\nWords 0x814-0x828: Shared TSF load and coherent station/SoftAP snapshot transaction.\n\nWord 0x82c: Shared TBTT staging word recovered from complete hal_set_sta_tbtt and tsf_hal_set_tbtt_start_time. The low 26-bit packing from the supplied 64-bit TSF value is exact; the hardware counter unit remains unnamed.\n\nWords 0x830-0x878: Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value.\n\nWord 0x83c: Shared WDEVPWR control word. The channel-change leaf proves the REGDMA selector, while complete modem-power leaves prove the wake-protect lead time and TBTT auto-period fields. Hardware interactions between these fields remain unqualified.\n\nWords 0x848-0x8d0: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x860-0x870: SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.\n\nWords 0x87c-0x880: Four-entry TSF timer bank recovered from all complete target, wakeup and enable/disable leaves. Each entry consists of one control word followed by its 32-bit target. The public index is guarded to zero through three by the target and timer-enable leaves; the dedicated wakeup leaves do not contain their own range check.\n\nWords 0x89c-0x8ac: Runtime receive-beacon and individual-TWT COEX/PTI words recovered from five complete hal_coex.o leaves. Register addresses, masks and RMW order are exact; fields whose electrical meaning is not established retain UNKNOWN names.\n\nWords 0x8b4-0x8c0: WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR."
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBPP_MAC_LOCAL_TIME", "BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_TSF", "ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015", "BLOB_LIBPP_HAL_INIT_TAIL", "BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_HAL_PWR", "HIL_OPEN_REGDMA_LINK4_2026_07_29", "S31_MMIO_MODEM_RADIO_CORE_MID", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BX4_S31_LP_DELIVERY_SITES_20261027", "BX4_S31_LP_STATUS_CONSUMER_20261027", "BX4_S31_LP_MODE58_USERS_20261027", "BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027", "BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027", "BX4_S31_LP_COMPARE_PUBLICATIONS_20261027", "BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027"]
 
 [[interrupt-outputs]]
 name = "WIFI_PWR"
@@ -36,12 +36,12 @@ sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROL
 [review.entity."RUNTIME_TIMER_START_COMMAND.COMMAND"]
 sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE", "HW2_S31_LP_STOP_WRAP_20261026"]
 
-[review.entity."WORD_0010_OPAQUE.BIT_1_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026"]
+[review.entity."WORD_0010_OPAQUE.ROLLOVER_DELIVERY_SET"]
+sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BX4_S31_LP_DELIVERY_SITES_20261027", "HW16_S31_LP_DELIVERY_20261026"]
 completeness = "partial"
 
-[review.entity."WORD_0010_OPAQUE.BIT_18_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW2_S31_LP_PENDING_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026"]
+[review.entity."WORD_0010_OPAQUE.COMPARE_SOFTWARE_DELIVERY_SET"]
+sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW2_S31_LP_PENDING_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BX4_S31_LP_DELIVERY_SITES_20261027", "HW16_S31_LP_DELIVERY_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_0014_OPAQUE.BITS_0_17_OPAQUE"]
@@ -57,14 +57,14 @@ sources = ["S31_MMIO_MANUAL_2010D014"]
 completeness = "partial"
 
 [review.entity."WORD_001C_OPAQUE"]
-sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "HW9_S31_LP_SLEEP16_20261027", "HW16_S31_LP_SLEEP_LANES_20261026"]
+sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "HW9_S31_LP_SLEEP16_20261027", "HW16_S31_LP_SLEEP_LANES_20261026", "BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027"]
 
-[review.entity."WORD_001C_OPAQUE.BITS_0_7_OPAQUE"]
-sources = ["S31_MMIO_AUDIT_2010D01C", "S31_MMIO_DECLARED_2010D01C", "HW9_S31_LP_SLEEP16_20261027"]
+[review.entity."WORD_001C_OPAQUE.SLEEP16_FLAG_BYTE"]
+sources = ["S31_MMIO_AUDIT_2010D01C", "S31_MMIO_DECLARED_2010D01C", "HW9_S31_LP_SLEEP16_20261027", "BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027", "HW16_S31_LP_SLEEP_LANES_20261026"]
 completeness = "partial"
 
-[review.entity."WORD_0020_OPAQUE.BITS_0_7_OPAQUE"]
-sources = ["S31_MMIO_AUDIT_2010D020", "S31_MMIO_DECLARED_2010D020"]
+[review.entity."WORD_0020_OPAQUE.SLEEP17_FLAG_BYTE"]
+sources = ["S31_MMIO_AUDIT_2010D020", "S31_MMIO_DECLARED_2010D020", "BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027", "HW16_S31_LP_SLEEP_LANES_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_0024_OPAQUE.LOW_BYTE"]
@@ -75,21 +75,17 @@ completeness = "partial"
 sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW8_S31_LP_TWO_WRAPS_20261026", "HW9_S31_LP_MASKED_ZERO_20261027", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "HW22_S31_LP_TWO_WRAPS_20261027"]
 completeness = "partial"
 
-[review.entity."WORD_0038_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026"]
-accuracy = "unknown"
-completeness = "unknown"
 
 [review.entity."WORD_0030_OPAQUE"]
-sources = ["BLOB_LIBBTDM_LP_SLEEP_ZERO_0030"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ZERO_0030", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
 completeness = "partial"
 
 [review.entity."WORD_0030_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["BLOB_LIBBTDM_LP_SLEEP_ZERO_0030"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ZERO_0030", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
 completeness = "partial"
 
 [review.entity."WORD_0040_OPAQUE.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D040"]
+sources = ["S31_MMIO_MANUAL_2010D040", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS"]
 completeness = "partial"
 
 [review.entity."WORD_0040_OPAQUE.SLEEP16_FLAG_ENABLE"]
@@ -101,7 +97,7 @@ sources = ["S31_MMIO_MANUAL_2010D040", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS", "H
 completeness = "partial"
 
 [review.entity."WORD_0044_OPAQUE.BIT_0_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D044"]
+sources = ["S31_MMIO_MANUAL_2010D044", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027", "BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS"]
 completeness = "partial"
 
 [review.entity."WORD_0044_OPAQUE.SLEEP16_FLAG_DISABLE"]
@@ -118,16 +114,16 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."WORD_0058_OPAQUE"]
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026"]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026", "BX4_S31_LP_MODE58_USERS_20261027"]
 completeness = "partial"
 
 [review.entity."WORD_0058_OPAQUE.CONTROL_0"]
-sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026"]
+sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026", "BX4_S31_LP_MODE58_USERS_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."WORD_0058_OPAQUE.CONTROL_1"]
-sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026"]
+sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026", "BX4_S31_LP_MODE58_USERS_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -135,7 +131,7 @@ completeness = "unknown"
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026", "HW22_S31_LP_CONDITIONAL_ACK_20261027"]
 
 [review.entity."WORD_0058_OPAQUE.CONTROL_4"]
-sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026", "HW21_S31_LP_CONTROL4_20261027"]
+sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW16_S31_LP_MODE58_20261026", "HW21_S31_LP_CONTROL4_20261027", "BX4_S31_LP_MODE58_USERS_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -148,42 +144,43 @@ sources = ["S31_MMIO_USE_2010D058", "S31_MMIO_DECLARED_2010D058"]
 completeness = "partial"
 
 [review.entity."WORD_0064_OPAQUE"]
-sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027"]
 
-[review.entity."WORD_0064_OPAQUE.BITS_0_23_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D064", "S31_MMIO_DECLARED_2010D064"]
+[review.entity."WORD_0064_OPAQUE.SLEEP16_TARGET"]
+sources = ["S31_MMIO_USE_2010D064", "S31_MMIO_DECLARED_2010D064", "BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027", "HW16_S31_LP_SLEEP_LANES_20261026", "HW9_S31_LP_SLEEP16_20261027"]
 completeness = "partial"
 
 [review.entity."WORD_0068_OPAQUE"]
-sources = ["HW16_S31_LP_SLEEP_LANES_20261026"]
+sources = ["HW16_S31_LP_SLEEP_LANES_20261026", "BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027"]
 completeness = "partial"
 
-[review.entity."WORD_0068_OPAQUE.BITS_0_23_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D068"]
+[review.entity."WORD_0068_OPAQUE.SLEEP17_TARGET"]
+sources = ["S31_MMIO_MANUAL_2010D068", "BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027", "HW16_S31_LP_SLEEP_LANES_20261026"]
 completeness = "partial"
 
 [review.entity."WORD_006C_OPAQUE.COMPARE_TARGET"]
-sources = ["S31_MMIO_DECLARED_2010D06C", "HW22_S31_LP_REARM_20261027", "HW22_S31_LP_COMPARE_WIDTH_20261027"]
+sources = ["S31_MMIO_DECLARED_2010D06C", "HW22_S31_LP_REARM_20261027", "HW22_S31_LP_COMPARE_WIDTH_20261027", "BX4_S31_LP_COMPARE_PUBLICATIONS_20261027"]
 
 [review.entity."WORD_006C_OPAQUE.BITS_24_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D06C", "BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME", "HW22_S31_LP_COMPARE_WIDTH_20261027"]
+sources = ["S31_MMIO_DECLARED_2010D06C", "BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME", "HW22_S31_LP_COMPARE_WIDTH_20261027", "BX4_S31_LP_COMPARE_PUBLICATIONS_20261027"]
 accuracy = "unknown"
 completeness = "partial"
 
 [review.entity."WORD_0078_OPAQUE"]
+sources = ["BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
 completeness = "partial"
 
 [review.entity."WORD_0078_OPAQUE.CONTROL_25"]
-sources = ["S31_MMIO_DECLARED_2010D078"]
+sources = ["S31_MMIO_DECLARED_2010D078", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."WORD_0078_OPAQUE.BITS_0_23_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D078", "S31_MMIO_DECLARED_2010D078"]
+sources = ["S31_MMIO_USE_2010D078", "S31_MMIO_DECLARED_2010D078", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
 completeness = "partial"
 
 [review.entity."WORD_0078_OPAQUE.BIT_26_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D078", "S31_MMIO_DECLARED_2010D078"]
+sources = ["S31_MMIO_USE_2010D078", "S31_MMIO_DECLARED_2010D078", "BX4_S31_LP_SLEEP0_OBSERVERS_20261027"]
 completeness = "partial"
 
 [review.entity."COUNTER"]
@@ -683,7 +680,7 @@ sources = ["S31_MMIO_USE_2010D8AC", "S31_MMIO_DECLARED_2010D8AC"]
 completeness = "partial"
 
 [review.entity."ENABLE"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_3"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
@@ -698,7 +695,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_L
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."ENABLE.BITS_8_16_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D8B4"]
+sources = ["S31_MMIO_DECLARED_2010D8B4", "BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -708,7 +705,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."ENABLE.BIT_18_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D8B4", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
+sources = ["S31_MMIO_DECLARED_2010D8B4", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027", "BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -718,12 +715,12 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."ENABLE.BITS_20_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D8B4"]
+sources = ["S31_MMIO_DECLARED_2010D8B4", "BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."RAW"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 
 [review.entity."RAW.TSF_TIMER_3"]
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
@@ -738,7 +735,7 @@ sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."RAW.BITS_8_16_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D8B8"]
+sources = ["S31_MMIO_DECLARED_2010D8B8", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -758,12 +755,12 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."RAW.BITS_20_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D8B8"]
+sources = ["S31_MMIO_DECLARED_2010D8B8", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_INTERRUPT_STATUS"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_3"]
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
@@ -778,7 +775,7 @@ sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."POWER_INTERRUPT_STATUS.BITS_8_16_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 completeness = "unknown"
 
 [review.entity."POWER_INTERRUPT_STATUS.BEACON_FILTER_WAKE"]
@@ -794,11 +791,11 @@ sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT",
 completeness = "unknown"
 
 [review.entity."POWER_INTERRUPT_STATUS.BITS_20_31_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
 completeness = "unknown"
 
 [review.entity."CLEAR"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "HW8_S31_WIFI_TSF_MASK_20261026", "HW26_S31_LOCAL_TBTT_20261027", "BLOB_LIBPP_S31_PWR_IRQ_SERVICE_20261027", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027", "BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_3"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMERS23_20261027", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
@@ -813,7 +810,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_L
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026", "BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027"]
 
 [review.entity."CLEAR.BITS_8_16_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 completeness = "unknown"
 
 [review.entity."CLEAR.BEACON_FILTER_WAKE"]
@@ -821,7 +818,7 @@ sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT",
 completeness = "unknown"
 
 [review.entity."CLEAR.BIT_18_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027", "BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 completeness = "unknown"
 
 [review.entity."CLEAR.BEACON_MISS"]
@@ -829,7 +826,7 @@ sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT",
 completeness = "unknown"
 
 [review.entity."CLEAR.BITS_20_31_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0", "BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027", "BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027", "BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027", "BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027"]
 completeness = "unknown"
 
 [review.entity."WORD_08D0_OPAQUE"]
@@ -1097,16 +1094,16 @@ offset = 0x10
 description = "Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; the tested additive delivery behavior is qualified below. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. Both tested delivery lanes survived BLE-timer and full production controller resets; restoring LP clocks recovered delivery without rearming. This is behavioral enable retention, not command-register readback. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. Across the separately tested hart0 HP system reset and next ROM-loader entry, fresh software pending remained silent until another bit18 enable command. In the both-pending and quiet follow-up, after restoring source clocks, CONTROL_25 and START, a natural wrap without a new bit1 enable left pending/status/output zero; enabling bit1 followed by a fresh natural wrap produced pending1/status2/source127 high. Both delivery lanes therefore required a new enable in the tested post-HP-reset setup. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is behavioral delivery evidence, not enable-register readback. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. Image2 then image0x40000 independently add the tested delivery enables; the second does not replace the first. SOURCE: HW16_S31_LP_DELIVERY_20261026."
 
 [[registers.fields]]
-name = "BIT_1_OPAQUE"
+name = "ROLLOVER_DELIVERY_SET"
 bits = "1"
 class = "write-only"
-description = "Image 2 redelivered the tested retained natural-rollover cause after all-ones disable, producing status 2/source 127 independently of the software-pending lane. Other effects remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026."
+description = "Image 2 redelivered the tested retained natural-rollover cause after all-ones disable, producing status 2/source 127 independently of the software-pending lane. Other effects remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. The command adds or redelivers the respective tested pending cause; it neither produces nor clears that cause and does not establish an exhaustive output equation. SOURCE: BX4_S31_LP_DELIVERY_SITES_20261027."
 
 [[registers.fields]]
-name = "BIT_18_OPAQUE"
+name = "COMPARE_SOFTWARE_DELIVERY_SET"
 bits = "18"
 class = "write-only"
-description = "Enable/redeliver the tested compare or software-pending byte at +0x24 as status0x40000/source127, without clearing the byte. This command adds the bit18 delivery enable without removing enabled rollover delivery; +0x14 bit18 suppresses it while retaining pending. The post-HP-reset setup requires a new enable. These are behavioral delivery observations, not command-register readback or an exhaustive output equation. SOURCE: HW2_S31_LP_PENDING_20261026; HW16_S31_LP_DELIVERY_20261026; HW13_S31_BLE_LP_HP_RESTORE_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT."
+description = "Enable/redeliver the tested compare or software-pending byte at +0x24 as status0x40000/source127, without clearing the byte. This command adds the bit18 delivery enable without removing enabled rollover delivery; +0x14 bit18 suppresses it while retaining pending. The post-HP-reset setup requires a new enable. These are behavioral delivery observations, not command-register readback or an exhaustive output equation. SOURCE: HW2_S31_LP_PENDING_20261026; HW16_S31_LP_DELIVERY_20261026; HW13_S31_BLE_LP_HP_RESTORE_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT. The command adds or redelivers the respective tested pending cause; it neither produces nor clears that cause and does not establish an exhaustive output equation. SOURCE: BX4_S31_LP_DELIVERY_SITES_20261027."
 
 [[registers]]
 name = "WORD_0014_OPAQUE"
@@ -1137,10 +1134,10 @@ offset = 0x1c
 description = "One complete runtime function reads the complete word and writes the finite zero image. Inner state encoding remains unknown. In a sourced sleep16 setup, a positively witnessed+0x64 target crossing set the low byte to1 under each tested mode58 control0/4 combination. +0x44 image 0x10000 retained the byte; whole-word zero cleared it. No127/129 route is established with the delivery bank disabled. SOURCE: HW9_S31_LP_SLEEP16_20261027. With known delivery bits1/18 enabled, the positive sleep16 flag still leaves status/output127 low. Whole-word all-ones+34 clears it. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026. R1/R2 logged only bits7:0; bits31:8 were not captured and their effects are unqualified."
 
 [[registers.fields]]
-name = "BITS_0_7_OPAQUE"
+name = "SLEEP16_FLAG_BYTE"
 bits = "7:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026."
 
 [[registers]]
 name = "WORD_0020_OPAQUE"
@@ -1148,10 +1145,10 @@ offset = 0x20
 description = "Complete state word read by runtime functions and cleared by two complete paths. In the tested setup with advancing completed BTLC captures, digital/ETM clocks live, ETM channels6/7 enabled and the ETM bit11 command issued, a future+68 crossing with sleep17 enabled and sleep0/16 disabled sets the low byte to1. +44 bit17 retains it; whole-word all-ones+34 clears it. A crossing while sleep17 is disabled leaves no visible flag for late enable; a fresh enabled future target is positive. The BTLC/ETM prerequisites were not varied independently. This qualifies a local comparator flag, not a completed PMU sleep/wake transition. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026. R1/R2 logged only bits7:0; bits31:8 were not captured and their effects are unqualified."
 
 [[registers.fields]]
-name = "BITS_0_7_OPAQUE"
+name = "SLEEP17_FLAG_BYTE"
 bits = "7:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026."
 
 [[registers]]
 name = "WORD_0024_OPAQUE"
@@ -1177,7 +1174,7 @@ class = "plain"
 [[registers]]
 name = "WORD_0030_OPAQUE"
 offset = 0x30
-description = "The boolean sleep-control helper stores complete zero on both branches. No read or inner state encoding is established. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030."
+description = "The boolean sleep-control helper stores complete zero on both branches. No read or inner state encoding is established. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030. The sleep0 nonzero branch pairs ETM+0x110 bit26, sleep-bank+0x40 bit0, +0x78 bit26 set, whole-word +0x30 zero and +0x78 bit25 set. Its zero branch clears +0x78 bit25, issues +0x44 bit0, clears +0x78 bit26, issues ETM+0x114 bit26, zeroes +0x30 and sets +0x78 bit25. No independently recovered completion observer is established. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
@@ -1197,18 +1194,37 @@ class = "write-only"
 [[registers]]
 name = "WORD_0038_OPAQUE"
 offset = 0x38
-description = "A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested BLE-timer/controller reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix 127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. After the separately tested probe's hart0 HP system reset, real compare, natural rollover, both and quiet scenarios all read zero at the next ROM-loader entry before prepare, with matrix source127 low. Clock-only access restoration did not recover the old causes. A fresh software publication and bit18 enable gave 0x40000/source127 high. The LP source selector/divider remained zero during this access-gate restoration; a separate both-pending/quiet follow-up restored the LP XTAL/divider without acknowledge, prepare or start and still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This establishes the next-entry view, not the instantaneous reset state or all production boot paths. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026."
+description = "A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images were observed, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested BLE-timer/controller reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix 127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. After the separately tested probe's hart0 HP system reset, real compare, natural rollover, both and quiet scenarios all read zero at the next ROM-loader entry before prepare, with matrix source127 low. Clock-only access restoration did not recover the old causes. A fresh software publication and bit18 enable gave 0x40000/source127 high. The LP source selector/divider remained zero during this access-gate restoration; a separate both-pending/quiet follow-up restored the LP XTAL/divider without acknowledge, prepare or start and still read zero through 4096 cycles. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This establishes the next-entry view, not the instantaneous reset state or all production boot paths. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. The ISR consumes a full 32-bit nonzero predicate without decoding every cause. The four measured whole-word images are finite observations, not an exhaustive value dictionary. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027."
 
 [[registers.fields]]
-name = "BITS_0_31_OPAQUE"
-bits = "31:0"
+name = "BIT_0_OPAQUE"
+bits = "0"
 class = "read-only"
-values = [
-  { name = "INACTIVE", value = 0 },
-  { name = "ROLLOVER_PENDING", value = 0x2 },
-  { name = "COMPARE_SOFTWARE_PENDING", value = 0x40000 },
-  { name = "BOTH_MEASURED_PENDING", value = 0x40002 },
-]
+description = "Individual cause identity unknown. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026."
+
+[[registers.fields]]
+name = "ROLLOVER_STATUS"
+bits = "1"
+class = "read-only"
+description = "Status observed for the tested natural rollover under its matching delivery enable. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026."
+
+[[registers.fields]]
+name = "BITS_2_17_OPAQUE"
+bits = "17:2"
+class = "read-only"
+description = "Individual cause identities unknown. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026."
+
+[[registers.fields]]
+name = "COMPARE_SOFTWARE_STATUS"
+bits = "18"
+class = "read-only"
+description = "Status observed for the tested compare/software pending cause under its matching delivery enable. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026."
+
+[[registers.fields]]
+name = "BITS_19_31_OPAQUE"
+bits = "31:19"
+class = "read-only"
+description = "Individual cause identities unknown. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026."
 
 [[registers]]
 name = "WORD_0040_OPAQUE"
@@ -1219,7 +1235,7 @@ description = "Complete runtime functions write finite images with independently
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "write-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "The sleep0 nonzero branch pairs ETM+0x110 bit26, sleep-bank+0x40 bit0, +0x78 bit26 set, whole-word +0x30 zero and +0x78 bit25 set. Its zero branch clears +0x78 bit25, issues +0x44 bit0, clears +0x78 bit26, issues ETM+0x114 bit26, zeroes +0x30 and sets +0x78 bit25. No independently recovered completion observer is established. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."
 
 [[registers.fields]]
 name = "SLEEP16_FLAG_ENABLE"
@@ -1242,7 +1258,7 @@ description = "Complete runtime functions write finite images with independently
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "write-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "The sleep0 nonzero branch pairs ETM+0x110 bit26, sleep-bank+0x40 bit0, +0x78 bit26 set, whole-word +0x30 zero and +0x78 bit25 set. Its zero branch clears +0x78 bit25, issues +0x44 bit0, clears +0x78 bit26, issues ETM+0x114 bit26, zeroes +0x30 and sets +0x78 bit25. No independently recovered completion observer is established. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."
 
 [[registers.fields]]
 name = "SLEEP16_FLAG_DISABLE"
@@ -1290,13 +1306,13 @@ description = "Runtime mode word: first-timer setup RMW-sets bits 0 and 4; the I
 name = "CONTROL_0"
 bits = "0"
 class = "plain"
-description = "Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8)."
+description = "Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). First-timer and wake-timer activation set CONTROL0/4 together; sleep/removal paths clear both before testing CONTROL2 and, when set, freshly rereading the word to publish CONTROL1. Joint use identifies neither an IRQ mask nor a PMU wake-enable role. SOURCE: BX4_S31_LP_MODE58_USERS_20261027."
 
 [[registers.fields]]
 name = "CONTROL_1"
 bits = "1"
 class = "write-trigger"
-description = "Fresh-read command clears the tested positive CONTROL_2, reads back zero, and preserves pending compare/status/output127 until separate acknowledgement. SOURCE: HW16_S31_LP_MODE58_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8)."
+description = "Fresh-read command clears the tested positive CONTROL_2, reads back zero, and preserves pending compare/status/output127 until separate acknowledgement. SOURCE: HW16_S31_LP_MODE58_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). The ISR, sleep and removal consumers test CONTROL2, then freshly reread and set CONTROL1. This is separate from pending-byte acknowledgement and source127 delivery. SOURCE: BX4_S31_LP_MODE58_USERS_20261027."
 
 [[registers.fields]]
 name = "CONTROL_2"
@@ -1308,7 +1324,7 @@ description = "Sampled on the conditional ISR path. In the near-compare test thi
 name = "CONTROL_4"
 bits = "4"
 class = "plain"
-description = "Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027."
+description = "Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). With CONTROL0=1, either initial value permits the tested compare and sleep16/17 flags. Toggling CONTROL4 with pending present preserves their flags, compare delivery and compare-associated CONTROL2. Sleep16/17 alone leave CONTROL2=0. No purpose or universal effect is established. SOURCE: HW21_S31_LP_CONTROL4_20261027. First-timer and wake-timer activation set CONTROL0/4 together; sleep/removal paths clear both before testing CONTROL2 and, when set, freshly rereading the word to publish CONTROL1. Joint use identifies neither an IRQ mask nor a PMU wake-enable role. SOURCE: BX4_S31_LP_MODE58_USERS_20261027."
 
 [[registers.fields]]
 name = "BIT_3_OPAQUE"
@@ -1325,40 +1341,41 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0064_OPAQUE"
 offset = 0x64
-description = "One complete runtime function reads the complete word and publishes complete dynamic images. The image remains a register-level fact."
+description = "The sleep-enable path reads the complete word and replaces the near-boundary target with a value truncated to24 bits before a 32-bit store. No counter-unit or PMU wake-route claim follows. SOURCE: BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027."
 
 [[registers.fields]]
-name = "BITS_0_23_OPAQUE"
+name = "SLEEP16_TARGET"
 bits = "23:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Low24 target of the tested sleep16 local flag. The near-boundary publication truncates the replacement to24 bits before a full-word store. SOURCE: BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026."
 
 [[registers]]
 name = "WORD_0068_OPAQUE"
 offset = 0x68
-description = "Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31. In the tested setup with advancing completed BTLC captures, digital/ETM clocks live, ETM channels6/7 enabled and the ETM bit11 command issued, sleep17 enable plus a verified future-target crossing sets the low byte20 even with sleep0/16 disabled. The BTLC/ETM prerequisites were not varied independently. No readback, counter unit or PMU wake-route equation is established. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026."
+description = "Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31. In the tested setup with advancing completed BTLC captures, digital/ETM clocks live, ETM channels6/7 enabled and the ETM bit11 command issued, sleep17 enable plus a verified future-target crossing sets the low byte20 even with sleep0/16 disabled. The BTLC/ETM prerequisites were not varied independently. No readback, counter unit or PMU wake-route equation is established. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026. The runtime-derived image is truncated to24 bits before a 32-bit store with upper8 zero and no preceding read of this word. SOURCE: BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027."
 
 [[registers.fields]]
-name = "BITS_0_23_OPAQUE"
+name = "SLEEP17_TARGET"
 bits = "23:0"
 class = "write-only"
+description = "Runtime-derived low24 target of the tested sleep17 local flag. The 32-bit publication writes upper8 zero without reading +0x68. No readback accessor, counter unit or PMU wake route is established. SOURCE: BX4_S31_LP_SLEEP_TARGET_PUBLICATIONS_20261027; HW16_S31_LP_SLEEP_LANES_20261026."
 
 [[registers]]
 name = "WORD_006C_OPAQUE"
 offset = 0x6c
-description = "Low24 is the compare target; the upper byte remains opaque. Runtime paths read this word and publish complete or low24 images. With XTAL/divider1, CONTROL4=0 and either CONTROL0 state, each upper bit24-31 individually and all together read back0 after publication and do not suppress the positive future low24 compare. This qualifies the tested comparison as24-bit; no universal upper-byte meaning is assigned. SOURCE: HW22_S31_LP_COMPARE_WIDTH_20261027. In the tested CONTROL0=1/CONTROL4=0, XTAL/divider1 setup, a positive software pending byte is conditionally zeroed before programming each target and issuing bit18. Future targets origin+2048 and origin+64 (still26 ticks ahead at the latter post-enable sample) produce byte24=1/CONTROL2=1/cause0x40000/source127 high. Target origin-64, already102 ticks behind at the post-enable sample, produces no indication through4096 counter ticks; a fresh future target subsequently delivers. This is a finite past-target observation, not a same-cycle priority or universal deadline-admission bound. SOURCE: HW22_S31_LP_REARM_20261027."
+description = "Low24 is the compare target; the upper byte remains opaque. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. With XTAL/divider1, CONTROL4=0 and either CONTROL0 state, each upper bit24-31 individually and all together read back0 after publication and do not suppress the positive future low24 compare. This qualifies the tested comparison as24-bit; no universal upper-byte meaning is assigned. SOURCE: HW22_S31_LP_COMPARE_WIDTH_20261027. In the tested CONTROL0=1/CONTROL4=0, XTAL/divider1 setup, a positive software pending byte is conditionally zeroed before programming each target and issuing bit18. Future targets origin+2048 and origin+64 (still26 ticks ahead at the latter post-enable sample) produce byte24=1/CONTROL2=1/cause0x40000/source127 high. Target origin-64, already102 ticks behind at the post-enable sample, produces no indication through4096 counter ticks; a fresh future target subsequently delivers. This is a finite past-target observation, not a same-cycle priority or universal deadline-admission bound. SOURCE: HW22_S31_LP_REARM_20261027."
 
 [[registers.fields]]
 name = "COMPARE_TARGET"
 bits = "23:0"
 class = "plain"
-description = "Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027."
+description = "Target compared against COUNTER_LOW: future low24 targets produce byte24/cause/source127. With XTAL/divider1 and CONTROL4=0, upper-byte publications read back0 and do not prevent that compare in either CONTROL0 state. SOURCE: HW22_S31_LP_REARM_20261027; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027."
 
 [[registers.fields]]
 name = "BITS_24_31_OPAQUE"
 bits = "31:24"
 class = "plain"
-description = "Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027."
+description = "Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027."
 
 [[registers]]
 name = "WORD_0078_OPAQUE"
@@ -1369,18 +1386,19 @@ description = "Initialization sets bit 25 through a fresh-read RMW. Other bits a
 name = "CONTROL_25"
 bits = "25"
 class = "plain"
+description = "Set after each sleep0 branch zeroes +0x30; cleared first on its disable branch. The updates do not identify a BUSY, DONE or capture-trigger function. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."
 
 [[registers.fields]]
 name = "BITS_0_23_OPAQUE"
 bits = "23:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Consumed as the low part of a runtime LP-time reference reconstructed with the sampled counter epoch and an epoch correction when the low counter precedes it. The capture producer and any completion relation are unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."
 
 [[registers.fields]]
 name = "BIT_26_OPAQUE"
 bits = "26"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Set by the sleep0 enable branch and cleared by its disable branch. Sleep-disable tests this bit for an assertion before invoking the disable helper; this is no completion polling loop. Individual electrical effect is unknown. SOURCE: BX4_S31_LP_SLEEP0_OBSERVERS_20261027."
 
 [[registers]]
 name = "COUNTER"
@@ -2416,7 +2434,7 @@ description = "Enable the guarded TSF timer-zero event. Static accessor mapping 
 name = "BITS_8_16_OPAQUE"
 bits = "16:8"
 class = "plain"
-description = "Event identities unknown."
+description = "Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027."
 write-range = { min = 0, max = 511 }
 
 [[registers.fields]]
@@ -2429,7 +2447,7 @@ description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "plain"
-description = "Independent event identity and dedicated enable writer are unknown. With MAC STATUS14, the vendor beacon-memory RX selector tests power RAW17/18 rather than power STATUS17/18. This software observation does not establish the hardware relation to ENABLE18. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
+description = "Independent event identity unknown. Inspected guarded TBTT/TSF and dedicated beacon interrupt writers preserve ENABLE18. The vendor beacon-memory RX selector tests RAW17/18 with MAC STATUS14, not ENABLE18; its hardware relation to this lane is unqualified. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027; BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BEACON_MISS"
@@ -2441,7 +2459,7 @@ description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_
 name = "BITS_20_31_OPAQUE"
 bits = "31:20"
 class = "plain"
-description = "Event identities unknown."
+description = "Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027."
 write-range = { min = 0, max = 4095 }
 
 [[registers]]
@@ -2501,7 +2519,7 @@ description = "Raw guarded TSF timer-zero event. Static accessor mapping is bit 
 name = "BITS_8_16_OPAQUE"
 bits = "16:8"
 class = "read-only"
-description = "Event identities unknown."
+description = "Individual event identities and producers unknown. On a nonempty vendor FIQ pass the complete sampled RAW word is forwarded to CLEAR before power-bank dispatch; RAW alone is excluded from the aggregate nonempty test. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027."
 
 [[registers.fields]]
 name = "BEACON_FILTER_WAKE"
@@ -2525,7 +2543,7 @@ description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_
 name = "BITS_20_31_OPAQUE"
 bits = "31:20"
 class = "read-only"
-description = "Event identities unknown."
+description = "Individual event identities and producers unknown. On a nonempty vendor FIQ pass the complete sampled RAW word is forwarded to CLEAR before power-bank dispatch; RAW alone is excluded from the aggregate nonempty test. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027."
 
 [[registers]]
 name = "POWER_INTERRUPT_STATUS"
@@ -2584,7 +2602,7 @@ description = "Masked guarded TSF timer-zero event. Static accessor mapping is b
 name = "BITS_8_16_OPAQUE"
 bits = "16:8"
 class = "read-only"
-description = "Event identities unknown."
+description = "Individual event identities and producers unknown. The vendor FIQ includes these lanes in its full STATUS nonempty test and sampled acknowledgement; it has no separately selected service for them. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027."
 
 [[registers.fields]]
 name = "BEACON_FILTER_WAKE"
@@ -2608,7 +2626,7 @@ description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_
 name = "BITS_20_31_OPAQUE"
 bits = "31:20"
 class = "read-only"
-description = "Event identities unknown."
+description = "Individual event identities and producers unknown. The vendor FIQ includes these lanes in its full STATUS nonempty test and sampled acknowledgement; it has no separately selected service for them. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027."
 
 [[registers]]
 name = "CLEAR"
@@ -2667,7 +2685,7 @@ description = "Acknowledge the guarded TSF timer-zero event. Static accessor map
 name = "BITS_8_16_OPAQUE"
 bits = "16:8"
 class = "write-one-to-clear"
-description = "Event identities unknown."
+description = "The vendor FIQ forwards these lanes from complete sampled power STATUS and RAW images. Named TBTT/TSF and beacon interrupt helpers can also forward unchanged CLEAR readback lanes. Individual event identities, readback semantics and positive per-lane clearing are unqualified. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027."
 
 [[registers.fields]]
 name = "BEACON_FILTER_WAKE"
@@ -2679,7 +2697,7 @@ description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "write-one-to-clear"
-description = "The vendor FIQ writes its complete sampled power STATUS and then RAW through this bank before selecting the RAW17/18 beacon-memory RX path. This includes sampled RAW18 even when absent from STATUS; it is an observed software acknowledgement, not a positive silicon-clear qualification. Independent cause unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027."
+description = "The vendor FIQ forwards sampled STATUS18 and RAW18 to CLEAR before its joint RAW17/18 beacon-memory selector. Named low-lane and beacon interrupt helpers also preserve this lane from CLEAR readback in their full stores. Independent cause, readback semantics and positive silicon clearing remain unknown. SOURCE: BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027."
 
 [[registers.fields]]
 name = "BEACON_MISS"
@@ -2691,7 +2709,7 @@ description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_
 name = "BITS_20_31_OPAQUE"
 bits = "31:20"
 class = "write-one-to-clear"
-description = "Event identities unknown."
+description = "The vendor FIQ forwards these lanes from complete sampled power STATUS and RAW images. Named TBTT/TSF and beacon interrupt helpers can also forward unchanged CLEAR readback lanes. Individual event identities, readback semantics and positive per-lane clearing are unqualified. SOURCE: BLOB_S31_PWR_FIQ_BANK_FORWARDING_20261027; BLOB_S31_PWR_CLEAR_READBACK_FORWARDING_20261027."
 
 [[registers]]
 name = "WORD_08D0_OPAQUE"
@@ -2722,7 +2740,7 @@ sources = ["HW9_S31_LP_CLEAR34_20261027", "HW16_S31_LP_DELIVERY_20261026"]
 sources = ["HW9_S31_LP_CLEAR34_20261027"]
 
 [review.entity."WORD_0010_OPAQUE"]
-sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "HW16_S31_LP_DELIVERY_20261026"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "HW16_S31_LP_DELIVERY_20261026", "BX4_S31_LP_DELIVERY_SITES_20261027"]
 
 [review.entity."WORD_0024_OPAQUE"]
 sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"]
@@ -2731,16 +2749,44 @@ sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "BLOB_BX16_LIBBTDM_LP_IMAGE_LANE
 sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BLOB_BX16_LIBBTDM_LP_IMAGE_LANES_20261027"]
 
 [review.entity."WORD_0038_OPAQUE"]
-sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026"]
+sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BX4_S31_LP_STATUS_CONSUMER_20261027"]
 
 [review.entity."WORD_0048_OPAQUE"]
 sources = ["HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026"]
 
 [review.entity."WORD_0020_OPAQUE"]
-sources = ["HW16_S31_LP_SLEEP_LANES_20261026"]
+sources = ["HW16_S31_LP_SLEEP_LANES_20261026", "BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027"]
 
 [review.entity."WORD_0040_OPAQUE"]
 sources = ["HW16_S31_LP_SLEEP_LANES_20261026"]
 
 [review.entity."WORD_0044_OPAQUE"]
 sources = ["HW16_S31_LP_SLEEP_LANES_20261026"]
+
+[review.entity."WORD_0038_OPAQUE.ROLLOVER_STATUS"]
+sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BX4_S31_LP_STATUS_CONSUMER_20261027", "HW2_S31_LP_PENDING_20261026"]
+accuracy = "bounded"
+completeness = "partial"
+
+[review.entity."WORD_0038_OPAQUE.COMPARE_SOFTWARE_STATUS"]
+sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BX4_S31_LP_STATUS_CONSUMER_20261027", "HW2_S31_LP_PENDING_20261026"]
+accuracy = "bounded"
+completeness = "partial"
+
+[review.entity."WORD_0038_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BX4_S31_LP_STATUS_CONSUMER_20261027", "HW2_S31_LP_PENDING_20261026"]
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_0038_OPAQUE.BITS_2_17_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BX4_S31_LP_STATUS_CONSUMER_20261027", "HW2_S31_LP_PENDING_20261026"]
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_0038_OPAQUE.BITS_19_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW_BLE_LP_CAUSES_2026_10_26", "HW2_S31_LP_STOP_WRAP_20261026", "HW2_S31_LP_GATES_20261026", "HW6_S31_LP_RESET_RETENTION_20261026", "HW13_S31_BLE_LP_HP_RESET_20261026", "HW13_S31_BLE_LP_HP_RESTORE_20261026", "BX4_S31_LP_STATUS_CONSUMER_20261027", "HW2_S31_LP_PENDING_20261026"]
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."WORD_006C_OPAQUE"]
+sources = ["BX4_S31_LP_COMPARE_PUBLICATIONS_20261027", "HW22_S31_LP_COMPARE_WIDTH_20261027"]

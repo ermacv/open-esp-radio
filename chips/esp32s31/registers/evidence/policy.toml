@@ -5,3 +5,7 @@ schema = 1
 [[sources]]
 id = "POLICY_STATION_BSS_COLOR_MASK"
 description = "chips/esp32s31/ieee80211/driver/README.md, BSS-color collision: station interrupt policy keeps the HE BSS-color collision event masked until an HE consumer exists. It is not a TX queue collision; queue collision detach is qualified only by TX_COMMON.collision_pending."
+
+[[sources]]
+id = "POLICY_S31_PWR_BANK_CLEAR_SCOPE_20261027"
+description = "SOURCE: Production policy in chips/esp32s31/registers/policy.toml, fixed-register-images clear_all_mac_power_interrupts: mask MODEM_PWR.ENABLE then write CLEAR=0xffffffff. The current-pin vendor hal_pwr_interrupt_clr_event leaf establishes full-argument forwarding only. HW8_S31_WIFI_TSF_MASK_20261026 positively qualifies the production image for a fresh masked timer 0 cause, not opaque lanes 8..16,18,20..31. All-lane acknowledgement is unqualified. Report: oer-notes/research/bx-modem-pwr-power-bank.md."

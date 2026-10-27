@@ -10,10 +10,7 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(s),
-        s.ble
-            .timer_status
-            .read_word_0038_opaque()
-            .bits_0_31_opaque(),
+        s.ble.timer_status.read_bluetooth_modem_lp_status(),
         s.interrupt_matrix
             .interrupt_core0_status
             .read_int_status_reg_3()
@@ -30,15 +27,15 @@ fn state(s: &Session<'_>, tag: u32) {
     );
     emit(
         tag + 2,
-        u32::from(t.read_word_001c_opaque().bits_0_7_opaque()),
-        u32::from(t.read_word_0020_opaque().bits_0_7_opaque()),
+        u32::from(t.read_word_001c_opaque().sleep16_flag_byte()),
+        u32::from(t.read_word_0020_opaque().sleep17_flag_byte()),
         u32::from(s.ble.task_irq.read_interrupt_enable().source_17()),
     );
     let m = t.read_word_0058_opaque();
     emit(
         tag + 3,
         u32::from(m.control_0()) + 4 * u32::from(m.control_2()) + 16 * u32::from(m.control_4()),
-        t.read_word_0064_opaque().bits_0_23_opaque().get(),
+        t.read_word_0064_opaque().sleep16_target().get(),
         t.read_word_006c_opaque().compare_target().get(),
     );
 }
@@ -52,13 +49,13 @@ fn quiet(s: &mut Session<'_>) {
 }
 fn enable18(s: &mut Session<'_>) {
     s.ble.timer.write_word_0010_opaque(|w| {
-        w.set_bit_18_opaque(true);
+        w.set_compare_software_delivery_set(true);
     });
     oer_riscv::fence();
 }
 fn enable1(s: &mut Session<'_>) {
     s.ble.timer.write_word_0010_opaque(|w| {
-        w.set_bit_1_opaque(true);
+        w.set_rollover_delivery_set(true);
     });
     oer_riscv::fence();
 }
@@ -125,7 +122,7 @@ fn lp_clear_run(s: &mut Session<'_>, initial_clear: bool) {
 fn future(s: &mut Session<'_>) -> u32 {
     let target = counter(s).wrapping_add(512) & LOW_MAX;
     s.ble.timer.modify_word_0064_opaque(|w| {
-        w.set_bits_0_23_opaque(Bits::truncate(target));
+        w.set_sleep16_target(Bits::truncate(target));
     });
     s.ble.timer.modify_word_006c_opaque(|w| {
         w.set_compare_target(Bits::truncate(LOW_MAX));
@@ -216,7 +213,7 @@ pub(in crate::image) fn sleep_other(s: &mut Session<'_>) {
     state(s, 0x9850);
     let target = counter(s).wrapping_add(512) & LOW_MAX;
     s.ble.timer.write_word_0068_opaque(|w| {
-        w.set_bits_0_23_opaque(Bits::truncate(target));
+        w.set_sleep17_target(Bits::truncate(target));
     });
     let origin = counter(s);
     emit(0x986f, target, origin, 0);

@@ -27,10 +27,7 @@ fn snapshot(s: &Session<'_>) -> [u32; 5] {
     let output = matrix(s);
     let t = &s.ble.timer;
     [
-        s.ble
-            .timer_status
-            .read_word_0038_opaque()
-            .bits_0_31_opaque(),
+        s.ble.timer_status.read_bluetooth_modem_lp_status(),
         u32::from(t.read_word_0024_opaque().low_byte()),
         u32::from(t.read_word_002c_opaque().low_byte()),
         counter(s),
@@ -92,7 +89,8 @@ fn wait_wrap(s: &Session<'_>, tag: u32) -> bool {
 }
 fn enable(s: &mut Session<'_>, compare: bool, rollover: bool) {
     s.ble.timer.write_word_0010_opaque(|w| {
-        w.set_bit_18_opaque(compare).set_bit_1_opaque(rollover);
+        w.set_compare_software_delivery_set(compare)
+            .set_rollover_delivery_set(rollover);
     });
     oer_riscv::fence();
 }

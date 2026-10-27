@@ -22,10 +22,7 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(s),
-        s.ble
-            .timer_status
-            .read_word_0038_opaque()
-            .bits_0_31_opaque(),
+        s.ble.timer_status.read_bluetooth_modem_lp_status(),
         s.interrupt_matrix
             .interrupt_core0_status
             .read_int_status_reg_3()
@@ -86,7 +83,7 @@ fn arm(s: &mut Session<'_>, target: u32, tag: u32) {
     });
     let before = counter(s);
     s.ble.timer.write_word_0010_opaque(|w| {
-        w.set_bit_18_opaque(true);
+        w.set_compare_software_delivery_set(true);
     });
     oer_riscv::fence();
     emit(tag, target, before, counter(s));
@@ -265,7 +262,7 @@ pub(super) fn compare_width(s: &mut Session<'_>) {
                 r.compare_target().get() | (u32::from(r.bits_24_31_opaque()) << LOW_WIDTH);
             let before = counter(s);
             s.ble.timer.write_word_0010_opaque(|w| {
-                w.set_bit_18_opaque(true);
+                w.set_compare_software_delivery_set(true);
             });
             oer_riscv::fence();
             let after = counter(s);

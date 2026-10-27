@@ -2937,7 +2937,7 @@ name = "clear_all_mac_power_interrupts"
 register = "MODEM_PWR.CLEAR"
 value = 0xffffffff
 masks = "MODEM_PWR.ENABLE"
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "HW8_S31_WIFI_TSF_MASK_20261026"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "HW8_S31_WIFI_TSF_MASK_20261026", "POLICY_S31_PWR_BANK_CLEAR_SCOPE_20261027"]
 # Whole-bank values are project policy; HW8 qualifies timer0/1 masking
 # and timer0 masked all-clear only, not all-producer shutdown.
 
@@ -3404,13 +3404,13 @@ sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNT
 name = "apply_modem_icg_selection"
 register = "PMU.IMM_MODEM_ICG"
 value = 0x80000000
-sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "S31_PMU_HEADERS"]
+sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "S31_PMU_HEADERS", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"]
 
 [[fixed-register-images]]
 name = "apply_sleep_icg_selection"
 register = "PMU.IMM_SLEEP_SYSCLK"
 value = 0x10000000
-sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "S31_PMU_HEADERS"]
+sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "S31_PMU_HEADERS", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"]
 
 [[fixed-register-images]]
 name = "pulse_phy_i2c_host0_reset"
@@ -5610,7 +5610,7 @@ sources = ["BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "S31_PMU_HEADERS"]
 name = "enable_frontend_baseband_power"
 fields = [{ field = "PMU.HP_ACTIVE_HP_CK_POWER.BITS_0_3_OPAQUE", source-bit-offset = 0 }, { field = "PMU.HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BB_I2C", source-bit-offset = 4 }]
 value = 0x0000001f
-sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK", "S31_PMU_HEADERS"]
+sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK", "S31_PMU_HEADERS", "BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4"]
 
 [[field-replace-modifies]]
 name = "set_wifi_baseband_and_mac_reset"
@@ -7660,14 +7660,14 @@ name = "clear_bluetooth_modem_lp_timer_state_001c"
 register = "MODEM_PWR.WORD_001C_OPAQUE"
 value = 0
 whole-word = true
-sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
+sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS", "BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027"]
 
 [[fixed-register-images]]
 name = "clear_bluetooth_modem_lp_timer_state_0020"
 register = "MODEM_PWR.WORD_0020_OPAQUE"
 value = 0
 whole-word = true
-sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
+sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS", "BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027"]
 
 [[fixed-register-images]]
 name = "publish_bluetooth_lp_sleep_etm_0110"
@@ -7731,3 +7731,8 @@ register = "BT_MAC.IRQ_CLEAR_1"
 value = 0x00000002
 masks = "BT_MAC.IRQ_ENABLE_1"
 sources = ["HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW9_S31_MAC_MASK_ACK_20261027"]
+
+[[register-image-reads]]
+name = "read_bluetooth_modem_lp_status"
+register = "MODEM_PWR.WORD_0038_OPAQUE"
+sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027", "HW_BLE_LP_CAUSES_2026_10_26"]

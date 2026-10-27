@@ -1026,18 +1026,20 @@ impl super::ModemLpTimerStopTransaction for StopRecorder {
 
 #[test]
 fn shutdown_returns_pending_then_leaves_the_counter_bytes_status_and_output_quiet() {
-    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::Bits0_31Opaque;
+    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::{
+        COMPARE_SOFTWARE_STATUS_MASK, ROLLOVER_STATUS_MASK,
+    };
     // SOURCE: HW6_S31_LP_QUIET_20261026, hw6-20261026-reset-02.
     for (software, rollover, status) in [
-        (9, 0, Bits0_31Opaque::CompareSoftwarePending),
-        (0, 5, Bits0_31Opaque::RolloverPending),
-        (9, 5, Bits0_31Opaque::BothMeasuredPending),
+        (9, 0, COMPARE_SOFTWARE_STATUS_MASK),
+        (0, 5, ROLLOVER_STATUS_MASK),
+        (9, 5, COMPARE_SOFTWARE_STATUS_MASK | ROLLOVER_STATUS_MASK),
     ] {
         let pending = super::BluetoothModemLpTimerPendingObservation {
             state_0024: software,
             state_002c: rollover,
         };
-        let mut recorder = StopRecorder::new(pending, status.bits());
+        let mut recorder = StopRecorder::new(pending, status);
         recorder
             .clock
             .advance(oer_time::Duration::from_micros(3000))
@@ -1084,13 +1086,13 @@ fn shutdown_samples_both_bytes_before_clearing_both_whole_words() {
 
 #[test]
 fn stopped_rollover_is_acknowledged_once_without_arming_or_dispatch() {
-    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::Bits0_31Opaque;
-    for status in [Bits0_31Opaque::Inactive, Bits0_31Opaque::RolloverPending] {
+    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::ROLLOVER_STATUS_MASK;
+    for status in [0, ROLLOVER_STATUS_MASK] {
         let pending = super::BluetoothModemLpTimerPendingObservation {
             state_0024: 0,
             state_002c: 5,
         };
-        let mut recorder = StopRecorder::new(pending, status.bits());
+        let mut recorder = StopRecorder::new(pending, status);
         let mut epoch = BluetoothModemLpTimerEpoch::new();
         assert_eq!(
             super::execute_modem_lp_timer_stopped_interrupt(&mut recorder, &mut epoch),
@@ -1161,14 +1163,8 @@ fn read_only_status_capability_remains_after_the_timer_owner_leaves() {
             timer.status
         };
         let other_reader = status;
-        assert_eq!(
-            status.read_word_0038_opaque().bits_0_31_opaque(),
-            0x89ab_cdef
-        );
-        assert_eq!(
-            other_reader.read_word_0038_opaque().bits_0_31_opaque(),
-            0x89ab_cdef
-        );
+        assert_eq!(status.read_bluetooth_modem_lp_status(), 0x89ab_cdef);
+        assert_eq!(other_reader.read_bluetooth_modem_lp_status(), 0x89ab_cdef);
     }
     assert_eq!(memory, before);
 }

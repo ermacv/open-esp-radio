@@ -996,14 +996,13 @@ pub(crate) fn assert_analog_i2c_reset<P: Placement>(
     });
 }
 
-// SOURCE: ROM_REV0_PHY_OPEN_FE_BB_CLK, S31_PMU_HEADERS.
+// SOURCE: BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4, S31_PMU_HEADERS.
 pub(crate) fn enable_frontend_baseband_power<P: Placement>(
     registers: &mut oer_esp32s31_pac::pmu::PmuRadio<P>,
 ) {
     registers.modify_hp_active_hp_ck_power(|w| {
-        w.set_bits_0_3_opaque(
-            oer_esp32s31_pac::pmu::hp_active_hp_ck_power::Bits0_3Opaque::RomRequired,
-        );
+        // SOURCE: BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4; observed configuration image.
+        w.set_bits_0_3_opaque(Bits::constant::<0xf>());
         w.set_hp_active_xpd_bb_i2c(true);
     });
 }

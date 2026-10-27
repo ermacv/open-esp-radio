@@ -347,7 +347,7 @@ fn lp_state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(b),
-        b.timer_status.read_word_0038_opaque().bits_0_31_opaque(),
+        b.timer_status.read_bluetooth_modem_lp_status(),
         pending(s),
     );
     emit(
@@ -400,7 +400,7 @@ pub(super) fn init_lp(s: &mut Session<'_>) {
     b.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     b.timer.prepare_bluetooth_modem_lp_timer_command_0034();
     b.timer.write_word_0010_opaque(|w| {
-        w.set_bit_1_opaque(true);
+        w.set_rollover_delivery_set(true);
     });
     b.timer.clear_bluetooth_modem_lp_timer_state_0024();
     b.timer.clear_bluetooth_modem_lp_timer_state_002c();
@@ -432,18 +432,13 @@ fn target(b: &mut Ble, delta: u32) {
 }
 fn command18(b: &mut Ble) {
     b.timer.write_word_0010_opaque(|w| {
-        w.set_bit_18_opaque(true);
+        w.set_compare_software_delivery_set(true);
     });
     oer_riscv::fence();
 }
 fn wait_cause(s: &Session<'_>) {
     let start = oer_riscv::cycle32();
-    while s
-        .ble
-        .timer_status
-        .read_word_0038_opaque()
-        .bits_0_31_opaque()
-        == 0
+    while s.ble.timer_status.read_bluetooth_modem_lp_status() == 0
         && oer_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT
     {}
     emit(0x23ff, oer_riscv::cycle32().wrapping_sub(start), 0, 0);
@@ -536,7 +531,7 @@ pub(super) fn lp_modes(s: &mut Session<'_>) {
         .timer
         .publish_bluetooth_modem_lp_timer_software_pending();
     s.ble.timer.write_word_0010_opaque(|w| {
-        w.set_bit_1_opaque(true);
+        w.set_rollover_delivery_set(true);
     });
     lp_state(s, 0x2602);
     s.ble.timer.modify_word_0058_opaque(|w| {
@@ -614,7 +609,7 @@ pub(super) fn software_pending(s: &mut Session<'_>) {
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     lp_state(s, 0x2908);
     s.ble.timer.write_word_0010_opaque(|w| {
-        w.set_bit_1_opaque(true);
+        w.set_rollover_delivery_set(true);
     });
     lp_state(s, 0x2909);
     command18(&mut s.ble);
@@ -668,7 +663,7 @@ pub(super) fn rollover_gates(s: &mut Session<'_>) {
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     lp_state(s, 0x3004);
     s.ble.timer.write_word_0010_opaque(|w| {
-        w.set_bit_1_opaque(true);
+        w.set_rollover_delivery_set(true);
     });
     lp_state(s, 0x3005);
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
