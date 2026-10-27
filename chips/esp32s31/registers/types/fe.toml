@@ -46,7 +46,7 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C"]
 completeness = "complete"
 
 [review.entity."FREQUENCY_CONTROL.BIT_18_OPAQUE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C", "HW19_S31_FREQUENCY_SELECTION_20261027"]
 
 [review.entity."FREQUENCY_CONTROL.CHANNEL_SWITCH_PULSE"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
@@ -136,7 +136,7 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 completeness = "unknown"
 
 [review.entity."FREQUENCY_MEMORY_READ_RESULT.VALUE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "HW19_S31_FREQUENCY_SELECTION_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -486,6 +486,7 @@ sources = ["S31_MMIO_USE_20100474"]
 sources = ["S31_MMIO_USE_20100474", "S31_MMIO_DECLARED_20100474"]
 
 [review.entity."ESTIMATOR_READY_STATUS.READY"]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "HW19_S31_EST_INDICATIONS_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -1016,7 +1017,7 @@ sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT"]
 accuracy = "positional"
 
 [review.entity."WORD_08D0_OPAQUE.BITS_20_21_OPAQUE"]
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "S31_MMIO_DECLARED_201008D0"]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "S31_MMIO_DECLARED_201008D0", "HW19_S31_EST_INDICATIONS_20261027"]
 accuracy = "positional"
 completeness = "unknown"
 
@@ -1168,7 +1169,7 @@ write-range = { min = 0x0, max = 0x3ff }
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "plain"
-description = "High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn."
+description = "High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67 and the low reference survived the separate clear/set pulse. Other-mode geometry and reset scope remain unresolved."
 
 [[registers.fields]]
 name = "CHANNEL_SWITCH_PULSE"
@@ -2710,7 +2711,7 @@ description = "Complete phy_iq_est_enable counts nonzero bits 21:20 while waitin
 name = "BITS_20_21_OPAQUE"
 bits = "21:20"
 class = "read-only"
-description = "Sampled only while estimator READY is clear, for a diagnostic count; phy_check_rx_sat samples the same pair 100 times. RX saturation is a strong inference, generic activity a weak inference; these are not established estimator-busy or completion bits. Individual bit meanings remain unassigned."
+description = "Sampled only while estimator READY is clear, for a diagnostic count; phy_check_rx_sat samples the same pair 100 times. HW19 observed zero in 33 not-ready ordered reads within two completed calibrated internal-tone measurements: a nonzero pair is not a necessary busy indication in that epoch. RX saturation remains an inference; individual bit meanings and other RF conditions remain unassigned."
 
 [[registers]]
 name = "DAC_SCALE_CONTROL"
