@@ -6,11 +6,10 @@ pub use oer_esp32s31_hal::ieee80211::dma::{
         RxDmaWalkerEnabled, RxDmaWalkerStopped,
     },
     rx_ring::{
-        RX_BUFFER_SENTINEL, RxCompletedDescriptor, RxCompletedDescriptorFrontier, RxCompletedUnit,
+        RxCompletedDescriptor, RxCompletedDescriptorFrontier, RxCompletedUnit,
         RxCompletedUnitFrontier, RxDescriptorSnapshot, RxDmaArenaState, RxDmaBufferAddresses,
         RxFrozenCursor, RxLiveAppend, RxObservedMask, RxReloadObservation, RxRingError,
         RxRingHalted, RxRingLive, RxRingStopped, RxRingTopologySnapshot, RxSegment,
-        prepare_recycled_buffer,
     },
 };
 use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};

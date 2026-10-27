@@ -96,38 +96,6 @@ fn completed_rx_descriptor_rearms_only_for_the_expected_storage() {
 }
 
 #[test]
-fn recycled_rx_buffer_restores_only_the_leading_sentinel() {
-    let mut storage = [0x5a; 20];
-    prepare_recycled_buffer(&mut storage, 16).unwrap();
-    assert_eq!(&storage[..4], &RX_BUFFER_SENTINEL.to_le_bytes());
-    assert_eq!(&storage[4..], &[0x5a; 16]);
-}
-
-#[test]
-fn recycled_rx_buffer_needs_no_storage_beyond_capacity() {
-    let mut storage = [0x5a; 16];
-    prepare_recycled_buffer(&mut storage, 16).unwrap();
-    assert_eq!(&storage[..4], &RX_BUFFER_SENTINEL.to_le_bytes());
-    assert_eq!(&storage[4..], &[0x5a; 12]);
-
-    let mut smallest = [0; 4];
-    prepare_recycled_buffer(&mut smallest, 4).unwrap();
-    assert_eq!(smallest, RX_BUFFER_SENTINEL.to_le_bytes());
-}
-
-#[test]
-fn recycled_rx_buffer_rejects_invalid_capacity_without_writing() {
-    for capacity in [0, 3, 17, usize::MAX] {
-        let mut storage = [0x5a; 16];
-        assert_eq!(
-            prepare_recycled_buffer(&mut storage, capacity),
-            Err(RxRingError::Size)
-        );
-        assert_eq!(storage, [0x5a; 16]);
-    }
-}
-
-#[test]
 fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbell() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
@@ -170,13 +138,9 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .unwrap();
-    // The buffers held stale payload; starting touches no buffer, so these
-    // are the leading guards preparation restored in every buffer.
+    // Neither preparation nor start paints the previous epoch's payload.
     for index in 0..COUNT {
-        assert!(
-            arena.guard_restored(&live, index),
-            "buffer {index} prepared"
-        );
+        assert_eq!(arena.leading_bytes(&live, index), [STALE_PAYLOAD; 4]);
     }
     // DMA has written into every buffer; descriptors zero and one complete.
     for index in 0..COUNT {
@@ -224,12 +188,13 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
         .recycle_completed_half(&mut live, &mut mmio)
         .unwrap()
         .unwrap();
-    let recycled = |arena: &Arena<COUNT>, live: &RxRingLive<'_, COUNT>| {
-        (0..COUNT)
-            .filter(|&index| arena.guard_restored(live, index))
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(recycled(&arena, &live), [0, 1]);
+    for index in 0..COUNT {
+        assert_eq!(
+            arena.leading_bytes(&live, index),
+            [0xa5; 4],
+            "recycle preserves bytes"
+        );
+    }
     assert_eq!(first.head_index.get(), 0);
     assert_eq!(first.tail_index.get(), 1);
     assert_eq!(descriptors[3].next_address(), base);
@@ -312,7 +277,8 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
             .unwrap()
             .is_none()
     );
-    assert!(recycled(&arena, &live).is_empty());
+    assert!(descriptors[2].word0().rx_done());
+    assert!(descriptors[3].word0().rx_done());
     // Repeated NEXT observations still do not release descriptor three's
     // link. A later completed LAST does.
     descriptors[0].write_word0(descriptors[0].word0().with_rx_done(true));
@@ -321,7 +287,8 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
         .recycle_completed_half(&mut live, &mut mmio)
         .unwrap()
         .unwrap();
-    assert_eq!(recycled(&arena, &live), [2, 3]);
+    assert!(!descriptors[2].word0().rx_done());
+    assert!(!descriptors[3].word0().rx_done());
     assert_eq!(second.head_index.get(), 2);
     assert_eq!(second.tail_index.get(), 3);
     assert_eq!(descriptors[1].next_address(), base + 2 * DESCRIPTOR_BYTES);
@@ -929,8 +896,8 @@ fn live_rx_recycle_rejects_a_corrupt_append_tail_before_any_mutation() {
         Err(RxRingError::Corrupt)
     );
     // No buffer was prepared: the DMA payload still covers buffer zero's
-    // leading guard.
-    assert_eq!(arena.dma_guard(&live, 0), [0xa5; 4]);
+    // leading bytes.
+    assert_eq!(arena.leading_bytes(&live, 0), [0xa5; 4]);
     for (index, expected) in before.into_iter().enumerate() {
         assert_eq!(
             (
@@ -1046,10 +1013,9 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     assert_eq!(staged_word0.length(), 336);
 
     let append = unit.recycle(&mut mmio).unwrap().unwrap();
-    let recycled = (0..COUNT)
-        .filter(|&index| arena.guard_restored(&live, index))
-        .collect::<Vec<_>>();
-    assert_eq!(recycled, [0, 1]);
+    for index in 0..COUNT {
+        assert_eq!(arena.leading_bytes(&live, index), [0xa5; 4]);
+    }
     assert_eq!(append.descriptor_count, 2);
     assert_eq!(live.recycle_start().get(), 2);
     assert!(!descriptors[0].word0().rx_done());

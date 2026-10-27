@@ -44,12 +44,12 @@ use {
         rx::{
             HeBandwidth, HeGuardIntervalAndLtf, HeMuBandwidth, HeMuSignal, HeSuSignal,
             HeTriggerBasedSignal, HtDuplicateRxClassification, INGRESS_STRICT_DUMP,
-            INGRESS_STRICT_RXEND, RX_BUFFER_SENTINEL, RxBasebandFormat, RxDma, RxDmaArenaState,
-            RxError, RxHe20MuSigBUsersError, RxIngressConfig, RxPhyInfo, RxReloadObservation,
-            RxRingError, RxRingLive, RxRingStopped, RxSegment, decode_normalized_rx_metadata,
+            INGRESS_STRICT_RXEND, RxBasebandFormat, RxDma, RxDmaArenaState, RxError,
+            RxHe20MuSigBUsersError, RxIngressConfig, RxPhyInfo, RxReloadObservation, RxRingError,
+            RxRingLive, RxRingStopped, RxSegment, decode_normalized_rx_metadata,
             decode_rx_he_mu_sig_b, decode_rx_local_timestamp, decode_rx_phy_info,
             extract_ccmp_data, extract_control, extract_data, extract_management,
-            first_segment_layout, prepare_recycled_buffer, view_normalized_rx_frame,
+            first_segment_layout, view_normalized_rx_frame,
         },
         tx::{
             AmpduTxConfig, HeAmpduTxConfig, HeBccDcmMcs, HeEdcaTxopLimit, HeFecCoding,

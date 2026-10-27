@@ -17,10 +17,10 @@ use crate::ieee80211::dma::{
     descriptor::RxDescriptor,
     rx_dma::{RxDescriptorAddresses, RxDma},
     rx_ring::{
-        RX_BUFFER_SENTINEL, RecycleGrant, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
+        RecycleGrant, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
         RxCompletedUnitFrontier, RxDescriptorTable, RxDmaArenaState, RxDmaBufferAddresses,
         RxFrozenCursor, RxLiveAppend, RxRingError, RxRingHalted, RxRingLive, RxRingPrepared,
-        RxRingStopped, RxSegment, prepare_recycled_buffer,
+        RxRingStopped, RxSegment,
     },
     space::{ChipDma, DmaSpace},
 };
@@ -415,7 +415,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
     RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
-    /// Empty storage with a leading recycle guard inside each buffer capacity.
+    /// Zeroed byte storage with affine return state for each buffer.
     /// The geometry is checked even when construction runs at runtime.
     ///
     /// ```compile_fail,E0080
@@ -425,7 +425,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     ///
     /// ```compile_fail,E0080
     /// use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
-    /// let _ = RxDmaStorage::<1, 3, 3>::new();
+    /// let _ = RxDmaStorage::<1, 0, 0>::new();
     /// ```
     pub const fn new() -> Self {
         Self {
@@ -493,16 +493,6 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// deterministic host fixtures and pre-publication initialization.
     pub fn buffer_mut(&mut self, index: usize) -> Option<&mut [u8; BUFFER_SIZE]> {
         self.buffers.get_mut(index).map(RxDmaBuffer::cpu_owned_mut)
-    }
-
-    /// Restore one buffer's leading recycle guard before any ring borrows this arena.
-    ///
-    /// Requiring `&mut self` proves that no stopped/live ring token can exist
-    /// at the same time, so pre-publication setup does not need privileged
-    /// access to the buffer's `UnsafeCell`.
-    pub fn prepare_unpublished_buffer(&mut self, index: usize) -> Result<(), RxRingError> {
-        let buffer = self.buffers.get_mut(index).ok_or(RxRingError::Count)?;
-        prepare_recycled_buffer(buffer.cpu_owned_storage_mut(), BUFFER_SIZE)
     }
 
     /// Place the storage: bind each descriptor to its buffer and record the
@@ -735,9 +725,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 }
             }
         }
-        let Some(descriptor) = with_bound_buffers(binding, |ring, buffers| {
-            ring.take_completed_owned(index, &buffers)
-        }) else {
+        let Some(descriptor) =
+            with_bound_buffers(binding, |ring, _buffers| ring.take_completed_owned(index))
+        else {
             return Ok(None);
         };
         let buffer = self
@@ -872,21 +862,15 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// Snapshot the complete units which one frozen cursor has released to
     /// software, through its LAST inclusive. A descriptor-local `RX_DONE`
     /// observation is intentionally insufficient for recycling its link
-    /// word. NEXT=0 and LAST at the accepted tail release untouched
-    /// intermediate descriptors which the vendor worker also walks before
-    /// the terminal.
+    /// word. Units contain every descriptor from the accepted-unit cursor
+    /// through the first terminal, regardless of buffer contents.
     pub fn completed_unit_frontier_through_cursor(
         &self,
         ring: &RxRingLive<'_, COUNT>,
         cursor: RxFrozenCursor,
     ) -> Result<RxCompletedUnitFrontier, RxRingError> {
         self.validate_live_ring(ring)?;
-        Ok(
-            ring.completed_unit_frontier_through_cursor_with(cursor, |index| {
-                self.buffer_for_descriptor(index)
-                    .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-            }),
-        )
+        Ok(ring.completed_unit_frontier_through_cursor(cursor))
     }
 
     /// Return the first complete unit at the software frontier, bounded by
@@ -898,16 +882,12 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         cursor: RxFrozenCursor,
     ) -> Result<RxCompletedUnitFrontier, RxRingError> {
         self.validate_live_ring(ring)?;
-        Ok(
-            ring.first_completed_unit_frontier_through_cursor_with(cursor, |index| {
-                self.buffer_for_descriptor(index)
-                    .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-            }),
-        )
+        Ok(ring.first_completed_unit_frontier_through_cursor(cursor))
     }
 
-    /// Copy bytes from the first descriptor of the first complete unit without
-    /// transferring descriptor ownership.
+    /// Copy bytes from a complete single-descriptor unit without transferring
+    /// descriptor ownership. Chains and reserved-descriptor tails refuse
+    /// preview: their first buffer alone is not an admissible frame header.
     ///
     /// This is a deliberately narrow admission-preview boundary. The ordered
     /// LAST/NEXT cursor proves that the first unit is complete, while copying
@@ -926,16 +906,16 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         output: &mut [u8],
     ) -> Result<bool, RxRingError> {
         self.validate_live_ring(ring)?;
-        let frontier = ring.first_completed_unit_frontier_through_cursor_with(cursor, |index| {
-            self.buffer_for_descriptor(index)
-                .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-        });
-        if frontier.unit_count == 0 {
+        let frontier = ring.first_completed_unit_frontier_through_cursor(cursor);
+        if frontier.descriptor_count != 1 || ring.unit_continues_reserved() {
             return Ok(false);
         }
         let index = self
             .completion_frontier_head(ring)?
             .ok_or(RxRingError::Corrupt)?;
+        if !ring.validate_completed_descriptor(index)? {
+            return Ok(false);
+        }
         let available = usize::from(ring.descriptors()[index].word0().length());
         let Some(end) = offset
             .checked_add(output.len())
@@ -981,15 +961,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         RxRingError,
     > {
         let binding = BoundBuffers::live(self, ring)?;
-        let unit = match with_bound_buffers(binding, |ring, buffers| {
-            ring.take_completed_unit_owned(
-                cursor,
-                |index| {
-                    self.buffer_for_descriptor(index)
-                        .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-                },
-                &buffers,
-            )
+        let unit = match with_bound_buffers(binding, |ring, _buffers| {
+            ring.take_completed_unit_owned(cursor)
         }) {
             Ok(Some(unit)) => unit,
             Ok(None) => return Ok(None),
@@ -1041,9 +1014,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         mmio: &mut M,
     ) -> Result<(), RxRingError> {
         let binding = BoundBuffers::live(self, ring)?;
-        with_bound_buffers(binding, |ring, buffers| {
-            ring.observe_reserved_owned(mmio, &buffers)
-        })
+        with_bound_buffers(binding, |ring, _buffers| ring.observe_reserved_owned(mmio))
     }
 
     fn validate_live_ring(&self, ring: &RxRingLive<'_, COUNT>) -> Result<(), RxRingError> {

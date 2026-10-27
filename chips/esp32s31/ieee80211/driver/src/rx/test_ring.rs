@@ -56,6 +56,10 @@ impl Ring {
         let buffers: &'static [u32; COUNT] = storage.buffer_addresses().bits();
         let base = placed.descriptor_base();
         let mut walker = RxWalkerModel::new();
+        // These ring-only fixtures resume at a retained ring NEXT. R is not
+        // a skipped, unterminated first segment of their first frame.
+        walker.next_descriptor_low =
+            base & oer_esp32s31_hal::ieee80211::registers::WifiDescriptorAddressLow::MAX;
         let live = placed
             .prepare_ring(&mut walker)
             .and_then(|ring| ring.core_ready_for_test().publish(&mut walker))

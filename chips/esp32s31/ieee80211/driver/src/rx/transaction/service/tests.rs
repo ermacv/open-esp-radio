@@ -220,6 +220,9 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut hardware = RxWalkerModel::new();
+    // This fixture starts directly at a retained ring cursor.
+    hardware.next_descriptor_low =
+        base & oer_esp32s31_hal::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let mut ring = placed
         .prepare_ring(&mut hardware)
         .and_then(|ring| ring.core_ready_for_test().publish(&mut hardware))

@@ -28,13 +28,9 @@ fn zeroed_rx_storage_checks_geometry_before_cpu_access_or_dma_placement() {
             "let _ = Storage::place_rotated(Placed::host(storage), 1);",
         ),
         ("buffer_mut", "let _ = storage.buffer_mut(0);"),
-        (
-            "prepare_unpublished_buffer",
-            "let _ = storage.prepare_unpublished_buffer(0);",
-        ),
     ] {
         for (capacity, backing, accepted) in
-            [(16, 16, true), (4, 4, true), (16, 15, false), (3, 3, false)]
+            [(16, 16, true), (1, 1, true), (16, 15, false), (0, 0, false)]
         {
             fs::write(
                 scratch.path().join("case.rs"),
@@ -71,9 +67,7 @@ pub fn exercise() {{
             if !accepted {
                 assert!(stderr.contains("error[E0080]"), "{stderr}");
                 assert!(
-                    stderr.contains(
-                        "RX DMA capacity includes its leading guard and fits its backing"
-                    ),
+                    stderr.contains("RX DMA capacity is nonzero and fits its backing"),
                     "{stderr}"
                 );
             }
