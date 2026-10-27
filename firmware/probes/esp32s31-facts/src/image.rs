@@ -134,9 +134,6 @@ extern "C" fn facts_irq() {
     let cycle = oer_riscv::cycle32();
     IRQ_CYCLE.store(cycle, Ordering::Relaxed);
     IRQ_PC.store(oer_riscv::read_mepc() as u32, Ordering::Relaxed);
-    if timg_arbitration::interrupt() {
-        return;
-    }
     if generic::interrupt() {
         IRQ_COUNT.fetch_add(1, Ordering::Relaxed);
         return;

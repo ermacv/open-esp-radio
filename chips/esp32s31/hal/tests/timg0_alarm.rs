@@ -14,7 +14,9 @@ pub fn on_executor(_: &mut FromCpu2Irq) {}
 // components/soc/esp32s31/include/soc/clic_reg.h (NLBITS/INT_INFO geometry).
 // SOURCE for arbitration: ESP32-C5 TRM v1.1,
 // documentation/esp32-c5_technical_reference_manual_en.pdf, section 2.8.2.5,
-// p.86. Lower-ID ordering assumes that family contract; unverified on S31 (probe P3).
+// p.86. This fixture binds lines 20/21 using that family contract.
+// SOURCE: HW23_S31_P2_ARBITRATION_20261027 measured lines 16/17 on S31
+// hart0 at P2 with TIMG0/FROM_CPU2 assigned both ways; 20/21 was not measured.
 oer_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];

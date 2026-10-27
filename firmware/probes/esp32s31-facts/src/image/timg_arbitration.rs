@@ -1,24 +1,21 @@
 //! Isolated TIMG0 reload/comparator and equal-level CLIC facts (HW23).
 //! No group reset, RF, DMA, watchdog configuration or production API.
-use super::{CONTROLS, LINE, Session, emit, pac, setup, wait_window};
-use core::{
-    ptr,
-    sync::atomic::{AtomicPtr, AtomicU32, Ordering},
-};
+#![forbid(unsafe_code)]
+use super::{CONTROLS, LINE, Session, emit, generic, pac, setup, wait_window};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use oer_mmio::{Bits, Index};
 
 const LIMIT: u32 = 200_000;
 const LOW: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
 const HIGH: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<{ LINE + 1 }>();
-static CLIC: AtomicPtr<pac::clic::Clic> = AtomicPtr::new(ptr::null_mut());
+static ACTIVE: AtomicBool = AtomicBool::new(false);
 static COUNT: AtomicU32 = AtomicU32::new(0);
 static CAUSES: [AtomicU32; 2] = [const { AtomicU32::new(0) }; 2];
 static CYCLES: [AtomicU32; 2] = [const { AtomicU32::new(0) }; 2];
 static LEVELS: [AtomicU32; 2] = [const { AtomicU32::new(0) }; 2];
 
-pub(super) fn interrupt() -> bool {
-    let clic = CLIC.load(Ordering::Acquire);
-    if clic.is_null() {
+pub(super) fn interrupt(clic: &mut pac::clic::Clic) -> bool {
+    if !ACTIVE.load(Ordering::Acquire) {
         return false;
     }
     let cycle = oer_riscv::cycle32();
@@ -34,12 +31,9 @@ pub(super) fn interrupt() -> bool {
         emit(0x19ee, cause, cycle, 1);
         super::halt();
     };
-    // SAFETY: arbitration publishes its live exclusive CLIC borrow while the
-    // masked thread enables IRQs and waits without touching it. Both lines are
-    // P2, hart1 is contained, and hardware prevents equal-level nesting. The
-    // thread revokes this loan only after clearing MIE. Each entry disables its
-    // own line; peripherals remain pending for post-admission observation.
-    unsafe { &mut *clic }.modify_ctrl(selected, |w| {
+    // The generic handler lends its existing CLIC borrow. Each entry disables
+    // only its own line; both peripheral causes remain pending for observation.
+    clic.modify_ctrl(selected, |w| {
         w.set_ie(false);
     });
     oer_riscv::fence();
@@ -427,21 +421,10 @@ fn arbitration(s: &mut Session<'_>, timer_high: bool) {
     for a in CAUSES.iter().chain(&CYCLES).chain(&LEVELS) {
         a.store(0, Ordering::Relaxed);
     }
-    CLIC.store(
-        ptr::addr_of_mut!(s.interrupt_matrix.clic),
-        Ordering::Release,
-    );
-    let start = oer_riscv::cycle32();
-    oer_riscv::enable_interrupts();
-    wait_window();
-    oer_riscv::disable_interrupts();
-    CLIC.store(ptr::null_mut(), Ordering::Release);
-    emit(
-        0x1965,
-        COUNT.load(Ordering::Acquire),
-        start,
-        oer_riscv::cycle32(),
-    );
+    ACTIVE.store(true, Ordering::Release);
+    let [start, end] = generic::admit_window(&mut s.interrupt_matrix.clic);
+    ACTIVE.store(false, Ordering::Release);
+    emit(0x1965, COUNT.load(Ordering::Acquire), start, end);
     for ((c, t), l) in CAUSES.iter().zip(&CYCLES).zip(&LEVELS) {
         emit(
             0x1966,

@@ -163,15 +163,17 @@ Arbitration emits expiry0x1960; assignments/CTL0x1961; state0x1962;
 matrix banks0/2 and FROM_CPU2 level0x1963; line/IP+IE/CTL0x1964 for each
 line; entry count/start/end0x1965; and ordered raw mcause/cycle-delta/
 mintstatus0x1966 for each entry. Both IP and IE must be one before MIE.
-Each handler disables only its own line through an exclusive CLIC loan;
+Each handler disables only its own line through the generic IRQ module's
+existing exclusive CLIC loan;
 neither producer is acknowledged before the post-admission state0x1967.
-The thread revokes the loan after clearing MIE. This adds one documented
-raw-pointer operation confined to the facts image.
+The thread revokes the loan after clearing MIE. The arbitration module takes
+an ordinary mutable borrow from the generic handler and forbids unsafe code.
 
 SOURCE: `HW23_S31_*_20261027`, run `hw23-20261027-timg-arbitration-01`,
 lease #908, [research report](/home/ermacv/dev/oer-notes/research/hw-timg0-arbitration.md).
-The measured probe source is commit `e4016ef7`; subsequent changes attach
-evidence and documentation without changing probe instructions.
+The measured probe source is commit `e4016ef7`. The current shared admission
+and handler path reuses the generic CLIC loan; it was not rerun on hardware.
+The recorded cycle observations belong to the measured revision.
 
 ## BLE interrupt facts
 
