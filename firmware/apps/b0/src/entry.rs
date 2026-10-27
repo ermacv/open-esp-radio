@@ -14,6 +14,7 @@ pub struct Profile {
 include!(concat!(env!("OUT_DIR"), "/profile.rs"));
 mod bridge;
 mod gate_fault;
+mod release_fault;
 mod host;
 mod irq;
 mod radio;

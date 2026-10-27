@@ -111,7 +111,11 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 [review.entity."IRQ_ENABLE_0.SOURCES_27_28"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
-[review.entity."IRQ_ENABLE_0.BITS_2_7_OPAQUE"]
+[review.entity."IRQ_ENABLE_0.ISO_CIG_RESET_SOURCE"]
+sources = ["BLOB_S31_BLE_BANK0_CIG_RESET_20261028"]
+completeness = "partial"
+
+[review.entity."IRQ_ENABLE_0.BITS_3_7_OPAQUE"]
 sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
 
 [review.entity."IRQ_ENABLE_0.BITS_9_12_OPAQUE"]
@@ -132,7 +136,14 @@ sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
 [review.entity."IRQ_CLEAR_0"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
-[review.entity."IRQ_CLEAR_0.BITS_0_6_OPAQUE"]
+[review.entity."IRQ_CLEAR_0.ISO_CIG_RESET_SOURCE"]
+sources = ["BLOB_S31_BLE_BANK0_CIG_RESET_20261028"]
+completeness = "partial"
+
+[review.entity."IRQ_CLEAR_0.BITS_0_1_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101058"]
+
+[review.entity."IRQ_CLEAR_0.BITS_3_6_OPAQUE"]
 sources = ["S31_MMIO_MANUAL_20101058"]
 
 [review.entity."IRQ_CLEAR_0.SOURCE_7"]
@@ -2025,8 +2036,14 @@ bits = "28:27"
 class = "plain"
 
 [[registers.fields]]
-name = "BITS_2_7_OPAQUE"
-bits = "7:2"
+name = "ISO_CIG_RESET_SOURCE"
+bits = "2"
+class = "plain"
+description = "Software interrupt lane masked, acknowledged and reenabled by the vendor CIG reset role. Physical event identity and the NRT/output relation remain unknown. SOURCE: BLOB_S31_BLE_BANK0_CIG_RESET_20261028."
+
+[[registers.fields]]
+name = "BITS_3_7_OPAQUE"
+bits = "7:3"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
@@ -2066,8 +2083,19 @@ offset = 0x58
 description = "First controller interrupt-clear bank. Primary and NRT handlers copy their respective first-bank status images here as complete words."
 
 [[registers.fields]]
-name = "BITS_0_6_OPAQUE"
-bits = "6:0"
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "ISO_CIG_RESET_SOURCE"
+bits = "2"
+class = "write-one-to-clear"
+description = "Selected W1C image 4 in the vendor CIG reset role, between mask and reenable of bank0 bit2. Physical producer, recurrence and output equation remain unknown. SOURCE: BLOB_S31_BLE_BANK0_CIG_RESET_20261028."
+
+[[registers.fields]]
+name = "BITS_3_6_OPAQUE"
+bits = "6:3"
 class = "write-one-to-clear"
 
 [[registers.fields]]

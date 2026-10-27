@@ -8,5 +8,7 @@ include!("entry.rs");
 include!("unconfigured.rs");
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod gate_fault;
+#[cfg(all(test, not(target_arch = "riscv32")))]
+mod release_fault;
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}

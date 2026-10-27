@@ -165,6 +165,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => crate::fail(error.name()),
     };
     crate::gate_fault::report_previous();
+    crate::release_fault::report_previous();
     if previous.is_some() {
         usb::early_text(b"OER-B0-BRINGUP: previous panic\r\n");
     }
