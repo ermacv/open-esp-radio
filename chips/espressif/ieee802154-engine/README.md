@@ -11,10 +11,16 @@ helpers), ported once for every supported chip.
 | `pib` | The driver's PIB and its publication to the MAC |
 | `ll` | The `Ieee802154LowLevel` interface (the driver's `ieee802154_ll_*` accessors, modem ETM steps and timer commands) and the hardware helpers generic over it; `ll::model` is a register model for tests and explicit `test-support` builds |
 | `capabilities` | The portable capabilities a radio over the engine reports (ESP-IDF's OpenThread port defaults) and the table a chip builds from its transmit-power level set |
-| `types`, `channel`, `coex`, `tx_power` | The chip-neutral values the interface exchanges, the 2.4 GHz channel/frequency-code map, the software-coexistence priorities and the vendor transmit-power resolution |
+| `types` | Engine-specific ACK timeout, receive status, diagnostic counters and ETM routes |
+| `channel`, `coex`, `tx_power` | The 2.4 GHz channel/frequency-code map, software-coexistence priorities and vendor transmit-power resolution |
+
+The shared events, abort reasons, Multi-PAN values, RX state and CCA/ED modes
+come directly from `oer-espressif-ieee802154-mac-values`. The engine does not
+re-export that vocabulary. Unnamed event lanes 7 and 13 remain separate
+observations through fault capture and retained decoding.
 
 Each chip's HAL implements `Ieee802154LowLevel` over its own PAC and converts
-between these values and its register types; the ESP32-S31 implementation is
+between semantic values and its register types; the ESP32-S31 implementation is
 `oer_esp32s31_hal::ieee802154::ll::Ieee802154MacOwners`. What differs between
 chips stays with the chip: register geometry, the transmit-on delays and the
 rest of the MAC lifecycle, the transmit-power level set, the coexistence

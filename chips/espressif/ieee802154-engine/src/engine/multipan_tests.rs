@@ -5,9 +5,12 @@
 use crate::ll::model::Ieee802154LlModel;
 use crate::ll::model::ModelAddress;
 use crate::{tx_power::*, types::*};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154Event, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+};
 use std::{boxed::Box, vec, vec::Vec};
 
-use crate::pib::{AutoPendingMode, Ieee802154MultipanIndex, Ieee802154PibDefaults};
+use crate::pib::{AutoPendingMode, Ieee802154PibDefaults};
 use oer_ieee802154_mac::FrameAddress;
 
 use super::{

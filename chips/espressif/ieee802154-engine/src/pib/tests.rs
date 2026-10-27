@@ -1,8 +1,9 @@
 //! PIB behavior read from the pinned `esp_ieee802154_pib.c`.
-use crate::{channel::*, tx_power::*, types::*};
+use crate::{channel::*, tx_power::*};
+use oer_espressif_ieee802154_mac_values::{Ieee802154CcaMode, Ieee802154MultipanIndex};
 use std::vec::Vec;
 
-use super::{AutoPendingMode, Ieee802154MultipanIndex, Ieee802154Pib, Ieee802154PibDefaults};
+use super::{AutoPendingMode, Ieee802154Pib, Ieee802154PibDefaults};
 
 use crate::engine::tests::{Call, Hw};
 

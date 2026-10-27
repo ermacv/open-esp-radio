@@ -17,6 +17,7 @@ links = "oer_esp32s31_ieee802154_vendor"
 
 
 [dependencies]
+oer-espressif-ieee802154-mac-values = { path = "../../../chips/espressif/ieee802154-mac-values" }
 hex = "=0.4.3"
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-espressif-coex = { path = "../../../chips/espressif/coex" }

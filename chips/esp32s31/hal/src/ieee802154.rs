@@ -24,8 +24,8 @@ pub use lifecycle::{
 
 pub use policy::{
     IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS, IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS,
-    Ieee802154AckTimeout, Ieee802154AckTimeoutError, Ieee802154CcaMode, Ieee802154MacControl,
-    Ieee802154MacPolicy, Ieee802154MacPolicyCheckpoint, Ieee802154PanIdentity,
+    Ieee802154AckTimeout, Ieee802154AckTimeoutError, Ieee802154MacControl, Ieee802154MacPolicy,
+    Ieee802154MacPolicyCheckpoint, Ieee802154PanIdentity,
 };
 
 pub use role::{

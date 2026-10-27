@@ -77,7 +77,8 @@ const fn event_observation(
     if readback.rx_sfd_done() {
         events = events.with(Ieee802154Event::RxSfdDone);
     }
-    Ieee802154EventObservation::from_parts(events, readback.has_unclassified())
+    // The C5 readback has one unnamed lane, at position 7.
+    Ieee802154EventObservation::from_parts(events, readback.has_unclassified(), false)
 }
 
 /// The shared observation of one affine `EVENT_STATUS` snapshot.

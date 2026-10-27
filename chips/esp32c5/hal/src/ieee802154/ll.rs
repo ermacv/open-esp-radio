@@ -33,14 +33,14 @@ use oer_espressif_ieee802154_engine::{
     coex::CoexPti,
     ll::COEX_DISABLED_PTI,
     tx_power::Ieee802154ResolvedTxPower,
-    types::{
-        Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdSampleMode, Ieee802154EtmChannel,
-        Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
-        Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet,
-        Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
-        Ieee802154RxStatus, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
-        Ieee802154TxAbortReasonObservation,
-    },
+    types::{Ieee802154DebugCounter, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154RxStatus},
+};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation,
 };
 use oer_espressif_interrupt_table::Silent;
 
@@ -142,7 +142,7 @@ fn event_observation_from_pac(observation: PacEventObservation) -> Ieee802154Eve
         .fold(Ieee802154EventMask::NONE, |mask, (engine, _)| {
             mask.with(*engine)
         });
-    Ieee802154EventObservation::new(events, observation.classification().is_err())
+    Ieee802154EventObservation::from_parts(events, observation.events_7(), observation.events_13())
 }
 
 const fn rx_abort_reason_from_pac(

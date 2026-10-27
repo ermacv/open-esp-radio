@@ -9,6 +9,12 @@ use super::{
     Ieee802154Timer,
 };
 use crate::{channel::*, coex::*, tx_power::*, types::*};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
+    Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
+};
 
 /// The modelled MAC state; every field is public for the test to set or
 /// inspect.
@@ -188,7 +194,7 @@ impl<Address: Copy + Eq> Ieee802154LowLevel for Ieee802154LlModel<Address> {
         Ieee802154RxStatus::new(
             0,
             self.rx_abort,
-            super::Ieee802154RxStateCode::new(0).expect("zero is a state code"),
+            Ieee802154RxStateCode::new(0).expect("zero is a state code"),
             false,
             false,
         )

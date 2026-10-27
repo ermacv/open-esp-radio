@@ -27,16 +27,17 @@
 use crate::channel::Ieee802154Channel;
 use crate::coex::{Ieee802154Coexistence, RadioOperation};
 use crate::ll::{
-    self, Ieee802154EtmRoute, Ieee802154LlCommand, Ieee802154LowLevel,
-    Ieee802154MultipanEnableState, Ieee802154RxAbortEnableSet, Ieee802154RxStatus, Ieee802154Timer,
+    self, Ieee802154EtmRoute, Ieee802154LlCommand, Ieee802154LowLevel, Ieee802154RxStatus,
+    Ieee802154Timer,
 };
-use crate::pib::{Ieee802154MultipanIndex, Ieee802154Permit, Ieee802154Pib, Ieee802154PibDefaults};
+use crate::pib::{Ieee802154Permit, Ieee802154Pib, Ieee802154PibDefaults};
 use crate::tx_power::Ieee802154TxPowerLevels;
-use crate::types::{
-    Ieee802154Event, Ieee802154EventMask, Ieee802154RxAbortReason,
-    Ieee802154RxAbortReasonObservation, Ieee802154TxAbortReason,
-    Ieee802154TxAbortReasonObservation,
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154Event, Ieee802154EventMask, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
 };
+
 use oer_ieee802154_mac::{
     FrameAddress, FrameType, FrameVersion, PendingTable, PhrFrame, ack_pending,
 };

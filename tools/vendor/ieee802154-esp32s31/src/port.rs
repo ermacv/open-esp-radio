@@ -20,21 +20,20 @@ use oer_espressif_ieee802154_engine::engine::{
     Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot,
     Ieee802154SecurityFrameError, Ieee802154TxError,
 };
-use oer_espressif_ieee802154_engine::pib::{
-    AutoPendingMode, Ieee802154MultipanIndex, Ieee802154PibDefaults,
-};
+use oer_espressif_ieee802154_engine::pib::{AutoPendingMode, Ieee802154PibDefaults};
 use oer_espressif_ieee802154_engine::{
     channel::Ieee802154Channel,
     coex::CoexPti,
     ll::{Ieee802154LlCommand, Ieee802154LowLevel, Ieee802154Timer},
     tx_power::Ieee802154ResolvedTxPower,
-    types::{
-        Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdSampleMode, Ieee802154EtmChannel,
-        Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
-        Ieee802154MultipanEnableState, Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason,
-        Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154RxStatus,
-        Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
-    },
+    types::{Ieee802154DebugCounter, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154RxStatus},
+};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation,
 };
 use oer_ieee802154_mac::FrameAddress;
 
@@ -348,7 +347,7 @@ impl Ieee802154LowLevel for PortLl {
         if u64::from(bits) != event_bits(named) {
             self.0.borrow_mut().incomplete = Some(format!("unclassified event bits in {bits:#x}"));
         }
-        Ieee802154EventObservation::new(named, bits & (1 << 7) != 0, bits & (1 << 13) != 0)
+        Ieee802154EventObservation::from_parts(named, bits & (1 << 7) != 0, bits & (1 << 13) != 0)
     }
     fn clear_events(&mut self, mask: Ieee802154EventMask) {
         self.value("ieee802154_ll_clear_events", event_bits(mask));

@@ -4,9 +4,16 @@
 use crate::ll::model::ModelAddress;
 use crate::ll::model::{DEBUG_COUNTERS, debug_slot};
 use crate::{channel::*, coex::*, ll::*, tx_power::*, types::*};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation,
+};
 use std::{boxed::Box, vec, vec::Vec};
 
-use crate::pib::{Ieee802154MultipanIndex, Ieee802154PibDefaults};
+use crate::pib::Ieee802154PibDefaults;
 
 use super::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
@@ -172,7 +179,7 @@ impl Ieee802154LowLevel for Hw {
     }
     fn events(&mut self) -> Ieee802154EventObservation {
         self.calls.push(Call::Events);
-        Ieee802154EventObservation::new(self.visible_events(), self.events_7, self.events_13)
+        Ieee802154EventObservation::from_parts(self.visible_events(), self.events_7, self.events_13)
     }
     fn clear_events(&mut self, mask: Ieee802154EventMask) {
         self.calls.push(Call::ClearEvents(mask));
@@ -1885,7 +1892,8 @@ fn unhandled_7_10_13_fault_before_ack_or_any_simultaneous_dispatch() {
         bench.hw.events_7 = events_7;
         bench.hw.events_13 = events_13;
         bench.hw.calls.clear();
-        let observation = Ieee802154EventObservation::new(bench.hw.events, events_7, events_13);
+        let observation =
+            Ieee802154EventObservation::from_parts(bench.hw.events, events_7, events_13);
         assert_eq!(
             bench.engine.isr(&mut bench.hw, &mut bench.env),
             Err(super::Fault::UnhandledEvents {

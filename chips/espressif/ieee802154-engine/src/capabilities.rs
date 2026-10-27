@@ -14,7 +14,8 @@ use oer_ieee802154_mac::{
 
 use crate::engine::RECEIVE_SENSITIVITY_DBM;
 use crate::pib::CCA_THRESHOLD_RANGE_DBM;
-use crate::types::Ieee802154MultipanIndex;
+
+use oer_espressif_ieee802154_mac_values::Ieee802154MultipanIndex;
 
 /// The portable operations a radio over this engine implements.
 ///

@@ -12,6 +12,7 @@ description = "Ownership boundaries of the ESP32-C5 radio over its closed PAC"
 test-support = ["oer-esp32c5-pac/test-support", "oer-espressif-ieee802154-engine/test-support"]
 
 [dependencies]
+oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-esp32c5-pac = { path = "../pac" }
 oer-memory = { path = "../../../portable/memory" }

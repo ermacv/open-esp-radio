@@ -1,7 +1,7 @@
 //! The low-level interface over host memory: each accessor reaches the
 //! register its public LL counterpart names, and reads back what it wrote.
 
-use oer_espressif_ieee802154_engine::types::{
+use oer_espressif_ieee802154_mac_values::{
     Ieee802154Event, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
 };
 

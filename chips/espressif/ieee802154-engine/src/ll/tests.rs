@@ -4,6 +4,12 @@
 use std::{vec, vec::Vec};
 
 use crate::{channel::*, coex::*, ll::*, tx_power::*, types::*};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation, Ieee802154TxAbortEnableSet,
+    Ieee802154TxAbortReasonObservation,
+};
 
 /// One recorded accessor call.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

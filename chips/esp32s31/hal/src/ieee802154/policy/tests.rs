@@ -1,12 +1,12 @@
 use std::vec::Vec;
 
-use oer_espressif_ieee802154_engine::types::Ieee802154MultipanEnableState;
+use oer_espressif_ieee802154_mac_values::{Ieee802154CcaMode, Ieee802154MultipanEnableState};
 
 use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
 use super::{
     COEX_DISABLED_PTI, IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS, Ieee802154AckTimeout,
-    Ieee802154CcaMode, Ieee802154MacControl, Ieee802154MacPolicy, Ieee802154MacPolicyBackend,
+    Ieee802154MacControl, Ieee802154MacPolicy, Ieee802154MacPolicyBackend,
     Ieee802154MacPolicyCheckpoint, Ieee802154MacPolicyReadback, Ieee802154MacPolicySnapshot,
     Ieee802154MacPolicyWrites, Ieee802154PanIdentity, configure_ieee802154_mac_policy,
     verify_ieee802154_mac_policy,

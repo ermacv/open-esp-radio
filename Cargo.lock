@@ -2166,6 +2166,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "oer-espressif-coex",
+ "oer-espressif-ieee802154-mac-values",
  "oer-ieee802154-mac",
  "oer-memory",
  "oer-radio-regulatory",
@@ -3762,6 +3763,7 @@ dependencies = [
  "oer-esp32s31-knowledge",
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
+ "oer-espressif-ieee802154-mac-values",
  "oer-ieee802154-mac",
  "oer-radio-regulatory",
  "oer-tool-pins",

@@ -16,13 +16,13 @@ use oer_espressif_ieee802154_engine::{
     channel::Ieee802154Channel,
     coex::CoexPti,
     tx_power::Ieee802154ResolvedTxPower,
-    types::{
-        Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdSampleMode, Ieee802154EtmChannel,
-        Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
-        Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet,
-        Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154TxAbortEnableSet,
-        Ieee802154TxAbortReasonObservation,
-    },
+    types::{Ieee802154DebugCounter, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154RxStatus},
+};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation, Ieee802154TxAbortEnableSet,
+    Ieee802154TxAbortReasonObservation,
 };
 use oer_espressif_interrupt_table::Silent;
 use oer_mmio::Placement;

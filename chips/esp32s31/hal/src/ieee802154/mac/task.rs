@@ -12,11 +12,11 @@ use oer_esp32s31_pac::ieee802154::{
 };
 use oer_espressif_ieee802154_engine::coex::CoexPti;
 use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
-use oer_espressif_ieee802154_engine::types::{
-    Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdSampleMode, Ieee802154Event,
-    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet,
-    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154RxStatus,
-    Ieee802154TxAbortEnableSet,
+use oer_espressif_ieee802154_engine::types::{Ieee802154DebugCounter, Ieee802154RxStatus};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154TxAbortEnableSet,
 };
 use oer_mmio::{Bits, Index, Placement};
 

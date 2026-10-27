@@ -1,8 +1,10 @@
 use std::vec::Vec;
 
 use crate::root::RadioPartitions;
-use oer_espressif_ieee802154_engine::types::Ieee802154MultipanEnableState;
-use oer_espressif_ieee802154_mac_values::{Ieee802154RxStateCode, Ieee802154TxStateCode};
+
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154MultipanEnableState, Ieee802154RxStateCode, Ieee802154TxStateCode,
+};
 
 use super::{
     Ieee802154FoundationSnapshot, Ieee802154Hal, Ieee802154MacHal, Ieee802154Pti,
@@ -12,7 +14,7 @@ use crate::ieee802154::{
     lifecycle::Ieee802154Channel,
     mac,
     policy::{
-        Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
+        Ieee802154AckTimeout, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
         Ieee802154PanIdentity,
     },
 };

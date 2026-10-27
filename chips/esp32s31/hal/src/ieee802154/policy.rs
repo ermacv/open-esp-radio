@@ -12,8 +12,8 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use oer_espressif_ieee802154_engine::types::{
-    Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
 };
 
 use crate::ieee802154::{
@@ -91,8 +91,6 @@ impl Ieee802154AckTimeout {
         self.units as u32 * IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS
     }
 }
-
-pub use oer_espressif_ieee802154_engine::types::Ieee802154CcaMode;
 
 /// Source-confirmed automatic-ACK and address-filter control policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

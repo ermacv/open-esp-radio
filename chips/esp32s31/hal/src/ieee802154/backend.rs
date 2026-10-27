@@ -11,8 +11,9 @@
 // later dataplane transition.
 #![cfg_attr(not(test), allow(dead_code))]
 
-use oer_espressif_ieee802154_engine::types::Ieee802154EdSampleMode;
-use oer_espressif_ieee802154_mac_values::Ieee802154StateSnapshot;
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154StateSnapshot,
+};
 use oer_mmio::Placement;
 
 use crate::ieee802154::{
@@ -22,7 +23,7 @@ use crate::ieee802154::{
         Ieee802154TaskOwner, MacPlacement, RxInfoPlacement,
     },
     policy::{
-        Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
+        Ieee802154AckTimeout, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
         Ieee802154PanIdentity,
     },
 };

@@ -8,10 +8,12 @@ use oer_esp32s31_pac::{
     modem_etm::{ch_event, ch_task},
 };
 use oer_espressif_ieee802154_engine::types::{
-    Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdSampleMode, Ieee802154EtmChannel,
-    Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask, Ieee802154MultipanEnableState,
-    Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation,
-    Ieee802154TxAbortEnableSet,
+    Ieee802154DebugCounter, Ieee802154EtmChannel, Ieee802154EtmRoute,
+};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortReasonObservation, Ieee802154TxAbortEnableSet,
 };
 
 use super::{
@@ -559,7 +561,7 @@ fn assert_startup_discard(events_7: bool, clock: bool, events_13: bool, other: b
     // the initial read, the pre-bind discard writes one to every event field.
     assert_eq!(
         observed,
-        oer_espressif_ieee802154_engine::types::Ieee802154EventObservation::new(
+        oer_espressif_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
             Ieee802154EventMask::NAMED,
             true,
             true,
@@ -578,7 +580,7 @@ fn startup_discards_hidden_pending_even_with_an_empty_visible_image() {
     let image = interrupts.events().observation();
     assert_eq!(
         image,
-        oer_espressif_ieee802154_engine::types::Ieee802154EventObservation::new(
+        oer_espressif_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
             Ieee802154EventMask::NAMED,
             true,
             true,
