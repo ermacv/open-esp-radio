@@ -307425,10 +307425,10 @@ pub mod layouts {
         pub const OFFSET_WIDTH: u32 = 1;
         /// Greatest unsigned image of `OFFSET`.
         pub const OFFSET_MAX: u32 = 0x1;
-        /// Project-assigned name. Vendor offset bit. Software initializes it through the control image; its encoding, units, hardware write behavior and effect are unknown. It is not an independently established completion marker.
+        /// Project-assigned name. Vendor offset bit, initialized by software through the control image. It reads zero on all sampled nodes in both bounded 32-by-128-byte, three-beacon captures, including repeated writes correlated with FCS errors. The receive phase conservatively permits an unknown hardware writer; no hardware store to this bit is established. Its encoding, units and effect when set are unknown; it is not an established completion marker.
         ///
-        /// `OFFSET`, bit 28; written by the CPU.
-        /// SOURCE: BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES.
+        /// `OFFSET`, bit 28; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `receive`: the hardware.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027.
         pub const fn offset(self) -> bool {
             self.0 & 0x10000000 != 0
         }
@@ -307446,10 +307446,10 @@ pub mod layouts {
         pub const SOSF_WIDTH: u32 = 1;
         /// Greatest unsigned image of `SOSF`.
         pub const SOSF_MAX: u32 = 0x1;
-        /// Project-assigned name. Vendor sosf bit, cleared on rearm. Its acronym, hardware effects and relation to frame boundaries are unknown. It stayed zero on all sampled nodes in the single 32-by-128-byte, three-beacon capture; that observation does not establish behavior for other formats or errors.
+        /// Project-assigned name. Vendor sosf bit, initialized/cleared by software on arm/rearm. Its acronym, hardware effects and relation to frame boundaries are unknown. It reads zero on all sampled nodes in both bounded 32-by-128-byte, three-beacon captures, including repeated writes correlated with FCS errors. The receive phase conservatively permits an unknown hardware writer; no hardware store to this bit is established, and setting it to one is untested.
         ///
-        /// `SOSF`, bit 29; written by the CPU.
-        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027.
+        /// `SOSF`, bit 29; written by the participants in the declared phases. Phase `arm-rearm`: the CPU. Phase `receive`: the hardware.
+        /// SOURCE: VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027.
         pub const fn sosf(self) -> bool {
             self.0 & 0x20000000 != 0
         }

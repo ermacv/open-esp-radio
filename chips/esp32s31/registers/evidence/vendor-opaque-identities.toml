@@ -3,7 +3,7 @@ schema = 1
 
 [[sources]]
 id = "VENDOR_WIFI_RX_IDENTITIES"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_wifi/include/esp_wifi_he_types.h (sha256 602abd515ad617d06d8fe01e94fdf755890e72194a56a03821fa49770544162d), lines 184-187: MAC-v3 rxmatch0/1/2 identify reception-interface matches at word bits 28/29/30, hence RX byte 3 bits 4/5/6. soc_caps.h selects MAC version 3. Pinned libpp.a (esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4) pp.o::ppRxProtoProc+0x24..0x92 and ROM copy 0x2f83278a independently use those routes. hal_debug.o::dbg_dump_rx_links+0x3e,+0x5e,+0x76,+0x8a identifies RX descriptor bit 29 as sosf. The acronym and hardware effect are not established."
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_wifi/include/esp_wifi_he_types.h (sha256 602abd515ad617d06d8fe01e94fdf755890e72194a56a03821fa49770544162d), lines 184-187: MAC-v3 rxmatch0/1/2 identify reception-interface matches at word bits 28/29/30, hence RX byte 3 bits 4/5/6. soc_caps.h selects MAC version 3. Pinned libpp.a (esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4) pp.o::ppRxProtoProc+0x24..0x92 and ROM copy 0x2f83278a independently use those routes. hal_debug.o::dbg_dump_rx_links+0x3e,+0x5e,+0x76,+0x8a identifies RX descriptor bit 29 as sosf. Adjacent dbg_dump_rx_links diagnostic arguments identify bit 28 as offset (Blobray direct-name evidence, /home/ermacv/dev/oer-notes/research/opaque-blobray-wifi.md L1). Neither spelling establishes hardware writeback. The acronym and hardware effect are not established."
 
 [[sources]]
 id = "VENDOR_WIFI_MAC_IDENTITIES"
