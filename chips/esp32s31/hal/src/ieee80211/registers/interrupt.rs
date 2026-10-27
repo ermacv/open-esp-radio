@@ -155,6 +155,16 @@ pub struct MacRxInterrupts {
     pub auxiliary_24: bool,
 }
 
+/// Independently observed delivery enables whose physical causes remain opaque.
+/// These are values from one ENABLE read, with no acknowledgement authority.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct MacOpaqueInterruptEnables {
+    pub lane_6: bool,
+    pub lane_12: bool,
+    pub lane_13: bool,
+    pub lane_23: bool,
+}
+
 impl MacRxInterrupts {
     pub const NONE: Self = Self {
         auxiliary_5: false,
@@ -649,6 +659,18 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
             auxiliary_5: value.rx_associated_auxiliary_5(),
             success: value.rx_success(),
             auxiliary_24: value.rx_associated_auxiliary_24(),
+        }
+    }
+
+    /// Observe the four opaque station delivery lanes independently, including
+    /// combinations outside the reviewed station and disabled images.
+    pub fn mac_opaque_interrupt_enable(&self) -> MacOpaqueInterruptEnables {
+        let value = self.mac.read_enable();
+        MacOpaqueInterruptEnables {
+            lane_6: value.bit_6_opaque(),
+            lane_12: value.bit_12_opaque(),
+            lane_13: value.bit_13_opaque(),
+            lane_23: value.bit_23_opaque(),
         }
     }
 

@@ -607,6 +607,13 @@ impl oer_mmio::InterruptSource for MacInterruptRegisters {
 }
 
 impl MacInterruptRegisters {
+    /// Observe opaque station delivery lanes on this bank's existing owner.
+    pub fn mac_opaque_interrupt_enable(
+        &self,
+    ) -> crate::ieee80211::registers::MacOpaqueInterruptEnables {
+        self.inner.mac_opaque_interrupt_enable()
+    }
+
     /// Read the three RX delivery enables independently.
     pub fn mac_rx_interrupt_enable(&self) -> crate::ieee80211::registers::MacRxInterrupts {
         self.inner.mac_rx_interrupt_enable()
