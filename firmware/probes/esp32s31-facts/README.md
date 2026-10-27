@@ -123,6 +123,56 @@ The ROM loader observation is not a power-on-reset value. A completed phased
 past-target example is not a guarantee for all set/clear collision orderings,
 and a watchdog readback match does not qualify every active-watchdog case.
 
+## TIMG0 reload and equal-level arbitration
+
+Selections 190–196 use the existing TIMG0, clock, FROM_CPU2 and CLIC PAC
+owners on hart0, with hart1 contained. No RF, DMA, group reset or watchdog
+configuration is involved; each latch/cause wait stops after 200,000 cycles.
+The existing ROM RTC watchdog is fed before each selection. XTAL/divider40
+matches the HAL alarm configuration. These are isolated facts, not a
+production latency or fairness qualification.
+
+| Selection | Experiment |
+| --- | --- |
+| 190 | Stopped high3/low12345 seed, LOAD-register-only negative control, zero LOAD strobe, one 40,000-cycle rate interval |
+| 191 | Exact #710 arm sequence from that nonzero seed for 10/100/1000 µs, once each |
+| 192 | Old pending retained across 1000-µs rearm, separate CLR, fresh expiry |
+| 193 | Alarm9999/10000/11000 at stopped count10000, alarm-only enable, then start |
+| 194 | Running count above10000, zero-RAW control, past target0 |
+| 195 / 196 | Both P2 lines pending before MIE; TIMG0/FROM_CPU2 on16/17, then17/16 |
+
+All selections emit 0x1900 (APB gate, reset, inherited T0 source), 0x1901
+(CPU source, integer divider, fractional numerator), 0x1902 (selected T0
+source, divider, MNLBITS), and final 0x19ff (RAW, ST, ENA/T_EN/ALARM_EN
+packed into bits0/1/2). Intermediate state records use the same encoding.
+0x19ee denotes an observation/interrupt failure, independently of completion.
+
+190 emits 0x1910/11/12 (captured low, high, zero) for seed/register-only/strobe,
+then 0x1913 (first count, second count, elapsed cycles including capture).
+191 emits 0x1920 (requested µs, seed low, high), 0x1921 (positive RAW,
+last-negative/first-positive polling cycle marks relative to before start),
+0x1922 (requested µs, arm-return delta, zero), 0x1923 (count low/high, µs),
+and state0x1924. The cycle marks include MMIO and polling overhead, and are
+not comparator or interrupt-entry timestamps. 192 uses 0x1930 and0x1935 for
+old/fresh expiry, states0x1931/32/34/37, absolute start/return stamps0x1933,
+and captured count0x1936. 193 emits target/count0x1940, states0x1941/42/44
+before alarm/after stopped alarm/after start, and expiry0x1943. 194 emits
+count0x1950, states0x1951/53 and expiry0x1952.
+
+Arbitration emits expiry0x1960; assignments/CTL0x1961; state0x1962;
+matrix banks0/2 and FROM_CPU2 level0x1963; line/IP+IE/CTL0x1964 for each
+line; entry count/start/end0x1965; and ordered raw mcause/cycle-delta/
+mintstatus0x1966 for each entry. Both IP and IE must be one before MIE.
+Each handler disables only its own line through an exclusive CLIC loan;
+neither producer is acknowledged before the post-admission state0x1967.
+The thread revokes the loan after clearing MIE. This adds one documented
+raw-pointer operation confined to the facts image.
+
+SOURCE: `HW23_S31_*_20261027`, run `hw23-20261027-timg-arbitration-01`,
+lease #908, [research report](/home/ermacv/dev/oer-notes/research/hw-timg0-arbitration.md).
+The measured probe source is commit `e4016ef7`; subsequent changes attach
+evidence and documentation without changing probe instructions.
+
 ## BLE interrupt facts
 
 BLE commands use disjoint PAC owners from the same root claim. They contain

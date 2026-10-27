@@ -51274,7 +51274,7 @@ pub mod cache {
 /// The `CLIC` block type.
 ///
 /// The core-local interrupt controller (CLIC) of the hart that accesses it.
-/// Words 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Production-router invariant: its bound vectored lines are level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte. SOURCE: HW1_S31_CLIC_20261026 confirms one software-pending positive-edge vector on external line 16; this does not make concurrent whole-word edge updates safe. SOURCE: HW1_S31_THRESHOLD_20261026 observes no handler entry after raising CSR mintthresh to 0x3f for CTL 0x1f in a 600-trial propagation-boundary sweep, including zero post-write NOPs and no readback; this is distinct from the legacy MMIO threshold.
+/// Words 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Production-router invariant: its bound vectored lines are level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte. SOURCE: HW1_S31_CLIC_20261026 confirms one software-pending positive-edge vector on external line 16; this does not make concurrent whole-word edge updates safe. SOURCE: HW1_S31_THRESHOLD_20261026 observes no handler entry after raising CSR mintthresh to 0x3f for CTL 0x1f in a 600-trial propagation-boundary sweep, including zero post-write NOPs and no readback; this is distinct from the legacy MMIO threshold. SOURCE: HW23_S31_P2_ARBITRATION_20261027 observes line17 before16 when both have IP1/IE1/CTL0x3f and MNLBITS3, with TIMG0 T0 and FROM_CPU2 assigned both ways on hart0. This supports highest-ID arbitration for that P2 pair; other lines, levels and harts remain unmeasured.
 pub mod clic {
     /// The `INT_CONFIG` register.
     ///
@@ -236050,13 +236050,13 @@ pub mod timg {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Enables timer0 alarm; one-shot expiry clears this bit while T_EN stays set and pending RAW remains until CLR. A past target armed after a zero-RAW control immediately produced the tested alarm. SOURCE: HW7_S31_TIMG0_20261026.
+            /// Enables timer0 alarm; one-shot expiry clears this bit while T_EN stays set and pending RAW remains until CLR. A past target armed after a zero-RAW control immediately produced the tested alarm. SOURCE: HW7_S31_TIMG0_20261026. SOURCE: HW23_S31_TIMG0_COMPARATOR_20261027 observes no RAW during 4096 cycles with T_EN=0 even for a target equal to or below stopped count10000; starting counting produces pending promptly for both, and a running past target0 also fires. This does not establish single-cycle comparator timing.
             #[inline]
             pub const fn t_alarm_en(self) -> bool {
                 (self.0 & 0x00000400) != 0
             }
 
-            /// Represents the timer 0 clock (T0_clk) prescaler value.
+            /// Represents the timer 0 clock (T0_clk) prescaler value. SOURCE: HW23_S31_TIMG0_RELOAD_20261027 observes 1002 ticks in 40076 CPU cycles at XTAL/divider40 and nominal 40 MHz CPU, consistent with 1 MHz T0; no general source/divider equation is measured.
             #[inline]
             pub const fn t_divider(self) -> u16 {
                 (self.0 >> 13) as u16
@@ -238646,7 +238646,7 @@ pub mod timg {
 
         /// Apply the fixed configuration `0x40051000`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
         ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
+        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
         #[inline]
         pub fn configure_timg0_timer0_stopped(&mut self) {
             self.0
@@ -238655,7 +238655,7 @@ pub mod timg {
 
         /// Apply the fixed configuration `0x40051400`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
         ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
+        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_COMPARATOR_20261027.
         #[inline]
         pub fn configure_timg0_timer0_stopped_alarm(&mut self) {
             self.0
@@ -238664,7 +238664,7 @@ pub mod timg {
 
         /// Apply the fixed configuration `0xc0051000`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
         ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
+        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
         #[inline]
         pub fn configure_timg0_timer0_counting(&mut self) {
             self.0
@@ -238673,7 +238673,7 @@ pub mod timg {
 
         /// Apply the fixed configuration `0xc0051400`, preserving undeclared and read-only bits (`TIMG0.T0CONFIG`).
         ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
+        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL, HW23_S31_TIMG0_RELOAD_20261027.
         #[inline]
         pub fn configure_timg0_timer0_armed(&mut self) {
             self.0
