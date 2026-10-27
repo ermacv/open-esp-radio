@@ -3,7 +3,6 @@ use super::{
     Bits, FACTS_OUTPUT, Index, Ordering, RETAINED, SECONDARY, Session, ble, ble_wave2::mac,
     contain, emit, halt, pac,
 };
-mod admission;
 const MAGIC: u32 = 0xfac70007;
 const REASON: u32 = 0x687725;
 
@@ -113,27 +112,6 @@ pub(super) fn inherited(s: &mut Session<'_>) {
             .read_hpcore_reset_cause(pac::BOOT_HART.index())
             .hpcore_reset_cause()
             .get(),
-        0,
-        0,
-    );
-}
-pub(super) fn admission(s: &mut Session<'_>) {
-    contain(s);
-    ble::clocks(s);
-    state(s, 0x2120);
-    admission::run(s);
-    state(s, 0x2150);
-    // The complete prefix enables the controller watchdog. Its isolated
-    // no-RF session must not keep that production monitor running through
-    // debugger dwell. Quench only after the admission observation.
-    // SOURCE: BLOB_LIBBTDM_HAL_CONTROLLER_INIT, WDT_CONFIG_0.ENABLE.
-    s.ble.core.modify_wdt_config_0(|w| {
-        w.set_enable(false);
-    });
-    oer_riscv::fence();
-    emit(
-        0x215f,
-        u32::from(s.ble.core.read_wdt_config_0().enable()),
         0,
         0,
     );

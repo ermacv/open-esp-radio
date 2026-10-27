@@ -911,7 +911,7 @@ BTLC limit. Commands remain serial under one board lease and one PAC claim.
 | Selection | Experiment |
 | --- | --- |
 | 210 | All modeled enable fields before writes and after access clocks only; HP reset cause |
-| 211 | Production controller-domain reset order, complete 49-write standalone HAL initialization, list-head clear, low-power ETM initialization and primary baseline prepare |
+| 211 | Reserved; the attempted standalone production admission prefix made the hart unavailable to JTAG and has no callable leaf |
 | 212 / 213 | Seed modeled feature/dynamic/task lanes, HP software reset / automatic next-ROM-entry observer before peripheral writes, then access clocks only |
 | 214 | Empty saved pair, then one witnessed CC0 crossing before saved-pair acknowledgement |
 | 215 | Saved CC0, then CC1 crossing before acknowledgement |
@@ -933,17 +933,16 @@ STATUS0/1 and matrix bank3; `base+3` contains NRT snapshots0/1 and matrix bank4;
 sample alone cannot establish register state. Each word has all 32 bits
 modeled; opaque bits retain their unknown meaning.
 
-210 uses `2100` before access-clock setup and `2110` afterward. 211 uses
-`2120` before domain resets, `2130` after them, `2140` after the complete
-digital initialization and `2150` after primary prepare. 212 retains its
-`2160` enable triple in LP SRAM; 213 emits `2170` before writes, the retained
-record at `2180`–`2183`, validity/reset cause at `218f`, and `2190` after
-access clocks. The loader and access-clock prefix are explicit differences
-from a pristine POR read and the production platform/RF lifecycle. 211
-reproduces the cited digital register subsequence, then disables the BT watchdog
-after the `2150` snapshot (`215f` records its readback) for debugger dwell.
-It does not claim full
-production controller/HCI admission or RF readiness.
+210 uses `2100` before access-clock setup and `2110` afterward. 212 retains
+its `2160` enable triple in LP SRAM; 213 emits `2170` before writes, the
+retained record at `2180`–`2183`, validity/reset cause at `218f`, and `2190`
+after access clocks. The loader and access-clock prefix are explicit
+differences from a pristine POR read and the production platform/RF lifecycle.
+No complete production-admission result is established. The attempted
+controller-domain reset / 49-write HAL / list / ETM / primary-prepare sequence
+and both failed captures are recorded in the external report and measured
+commits; it is excluded from the callable registry. Full production parent
+prerequisites require separate investigation before another admission probe.
 
 214–217 emit `21a0` initial state, `21a8` initial CC0 crossing when applicable,
 `21b0` saved pair plus cycle stamp, `21b8` fresh crossing, `21c0` observed
