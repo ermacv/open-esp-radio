@@ -2549,6 +2549,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-registers-model",
  "oer-time",
+ "oer-time-virtual",
  "static_cell",
 ]
 

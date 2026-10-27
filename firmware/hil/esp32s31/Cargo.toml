@@ -63,7 +63,7 @@ wifi-station = [
     "dep:oer-ieee80211-arbiter",
 ]
 
-[dependencies]
+[target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-firmware-apps-w3 = { path = "../../apps/w3", optional = true }
 oer-time = { path = "../../../portable/time" }
 oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter", optional = true }

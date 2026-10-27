@@ -13,7 +13,9 @@ const SSID: &str = "OER_W1_SSID_HEX";
 const COUNTRY: &str = "OER_W1_COUNTRY";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w1")?;
+    if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
+        oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w1")?;
+    }
     for name in [CHANNEL, BSSID, SSID, COUNTRY] {
         println!("cargo:rerun-if-env-changed={name}");
     }

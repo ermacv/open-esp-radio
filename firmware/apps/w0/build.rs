@@ -7,7 +7,9 @@ use std::{env, fs, path::PathBuf};
 const COUNTRY: &str = "OER_W0_COUNTRY";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w0")?;
+    if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
+        oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w0")?;
+    }
     println!("cargo:rerun-if-env-changed={COUNTRY}");
     let country = match env::var(COUNTRY) {
         Ok(text) => match text.trim().as_bytes() {
