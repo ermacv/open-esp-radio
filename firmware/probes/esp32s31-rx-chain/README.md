@@ -6,7 +6,7 @@ under the DE domain, stopping at 3 terminal nodes or 700 milliseconds. A 512-row
 buffer records changes with mcycle bounds; no console output occurs during
 collection. Nothing is taken, recycled, detached, reloaded, or repainted live.
 Before BASE publication, every buffer is initialized word by word. Ordinary
-leading words retain the production `0xdeadbeef` marker; other words equal
+leading words hold this probe's own `0xdeadbeef` pattern; other words equal
 `0xa5000000 | (node << 12) | word_index`. Nodes 12, 20 and 28 use that pattern
 for all 32 words, including the first. After the public start validates the
 armed topology, their typed OWNER fields are cleared, with outer MAC RX still
