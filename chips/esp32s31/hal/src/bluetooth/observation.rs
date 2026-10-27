@@ -64,7 +64,19 @@ fn interrupt_enable(v: pac::bt_mac::interrupt_enable::R) -> u32 {
 }
 fn opaque_task_state(v: pac::bt_mac::word_04bc_opaque::R) -> u32 {
     use pac::bt_mac::word_04bc_opaque as r;
-    (v.bits_0_21_opaque().get() << r::BITS_0_21_OPAQUE_MASK.trailing_zeros())
+    (u32::from(v.bit_0_opaque()) << r::BIT_0_OPAQUE_MASK.trailing_zeros())
+        | (v.bits_1_2_opaque().get() << r::BITS_1_2_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.bit_3_opaque()) << r::BIT_3_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.bit_4_opaque()) << r::BIT_4_OPAQUE_MASK.trailing_zeros())
+        | (v.bits_5_9_opaque().get() << r::BITS_5_9_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.bit_10_opaque()) << r::BIT_10_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.bit_11_opaque()) << r::BIT_11_OPAQUE_MASK.trailing_zeros())
+        | (v.bits_12_13_opaque().get() << r::BITS_12_13_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.scheduler_run()) << r::SCHEDULER_RUN_MASK.trailing_zeros())
+        | (u32::from(v.bit_15_opaque()) << r::BIT_15_OPAQUE_MASK.trailing_zeros())
+        | (v.bits_16_19_opaque().get() << r::BITS_16_19_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.bit_20_opaque()) << r::BIT_20_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.bit_21_opaque()) << r::BIT_21_OPAQUE_MASK.trailing_zeros())
         | (u32::from(v.bit_24_opaque()) << r::BIT_24_OPAQUE_MASK.trailing_zeros())
 }
 fn primary(bank: &pac::bt_mac::BluetoothInterruptBank) -> BluetoothInterruptObservation {

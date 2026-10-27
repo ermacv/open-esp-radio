@@ -306,9 +306,27 @@ pub(super) fn retention(s: &mut Session<'_>) {
             .set_bits_18_31_opaque(Bits::constant::<0>());
     });
     s.ble.task_irq.trigger_interrupt_clear(|t| {
-        t.bits_0_13_opaque(Bits::constant::<0x3fff>())
+        use pac::bt_mac::interrupt_clear as r;
+        t.bit_0_opaque()
+            .bits_1_2_opaque(Bits::constant::<{ r::BITS_1_2_OPAQUE_MAX }>())
+            .bit_3_opaque()
+            .bit_4_opaque()
+            .bits_5_9_opaque(Bits::constant::<{ r::BITS_5_9_OPAQUE_MAX }>())
+            .bit_10_opaque()
+            .bit_11_opaque()
+            .bits_12_13_opaque(Bits::constant::<{ r::BITS_12_13_OPAQUE_MAX }>())
             .scheduler_run()
-            .bits_15_31_opaque(Bits::constant::<0x1ffff>());
+            .bit_15_opaque()
+            .bit_16_opaque()
+            .bit_17_opaque()
+            .bits_18_19_opaque(Bits::constant::<{ r::BITS_18_19_OPAQUE_MAX }>())
+            .bit_20_opaque()
+            .bit_21_opaque()
+            .bits_22_23_opaque(Bits::constant::<{ r::BITS_22_23_OPAQUE_MAX }>())
+            .bit_24_opaque()
+            .bits_25_27_opaque(Bits::constant::<{ r::BITS_25_27_OPAQUE_MAX }>())
+            .bit_28_opaque()
+            .bits_29_31_opaque(Bits::constant::<{ r::BITS_29_31_OPAQUE_MAX }>());
     });
     state(s, 0x2210);
     // SOURCE: HAL interrupt/retirement.rs mask_dynamic -> disable_run ->
