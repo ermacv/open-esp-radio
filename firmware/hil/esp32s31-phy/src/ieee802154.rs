@@ -129,6 +129,7 @@ impl Rx {
 
     pub async fn enter(
         &mut self,
+        phy_pilot: &mut crate::phy_pilot::Client,
         domain_slot: &mut Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
         fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
         clocks: &ChipClocks,
@@ -189,6 +190,7 @@ impl Rx {
                     require_radio(domain_slot.take(), fault),
                     &mut (),
                     &mut observer,
+                    phy_pilot,
                 )
                 .await;
                 *domain_slot = Some(returned);

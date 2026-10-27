@@ -39,6 +39,43 @@ pub enum FaultReason {
     Cancelled(Operation),
     IdentityClaimed,
     OwnerUnavailable,
+    SarTransfer {
+        operation: Operation,
+        fault: SarTransferFault,
+    },
+    SarSetup(SarSetupFault),
+}
+
+/// Failed SAR custody edge, retaining the source observation in session RAM.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SarTransferFault {
+    RequestOccupied {
+        queued: usize,
+    },
+    ProgramUnavailable,
+    InvalidDelay {
+        requested: oer_time::Duration,
+    },
+    ReplyOccupied {
+        queued: usize,
+    },
+    ResultUnavailable,
+    ForeignSignal,
+    ForeignReunion {
+        expected_owner: usize,
+        received_owner: usize,
+    },
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SarSetupFault {
+    Storage(SarSetupStorage),
+    Binding(oer_interrupt_table::Error),
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SarSetupStorage {
+    Cells,
+    State,
+    Handler,
 }
 
 /// Original observations retained on cancellation. No register is reclaimed.
@@ -144,19 +181,19 @@ impl FaultHandle {
 struct Guard {
     seat: &'static TransactionSeat,
     registration: Option<PhyRegistrationEpoch>,
-    reason: FaultReason,
+    operation: Operation,
     armed: bool,
 }
 impl Guard {
     fn new(
         identity: &PhyIdentity,
         registration: Option<PhyRegistrationEpoch>,
-        reason: FaultReason,
+        operation: Operation,
     ) -> Self {
         Self {
             seat: identity.seat,
             registration,
-            reason,
+            operation,
             armed: true,
         }
     }
@@ -168,7 +205,7 @@ impl Drop for Guard {
     fn drop(&mut self) {
         if self.armed && !self.seat.fault.is_requested() {
             self.seat.quarantine(Fault {
-                reason: self.reason,
+                reason: FaultReason::Cancelled(self.operation),
                 registration: self.registration,
             });
         }
@@ -197,7 +234,43 @@ pub struct PhyTransaction {
     guard: Guard,
     payload: ManuallyDrop<Payload>,
 }
+/// Reporter confined to a SAR custody transfer; it grants no owner access.
+#[derive(Clone, Copy)]
+pub struct SarTransferReporter {
+    seat: &'static TransactionSeat,
+    operation: Operation,
+    registration: Option<PhyRegistrationEpoch>,
+}
+impl SarTransferReporter {
+    pub fn quarantine(self, fault: SarTransferFault) -> ! {
+        self.seat.quarantine(Fault {
+            reason: FaultReason::SarTransfer {
+                operation: self.operation,
+                fault,
+            },
+            registration: self.registration,
+        })
+    }
+}
 impl PhyTransaction {
+    pub fn sar_transfer_reporter(&self) -> SarTransferReporter {
+        SarTransferReporter {
+            seat: self.guard.seat,
+            operation: self.guard.operation,
+            registration: self.guard.registration,
+        }
+    }
+    /// Retain this transfer's owners and report the exact failed custody edge.
+    pub fn quarantine_sar_transfer(self, fault: SarTransferFault) -> ! {
+        let held = ManuallyDrop::new(self);
+        held.guard.seat.quarantine(Fault {
+            reason: FaultReason::SarTransfer {
+                operation: held.guard.operation,
+                fault,
+            },
+            registration: held.guard.registration,
+        })
+    }
     pub fn hardware_mut(&mut self) -> &mut PhyHardware {
         &mut self.payload.hardware
     }
@@ -405,8 +478,8 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             identity,
         } = self.state;
         let registration = phy.registration_epoch();
-        let guard = Guard::new(&identity, registration, FaultReason::Cancelled(operation));
-        let phy_guard = Guard::new(&identity, registration, FaultReason::Cancelled(operation));
+        let guard = Guard::new(&identity, registration, operation);
+        let phy_guard = Guard::new(&identity, registration, operation);
         RadioTransaction {
             domain: DetachedRadioDomain {
                 guard,

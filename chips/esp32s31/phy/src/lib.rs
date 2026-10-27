@@ -53,6 +53,7 @@
 extern crate std;
 
 pub mod executor;
+pub mod sar_pilot;
 #[cfg(target_arch = "riscv32")]
 mod target_executor;
 #[cfg(target_arch = "riscv32")]

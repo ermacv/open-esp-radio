@@ -74,6 +74,7 @@ type Actor = RadioSystem<
         ChipClocks,
         oer_espressif_executor::Cooperative<EmbassyClock>,
         NoopPhyTargetObserver,
+        crate::phy_pilot::Client,
     >,
     EmbassyClock,
 >;
@@ -119,6 +120,7 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         park()
     };
+    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
     let backend = Esp32s31Radio::new(
         domain,
         partitions.wifi_coex,
@@ -126,6 +128,7 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_espressif_executor::Cooperative::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
+        phy_pilot,
     );
     let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
     // The radio executor writes the system timer; the application executor

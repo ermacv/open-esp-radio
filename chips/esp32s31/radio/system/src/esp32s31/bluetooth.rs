@@ -103,29 +103,31 @@ impl<H> BluetoothAttachment<H> {
     }
 }
 
-impl<C, T, O, H> crate::BluetoothBackend<Esp32s31Radio<C, T, O>, RcSlow> for BluetoothAttachment<H>
+impl<C, T, O, S, H> crate::BluetoothBackend<Esp32s31Radio<C, T, O, S>, RcSlow>
+    for BluetoothAttachment<H>
 where
     C: PlatformClockProvider,
     T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
+    S: oer_esp32s31_phy::sar_pilot::Service,
     H: RadioController<C::Backend>,
 {
-    fn attached(&mut self, shared: &mut Esp32s31Radio<C, T, O>) {
+    fn attached(&mut self, shared: &mut Esp32s31Radio<C, T, O, S>) {
         shared.bluetooth_attached = true;
     }
-    fn detached(&mut self, shared: &mut Esp32s31Radio<C, T, O>) {
+    fn detached(&mut self, shared: &mut Esp32s31Radio<C, T, O, S>) {
         shared.bluetooth_attached = false;
     }
-    fn is_stopped(&self, _: &Esp32s31Radio<C, T, O>) -> bool {
+    fn is_stopped(&self, _: &Esp32s31Radio<C, T, O, S>) -> bool {
         self.stopped()
     }
-    fn admits(&self, _shared: &Esp32s31Radio<C, T, O>, _join: &BluetoothJoin) -> bool {
+    fn admits(&self, _shared: &Esp32s31Radio<C, T, O, S>, _join: &BluetoothJoin) -> bool {
         self.cold.is_some() && self.controller.can_prepare() && self.membership.is_none()
     }
 
     async fn enter(
         &mut self,
-        shared: &mut Esp32s31Radio<C, T, O>,
+        shared: &mut Esp32s31Radio<C, T, O, S>,
         join: BluetoothJoin,
         phy: PhyPreparation,
         _lp: &LpClock<RcSlow>,
@@ -204,7 +206,7 @@ where
 
     async fn track(
         &mut self,
-        shared: &mut Esp32s31Radio<C, T, O>,
+        shared: &mut Esp32s31Radio<C, T, O, S>,
         installation: Installation,
     ) -> Result<Installation, Failed<Installation>> {
         let failed = |cause| Failed {
@@ -235,7 +237,7 @@ where
 
     async fn exit(
         &mut self,
-        shared: &mut Esp32s31Radio<C, T, O>,
+        shared: &mut Esp32s31Radio<C, T, O, S>,
         installation: Installation,
     ) -> (BluetoothLeft, Exit) {
         let poisoned = |cause| {

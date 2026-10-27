@@ -71,7 +71,8 @@ release a secondary hart.
 | Context | Runs | Rule |
 | --- | --- | --- |
 | P3, boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
-| P2, boot hart | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
+| P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
+| P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application | — |
 
 - An interrupt handler never shares a lock with a task and reaches tasks
@@ -93,7 +94,7 @@ release a secondary hart.
 - Drivers never block or spin. A named settle of a known length up to 20 µs
   may busy-wait and counts against its context's step bound; a wait of
   unknown length is a timer-woken step with a deadline.
-  PHY short settles count `mcycle` through `oer-riscv`, at the stable CPU
+  PHY short busy-wait settles count `mcycle` through `oer-riscv`, at the stable CPU
   frequency the clock owner adopts from its register state during runtime
   handover. They require neither a ROM delay nor ROM clock calibration.
 - PHY's shared transport and RX-gain drivers check CPU admission between
@@ -334,7 +335,28 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
   calls `track_concurrent_phy`, which evaluates demand and runs due work.
   The default period is 1 s, with eligibility at `previous + period + 1 µs`.
   SYSTIMER Alarm0 at P3 acknowledges and pends P2; the P2 executor dispatches
-  timers and polls the actor. There is no dedicated PHY timer handler.
+  timers and polls the actor. The direct maintenance TXDC/PWDET path submits
+  each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
+  performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
+  2 µs wait and timer-driven readiness samples. It judges ready before checking
+  the 40 µs not-ready limit. It never polls a future. Other PHY leaves and the
+  registration graph remain async.
+  The actor arms before depositing an affine bundle into an `oer-memory`
+  one-slot request cell. The bundle holds `PhyTransaction` (registers, restore
+  slots, epoch and grant-protect state), `Timg0AlarmProgram`, its binding proof
+  and the machine. The waiting future keeps `DetachedRadioDomain`; its drop
+  guard therefore still records cancellation while the handler holds the PHY.
+  The handler retains `Timg0AlarmInterrupt` for the image's lifetime,
+  acknowledges RAW through CLR before every step, and returns custody through
+  a one-slot reply cell and an `IrqSignal` declared with `FromExecutorLevel`.
+  Startup stops/masks T0 and explicitly clears stale RAW before unmasking;
+  rearming alone does not clear it. The image uses the measured S31 hart0 P2
+  pair, line 17 before 16 (HW23_S31_P2_ARBITRATION_20261027), and moves P1
+  entries to lines 40–42 preserving their relative order. This observation
+  qualifies only the P2 pair, not the other lines or levels. A higher-priority
+  pending executor round runs first; there is no bound on starvation under
+  continuously pending P2 executor work. Handler latency and RF quality with
+  these event gaps are not measured.
   Registration, tracking, RF close and retained wake consume the domain and
   return it with their typed result. `RadioDomain::detach` owns a PHY
   transaction containing the registers, restore slots, registration epoch

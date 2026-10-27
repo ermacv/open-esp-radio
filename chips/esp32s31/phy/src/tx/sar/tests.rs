@@ -1,166 +1,208 @@
 use super::*;
-use core::{
-    future::Future,
-    task::{Context, Poll, Waker},
-};
-use oer_time::{Clock, Instant};
 use oer_time_virtual::VirtualClock;
-use std::{
-    boxed::Box,
-    cell::{Cell, RefCell},
-};
+use std::{cell::RefCell, vec::Vec};
 
-#[test]
-fn readiness_beyond_the_old_settle_can_arrive_within_the_deadline() {
-    let clock: VirtualClock = VirtualClock::default();
-    let started = clock.now();
-    let reads = Cell::new(0);
-    let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || {
-        reads.set(reads.get() + 1);
-        clock.now().saturating_duration_since(started).as_micros() >= 27
-    }));
-    let mut cx = Context::from_waker(Waker::noop());
-    assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending);
-    assert_eq!(reads.get(), 1);
-    assert_eq!(
-        clock.next_deadline(),
-        started.checked_add(Duration::from_micros(1))
-    );
-    clock.advance(Duration::from_micros(27)).unwrap();
-    assert_eq!(
-        future.as_mut().poll(&mut cx),
-        Poll::Ready(Readiness {
-            ready: true,
-            elapsed_micros: 27,
-            observations: 2,
-        })
-    );
+struct Hardware<'a> {
+    clock: &'a VirtualClock,
+    ready_at: Option<Instant>,
+    events: RefCell<Vec<(&'static str, Instant)>>,
+    io_delay: u64,
 }
-
-#[test]
-fn a_ready_sample_taken_after_the_deadline_succeeds() {
-    let clock: VirtualClock = VirtualClock::default();
-    let started = clock.now();
-    let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || {
-        clock.now().saturating_duration_since(started).as_micros() >= 51
-    }));
-    let mut cx = Context::from_waker(Waker::noop());
-    assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending);
-    clock.advance(Duration::from_micros(51)).unwrap();
-    assert_eq!(
-        future.as_mut().poll(&mut cx),
-        Poll::Ready(Readiness {
-            ready: true,
-            elapsed_micros: 51,
-            observations: 2,
-        })
-    );
+impl Hardware<'_> {
+    fn record(&self, name: &'static str) {
+        self.events.borrow_mut().push((name, self.clock.now()));
+    }
 }
-
-#[test]
-fn ready_on_the_first_sample_succeeds_without_waiting() {
-    let clock: VirtualClock = VirtualClock::default();
-    let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || true));
-    assert_eq!(
-        future
-            .as_mut()
-            .poll(&mut Context::from_waker(Waker::noop())),
-        Poll::Ready(Readiness {
-            ready: true,
-            elapsed_micros: 0,
-            observations: 1,
-        })
-    );
-    assert_eq!(clock.next_deadline(), None);
+impl Io for Hardware<'_> {
+    fn arm_tone(&mut self) {
+        self.record("arm");
+        self.clock
+            .advance(Duration::from_micros(self.io_delay))
+            .unwrap();
+    }
+    fn trigger(&mut self) {
+        self.record("trigger");
+        self.clock
+            .advance(Duration::from_micros(self.io_delay))
+            .unwrap();
+    }
+    fn ready(&mut self) -> bool {
+        self.record("ready");
+        self.ready_at.is_some_and(|at| self.clock.now() >= at)
+    }
+    fn clear_tone(&mut self) {
+        self.record("clear");
+    }
+    fn sample(&mut self) -> u16 {
+        self.record("sample");
+        73
+    }
 }
-
+fn hardware(clock: &VirtualClock, ready_at: Option<u64>) -> Hardware<'_> {
+    Hardware {
+        clock,
+        ready_at: ready_at.map(Instant::from_micros),
+        events: RefCell::new(Vec::new()),
+        io_delay: 0,
+    }
+}
 #[test]
-fn never_ready_fails_at_the_deadline() {
-    let clock: VirtualClock = VirtualClock::default();
-    let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || false));
-    let mut cx = Context::from_waker(Waker::noop());
-    let mut polls = 0_u16;
-    let readiness = loop {
-        polls += 1;
-        match future.as_mut().poll(&mut cx) {
-            Poll::Ready(readiness) => break readiness,
-            Poll::Pending => {
-                clock.advance_to_next_deadline().unwrap();
+fn vendor_minimum_waits_are_measured_from_the_actual_edge() {
+    let clock = VirtualClock::starting_at(Instant::EPOCH);
+    let mut io = hardware(&clock, Some(0));
+    let mut engine = Engine::new(true);
+    assert_eq!(
+        engine.advance(&clock, &mut io),
+        Event::WaitAt(Instant::from_micros(1))
+    );
+    // Early/duplicate events do not consume a minimum wait or issue I/O.
+    assert_eq!(
+        engine.advance(&clock, &mut io),
+        Event::WaitAt(Instant::from_micros(1))
+    );
+    clock.advance(Duration::from_micros(20)).unwrap();
+    assert_eq!(
+        engine.advance(&clock, &mut io),
+        Event::WaitAt(Instant::from_micros(22))
+    );
+    clock.advance(Duration::from_micros(1)).unwrap();
+    assert_eq!(
+        engine.advance(&clock, &mut io),
+        Event::WaitAt(Instant::from_micros(22))
+    );
+    assert_eq!(io.events.borrow().len(), 2);
+    clock.advance(Duration::from_micros(1)).unwrap();
+    let done = engine.advance(&clock, &mut io);
+    assert_eq!(
+        done,
+        Event::Complete(Ok(Sample {
+            value: 73,
+            readiness: Readiness {
+                elapsed_micros: 0,
+                observations: 1,
+                ready: true,
             }
+        }))
+    );
+    assert_eq!(
+        io.events
+            .borrow()
+            .iter()
+            .map(|(s, _)| *s)
+            .collect::<Vec<_>>(),
+        ["arm", "trigger", "ready", "clear", "sample"]
+    );
+    assert_eq!(engine.advance(&clock, &mut io), done);
+    assert_eq!(io.events.borrow().len(), 5);
+}
+#[test]
+fn delayed_ready_sample_succeeds_and_delayed_unready_sample_consumes_no_result() {
+    for ready in [true, false] {
+        let clock = VirtualClock::starting_at(Instant::EPOCH);
+        let mut io = hardware(&clock, ready.then_some(50));
+        let mut engine = Engine::new(false);
+        engine.advance(&clock, &mut io);
+        clock.advance(Duration::from_micros(1)).unwrap();
+        engine.advance(&clock, &mut io);
+        clock.advance(Duration::from_micros(100)).unwrap();
+        let readiness = Readiness {
+            elapsed_micros: 98,
+            observations: 1,
+            ready,
+        };
+        let result = if ready {
+            Ok(Sample {
+                value: 73,
+                readiness,
+            })
+        } else {
+            Err(Error::NotReady(readiness))
+        };
+        assert_eq!(engine.advance(&clock, &mut io), Event::Complete(result));
+        assert_eq!(io.events.borrow().len(), if ready { 4 } else { 3 });
+    }
+}
+#[test]
+fn not_ready_rearms_at_one_microsecond_and_stops_at_the_limit() {
+    let clock = VirtualClock::starting_at(Instant::EPOCH);
+    let mut io = hardware(&clock, None);
+    let mut engine = Engine::new(true);
+    let result = loop {
+        match engine.advance(&clock, &mut io) {
+            Event::WaitAt(at) => {
+                clock
+                    .advance(at.saturating_duration_since(clock.now()))
+                    .unwrap();
+            }
+            Event::Complete(result) => break result,
         }
     };
     assert_eq!(
-        readiness,
-        Readiness {
-            ready: false,
-            elapsed_micros: 50,
-            observations: 51,
-        }
+        result,
+        Err(Error::NotReady(Readiness {
+            elapsed_micros: 40,
+            observations: 41,
+            ready: false
+        }))
     );
-    assert_eq!(polls, 51);
-    assert_eq!(clock.next_deadline(), None);
+    assert!(
+        !io.events
+            .borrow()
+            .iter()
+            .any(|(name, _)| *name == "sample" || *name == "clear")
+    );
 }
-
 #[test]
-fn the_limit_accepts_ready_but_never_waits_again_for_unready_hardware() {
-    for ready_at_limit in [false, true] {
-        let clock: VirtualClock = VirtualClock::default();
-        let started = clock.now();
-        let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || {
-            ready_at_limit && clock.now().saturating_duration_since(started).as_micros() >= 50
-        }));
-        let mut cx = Context::from_waker(Waker::noop());
-        assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending);
-        clock.advance(Duration::from_micros(50)).unwrap();
-        assert_eq!(
-            future.as_mut().poll(&mut cx),
-            Poll::Ready(Readiness {
-                ready: ready_at_limit,
-                elapsed_micros: 50,
-                observations: 2,
-            })
-        );
-        assert_eq!(clock.next_deadline(), None);
-    }
-}
-
-#[test]
-fn the_sample_closure_keeps_its_exclusive_owner_while_suspended() {
-    let clock: VirtualClock = VirtualClock::default();
-    let owner = RefCell::new(());
-    let physical = owner.borrow_mut();
-    let timer = &clock;
-    let started = clock.now();
-    let mut future = Box::pin(wait(timer, Duration::from_micros(50), move || {
-        let _held = &physical;
-        timer.now() > started
-    }));
-    let mut cx = Context::from_waker(Waker::noop());
-    assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending);
-    assert!(owner.try_borrow_mut().is_err());
-    clock.advance_to_next_deadline().unwrap();
-    assert!(matches!(
-        future.as_mut().poll(&mut cx),
-        Poll::Ready(Readiness { ready: true, .. })
-    ));
-    drop(future);
-    assert!(owner.try_borrow_mut().is_ok());
-}
-
-#[test]
-fn an_unrepresentable_deadline_touches_no_hardware() {
-    let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(u64::MAX - 10));
-    let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || -> bool {
-        panic!("an invalid deadline must not touch hardware")
-    }));
+fn deadline_overflow_issues_no_edge() {
+    let clock = VirtualClock::starting_at(Instant::from_micros(u64::MAX));
+    let mut io = hardware(&clock, Some(0));
     assert_eq!(
-        future
-            .as_mut()
-            .poll(&mut Context::from_waker(Waker::noop())),
-        Poll::Ready(Readiness {
-            ready: false,
-            elapsed_micros: 0,
-            observations: 0,
-        })
+        Engine::new(true).advance(&clock, &mut io),
+        Event::Complete(Err(Error::DeadlineOverflow))
     );
+    assert!(io.events.borrow().is_empty());
+}
+
+#[test]
+fn minimum_wait_starts_after_the_mmio_edge_finishes() {
+    let clock = VirtualClock::starting_at(Instant::EPOCH);
+    let mut io = hardware(&clock, Some(0));
+    io.io_delay = 5;
+    let mut engine = Engine::new(false);
+    assert_eq!(
+        engine.advance(&clock, &mut io),
+        Event::WaitAt(Instant::from_micros(6))
+    );
+    clock.advance(Duration::from_micros(1)).unwrap();
+    assert_eq!(
+        engine.advance(&clock, &mut io),
+        Event::WaitAt(Instant::from_micros(13))
+    );
+    assert_eq!(clock.now(), Instant::from_micros(11));
+}
+#[test]
+fn ready_exactly_at_the_limit_succeeds() {
+    let clock = VirtualClock::starting_at(Instant::EPOCH);
+    let mut io = hardware(&clock, Some(43));
+    let mut engine = Engine::new(false);
+    loop {
+        match engine.advance(&clock, &mut io) {
+            Event::WaitAt(at) => {
+                clock
+                    .advance(at.saturating_duration_since(clock.now()))
+                    .unwrap();
+            }
+            Event::Complete(result) => {
+                assert_eq!(
+                    result.unwrap().readiness,
+                    Readiness {
+                        elapsed_micros: 40,
+                        observations: 41,
+                        ready: true
+                    }
+                );
+                break;
+            }
+        }
+    }
 }

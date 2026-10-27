@@ -69,8 +69,10 @@ system these rules serve.
   A signal names its raisers at compile time. A raising handler sits strictly
   above the receiving executor; the one exception is an
   `Exempt(ExecutorLevel)` handler on that executor's hart and level
-  (`FromExecutorLevel`), whose signal the next round serves. Driver code
-  never blocks or spins; it yields to its executor. The one exception is a
+  (`FromExecutorLevel`), whose signal the next round serves. The SAR/PWDET
+  pilot uses TIMG0 T0 at P2 on line 16, below the radio executor's line 17;
+  it advances one explicit conversion step per event with owned PHY custody.
+  Driver code never blocks or spins; it yields to its executor. The one exception is a
   named settle of a known length up to 20 µs. Before an executor exists
   (the bootstrap and early boot) there is nothing to yield to: console
   output there may wait for room in the USB FIFO up to a bounded budget per

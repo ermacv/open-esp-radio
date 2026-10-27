@@ -129,7 +129,7 @@ pub fn trigger_sar(registers: &mut impl SharedPhyAccess) {
 /// Rev0 ROM `phy_pwdet_tone_start+0x42` and `phy_pwdet_wait_idle+0x6`
 /// sample the three-bit field and compare it with 7. The wrapper
 /// `phy_get_tone_sar_dout_` calls tone-start; repetition and deadline
-/// ownership remain in the Rust async state machine.
+/// ownership remain in the Rust state machine.
 #[cfg(target_arch = "riscv32")]
 pub fn sample_ready(registers: &mut impl SharedPhyAccess) -> bool {
     ops::power_detector_ready(&phy_blocks_mut(registers).phy_baseband_config_oracle)

@@ -462,6 +462,22 @@ record `Cancelled(Operation)` with the registration observation, independently
 of field drop order. The operation names register, maintain, wake, close,
 channel or retune. `FaultHandle::require_owner` reports only a missing owner;
 a diagnostic handle cannot select another fault reason.
+The SAR/PWDET pilot transfers only the movable PHY half: its calibration
+restore/epoch and grant state travel together, while the async maintenance
+future retains the exact `DetachedRadioDomain` and its cancellation guard.
+No reference into the hardware crosses submission. One-slot affine SPSC
+queues and the handler's existing `HandlerCell` provide storage; their `Send`
+bounds check the complete bundle. The handler acknowledges T0 RAW with CLR
+before stepping/rearming; startup clears stale RAW while masked. The actor
+arms before deposit on the handler's same hart/level. The same-level signal
+publishes facts and pends the next executor round, never a task waker.
+`SarTransferFault` retains the original failed queue, alarm or reunion
+observation. `SarSetupFault` retains the failed storage or router binding;
+startup owners remain held on its non-returning reset path. Its narrow reporter can report only SAR transfer faults, without
+reunion or register authority. Owners stay quarantined before record/reset;
+the existing retained codec remains 16 bytes and records the named reason and
+epoch. Pointers from a foreign reunion remain session diagnostics, not retained
+owner identities.
 The HAL declares the direct `link_fn!` binding and exports
 `phy_fault_reporter!` to define that exact signature. Staged images bind it
 to `fatal::reset_recording`. Their four-word (16-byte), versioned/checksummed
