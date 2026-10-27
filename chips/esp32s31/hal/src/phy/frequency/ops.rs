@@ -31,8 +31,8 @@ pub fn restore_read_configuration<P: PhyPlacement>(
         w.set_memory_read_mode(saved.number.memory_read_mode());
     });
     frequency.fe.modify_frequency_control(|w| {
-        w.set_bits_8_17_opaque(saved.control.bits_8_17_opaque())
-            .set_bit_18_opaque(saved.control.bit_18_opaque())
+        w.set_memory_address_low(saved.control.memory_address_low())
+            .set_memory_address_high(saved.control.memory_address_high())
             .set_hardware_frequency_disable(saved.control.hardware_frequency_disable_variant());
     });
 }
@@ -79,7 +79,7 @@ pub fn observe<P: PhyPlacement>(frequency: &FrequencyRegisters<P>) -> Option<sup
         control_image,
         parameter_image,
         result,
-        high_address_or_reset: control.bit_18_opaque(),
+        high_address_or_reset: control.memory_address_high(),
         ready,
     })
 }
@@ -198,15 +198,16 @@ pub fn set_baseband_mode<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>,
     });
 }
 
-/// Pulse the frequency-module reset/release bit through two fresh RMWs.
+/// Apply `phy_freq_module_resetn`'s bit18 low/high writes with two fresh RMWs.
+/// The electrical reset target and effective edge remain unqualified.
 pub fn reset_module<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>) {
-    // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
+    // SOURCE: BX10_S31_FE_FREQ_RESET_CONTEXT_20261027.
     frequency.fe.modify_frequency_control(|w| {
-        w.set_bit_18_opaque(false);
+        w.set_memory_address_high(false);
     });
-    // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
+    // SOURCE: BX10_S31_FE_FREQ_RESET_CONTEXT_20261027.
     frequency.fe.modify_frequency_control(|w| {
-        w.set_bit_18_opaque(true);
+        w.set_memory_address_high(true);
     });
 }
 
@@ -280,8 +281,8 @@ pub fn write_memory<P: PhyPlacement>(
     let data = Bits::<24>::new(value).expect("frequency-memory data must fit 24 bits");
     let (address_low, address_high) = frequency_memory_address(address);
     frequency.fe.modify_frequency_control(|w| {
-        w.set_bits_8_17_opaque(address_low)
-            .set_bit_18_opaque(address_high);
+        w.set_memory_address_low(address_low)
+            .set_memory_address_high(address_high);
     });
     frequency.fe.write_frequency_memory_data(|w| {
         w.set_data(data).set_mode(mode);
@@ -306,8 +307,8 @@ pub fn read_memory<P: PhyPlacement>(
     let mode = Bits::<2>::new(u32::from(mode))
         .expect("frequency-memory read mode must fit its two-bit field");
     frequency.fe.modify_frequency_control(|w| {
-        w.set_bits_8_17_opaque(address_low)
-            .set_bit_18_opaque(address_high);
+        w.set_memory_address_low(address_low)
+            .set_memory_address_high(address_high);
     });
     frequency.fe.modify_i2c_number_control(|w| {
         w.set_memory_read_mode(mode);

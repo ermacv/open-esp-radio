@@ -6,7 +6,7 @@ schema = 3
 [type]
 name = "TSENS"
 description = "The temperature sensor."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "BLOB_S31_TSENS_CLK_CONF_WRITES_20261027", "BLOB_S31_TSENS_RAW_READS_20261027"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -40,7 +40,7 @@ sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
 
 [review.entity."CTRL.OUT"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS", "BLOB_S31_TSENS_RAW_READS_20261027"]
 
 [review.entity."CTRL.READY"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
@@ -79,19 +79,22 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."CLK_CONF"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "BLOB_S31_TSENS_CLK_CONF_WRITES_20261027", "ESP_IDF_4D59230D_S31_TSENS_STRUCT"]
+provenance = "observed"
+accuracy = "positional"
+completeness = "partial"
 
 [review.entity."CLK_CONF.CLK_EN"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 
 [review.entity."CLK_CONF.BIT_9_OPAQUE"]
-sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018", "HW11_S31_TSENS_20261027"]
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018", "HW11_S31_TSENS_20261027", "BLOB_S31_TSENS_CLK_CONF_WRITES_20261027"]
 provenance = "observed"
 accuracy = "positional"
 completeness = "partial"
 
 [review.entity."CLK_CONF.BIT_23_OPAQUE"]
-sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018", "HW11_S31_TSENS_20261027"]
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018", "HW11_S31_TSENS_20261027", "BLOB_S31_TSENS_CLK_CONF_WRITES_20261027"]
 provenance = "observed"
 accuracy = "positional"
 completeness = "partial"
@@ -106,7 +109,7 @@ reset = { value = 0x19400 }
 name = "OUT"
 bits = "7:0"
 class = "read-only"
-description = "Temperature sensor data out. Unsigned temperature-sensor code sampled once by the complete ROM read leaves."
+description = "Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample."
 
 [[registers.fields]]
 name = "READY"
@@ -225,7 +228,7 @@ description = "Tsens wakeup interrupt clear."
 [[registers]]
 name = "CLK_CONF"
 offset = 0x18
-description = "Tsens regbank configuration registers. Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim."
+description = "Temperature-sensor register-bank configuration. CLK_EN is publicly described. Pinned PHY initialization also writes bits23 and9 in that order; their individual hardware effects are unresolved despite the public struct reserving them."
 reset = { value = 0x0 }
 reserved = { mask = 0xff7ffdfe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_IDF_4D59230D_S31_TSENS_STRUCT"] }
 
@@ -239,13 +242,13 @@ description = "Tsens regbank clock gating enable. Temperature-sensor register-ba
 name = "BIT_9_OPAQUE"
 bits = "9"
 class = "plain"
-description = "Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved."
+description = "Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x26 and sets bit9 at +0x2c after the bit23 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual conversion role is established."
 
 [[registers.fields]]
 name = "BIT_23_OPAQUE"
 bits = "23"
 class = "plain"
-description = "Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved."
+description = "Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x1c and sets bit23 at +0x24 before the bit9 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual readout role is established."
 
 [[registers]]
 name = "INT_ENA_W1TS"

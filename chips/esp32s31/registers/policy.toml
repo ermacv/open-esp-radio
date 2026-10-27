@@ -7321,16 +7321,16 @@ domain = "PhyFrequencyBasebandMode"
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "assert_phy_frequency_module_reset"
-fields = [{ field = "FE.FREQUENCY_CONTROL.BIT_18_OPAQUE", source-bit-offset = 0 }]
+name = "clear_phy_frequency_control_bit_18"
+fields = [{ field = "FE.FREQUENCY_CONTROL.MEMORY_ADDRESS_HIGH", source-bit-offset = 0 }]
 value = 0
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD", "BX10_S31_FE_FREQ_RESET_CONTEXT_20261027"]
 
 [[field-replace-modifies]]
-name = "release_phy_frequency_module_reset"
-fields = [{ field = "FE.FREQUENCY_CONTROL.BIT_18_OPAQUE", source-bit-offset = 0 }]
+name = "set_phy_frequency_control_bit_18"
+fields = [{ field = "FE.FREQUENCY_CONTROL.MEMORY_ADDRESS_HIGH", source-bit-offset = 0 }]
 value = 1
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD", "BX10_S31_FE_FREQ_RESET_CONTEXT_20261027"]
 
 [[field-replace-modifies]]
 name = "configure_phy_hardware_frequency_control"
@@ -7400,9 +7400,9 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "configure_phy_frequency_memory_address"
-fields = [{ field = "FE.FREQUENCY_CONTROL.BITS_8_17_OPAQUE", source-bit-offset = 0 }, { field = "FE.FREQUENCY_CONTROL.BIT_18_OPAQUE", source-bit-offset = 10 }]
+fields = [{ field = "FE.FREQUENCY_CONTROL.MEMORY_ADDRESS_LOW", source-bit-offset = 0 }, { field = "FE.FREQUENCY_CONTROL.MEMORY_ADDRESS_HIGH", source-bit-offset = 10 }]
 domain = "PhyFrequencyMemoryAddress"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD", "BX10_S31_FE_FREQ_ADDRESS_20261027"]
 
 [[field-replace-modifies]]
 name = "raise_phy_frequency_memory_write_pulse"

@@ -32,8 +32,8 @@ pub struct ReadConfigurationFields {
 impl ReadConfiguration {
     pub fn fields(&self) -> ReadConfigurationFields {
         ReadConfigurationFields {
-            address_low: self.control.bits_8_17_opaque().get() as u16,
-            high_address_or_reset: self.control.bit_18_opaque(),
+            address_low: self.control.memory_address_low().get() as u16,
+            high_address_or_reset: self.control.memory_address_high(),
             read_mode: self.number.memory_read_mode().get() as u8,
             hardware_disabled: self.control.hardware_frequency_disable(),
         }
@@ -93,7 +93,8 @@ pub fn set_baseband_mode(registers: &mut impl SharedPhyAccess, mode: u8) {
     );
 }
 
-/// Pulse complete rev0 ROM `phy_freq_module_resetn`.
+/// Apply rev0 ROM `phy_freq_module_resetn`'s two fresh bit18 low/high RMWs.
+/// The electrical reset target and effective edge remain unqualified.
 #[cfg(target_arch = "riscv32")]
 pub fn reset_module(registers: &mut impl SharedPhyAccess) {
     ops::reset_module(&mut phy_blocks_mut(registers).phy_frequency_channel_oracle);
