@@ -451,6 +451,10 @@ expose typed access to registers that production does not use, on the owner
 that already holds them, so a comparison probe reaches them through the public
 API. Such access grants nothing the owner's partition does not hold, and
 production has no `cfg(oer_probe)`, probe constructor or probe module.
+A comparison probe's observation needs do not justify generalizing driver
+attachment, lifecycle or retirement APIs. Bluetooth retains the concrete
+`ChipGate` for these paths; the additional typed register access stays on
+the existing HAL owner.
 
 ## Tools
 
