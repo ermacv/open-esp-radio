@@ -122,10 +122,23 @@ impl Values<'_> {
 /// carry an acknowledgement proof. A sequence never acknowledges events.
 #[derive(Clone, Copy)]
 enum WordWrite {
-    Store { written: u32, whole: bool },
-    Image { value: u32, whole_word: bool },
-    Sequence { value: u32, whole_word: bool },
-    Acknowledge { mask: u32 },
+    /// A separately sourced complete zero publication, without replay.
+    Zero,
+    Store {
+        written: u32,
+        whole: bool,
+    },
+    Image {
+        value: u32,
+        whole_word: bool,
+    },
+    Sequence {
+        value: u32,
+        whole_word: bool,
+    },
+    Acknowledge {
+        mask: u32,
+    },
 }
 
 /// The ones from bit zero through the highest one of `value`.
@@ -1051,6 +1064,15 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 ),
             ));
         }
+        let observed = word.has(FieldClass::ReadObserved);
+        if observed && !matches!(write, WordWrite::Zero) {
+            return Err(self.error(
+                entity,
+                ErrorKind::Register(
+                    "a read-observed word admits only a sourced zero-register-write".to_owned(),
+                ),
+            ));
+        }
         if let WordWrite::Store { whole, .. } = write {
             if let Some(reason) = word.unstorable() {
                 return Err(self.error(entity, ErrorKind::Register(reason.to_owned())));
@@ -1073,6 +1095,15 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         };
         for field in word.fields() {
             let mask = field_mask(field);
+            if observed && matches!(write, WordWrite::Zero) {
+                self.class(
+                    entity,
+                    field,
+                    matches!(field.class, FieldClass::ReadObserved | FieldClass::ReadOnly)
+                        || stored(field.class),
+                    "a complete zero publication",
+                )?;
+            }
             if let Some((value, whole_word)) = fixed
                 && value & mask != 0
             {
@@ -1082,6 +1113,7 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 self.class(entity, field, allowed, "a fixed write")?;
             }
             let values = match write {
+                WordWrite::Zero => Values::Fixed(0),
                 WordWrite::Store { written, .. } if mask & written != 0 => continue,
                 WordWrite::Store { .. } => Values::Fixed(0),
                 WordWrite::Image { value, .. } | WordWrite::Sequence { value, .. } => {
@@ -1093,7 +1125,9 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             };
             self.constrained(entity, word, field, values)?;
         }
-        if !word.fields().iter().any(|field| field.class.written()) {
+        if !(word.fields().iter().any(|field| field.class.written())
+            || (observed && matches!(write, WordWrite::Zero)))
+        {
             return Err(self.error(
                 entity,
                 ErrorKind::Register("the word has no field a write gives a value".to_owned()),
@@ -1299,7 +1333,14 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             let entity = write.name.as_str();
             self.begin(entity, &write.sources)?;
             let target = self.register(entity, &write.register)?;
-            self.store(entity, target, 0, false)?;
+            if self.word(entity, target)?.has(FieldClass::ReadObserved) {
+                self.element(entity, &write.register)?;
+                self.write_word(entity, target, WordWrite::Zero)?;
+                let owner = self.owner(entity, target, Some(0))?;
+                self.take(entity, &[owner], true)?;
+            } else {
+                self.store(entity, target, 0, false)?;
+            }
         }
         Ok(())
     }

@@ -2400,13 +2400,15 @@ sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_INIT_TAIL", "S3
 accuracy = "exact"
 
 [review.entity."RAW"]
-sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027", "BLOB_WIFI_MAC_STALE_CLEAR_FORMS_20261027"]
 provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
+accuracy = "bounded"
+completeness = "partial"
 
 [review.entity."RAW.BITS_0_20_OPAQUE"]
-sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027", "BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027"]
+sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027", "BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027", "BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027", "BLOB_WIFI_MAC_STALE_CLEAR_FORMS_20261027"]
+accuracy = "bounded"
+completeness = "partial"
 
 [review.entity."RAW.FATAL_ASSERTION"]
 sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_ISR_REGISTER_DUMP"]
@@ -2414,7 +2416,7 @@ provenance = "observed"
 accuracy = "exact"
 
 [review.entity."RAW.BITS_22_31_OPAQUE"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027", "BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027"]
 
 [review.entity."STATUS"]
 sources = ["HW20_RX_RAW_RETENTION_20261027", "HW20_RX_IRQ_DMA_BRACKETS_20261027", "HW18_RX_MASK_STATUS_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
@@ -3446,19 +3448,21 @@ accuracy = "exact"
 completeness = "complete"
 
 [review.entity."CONTROL%s.BITS_20_21_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20104D40"]
+sources = ["S31_MMIO_DECLARED_20104D40", "BX8_WIFI_CONTROL_PREPARATION_20261027", "BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027"]
+accuracy = "exact"
+completeness = "partial"
 
 [review.entity."CONTROL%s.BIT_22_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX", "S31_MMIO_DECLARED_20104D40", "VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS", "RECORDED_OPEN_TX_CONTROL_BIT22_20260729"]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "S31_MMIO_DECLARED_20104D40", "VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS", "RECORDED_OPEN_TX_CONTROL_BIT22_20260729", "BX8_WIFI_CONTROL_TXOP_SCOPE_20261027", "BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027"]
 provenance = "reviewed"
 accuracy = "exact"
-completeness = "complete"
+completeness = "partial"
 
 [review.entity."CONTROL%s.BIT_23_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20104D40"]
 
 [review.entity."CONTROL%s.PLCP_FORMAT"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27", "HIL_OPEN_AUTH_PLCP_FORMAT_2026_07_28", "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29", "HIL_OPEN_HT_SINGLE_EXTREMES_2026_07_29", "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29", "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29", "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29"]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27", "HIL_OPEN_AUTH_PLCP_FORMAT_2026_07_28", "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29", "HIL_OPEN_HT_SINGLE_EXTREMES_2026_07_29", "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29", "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29", "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29", "BX8_WIFI_TX_FORMAT_DOMAINS_20261027"]
 accuracy = "exact"
 completeness = "complete"
 
@@ -4021,7 +4025,7 @@ provenance = "observed"
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL"]
 # Vendor publication layout and bounded HW11 quiet/staging observations only;
 # HW11 does not establish live agreement acceptance or opaque-bit evolution.
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HW11_S31_BLOCK_ACK_20261027"]
+sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HW11_S31_BLOCK_ACK_20261027", "BLOB_WIFI_EXTRA_SOFTAP_BA_CONTROL_LIFECYCLE_20261027"]
 provenance = "observed"
 accuracy = "bounded"
 completeness = "partial"
@@ -4035,7 +4039,9 @@ sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 provenance = "observed"
 
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.BITS_10_11_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20104EA4"]
+sources = ["S31_MMIO_DECLARED_20104EA4", "BLOB_WIFI_EXTRA_SOFTAP_BA_CONTROL_LIFECYCLE_20261027"]
+accuracy = "bounded"
+completeness = "partial"
 
 [review.entity."EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.TID"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
@@ -5257,7 +5263,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_DBG_READ_KEY_ENTRY", "HIL_VENDOR
 sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_DBG_READ_KEY_ENTRY", "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29"]
 
 [review.entity."PLCP1%s.VECTOR_FORMAT"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_DBG_READ_KEY_ENTRY", "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29"]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_DBG_READ_KEY_ENTRY", "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29", "BX8_WIFI_TX_FORMAT_DOMAINS_20261027"]
 
 [review.entity."PLCP1%s.HIGH_CONTROL_28"]
 sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_DBG_READ_KEY_ENTRY", "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29"]
@@ -5368,7 +5374,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_DBG_READ_TX_SIG", "IEEE80211_HT_
 provenance = "observed"
 
 [review.entity."VHT_SIGNAL_1%s"]
-sources = ["BLOB_LIBPP_DBG_READ_TX_SIG"]
+sources = ["BLOB_LIBPP_DBG_READ_TX_SIG", "BX8_WIFI_TX_FORMAT_DOMAINS_20261027"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -5406,7 +5412,7 @@ sources = ["BLOB_LIBPP_DBG_READ_TX_SIG"]
 provenance = "observed"
 
 [review.entity."VHT_MODE%s"]
-sources = ["BLOB_LIBPP_DBG_READ_TX_SIG"]
+sources = ["BLOB_LIBPP_DBG_READ_TX_SIG", "BX8_WIFI_TX_FORMAT_DOMAINS_20261027"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -9715,27 +9721,25 @@ description = "Interrupt-enable bits whose event identities remain unknown."
 [[registers]]
 name = "RAW"
 offset = 0xc44
-description = "Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027."
+description = "Unmasked WDEV interrupt snapshot read by print_isr_regs. hal_disable_mac+0x1e stores the complete RAW word as zero after setting common MAC disable gates and storing ENABLE=0, before zeroing INTERRUPT_1_RAW. That leaf does not read RAW afterward. This proves the publication and order, not its effect on positive pending, a reset value or arbitrary writable-storage semantics. Initialization/deinitialization instead clear stale state through CLEAR=0xffffffff. SOURCE: BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027, BLOB_WIFI_MAC_STALE_CLEAR_FORMS_20261027. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. A bounded RX observation retains pending lanes 5/14 with ENABLE=0 and STATUS=0, and clears them independently through CLEAR. SOURCE: HW20_RX_RAW_RETENTION_20261027, BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Access is limited to observation and the separately sourced complete zero publication, without a claim of hardware read-only behavior."
 
 [[registers.fields]]
 name = "BITS_0_20_OPAQUE"
 bits = "20:0"
-class = "plain"
-write-range = { min = 0, max = 0x1fffff }
-description = "Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Vendor STATUS2/3 have RF-test polling/clear consumers and ENABLE2 has a sniffer accessor use, without established physical identities. These STATUS/ENABLE observations do not show a CPU store that sets RAW2/3/4. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027."
+class = "read-observed"
+description = "Raw event observations; identities are not independently decoded here. In this capture, opaque bits 2/3/4 (0x1c) were observed pending before the first accepted beacon and were not removed by the selected clears. SOURCE: HW20_RX_RAW_RETENTION_20261027. Vendor STATUS2/3 have RF-test polling/clear consumers and ENABLE2 has a sniffer accessor use, without established physical identities. These STATUS/ENABLE observations do not show a CPU store that sets RAW2/3/4. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027. The recovered disabled-engine CPU publication writes this entire range zero as part of a whole-word store; nonzero writes and zero-write effects on positive pending are unqualified. Selective acknowledgement writes CLEAR instead. No reset value or zero-only read invariant follows. SOURCE: BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027, BLOB_WIFI_MAC_STALE_CLEAR_FORMS_20261027."
 
 [[registers.fields]]
 name = "FATAL_ASSERTION"
 bits = "21"
-class = "plain"
+class = "read-observed"
 description = "Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank)."
 
 [[registers.fields]]
 name = "BITS_22_31_OPAQUE"
 bits = "31:22"
-class = "plain"
-write-range = { min = 0, max = 0x3ff }
-description = "Raw event observations; identities are not independently decoded here."
+class = "read-observed"
+description = "Raw event observations; identities are not independently decoded here. The disabled-engine whole-word zero publication covers these lanes too; effects on positive pending and nonzero writes are unqualified. SOURCE: BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027."
 
 [[registers]]
 name = "STATUS"
@@ -11019,14 +11023,14 @@ pointer = { points-to = "WIFI_TX_DMA_DESCRIPTOR", placement = "dma-window", enco
 name = "BITS_20_21_OPAQUE"
 bits = "21:20"
 class = "plain"
-description = "Recovered PLCP0 control image; libpp[hal_mac_tx.o]::mac_tx_set_plcp0 initializes these two bits to binary 10 for the ordinary direct legacy path."
+description = "Ordinary libpp and rev0 ROM PLCP0 preparation writes binary 10 here before legacy, HT or HE vector preparation. RFTEST fill_tx_frame direct preparation writes binary 00. No rate, PHY-family or descriptor-mode meaning, and no meaning for encodings 01/11, is established. SOURCE: BX8_WIFI_CONTROL_PREPARATION_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027."
 write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "BIT_22_OPAQUE"
 bits = "22"
 class = "plain"
-description = "PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The open legacy/HT/HE formatter sets bit 22 unconditionally; its missing reserved-slot adjustment is a known vendor difference. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729."
+description = "PLCP setup sets this bit. Vendor mac_tx_set_txop_q changes it only with a reserved TXOP slot 0/1/2: it sets the bit when the head software-descriptor flags [7:6] equal two and clears it for zero, one or three. Initialized/released index three preserves the PLCP bit. All inspected ordinary unfragmented frame classes, including CCMP, have flags [7:6] zero; successful software fragment chains have two before the final fragment and three on the final fragment. Cipher/key selectors are in the separate descriptor word +0x10. The ordinary PPDU parent reaches the reserved-slot adjustment only outside descriptor-rate codes 16 through 35. Its reviewed HT/HE branches bypass that helper and retain the initial set bit. The open formatter's unconditional set agrees with those branches and with the legacy no-granted-slot case; behavior for a reserved legacy slot requires separate qualification. The recorded 2026-07-29 open HIL A/B observed roughly 28 percent raw ACK timeouts with the bit set and 1395/2325 attempts (60 percent) with it cleared; that observation does not establish a per-cipher mapping or physical meaning. The raw run identifier for that secondary observation has not been recovered; it is not a new measurement. The effect of the reserved-slot adjustment on air remains unqualified. SOURCE: VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS, RECORDED_OPEN_TX_CONTROL_BIT22_20260729. SOURCE: BX8_WIFI_CONTROL_TXOP_SCOPE_20261027, BX8_WIFI_CONTROL_CONSUMER_LIMITS_20261027."
 
 [[registers.fields]]
 name = "BIT_23_OPAQUE"
@@ -11039,7 +11043,7 @@ name = "PLCP_FORMAT"
 values = [{ name = "NO_RESPONSE", value = 0 }, { name = "ACK_RESPONSE", value = 1 }, { name = "BLOCK_ACK_RESPONSE", value = 2 }, { name = "HT_SINGLE_MPDU", value = 1 }, { name = "HT_AMPDU", value = 2 }, { name = "HE_SMPDU", value = 1 }, { name = "HE_AMPDU", value = 5 }]
 bits = "26:24"
 class = "plain"
-description = "Three-bit format selector derived by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 from vendor descriptor flags. For the bounded plain legacy roots, libpp[pp.o]::ppTxProtoProc maps the address-one I/G bit to descriptor flag 0x2: group traffic retains format zero, while an ordinary individual-address descriptor with zero flags selects format one. Exact vendor callback images select format one for both non-A-MPDU HT20 MCS0 and HE20 MCS0 DCM S-MPDU frames; the owned open paths receive ACK at the same format. Independently captured HT and HE A-MPDU images select aggregate format two or five respectively. Format three has an instruction-exact descriptor branch but its higher-level meaning remains open. A legacy-only single-variable A/B temporarily correlated format one with status five and format zero with one authentication response, but format-zero repetitions failed; that experiment is retained as evidence that completion status alone is not a protocol-success oracle, not as an override of the complete blob mapping."
+description = "Three-bit format selector derived by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 from vendor descriptor flags. For the bounded plain legacy roots, libpp[pp.o]::ppTxProtoProc maps the address-one I/G bit to descriptor flag 0x2: group traffic retains format zero, while an ordinary individual-address descriptor with zero flags selects format one. Exact vendor callback images select format one for both non-A-MPDU HT20 MCS0 and HE20 MCS0 DCM S-MPDU frames; the owned open paths receive ACK at the same format. Independently captured HT and HE A-MPDU images select aggregate format two or five respectively. Format three has an instruction-exact descriptor branch but its higher-level meaning remains open. A legacy-only single-variable A/B temporarily correlated format one with status five and format zero with one authentication response, but format-zero repetitions failed; that experiment is retained as evidence that completion status alone is not a protocol-success oracle, not as an override of the complete blob mapping. This CONTROL[26:24] descriptor-format domain is distinct from PLCP1.VECTOR_FORMAT; dbg_read_tx_sig selects its SIG interpretation from the latter's low two bits. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027."
 write-range = { min = 0x0, max = 0x7 }
 
 [[registers.fields]]
@@ -11794,7 +11798,7 @@ write-range = { min = 0x0, max = 0x1f }
 [[registers]]
 name = "EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL"
 offset = 0xea4
-description = "Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant."
+description = "Shared staging and readback-control word used by extra-SoftAP agreement add/update/delete, the diagnostic reader and ROM reset. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant. SOURCE: BLOB_WIFI_EXTRA_SOFTAP_BA_CONTROL_LIFECYCLE_20261027."
 
 [[registers.fields]]
 name = "ENABLE"
@@ -11811,7 +11815,7 @@ write-range = { min = 0x0, max = 0x1f }
 name = "BITS_10_11_OPAQUE"
 bits = "11:10"
 class = "plain"
-description = "Bits cleared by every reviewed zero-based extra-SoftAP control publication."
+description = "The extra-SoftAP add publication writes these bits zero at hal_agreement_add_extra_softap_rx_ba+0xc4. Index selection, window reset and VALID-clear deletion preserve their sampled values. The vendor logs the latched control without a local zero test. Physical meaning and live readback invariants remain unknown. SOURCE: BLOB_WIFI_EXTRA_SOFTAP_BA_CONTROL_LIFECYCLE_20261027."
 
 [[registers.fields]]
 name = "TID"
@@ -13210,7 +13214,7 @@ name = "VECTOR_FORMAT"
 values = [{ name = "LEGACY", value = 0 }, { name = "HT", value = 1 }, { name = "HE", value = 2 }]
 bits = "27:25"
 class = "plain"
-description = "Three-bit vector family: zero for legacy, one for HT and two for HE in the reviewed paths."
+description = "Three-bit vector family: zero for legacy, one for HT and two for HE in the reviewed paths. The vendor debug decoder selects its family-specific interpretation from this field's low two bits at PLCP1[26:25], independently of CONTROL.PLCP_FORMAT. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027."
 write-range = { min = 0x0, max = 0x7 }
 
 [[registers.fields]]
@@ -13383,7 +13387,7 @@ description = "Standard HT-SIG2 short guard-interval bit."
 name = "VHT_SIGNAL_1%s"
 offset = 0x1378
 dim = { count = 4, stride = 0x7c }
-description = "Complete dbg_read_tx_sig decodes this word only when PLCP_FORMAT is three and names VHT MCS, channel width, group ID, NSTS, SU partial AID, SGI, SGI symbol disambiguation and coding. This maps an internal hardware vector; it does not assert that the ESP32-S31 public Wi-Fi mode supports VHT transmission."
+description = "Complete dbg_read_tx_sig decodes this word only when PLCP1.VECTOR_FORMAT[1:0] is three and names VHT MCS, channel width, group ID, NSTS, SU partial AID, SGI, SGI symbol disambiguation and coding. This maps an internal hardware vector; it does not assert that the ESP32-S31 public Wi-Fi mode supports VHT transmission. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "CHANNEL_WIDTH"
@@ -13429,7 +13433,7 @@ class = "plain"
 name = "VHT_MODE%s"
 offset = 0x137c
 dim = { count = 4, stride = 0x7c }
-description = "Complete dbg_read_tx_sig decodes this word only when PLCP_FORMAT is three and names bits 18:2 SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LEN. Remaining bits are not assigned a meaning by the complete body."
+description = "Complete dbg_read_tx_sig decodes this word only when PLCP1.VECTOR_FORMAT[1:0] is three and names bits 18:2 SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LEN. Remaining bits are not assigned a meaning by the complete body. SOURCE: BX8_WIFI_TX_FORMAT_DOMAINS_20261027."
 
 [[registers.fields]]
 name = "SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LENGTH"

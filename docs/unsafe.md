@@ -209,6 +209,14 @@ transaction asserts its masks against the register's declared fields in a
 `whole-word`: the vendor's store of a whole word, with its evidence
 sources, which also writes the bits the model leaves undeclared.
 
+`read-observed` fields expose observations without asserting hardware
+read-only behavior or writable-storage semantics. A word containing one has
+no generic writer, RMW, command or mixed trigger that could replay it.
+Its only publication is a separately sourced `zero-register-writes`
+operation: one complete zero store with no preceding load. This capability
+establishes neither a reset image nor a pending-clear effect. Wi-Fi MAC RAW
+uses it; sampled acknowledgement continues through CLEAR.
+
 Generated SRAM-layout builders check a narrow constant field value through
 `with_<field>_constant::<VALUE>()` at monomorphization, including calls from
 runtime code. The setter preserves every other bit. A dynamic field value

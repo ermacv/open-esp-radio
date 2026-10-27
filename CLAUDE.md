@@ -94,6 +94,10 @@ system these rules serve.
   A typed trigger in a readable mixed word preserves ordinary fields and
   unassigned bits, writes zero to WTC and other WT lanes, and sets only its
   selected WT field. Generic modify remains unavailable for a WTC word.
+  A `read-observed` field grants observation without asserting hardware
+  read-only semantics. Its word has no generic writer or read-modify-write;
+  only a separately sourced `zero-register-writes` operation may publish
+  the complete zero word, without reading or implying an acknowledgement.
   Generated register code has no `unsafe`: volatile access lives in
   `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
   instructions in `portable/riscv`, the PAC's one root claim, probe images,

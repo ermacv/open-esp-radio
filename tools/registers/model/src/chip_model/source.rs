@@ -263,6 +263,9 @@ pub enum FieldClass {
     Plain,
     /// `RO`, `R`, `HRO`, `RO/SS`.
     ReadOnly,
+    /// Observation is established; arbitrary writes and replay are not.
+    /// Only a separately sourced whole-word zero publication may write it.
+    ReadObserved,
     /// `WO`.
     WriteOnly,
     /// `WT`: a write starts an action; reads back nothing.
@@ -293,6 +296,7 @@ impl FieldClass {
         match self {
             Self::Plain => "plain",
             Self::ReadOnly => "read-only",
+            Self::ReadObserved => "read-observed",
             Self::WriteOnly => "write-only",
             Self::WriteTrigger => "write-trigger",
             Self::WriteOneToClear => "write-one-to-clear",
@@ -309,7 +313,11 @@ impl FieldClass {
     pub fn written(self) -> bool {
         !matches!(
             self,
-            Self::ReadOnly | Self::ReadClears | Self::DebugOnly | Self::Unknown
+            Self::ReadOnly
+                | Self::ReadObserved
+                | Self::ReadClears
+                | Self::DebugOnly
+                | Self::Unknown
         )
     }
 }

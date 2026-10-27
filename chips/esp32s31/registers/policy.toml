@@ -2769,12 +2769,12 @@ sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 [[zero-register-writes]]
 name = "disable_mac_interrupt_raw"
 register = "WIFI_MAC.RAW"
-sources = ["BLOB_LIBPP_HAL_DISABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027"]
 
 [[zero-register-writes]]
 name = "disable_mac_interrupt_1_raw"
 register = "WIFI_MAC.INTERRUPT_1_RAW"
-sources = ["BLOB_LIBPP_HAL_DISABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_DISABLE_MAC", "BLOB_WIFI_MAC_RAW_ZERO_STORE_20261027"]
 
 [[zero-register-writes]]
 name = "clear_rx_block_ack_bitmap_low_load"

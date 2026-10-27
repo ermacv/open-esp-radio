@@ -354,6 +354,7 @@ impl<'m> Word<'m> {
                         | FieldClass::SelfClearing
                         | FieldClass::SetOnly
                         | FieldClass::HardwareWritten
+                        | FieldClass::ReadObserved
                 )
             })
     }

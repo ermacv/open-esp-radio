@@ -237,13 +237,15 @@ A pointer's `high-field` takes the fixed high bits of its placement
 `write-range` or `write-values-only`, and every pointer naming it agrees on
 the prefix. The PAC sets it only to that prefix.
 
-Every field has one `class` from a closed set. The class alone fixes what a
-read and a write do; there is no separate access key.
+Every field has one `class` from a closed set. The class fixes the admitted access and replay behavior; there is no
+separate access key. `read-observed` records a limited CPU access contract,
+without claiming hardware read-only behavior or arbitrary writable storage.
 
 | `class` | Header classes | What the renderer can generate |
 | --- | --- | --- |
 | `plain` | `R/W` | getter, setter and read-modify-write |
 | `read-only` | `RO`, `R`, `HRO`, `RO/SS` | getter only |
+| `read-observed` | observed reads; other write effects unqualified | getter only; no replay; separately sourced whole-word zero publication |
 | `write-only` | `WO` | setter in a write from zero; no getter |
 | `write-trigger` | `WT` | `trigger_<register>_<field>` (a wider one with its value); zero in every other write; no getter |
 | `write-one-to-clear` | `WTC`, `W1C` | in a register of only such fields: a sample token and its acknowledgement; otherwise getter only |
@@ -736,6 +738,13 @@ element), `masked-register-modifies`, `field-or-modifies`,
 `indexed-bit-set-modifies`. Names are unique `lower_snake_case` across
 all transactions; the fields of one transaction lie in one register.
 
+A word containing a `read-observed` field admits only observation and a
+separately sourced `zero-register-writes` publication. The latter generates
+one complete zero store on its owner without a preceding read; it establishes
+no reset value, pending-clear effect or zero-only read domain. Generic writes,
+RMW, fixed images and sequence steps cannot reach that word. Other lanes must
+admit zero and have a stored, read-only or read-observed class.
+
 What a transaction may reach follows the field class and the word:
 
 | Transaction | Fields it may write or read | Its word |
@@ -897,7 +906,7 @@ What a write does with the lanes it does not set:
   and write constraints. It grants no generic modify of that word;
 - a command start keeps the same lanes and writes zero to triggers,
   write-one-to-clear and set-only lanes; a lane it can neither keep nor
-  zero (`write-only`, `hardware-written`, `unknown`) is a render error;
+  zero (`write-only`, `hardware-written`, `read-observed`, `unknown`) is a render error;
 - a write from zero stores the reserved bits at their reset value, each
   high field's prefix and zero elsewhere; a field no write may leave zero
   (a `write-range` above zero, `write-values-only` without zero, a pointer)

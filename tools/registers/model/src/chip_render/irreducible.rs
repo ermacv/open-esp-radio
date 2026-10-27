@@ -16,6 +16,7 @@
 //!   reference's image into a fresh read;
 //! - a partition image read: on each part of the partition, a read-only
 //!   diagnostic image of the part's readable, side-effect-free words, raw.
+//! - a sourced zero publication to a read-observed word, without a load.
 //!
 //! Every other transaction of the policy is a sequence of field accessors
 //! and belongs to the HAL.
@@ -125,6 +126,34 @@ pub(super) fn render(
 ) -> Result<(), Error> {
     let file = policy.file();
     let mine = |name: &str| policy.owner(name) == Some(owner.id);
+    for zero in file
+        .zero_register_writes
+        .iter()
+        .filter(|zero| mine(&zero.name))
+    {
+        let entity = zero.name.as_str();
+        if !model.register(&zero.register).is_some_and(|register| {
+            register
+                .fields
+                .iter()
+                .any(|field| field.class == FieldClass::ReadObserved)
+        }) {
+            continue;
+        }
+        let target = element(entity, plan, owner, model, &zero.register)?;
+        doc(
+            body,
+            "Publish the sourced complete zero word; its hardware effect is unqualified",
+            &zero.register,
+            &zero.sources,
+        );
+        let write = target.write(entity, owner, "0", 0)?;
+        let _ = writeln!(
+            body,
+            "#[inline]\npub fn {}(&mut self) {{\n{write};\n}}\n",
+            names::ident(entity)
+        );
+    }
     for image in file
         .fixed_register_images
         .iter()
