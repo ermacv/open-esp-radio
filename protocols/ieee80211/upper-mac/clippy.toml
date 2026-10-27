@@ -1,4 +1,8 @@
 disallowed-methods = [
+    # Clippy uses the nearest config; retain every common workspace ban.
+    { path = "oer_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    { path = "oer_memory::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    { path = "oer_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
     { path = "core::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
     { path = "core::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
     { path = "std::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },

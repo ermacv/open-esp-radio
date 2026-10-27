@@ -29,14 +29,23 @@ system these rules serve.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.
 - **Panics and unsafe.** A change introduces no new runtime panic sites or
-  `unsafe` code. Unsafe contracts cover memory safety; operation order and
+  `unsafe` code. Sans-IO crates (the layer in `docs/architecture.md`)
+  start with `#![forbid(unsafe_code)]` and contain no runtime panic paths:
+  `panic!`, `unreachable!`, `todo!`, `unimplemented!`, `assert*`,
+  `debug_assert*`, `vendor_assert!`, `unwrap`/`expect`, unchecked indexing
+  or slicing, overflow, invalid division and panicking core methods return
+  typed errors instead. They never depend on fatal, reset or retained-record
+  owners and never reset; only the image or HAL owner resets. Compile-time
+  checks use `const { if !cond { panic!("…") } }` as a const item or inline
+  const, never assertion macros. Compile-time panics and test assertions
+  are allowed. Unsafe contracts cover memory safety; operation order and
   lifecycle are enforced by `&mut` ownership and typestate. Moving existing
   unsafe sites into their narrow home (`oer-riscv` for architectural
   instructions, `oer-memory` for cells, placement and DMA proofs, the HAL's
   PSRAM owner for slice creation) may increase the home's count only by the
   moved sites, when the touched crates' total decreases and no calling crate's
   count increases; each site retains its narrow
-  contract and `// SAFETY:` proof. Compile-time checks and test assertions are allowed.
+  contract and `// SAFETY:` proof.
   Context-local mutable payloads use `oer-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
   An impossible state returns a named fault retaining its source observations;
@@ -77,7 +86,13 @@ system these rules serve.
   compile time are allowed. Air, peer, host and API input return a handled
   error. New panic-lint `allow` and `expect` attributes are test-only. A crate
   moves each clean panic lint to crate-root `deny` in the PR that clears it,
-  keeping workspace lint inheritance. `debug_assert!` is not a guard.
+  keeping workspace lint inheritance. Workspace `disallowed_methods`
+  stays `deny`; `disallowed_macros` keeps its default level. A cleaned sans-IO
+  crate's `clippy.toml` contains the union of the root's common entries,
+  `tools/test/layers/sans-io-lints.toml` and its existing local entries before
+  it denies `disallowed_methods` or `disallowed_macros` at the crate root.
+  Every local Clippy configuration retains all common method bans.
+  `debug_assert!` is not a guard.
   Arithmetic on peer values names its overflow behavior with `checked_`,
   `wrapping_` or `saturating_` operations.
 - **Execution.** The critical section is hart-local; staged build/run checks

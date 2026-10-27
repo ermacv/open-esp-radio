@@ -19,3 +19,6 @@ allow-panic-in-tests = true
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-indexing-slicing-in-tests = true
+
+# Check runtime-accessible const functions as well as ordinary code.
+suppress-restriction-lint-in-const = false
