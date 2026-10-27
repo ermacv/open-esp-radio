@@ -1,5 +1,5 @@
 #![no_std]
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 #![deny(
     clippy::unwrap_used,
     clippy::panic,
@@ -11,9 +11,8 @@
 //!
 //! This crate transfers general-memory packet owners between the network stack
 //! and the radio. It contains no Wi-Fi scheduling, physical SRAM allocator or
-//! compatibility implementation of the released Embassy driver API. Its only
-//! unsafe code, behind `external-rx`, adopts detached DMA buffers as Xarxa
-//! packets for zero-copy RX.
+//! compatibility implementation of the released Embassy driver API. RX frames
+//! are copied into packet-pool storage before publication to the network stack.
 
 pub use embassy_sync::blocking_mutex::raw::{NoopRawMutex, RawMutex};
 pub use embassy_sync::signal::Signal;
@@ -27,9 +26,6 @@ pub use owned::{
     OwnedEndpointResources, OwnedLinkController, OwnedNetworkDevice, OwnedNetworkRunner,
     OwnedNetworkTxFrame, OwnedRxPublisher, OwnedTxFrameSource,
 };
-
-#[cfg(feature = "external-rx")]
-pub use owned::{ExternalRxAdmission, ExternalRxCounters, ExternalRxOrigin, ExternalRxRefusal};
 
 impl<M: RawMutex> oer_ieee80211_datapath::SoftwareTxFrame for OwnedNetworkTxFrame<'_, M> {
     fn interface(&self) -> NetworkInterfaceId {

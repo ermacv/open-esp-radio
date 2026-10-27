@@ -1,5 +1,4 @@
-#![cfg_attr(target_os = "none", no_std)]
-#![cfg_attr(target_os = "none", no_main)]
+#![forbid(unsafe_code)]
 
 use core::{
     future::Future,
@@ -336,26 +335,6 @@ port!(ieee802154, oer_radio_port);
 static BLE: Probe = Probe::new();
 static IEEE: Probe = Probe::new();
 
-// SAFETY: this standalone measurement ELF supplies its sole entry symbol.
-#[cfg(target_os = "none")]
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
-    core::hint::black_box(bluetooth::run(&BLE));
-    core::hint::black_box(ieee802154::run(&IEEE));
-    loop {
-        core::hint::spin_loop();
-    }
-}
-
-#[cfg(target_os = "none")]
-#[panic_handler]
-fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
-}
-
-#[cfg(not(target_os = "none"))]
 fn main() {
     println!(
         "BLE future: {} bytes; IEEE 802.15.4 future: {} bytes",

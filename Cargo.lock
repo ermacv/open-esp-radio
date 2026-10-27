@@ -1875,7 +1875,6 @@ dependencies = [
  "embassy-net",
  "embassy-sync",
  "oer-ieee80211-datapath",
- "oer-memory",
  "oer-network",
  "xarxa-driver",
 ]
