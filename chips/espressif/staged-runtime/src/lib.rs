@@ -67,8 +67,6 @@ pub use vectors::BOOT_HART;
 #[cfg(feature = "esp32s31")]
 mod vectors {
     include!(concat!(env!("OUT_DIR"), "/vectors.rs"));
-    #[cfg(target_arch = "riscv32")]
-    include!(concat!(env!("OUT_DIR"), "/vector-tables.rs"));
 }
 #[cfg(target_arch = "riscv32")]
 pub mod layout;

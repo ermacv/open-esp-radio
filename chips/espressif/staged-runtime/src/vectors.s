@@ -3,8 +3,11 @@
     // checked exit. The runtime's build generates, from the chip facts' lines
     // and harts, the macros `RUNTIME_IRQ_ENTRIES` (an `IRQ_ENTRY hart, line`
     // for every line but 0 of every hart), plus typed Rust vector tables.
-    // This text holds what every assembly entry shares and invokes the macro. `stacks.rs` assembles the generated text and this one with the
-    // operands:
+    // This text holds what every assembly entry shares and invokes the macro.
+    // `stacks.rs` assembles the generated text and this one with the operands:
+    //   {mtvt}             sym of the immutable Rust MTVT static
+    //   {frame_bytes}      size_of!(TrapFrame)
+    //   frame_* operands   offset_of!(TrapFrame, field), named for its field
     //   {fs}               mstatus.FS
     //   {mie}              mstatus.MIE
     //   {mintthresh}       the CLIC threshold CSR
@@ -14,8 +17,8 @@
     //
     // Every entry swaps `sp` with `mscratch` before its first memory access
     // and saves the interrupted caller registers, `mstatus`, `mepc`,
-    // `mcause`, the threshold and `tcontrol` in a 96-byte frame on the
-    // hart's SRAM interrupt stack before it admits a nested interrupt; it
+    // `mcause`, the threshold and `tcontrol` in a TrapFrame on the hart's
+    // SRAM interrupt stack before it admits a nested interrupt; it
     // turns the FPU off, since no trap saves the floating-point registers,
     // and calls its one handler directly. An interrupt's entry gives its
     // handler the triggers of the context it interrupted, which the trap
@@ -32,6 +35,11 @@
     .option push
     .option norelax
     .option norvc
+
+    // The static is defined in the same codegen unit as this export.
+    .global _runtime_mtvt
+    .type _runtime_mtvt, @object
+    .set _runtime_mtvt, {mtvt}
 
     .balign 4
     .global _runtime_stack_bootstrap

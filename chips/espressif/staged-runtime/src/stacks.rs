@@ -263,10 +263,16 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
     })
 }
 
+// The static and its assembly export share this module/codegen unit: an ELF
+// assembler cannot export a .set alias of a symbol defined in another unit.
+#[cfg(target_arch = "riscv32")]
+include!(concat!(env!("OUT_DIR"), "/vector-tables.rs"));
+
 #[cfg(target_arch = "riscv32")]
 core::arch::global_asm!(
     include_str!(concat!(env!("OUT_DIR"), "/vectors.s")),
     include_str!("vectors.s"),
+    mtvt = sym MTVT,
     frame_bytes = const crate::trap::TRAP_FRAME_BYTES,
     frame_ra = const core::mem::offset_of!(crate::trap::TrapFrame, ra),
     frame_t0 = const core::mem::offset_of!(crate::trap::TrapFrame, t0),

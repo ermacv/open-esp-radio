@@ -120,7 +120,8 @@ pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
          \x20   flash_tuning_reference_bytes: {tuning:#x},\n\
          \x20   rom_script: {script:?},\n\
          }};\n\n\
-         const _: () = LAYOUT.check();\n",
+         const _: () = LAYOUT.check();\n\
+         const _: () = assert!(LAYOUT.boot_hart as usize == oer_espressif_staged_layout::boot::BOOT_HART);\n",
         id = facts.id,
         board = facts
             .board
@@ -231,7 +232,7 @@ impl Vectors {
         for hart in (0..self.harts).filter(|hart| *hart != self.boot_hart) {
             let _ = writeln!(
                 text,
-                "    .section .text.secondary._runtime_start_h{hart}, \"ax\", @progbits\n    .balign 4\n    .global _runtime_start_h{hart}\n    .type _runtime_start_h{hart}, @function\n_runtime_start_h{hart}:\n    csrci mstatus, {{mie}}\n    csrr t0, mhartid\n    li t1, {hart}\n    bne t0, t1, 99f\n    // No launcher or admission path is linked; touch no stack or data.\n99:\n    j 99b\n    .size _runtime_start_h{hart}, . - _runtime_start_h{hart}"
+                "    .section .text.secondary._runtime_start_h{hart}, \"ax\", @progbits\n    .balign 4\n    .global _runtime_start_h{hart}\n    .type _runtime_start_h{hart}, @function\n_runtime_start_h{hart}:\n    csrci mstatus, {{mie}}\n    // Every entrant parks: no launcher or admission path is linked.\n    // Touch no stack or data.\n99:\n    j 99b\n    .size _runtime_start_h{hart}, . - _runtime_start_h{hart}"
             );
         }
         text
@@ -247,7 +248,7 @@ impl Vectors {
         for (hart, line) in self.entries() {
             let _ = writeln!(
                 text,
-                "pub(crate) safe static {}: crate::vectors::VectorEntry;",
+                "pub(crate) safe static {}: crate::stacks::VectorEntry;",
                 Self::entry(hart, line)
             );
         }
@@ -257,8 +258,8 @@ impl Vectors {
 
     /// Typed, per-hart MTVT rows. Optional references have the pointer's
     /// representation with a zero niche, preserving the hardware table words.
-    /// Only the entire table needs section and export attributes, independent
-    /// of hart cardinality.
+    /// One placement attribute covers the entire table, independent of hart
+    /// cardinality; trap assembly exports its address through a sym operand.
     pub fn vector_tables(&self) -> String {
         let mut text = format!(
             "// Generated from the chip interrupt geometry.\n\
@@ -272,14 +273,12 @@ impl Vectors {
              assert!(core::mem::size_of::<VectorTable>() == VECTOR_TABLE_WORDS * 4);\n\
              }};\n\
              #[used]\n\
-             #[allow(unsafe_code, reason = \"the runtime owns MTVT placement and its symbol\")]\n\
-             // SAFETY: the runtime's unique immutable MTVT image lives in its\n\
-             // SRAM trap section; every row has the facts-required alignment,\n\
-             // valid entry addresses, and null reserved/padding words.\n\
-             #[unsafe(no_mangle)]\n\
-             // SAFETY: the linker copies this immutable trap data into SRAM before dispatch.\n\
+             #[allow(unsafe_code, reason = \"the runtime owns MTVT placement\")]\n\
+             // SAFETY: the linker reserves this immutable aligned table in .isr.text.\n\
+             // _runtime_start copies it from __runtime_isr_load_start into SRAM\n\
+             // before installing its vector CSRs or admitting runtime dispatch.\n\
              #[unsafe(link_section = \".trap.mtvt\")]\n\
-             static _runtime_mtvt: [VectorTable; HARTS] = [\n",
+             static MTVT: [VectorTable; HARTS] = [\n",
             alignment = self.slots * 4,
         );
         for hart in 0..self.harts {
@@ -539,7 +538,7 @@ mod tests {
         for (hart, line) in s31.entries() {
             let symbol = Vectors::entry(hart, line);
             assert!(markers.contains(&format!(
-                "safe static {symbol}: crate::vectors::VectorEntry;"
+                "safe static {symbol}: crate::stacks::VectorEntry;"
             )));
             assert!(tables.contains(&format!("Some(&crate::layout::{symbol}),")));
         }
@@ -569,7 +568,7 @@ mod tests {
             syn::parse_file(&tables).expect("synthetic Rust table");
             assert_eq!(tables.matches("VectorTable([None,").count(), harts as usize);
             // The table's unsafe attributes are constant in N, including generated instances.
-            assert_eq!(tables.matches("#[unsafe(").count(), 2);
+            assert_eq!(tables.matches("#[unsafe(").count(), 1);
             assert!(!markers.contains("unsafe"));
             assert_eq!(
                 assembly.matches(".global _runtime_start_h").count(),
@@ -675,6 +674,62 @@ mod tests {
         ] {
             assert!(default_task_stack_bytes(policy, 1).is_err());
         }
+    }
+
+    #[test]
+    fn a_generated_layout_must_agree_with_bootstrap_hart_admission() {
+        let mut facts = tracked("esp32s31");
+        let interrupts = facts.interrupts.as_ref().expect("interrupt contract");
+        let other = interrupts
+            .harts
+            .iter()
+            .copied()
+            .find(|hart| *hart != interrupts.boot_hart)
+            .expect("the chip has a secondary hart");
+        let tasks = alloc::vec![16; interrupts.harts.len()];
+        let build = tempfile::tempdir().expect("a private compiler fixture");
+        let layout_sources =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../staged-layout/src");
+        let prefix = format!(
+            "mod oer_espressif_staged_layout {{\n#[path = {boot:?}] pub mod boot;\n#[path = {memory:?}] mod memory;\npub use memory::{{Layout, Region}};\n}}\n",
+            boot = layout_sources.join("boot.rs"),
+            memory = layout_sources.join("memory.rs"),
+        );
+        let compile = |name: &str, generated: String| {
+            let source = build.path().join(format!("{name}.rs"));
+            std::fs::write(&source, format!("{prefix}{generated}\nfn main() {{}}\n"))
+                .expect("fixture source");
+            std::process::Command::new("rustc")
+                .args([
+                    "--edition=2024",
+                    "--emit=metadata",
+                    "--crate-name=boot_hart_layout",
+                ])
+                .arg("--out-dir")
+                .arg(build.path())
+                .arg(source)
+                .current_dir(build.path())
+                .output()
+                .expect("the pinned Rust compiler runs")
+        };
+        let admitted = compile("admitted", super::layout(&facts, &tasks).expect("layout"));
+        assert!(
+            admitted.status.success(),
+            "{}",
+            String::from_utf8_lossy(&admitted.stderr)
+        );
+        facts
+            .interrupts
+            .as_mut()
+            .expect("interrupt contract")
+            .boot_hart = other;
+        let refused = compile("refused", super::layout(&facts, &tasks).expect("layout"));
+        let stderr = String::from_utf8_lossy(&refused.stderr);
+        assert!(!refused.status.success(), "{stderr}");
+        assert!(
+            stderr.contains("E0080") && stderr.contains("LAYOUT.boot_hart"),
+            "{stderr}"
+        );
     }
 
     fn tracked_ids() -> Vec<&'static str> {

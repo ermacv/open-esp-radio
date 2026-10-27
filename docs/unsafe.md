@@ -157,7 +157,9 @@ trap-register writes remain in `oer-riscv::install_trap_stack`, each with
 its narrow safety contract.
 
 The generated Rust MTVT is one immutable array of aligned per-hart rows.
-Its two unsafe attributes own the unique exported symbol and SRAM section.
+Its one unsafe attribute owns the SRAM section. The table and trap assembly
+share a module/codegen unit; the existing `global_asm!` exports `_runtime_mtvt`
+through a `sym` operand without a Rust export attribute.
 Entries are optional references to opaque zero-sized address markers
 declared inside `layout`'s existing extern block: reading a marker touches
 no instruction memory and Rust cannot call it as a function. Compile-time
