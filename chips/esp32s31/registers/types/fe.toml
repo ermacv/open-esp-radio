@@ -4,8 +4,8 @@ schema = 3
 
 [type]
 name = "FE"
-description = "The radio front end at DR_REG_FE_BASE: PHY front-end control, data and coexistence words, the PHY table memory command port and the PBus.\n\nWord 0x10: Sparse FECOEX words absent from the public platform PAC.\n\nWords 0x1c-0x874: Frequency-memory, hardware channel-switch, NRX and channel-bandwidth registers recovered from complete finite ROM/blob bodies. Names retain UNKNOWN where the instructions prove a field but not its electrical meaning. One physical word has one identity even when a bit has different mode-dependent roles.\n\nWords 0x400-0x800: OPAQUE PHY clock-gate registers recovered from complete no-call ROM/blob leaves.\n\nWords 0x40c-0xc20: PHY/baseband configuration registers recovered from complete rev0 ROM bodies and complete pinned libphy leaves. Operation-derived fields keep UNKNOWN where neither public documentation nor an independent symbol establishes the electrical meaning.\n\nWords 0x430-0x440: Sparse FEDATA words absent from the public platform PAC.\n\nWord 0x434: RX-DCO calibration control word recovered from complete pinned S31 blob and rev0 ROM calibration bodies.\n\nWords 0x44c-0x8d0: DC/IQ estimator configuration, signed result and activity registers recovered from complete S31 rev0 ROM bodies and the complete pinned phy_check_rx_sat blob leaf. Unknown electrical roles remain explicit.\n\nWords 0x470-0x474: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x834-0x840: Sparse FECTRL antenna words absent from the public platform PAC.\n\nWords 0x844-0x854: Shared PHY table-memory command, data and PBUS group-boundary aperture. The same command/data words have mode-dependent PBUS-memory, TX-CFR and gain-memory meanings; fields are named only where the complete bodies prove a common or mode-independent identity.\n\nWords 0x884-0x8a4: PBus command, mode, status/clock/force and packed result windows recovered from complete rev0 ROM bodies and their address/shift jump tables. The blob debug printer independently names selector/path groups: RFRX is selector 0 paths 1/2; BB is selector 1 paths 1/2; DCO is selectors 2/3 paths 1/2; RFTX is selector 4 paths 1/2 and selector 5 path 1.\n\nWord 0x8bc: OPAQUE PHY AGC, PBus-pulse, antenna, RX-compensation, DC-memory, post-initialization and 11b-control registers recovered from complete, finite rev0 ROM/blob bodies. One physical register has one identity even when independent bodies prove different fields. Names describe their proven operation role, not an unevidenced electrical identity.\n\nWord 0x8cc: Receive sample-dump words programmed by complete librftest adctrig and set_dump_mode. Dumped words are read back from 0x2f060000 as signed ten-bit components in bits 9:0 and 19:10 (complete print_dump_data and sampledeal); that aperture is not radio MMIO.\n\nWords 0xc14-0xc1c: Sparse FEDATA_WIFI words absent from the public platform PAC."
-sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK", "BLOB_LIBBTBB_COEX_PTI_V2", "ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT", "BLOB_LIBPHY_REGISTER_CHIPV7_PHY", "ROM_REV0_PHY_OPEN_FE_BB_CLK", "ROM_REV0_PHY_FE_REG_INIT", "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_POWER_DETECTOR", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL", "ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "S31_MMIO_MODEM_RADIO_CORE_LOW", "ROM_REV0_PHY_SET_PBUS_MEM", "ROM_REV0_PHY_WRITE_PBUS_MEM", "ROM_REV0_PHY_SAVE_PBUS_REG", "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "ROM_REV0_PHY_WRITE_GAIN_MEM", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "ROM_REV0_PHY_AGC", "ROM_REV0_PHY_ANT_INIT", "BLOB_LIBPHY_PHY_DC_MEM_CLR", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "BLOB_LIBRFTEST_ADCTRIG", "BLOB_LIBRFTEST_SET_DUMP_MODE", "BLOB_LIBRFTEST_PRINT_DUMP_DATA"]
+description = "The radio front end at DR_REG_FE_BASE: PHY front-end control, data and coexistence words, the PHY table memory command port and the PBus.\n\nWord 0x10: Sparse FECOEX words absent from the public platform PAC.\n\nWords 0x1c-0x874: Frequency-memory, hardware channel-switch, NRX and channel-bandwidth registers recovered from complete finite ROM/blob bodies. Names retain UNKNOWN where the instructions prove a field but not its electrical meaning. One physical word has one identity; the address and independent low/high writes to bit18 do not establish an electrical mode multiplex.\n\nWords 0x400-0x800: OPAQUE PHY clock-gate registers recovered from complete no-call ROM/blob leaves.\n\nWords 0x40c-0xc20: PHY/baseband configuration registers recovered from complete rev0 ROM bodies and complete pinned libphy leaves. Operation-derived fields keep UNKNOWN where neither public documentation nor an independent symbol establishes the electrical meaning.\n\nWords 0x430-0x440: Sparse FEDATA words absent from the public platform PAC.\n\nWord 0x434: RX-DCO calibration control word recovered from complete pinned S31 blob and rev0 ROM calibration bodies.\n\nWords 0x44c-0x8d0: DC/IQ estimator configuration, signed result and indication registers recovered from complete S31 rev0 ROM bodies and the complete pinned phy_check_rx_sat blob leaf. Unknown electrical roles remain explicit.\n\nWords 0x470-0x474: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x834-0x840: Sparse FECTRL antenna words absent from the public platform PAC.\n\nWords 0x844-0x854: Shared PHY table-memory command, data and PBUS group-boundary aperture. The same command/data words have mode-dependent PBUS-memory, TX-CFR and gain-memory meanings; fields are named only where the complete bodies prove a common or mode-independent identity.\n\nWords 0x884-0x8a4: PBus command, mode, status/clock/force and packed result windows recovered from complete rev0 ROM bodies and their address/shift jump tables. The blob debug printer independently names selector/path groups: RFRX is selector 0 paths 1/2; BB is selector 1 paths 1/2; DCO is selectors 2/3 paths 1/2; RFTX is selector 4 paths 1/2 and selector 5 path 1.\n\nWord 0x8bc: OPAQUE PHY AGC, PBus-pulse, antenna, RX-compensation, DC-memory, post-initialization and 11b-control registers recovered from complete, finite rev0 ROM/blob bodies. One physical register has one identity even when independent bodies prove different fields. Names describe their proven operation role, not an unevidenced electrical identity.\n\nWord 0x8cc: Receive sample-dump words programmed by complete librftest adctrig and set_dump_mode. Dumped words are read back from 0x2f060000 as signed ten-bit components in bits 9:0 and 19:10 (complete print_dump_data and sampledeal); that aperture is not radio MMIO.\n\nWords 0xc14-0xc1c: Sparse FEDATA_WIFI words absent from the public platform PAC."
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK", "BLOB_LIBBTBB_COEX_PTI_V2", "ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT", "BLOB_LIBPHY_REGISTER_CHIPV7_PHY", "ROM_REV0_PHY_OPEN_FE_BB_CLK", "ROM_REV0_PHY_FE_REG_INIT", "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_POWER_DETECTOR", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL", "ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "S31_MMIO_MODEM_RADIO_CORE_LOW", "ROM_REV0_PHY_SET_PBUS_MEM", "ROM_REV0_PHY_WRITE_PBUS_MEM", "ROM_REV0_PHY_SAVE_PBUS_REG", "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "ROM_REV0_PHY_WRITE_GAIN_MEM", "ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS", "ROM_REV0_PHY_AGC", "ROM_REV0_PHY_ANT_INIT", "BLOB_LIBPHY_PHY_DC_MEM_CLR", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "BLOB_LIBRFTEST_ADCTRIG", "BLOB_LIBRFTEST_SET_DUMP_MODE", "BLOB_LIBRFTEST_PRINT_DUMP_DATA", "BX10_S31_FE_EST_CONSUMERS_20261027", "BX10_S31_FE_EST_ADMISSION_20261027", "BX10_S31_FE_FREQ_ADDRESS_20261027", "BX10_S31_FE_FREQ_RESET_CONTEXT_20261027", "BX10_S31_FE_FREQ_MODE_CONSUMERS_20261027"]
 
 [review]
 sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
@@ -35,18 +35,19 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."FREQUENCY_CONTROL"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_REGISTER_CHIPV7_PHY"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_REGISTER_CHIPV7_PHY", "BX10_S31_FE_FREQ_ADDRESS_20261027", "BX10_S31_FE_FREQ_RESET_CONTEXT_20261027"]
 completeness = "partial"
 
 [review.entity."FREQUENCY_CONTROL.CHANNEL_INDEX"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
-[review.entity."FREQUENCY_CONTROL.BITS_8_17_OPAQUE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C"]
-completeness = "complete"
+[review.entity."FREQUENCY_CONTROL.MEMORY_ADDRESS_LOW"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C", "BX10_S31_FE_FREQ_ADDRESS_20261027"]
 
-[review.entity."FREQUENCY_CONTROL.BIT_18_OPAQUE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C", "HW19_S31_FREQUENCY_SELECTION_20261027"]
+[review.entity."FREQUENCY_CONTROL.MEMORY_ADDRESS_HIGH"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C", "HW19_S31_FREQUENCY_SELECTION_20261027", "BX10_S31_FE_FREQ_ADDRESS_20261027", "BX10_S31_FE_FREQ_RESET_CONTEXT_20261027"]
+accuracy = "bounded"
+completeness = "partial"
 
 [review.entity."FREQUENCY_CONTROL.CHANNEL_SWITCH_PULSE"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
@@ -108,7 +109,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."FREQUENCY_MEMORY_DATA.MODE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BX10_S31_FE_FREQ_MODE_CONSUMERS_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -116,7 +117,7 @@ completeness = "unknown"
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
 [review.entity."I2C_NUMBER_CONTROL.MEMORY_READ_MODE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BX10_S31_FE_FREQ_MODE_CONSUMERS_20261027"]
 
 [review.entity."I2C_NUMBER_CONTROL.BITS_8_12_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20100030"]
@@ -1013,11 +1014,12 @@ sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE", "S31_MMIO_DECLARED_201008CC"]
 completeness = "complete"
 
 [review.entity."WORD_08D0_OPAQUE"]
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT"]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "BX10_S31_FE_EST_CONSUMERS_20261027", "BX10_S31_FE_EST_ADMISSION_20261027"]
 accuracy = "positional"
+completeness = "unknown"
 
 [review.entity."WORD_08D0_OPAQUE.BITS_20_21_OPAQUE"]
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "S31_MMIO_DECLARED_201008D0", "HW19_S31_EST_INDICATIONS_20261027"]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "S31_MMIO_DECLARED_201008D0", "HW19_S31_EST_INDICATIONS_20261027", "BX10_S31_FE_EST_CONSUMERS_20261027", "BX10_S31_FE_EST_ADMISSION_20261027"]
 accuracy = "positional"
 completeness = "unknown"
 
@@ -1149,7 +1151,7 @@ write-values-only = true
 [[registers]]
 name = "FREQUENCY_CONTROL"
 offset = 0x1c
-description = "Shared frequency module control word. Bit 18 is both the high bit\n            of an eleven-bit command-memory address and the reset/release bit\n            pulsed by phy_freq_module_resetn."
+description = "Shared frequency command/channel control word. Bits 18:8 carry the low eleven address bits in the reviewed memory read and write transactions. The independently called phy_freq_module_resetn writes bit18 low then high; the hardware reset target, effective edge, polarity and mode conditions remain unqualified."
 
 [[registers.fields]]
 name = "CHANNEL_INDEX"
@@ -1159,17 +1161,17 @@ description = "Complete phy_freq_chan_en_sw replaces the low byte with the calle
 value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
-name = "BITS_8_17_OPAQUE"
+name = "MEMORY_ADDRESS_LOW"
 bits = "17:8"
 class = "plain"
-description = "Low ten bits of the eleven-bit address selected by phy_freq_i2c_mem_write."
+description = "Low ten bits of the eleven-bit address published by phy_read_rf_freq_mem and phy_freq_i2c_mem_write."
 write-range = { min = 0x0, max = 0x3ff }
 
 [[registers.fields]]
-name = "BIT_18_OPAQUE"
+name = "MEMORY_ADDRESS_HIGH"
 bits = "18"
 class = "plain"
-description = "High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67; read0 again returned0x67 after those address transitions plus clear/set issued from bit18=0. The clear was a no-op and set wrote0->1; address0x400->0 supplied1->0 edges. No separate reset pulse was established. Other-mode geometry and reset scope remain unresolved."
+description = "Address bit10 in reviewed frequency-memory reads and writes. The same physical bit is independently written 0 then 1 by phy_freq_module_resetn. No electrical mode switch or reset effect is established. HW19's held mode0 high-address observation and its clear-from0 limitation remain as recorded in HW19_S31_FREQUENCY_SELECTION_20261027."
 
 [[registers.fields]]
 name = "CHANNEL_SWITCH_PULSE"
@@ -1277,6 +1279,7 @@ write-range = { min = 0x0, max = 0xffffff }
 name = "MODE"
 bits = "31:24"
 class = "write-only"
+description = "Reviewed publication consumers pass 1, 3 or 7; these observations do not establish a complete mode dictionary or a reset selector."
 write-range = { min = 0x0, max = 0xff }
 
 [[registers]]
@@ -1288,7 +1291,7 @@ description = "First two five-bit PHY-I2C number addresses packed by complete ph
 name = "MEMORY_READ_MODE"
 bits = "1:0"
 class = "plain"
-description = "Complete phy_read_rf_freq_mem replaces only the low two bits with its read-mode argument."
+description = "Complete phy_read_rf_freq_mem replaces only the low two bits with its read-mode argument. The reviewed capacitor-update consumer selects read mode 2; this does not select a proved reset behavior."
 value-range = { min = 0x0, max = 0x3, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
@@ -2706,13 +2709,13 @@ description = "Four bits cleared by complete set_dump_mode for every mode."
 [[registers]]
 name = "WORD_08D0_OPAQUE"
 offset = 0x8d0
-description = "Complete phy_iq_est_enable counts nonzero bits 21:20 while waiting; complete phy_check_rx_sat samples the same field exactly 100 times."
+description = "The pair 21:20 is consumed together by the ROM and RFTEST IQ-estimator not-ready paths, by the pinned RX-saturation sampler and by its RFTEST recorder. No independent bit identity or hardware latch behavior is established."
 
 [[registers.fields]]
 name = "BITS_20_21_OPAQUE"
 bits = "21:20"
 class = "read-only"
-description = "Sampled only while estimator READY is clear, for a diagnostic count; phy_check_rx_sat samples the same pair 100 times. HW19 observed zero in 33 not-ready ordered reads within two completed calibrated internal-tone measurements: a nonzero pair is not a necessary busy indication in that epoch. RX saturation remains an inference; individual bit meanings and other RF conditions remain unassigned."
+description = "IQ-estimation counts nonzero pair observations only while READY is clear; the independent phy_check_rx_sat takes 100 samples without a READY test and sets its software flag if any are nonzero. That software flag and the estimator count gate RX-DC candidate acceptance. Saturation physics, individual bit meanings and level/latch behavior remain unknown. HW19 rejects a necessary nonzero busy indication in its measured epoch."
 
 [[registers]]
 name = "DAC_SCALE_CONTROL"

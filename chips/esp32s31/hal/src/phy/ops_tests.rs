@@ -88,8 +88,8 @@ fn frequency_read_restore_preserves_other_owner_changes_and_never_pulses_writers
     fr::restore_read_configuration(&mut frequency, saved);
     let control = frequency.fe.read_frequency_control();
     assert_eq!(control.channel_index(), 17);
-    assert_eq!(control.bits_8_17_opaque().get(), 0);
-    assert!(!control.bit_18_opaque());
+    assert_eq!(control.memory_address_low().get(), 0);
+    assert!(!control.memory_address_high());
     assert!(!control.hardware_frequency_disable());
     assert!(!control.memory_write_pulse());
     assert!(!control.channel_switch_pulse());

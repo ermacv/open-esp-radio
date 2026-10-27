@@ -64163,12 +64163,12 @@ pub mod efuse {
 ///
 /// The radio front end at DR_REG_FE_BASE: PHY front-end control, data and coexistence words, the PHY table memory command port and the PBus.
 /// Word 0x10: Sparse FECOEX words absent from the public platform PAC.
-/// Words 0x1c-0x874: Frequency-memory, hardware channel-switch, NRX and channel-bandwidth registers recovered from complete finite ROM/blob bodies. Names retain UNKNOWN where the instructions prove a field but not its electrical meaning. One physical word has one identity even when a bit has different mode-dependent roles.
+/// Words 0x1c-0x874: Frequency-memory, hardware channel-switch, NRX and channel-bandwidth registers recovered from complete finite ROM/blob bodies. Names retain UNKNOWN where the instructions prove a field but not its electrical meaning. One physical word has one identity; the address and independent low/high writes to bit18 do not establish an electrical mode multiplex.
 /// Words 0x400-0x800: OPAQUE PHY clock-gate registers recovered from complete no-call ROM/blob leaves.
 /// Words 0x40c-0xc20: PHY/baseband configuration registers recovered from complete rev0 ROM bodies and complete pinned libphy leaves. Operation-derived fields keep UNKNOWN where neither public documentation nor an independent symbol establishes the electrical meaning.
 /// Words 0x430-0x440: Sparse FEDATA words absent from the public platform PAC.
 /// Word 0x434: RX-DCO calibration control word recovered from complete pinned S31 blob and rev0 ROM calibration bodies.
-/// Words 0x44c-0x8d0: DC/IQ estimator configuration, signed result and activity registers recovered from complete S31 rev0 ROM bodies and the complete pinned phy_check_rx_sat blob leaf. Unknown electrical roles remain explicit.
+/// Words 0x44c-0x8d0: DC/IQ estimator configuration, signed result and indication registers recovered from complete S31 rev0 ROM bodies and the complete pinned phy_check_rx_sat blob leaf. Unknown electrical roles remain explicit.
 /// Words 0x470-0x474: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.
 /// Words 0x834-0x840: Sparse FECTRL antenna words absent from the public platform PAC.
 /// Words 0x844-0x854: Shared PHY table-memory command, data and PBUS group-boundary aperture. The same command/data words have mode-dependent PBUS-memory, TX-CFR and gain-memory meanings; fields are named only where the complete bodies prove a common or mode-independent identity.
@@ -64347,9 +64347,7 @@ pub mod fe {
 
     /// The `FREQUENCY_CONTROL` register.
     ///
-    /// Shared frequency module control word. Bit 18 is both the high bit
-    /// of an eleven-bit command-memory address and the reset/release bit
-    /// pulsed by phy_freq_module_resetn.
+    /// Shared frequency command/channel control word. Bits 18:8 carry the low eleven address bits in the reviewed memory read and write transactions. The independently called phy_freq_module_resetn writes bit18 low then high; the hardware reset target, effective edge, polarity and mode conditions remain unqualified.
     pub mod frequency_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -64366,19 +64364,19 @@ pub mod fe {
         /// Positioned bits of `CHANNEL_INDEX`.
         pub const CHANNEL_INDEX_MASK: u32 = 0xff;
 
-        /// Width of `BITS_8_17_OPAQUE` in bits.
-        pub const BITS_8_17_OPAQUE_WIDTH: u32 = 10;
-        /// Greatest unsigned image of `BITS_8_17_OPAQUE`.
-        pub const BITS_8_17_OPAQUE_MAX: u32 = 0x3ff;
-        /// Positioned bits of `BITS_8_17_OPAQUE`.
-        pub const BITS_8_17_OPAQUE_MASK: u32 = 0x3ff00;
+        /// Width of `MEMORY_ADDRESS_LOW` in bits.
+        pub const MEMORY_ADDRESS_LOW_WIDTH: u32 = 10;
+        /// Greatest unsigned image of `MEMORY_ADDRESS_LOW`.
+        pub const MEMORY_ADDRESS_LOW_MAX: u32 = 0x3ff;
+        /// Positioned bits of `MEMORY_ADDRESS_LOW`.
+        pub const MEMORY_ADDRESS_LOW_MASK: u32 = 0x3ff00;
 
-        /// Width of `BIT_18_OPAQUE` in bits.
-        pub const BIT_18_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_18_OPAQUE`.
-        pub const BIT_18_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_18_OPAQUE`.
-        pub const BIT_18_OPAQUE_MASK: u32 = 0x40000;
+        /// Width of `MEMORY_ADDRESS_HIGH` in bits.
+        pub const MEMORY_ADDRESS_HIGH_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `MEMORY_ADDRESS_HIGH`.
+        pub const MEMORY_ADDRESS_HIGH_MAX: u32 = 0x1;
+        /// Positioned bits of `MEMORY_ADDRESS_HIGH`.
+        pub const MEMORY_ADDRESS_HIGH_MASK: u32 = 0x40000;
 
         /// Width of `CHANNEL_SWITCH_PULSE` in bits.
         pub const CHANNEL_SWITCH_PULSE_WIDTH: u32 = 1;
@@ -64470,15 +64468,15 @@ pub mod fe {
                 self.0 as u8
             }
 
-            /// Low ten bits of the eleven-bit address selected by phy_freq_i2c_mem_write.
+            /// Low ten bits of the eleven-bit address published by phy_read_rf_freq_mem and phy_freq_i2c_mem_write.
             #[inline]
-            pub const fn bits_8_17_opaque(self) -> oer_mmio::Bits<10> {
+            pub const fn memory_address_low(self) -> oer_mmio::Bits<10> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67; read0 again returned0x67 after those address transitions plus clear/set issued from bit18=0. The clear was a no-op and set wrote0->1; address0x400->0 supplied1->0 edges. No separate reset pulse was established. Other-mode geometry and reset scope remain unresolved.
+            /// Address bit10 in reviewed frequency-memory reads and writes. The same physical bit is independently written 0 then 1 by phy_freq_module_resetn. No electrical mode switch or reset effect is established. HW19's held mode0 high-address observation and its clear-from0 limitation remain as recorded in HW19_S31_FREQUENCY_SELECTION_20261027.
             #[inline]
-            pub const fn bit_18_opaque(self) -> bool {
+            pub const fn memory_address_high(self) -> bool {
                 (self.0 & 0x00040000) != 0
             }
 
@@ -64535,15 +64533,15 @@ pub mod fe {
                 self.0 as u8
             }
 
-            /// Low ten bits of the eleven-bit address selected by phy_freq_i2c_mem_write.
+            /// Low ten bits of the eleven-bit address published by phy_read_rf_freq_mem and phy_freq_i2c_mem_write.
             #[inline]
-            pub const fn bits_8_17_opaque(&self) -> oer_mmio::Bits<10> {
+            pub const fn memory_address_low(&self) -> oer_mmio::Bits<10> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn. In HW19 held mode0 reads, addresses0/0x400/0 selected0x67/0xda/0x67; read0 again returned0x67 after those address transitions plus clear/set issued from bit18=0. The clear was a no-op and set wrote0->1; address0x400->0 supplied1->0 edges. No separate reset pulse was established. Other-mode geometry and reset scope remain unresolved.
+            /// Address bit10 in reviewed frequency-memory reads and writes. The same physical bit is independently written 0 then 1 by phy_freq_module_resetn. No electrical mode switch or reset effect is established. HW19's held mode0 high-address observation and its clear-from0 limitation remain as recorded in HW19_S31_FREQUENCY_SELECTION_20261027.
             #[inline]
-            pub const fn bit_18_opaque(&self) -> bool {
+            pub const fn memory_address_high(&self) -> bool {
                 (self.0 & 0x00040000) != 0
             }
 
@@ -64596,16 +64594,16 @@ pub mod fe {
                 self
             }
 
-            /// Set `BITS_8_17_OPAQUE`.
+            /// Set `MEMORY_ADDRESS_LOW`.
             #[inline]
-            pub fn set_bits_8_17_opaque(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+            pub fn set_memory_address_low(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
                 self.0 = (self.0 & 0xfffc00ff) | (value.get() << 8);
                 self
             }
 
-            /// Set `BIT_18_OPAQUE`.
+            /// Set `MEMORY_ADDRESS_HIGH`.
             #[inline]
-            pub fn set_bit_18_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_memory_address_high(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffbffff) | (u32::from(value) << 18);
                 self
             }
@@ -64944,7 +64942,7 @@ pub mod fe {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Complete phy_read_rf_freq_mem replaces only the low two bits with its read-mode argument.
+            /// Complete phy_read_rf_freq_mem replaces only the low two bits with its read-mode argument. The reviewed capacitor-update consumer selects read mode 2; this does not select a proved reset behavior.
             #[inline]
             pub const fn memory_read_mode(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0)
@@ -64967,7 +64965,7 @@ pub mod fe {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Complete phy_read_rf_freq_mem replaces only the low two bits with its read-mode argument.
+            /// Complete phy_read_rf_freq_mem replaces only the low two bits with its read-mode argument. The reviewed capacitor-update consumer selects read mode 2; this does not select a proved reset behavior.
             #[inline]
             pub const fn memory_read_mode(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0)
@@ -71201,7 +71199,7 @@ pub mod fe {
 
     /// The `WORD_08D0_OPAQUE` register.
     ///
-    /// Complete phy_iq_est_enable counts nonzero bits 21:20 while waiting; complete phy_check_rx_sat samples the same field exactly 100 times.
+    /// The pair 21:20 is consumed together by the ROM and RFTEST IQ-estimator not-ready paths, by the pinned RX-saturation sampler and by its RFTEST recorder. No independent bit identity or hardware latch behavior is established.
     pub mod word_08d0_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00300000;
@@ -71223,7 +71221,7 @@ pub mod fe {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Sampled only while estimator READY is clear, for a diagnostic count; phy_check_rx_sat samples the same pair 100 times. HW19 observed zero in 33 not-ready ordered reads within two completed calibrated internal-tone measurements: a nonzero pair is not a necessary busy indication in that epoch. RX saturation remains an inference; individual bit meanings and other RF conditions remain unassigned.
+            /// IQ-estimation counts nonzero pair observations only while READY is clear; the independent phy_check_rx_sat takes 100 samples without a READY test and sets its software flag if any are nonzero. That software flag and the estimator count gate RX-DC candidate acceptance. Saturation physics, individual bit meanings and level/latch behavior remain unknown. HW19 rejects a necessary nonzero busy indication in its measured epoch.
             #[inline]
             pub const fn bits_20_21_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 20)
@@ -241673,7 +241671,7 @@ pub mod tsens {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Temperature sensor data out. Unsigned temperature-sensor code sampled once by the complete ROM read leaves.
+            /// Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample.
             #[inline]
             pub const fn out(self) -> u8 {
                 self.0 as u8
@@ -241750,7 +241748,7 @@ pub mod tsens {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Temperature sensor data out. Unsigned temperature-sensor code sampled once by the complete ROM read leaves.
+            /// Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample.
             #[inline]
             pub const fn out(&self) -> u8 {
                 self.0 as u8
@@ -242079,7 +242077,7 @@ pub mod tsens {
 
     /// The `CLK_CONF` register.
     ///
-    /// Tsens regbank configuration registers. Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim.
+    /// Temperature-sensor register-bank configuration. CLK_EN is publicly described. Pinned PHY initialization also writes bits23 and9 in that order; their individual hardware effects are unresolved despite the public struct reserving them.
     pub mod clk_conf {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00800201;
@@ -242125,13 +242123,13 @@ pub mod tsens {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
+            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x26 and sets bit9 at +0x2c after the bit23 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual conversion role is established.
             #[inline]
             pub const fn bit_9_opaque(self) -> bool {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
+            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x1c and sets bit23 at +0x24 before the bit9 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual readout role is established.
             #[inline]
             pub const fn bit_23_opaque(self) -> bool {
                 (self.0 & 0x00800000) != 0
@@ -242148,13 +242146,13 @@ pub mod tsens {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
+            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x26 and sets bit9 at +0x2c after the bit23 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual conversion role is established.
             #[inline]
             pub const fn bit_9_opaque(&self) -> bool {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Vendor initialization sets this opaque lane. In the cited forced-power stand mode it reads zero after both zero and one writes; ignored writes, read-zero behavior and transient effects remain unresolved.
+            /// Pinned phy_tsens_read_init fresh-reads CLK_CONF at +0x1c and sets bit23 at +0x24 before the bit9 update. In HW11 forced-power observations it reads zero after writes of zero and one. Storage, transient effects and ignored writes remain unresolved; no individual readout role is established.
             #[inline]
             pub const fn bit_23_opaque(&self) -> bool {
                 (self.0 & 0x00800000) != 0
