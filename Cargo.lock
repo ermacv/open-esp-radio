@@ -2589,6 +2589,8 @@ name = "oer-firmware-probes-esp32s31-register"
 version = "0.1.0"
 dependencies = [
  "oer-esp32s31-hal",
+ "oer-esp32s31-layout",
+ "oer-espressif-staged-runtime",
  "oer-memory",
  "oer-probe-codegen",
  "oer-probe-macros",

@@ -3,8 +3,9 @@
 //! [`RadioDomain`] owns the shared radio registers together with the shared
 //! PHY software state (registration epoch and calibration restore slots).
 //! Protocol drivers hold only their own register partitions; the one owner of
-//! the domain, the radio system, works on it by `&mut` borrow, so no lock and
-//! no lease exists.
+//! the domain, the radio system, transfers an owned PHY transaction for
+//! lifecycle and tracking. Client operations take short exclusive borrows;
+//! no lock is shared with an interrupt handler.
 //!
 //! The domain also owns common radio power. Each protocol enters and leaves
 //! it proving its identity with its own register set; the first client runs
@@ -45,11 +46,12 @@ pub use crate::power::{
     PlatformClockGuard, PlatformClockHolds, PlatformClockProvider,
 };
 use crate::{
-    clock::CommonRadioPower,
-    ieee802154::mac::Ieee802154TaskOwner,
-    owner::{PhyRegistrationEpoch, SharedPhyHal, route},
+    clock::CommonRadioPower, ieee802154::mac::Ieee802154TaskOwner, owner::PhyRegistrationEpoch,
     phy::restore::PhyRouteState,
 };
+
+pub mod transaction;
+use transaction::PhyIdentity;
 
 mod sealed {
     pub trait RadioClientOwner {}
@@ -201,6 +203,7 @@ struct SharedRadioState<B: PlatformClockBackend, T> {
     external_coex: Option<crate::coex::ExternalCoexConfig>,
     coex_participants: CoexParticipants,
     attachment: T,
+    identity: PhyIdentity,
 }
 
 impl<B: PlatformClockBackend, T> SharedRadioState<B, T> {
@@ -363,7 +366,12 @@ pub struct RadioDomain<B: PlatformClockBackend, T = ()> {
 impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// Place the shared owner, its PHY state and `attachment` in one domain.
     /// This performs no MMIO.
-    pub(crate) fn new(registers: SharedRadioRegisters, phy: PhyRouteState, attachment: T) -> Self {
+    pub(crate) fn new(
+        registers: SharedRadioRegisters,
+        phy: PhyRouteState,
+        attachment: T,
+        identity: PhyIdentity,
+    ) -> Self {
         Self {
             state: SharedRadioState {
                 registers,
@@ -380,6 +388,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 external_coex: None,
                 coex_participants: CoexParticipants::default(),
                 attachment,
+                identity,
             },
         }
     }
@@ -454,6 +463,18 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     #[cfg(test)]
     pub(crate) fn phy_state_mut_for_test(&mut self) -> &mut PhyRouteState {
         &mut self.state.phy
+    }
+
+    /// Begin a synthetic registration for a hermetic host ownership model.
+    #[cfg(all(any(test, feature = "test-support"), not(target_arch = "riscv32")))]
+    pub fn begin_registration_for_host_test(&mut self) -> crate::owner::PhyRegistrationGrant {
+        crate::owner::PhyRegistrationGrant::new(self.state.phy.begin_registration_epoch())
+    }
+
+    /// Apply the Wi-Fi receive enable leaf on this owned domain.
+    #[cfg(target_arch = "riscv32")]
+    pub fn set_wifi_rx_enabled(&mut self, enabled: bool) {
+        crate::ieee80211::baseband::set_wifi_enabled(self.state.registers.radio_phy_mut(), enabled);
     }
 
     /// Seed an already initialized baseband reference in a native radio model.
@@ -742,12 +763,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             &mut state.phy,
             &mut state.attachment,
         )
-    }
-
-    /// Borrow the shared PHY for one PHY-layer operation.
-    pub fn phy_hal(&mut self) -> SharedPhyHal<'_, route::Shared> {
-        let state = self.state_mut();
-        SharedPhyHal::new(state.registers.radio_phy_mut(), &mut state.phy)
     }
 
     /// Enable the modem clocks of the protocol that owns `owner`.
@@ -1125,32 +1140,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// Mutably borrow the upper layer's attachment.
     pub fn attachment_mut(&mut self) -> &mut T {
         &mut self.state_mut().attachment
-    }
-
-    /// Borrow the shared PHY together with the attachment, for an upper-layer
-    /// operation that updates its state while driving the PHY.
-    pub fn phy_hal_with_attachment(&mut self) -> (SharedPhyHal<'_, route::Shared>, &mut T) {
-        let state = self.state_mut();
-        (
-            SharedPhyHal::new(state.registers.radio_phy_mut(), &mut state.phy),
-            &mut state.attachment,
-        )
-    }
-
-    /// Borrow the shared PHY, the attachment and the PHY grant-protect
-    /// request together, for PHY maintenance that brackets its hardware
-    /// regions with the request.
-    pub fn phy_hal_with_attachment_and_grant(
-        &mut self,
-    ) -> (SharedPhyHal<'_, route::Shared>, &mut T, PhyGrantProtect<'_>) {
-        let state = self.state_mut();
-        let pti = state.coex_pti.pti(PHY_GRANT_PROTECT_EVENT);
-        let (phy, timers) = state.registers.radio_phy_and_coex_timers_mut();
-        (
-            SharedPhyHal::new(phy, &mut state.phy),
-            &mut state.attachment,
-            PhyGrantProtect::new(timers, pti, &mut state.phy_grant_protected),
-        )
     }
 
     /// Borrow the shared registers for a protocol read-back that also reads

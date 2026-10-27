@@ -26,17 +26,6 @@ mod session;
 /// start: no write.
 const REJECTED: u32 = u32::MAX;
 
-#[panic_handler]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "isolated verification image has no executor; panic is a terminal probe failure"
-)]
-fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
-}
-
 /// Harness-only delay edge intercepted by the Blobray verifier before this body runs.
 // SAFETY: the probe image links no ROM, so this is the one `ets_delay_us`,
 // with the ROM function's C signature the vendor code calls.
@@ -362,12 +351,9 @@ oer_probe_macros::probe! {
 
 oer_probe_macros::probe! {
     pub fn open_phy_trace_dis_hw_set_freq() {
-        let _ = session::with(|session| {
-            oer_esp32s31_hal::phy::frequency::set_hardware_control(
-                &mut session.radio.phy_hal(),
-                false,
-            )
-        });
+        let _ = session::with(|session| session.phy(|phy| {
+            oer_esp32s31_hal::phy::frequency::set_hardware_control(phy, false)
+        }));
         ets_delay_us(2);
         // Keep the delay as a non-tail edge so the executor sees the named
         // harness symbol independently of linker tail-call relaxation.
@@ -388,9 +374,9 @@ oer_probe_macros::probe! {
             parameters[4],
             parameters[5],
         );
-        let _ = session::with(|session| {
-            oer_esp32s31_hal::phy::i2c::configure_command_memory(&mut session.radio.phy_hal(), inputs)
-        });
+        let _ = session::with(|session| session.phy(|phy| {
+            oer_esp32s31_hal::phy::i2c::configure_command_memory(phy, inputs)
+        }));
     }
 }
 

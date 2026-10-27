@@ -1,17 +1,56 @@
-fn main() {
-    // Cargo can reuse this compiled build script after the package is moved.
-    // Resolve the current invocation's manifest directory, not its build path.
-    let directory = std::env::var_os("CARGO_MANIFEST_DIR")
-        .expect("Cargo supplies the package manifest directory");
-    let directory = std::path::PathBuf::from(directory);
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let directory = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR").ok_or("Cargo manifest directory")?,
+    );
+    let out =
+        std::path::PathBuf::from(std::env::var_os("OUT_DIR").ok_or("Cargo output directory")?);
     oer_probe_codegen::build(
         &directory.join("src/lib.rs"),
-        &std::env::var("CARGO_PKG_NAME").expect("Cargo package name"),
-        &std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo output directory")),
-    )
-    .expect("valid probe declarations");
-    let script = directory.join("link.x");
-    println!("cargo:rerun-if-changed={}", script.display());
-    // The script places the image alone; the library is linked into it.
+        &std::env::var("CARGO_PKG_NAME")?,
+        &out,
+    )?;
+    let source = directory.join("link.x");
+    println!("cargo:rerun-if-changed={}", source.display());
+    // SOURCE: the chip layout generated from platform facts. Probe records
+    // use the same retained region and reserved tail as staged images.
+    const LENGTH: u32 = match oer_esp32s31_layout::LAYOUT
+        .retained
+        .length()
+        .checked_sub(oer_esp32s31_layout::LAYOUT.retained_reserved_tail)
+    {
+        Some(length) => length,
+        None => panic!("retained tail must fit the sourced region"),
+    };
+    let script = out.join("probe-link.x");
+    std::fs::write(
+        &script,
+        format!(
+            "PROBE_RETAINED_ORIGIN = {:#x};\nPROBE_RETAINED_LENGTH = {:#x};\n{}",
+            oer_esp32s31_layout::LAYOUT.retained.origin(),
+            LENGTH,
+            std::fs::read_to_string(source)?
+        ),
+    )?;
+    // The verifier supplies its stack and installs no runtime IRQ/task stack.
+    // Panic classification reads explicit empty ranges for every sourced hart.
+    let mut markers = String::new();
+    for hart in 0..oer_esp32s31_layout::LAYOUT.harts {
+        for suffix in [
+            "irq_stack_bottom",
+            "irq_stack_top",
+            "irq_stack_guard_bytes",
+            "task_stack_bottom",
+            "task_stack_top",
+        ] {
+            use std::fmt::Write;
+            writeln!(markers, "__runtime_cpu{hart}_{suffix} = 0;")?;
+        }
+    }
+    use std::io::Write;
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(&script)?
+        .write_all(markers.as_bytes())?;
     println!("cargo:rustc-link-arg-bins=-T{}", script.display());
+    Ok(())
 }

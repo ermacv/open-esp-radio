@@ -5,8 +5,11 @@ use crate::controller_time::ControllerTimeWorkerPhase;
 use super::separate_interrupt_owner;
 
 fn clocked() -> ClockedOwner {
-    let (_shared, partitions) =
-        RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
+    let (_shared, partitions) = RadioHardware::for_host_test()
+        .split::<crate::test_clocks::TestClockBackend, _>(
+            (),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        );
     ClockedOwner::for_host_test(partitions.bluetooth)
 }
 

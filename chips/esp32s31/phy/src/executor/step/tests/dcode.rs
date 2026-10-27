@@ -180,11 +180,9 @@ async fn cold_complete(
                 .map(Completion::Rfpll)
                 .map_err(|_| Failure::Binding)
         }
-        PhyDcodeExternalBinding::Rfpll(binding) => {
-            super::super::io::Io::Test(io, core::marker::PhantomData)
-                .frequency::<TestDelay, _>(clock, binding)
-                .map(Completion::Rfpll)
-        }
+        PhyDcodeExternalBinding::Rfpll(binding) => super::super::io::Io::Test(io)
+            .frequency::<TestDelay, _>(clock, binding)
+            .map(Completion::Rfpll),
     }
 }
 
@@ -203,7 +201,7 @@ fn a_ready_rmw_write_is_observed_even_when_publication_crosses_the_deadline() {
             1,
         ));
         let result = super::super::rfpll::direct_i2c(
-            &mut super::super::io::Io::Test(&mut io, core::marker::PhantomData),
+            &mut super::super::io::Io::Test(&mut io),
             &*clock,
             &mut transaction,
             None,

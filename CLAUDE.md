@@ -42,6 +42,10 @@ system these rules serve.
   An impossible state returns a named fault retaining its source observations;
   its owners stay quarantined, then the image calls safe `fatal::reset_recording`
   to retain the reason for the next boot to print. A watchdog is not this mechanism.
+  Owned PHY transactions preserve their registration and restore obligations;
+  only consuming reunion with the exact affine return owner releases their
+  quarantine guard. Dropping either half records its source observations and
+  resets, without automatic restoration or owner release.
   Remove existing runtime panics from image crates, including probes and
   HIL; image panic budgets only shrink to 0. `const` panics evaluated at
   compile time are allowed. Air, peer, host and API input return a handled

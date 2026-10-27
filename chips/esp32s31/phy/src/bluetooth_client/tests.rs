@@ -23,15 +23,17 @@ fn radio_domain(
     RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy>,
     ProtocolPartitions,
 ) {
-    let (mut radio, partitions) =
-        RadioHardware::for_host_test()
-            .split::<crate::test_clocks::TestClockBackend, _>(ConcurrentPhy::new());
+    let (mut radio, partitions) = RadioHardware::for_host_test()
+        .split::<crate::test_clocks::TestClockBackend, _>(
+        ConcurrentPhy::new(),
+        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+    );
     {
         let domain = &mut radio;
-        let grant = domain.phy_hal().begin_registration();
+        let grant = domain.begin_registration_for_host_test();
         let epoch = grant.epoch();
         if stale {
-            let _current = domain.phy_hal().begin_registration().epoch();
+            let _current = domain.begin_registration_for_host_test().epoch();
         }
         *domain.attachment_mut() = ConcurrentPhy::registered_for_test(PhyDomain::new(
             RegisteredPhyState::from_wrapper_test_model(
@@ -116,9 +118,11 @@ fn foreign_completion_cannot_authorize_a_new_registrations_graph() {
 
 #[test]
 fn joining_an_unregistered_domain_changes_nothing() {
-    let (mut radio, partitions) =
-        RadioHardware::for_host_test()
-            .split::<crate::test_clocks::TestClockBackend, _>(ConcurrentPhy::new());
+    let (mut radio, partitions) = RadioHardware::for_host_test()
+        .split::<crate::test_clocks::TestClockBackend, _>(
+        ConcurrentPhy::new(),
+        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+    );
     let task = task(partitions);
     let radio = &mut radio;
 

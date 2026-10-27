@@ -421,6 +421,29 @@ upper owner. Its caller lends the arena's live ring shared:
 completed-descriptor views borrow that ring mutably, and the ring is not
 `Sync`, so no CPU view of the bytes is live meanwhile.
 
+The HAL's owned PHY transaction adds no unsafe code. A permanently claimed
+`TransactionSeat` supplies one affine domain identity. `RadioTransaction`
+keeps its PHY and inert return owner paired; after a consuming split,
+`DetachedRadioDomain::reunite` checks the exact seat identity and returns
+foreign inputs unchanged. Registration-epoch equality grants no reunion.
+`PhyHardware` owns its registers and restore state; shared accessors lend
+short borrows of that owner, without extending a lifetime. The transaction's
+grant-protect words remain with the movable PHY half. Neither half exposes
+register ownership from the other.
+Both payloads stay in `ManuallyDrop` until consuming reunion. An armed
+cancellation guard records the source identity and registration observation,
+then calls the existing `oer-memory::link_fn!` binding to the staged runtime's
+`fatal::reset_recording`, never an indirect callback or watchdog transition.
+The image retains a 24-byte checksummed reason record and prints it during
+adoption, clearing it only after successful output. Verification probes use
+the same runtime reset/record API and report at session startup. Their linker
+scripts take the retained region from the chip layout and generate empty
+IRQ/task-stack markers for every sourced hart: the verifier supplies its stack.
+Host tests
+use separate seats and catch a test-only reporter's unwind; payloads remain
+quarantined there too. No new unsafe block or sharing implementation is
+introduced.
+
 `oer-memory` holds the shared proofs for executor-crossing storage.
 `ContextCell<T, P: ContextProof>` holds executor-owned signal state, signal
 list links and timer slots. The owner's private unsafe `ContextProof`

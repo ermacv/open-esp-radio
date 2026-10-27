@@ -133,7 +133,7 @@ impl oer_diagnostics::DiagnosticPath for ConcurrentPhyTrackingError {
     }
 }
 
-/// Register the shared PHY domain through the radio domain's shared-PHY borrow.
+/// Register the shared PHY domain through an owned PHY transaction.
 ///
 /// This is the calibrating first `esp_phy_enable`: `PHY` and
 /// `PHY_CALIBRATION` are enabled through the radio domain before calibration, and
@@ -141,51 +141,64 @@ impl oer_diagnostics::DiagnosticPath for ConcurrentPhyTrackingError {
 ///
 /// # Cancellation
 ///
-/// Once polled, drive this future to a terminal result. Cancellation may
-/// strand a partially applied edge and leaves the domain unregistered; the
-/// radio then requires reset.
+/// Cancellation, including before the first poll, quarantines the owned
+/// transaction and records its fault before reset.
 #[must_use = "PHY registration must be driven to a terminal result"]
 #[allow(
     clippy::result_large_err,
     reason = "fail-stop error retains the allocation-free PHY transition"
 )]
-pub fn register_concurrent_phy<'a, B: PlatformClockBackend, P, D, O>(
+pub fn register_concurrent_phy<'a, B: PlatformClockBackend + 'a, P, D, O>(
     timer: &'a impl oer_cooperate::CooperativeTimer,
-    radio: &'a mut RadioDomain<B, ConcurrentPhy>,
+    radio: RadioDomain<B, ConcurrentPhy>,
     platform: &'a mut P,
     clocks: &'a impl PlatformClockProvider<Backend = B>,
     config: PhyRegisterConfig,
     observer: O,
-) -> impl core::future::Future<Output = Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>>
-+ 'a
+) -> impl core::future::Future<
+    Output = (
+        RadioDomain<B, ConcurrentPhy>,
+        Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+    ),
+> + 'a
 where
     D: PhyShortDelay + 'a,
     O: PhyTargetObserver + 'a,
 {
+    let initial = radio.detach();
     super::domain::RegisterFuture {
         future: async move {
-            match radio.attachment_mut().slot_mut() {
-                Slot::Empty => {}
-                Slot::Poisoned => {
-                    return Err(ConcurrentPhyRegisterFailure::Rejected(
-                        ConcurrentPhyError::Poisoned,
-                    ));
-                }
+            let mut radio = initial.reunite();
+            let rejection = match radio.attachment_mut().slot_mut() {
+                Slot::Empty => None,
+                Slot::Poisoned => Some(ConcurrentPhyError::Poisoned),
                 Slot::Registered(_) | Slot::RfClosed(_) | Slot::Pending { .. } => {
-                    return Err(ConcurrentPhyRegisterFailure::Rejected(
-                        ConcurrentPhyError::AlreadyRegistered,
-                    ));
+                    Some(ConcurrentPhyError::AlreadyRegistered)
                 }
-            }
-            enable_phy_clocks(radio, clocks).map_err(|error| {
-                ConcurrentPhyRegisterFailure::Rejected(ConcurrentPhyError::Clock(error))
-            })?;
-            let registered = {
-                let (mut registers, _) = radio.phy_hal_with_attachment();
-                PhyDomain::register::<P, _, D, O>(timer, platform, &mut registers, config, observer)
-                    .await
             };
-            finish_concurrent_registration(radio, registered)
+            if let Some(error) = rejection {
+                return (radio, Err(ConcurrentPhyRegisterFailure::Rejected(error)));
+            }
+            if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
+                return (
+                    radio,
+                    Err(ConcurrentPhyRegisterFailure::Rejected(
+                        ConcurrentPhyError::Clock(error),
+                    )),
+                );
+            }
+            let mut transaction = radio.detach();
+            let registered = PhyDomain::register::<P, _, D, O>(
+                timer,
+                platform,
+                transaction.hardware_mut(),
+                config,
+                observer,
+            )
+            .await;
+            let mut radio = transaction.reunite();
+            let result = finish_concurrent_registration(&mut radio, registered);
+            (radio, result)
         },
     }
 }
@@ -235,67 +248,79 @@ fn finish_concurrent_registration<B: PlatformClockBackend>(
 /// # Errors
 ///
 /// Rejected before any register access when the domain is not RF-open,
-/// clients are active or the borrow describes another registration. A
+/// clients are active or the owner describes another registration. A
 /// preparation failure after completed transactions keeps RF open; an
 /// ambiguous hardware failure poisons the domain.
 ///
 /// # Cancellation
 ///
-/// Once polled, drive this future to a terminal result. Cancellation leaves
-/// the domain unregistered in software while RF may be partially closed; the
-/// radio then requires reset.
-pub async fn close_concurrent_rf<B: PlatformClockBackend, P, D>(
+/// Cancellation, including before the first poll, quarantines the owned
+/// transaction and records its fault before reset.
+pub fn close_concurrent_rf<B: PlatformClockBackend, P, D>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    radio: &mut RadioDomain<B, ConcurrentPhy>,
+    radio: RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
-) -> Result<(), ConcurrentRfError>
+) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
 where
     D: PhyShortDelay,
 {
-    let mut domain = radio
-        .attachment_mut()
-        .idle_domain()
-        .map_err(ConcurrentRfError::Rejected)?;
-    let (mut registers, phy) = radio.phy_hal_with_attachment();
-    if !domain.clients.describes(&registers) {
-        *phy.slot_mut() = Slot::Registered(domain);
-        return Err(ConcurrentRfError::Rejected(
-            ConcurrentPhyError::EpochMismatch,
-        ));
-    }
-    let closed = match radio_lifecycle::observe_temperature_with_hal::<P, D>(
-        timer,
-        platform,
-        &mut registers,
-        domain.registered.target_state_mut(),
-    )
-    .await
-    {
-        Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D, _>(timer, &mut registers)
-            .and_then(|()| {
-                // SOURCE: linked IDF override releases TSENS and the last
-                // peripheral SAR-I2C reference after phy_close_rf.
-                oer_esp32s31_hal::phy::temperature::release(&mut registers)
-                    .map_err(|_| PhyTargetPortError::HardwareInvariant)
-            })
-            .map_err(PhyRfCloseTemperatureFailure::HardwareAmbiguous),
-        Err(failure) => Err(failure),
-    };
-    match closed {
-        Ok(()) => {
-            *phy.slot_mut() = Slot::RfClosed(domain);
+    let initial = radio.detach();
+    async move {
+        let mut radio = initial.reunite();
+        let mut domain = match radio.attachment_mut().idle_domain() {
+            Ok(domain) => domain,
+            Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
+        };
+        let mut transaction = radio.detach();
+        let (registers, phy) = transaction.hardware_with_attachment();
+        if !domain.clients.describes(registers) {
+            *phy.slot_mut() = Slot::Registered(domain);
+            return (
+                transaction.reunite(),
+                Err(ConcurrentRfError::Rejected(
+                    ConcurrentPhyError::EpochMismatch,
+                )),
+            );
+        }
+        let closed = match radio_lifecycle::observe_temperature_with_hal::<P, D>(
+            timer,
+            platform,
+            registers,
+            domain.registered.target_state_mut(),
+        )
+        .await
+        {
+            Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D, _>(timer, registers)
+                .and_then(|()| {
+                    // SOURCE: linked IDF override releases TSENS and the last
+                    // peripheral SAR-I2C reference after phy_close_rf.
+                    oer_esp32s31_hal::phy::temperature::release(registers)
+                        .map_err(|_| PhyTargetPortError::HardwareInvariant)
+                })
+                .map_err(PhyRfCloseTemperatureFailure::HardwareAmbiguous),
+            Err(failure) => Err(failure),
+        };
+        let result = match closed {
+            Ok(()) => {
+                *phy.slot_mut() = Slot::RfClosed(domain);
+                Ok(())
+            }
+            Err(PhyRfCloseTemperatureFailure::Recoverable(error)) => {
+                *phy.slot_mut() = Slot::Registered(domain);
+                Err(ConcurrentRfError::Recoverable(error))
+            }
+            Err(PhyRfCloseTemperatureFailure::HardwareAmbiguous(error)) => {
+                *phy.slot_mut() = Slot::Poisoned;
+                Err(ConcurrentRfError::Failed(error))
+            }
+        };
+        let mut radio = transaction.reunite();
+        let result = result.and_then(|()| {
             radio
                 .disable_phy_modem_clocks(PhyClockModule::Phy)
                 .map_err(ConcurrentRfError::Clock)
-        }
-        Err(PhyRfCloseTemperatureFailure::Recoverable(error)) => {
-            *phy.slot_mut() = Slot::Registered(domain);
-            Err(ConcurrentRfError::Recoverable(error))
-        }
-        Err(PhyRfCloseTemperatureFailure::HardwareAmbiguous(error)) => {
-            *phy.slot_mut() = Slot::Poisoned;
-            Err(ConcurrentRfError::Failed(error))
-        }
+        });
+        (radio, result)
     }
 }
 
@@ -310,58 +335,79 @@ where
 /// # Errors
 ///
 /// Rejected before any register access when the domain is not RF-closed, the
-/// borrow describes another registration or the clocks could not be
+/// owner describes another registration or the clocks could not be
 /// enabled. A started wake that fails poisons the domain.
 ///
 /// # Cancellation
 ///
-/// Once polled, drive this future to a terminal result. After the first wake
-/// edge every failure is fail-stop and requires reset.
-pub async fn wake_concurrent_rf<B: PlatformClockBackend, D>(
+/// Cancellation, including before the first poll, quarantines the owned
+/// transaction and records its fault before reset.
+pub fn wake_concurrent_rf<B: PlatformClockBackend, D>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    radio: &mut RadioDomain<B, ConcurrentPhy>,
+    radio: RadioDomain<B, ConcurrentPhy>,
     clocks: &impl PlatformClockProvider<Backend = B>,
-) -> Result<(), ConcurrentRfError>
+) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
 where
     D: PhyShortDelay,
 {
-    let domain = radio
-        .attachment_mut()
-        .closed_domain()
-        .map_err(ConcurrentRfError::Rejected)?;
-    let describes = {
-        let (registers, _) = radio.phy_hal_with_attachment();
-        domain.clients.describes(&registers)
-    };
-    if !describes {
-        *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
-        return Err(ConcurrentRfError::Rejected(
-            ConcurrentPhyError::EpochMismatch,
-        ));
+    let initial = radio.detach();
+    async move {
+        let mut radio = initial.reunite();
+        let domain = match radio.attachment_mut().closed_domain() {
+            Ok(domain) => domain,
+            Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
+        };
+        let transaction = radio.detach();
+        let describes = domain.clients.describes(transaction.hardware());
+        let mut radio = transaction.reunite();
+        if !describes {
+            *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+            return (
+                radio,
+                Err(ConcurrentRfError::Rejected(
+                    ConcurrentPhyError::EpochMismatch,
+                )),
+            );
+        }
+        if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
+            *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+            return (
+                radio,
+                Err(ConcurrentRfError::Rejected(ConcurrentPhyError::Clock(
+                    error,
+                ))),
+            );
+        }
+        let mut transaction = radio.detach();
+        let result = radio_lifecycle::execute_rf_wake_with_hal::<D>(
+            timer,
+            transaction.hardware_mut(),
+            domain.phy_state(),
+        )
+        .await;
+        let result = match result {
+            Ok(()) => {
+                *transaction.attachment_mut().slot_mut() = Slot::Registered(domain);
+                Ok(())
+            }
+            Err(error) => {
+                *transaction.attachment_mut().slot_mut() = Slot::Poisoned;
+                Err(ConcurrentRfError::Failed(error))
+            }
+        };
+        let mut radio = transaction.reunite();
+        let result = result.and_then(|()| {
+            radio
+                .disable_phy_modem_clocks(PhyClockModule::Calibration)
+                .map_err(ConcurrentRfError::Clock)
+        });
+        (radio, result)
     }
-    if let Err(error) = enable_phy_clocks(radio, clocks) {
-        *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
-        return Err(ConcurrentRfError::Rejected(ConcurrentPhyError::Clock(
-            error,
-        )));
-    }
-    let (mut registers, phy) = radio.phy_hal_with_attachment();
-    if let Err(error) =
-        radio_lifecycle::execute_rf_wake_with_hal::<D>(timer, &mut registers, domain.phy_state())
-            .await
-    {
-        *phy.slot_mut() = Slot::Poisoned;
-        return Err(ConcurrentRfError::Failed(error));
-    }
-    *phy.slot_mut() = Slot::Registered(domain);
-    radio
-        .disable_phy_modem_clocks(PhyClockModule::Calibration)
-        .map_err(ConcurrentRfError::Clock)
 }
 
 /// Run the pending tracking request with the protocols running, as the
-/// vendor's tracking does under its PHY lock: the exclusive borrow of the
-/// radio domain is that lock, and the
+/// vendor's tracking does under its PHY lock: the owned PHY transaction serializes
+/// the radio domain, and the
 /// tracking graph brackets its RF-sensitive regions with the grant-protect
 /// request.
 ///
@@ -370,71 +416,84 @@ where
 ///
 /// # Cancellation
 ///
-/// Once polled, drive this future to a terminal result. Cancellation after
-/// admission leaves the domain pending in software while hardware may be
-/// partially updated; the radio then requires reset.
-pub async fn maintain_concurrent_phy<B: PlatformClockBackend, P, D, O>(
+/// Cancellation, including before the first poll, quarantines the owned
+/// transaction and records its fault before reset.
+pub fn maintain_concurrent_phy<B: PlatformClockBackend, P, D, O>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    radio: &mut RadioDomain<B, ConcurrentPhy>,
+    radio: RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
     observer: O,
-) -> Result<PhyParamTrackingOutcome, ConcurrentPhyTrackingError>
+) -> impl core::future::Future<
+    Output = (
+        RadioDomain<B, ConcurrentPhy>,
+        Result<PhyParamTrackingOutcome, ConcurrentPhyTrackingError>,
+    ),
+>
 where
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
-    admit_maintenance(radio).map_err(ConcurrentPhyTrackingError::Rejected)?;
-
-    let (mut registered, pending) = match radio.attachment_mut().take_tracking() {
-        Slot::Pending {
-            registered,
-            pending,
-        } => (registered, pending),
-        other => {
-            *radio.attachment_mut().slot_mut() = other;
-            return Err(ConcurrentPhyTrackingError::Rejected(
-                ConcurrentPhyError::NoTrackingPending,
-            ));
+    let initial = radio.detach();
+    async move {
+        let mut radio = initial.reunite();
+        if let Err(error) = admit_maintenance(&radio) {
+            return (radio, Err(ConcurrentPhyTrackingError::Rejected(error)));
         }
-    };
-    let mut tracking = pending.begin_tracking(registered.tracking_policy());
-
-    let (mut registers, phy, mut grant) = radio.phy_hal_with_attachment_and_grant();
-    if !tracking.describes(&registers) {
-        let error = TargetPhyParamTrackingError::EpochMismatch;
-        *phy.slot_mut() = Slot::Poisoned;
-        return Err(ConcurrentPhyTrackingError::Failed(error));
-    }
-    let result = {
-        let state = registered.target_state_mut();
-        let mut port = TargetPhyParamTrackingPort::<_, _, _, D, _, _>::new(
-            platform,
-            &mut registers,
-            &mut grant,
-            timer,
-            observer,
-        );
-        run_phy_param_tracking(&mut tracking, state, &mut port)
-            .await
-            .map_err(TargetPhyParamTrackingError::Run)
-    };
-    let outcome = match result {
-        Ok(outcome) => outcome,
-        Err(error) => {
+        let (mut registered, pending) = match radio.attachment_mut().take_tracking() {
+            Slot::Pending {
+                registered,
+                pending,
+            } => (registered, pending),
+            other => {
+                *radio.attachment_mut().slot_mut() = other;
+                return (
+                    radio,
+                    Err(ConcurrentPhyTrackingError::Rejected(
+                        ConcurrentPhyError::NoTrackingPending,
+                    )),
+                );
+            }
+        };
+        let mut tracking = pending.begin_tracking(registered.tracking_policy());
+        let mut transaction = radio.detach();
+        let (registers, phy, mut grant) = transaction.hardware_with_attachment_and_grant();
+        if !tracking.describes(registers) {
             *phy.slot_mut() = Slot::Poisoned;
-            return Err(ConcurrentPhyTrackingError::Failed(error));
+            return (
+                transaction.reunite(),
+                Err(ConcurrentPhyTrackingError::Failed(
+                    TargetPhyParamTrackingError::EpochMismatch,
+                )),
+            );
         }
-    };
-    match tracking.into_owner() {
-        Ok(clients) => {
-            *phy.slot_mut() = Slot::Registered(PhyDomain::new(registered, clients));
-            Ok(outcome)
-        }
-        Err(_) => {
-            let error = TargetPhyParamTrackingError::MissingCompletedOwner;
-            *phy.slot_mut() = Slot::Poisoned;
-            Err(ConcurrentPhyTrackingError::Failed(error))
-        }
+        let result = {
+            let state = registered.target_state_mut();
+            let mut port = TargetPhyParamTrackingPort::<_, _, _, D, _, _>::new(
+                platform, registers, &mut grant, timer, observer,
+            );
+            run_phy_param_tracking(&mut tracking, state, &mut port)
+                .await
+                .map_err(TargetPhyParamTrackingError::Run)
+        };
+        let result = match result {
+            Err(error) => {
+                *phy.slot_mut() = Slot::Poisoned;
+                Err(ConcurrentPhyTrackingError::Failed(error))
+            }
+            Ok(outcome) => match tracking.into_owner() {
+                Ok(clients) => {
+                    *phy.slot_mut() = Slot::Registered(PhyDomain::new(registered, clients));
+                    Ok(outcome)
+                }
+                Err(_) => {
+                    *phy.slot_mut() = Slot::Poisoned;
+                    Err(ConcurrentPhyTrackingError::Failed(
+                        TargetPhyParamTrackingError::MissingCompletedOwner,
+                    ))
+                }
+            },
+        };
+        (transaction.reunite(), result)
     }
 }
 
@@ -471,7 +530,7 @@ impl oer_diagnostics::DiagnosticPath for ConcurrentTrackingTick {
 /// One tick of ESP-IDF's periodic `phy_track_pll`: evaluate the clients'
 /// tracking period and, when tracking is due, run it at once with the
 /// protocols running, as the vendor timer callback does under its PHY lock;
-/// the exclusive borrow of the radio domain is that lock, and the tracking
+/// the owned PHY transaction serializes the radio domain, and the tracking
 /// graph brackets its RF-sensitive
 /// regions with the grant-protect request.
 ///
@@ -482,37 +541,46 @@ impl oer_diagnostics::DiagnosticPath for ConcurrentTrackingTick {
 ///
 /// # Cancellation
 ///
-/// Once tracking starts, drive this future to a terminal result;
-/// cancellation then leaves hardware partially updated and requires reset.
-pub async fn track_concurrent_phy<B: PlatformClockBackend, P, D, O>(
-    radio: &mut RadioDomain<B, ConcurrentPhy>,
+/// Cancellation, including before the first poll, quarantines the owned
+/// transaction and records its fault before reset.
+pub fn track_concurrent_phy<B: PlatformClockBackend, P, D, O>(
+    radio: RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
     timer: &impl oer_cooperate::CooperativeTimer,
     observer: O,
-) -> Result<ConcurrentTrackingTick, ConcurrentPhyTrackingError>
+) -> impl core::future::Future<
+    Output = (
+        RadioDomain<B, ConcurrentPhy>,
+        Result<ConcurrentTrackingTick, ConcurrentPhyTrackingError>,
+    ),
+>
 where
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
-    let due = if radio.attachment().tracking_pending() {
-        true
-    } else {
-        match evaluate_periodic_tracking(radio, timer) {
-            Ok(due) => due,
-            Err(
-                error @ (ConcurrentPhyError::NotRegistered
-                | ConcurrentPhyError::RfClosed
-                | ConcurrentPhyError::Poisoned),
-            ) => return Ok(ConcurrentTrackingTick::Unavailable(error)),
-            Err(error) => return Err(ConcurrentPhyTrackingError::Rejected(error)),
+    let initial = radio.detach();
+    async move {
+        let mut radio = initial.reunite();
+        let due = if radio.attachment().tracking_pending() {
+            true
+        } else {
+            match evaluate_periodic_tracking(&mut radio, timer) {
+                Ok(due) => due,
+                Err(
+                    error @ (ConcurrentPhyError::NotRegistered
+                    | ConcurrentPhyError::RfClosed
+                    | ConcurrentPhyError::Poisoned),
+                ) => return (radio, Ok(ConcurrentTrackingTick::Unavailable(error))),
+                Err(error) => return (radio, Err(ConcurrentPhyTrackingError::Rejected(error))),
+            }
+        };
+        if !due {
+            return (radio, Ok(ConcurrentTrackingTick::NotDue));
         }
-    };
-    if !due {
-        return Ok(ConcurrentTrackingTick::NotDue);
+        let (radio, result) =
+            maintain_concurrent_phy::<_, P, D, O>(timer, radio, platform, observer).await;
+        (radio, result.map(ConcurrentTrackingTick::Tracked))
     }
-    maintain_concurrent_phy::<_, P, D, O>(timer, radio, platform, observer)
-        .await
-        .map(ConcurrentTrackingTick::Tracked)
 }
 
 /// Wi-Fi channel operation on the shared domain that did not complete.

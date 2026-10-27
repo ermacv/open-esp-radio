@@ -21,7 +21,8 @@ use oer_memory::ClaimCell;
 pub(crate) struct Session {
     pub(crate) calibrated: bool,
     /// The shared radio domain.
-    pub(crate) radio: RadioDomain<ChipClocks, ConcurrentPhy>,
+    pub(crate) radio: Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
+    radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     /// The running Wi-Fi register owner.
     pub(crate) wifi: RadioAccess,
     /// Wi-Fi's common power, held for the session.
@@ -55,8 +56,12 @@ pub(crate) fn init() -> u32 {
     let Ok(runtime) = root.into_runtime() else {
         return ROOT_INIT;
     };
+    oer_espressif_staged_runtime::phy_fault::report_previous();
+    let transaction_identity = oer_espressif_staged_runtime::phy_fault::identity();
     let clocks = runtime.clocks;
-    let (radio, partitions) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let (radio, partitions) = runtime
+        .radio
+        .split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity);
     let session = match powered(radio, partitions.wifi, clocks) {
         Ok(session) => session,
         Err(reason) => return reason,
@@ -76,9 +81,11 @@ fn powered(
         return Err(WIFI_CLOCKS);
     };
     let (wifi, clocks_on) = clocked.into_running();
+    let radio_fault = radio.fault_handle();
     Ok(Session {
         calibrated: false,
-        radio,
+        radio: Some(radio),
+        radio_fault,
         wifi,
         _power: power,
         _clocks_on: clocks_on,
@@ -101,10 +108,13 @@ pub(crate) async fn calibrated(
     use oer_esp32s31_phy::{
         NoopPhyTargetObserver, PhyRegisterConfig, RomShortDelay, register_concurrent_phy,
     };
-    let (mut radio, partitions) = hardware.split::<ChipClocks, _>(ConcurrentPhy::new());
-    let registration = register_concurrent_phy::<_, (), RomShortDelay, _>(
+    let (radio, partitions) = hardware.split::<ChipClocks, _>(
+        ConcurrentPhy::new(),
+        oer_espressif_staged_runtime::phy_fault::identity(),
+    );
+    let (radio, registration) = register_concurrent_phy::<_, (), RomShortDelay, _>(
         timer,
-        &mut radio,
+        radio,
         &mut (),
         &clocks,
         PhyRegisterConfig::new(identity),
@@ -127,12 +137,18 @@ pub(crate) async fn calibrated(
 impl Session {
     pub(crate) fn measurement_clocks(&mut self, enabled: bool) -> bool {
         use oer_esp32s31_hal::domain::PhyClockModule;
+        let radio = match self.radio.as_mut() {
+            Some(radio) => radio,
+            None => self
+                .radio_fault
+                .reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
+        };
         if enabled {
-            self.radio
+            radio
                 .enable_phy_modem_clocks(PhyClockModule::Calibration, &self._clocks)
                 .is_ok()
         } else {
-            self.radio
+            radio
                 .disable_phy_modem_clocks(PhyClockModule::Calibration)
                 .is_ok()
         }
@@ -150,4 +166,30 @@ pub(crate) fn install(session: Session) -> u32 {
 /// start.
 pub(crate) fn with<R>(entry: impl FnOnce(&mut Session) -> R) -> Option<R> {
     SESSION.lend(entry).ok()
+}
+
+impl Session {
+    pub(crate) fn radio_mut(&mut self) -> &mut RadioDomain<ChipClocks, ConcurrentPhy> {
+        match self.radio.as_mut() {
+            Some(radio) => radio,
+            None => self
+                .radio_fault
+                .reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
+        }
+    }
+    pub(crate) fn phy<R>(
+        &mut self,
+        operation: impl FnOnce(&mut oer_esp32s31_hal::domain::transaction::PhyHardware) -> R,
+    ) -> R {
+        let radio = match self.radio.take() {
+            Some(radio) => radio,
+            None => self
+                .radio_fault
+                .reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
+        };
+        let mut transaction = radio.detach();
+        let result = operation(transaction.hardware_mut());
+        self.radio = Some(transaction.reunite());
+        result
+    }
 }

@@ -126,7 +126,7 @@ fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, 
 /// Dispatch and acknowledgement are shared, independent of the clock type.
 #[inline(never)]
 pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_time::Clock>(
-    io: &mut Io<'_, '_>,
+    io: &mut Io<'_>,
     child: &mut PhyParamTrackingTxPowerTransition<'_>,
     gain: &mut Cursor,
     action: Action,
@@ -216,7 +216,7 @@ fn gain_record(
 
 #[inline(never)]
 fn execute<D: crate::executor::wait::PhyShortDelay>(
-    io: &mut Io<'_, '_>,
+    io: &mut Io<'_>,
     transition: &mut PhyTxPowerTrackingTransition,
     binding: crate::tracking::power::ControlBinding,
 ) -> Result<(), Failure> {

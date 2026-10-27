@@ -129,7 +129,7 @@ fn maximum_poll_and_atom_retain_their_own_group_or_terminal_identity() {
     let mut cursor = super::super::channel_gain::Cursor::default();
     // Advance through real entry groups; observations use a hermetic synthetic clock record.
     let mut io = Io::default();
-    let mut target = super::super::io::Io::Test(&mut io, core::marker::PhantomData);
+    let mut target = super::super::io::Io::Test(&mut io);
     cursor.advance(&mut target, &image()).expect("first group");
     let mut timing = EngineTiming {
         maximum_micros: 30,

@@ -1,4 +1,5 @@
 //! Image-local RX diagnostic assembly; no block runtime API.
+use crate::radio::require_radio;
 use oer_diagnostics::{DiagPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
@@ -128,31 +129,33 @@ impl Rx {
 
     pub async fn enter(
         &mut self,
-        domain: &mut RadioDomain<ChipClocks, ConcurrentPhy>,
+        domain_slot: &mut Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
+        fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
         clocks: &ChipClocks,
         channel: u8,
         power_dbm: i8,
     ) -> Result<()> {
         let permit = receive_permit(channel)?;
         let absent = self.absent.take().ok_or(RejectReason::Internal)?;
-        let (coex, _) = domain.enter_coex(absent);
+        let (coex, _) = require_radio(domain_slot.as_mut(), fault).enter_coex(absent);
         self.coex = Some(coex);
         let (powered, power) = self
             .cold
             .take()
             .ok_or(RejectReason::Internal)?
-            .power_up(domain, clocks)
+            .power_up(require_radio(domain_slot.as_mut(), fault), clocks)
             .map_err(|_| failed("154-power-up"))?;
         self.power = Some(power);
         crate::tx_rate_checkpoint::observe(
-            domain,
+            require_radio(domain_slot.as_ref(), fault),
             crate::tx_rate_checkpoint::Point::AfterIeee802154CommonPower,
         )
         .await?;
         let clocked = powered
-            .enable_clocks(domain, clocks)
+            .enable_clocks(require_radio(domain_slot.as_mut(), fault), clocks)
             .map_err(|_| failed("154-clocks-on"))?;
-        let ready = phy_ready(domain).map_err(|_| failed("154-phy-ready"))?;
+        let ready = phy_ready(require_radio(domain_slot.as_mut(), fault))
+            .map_err(|_| failed("154-phy-ready"))?;
         let PhyClientAccess::Available(available) = ready.client::<Ieee802154PhyMembership>()
         else {
             return Err(RejectReason::Internal);
@@ -180,13 +183,17 @@ impl Rx {
             );
             #[cfg(oer_profile)]
             let timer_window = oer_espressif_executor::timer_observation::Window::begin();
-            let result = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-                &crate::PHY_CLOCK,
-                domain,
-                &mut (),
-                &mut observer,
-            )
-            .await;
+            let result = {
+                let (returned, result) = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
+                    &crate::PHY_CLOCK,
+                    require_radio(domain_slot.take(), fault),
+                    &mut (),
+                    &mut observer,
+                )
+                .await;
+                *domain_slot = Some(returned);
+                result
+            };
             observer.report(0).await;
             #[cfg(oer_profile)]
             crate::hold::report_timer(timer_window).await;
@@ -198,7 +205,7 @@ impl Rx {
             })?;
         }
         let foundation = clocked
-            .reset_mac(domain)
+            .reset_mac(require_radio(domain_slot.as_mut(), fault))
             .map_err(|_| failed("154-reset"))?
             .configure_foundation()
             .map_err(|_| failed("154-foundation"))?;
@@ -222,7 +229,9 @@ impl Rx {
             .map_err(|_| failed("154-placement"))?,
         };
         engine.set_coexistence(Ieee802154Coexistence::Software(
-            Ieee802154CoexPriorities::resolve(&domain.coex_pti_table()),
+            Ieee802154CoexPriorities::resolve(
+                &require_radio(domain_slot.as_mut(), fault).coex_pti_table(),
+            ),
         ));
         engine.enable();
         engine.mac_init();
@@ -261,7 +270,8 @@ impl Rx {
 
     pub async fn exit(
         &mut self,
-        domain: &mut RadioDomain<ChipClocks, ConcurrentPhy>,
+        domain_slot: &mut Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
+        fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     ) -> Result<()> {
         // Same P2 task as the polls, with no yield until the engine stopped.
         let mut running = ENGINE
@@ -297,28 +307,43 @@ impl Rx {
             .into_foundation(task, interrupts)
             .map_err(|_| failed("154-return"))?;
         let clocked = foundation.into_clocked();
-        if !leave_ieee802154(domain, &clocked, member).map_err(|_| failed("154-leave"))? {
+        if !leave_ieee802154(require_radio(domain_slot.as_mut(), fault), &clocked, member)
+            .map_err(|_| failed("154-leave"))?
+        {
             return Err(RejectReason::Internal);
         }
         let powered = clocked
-            .disable_clocks(domain)
+            .disable_clocks(require_radio(domain_slot.as_mut(), fault))
             .map_err(|_| failed("154-clocks-off"))?;
-        let (absent, _) = domain.leave_coex(self.coex.take().ok_or(RejectReason::Internal)?);
+        let (absent, _) = require_radio(domain_slot.as_mut(), fault)
+            .leave_coex(self.coex.take().ok_or(RejectReason::Internal)?);
         self.cold = Some(
             powered
                 .power_down(
-                    domain,
+                    require_radio(domain_slot.as_mut(), fault),
                     self.power.take().ok_or(RejectReason::Internal)?,
                     &absent,
                 )
                 .map_err(|_| RejectReason::Internal)?,
         );
         self.absent = Some(absent);
-        crate::sar2_checkpoint::observe(domain, crate::sar2_checkpoint::Point::BeforeRfClose)
-            .await?;
-        close_concurrent_rf::<_, (), RomShortDelay>(&crate::PHY_CLOCK, domain, &mut ())
-            .await
-            .map_err(|_| RejectReason::Internal)?;
+        crate::sar2_checkpoint::observe(
+            domain_slot,
+            fault,
+            crate::sar2_checkpoint::Point::BeforeRfClose,
+        )
+        .await?;
+        {
+            let (returned, result) = close_concurrent_rf::<_, (), RomShortDelay>(
+                &crate::PHY_CLOCK,
+                require_radio(domain_slot.take(), fault),
+                &mut (),
+            )
+            .await;
+            *domain_slot = Some(returned);
+            result
+        }
+        .map_err(|_| RejectReason::Internal)?;
         Ok(())
     }
 }

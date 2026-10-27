@@ -4,8 +4,11 @@ use crate::root::RadioHardware;
 /// The partition round-trips through the cold owner without MMIO.
 #[test]
 fn a_cold_client_returns_its_partition() {
-    let (_radio, partitions) =
-        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (_radio, partitions) = RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     let cold = WifiCold::from_partition(partitions.wifi);
     let _partition = cold.into_partition();
 }
@@ -14,8 +17,11 @@ fn a_cold_client_returns_its_partition() {
 /// keeping its initialized status.
 #[test]
 fn a_running_epoch_reunites_with_its_clocked_client() {
-    let (_radio, partitions) =
-        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (_radio, partitions) = RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
     let (runtime, clocks) = clocked.into_running();
     let clocked = super::WifiClocked::from_running(runtime, clocks);
@@ -26,8 +32,11 @@ fn a_running_epoch_reunites_with_its_clocked_client() {
 /// domain and ends with it.
 #[test]
 fn the_runtime_channel_capability_borrows_the_lease() {
-    let (mut radio, partitions) =
-        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (mut radio, partitions) = RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
     let (mut runtime, _clocks) = clocked.into_running();
     let domain = &mut radio;
@@ -39,8 +48,11 @@ fn the_runtime_channel_capability_borrows_the_lease() {
 
 #[test]
 fn clock_release_consumes_the_obligation_only_on_success() {
-    let (_radio, partitions) =
-        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (_radio, partitions) = RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
     let released = match clocked.finish_clock_release(Ok(())) {
         Ok(released) => released,
@@ -58,7 +70,10 @@ fn every_clock_release_failure_retains_stopped_custody_and_exact_obligation() {
         super::ModemClockError::Poisoned,
     ] {
         let (_radio, partitions) = RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend, _>(());
+            .split::<crate::power::test_clocks::CountingBackend, _>(
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        );
         let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
         let (stopped, poison) = match clocked.finish_clock_release(Err(reason)) {
             Err(owners) => owners,

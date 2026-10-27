@@ -63,10 +63,9 @@ oer_probe_macros::probe! {
         let result = crate::session::with(|session| {
             if !session.calibrated { return Err(13); }
             if !session.measurement_clocks(true) { return Err(2); }
-            let result = {
-                let mut phy = session.radio.phy_hal();
-                if selection == 151 { estimator(&mut phy) } else { frequency(&mut phy) }
-            };
+            let result = session.phy(|phy| {
+                if selection == 151 { estimator(phy) } else { frequency(phy) }
+            });
             if !session.measurement_clocks(false) { return Err(3); }
             result
         });

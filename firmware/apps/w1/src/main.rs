@@ -264,9 +264,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let access_point = factory.address(Interface::AccessPoint);
 
     // The image times the root's platform clock owner.
-    let (domain, partitions) = runtime
-        .radio
-        .split::<TimedChipClocks, _>(ConcurrentPhy::new());
+    let (domain, partitions) = runtime.radio.split::<TimedChipClocks, _>(
+        ConcurrentPhy::new(),
+        oer_espressif_staged_runtime::phy_fault::identity(),
+    );
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         fail("claim")
     };

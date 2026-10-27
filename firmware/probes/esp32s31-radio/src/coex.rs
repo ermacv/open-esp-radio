@@ -13,7 +13,7 @@ fn with_timer(index: u32, operation: impl FnOnce(&mut CoexTimerBank<'_>, CoexPol
     let Some(timer) = u8::try_from(index).ok().and_then(CoexPolicyTimer::new) else {
         return;
     };
-    let _ = session::with(|session| operation(&mut session.radio.coex_timer_bank(), timer));
+    let _ = session::with(|session| operation(&mut session.radio_mut().coex_timer_bank(), timer));
 }
 
 pub fn enable_timer(index: u32) {
@@ -36,7 +36,7 @@ pub fn unforce_timer(index: u32) {
 pub fn core_release(event: CoexEventId) -> Option<Result<(), CoexError>> {
     let mut core = CoexCore::new();
     session::with(|session| {
-        let ports = CoexDomainPorts::new(&mut session.radio);
+        let ports = CoexDomainPorts::new(session.radio_mut());
         let (mut timer, _) = ports.ports();
         core.release(&mut timer, event).map(|_| ())
     })
@@ -54,7 +54,7 @@ pub fn set_timer_clock(selector: u32, divisor: u32) -> bool {
         _ => return false,
     };
     session::with(|session| {
-        CoexDomainPorts::new(&mut session.radio).set_timer_clock(selector, divisor)
+        CoexDomainPorts::new(session.radio_mut()).set_timer_clock(selector, divisor)
     })
     .unwrap_or(false)
 }

@@ -46,14 +46,17 @@ impl Restore {
 fn register(
     shared: &mut RadioDomain<crate::power::test_clocks::CountingBackend>,
 ) -> crate::owner::PhyRegistrationEpoch {
-    shared.phy_hal().begin_registration().epoch()
+    shared.begin_registration_for_host_test().epoch()
 }
 
 #[test]
 fn every_pending_restore_blocks_the_reunion() {
     for restore in Restore::ALL {
         let (mut shared, partitions) = RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend, _>(());
+            .split::<crate::power::test_clocks::CountingBackend, _>(
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        );
         restore.occupy(shared.phy_state_mut_for_test());
         let Err(failure) = RadioHardware::reunite(shared, partitions) else {
             panic!("the split reunited over a pending restore");
@@ -67,8 +70,11 @@ fn every_pending_restore_blocks_the_reunion() {
 
 #[test]
 fn a_split_reunites_and_retires_the_registration() {
-    let (mut shared, partitions) =
-        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (mut shared, partitions) = RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     let first = register(&mut shared);
     let second = register(&mut shared);
     assert_ne!(first, second);
@@ -76,8 +82,11 @@ fn a_split_reunites_and_retires_the_registration() {
         .unwrap_or_else(|_| panic!("an idle split reunites"));
 
     // Returning to the neutral root retires the registration.
-    let (mut shared, _partitions) =
-        hardware.split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (mut shared, _partitions) = hardware
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        );
     {
         let radio = &mut shared;
         assert_eq!(radio.registration_epoch(), None);
@@ -93,8 +102,11 @@ fn a_split_reunites_and_retires_the_registration() {
 fn reunion_waits_for_platform_clocks_a_failed_power_sequence_kept() {
     use crate::power::{PlatformClock, test_clocks::CountingPlatformClocks};
     let platform = CountingPlatformClocks::new();
-    let (mut shared, partitions) =
-        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (mut shared, partitions) = RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     shared.hold_platform_clock_for_test(PlatformClock::Pll160m, &platform);
     let Err(failure) = RadioHardware::reunite(shared, partitions) else {
         panic!("common power still holds the 160 MHz source");
@@ -114,8 +126,11 @@ fn reunion_waits_for_platform_clocks_a_failed_power_sequence_kept() {
 #[test]
 fn reunion_waits_for_common_power() {
     use crate::domain::RadioClient;
-    let (mut shared, partitions) =
-        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
+    let (mut shared, partitions) = RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(
+        (),
+        crate::domain::transaction::PhyIdentity::for_host_test(),
+    );
     shared.hold_common_power_for_test(RadioClient::Bluetooth);
     let Err(failure) = RadioHardware::reunite(shared, partitions) else {
         panic!("a client still holds common power");

@@ -201,7 +201,8 @@ struct WifiShare {
 /// `C` provides the platform clocks, `T` is the PHY's time and `O` observes
 /// the PHY's target work.
 pub struct Esp32s31Radio<C: PlatformClockProvider, T, O> {
-    radio: RadioDomain<C::Backend, ConcurrentPhy>,
+    radio: Option<RadioDomain<C::Backend, ConcurrentPhy>>,
+    radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     clocks: C,
     timer: T,
     observer: O,
@@ -229,8 +230,10 @@ where
         observer: O,
         registration: PhyRegisterConfig,
     ) -> Self {
+        let radio_fault = radio.fault_handle();
         Self {
-            radio,
+            radio: Some(radio),
+            radio_fault,
             clocks,
             timer,
             observer,
@@ -257,7 +260,8 @@ where
     fn enter_coex(&mut self) -> bool {
         match self.wifi.coex.take() {
             Some(Coex::Absent(absent)) => {
-                let (coexisting, _participants) = self.radio.enter_coex(absent);
+                let (coexisting, _participants) =
+                    require_radio(self.radio.as_mut(), self.radio_fault).enter_coex(absent);
                 self.wifi.coex = Some(Coex::Coexisting(coexisting));
                 true
             }
@@ -270,7 +274,8 @@ where
 
     fn leave_coex(&mut self) {
         if let Some(Coex::Coexisting(coexisting)) = self.wifi.coex.take() {
-            let (absent, _participants) = self.radio.leave_coex(coexisting);
+            let (absent, _participants) =
+                require_radio(self.radio.as_mut(), self.radio_fault).leave_coex(coexisting);
             self.wifi.coex = Some(Coex::Absent(absent));
         }
     }
@@ -282,7 +287,11 @@ where
         else {
             return Err(WifiReturned::Powered(powered));
         };
-        match powered.power_down(&mut self.radio, power, absent) {
+        match powered.power_down(
+            require_radio(self.radio.as_mut(), self.radio_fault),
+            power,
+            absent,
+        ) {
             Ok(cold) => Ok(cold),
             Err(failure) => {
                 let (powered, power) = failure.into_owner();
@@ -294,7 +303,7 @@ where
 
     /// Release the module clocks and initialized status, then power down.
     fn roll_back(&mut self, clocked: WifiClocked) -> Result<WifiCold, WifiReturned> {
-        match clocked.release_clocks(&mut self.radio) {
+        match clocked.release_clocks(require_radio(self.radio.as_mut(), self.radio_fault)) {
             Ok(released) => self.power_down(released.into_powered()),
             Err((stopped, obligation)) => Err(WifiReturned::ClockPoisoned {
                 stopped,
@@ -341,9 +350,17 @@ where
             Rf::Closed => {
                 // Any failure, a rejection included, leaves the domain's
                 // state unknown to the actor: it poisons.
-                wake_concurrent_rf::<_, RomShortDelay>(&self.timer, &mut self.radio, &self.clocks)
-                    .await
-                    .map_err(|error| Fault(rf_cause(error)))?;
+                {
+                    let (radio, result) = wake_concurrent_rf::<_, RomShortDelay>(
+                        &self.timer,
+                        require_radio(self.radio.take(), self.radio_fault),
+                        &self.clocks,
+                    )
+                    .await;
+                    self.radio = Some(radio);
+                    result
+                }
+                .map_err(|error| Fault(rf_cause(error)))?;
                 self.rf = Rf::Open;
                 Ok(PhyPreparation::Woke {
                     micros: self.micros_since(start),
@@ -354,15 +371,19 @@ where
                     .registration
                     .take()
                     .ok_or(Fault(PoisonCause::Custody))?;
-                let registration = register_concurrent_phy::<_, (), RomShortDelay, O>(
-                    &self.timer,
-                    &mut self.radio,
-                    &mut (),
-                    &self.clocks,
-                    config,
-                    self.observer.clone(),
-                )
-                .await
+                let registration = {
+                    let (radio, result) = register_concurrent_phy::<_, (), RomShortDelay, O>(
+                        &self.timer,
+                        require_radio(self.radio.take(), self.radio_fault),
+                        &mut (),
+                        &self.clocks,
+                        config,
+                        self.observer.clone(),
+                    )
+                    .await;
+                    self.radio = Some(radio);
+                    result
+                }
                 .map_err(|failure| Fault(registration_cause(&failure)))?;
                 self.rf = Rf::Open;
                 let outcome = registration.outcome();
@@ -378,9 +399,14 @@ where
 
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault> {
         let LastClientLeft(()) = last;
-        match close_concurrent_rf::<_, (), RomShortDelay>(&self.timer, &mut self.radio, &mut ())
-            .await
-        {
+        let (radio, result) = close_concurrent_rf::<_, (), RomShortDelay>(
+            &self.timer,
+            require_radio(self.radio.take(), self.radio_fault),
+            &mut (),
+        )
+        .await;
+        self.radio = Some(radio);
+        match result {
             Ok(()) => {
                 self.rf = Rf::Closed;
                 Ok(())
@@ -397,8 +423,7 @@ where
     }
 
     fn tracking_deadline(&self) -> Option<oer_time::Instant> {
-        let micros = self
-            .radio
+        let micros = require_radio(self.radio.as_ref(), self.radio_fault)
             .attachment()
             .client_snapshot()?
             .next_tracking_deadline_micros()
@@ -409,13 +434,17 @@ where
     async fn track_tick(&mut self) -> Result<(), Fault> {
         // A rejected tick (the tracking clock ran backwards) would fall due
         // again at once; it poisons like a failed one.
-        let result = track_concurrent_phy::<_, (), RomShortDelay, O>(
-            &mut self.radio,
-            &mut (),
-            &self.timer,
-            self.observer.clone(),
-        )
-        .await
+        let result = {
+            let (radio, result) = track_concurrent_phy::<_, (), RomShortDelay, O>(
+                require_radio(self.radio.take(), self.radio_fault),
+                &mut (),
+                &self.timer,
+                self.observer.clone(),
+            )
+            .await;
+            self.radio = Some(radio);
+            result
+        }
         .map(|_tick| ())
         .map_err(|error| Fault(tracking_cause(error)));
         #[cfg(feature = "bluetooth")]
@@ -455,7 +484,10 @@ where
                 cause: wifi_poisoned(RequestKind::Join, PoisonCause::Custody),
             });
         }
-        let (powered, power) = match cold.power_up(&mut self.radio, &self.clocks) {
+        let (powered, power) = match cold.power_up(
+            require_radio(self.radio.as_mut(), self.radio_fault),
+            &self.clocks,
+        ) {
             Ok(powered) => powered,
             Err(failure) => {
                 let cause = match failure.error() {
@@ -481,7 +513,10 @@ where
             }
         };
         self.wifi.power = Some(power);
-        let mut clocked = match powered.enable_clocks(&mut self.radio, &self.clocks) {
+        let mut clocked = match powered.enable_clocks(
+            require_radio(self.radio.as_mut(), self.radio_fault),
+            &self.clocks,
+        ) {
             Ok(clocked) => clocked,
             Err(failure) => {
                 let error = failure.error();
@@ -507,14 +542,16 @@ where
                 });
             }
         };
-        if let Err(error) = clocked.set_initialized(&mut self.radio, true) {
+        if let Err(error) =
+            clocked.set_initialized(require_radio(self.radio.as_mut(), self.radio_fault), true)
+        {
             // The modem clocks are poisoned.
             return Err(Failed {
                 returned: WifiReturned::Clocked(clocked),
                 cause: wifi_poisoned(RequestKind::Join, PoisonCause::ModemClock(error)),
             });
         }
-        let joined = match phy_ready(&mut self.radio) {
+        let joined = match phy_ready(require_radio(self.radio.as_mut(), self.radio_fault)) {
             Ok(ready) => join_wifi(vacant_wifi(ready), &clocked, &self.timer)
                 .map(|joined| (joined.membership, joined.acquired))
                 .map_err(|refused| refused.error),
@@ -559,14 +596,15 @@ where
         };
         let tracking_micros = if self.wifi.tracking_due {
             let start = self.timer.now();
-            match maintain_concurrent_phy::<_, (), RomShortDelay, O>(
+            let (radio, result) = maintain_concurrent_phy::<_, (), RomShortDelay, O>(
                 &self.timer,
-                &mut self.radio,
+                require_radio(self.radio.take(), self.radio_fault),
                 &mut (),
                 self.observer.clone(),
             )
-            .await
-            {
+            .await;
+            self.radio = Some(radio);
+            match result {
                 Ok(_outcome) => {
                     self.wifi.tracking_due = false;
                     Some(self.micros_since(start))
@@ -588,13 +626,19 @@ where
             None
         };
 
-        set_wifi_rx(&mut self.radio, &membership, true);
+        set_wifi_rx(
+            require_radio(self.radio.as_mut(), self.radio_fault),
+            &membership,
+            true,
+        );
         let lowered = crate::channel::lower_wifi_channel(channel.channel());
         let mut observer = self.observer.clone();
         let mut platform = ();
         let selected = {
-            let (mut channel, phy) =
-                wifi.channel_hal_with_attachment(&mut platform, &mut self.radio);
+            let (mut channel, phy) = wifi.channel_hal_with_attachment(
+                &mut platform,
+                require_radio(self.radio.as_mut(), self.radio_fault),
+            );
             select_concurrent_wifi_channel::<RomShortDelay, _, _>(
                 &self.timer,
                 phy,
@@ -610,7 +654,11 @@ where
                 ConcurrentWifiChannelError::Rejected(_) => {
                     // ClientFailed: the channel transaction did not start; the
                     // only shared write is Wi-Fi's own RX enable, cleared again.
-                    set_wifi_rx(&mut self.radio, &membership, false);
+                    set_wifi_rx(
+                        require_radio(self.radio.as_mut(), self.radio_fault),
+                        &membership,
+                        false,
+                    );
                     Failure::ClientFailed
                 }
                 ConcurrentWifiChannelError::Failed(error) => {
@@ -624,7 +672,10 @@ where
             });
         }
 
-        let (tx_power, temperature) = match self.radio.attachment().phy_state() {
+        let (tx_power, temperature) = match require_radio(self.radio.as_ref(), self.radio_fault)
+            .attachment()
+            .phy_state()
+        {
             Ok(state) => (
                 state
                     .tx_target_power_profile()
@@ -644,15 +695,19 @@ where
 
         let mut sources = MacSources {
             pti: MAC_COEX_EVENTS.map(|event| {
-                MacCoexPti::new(self.radio.coex_pti(event.coex_event()).value())
-                    .expect("the coexistence table holds four-bit priorities")
+                MacCoexPti::new(
+                    require_radio(self.radio.as_ref(), self.radio_fault)
+                        .coex_pti(event.coex_event())
+                        .value(),
+                )
+                .expect("the coexistence table holds four-bit priorities")
             }),
             tx_power,
             slow_clock,
             delay_random,
         };
         let mac_outcome = {
-            let mut hal = wifi.cold_mac_hal(&mut self.radio);
+            let mut hal = wifi.cold_mac_hal(require_radio(self.radio.as_mut(), self.radio_fault));
             // Track prepares MAC configuration and IRQs with its common gates
             // held. Only the later runtime owner can supply an RX-ring proof.
             initialize_wifi_mac(&mut sources, &mut hal, &self.timer, mac).await
@@ -664,7 +719,7 @@ where
                     wifi,
                     report: TrackReport {
                         probe_priority: crate::mac_sources::probe_priority(
-                            self.radio.coex_pti_table(),
+                            require_radio(self.radio.as_ref(), self.radio_fault).coex_pti_table(),
                         ),
                         tracking_micros,
                         temperature,
@@ -680,7 +735,11 @@ where
                 // register as it was; the half-started MAC is Wi-Fi's
                 // partition. The TX power queries come later and read only
                 // the owned profile. Wi-Fi's RX enable is cleared again.
-                set_wifi_rx(&mut self.radio, &membership, false);
+                set_wifi_rx(
+                    require_radio(self.radio.as_mut(), self.radio_fault),
+                    &membership,
+                    false,
+                );
                 self.wifi.membership = Some(membership);
                 Err(Failed {
                     returned: wifi,
@@ -715,7 +774,7 @@ where
         let mut observer = self.observer.clone();
         if let Err(error) = retune::select_wifi_channel(
             &self.timer,
-            &mut self.radio,
+            require_radio(self.radio.as_mut(), self.radio_fault),
             &mut wifi,
             channel,
             &mut observer,
@@ -732,7 +791,10 @@ where
                 },
             });
         }
-        let state = match self.radio.attachment().phy_state() {
+        let state = match require_radio(self.radio.as_ref(), self.radio_fault)
+            .attachment()
+            .phy_state()
+        {
             Ok(state) => state,
             Err(error) => {
                 return Err(Failed {
@@ -744,7 +806,9 @@ where
         Ok(WifiRetuned {
             wifi,
             report: RetuneReport {
-                probe_priority: crate::mac_sources::probe_priority(self.radio.coex_pti_table()),
+                probe_priority: crate::mac_sources::probe_priority(
+                    require_radio(self.radio.as_ref(), self.radio_fault).coex_pti_table(),
+                ),
                 micros: self.micros_since(start),
                 tx_power: state
                     .tx_target_power_profile()
@@ -782,8 +846,16 @@ where
         let Some(membership) = self.wifi.membership.take() else {
             return poisoned(WifiReturned::Clocked(wifi), false, PoisonCause::Custody);
         };
-        set_wifi_rx(&mut self.radio, &membership, false);
-        let last = match leave_wifi(&mut self.radio, &wifi, membership) {
+        set_wifi_rx(
+            require_radio(self.radio.as_mut(), self.radio_fault),
+            &membership,
+            false,
+        );
+        let last = match leave_wifi(
+            require_radio(self.radio.as_mut(), self.radio_fault),
+            &wifi,
+            membership,
+        ) {
             Ok(last) => last,
             Err(failure) => {
                 // The member is retired but the PHY still counts Wi-Fi.
@@ -821,3 +893,15 @@ fn vacant_wifi<B: PlatformClockBackend>(
 mod bluetooth;
 #[cfg(feature = "bluetooth")]
 pub use bluetooth::BluetoothAttachment;
+
+// An absent domain means an owned operation has not returned. Its original
+// diagnostic capability retains the source owner even after cancellation.
+fn require_radio<R>(
+    owner: Option<R>,
+    fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
+) -> R {
+    match owner {
+        Some(owner) => owner,
+        None => fault.reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
+    }
+}

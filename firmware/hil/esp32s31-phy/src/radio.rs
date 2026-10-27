@@ -24,7 +24,8 @@ use oer_time::{Clock, Timer};
 type Result<T> = core::result::Result<T, RejectReason>;
 
 pub struct Radio {
-    domain: RadioDomain<ChipClocks, ConcurrentPhy>,
+    domain: Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
+    radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     clocks: ChipClocks,
     cold: Option<WifiCold>,
     clocked: Option<WifiClocked>,
@@ -65,11 +66,13 @@ impl Radio {
         access_point: [u8; 6],
         rng: Rng,
     ) -> &'storage mut Self {
+        let radio_fault = domain.fault_handle();
         crate::place_diagnostic_radio!(
             storage,
             Self {
                 ieee802154: ieee802154,
-                domain: domain,
+                domain: Some(domain),
+                radio_fault: radio_fault,
                 clocks: clocks,
                 cold: Some(WifiCold::from_partition(wifi)),
                 clocked: None,
@@ -148,8 +151,7 @@ impl Radio {
                     return Err(RejectReason::InvalidConfiguration);
                 }
                 let current = self.current(config.epoch)?;
-                let saved = self
-                    .domain
+                let saved = require_radio(self.domain.as_ref(), self.radio_fault)
                     .attachment()
                     .phy_state()
                     .map_err(|_| RejectReason::InvalidState)?
@@ -159,7 +161,7 @@ impl Radio {
                     .checked_add(1)
                     .ok_or(RejectReason::InvalidState)?;
                 if config.policy == HoldPolicy::Forced {
-                    self.domain
+                    require_radio(self.domain.as_mut(), self.radio_fault)
                         .attachment_mut()
                         .set_temperature_tracking_debug(3, 0)
                         .map_err(|_| RejectReason::InvalidState)?;
@@ -194,15 +196,18 @@ impl Radio {
                 let mut hold = self.hold.take().ok_or(RejectReason::InvalidState)?;
                 hold.running = false;
                 let restored = if hold.started.policy == HoldPolicy::Forced {
-                    self.domain
+                    require_radio(self.domain.as_mut(), self.radio_fault)
                         .attachment_mut()
                         .set_temperature_tracking_debug(hold.saved_debug[0], hold.saved_debug[1])
                         .is_ok()
                 } else {
-                    self.domain.attachment().phy_state().is_ok_and(|state| {
-                        let policy = state.temperature_tracking_debug();
-                        [policy.first, policy.second] == hold.saved_debug
-                    })
+                    require_radio(self.domain.as_ref(), self.radio_fault)
+                        .attachment()
+                        .phy_state()
+                        .is_ok_and(|state| {
+                            let policy = state.temperature_tracking_debug();
+                            [policy.first, policy.second] == hold.saved_debug
+                        })
                 };
                 Ok(Answer::HoldStopped(HoldStopped {
                     id: config.id,
@@ -249,18 +254,26 @@ impl Radio {
                 let next = epoch.checked_add(1).ok_or(RejectReason::InvalidState)?;
                 self.ready = None;
                 self.exit_capture(current.radio).await?;
-                if !self.domain.attachment().rf_closed() {
+                if !require_radio(self.domain.as_ref(), self.radio_fault)
+                    .attachment()
+                    .rf_closed()
+                {
                     return Err(RejectReason::Internal);
                 }
-                wake_concurrent_rf::<_, RomShortDelay>(
-                    &crate::PHY_CLOCK,
-                    &mut self.domain,
-                    &self.clocks,
-                )
-                .await
+                {
+                    let (domain, result) = wake_concurrent_rf::<_, RomShortDelay>(
+                        &crate::PHY_CLOCK,
+                        require_radio(self.domain.take(), self.radio_fault),
+                        &self.clocks,
+                    )
+                    .await;
+                    self.domain = Some(domain);
+                    result
+                }
                 .map_err(|_| RejectReason::Internal)?;
                 crate::sar2_checkpoint::observe(
                     &mut self.domain,
+                    self.radio_fault,
                     crate::sar2_checkpoint::Point::AfterRfWake,
                 )
                 .await?;
@@ -292,7 +305,7 @@ impl Radio {
                     let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
                     let prepared = capture_rx.take();
                     let (wifi, result) = crate::cca_rx::run(
-                        &self.domain,
+                        require_radio(self.domain.as_ref(), self.radio_fault),
                         wifi,
                         current.channel,
                         prepared,
@@ -306,12 +319,21 @@ impl Radio {
                     Ok(())
                 };
                 let closed = self.exit_capture(current.radio).await;
-                report_capture_stop(&observed, &closed, self.domain.attachment().rf_closed()).await;
+                report_capture_stop(
+                    &observed,
+                    &closed,
+                    require_radio(self.domain.as_ref(), self.radio_fault)
+                        .attachment()
+                        .rf_closed(),
+                )
+                .await;
                 closed?;
                 observed?;
                 Ok(Answer::Stopped(CaptureStopped {
                     epoch,
-                    rf_closed: self.domain.attachment().rf_closed(),
+                    rf_closed: require_radio(self.domain.as_ref(), self.radio_fault)
+                        .attachment()
+                        .rf_closed(),
                 }))
             }
             Request::Calibration(ReadCalibrationProjection(window)) => {
@@ -335,8 +357,7 @@ impl Radio {
                     .ok_or(RejectReason::InvalidConfiguration)?;
                 let mut values = heapless::Vec::new();
                 for index in range {
-                    let value = self
-                        .domain
+                    let value = require_radio(self.domain.as_ref(), self.radio_fault)
                         .phy_register_image(index)
                         .ok_or(RejectReason::Internal)?;
                     values.push(value).map_err(|_| RejectReason::Internal)?;
@@ -400,15 +421,19 @@ impl Radio {
         let began = EmbassyClock.now();
         // Consume the native result before awaiting diagnostics: its failure
         // variant retains the complete registration transition.
-        let outcome = register_concurrent_phy::<_, (), RomShortDelay, _>(
-            &crate::PHY_CLOCK,
-            &mut self.domain,
-            &mut (),
-            &self.clocks,
-            registration_config,
-            crate::capture_observer!(self),
-        )
-        .await
+        let outcome = {
+            let (domain, result) = register_concurrent_phy::<_, (), RomShortDelay, _>(
+                &crate::PHY_CLOCK,
+                require_radio(self.domain.take(), self.radio_fault),
+                &mut (),
+                &self.clocks,
+                registration_config,
+                crate::capture_observer!(self),
+            )
+            .await;
+            self.domain = Some(domain);
+            result
+        }
         .map(|registration| registration.outcome())
         .map_err(|_| RejectReason::Internal);
         let outcome = match outcome {
@@ -440,22 +465,21 @@ impl Radio {
             PhyCalibrationPath::PartialFromCache => CalibrationPath::PartialFromCache,
         };
         crate::tx_rate_checkpoint::observe(
-            &self.domain,
+            require_radio(self.domain.as_ref(), self.radio_fault),
             crate::tx_rate_checkpoint::Point::AfterPhyRegistration,
         )
         .await?;
         crate::sar2_checkpoint::observe(
             &mut self.domain,
+            self.radio_fault,
             crate::sar2_checkpoint::Point::AfterPhyRegistration,
         )
         .await?;
-        let cache = self
-            .domain
+        let cache = require_radio(self.domain.as_ref(), self.radio_fault)
             .attachment()
             .calibration_cache(self.identity)
             .map_err(|_| RejectReason::Internal)?;
-        let state = self
-            .domain
+        let state = require_radio(self.domain.as_ref(), self.radio_fault)
             .attachment()
             .phy_state()
             .map_err(|_| RejectReason::Internal)?;
@@ -519,8 +543,7 @@ impl Radio {
             ));
         if hold.started.policy == HoldPolicy::Forced
             && hold.started.radio == CaptureRadio::Wifi
-            && self
-                .domain
+            && require_radio(self.domain.as_mut(), self.radio_fault)
                 .attachment_mut()
                 .force_wifi_i2c_tracking_debug()
                 .is_err()
@@ -530,8 +553,7 @@ impl Radio {
             return;
         }
         if hold.started.policy == HoldPolicy::Forced
-            && self
-                .domain
+            && require_radio(self.domain.as_mut(), self.radio_fault)
                 .attachment_mut()
                 .force_power_tracking_debug(hold.started.radio == CaptureRadio::Wifi)
                 .is_err()
@@ -551,16 +573,17 @@ impl Radio {
             &mut uart,
         );
         observer.metrics = Some(&metrics);
-        let tracked = {
+        let (domain, tracked) = {
             let mut port = ();
             let mut future = core::pin::pin!(track_concurrent_phy::<_, (), RomShortDelay, _>(
-                &mut self.domain,
+                require_radio(self.domain.take(), self.radio_fault),
                 &mut port,
                 &crate::PHY_CLOCK,
                 &mut observer,
             ));
             crate::hold::metrics::observe(future.as_mut(), &crate::PHY_CLOCK, &metrics).await
         };
+        self.domain = Some(domain);
         let (committed, failed) = match tracked {
             Ok(ConcurrentTrackingTick::NotDue) => return,
             Ok(ConcurrentTrackingTick::Tracked(outcome)) => {
@@ -615,8 +638,7 @@ impl Radio {
             path: self.calibration_path,
             projection_schema: projection::SCHEMA,
             calibration_words: projection::WORDS as u16,
-            registers: self
-                .domain
+            registers: require_radio(self.domain.as_ref(), self.radio_fault)
                 .phy_register_image_len()
                 .try_into()
                 .map_err(|_| RejectReason::Internal)?,
@@ -636,7 +658,12 @@ impl Radio {
         capture_rx: &mut Option<crate::cca_rx::Prepared>,
     ) -> Result<()> {
         let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
-        let (wifi, prepared) = crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take()).await;
+        let (wifi, prepared) = crate::cca_rx::prepare(
+            require_radio(self.domain.as_ref(), self.radio_fault),
+            wifi,
+            capture_rx.take(),
+        )
+        .await;
         self.clocked = Some(wifi);
         *capture_rx = Some(prepared?);
         Ok(())
@@ -647,7 +674,13 @@ impl Radio {
             CaptureRadio::Wifi => self.enter(config.channel).await,
             CaptureRadio::Ieee802154 { power_dbm } => {
                 self.ieee802154
-                    .enter(&mut self.domain, &self.clocks, config.channel, power_dbm)
+                    .enter(
+                        &mut self.domain,
+                        self.radio_fault,
+                        &self.clocks,
+                        config.channel,
+                        power_dbm,
+                    )
                     .await
             }
         }
@@ -656,30 +689,41 @@ impl Radio {
     async fn exit_capture(&mut self, radio: CaptureRadio) -> Result<()> {
         match radio {
             CaptureRadio::Wifi => self.exit().await,
-            CaptureRadio::Ieee802154 { .. } => self.ieee802154.exit(&mut self.domain).await,
+            CaptureRadio::Ieee802154 { .. } => {
+                self.ieee802154
+                    .exit(&mut self.domain, self.radio_fault)
+                    .await
+            }
         }
     }
 
     async fn enter(&mut self, channel: u8) -> Result<()> {
         let absent = self.absent.take().ok_or(RejectReason::Internal)?;
-        let (coex, _) = self.domain.enter_coex(absent);
+        let (coex, _) = require_radio(self.domain.as_mut(), self.radio_fault).enter_coex(absent);
         self.coex = Some(coex);
         let cold = self.cold.take().ok_or(RejectReason::Internal)?;
         let (powered, power) = cold
-            .power_up(&mut self.domain, &self.clocks)
+            .power_up(
+                require_radio(self.domain.as_mut(), self.radio_fault),
+                &self.clocks,
+            )
             .map_err(|_| RejectReason::Internal)?;
         self.power = Some(power);
         crate::tx_rate_checkpoint::observe(
-            &self.domain,
+            require_radio(self.domain.as_ref(), self.radio_fault),
             crate::tx_rate_checkpoint::Point::AfterWifiCommonPower,
         )
         .await?;
         let mut wifi = powered
-            .enable_clocks(&mut self.domain, &self.clocks)
+            .enable_clocks(
+                require_radio(self.domain.as_mut(), self.radio_fault),
+                &self.clocks,
+            )
             .map_err(|_| RejectReason::Internal)?;
-        wifi.set_initialized(&mut self.domain, true)
+        wifi.set_initialized(require_radio(self.domain.as_mut(), self.radio_fault), true)
             .map_err(|_| RejectReason::Internal)?;
-        let ready = phy_ready(&mut self.domain).map_err(|_| RejectReason::Internal)?;
+        let ready = phy_ready(require_radio(self.domain.as_mut(), self.radio_fault))
+            .map_err(|_| RejectReason::Internal)?;
         let PhyClientAccess::Available(available) = ready.client::<WifiPhyMembership>() else {
             return Err(RejectReason::Internal);
         };
@@ -688,27 +732,49 @@ impl Radio {
         let due = joined.acquired == ConcurrentAcquire::TrackingDue;
         self.member = Some(joined.membership);
         if due {
-            maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-                &crate::PHY_CLOCK,
-                &mut self.domain,
-                &mut (),
-                crate::capture_observer!(self),
-            )
-            .await
+            {
+                let (domain, result) = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
+                    &crate::PHY_CLOCK,
+                    require_radio(self.domain.take(), self.radio_fault),
+                    &mut (),
+                    crate::capture_observer!(self),
+                )
+                .await;
+                self.domain = Some(domain);
+                result
+            }
             .map_err(|_| RejectReason::Internal)?;
         }
         use crate::cca_checkpoint::{Point, observe};
-        wifi = observe(&self.domain, wifi, Point::BeforeRx).await?;
+        wifi = observe(
+            require_radio(self.domain.as_ref(), self.radio_fault),
+            wifi,
+            Point::BeforeRx,
+        )
+        .await?;
         set_wifi_rx(
-            &mut self.domain,
+            require_radio(self.domain.as_mut(), self.radio_fault),
             self.member.as_ref().ok_or(RejectReason::Internal)?,
             true,
         );
-        wifi = observe(&self.domain, wifi, Point::AfterRx).await?;
-        wifi = observe(&self.domain, wifi, Point::BeforeChannel).await?;
+        wifi = observe(
+            require_radio(self.domain.as_ref(), self.radio_fault),
+            wifi,
+            Point::AfterRx,
+        )
+        .await?;
+        wifi = observe(
+            require_radio(self.domain.as_ref(), self.radio_fault),
+            wifi,
+            Point::BeforeChannel,
+        )
+        .await?;
         {
             let mut platform = ();
-            let (mut port, phy) = wifi.channel_hal_with_attachment(&mut platform, &mut self.domain);
+            let (mut port, phy) = wifi.channel_hal_with_attachment(
+                &mut platform,
+                require_radio(self.domain.as_mut(), self.radio_fault),
+            );
             select_concurrent_wifi_channel::<RomShortDelay, _, _>(
                 &crate::PHY_CLOCK,
                 phy,
@@ -720,9 +786,13 @@ impl Radio {
             .await
             .map_err(|_| RejectReason::Internal)?;
         }
-        wifi = observe(&self.domain, wifi, Point::AfterChannel).await?;
-        let tx = self
-            .domain
+        wifi = observe(
+            require_radio(self.domain.as_ref(), self.radio_fault),
+            wifi,
+            Point::AfterChannel,
+        )
+        .await?;
+        let tx = require_radio(self.domain.as_ref(), self.radio_fault)
             .attachment()
             .phy_state()
             .map_err(|_| RejectReason::Internal)?
@@ -737,14 +807,23 @@ impl Radio {
                 MacCoexEvent::Event15,
             ]
             .map(|event| {
-                MacCoexPti::new(self.domain.coex_pti(event.coex_event()).value())
-                    .expect("generated coexistence PTI fits")
+                MacCoexPti::new(
+                    require_radio(self.domain.as_ref(), self.radio_fault)
+                        .coex_pti(event.coex_event())
+                        .value(),
+                )
+                .expect("generated coexistence PTI fits")
             }),
         };
-        wifi = observe(&self.domain, wifi, Point::BeforeMac).await?;
+        wifi = observe(
+            require_radio(self.domain.as_ref(), self.radio_fault),
+            wifi,
+            Point::BeforeMac,
+        )
+        .await?;
         initialize_wifi_mac(
             &mut sources,
-            &mut wifi.cold_mac_hal(&mut self.domain),
+            &mut wifi.cold_mac_hal(require_radio(self.domain.as_mut(), self.radio_fault)),
             &crate::PHY_CLOCK,
             MacColdStartConfig {
                 handshake_deadline: MAC_COLD_HANDSHAKE_DEADLINE,
@@ -754,7 +833,12 @@ impl Radio {
         )
         .await
         .map_err(|_| RejectReason::Internal)?;
-        wifi = observe(&self.domain, wifi, Point::AfterMac).await?;
+        wifi = observe(
+            require_radio(self.domain.as_ref(), self.radio_fault),
+            wifi,
+            Point::AfterMac,
+        )
+        .await?;
         // Diagnostic observation window only: allow live CCA state time to
         // evolve without changing the radio, MAC, calibration or DMA setup.
         for sample in 0..5 {
@@ -765,7 +849,12 @@ impl Radio {
                         .saturating_add(oer_time::Duration::from_micros(200_000)),
                 )
                 .await;
-            wifi = observe(&self.domain, wifi, Point::Settled(sample)).await?;
+            wifi = observe(
+                require_radio(self.domain.as_ref(), self.radio_fault),
+                wifi,
+                Point::Settled(sample),
+            )
+            .await?;
         }
         self.clocked = Some(wifi);
         Ok(())
@@ -774,21 +863,30 @@ impl Radio {
     async fn exit(&mut self) -> Result<()> {
         let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
         let member = self.member.take().ok_or(RejectReason::Internal)?;
-        set_wifi_rx(&mut self.domain, &member, false);
-        if !leave_wifi(&mut self.domain, &wifi, member).map_err(|_| RejectReason::Internal)? {
+        set_wifi_rx(
+            require_radio(self.domain.as_mut(), self.radio_fault),
+            &member,
+            false,
+        );
+        if !leave_wifi(
+            require_radio(self.domain.as_mut(), self.radio_fault),
+            &wifi,
+            member,
+        )
+        .map_err(|_| RejectReason::Internal)?
+        {
             return Err(RejectReason::Internal);
         }
         let powered = wifi
-            .release_clocks(&mut self.domain)
+            .release_clocks(require_radio(self.domain.as_mut(), self.radio_fault))
             .map_err(|_| RejectReason::Internal)?
             .into_powered();
-        let (absent, _) = self
-            .domain
+        let (absent, _) = require_radio(self.domain.as_mut(), self.radio_fault)
             .leave_coex(self.coex.take().ok_or(RejectReason::Internal)?);
         self.cold = Some(
             powered
                 .power_down(
-                    &mut self.domain,
+                    require_radio(self.domain.as_mut(), self.radio_fault),
                     self.power.take().ok_or(RejectReason::Internal)?,
                     &absent,
                 )
@@ -797,36 +895,51 @@ impl Radio {
         self.absent = Some(absent);
         crate::sar2_checkpoint::observe(
             &mut self.domain,
+            self.radio_fault,
             crate::sar2_checkpoint::Point::BeforeRfClose,
         )
         .await?;
-        close_concurrent_rf::<_, (), RomShortDelay>(&crate::PHY_CLOCK, &mut self.domain, &mut ())
-            .await
-            .map_err(|_| RejectReason::Internal)?;
+        {
+            let (domain, result) = close_concurrent_rf::<_, (), RomShortDelay>(
+                &crate::PHY_CLOCK,
+                require_radio(self.domain.take(), self.radio_fault),
+                &mut (),
+            )
+            .await;
+            self.domain = Some(domain);
+            result
+        }
+        .map_err(|_| RejectReason::Internal)?;
         Ok(())
     }
 
     async fn read_analog(&mut self, address: Address) -> Result<u8> {
-        let mut registers = self.domain.phy_hal();
-        let mut started = false;
-        for _ in 0..HARDWARE_EDGE_LIMIT {
-            if !started {
-                started = i2c::try_start_read(&mut registers, address).is_ok();
-            }
-            if started {
-                if let Ok(value) = i2c::try_finish_read(&registers, address) {
-                    return Ok(value);
+        let mut transaction = require_radio(self.domain.take(), self.radio_fault).detach();
+        let result = async {
+            let registers = transaction.hardware_mut();
+            let mut started = false;
+            for _ in 0..HARDWARE_EDGE_LIMIT {
+                if !started {
+                    started = i2c::try_start_read(registers, address).is_ok();
                 }
+                if started {
+                    if let Ok(value) = i2c::try_finish_read(registers, address) {
+                        return Ok(value);
+                    }
+                }
+                EmbassyClock
+                    .wait_until(
+                        EmbassyClock
+                            .now()
+                            .saturating_add(oer_time::Duration::from_micros(1)),
+                    )
+                    .await;
             }
-            EmbassyClock
-                .wait_until(
-                    EmbassyClock
-                        .now()
-                        .saturating_add(oer_time::Duration::from_micros(1)),
-                )
-                .await;
+            Err(RejectReason::Internal)
         }
-        Err(RejectReason::Internal)
+        .await;
+        self.domain = Some(transaction.reunite());
+        result
     }
 }
 
@@ -925,13 +1038,16 @@ impl Radio {
                 }
                 let current = self.current(identity.epoch)?;
                 let started_micros = health::now();
-                if let Ok(state) = self.domain.attachment().phy_state() {
+                if let Ok(state) = require_radio(self.domain.as_ref(), self.radio_fault)
+                    .attachment()
+                    .phy_state()
+                {
                     health::retained_detector(&mut self.health, state);
                     health::temperature(&mut self.health, state, current.channel);
                 }
                 let wifi = self.clocked.take().ok_or(RejectReason::InvalidState)?;
                 let (wifi, rx) = crate::cca_rx::run(
-                    &self.domain,
+                    require_radio(self.domain.as_ref(), self.radio_fault),
                     wifi,
                     current.channel,
                     capture_rx.take(),
@@ -941,17 +1057,24 @@ impl Radio {
                 self.clocked = Some(wifi);
                 // The finite RX transaction has already stopped/reclaimed its ring.
                 // Natural tracking now uses its ordinary exclusive PHY path.
-                health::inspection(&mut self.health, self.domain.attachment());
+                health::inspection(
+                    &mut self.health,
+                    require_radio(self.domain.as_ref(), self.radio_fault).attachment(),
+                );
                 let tracking = if rx.is_ok() {
-                    track_concurrent_phy::<_, (), RomShortDelay, _>(
-                        &mut self.domain,
-                        &mut (),
-                        &crate::PHY_CLOCK,
-                        Observer {
-                            store: &mut self.health,
-                        },
-                    )
-                    .await
+                    {
+                        let (domain, result) = track_concurrent_phy::<_, (), RomShortDelay, _>(
+                            require_radio(self.domain.take(), self.radio_fault),
+                            &mut (),
+                            &crate::PHY_CLOCK,
+                            Observer {
+                                store: &mut self.health,
+                            },
+                        )
+                        .await;
+                        self.domain = Some(domain);
+                        result
+                    }
                 } else {
                     self.health.fail();
                     return Ok(A::Window(
@@ -1000,7 +1123,10 @@ impl Radio {
                     at_micros: at,
                     committed,
                 }));
-                if let Ok(state) = self.domain.attachment().phy_state() {
+                if let Ok(state) = require_radio(self.domain.as_ref(), self.radio_fault)
+                    .attachment()
+                    .phy_state()
+                {
                     health::temperature(&mut self.health, state, current.channel);
                 }
                 let window = HealthWindow {
@@ -1023,8 +1149,12 @@ impl Radio {
                     }
                 }
                 A::Finished(
-                    self.health
-                        .finish(identity, self.domain.attachment().rf_closed())?,
+                    self.health.finish(
+                        identity,
+                        require_radio(self.domain.as_ref(), self.radio_fault)
+                            .attachment()
+                            .rf_closed(),
+                    )?,
                 )
             }
             Request::Counters(ReadHealthCounters(r)) => A::Counters(self.health.counters(r)?),
@@ -1067,4 +1197,14 @@ macro_rules! place_diagnostic_radio {
             health => crate::health::Store::place, health_boot: 0,
         }) }
     }};
+}
+
+pub(crate) fn require_radio<T>(
+    owner: Option<T>,
+    fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
+) -> T {
+    match owner {
+        Some(owner) => owner,
+        None => fault.reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
+    }
 }

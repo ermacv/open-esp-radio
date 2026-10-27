@@ -12,6 +12,12 @@ description = "Isolated ESP32-S31 PAC/HAL register conformance probes, and the l
 oer-probe-macros = { path = "../../../tools/probe/macros" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-memory = { path = "../../../portable/memory" }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31"] }
+
+[target.'cfg(not(target_arch = "riscv32"))'.dependencies]
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", features = ["test-support"] }
+
 [lib]
 crate-type = ["rlib", "staticlib"]
 
@@ -20,6 +26,7 @@ name = "oer-firmware-probes-esp32s31-register"
 path = "src/main.rs"
 
 [build-dependencies]
+oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 oer-probe-codegen = { path = "../../../tools/probe/codegen" }
 
 [lints]

@@ -1,0 +1,5 @@
+error[E0599]: no method named `hardware_mut` found for struct `DetachedRadioDomain<B, T>` in the current scope
+ --> tests/ui/detached_radio_has_no_hardware.rs:6:27
+  |
+6 |     let _hardware = owner.hardware_mut(); // ui-error: E0599
+  |                           ^^^^^^^^^^^^ method not found in `DetachedRadioDomain<B, T>`

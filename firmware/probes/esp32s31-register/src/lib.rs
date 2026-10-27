@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(target_arch = "riscv32", no_std)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 //! Small, low-level probes kept independent from AP/STA runtime adapters.
@@ -42,8 +42,14 @@ fn start_session() -> u32 {
     let Ok(runtime) = root.into_runtime() else {
         return 5;
     };
+    #[cfg(target_arch = "riscv32")]
+    oer_espressif_staged_runtime::phy_fault::report_previous();
+    #[cfg(target_arch = "riscv32")]
+    let identity = oer_espressif_staged_runtime::phy_fault::identity();
+    #[cfg(not(target_arch = "riscv32"))]
+    let identity = oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test();
     let clocks = runtime.clocks;
-    let (mut radio, partitions) = runtime.radio.split::<ChipClocks, _>(());
+    let (mut radio, partitions) = runtime.radio.split::<ChipClocks, _>((), identity);
     let Ok((powered, power)) =
         WifiCold::from_partition(partitions.wifi).power_up(&mut radio, &clocks)
     else {
@@ -63,17 +69,6 @@ fn start_session() -> u32 {
     match SESSION.install(session) {
         Ok(()) => 0,
         Err(_) => 4,
-    }
-}
-
-#[panic_handler]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "isolated verification image terminates on panic without a runtime executor"
-)]
-fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
-    loop {
-        core::hint::spin_loop();
     }
 }
 

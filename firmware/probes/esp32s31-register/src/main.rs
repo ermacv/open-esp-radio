@@ -9,7 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/probe_catalog.rs"));
     clippy::disallowed_methods,
     reason = "verification image idle entry is never a production runtime"
 )]
-// SAFETY: the probe image links no runtime, so this is the one `_start`;
+// SAFETY: the runtime entry macro is not invoked, so this is the one `_start`;
 // it touches nothing and never returns.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {

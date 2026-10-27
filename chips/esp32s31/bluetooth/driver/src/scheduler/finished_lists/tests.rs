@@ -108,8 +108,11 @@ fn sole_list_zero_exhausts_the_capture() {
 #[test]
 fn stopped_capture_borrows_only_the_engine_and_refuses_before_mmio_without_its_receipt() {
     use oer_esp32s31_hal::{bluetooth::ClockedOwner, root::RadioHardware};
-    let (_, partitions) =
-        RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
+    let (_, partitions) = RadioHardware::for_host_test()
+        .split::<crate::test_clocks::TestClockBackend, _>(
+            (),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        );
     let (mut engine, _interrupts) =
         crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
     let mut worker = SchedulerFinishedListWorker::new();
