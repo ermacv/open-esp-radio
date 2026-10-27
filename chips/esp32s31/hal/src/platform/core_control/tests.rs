@@ -58,7 +58,7 @@ fn the_stall_status_is_the_hardware_s_and_not_the_request() {
 }
 
 #[test]
-fn holding_core_1_gates_its_clocks_and_asserts_its_reset_and_releasing_undoes_it() {
+fn holding_core_1_gates_its_clocks_and_asserts_its_reset() {
     let mut memory = Memory::filled(0);
     let mut registers = memory.registers();
     assert!(!registers.held(Hart::SECONDARIES[0].hart()));
@@ -68,12 +68,6 @@ fn holding_core_1_gates_its_clocks_and_asserts_its_reset_and_releasing_undoes_it
         .clocks
         .read_hpcore_ctrl0(Hart::SECONDARIES[0].hart().index());
     assert!(!control.reg_core_clic_clk_en() && !control.reg_core_force_norst());
-    registers.release(Hart::SECONDARIES[0]);
-    assert!(!registers.held(Hart::SECONDARIES[0].hart()));
-    let control = registers
-        .clocks
-        .read_hpcore_ctrl0(Hart::SECONDARIES[0].hart().index());
-    assert!(control.reg_core_cpu_clk_en() && control.reg_core_clic_clk_en());
 }
 
 #[test]

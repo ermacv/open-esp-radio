@@ -1,7 +1,8 @@
 # How core 1 starts
 
-Every current image keeps the secondary HP hart contained. The image check
-confines the hart-local critical section to the image's declared hart.
+Every current image keeps the secondary HP hart contained. The public HAL
+cannot start or release a secondary hart. The staged build/run check audits
+linked critical-section entries against the image's declared hart roots.
 The platform HP-hart list defines the geometry and the boot role.
 
 ## 1. The mask ROM starts core 1 only at an explicit boot address
@@ -41,15 +42,20 @@ which the bootstrap runs first, iterates the generated secondary identities,
 requests their stalls, gates their core and CLIC clocks, holds their global
 resets and clears their indexed ROM boot addresses
 (SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`,
-ESP-IDF `system_internal.c:61-100`). `Cores::start` undoes it; no current image
-links a starter.
+ESP-IDF `system_internal.c:61-100`). The public HAL provides no operation that
+releases this containment or publishes a secondary entry.
 
-## 3. Nothing in an image reaches the starter
+## 3. Public API and linked-image checks
 
-The image gate rejects an image whose call graph reaches the starter symbols
-of `[core-start]` in `chip.toml`, and an interrupt-table entry with
-`hart 1`, unless that image's `stack.toml` declares core 1 used and proves
-its roots.
+Calling secondary start or clock/reset release through the public HAL fails
+at compile time. The image gate additionally rejects linked function symbols
+matching `[core-start]` in `chip.toml` when the image declares a secondary task
+stack unused; this symbol inventory does not identify inlined launch code.
+Interrupt-table routes and storage must also agree with the image's declared
+per-hart stacks. The critical-section check follows the existing call
+resolutions from the image's declared task roots, every interrupt-table handler
+and exception root, rejecting linked section entry symbols and their inline
+copies on a foreign hart.
 
 The register model describes stall-code and status lanes, clock/reset words,
 reset causes, secondary ROM boot words and matrix banks as indexed families.

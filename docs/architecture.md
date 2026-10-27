@@ -64,7 +64,9 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 ## Execution
 
-The critical section is hart-local; the image check confines it to one declared hart.
+The critical section is hart-local; staged build/run checks confine linked section
+entry points to the image's declared hart roots. The public HAL cannot start or
+release a secondary hart.
 
 | Context | Runs | Rule |
 | --- | --- | --- |

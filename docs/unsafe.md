@@ -682,12 +682,15 @@ needs:
   exception handler symbols (`panic_hook!`, `exception_handler!`), trap
   snapshots and vector-table reads (`trap`), and the linked sections (`layout`).
   Images and HIL agents reach these through safe APIs and forbid unsafe code.
-  The critical section masks its executing hart only. Each staged image declares
-  `critical-section-hart`; an enforced image prerequisite checks every used
-  hart's entry, handlers and exception, following task polls through the existing
-  call resolutions. Another hart must neither reach a critical-section entry
-  (including an inlined copy) nor leave an unresolved path that could reach one.
-  The declared hart may retain partial bounds. No cross-hart lock is involved.
+  The critical section masks its executing hart only. Firmware packages depending
+  on the staged runtime declare `critical-section-hart`. The staged build/run
+  pipeline checks linked section entry symbols and inline copies against the
+  image's declared per-hart task roots, interrupt-table handlers and exception
+  roots, using existing call resolutions. Foreign roots must have complete
+  resolved paths excluding those entries; the declared hart may retain partial
+  bounds. The public HAL cannot start or release a secondary hart. `cargo fw probe`
+  emits reachability reports only, including for binaries linking the staged
+  runtime; it does not run this critical-section gate. No cross-hart lock is involved.
   The image linker places strict code in SRAM from interrupt, exception and
   panic analysis.
   `entry!` mints `StageTwoHandoff` directly and passes it to the safe
