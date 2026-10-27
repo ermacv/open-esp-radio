@@ -21267,7 +21267,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_1` register.
     ///
-    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. ISO coexistence separately masks bit 13 before acknowledgement; common baseline/dynamic masks preserve that enable and bits 4/5/6 in their stores. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking CONTROLLER_TIME_OVERFLOW retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026. On the measured s31-a power-cycle/download-loader path and after the seeded HP software reset plus ROM re-entry, all modeled enables read zero; neither observation establishes pristine POR or production-admission defaults. SOURCE: HW25_S31_BLE_INHERITED_20261027. The synthetic-enable idle retirement register suffix preserved feature lanes and task17 while removing the dynamic groups; it retained enabled pending CC0/source124. SOURCE: HW25_S31_BLE_RELEASE_20261027.
+    /// Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. ISO coexistence separately masks bit 13 before acknowledgement; common baseline/dynamic masks preserve that enable and bits 4/5/6 in their stores. These explicit stores do not establish what intervening CONTROL commands do to enables or pending. SOURCE: BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027. The HAL arms the same baseline, including controller-time overflow. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper). With baseline 0x1302, masking CONTROLLER_TIME_OVERFLOW retained pending for unmask redelivery. MAC reset preserved0x1302; APB reset made every modeled lane zero and removed the tested pending overflow even after re-enable and CONTROL0 reopen. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026. On the measured s31-a power-cycle/download-loader path and after the seeded HP software reset plus ROM re-entry, all modeled enables read zero; neither observation establishes pristine POR or production-admission defaults. SOURCE: HW25_S31_BLE_INHERITED_20261027. The synthetic-enable idle retirement register suffix preserved feature lanes and task17 while removing the dynamic groups; it retained enabled pending CC0/source124. SOURCE: HW25_S31_BLE_RELEASE_20261027. For isolated local compare0/compare1/seeded-overflow pending, opening only the selected lane with matrix routes124/133 parked at MAP0 revealed primary status and raised matrix124 plus modem wake-vector image0x10. A separate validated edge observer latched124 with CLIC IE0 and MIE0. CPU admission masking therefore does not fence these peripheral output observations; actual wake and PMU/ETM events remain unqualified. SOURCE: HW32_S31_BT_OUTPUT_OBSERVER_20261027.
     pub mod irq_enable_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21655,7 +21655,7 @@ pub mod bt_mac {
 
     /// The `IRQ_CLEAR_1` register.
     ///
-    /// Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027. A positive sampled image 2 written while ENA1[1]=1 cleared isolated overflow pending and lowered 124; copying the zero NRT pair did not clear that primary cause. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026. Ordered sample-to-ack windows on s31-a preserved a new CC0 after an empty sample, and preserved CC1 or overflow after a saved CC0 acknowledgement. Two same-CC0 crossings pending before old-image acknowledgement left one indication, then zero; a fresh crossing after clear delivered again. Exact coincident priority is unmeasured. SOURCE: HW25_S31_BLE_ARRIVAL_20261027.
+    /// Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027. A positive sampled image 2 written while ENA1[1]=1 cleared isolated overflow pending and lowered 124; copying the zero NRT pair did not clear that primary cause. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026. Ordered sample-to-ack windows on s31-a preserved a new CC0 after an empty sample, and preserved CC1 or overflow after a saved CC0 acknowledgement. Two same-CC0 crossings pending before old-image acknowledgement left one indication, then zero; a fresh crossing after clear delivered again. Exact coincident priority is unmeasured. SOURCE: HW25_S31_BLE_ARRIVAL_20261027. Single fixed images0x10/0x20/2 cleared the corresponding isolated compare0/compare1/seeded-overflow indication while leaving the enable unchanged, both while enabled and after a fresh masked crossing without first opening that occurrence. Subsequent reopen stayed quiet; a later fresh occurrence was positive. The scope is these three bank1 indications, without bank0/NRT or all-lane coverage. SOURCE: HW32_S31_BT_MASKED_FIXED_W1C_20261027.
     pub mod irq_clear_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21966,7 +21966,7 @@ pub mod bt_mac {
 
     /// The `IRQ_STATUS_1` register.
     ///
-    /// Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027. An enabled sampled overflow image2 was acknowledged to zero with124 low. APB reset also removed the tested pending cause, checked after re-enable and CONTROL0 reopen before a fresh positive wrap. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026. One natural, unseeded first-word wrap produced image2/source124, retained without ISR/ack for approximately 102.519 nominal seconds (status reads follow the capture brackets); consuming the positive primary image lowered both, quiet for approximately 29.999 s. No hidden-event count or multi-period retention follows. SOURCE: HW27_S31_BTLC_NATURAL_20261027. Ordered sample-to-ack windows on s31-a preserved a new CC0 after an empty sample, and preserved CC1 or overflow after a saved CC0 acknowledgement. Two same-CC0 crossings pending before old-image acknowledgement left one indication, then zero; a fresh crossing after clear delivered again. Exact coincident priority is unmeasured. SOURCE: HW25_S31_BLE_ARRIVAL_20261027.
+    /// Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027. An enabled sampled overflow image2 was acknowledged to zero with124 low. APB reset also removed the tested pending cause, checked after re-enable and CONTROL0 reopen before a fresh positive wrap. SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026; HW12_S31_BLE_APB_RESET_20261026. One natural, unseeded first-word wrap produced image2/source124, retained without ISR/ack for approximately 102.519 nominal seconds (status reads follow the capture brackets); consuming the positive primary image lowered both, quiet for approximately 29.999 s. No hidden-event count or multi-period retention follows. SOURCE: HW27_S31_BTLC_NATURAL_20261027. Ordered sample-to-ack windows on s31-a preserved a new CC0 after an empty sample, and preserved CC1 or overflow after a saved CC0 acknowledgement. Two same-CC0 crossings pending before old-image acknowledgement left one indication, then zero; a fresh crossing after clear delivered again. Exact coincident priority is unmeasured. SOURCE: HW25_S31_BLE_ARRIVAL_20261027. In a short s31-a digital session with both BLE matrix routes parked and CPU admission masked, fresh masked compare0/compare1/seeded-overflow crossings were hidden, appeared as0x10/0x20/2 on single-lane enable and survived mask/reopen without W1C. Both enabled and hidden fixed-image W1C removed the tested indication through reopen. SOURCE: HW32_S31_BT_MASKED_FIXED_W1C_20261027.
     pub mod irq_status_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -29684,7 +29684,7 @@ pub mod bt_mac {
 
     /// The `WORD_04BC_OPAQUE` register.
     ///
-    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset, read side effect or hardware write effect is established. Read only by diagnostics; the cited sources establish use, not read safety. SOURCE: S31_MMIO_USE_201014BC; S31_MMIO_DECLARED_201014BC.
+    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset, read side effect or hardware write effect is established. Read only by diagnostics; the cited sources establish use, not read safety. SOURCE: S31_MMIO_USE_201014BC; S31_MMIO_DECLARED_201014BC. Three consecutive complete reads with each known primary timer indication positive, then three with it hidden, returned zero and preserved that pending through reopen; completed BTLC captures continued advancing before/across/after the reads. The word's own task indications lacked a positive producer. This qualifies only the measured pending/counter observations and establishes no general read-safety or task-bit clear-on-read contract. SOURCE: HW32_S31_BT_04BC_READ_SCOPE_20261027.
     pub mod word_04bc_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x013fffff;
@@ -34602,9 +34602,9 @@ pub mod bt_mac {
 
     /// The `BtmacBlePhyInit` part of `BT_MAC`.
     ///
-    /// BLE PHY/task registers, including the diagnostic opaque task view at +0x4bc. Read side effects of this view are not established; it is read only by diagnostics. This view grants no decoded cause or acknowledgement authority.
+    /// BLE PHY/task registers, including the diagnostic opaque task view at +0x4bc. General read side effects of this view are not established; it is read only by diagnostics. Complete-image access issues a load without an explicit acknowledgement store and does not promise absence of hardware read effects. The scoped timer pending/progression observations in HW32 establish no general read-safety capability. This view grants no decoded cause or acknowledgement authority.
     ///
-    /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS, S31_MMIO_USE_201014BC, S31_MMIO_DECLARED_201014BC.
+    /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS, S31_MMIO_USE_201014BC, S31_MMIO_DECLARED_201014BC, HW32_S31_BT_04BC_READ_SCOPE_20261027.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct BtmacBlePhyInit<P: oer_mmio::Placement = oer_mmio::Fixed<0x20101000>>(
         oer_mmio::Block<P, BtmacBlePhyInitWords>,
@@ -35136,6 +35136,14 @@ pub mod bt_mac {
         #[inline]
         pub fn publish_ble_phy_init_configuration_word(&mut self) {
             self.0.write::<0x940>(0x000007d0);
+        }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`BT_MAC.WORD_04BC_OPAQUE`).
+        ///
+        /// SOURCE: S31_MMIO_USE_201014BC, S31_MMIO_DECLARED_201014BC, HW32_S31_BT_04BC_READ_SCOPE_20261027.
+        #[inline]
+        pub fn read_bluetooth_task_diagnostic_image(&self) -> u32 {
+            self.0.read::<0x4bc>()
         }
     }
 
@@ -35727,6 +35735,39 @@ pub mod bt_mac {
         pub fn clear_bluetooth_controller_time_overflow(&mut self) {
             let bits = self.0.read::<0x60>();
             self.0.write::<0x60>(bits & 0xfffffffd);
+            self.0.write::<0x64>(0x00000002);
+        }
+
+        /// Acknowledge the consumed events `0x00000010` (`BT_MAC.IRQ_CLEAR_1`).
+        ///
+        /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027, HW32_S31_BT_MASKED_FIXED_W1C_20261027.
+        ///
+        /// The caller consumed these events:
+        /// The caller consumes the local BTLC compare0 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement.
+        #[inline]
+        pub fn discard_bluetooth_compare_0_indication(&mut self) {
+            self.0.write::<0x64>(0x00000010);
+        }
+
+        /// Acknowledge the consumed events `0x00000020` (`BT_MAC.IRQ_CLEAR_1`).
+        ///
+        /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027, HW32_S31_BT_MASKED_FIXED_W1C_20261027.
+        ///
+        /// The caller consumed these events:
+        /// The caller consumes the local BTLC compare1 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement.
+        #[inline]
+        pub fn discard_bluetooth_compare_1_indication(&mut self) {
+            self.0.write::<0x64>(0x00000020);
+        }
+
+        /// Acknowledge the consumed events `0x00000002` (`BT_MAC.IRQ_CLEAR_1`).
+        ///
+        /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027, HW32_S31_BT_MASKED_FIXED_W1C_20261027.
+        ///
+        /// The caller consumed these events:
+        /// The caller consumes the local BTLC first-word overflow indication itself; no handler or continuous-time reconstruction may require this indication. This is a discard, not a sampled runtime acknowledgement.
+        #[inline]
+        pub fn discard_bluetooth_controller_time_overflow_indication(&mut self) {
             self.0.write::<0x64>(0x00000002);
         }
 
@@ -128490,7 +128531,7 @@ pub mod modem_lpcon {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// With inherited wake enables 0x3fff, the tested near LP compare yields 0x80 together with cause 0x40000/source 127; all-ones +0x34 returns these observations to zero. In the tested XTAL/divider-1 setup with +0x10 bits 1/18 issued, isolated sleep16/17 flags leave this vector zero. This does not qualify PMU wake: WAKEUP_ENA and all sampled PMU causes remain zero while awake. SOURCE: HW21_S31_LP_AWAKE_ROUTE_20261027.
+            /// With inherited wake enables 0x3fff, the tested near LP compare yields 0x80 together with cause 0x40000/source 127; all-ones +0x34 returns these observations to zero. In the tested XTAL/divider-1 setup with +0x10 bits 1/18 issued, isolated sleep16/17 flags leave this vector zero. This does not qualify PMU wake: WAKEUP_ENA and all sampled PMU causes remain zero while awake. SOURCE: HW21_S31_LP_AWAKE_ROUTE_20261027. Isolated pending BTLC compare0/compare1/seeded-overflow enables also produce vector0x10 together with primary status and matrix124 while both BLE routes are parked at MAP0 and CPU admission is masked. Masking or fixed W1C lowers this vector. This positively qualifies the vector observation, without proving an actual PMU wake or absence of PMU/ETM activity. SOURCE: HW32_S31_BT_OUTPUT_OBSERVER_20261027.
             #[inline]
             pub const fn modem_intr_vector(self) -> oer_mmio::Bits<14> {
                 oer_mmio::Bits::truncate(self.0)

@@ -6,7 +6,7 @@ mod overflow;
 pub(in crate::image) use natural::{natural_ready, natural_wrap};
 pub(in crate::image) use overflow::{overflow_ack, overflow_rate, overflow_reset};
 
-fn sample(s: &mut Session<'_>) -> Option<u32> {
+pub(in crate::image) fn sample(s: &mut Session<'_>) -> Option<u32> {
     s.ble.core.modify_btlc_timer_control(|w| {
         w.set_latch_request(true);
     });
