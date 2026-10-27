@@ -14,11 +14,11 @@ always-awake operation, one non-connectable PDU on primary channels 37, 38 and
 ## Evidence and role map
 
 - ESP32-S31 Controller archive
-  [`espressif/esp32s31-bt-lib@10c507788e9da0993709cf82e405c896561172d8`](https://github.com/espressif/esp32s31-bt-lib/tree/10c507788e9da0993709cf82e405c896561172d8),
+  [`espressif/esp32s31-bt-lib@7a85006f35f6839ae7ea5adee16e68a757759196`](https://github.com/espressif/esp32s31-bt-lib/tree/7a85006f35f6839ae7ea5adee16e68a757759196),
   `libble_app.a` SHA-256
-  `e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723`
+  `e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6`
   and `libbtdm_common.a` SHA-256
-  `389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41`;
+  `838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0`;
 - same-chip role-name reference only:
   [`espressif/esp32s31-bt-lib@31c30949541a5d3abd4043a1cb66d55aa55577dd`](https://github.com/espressif/esp32s31-bt-lib/tree/31c30949541a5d3abd4043a1cb66d55aa55577dd),
   whose unobfuscated names reach the pinned symbols through the reviewed
@@ -359,3 +359,8 @@ end minus start. These hardware timing inputs are distinct from the scheduler
 window endpoints. The memory codec writes both before bookkeeping and RUN;
 rejection retains the unchanged CPU owner. Nonzero completion diagnostics retain
 the complete opaque item value.
+
+The current recycle callback also branches on scheduler-item STATUS bit 20
+(+0x3ec/+0x3f0). Its physical meaning is unproved. The generated opaque
+status lanes retain it; the open Zero/NonZero result does not decode it
+as a new success or failure condition.

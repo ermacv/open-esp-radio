@@ -71,7 +71,7 @@ remain unqualified.
 
 SOURCE: `VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS` in
 [`vendor-opaque-identities.toml`](../../registers/evidence/vendor-opaque-identities.toml),
-from pinned `esp32-wifi-lib@af55a0ca258ce9d791d1661d7c2bbb65f08c0c21`.
+from pinned `esp32-wifi-lib@f856b5db55cb18e2d1826044430f3f4089e47cf9`.
 `hal_mac_tx.o::mac_tx_set_plcp0` sets bit 22. The subsequent
 `mac_tx_set_txop_q` first tests queue-context byte `+0x1d`: initialized or
 released index 3 preserves the bit; reserved slot 0/1/2 sets it only when

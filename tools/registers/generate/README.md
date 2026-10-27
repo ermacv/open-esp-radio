@@ -86,12 +86,16 @@ The MMIO corpus does not cover RAM layouts. No model is edited by this check.
 at the chip's current pin, with its pinned header submodules initialized.
 `--check` repeats generation and requires byte-for-byte equal facts.
 
-The SDK configuration is an explicit input. For the checked-in facts, use
-the generated configuration from `cargo hil firmware build
-ble-scan-vendor-reference`. It builds SDK reference firmware locally.
-The configuration hash is recorded, and another configuration may expose a
-different set of declarations. The command neither flashes nor captures a
-board. A RISC-V capable Clang and the SDK's C library headers are required.
+The SDK configuration is an explicit input. The checked-in facts use the
+generated configuration of `firmware/vendor/esp32s31/ble-scan-reference`,
+configured for `IDF_TARGET=esp32s31` with the pinned ESP-IDF and the project's
+`sdkconfig.defaults`. CMake configuration produces `config/sdkconfig.h`
+without building firmware. Keep its build directory and `SDKCONFIG` under
+the worktree's `target/`. The configuration hash is recorded, and another
+configuration may expose a different set of declarations. A RISC-V capable
+Clang and the SDK's picolibc headers are required. The checked-in facts use
+picolibc from the `riscv32-esp-elf` toolchain release `esp-16.1.0_20260609`
+(ESP toolchain version `esp-16.1.0`).
 
 The ELF facade supplies global name candidates from every pinned binary;
 Blobray `call-arguments --call-summaries --abi riscv-integer` selects actual

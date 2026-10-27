@@ -3,7 +3,7 @@ use CoexSchemeId as S;
 
 /// One status per selectable scheme and the scheme the vendor selects,
 /// found by emulating `coex_schm_status_change` of `coexist_scheme.o`
-/// (esp-coex-lib c758e7b5, see [`super`]) over every combination of the
+/// (esp-coex-lib fa152b3b, see [`super`]) over every combination of the
 /// status bits it tests; each vector is a minimal status for its scheme.
 /// The `bt_default` rows use a classic Bluetooth bit outside every tested
 /// mask, which the vendor's final `else` selects.

@@ -460,7 +460,7 @@ the block type.
 
 These are S31 root excerpts. Included types, other sources and modem
 instance placements are omitted. Evidence IDs below denote entries for
-ESP-IDF `4d59230ddff16327812782151ef0afef202dc6d7`:
+ESP-IDF `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`:
 
 | Evidence ID | Source under `components/` |
 | --- | --- |

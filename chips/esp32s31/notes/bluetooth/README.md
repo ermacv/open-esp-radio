@@ -1,9 +1,10 @@
 # ESP32-S31 Bluetooth knowledge notes
 
-`esp32s31-bt-lib` has no license. Under "Sources without a license" in
-[the source policy](../../../../docs/source-policy.md), the repository may record
-only facts from it: values, layouts, addresses, order of operations and names.
-It records neither code nor verbatim data blocks; the facts are kept here.
+The current `esp32s31-bt-lib` pin includes an Apache-2.0 binary distribution
+license. These knowledge notes retain the facts-only boundary in
+[the source policy](../../../../docs/source-policy.md): values, layouts,
+addresses, order of operations and names. They contain neither vendor code
+nor verbatim data blocks.
 
 Clean-room rule: these notes hold facts only. Our code is written from the
 Bluetooth Core Specification, these facts and hardware measurements, never

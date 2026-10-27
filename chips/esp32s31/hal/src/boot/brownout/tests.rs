@@ -1,5 +1,5 @@
 //! The brownout policy over host memory from LP_ANA_PERI's base and a fake
-//! analog bus, against ESP-IDF 4d59230d `lp_analog_peri_reg.h`
+//! analog bus, against ESP-IDF 4d80c1b2 `lp_analog_peri_reg.h`
 //! (`BOD_MODE0_CNTL` 0x0: CLOSE_FLASH_ENA 6, PD_RF_ENA 7, INTR_WAIT 17:8,
 //! RESET_WAIT 27:18, CNT_CLR 28, INTR_ENA 29, RESET_SEL 30, RESET_ENA 31;
 //! `BOD_MODE1_CNTL` 0x4: RESET_ENA 31; `FIB_ENABLE` 0x1c) and

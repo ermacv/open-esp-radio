@@ -21380,7 +21380,7 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. CONTROL1/2 do not lower an enabled pending overflow; release masks and clears this cause. SOURCE: HW9_S31_MAC_RELEASE_20261027; HW9_S31_MAC_MASK_ACK_20261027; HW12_S31_BLE_OVERFLOW_ACK_20261026. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026. A natural unseeded wrap and delayed positive acknowledgement were also observed in the digital setup. SOURCE: HW27_S31_BTLC_NATURAL_20261027.
+            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. CONTROL1/2 do not lower an enabled pending overflow; release masks and clears this cause. SOURCE: HW9_S31_MAC_RELEASE_20261027; HW9_S31_MAC_MASK_ACK_20261027; HW12_S31_BLE_OVERFLOW_ACK_20261026. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 7a85006f35f6839ae7ea5adee16e68a757759196, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026. A natural unseeded wrap and delayed positive acknowledgement were also observed in the digital setup. SOURCE: HW27_S31_BTLC_NATURAL_20261027.
             #[inline]
             pub const fn controller_time_overflow(self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -21469,7 +21469,7 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. CONTROL1/2 do not lower an enabled pending overflow; release masks and clears this cause. SOURCE: HW9_S31_MAC_RELEASE_20261027; HW9_S31_MAC_MASK_ACK_20261027; HW12_S31_BLE_OVERFLOW_ACK_20261026. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026. A natural unseeded wrap and delayed positive acknowledgement were also observed in the digital setup. SOURCE: HW27_S31_BTLC_NATURAL_20261027.
+            /// The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. CONTROL1/2 do not lower an enabled pending overflow; release masks and clears this cause. SOURCE: HW9_S31_MAC_RELEASE_20261027; HW9_S31_MAC_MASK_ACK_20261027; HW12_S31_BLE_OVERFLOW_ACK_20261026. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 7a85006f35f6839ae7ea5adee16e68a757759196, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026. A natural unseeded wrap and delayed positive acknowledgement were also observed in the digital setup. SOURCE: HW27_S31_BTLC_NATURAL_20261027.
             #[inline]
             pub const fn controller_time_overflow(&self) -> bool {
                 (self.0 & 0x00000002) != 0
@@ -25546,7 +25546,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_memory::DmaRef<super::super::layouts::BlePhyEnvironment>,
             ) -> &mut Self {
-                self.0 = value.bits().wrapping_add(0x4d);
+                self.0 = value.bits().wrapping_add(0x51);
                 self
             }
 
@@ -34223,7 +34223,7 @@ pub mod bt_mac {
             address: oer_memory::DmaRef<super::layouts::BlePhyEnvironment>,
             change: impl FnOnce(&mut phy_environment_tail_pointer::W),
         ) {
-            let mut value = phy_environment_tail_pointer::W(address.bits().wrapping_add(0x4d));
+            let mut value = phy_environment_tail_pointer::W(address.bits().wrapping_add(0x51));
             change(&mut value);
             self.0.write::<0x24c>(value.0);
         }
@@ -56307,16 +56307,12 @@ pub mod efuse {
     /// Represents rd_sys_part1_data%s
     pub mod rd_sys_part1_data4 {
         /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0x0001ffff;
+        pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x78;
-
-        /// The reserved bits: never a field, kept by every read-modify-write and
-        /// stored at their reset value by a write from zero.
-        pub const RESERVED: u32 = 0xfffe0000;
 
         /// Width of `TEMP_CALIBRATION` in bits.
         pub const TEMP_CALIBRATION_WIDTH: u32 = 10;
@@ -56338,6 +56334,20 @@ pub mod efuse {
         pub const SPI_LDO_1V_MUL_MAX: u32 = 0x7;
         /// Positioned bits of `SPI_LDO_1V_MUL`.
         pub const SPI_LDO_1V_MUL_MASK: u32 = 0x1c000;
+
+        /// Width of `ADC1_WEIGHT_BIT16` in bits.
+        pub const ADC1_WEIGHT_BIT16_WIDTH: u32 = 10;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT16`.
+        pub const ADC1_WEIGHT_BIT16_MAX: u32 = 0x3ff;
+        /// Positioned bits of `ADC1_WEIGHT_BIT16`.
+        pub const ADC1_WEIGHT_BIT16_MASK: u32 = 0x7fe0000;
+
+        /// Width of `ADC1_WEIGHT_BIT15` in bits.
+        pub const ADC1_WEIGHT_BIT15_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT15`.
+        pub const ADC1_WEIGHT_BIT15_MAX: u32 = 0x1f;
+        /// Positioned bits of `ADC1_WEIGHT_BIT15`.
+        pub const ADC1_WEIGHT_BIT15_MASK: u32 = 0xf8000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56361,6 +56371,18 @@ pub mod efuse {
             pub const fn spi_ldo_1v_mul(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 14)
             }
+
+            /// ADC1 bit 16 weight fragment.
+            #[inline]
+            pub const fn adc1_weight_bit16(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// ADC1 bit 15 weight fragment.
+            #[inline]
+            pub const fn adc1_weight_bit15(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
         }
     }
 
@@ -56376,22 +56398,74 @@ pub mod efuse {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x7c;
 
-        /// Width of `SYS_DATA_PART1` in bits.
-        pub const SYS_DATA_PART1_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `SYS_DATA_PART1`.
-        pub const SYS_DATA_PART1_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `SYS_DATA_PART1`.
-        pub const SYS_DATA_PART1_MASK: u32 = 0xffffffff;
+        /// Width of `ADC1_WEIGHT_BIT15_1` in bits.
+        pub const ADC1_WEIGHT_BIT15_1_WIDTH: u32 = 4;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT15_1`.
+        pub const ADC1_WEIGHT_BIT15_1_MAX: u32 = 0xf;
+        /// Positioned bits of `ADC1_WEIGHT_BIT15_1`.
+        pub const ADC1_WEIGHT_BIT15_1_MASK: u32 = 0xf;
+
+        /// Width of `ADC1_WEIGHT_BIT14` in bits.
+        pub const ADC1_WEIGHT_BIT14_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT14`.
+        pub const ADC1_WEIGHT_BIT14_MAX: u32 = 0xff;
+        /// Positioned bits of `ADC1_WEIGHT_BIT14`.
+        pub const ADC1_WEIGHT_BIT14_MASK: u32 = 0xff0;
+
+        /// Width of `ADC1_WEIGHT_BIT13` in bits.
+        pub const ADC1_WEIGHT_BIT13_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT13`.
+        pub const ADC1_WEIGHT_BIT13_MAX: u32 = 0xff;
+        /// Positioned bits of `ADC1_WEIGHT_BIT13`.
+        pub const ADC1_WEIGHT_BIT13_MASK: u32 = 0xff000;
+
+        /// Width of `ADC1_WEIGHT_BIT12` in bits.
+        pub const ADC1_WEIGHT_BIT12_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT12`.
+        pub const ADC1_WEIGHT_BIT12_MAX: u32 = 0xff;
+        /// Positioned bits of `ADC1_WEIGHT_BIT12`.
+        pub const ADC1_WEIGHT_BIT12_MASK: u32 = 0xff00000;
+
+        /// Width of `ADC1_WEIGHT_BIT11` in bits.
+        pub const ADC1_WEIGHT_BIT11_WIDTH: u32 = 4;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT11`.
+        pub const ADC1_WEIGHT_BIT11_MAX: u32 = 0xf;
+        /// Positioned bits of `ADC1_WEIGHT_BIT11`.
+        pub const ADC1_WEIGHT_BIT11_MASK: u32 = 0xf0000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Represents the zeroth 32-bit of first part of system data.
+            /// ADC1 bit 15 weight fragment.
             #[inline]
-            pub const fn sys_data_part1(self) -> u32 {
-                self.0
+            pub const fn adc1_weight_bit15_1(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// ADC1 bit 14 weight fragment.
+            #[inline]
+            pub const fn adc1_weight_bit14(self) -> u8 {
+                (self.0 >> 4) as u8
+            }
+
+            /// ADC1 bit 13 weight fragment.
+            #[inline]
+            pub const fn adc1_weight_bit13(self) -> u8 {
+                (self.0 >> 12) as u8
+            }
+
+            /// ADC1 bit 12 weight fragment.
+            #[inline]
+            pub const fn adc1_weight_bit12(self) -> u8 {
+                (self.0 >> 20) as u8
+            }
+
+            /// ADC1 bit 11 weight fragment.
+            #[inline]
+            pub const fn adc1_weight_bit11(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
             }
         }
     }
@@ -56408,22 +56482,74 @@ pub mod efuse {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x80;
 
-        /// Width of `SYS_DATA_PART1` in bits.
-        pub const SYS_DATA_PART1_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `SYS_DATA_PART1`.
-        pub const SYS_DATA_PART1_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `SYS_DATA_PART1`.
-        pub const SYS_DATA_PART1_MASK: u32 = 0xffffffff;
+        /// Width of `ADC1_WEIGHT_BIT11_1` in bits.
+        pub const ADC1_WEIGHT_BIT11_1_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT11_1`.
+        pub const ADC1_WEIGHT_BIT11_1_MAX: u32 = 0x3;
+        /// Positioned bits of `ADC1_WEIGHT_BIT11_1`.
+        pub const ADC1_WEIGHT_BIT11_1_MASK: u32 = 0x3;
+
+        /// Width of `ADC1_WEIGHT_BIT10` in bits.
+        pub const ADC1_WEIGHT_BIT10_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `ADC1_WEIGHT_BIT10`.
+        pub const ADC1_WEIGHT_BIT10_MAX: u32 = 0x1f;
+        /// Positioned bits of `ADC1_WEIGHT_BIT10`.
+        pub const ADC1_WEIGHT_BIT10_MASK: u32 = 0x7c;
+
+        /// Width of `ADC2_WEIGHT_BIT16` in bits.
+        pub const ADC2_WEIGHT_BIT16_WIDTH: u32 = 10;
+        /// Greatest unsigned image of `ADC2_WEIGHT_BIT16`.
+        pub const ADC2_WEIGHT_BIT16_MAX: u32 = 0x3ff;
+        /// Positioned bits of `ADC2_WEIGHT_BIT16`.
+        pub const ADC2_WEIGHT_BIT16_MASK: u32 = 0x1ff80;
+
+        /// Width of `ADC2_WEIGHT_BIT15` in bits.
+        pub const ADC2_WEIGHT_BIT15_WIDTH: u32 = 9;
+        /// Greatest unsigned image of `ADC2_WEIGHT_BIT15`.
+        pub const ADC2_WEIGHT_BIT15_MAX: u32 = 0x1ff;
+        /// Positioned bits of `ADC2_WEIGHT_BIT15`.
+        pub const ADC2_WEIGHT_BIT15_MASK: u32 = 0x3fe0000;
+
+        /// Width of `ADC2_WEIGHT_BIT14` in bits.
+        pub const ADC2_WEIGHT_BIT14_WIDTH: u32 = 6;
+        /// Greatest unsigned image of `ADC2_WEIGHT_BIT14`.
+        pub const ADC2_WEIGHT_BIT14_MAX: u32 = 0x3f;
+        /// Positioned bits of `ADC2_WEIGHT_BIT14`.
+        pub const ADC2_WEIGHT_BIT14_MASK: u32 = 0xfc000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Represents the zeroth 32-bit of first part of system data.
+            /// ADC1 bit 11 weight fragment.
             #[inline]
-            pub const fn sys_data_part1(self) -> u32 {
-                self.0
+            pub const fn adc1_weight_bit11_1(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// ADC1 bit 10 weight fragment.
+            #[inline]
+            pub const fn adc1_weight_bit10(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// ADC2 bit 16 weight fragment.
+            #[inline]
+            pub const fn adc2_weight_bit16(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 7)
+            }
+
+            /// ADC2 bit 15 weight fragment.
+            #[inline]
+            pub const fn adc2_weight_bit15(self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// ADC2 bit 14 weight fragment.
+            #[inline]
+            pub const fn adc2_weight_bit14(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
             }
         }
     }
@@ -56433,29 +56559,85 @@ pub mod efuse {
     /// Represents rd_sys_part1_data%s
     pub mod rd_sys_part1_data7 {
         /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xffffffff;
+        pub const FIELDS: u32 = 0x1fffffff;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x84;
 
-        /// Width of `SYS_DATA_PART1` in bits.
-        pub const SYS_DATA_PART1_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `SYS_DATA_PART1`.
-        pub const SYS_DATA_PART1_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `SYS_DATA_PART1`.
-        pub const SYS_DATA_PART1_MASK: u32 = 0xffffffff;
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xe0000000;
+
+        /// Width of `ADC2_WEIGHT_BIT14_1` in bits.
+        pub const ADC2_WEIGHT_BIT14_1_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `ADC2_WEIGHT_BIT14_1`.
+        pub const ADC2_WEIGHT_BIT14_1_MAX: u32 = 0x3;
+        /// Positioned bits of `ADC2_WEIGHT_BIT14_1`.
+        pub const ADC2_WEIGHT_BIT14_1_MASK: u32 = 0x3;
+
+        /// Width of `ADC2_WEIGHT_BIT13` in bits.
+        pub const ADC2_WEIGHT_BIT13_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `ADC2_WEIGHT_BIT13`.
+        pub const ADC2_WEIGHT_BIT13_MAX: u32 = 0xff;
+        /// Positioned bits of `ADC2_WEIGHT_BIT13`.
+        pub const ADC2_WEIGHT_BIT13_MASK: u32 = 0x3fc;
+
+        /// Width of `ADC2_WEIGHT_BIT12` in bits.
+        pub const ADC2_WEIGHT_BIT12_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `ADC2_WEIGHT_BIT12`.
+        pub const ADC2_WEIGHT_BIT12_MAX: u32 = 0xff;
+        /// Positioned bits of `ADC2_WEIGHT_BIT12`.
+        pub const ADC2_WEIGHT_BIT12_MASK: u32 = 0x3fc00;
+
+        /// Width of `ADC2_WEIGHT_BIT11` in bits.
+        pub const ADC2_WEIGHT_BIT11_WIDTH: u32 = 6;
+        /// Greatest unsigned image of `ADC2_WEIGHT_BIT11`.
+        pub const ADC2_WEIGHT_BIT11_MAX: u32 = 0x3f;
+        /// Positioned bits of `ADC2_WEIGHT_BIT11`.
+        pub const ADC2_WEIGHT_BIT11_MASK: u32 = 0xfc0000;
+
+        /// Width of `ADC2_WEIGHT_BIT10` in bits.
+        pub const ADC2_WEIGHT_BIT10_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `ADC2_WEIGHT_BIT10`.
+        pub const ADC2_WEIGHT_BIT10_MAX: u32 = 0x1f;
+        /// Positioned bits of `ADC2_WEIGHT_BIT10`.
+        pub const ADC2_WEIGHT_BIT10_MASK: u32 = 0x1f000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Represents the zeroth 32-bit of first part of system data.
+            /// ADC2 bit 14 weight fragment.
             #[inline]
-            pub const fn sys_data_part1(self) -> u32 {
-                self.0
+            pub const fn adc2_weight_bit14_1(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// ADC2 bit 13 weight fragment.
+            #[inline]
+            pub const fn adc2_weight_bit13(self) -> u8 {
+                (self.0 >> 2) as u8
+            }
+
+            /// ADC2 bit 12 weight fragment.
+            #[inline]
+            pub const fn adc2_weight_bit12(self) -> u8 {
+                (self.0 >> 10) as u8
+            }
+
+            /// ADC2 bit 11 weight fragment.
+            #[inline]
+            pub const fn adc2_weight_bit11(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// ADC2 bit 10 weight fragment.
+            #[inline]
+            pub const fn adc2_weight_bit10(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
             }
         }
     }
@@ -311902,7 +312084,7 @@ pub mod layouts {
         pub const BITS_11_23_OPAQUE_WIDTH: u32 = 13;
         /// Greatest unsigned image of `BITS_11_23_OPAQUE`.
         pub const BITS_11_23_OPAQUE_MAX: u32 = 0x1fff;
-        /// Opaque: meaning not established. ISO bits 21/22/23 are NPI-length error, LLID error and power stop; bits 11..20 have no identified meaning. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
+        /// Opaque: meaning not established. ISO bits 21/22 are NPI-length error and LLID error; bits 11..20 and bit 23 have no established current identity. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged.
         ///
         /// `BITS_11_23_OPAQUE`, bits 23:11; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
         /// SOURCE: VENDOR_BLE_ISO_RX_ERRORS.
@@ -318941,9 +319123,9 @@ pub mod layouts {
         }
     }
 
-    /// BLE PHY environment and its raw buffer pointers. PHY initialization publishes addresses of the members at +0x2c and +0x4d; their internal hardware meaning remains opaque.
+    /// BLE PHY environment and its raw buffer pointers. PHY initialization publishes addresses of the members at +0x2c and +0x51; their internal hardware meaning remains opaque.
     ///
-    /// 128 bytes, aligned to 4; its zero bytes are an all-zero structure.
+    /// 132 bytes, aligned to 4; its zero bytes are an all-zero structure.
     /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
     #[repr(C, align(4))]
     #[derive(bytemuck::Zeroable)]
@@ -318966,9 +319148,9 @@ pub mod layouts {
         word_003c_opaque: BlePhyEnvironmentWord003cOpaqueCell,
         word_0040_opaque: BlePhyEnvironmentWord0040OpaqueCell,
         word_0044_opaque: BlePhyEnvironmentWord0044OpaqueCell,
+        word_0048_opaque: BlePhyEnvironmentWord0048OpaqueCell,
         tx_power_levels: BlePhyEnvironmentTxPowerLevelsCell,
         tx_power_level_count: BlePhyEnvironmentTxPowerLevelCountCell,
-        word_0050_opaque: BlePhyEnvironmentWord0050OpaqueCell,
         word_0054_opaque: BlePhyEnvironmentWord0054OpaqueCell,
         word_0058_opaque: BlePhyEnvironmentWord0058OpaqueCell,
         word_005c_opaque: BlePhyEnvironmentWord005cOpaqueCell,
@@ -318978,18 +319160,19 @@ pub mod layouts {
         word_006c_opaque: BlePhyEnvironmentWord006cOpaqueCell,
         word_0070_opaque: BlePhyEnvironmentWord0070OpaqueCell,
         word_0074_opaque: BlePhyEnvironmentWord0074OpaqueCell,
+        word_0078_opaque: BlePhyEnvironmentWord0078OpaqueCell,
         tx_power_first_level: BlePhyEnvironmentTxPowerFirstLevelCell,
         tx_power_last_level: BlePhyEnvironmentTxPowerLastLevelCell,
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BlePhyEnvironment>() == 128);
+        assert!(core::mem::size_of::<BlePhyEnvironment>() == 132);
         assert!(core::mem::align_of::<BlePhyEnvironment>() == 4);
     };
 
     impl BlePhyEnvironment {
         /// The structure's size in bytes.
-        pub const SIZE: usize = 128;
+        pub const SIZE: usize = 132;
         /// The alignment the hardware requires, in bytes.
         pub const ALIGN: usize = 4;
         /// The RAM regions the structure must lie in.
@@ -319052,13 +319235,13 @@ pub mod layouts {
                 word_0044_opaque: BlePhyEnvironmentWord0044OpaqueCell(
                     oer_memory::VolatileCell::new(0),
                 ),
+                word_0048_opaque: BlePhyEnvironmentWord0048OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
                 tx_power_levels: BlePhyEnvironmentTxPowerLevelsCell(oer_memory::VolatileCell::new(
                     0,
                 )),
                 tx_power_level_count: BlePhyEnvironmentTxPowerLevelCountCell(
-                    oer_memory::VolatileCell::new(0),
-                ),
-                word_0050_opaque: BlePhyEnvironmentWord0050OpaqueCell(
                     oer_memory::VolatileCell::new(0),
                 ),
                 word_0054_opaque: BlePhyEnvironmentWord0054OpaqueCell(
@@ -319086,6 +319269,9 @@ pub mod layouts {
                     oer_memory::VolatileCell::new(0),
                 ),
                 word_0074_opaque: BlePhyEnvironmentWord0074OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0078_opaque: BlePhyEnvironmentWord0078OpaqueCell(
                     oer_memory::VolatileCell::new(0),
                 ),
                 tx_power_first_level: BlePhyEnvironmentTxPowerFirstLevelCell(
@@ -319189,19 +319375,19 @@ pub mod layouts {
             &self.word_0044_opaque
         }
 
-        /// The `TX_POWER_LEVELS` word at offset 0x48.
+        /// The `WORD_0048_OPAQUE` word at offset 0x48.
+        pub const fn word_0048_opaque(&self) -> &BlePhyEnvironmentWord0048OpaqueCell {
+            &self.word_0048_opaque
+        }
+
+        /// The `TX_POWER_LEVELS` word at offset 0x4c.
         pub const fn tx_power_levels(&self) -> &BlePhyEnvironmentTxPowerLevelsCell {
             &self.tx_power_levels
         }
 
-        /// The `TX_POWER_LEVEL_COUNT` word at offset 0x4c.
+        /// The `TX_POWER_LEVEL_COUNT` word at offset 0x50.
         pub const fn tx_power_level_count(&self) -> &BlePhyEnvironmentTxPowerLevelCountCell {
             &self.tx_power_level_count
-        }
-
-        /// The `WORD_0050_OPAQUE` word at offset 0x50.
-        pub const fn word_0050_opaque(&self) -> &BlePhyEnvironmentWord0050OpaqueCell {
-            &self.word_0050_opaque
         }
 
         /// The `WORD_0054_OPAQUE` word at offset 0x54.
@@ -319249,12 +319435,17 @@ pub mod layouts {
             &self.word_0074_opaque
         }
 
-        /// The `TX_POWER_FIRST_LEVEL` word at offset 0x78.
+        /// The `WORD_0078_OPAQUE` word at offset 0x78.
+        pub const fn word_0078_opaque(&self) -> &BlePhyEnvironmentWord0078OpaqueCell {
+            &self.word_0078_opaque
+        }
+
+        /// The `TX_POWER_FIRST_LEVEL` word at offset 0x7c.
         pub const fn tx_power_first_level(&self) -> &BlePhyEnvironmentTxPowerFirstLevelCell {
             &self.tx_power_first_level
         }
 
-        /// The `TX_POWER_LAST_LEVEL` word at offset 0x7c.
+        /// The `TX_POWER_LAST_LEVEL` word at offset 0x80.
         pub const fn tx_power_last_level(&self) -> &BlePhyEnvironmentTxPowerLastLevelCell {
             &self.tx_power_last_level
         }
@@ -320049,6 +320240,47 @@ pub mod layouts {
         }
     }
 
+    /// The `BLE_PHY_ENVIRONMENT.WORD_0048_OPAQUE` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct BlePhyEnvironmentWord0048OpaqueCell(oer_memory::VolatileCell<u32>);
+
+    impl BlePhyEnvironmentWord0048OpaqueCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> BlePhyEnvironmentWord0048Opaque {
+            BlePhyEnvironmentWord0048Opaque(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: BlePhyEnvironmentWord0048Opaque) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Opaque: meaning not established. Observed allocation word; its meaning is not established.
+    ///
+    /// A value of the `BLE_PHY_ENVIRONMENT.WORD_0048_OPAQUE` word.
+    /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct BlePhyEnvironmentWord0048Opaque(u32);
+
+    impl BlePhyEnvironmentWord0048Opaque {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+    }
+
     /// The `BLE_PHY_ENVIRONMENT.TX_POWER_LEVELS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
@@ -320162,47 +320394,6 @@ pub mod layouts {
         /// This value with `VALUE` set to `value`.
         pub const fn with_value(self, value: u8) -> Self {
             Self((self.0 & 0xffffff00) | value as u32)
-        }
-    }
-
-    /// The `BLE_PHY_ENVIRONMENT.WORD_0050_OPAQUE` word as the hardware may change it: volatile access only.
-    #[repr(transparent)]
-    #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0050OpaqueCell(oer_memory::VolatileCell<u32>);
-
-    impl BlePhyEnvironmentWord0050OpaqueCell {
-        /// One volatile read of the word.
-        #[inline]
-        pub fn read(&self) -> BlePhyEnvironmentWord0050Opaque {
-            BlePhyEnvironmentWord0050Opaque(self.0.get())
-        }
-
-        /// One volatile write of the whole word.
-        #[inline]
-        pub fn write(&self, value: BlePhyEnvironmentWord0050Opaque) {
-            self.0.set(value.0);
-        }
-    }
-
-    /// Opaque: meaning not established. Observed word position; unassigned bits retain their exact image.
-    ///
-    /// A value of the `BLE_PHY_ENVIRONMENT.WORD_0050_OPAQUE` word.
-    /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-    pub struct BlePhyEnvironmentWord0050Opaque(u32);
-
-    impl BlePhyEnvironmentWord0050Opaque {
-        /// The all-zero word.
-        pub const ZERO: Self = Self(0);
-
-        /// The value of a word image; every bit pattern is one.
-        pub const fn from_bits(bits: u32) -> Self {
-            Self(bits)
-        }
-
-        /// The word image.
-        pub const fn bits(self) -> u32 {
-            self.0
         }
     }
 
@@ -320561,6 +320752,47 @@ pub mod layouts {
     pub struct BlePhyEnvironmentWord0074Opaque(u32);
 
     impl BlePhyEnvironmentWord0074Opaque {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+    }
+
+    /// The `BLE_PHY_ENVIRONMENT.WORD_0078_OPAQUE` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct BlePhyEnvironmentWord0078OpaqueCell(oer_memory::VolatileCell<u32>);
+
+    impl BlePhyEnvironmentWord0078OpaqueCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> BlePhyEnvironmentWord0078Opaque {
+            BlePhyEnvironmentWord0078Opaque(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: BlePhyEnvironmentWord0078Opaque) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Opaque: meaning not established. Observed word position; unassigned bits retain their exact image.
+    ///
+    /// A value of the `BLE_PHY_ENVIRONMENT.WORD_0078_OPAQUE` word.
+    /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct BlePhyEnvironmentWord0078Opaque(u32);
+
+    impl BlePhyEnvironmentWord0078Opaque {
         /// The all-zero word.
         pub const ZERO: Self = Self(0);
 

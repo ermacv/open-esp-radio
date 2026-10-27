@@ -137,7 +137,7 @@ opaque = true
 bits = "23:11"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "ISO bits 21/22/23 are NPI-length error, LLID error and power stop; bits 11..20 have no identified meaning. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
+description = "ISO bits 21/22 are NPI-length error and LLID error; bits 11..20 and bit 23 have no established current identity. Direct identity only in the named ISO format after sentinel replacement; transfer to ordinary RX is inference. Ordinary acceptance policy is unchanged."
 
 [[layout.bytes.fields]]
 name = "RSSI"

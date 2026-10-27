@@ -14,7 +14,7 @@
 //! Timer group 1's main watchdog is not armed by the ROM and its bus clock
 //! is gated at reset, so the bootstrap leaves it alone.
 //!
-//! SOURCE: ESP-IDF 4d59230d
+//! SOURCE: ESP-IDF 4d80c1b2
 //! `components/bootloader_support/src/bootloader_init.c:76-110`
 //! (`bootloader_config_wdt`: RWDT flash boot protection cleared, the RWDT
 //! armed for `CONFIG_BOOTLOADER_WDT_TIME_MS`, then MWDT0's protection

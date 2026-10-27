@@ -88,7 +88,11 @@ Exception: the Bluetooth LE hardware engine (the S31 driver, the HAL's controlle
 engine, the PAC's Bluetooth initialization and the HAL's scheduler locks)
 keeps what it takes from `esp32s31-bt-lib` as it is.
 
-From a source that has no license, such as `esp32s31-bt-lib`, the repository
+The current `esp32s31-bt-lib` pin includes an Apache-2.0 binary distribution
+license. Earlier unlicensed inputs retain their facts-only attribution; a
+new distribution license does not relabel an earlier derivation.
+
+From a source that has no license, the repository
 records only facts: values, layouts, addresses, order of operations and names.
 It records neither code (including code translated into another form, such as
 a state machine) nor verbatim data blocks (whole tables copied as they are).

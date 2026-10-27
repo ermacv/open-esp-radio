@@ -14,7 +14,7 @@ must lower.
 ## Authenticated connection contracts
 
 The connection functions of the pinned
-[`esp32s31-bt-lib@10c5077`](https://github.com/espressif/esp32s31-bt-lib/tree/10c507788e9da0993709cf82e405c896561172d8)
+[`esp32s31-bt-lib@7a85006f`](https://github.com/espressif/esp32s31-bt-lib/tree/7a85006f35f6839ae7ea5adee16e68a757759196)
 `libble_app.a` are identified below by their symbol names; role names come
 from the reviewed lineage in
 [`chips/esp32s31/vendor/facts/names/`](../vendor/facts/names/)
@@ -498,3 +498,8 @@ or beyond the deadline waits for expiry without publishing RUN. A RUN that
 started earlier closes through the existing completion/unlink path before the
 next decision. These source contracts do not qualify CRC-error or abrupt-loss
 behavior, nor establish linked semantic equivalence with the vendor callout.
+
+The current recycle callback also branches on scheduler-item STATUS bit 20
+(+0x32a/+0x34a/+0x34e). Its physical meaning is unproved. The generated opaque
+status lanes retain it; the open Zero/NonZero result does not decode it
+as a new success or failure condition.

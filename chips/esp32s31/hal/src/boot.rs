@@ -48,7 +48,7 @@ mod tests;
 /// the flash controller's table, each naming one of 2048 physical pages
 /// (its 11-bit page field).
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/soc/esp32s31/include/soc/ext_mem_defs.h:19,75,85,93`
 /// (`SOC_MMU_PAGE_SIZE`, `SOC_MMU_FLASH_VALID_VAL_MASK` 0x7ff,
 /// `SOC_MMU_ENTRY_NUM`, `SOC_MMU_FLASH_VADDR_BASE`).
@@ -64,7 +64,7 @@ pub const FLASH_MMU_WINDOW: MmuWindow = MmuWindow {
 /// the PSRAM controller's table, each naming one of 1024 physical pages
 /// (its 10-bit page field).
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/soc/esp32s31/include/soc/ext_mem_defs.h:19,76,85,94`
 /// (`SOC_MMU_PAGE_SIZE`, `SOC_MMU_PSRAM_VALID_VAL_MASK` 0x3ff,
 /// `SOC_MMU_ENTRY_NUM`, `SOC_MMU_PSRAM_VADDR_BASE`).
@@ -137,14 +137,14 @@ impl Brownout {
 
 /// The CPU PLL's rate.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:448-453`
 /// (`CLK_LL_PLL_320M_FREQ_MHZ`, the only CPLL rate, from the 40 MHz XTAL).
 pub const CPLL_HZ: u32 = 320_000_000;
 
 /// The CPU PLL's dividers for [`CPLL_HZ`]: feedback 8 over reference 1.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:422-440`
 /// (`clk_ll_cpll_set_freq_mhz`: feedback 8, reference 1).
 pub const CPLL_320: CpllDividers = CpllDividers {
@@ -164,7 +164,7 @@ pub enum CpuProfile {
 impl CpuProfile {
     /// The profile's root, PLL, dividers and rates.
     ///
-    /// SOURCE: ESP-IDF 4d59230d
+    /// SOURCE: ESP-IDF 4d80c1b2
     /// `components/esp_hw_support/port/esp32s31/rtc_clk.c:222-253`
     /// (`rtc_clk_cpu_freq_to_cpll_mhz`: 160 MHz divisors 2/1/2/2;
     /// 320 MHz divisors 1/2/3/2). The register codes are divisor minus one
@@ -197,7 +197,7 @@ impl CpuProfile {
 /// root, the memory and system clocks divide the CPU clock, the APB clock
 /// divides the system clock, each by its code plus one.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:664-762`
 /// (integer dividers and the CPU -> memory/system -> APB clock tree).
 pub const fn rates(root_hz: u32, dividers: BusDividers) -> ClockRates {
@@ -217,7 +217,7 @@ pub const fn rates(root_hz: u32, dividers: BusDividers) -> ClockRates {
 
 /// The highest memory clock.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hw_support/port/esp32s31/rtc_clk.c:224`
 /// (`MEM_CLK <= 160MHz`).
 pub const MAX_MEM_HZ: u32 = 160_000_000;
@@ -232,7 +232,7 @@ const _: () = {
 /// The RTC watchdog's timeout as the ESP-IDF bootloader arms it, counted
 /// from the bootloader's start.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/bootloader/Kconfig.projbuild:311-315`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/bootloader/Kconfig.projbuild:311-315`
 /// (`CONFIG_BOOTLOADER_WDT_TIME_MS`, 9000 by default) and
 /// `components/bootloader_support/src/bootloader_init.c:91-99`.
 pub const BOOTLOADER_RTC_WATCHDOG: Duration = Duration::from_secs(9);
@@ -247,14 +247,14 @@ pub const BOOT_BUDGET: BootBudget =
 
 /// The clock bring-up's waits.
 pub const CLOCK_WAITS: ClockWaits = ClockWaits {
-    // ESP-IDF 4d59230d `components/esp_hw_support/port/esp32s31/rtc_clk.c:144`
+    // ESP-IDF 4d80c1b2 `components/esp_hw_support/port/esp32s31/rtc_clk.c:144`
     // polls `clk_ll_cpll_calibration_is_done` without a limit.
     calibration: BootWait::new("cpll-calibration", Duration::from_millis(1)),
-    // SOURCE: ESP-IDF 4d59230d
+    // SOURCE: ESP-IDF 4d80c1b2
     // `components/esp_hw_support/port/esp32s31/rtc_clk.c:145`:
     // 10 µs after calibration completes ("wait for true stop").
     calibration_settle: BootWait::new("cpll-settle", Duration::from_micros(10)),
-    // ESP-IDF 4d59230d `clk_tree_ll.h:602-606` (`clk_ll_bus_update`) polls
+    // ESP-IDF 4d80c1b2 `clk_tree_ll.h:602-606` (`clk_ll_bus_update`) polls
     // `SOC_CLK_UPDATE` without a limit.
     update: BootWait::new("clock-update", Duration::from_micros(100)),
 };
@@ -262,7 +262,7 @@ pub const CLOCK_WAITS: ClockWaits = ClockWaits {
 /// The L1 cache's publication geometry: 64-byte lines, the data cache
 /// written back twice, both instruction caches invalidated.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:31,45,160-166`
 /// (64-byte lines, data map 0x10, instruction map 0x03);
 /// `components/esp_rom/patches/esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50`;
@@ -278,7 +278,7 @@ pub const CACHE_GEOMETRY: CacheGeometry<CacheMap> = CacheGeometry {
 };
 
 /// One sync command over a range of at most the stage-two image. ESP-IDF
-/// 4d59230d `components/esp_rom/patches/esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50`
+/// 4d80c1b2 `components/esp_rom/patches/esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50`
 /// polls `SYNC_DONE` without a limit.
 pub const CACHE_SYNC: BootWait = BootWait::new("cache-sync", Duration::from_millis(50));
 
@@ -325,7 +325,7 @@ const fn read_command(opcode: u8, address_bits: u8, dummy_cycles: u8) -> FlashRe
 /// @0x2f80f0c2 (QIO 0xEB, 8 more address bits, dummy + 4; DIO 0xBB, 4 more,
 /// dummy + 2; QOUT 0x6B, DOUT 0x3B and fast read 0x0B, dummy + 8; slow read
 /// 0x03, dummy + 0) and `spi_dummy_len_fix` @0x2f80df7e (stores zero to
-/// `dummy_len_plus`); ESP-IDF 4d59230d
+/// `dummy_len_plus`); ESP-IDF 4d80c1b2
 /// `components/esp_rom/esp32s31/include/esp32s31/rom/spi_flash.h:54-60`
 /// (24-bit read addresses) and
 /// `components/bootloader_support/bootloader_flash/src/bootloader_flash_config_esp32s31.c`
@@ -382,7 +382,7 @@ const fn candidate(din_mode: u32, din_num: u32, extra_dummy: u32) -> FlashTiming
 /// The 120-MHz STR timing candidates, in the sweep's order: input delay
 /// mode, delay number and extra dummy cycles.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_mspi/mspi_timing_tuning/port/esp32p4/mspi_timing_tuning_configs.h:79`
 /// (`MSPI_TIMING_FLASH_CONFIG_TABLE_CORE_CLK_120M_MODULE_CLK_120M_STR_MODE`).
 /// This is the related P4 block's table selected for this sweep.
@@ -403,7 +403,7 @@ pub const FLASH_TIMING_CANDIDATES: [FlashTimingCandidate; 12] = [
 
 /// The PSRAM PHY supply's level, in millivolts.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hw_support/port/esp32s31/Kconfig.ldo:21-33`
 /// (`ESP_LDO_VOLTAGE_PSRAM_DOMAIN`, default 1800 mV).
 pub const PSRAM_SUPPLY_MV: u32 = 1800;
@@ -412,7 +412,7 @@ pub const PSRAM_SUPPLY_MV: u32 = 1800;
 /// `vout = vref × (4 + mul) / 4 × 20`, `vref` 10 + dref below 9, else
 /// 20 + 2 × (dref − 9); the first closest pair in order.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_pmu/esp32s31/include/hal/ldo_ll.h:61-94`
 /// (`ldo_ll_voltage_to_dref_mul`, without eFuse calibration).
 pub const fn psram_supply_level(millivolts: u32) -> PsramSupplyLevel {
@@ -445,7 +445,7 @@ pub const fn psram_supply_level(millivolts: u32) -> PsramSupplyLevel {
 
 /// The memory PLL's rate, the PSRAM controllers' source.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:60-61`
 /// (`AP_OCT_PSRAM_MPLL_DEFAULT_FREQ_MHZ` 500 at 250 MHz).
 pub const MPLL_HZ: u32 = 500_000_000;
@@ -455,7 +455,7 @@ pub const PSRAM_HZ: u32 = 250_000_000;
 
 /// The board's octal PSRAM at 250 MHz, of `size` bytes (the module's).
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:33-38,55-58`
 /// (250 MHz: read latency 6, write latency 3, dummy bits 34/16, register
 /// dummy 16; chip-select setup/hold 4, hold delay 3) and
@@ -488,7 +488,7 @@ const _: () = assert!(
 
 /// The PSRAM bring-up's waits.
 pub const PSRAM_WAITS: PsramWaits = PsramWaits {
-    // SOURCE: ESP-IDF 4d59230d
+    // SOURCE: ESP-IDF 4d80c1b2
     // `components/esp_hw_support/port/esp32s31/Kconfig.ldo:35-38`
     // (1000 µs) and `components/esp_hw_support/ldo/esp_ldo_regulator.c:92-119`
     // (current limit off before the voltage-stable delay).

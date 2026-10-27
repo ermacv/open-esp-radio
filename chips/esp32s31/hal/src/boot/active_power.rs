@@ -2,7 +2,7 @@
 //! word of the radio PMU part: the bootstrap's root lends the part to this
 //! owner for its PLL epoch; in stage two the radio domain owns the part.
 //!
-//! SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/register/soc/pmu_reg.h`
+//! SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/register/soc/pmu_reg.h`
 //! (`HP_ACTIVE_HP_CK_POWER`: CPLL and MPLL power and their analog-I2C power).
 
 use oer_esp32s31_pac::{instances, pmu::PmuRadio};

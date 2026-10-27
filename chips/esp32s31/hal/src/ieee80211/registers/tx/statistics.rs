@@ -30,7 +30,7 @@ impl MacTxStatisticsSnapshot {
 impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Read the complete vendor-labelled TX statistics bank.
     ///
-    /// SOURCE: complete `libpp[hal_debug.o]::dbg_lmac_hw_statis_dump`.
+    /// SOURCE: complete `libpp[pp_debug.o]::dbg_lmac_hw_statis_dump`.
     pub fn tx_statistics_snapshot(&self) -> MacTxStatisticsSnapshot {
         let registers = &self.mac.wifi_mac_tx_statistics;
         MacTxStatisticsSnapshot {

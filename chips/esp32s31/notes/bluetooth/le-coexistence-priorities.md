@@ -1,6 +1,6 @@
 # ESP32-S31 LE coexistence priorities
 
-Source: `esp32s31-bt-lib` `libble_app.a` (pin `10c50778`), members
+Source: `esp32s31-bt-lib` `libble_app.a` (pin `7a85006f`), members
 `coexAdv.c.o_1.o` (`r_sym_coexAdv_pNmEzY32xPoYRR8VuoXP`, role
 `r_ble_lll_adv_coex_pti_init`; `r_sym_coexAdv_VG7vTjgdtb9y55QZyPP0`, role
 `r_ble_lll_adv_coex_dpc_update_on_adv_start`;

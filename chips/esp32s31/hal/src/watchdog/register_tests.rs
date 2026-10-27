@@ -3,7 +3,7 @@
 //! `oer-espressif-watchdog` on an owner, reads the fields back through a
 //! typed view of the same words and checks that no other word changed.
 //!
-//! Word offsets are ESP-IDF 4d59230d's: `timer_group_reg.h`
+//! Word offsets are ESP-IDF 4d80c1b2's: `timer_group_reg.h`
 //! (`WDTCONFIG0` 0x48, `WDTCONFIG1` 0x4c, `WDTCONFIG2` 0x50, `WDTFEED`
 //! 0x60, `WDTWPROTECT` 0x64), `hp_sys_clkrst_reg.h` (`TIMERGRP1_CTRL0`
 //! 0x11c) and `lp_wdt_reg.h` (`CONFIG0` 0x0, `CONFIG1` 0x4, `FEED` 0x14,
@@ -147,7 +147,7 @@ fn arming_a_main_watchdog_writes_its_timeout_stages_and_reset_lengths() {
     assert_eq!(view.wdt.read_wdtconfig2().wdt_stg0_hold(), 1_000_000);
     assert_eq!(view.wdt.read_wdtwprotect().wdt_wkey(), LOCK, "locked again");
     drop(view);
-    // SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:219-222`: the feed stores one.
+    // SOURCE: ESP-IDF 4d80c1b2 `mwdt_ll.h:219-222`: the feed stores one.
     assert_eq!(words[0x60 / 4], 1);
 }
 

@@ -2,9 +2,9 @@
 # Generated provenance of the ESP-IDF header ABI facts.
 schema = 1
 chip = "esp32s31"
-esp_idf_revision = "4d59230ddff16327812782151ef0afef202dc6d7"
+esp_idf_revision = "4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d"
 abi = "riscv32-ilp32-integer"
-sdkconfig_sha256 = "da74f7966ece60a8b3c07da373f5edec019a9d1e2696b9c9a304e22ab4876a5e"
+sdkconfig_sha256 = "68c597559bbbaf0c34b9aa0d676face25df5189073fdd97deb90ebc3e52dd3d1"
 
 [headers]
 "components/bt/porting/transport/include/esp_hci_internal.h" = "0e978b8c736b39265d4f746a081feeb65b75c74c42b610f70c990c8513916cfd"
@@ -18,7 +18,7 @@ sdkconfig_sha256 = "da74f7966ece60a8b3c07da373f5edec019a9d1e2696b9c9a304e22ab487
 "components/esp_hal_uart/include/hal/uart_hal.h" = "8f1134a82d6653331658444e7a1e00b43313094a711a5351309a7d58198527a4"
 "components/esp_hal_wdt/include/hal/wdt_hal.h" = "e12bf16b7712134e2525aad90ec6d21bb84963e772fc6e3da88aea2785b20cfe"
 "components/esp_hw_support/include/esp_private/adc_share_hw_ctrl.h" = "1cdfdbc87ef8691cff3d0cfdba9da7d5328fdd997a467f4d97481ab57862b339"
-"components/esp_hw_support/port/esp32s31/include/soc/rtc.h" = "55cfc0ca5804c772d281846304629c4e782311f736124dd0fbce5fe91be74a76"
+"components/esp_hw_support/port/esp32s31/include/soc/rtc.h" = "f222e1debcbecc1103c6394f63818bd8bef0708d375a951a69fa964e97c426f5"
 "components/esp_mspi/include/esp_private/cache_utils.h" = "4909acbf732f1286b6e7e70ffe5d1f2e660b8b1592f4efc5b7ebd91a7bb07575"
 "components/esp_phy/include/esp_phy_init.h" = "700bf7b3865705b6d858e63a55fd5a880ebf298f700927cd642bee7536e4dc58"
 "components/esp_phy/include/esp_private/btbb.h" = "659a94ca15d9e7d5531f34c755476523d285bc2cbc0a378b58505e67facea289"
@@ -33,7 +33,7 @@ sdkconfig_sha256 = "da74f7966ece60a8b3c07da373f5edec019a9d1e2696b9c9a304e22ab487
 "components/esp_rom/esp32s31/include/esp32s31/rom/km.h" = "9e2cbccee04490e2d8464eaf8e851c7dc89e2a5909bee3742df9d22bf6c6368c"
 "components/esp_rom/esp32s31/include/esp32s31/rom/opi_flash.h" = "a93b581bf6ffb0123e811b2d5931e8f0275eb043c5cbbab0c866d642b8629009"
 "components/esp_rom/esp32s31/include/esp32s31/rom/rsa_pss.h" = "acc6779178af9a5bd99f6b609c6887f4e9c9a9dd83a10b4d1ba5d94c42d5c7c7"
-"components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h" = "60ae2226afc6d46cc5294ef1b3514acde6b3da35390f830e525250d3fccf0e18"
+"components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h" = "2b5ba568153d34bca40bcec7ebea88757bcb861c9be78c33080e7daa429d0ad8"
 "components/esp_rom/esp32s31/include/esp32s31/rom/sha.h" = "e5b74fb0fbfb8f12f792e53cff262517cbff91553eeaa3f0d511daa82665b47e"
 "components/esp_rom/esp32s31/include/esp32s31/rom/spi_flash.h" = "c679b09bfa771bf3e45e741aded77706975effd64a424dd2f84de0b757f811a0"
 "components/esp_rom/esp32s31/include/esp32s31/rom/uart.h" = "508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314"
@@ -51,7 +51,7 @@ sdkconfig_sha256 = "da74f7966ece60a8b3c07da373f5edec019a9d1e2696b9c9a304e22ab487
 "components/heap/rom_patches/include/rom_patch_tlsf.h" = "696992ca3a74f4763c3ad33a3d2d47797f2cab19cb4e220182fc4fdded579cf1"
 "components/heap/tlsf/include/tlsf.h" = "69799f4f1e7c5f8d3a35e89f5efb8014aa00e6e49f96939b93fc39ceb95d0e8b"
 "components/heap/tlsf/tlsf_control_functions.h" = "2e89b64ac4357ce8c951b540355dfe3279953f96ee46fdac0ac22972bd1d070f"
-"components/ieee802154/private_include/esp_ieee802154_dev.h" = "afdb884e6dc78f19c9d72adedfc1ea7fdbbdebb86d1e7aaa80bb89e62a74bfd3"
+"components/ieee802154/private_include/esp_ieee802154_dev.h" = "5a8d7d8db146a78bb8a7281c098006375c3708b1523b8541b8e50fbee31279c5"
 "components/riscv/include/riscv/interrupt.h" = "050269fa565533478962e4048fcec8a753b542169cd5ad6ba46f4cfd7e5185a0"
 "components/spi_flash/include/esp_flash_chips/spi_flash_chip_generic.h" = "dd1ce77cc5ce5d6560c8ab7f57a70dab6f7904e81b48fad711466bce8ae44fbd"
 "components/spi_flash/include/spi_flash_mmap.h" = "06eac0e3c378ab529db28d040d3a14b659a336e17be7272890adcc83a14bc857"
@@ -75,47 +75,47 @@ sha256 = "2d8151fd417b34cf8de716f503d212223f652b06f2defae439f915ccdf661118"
 
 [[corpus]]
 role = "libpp"
-sha256 = "0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4"
+sha256 = "4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391"
 
 [[corpus]]
 role = "libnet80211"
-sha256 = "23de6b00cbc71f4cd4a43c0c6cca4aa670154f52eb43d798668e1f1507f2425d"
+sha256 = "3bbc253d1127ec579ebdc6c44cab906959097bed245a5664ea0e10d2c642a2da"
 
 [[corpus]]
 role = "libcore"
-sha256 = "7199d31d655adc31af612502f96febe1ba1607cdb8ba2a77c8c140fc08dda9de"
+sha256 = "0f8845b53779ddf8feaf8b151afa7505a6577ee4812614820d0b3b0339327e3d"
 
 [[corpus]]
 role = "libespnow"
-sha256 = "f15f64b73a53b0a0a059cf5d433f7167ce520ab2df63c8a7b656712e939f0698"
+sha256 = "87dd2edb483b9129d8edf209b7a63e56ec3e47fe3c35c7679a2a2e3915dca41b"
 
 [[corpus]]
 role = "libmesh"
-sha256 = "9a7b11fa8114a588cfeac9332f7136938d92601d93eda327e9b7a0b2d05572b6"
+sha256 = "066494fd5f0f5ce950e5eb396b545efa2c168557ad34e864bc99fde77b518fb3"
 
 [[corpus]]
 role = "libsmartconfig"
-sha256 = "ddb9c932ead9a7a1fac3c6aefec4f33bc023e19a800cb829ee4d69c41f68101b"
+sha256 = "1c03583730c2618a598650dcf42bbe980ca59cecf25666048de30adc27879210"
 
 [[corpus]]
 role = "libwapi"
-sha256 = "8677d30cbd8805258a774c16ddd584e268f92899e43a75ec52eacd53c871b7d7"
+sha256 = "7e55ba312c4fd84bedafc926e2abbf2a9eae7f47ee1cbef62297c82591919ca6"
 
 [[corpus]]
 role = "libcoexist"
-sha256 = "13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147"
+sha256 = "01c1b4f2b86cbc3024a2b51f3f104ea7937fc721a4ee57b53146fea6608836bb"
 
 [[corpus]]
 role = "libble_app"
-sha256 = "e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723"
+sha256 = "e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6"
 
 [[corpus]]
 role = "libbredr_app"
-sha256 = "813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851"
+sha256 = "08301519c231a02a797c47a69b3eacec2be2f31080581d688a2f749da4f42c80"
 
 [[corpus]]
 role = "libbtdm_common"
-sha256 = "389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41"
+sha256 = "838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0"
 
 [[corpus]]
 role = "rom"

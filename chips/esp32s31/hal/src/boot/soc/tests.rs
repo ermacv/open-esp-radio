@@ -1,5 +1,5 @@
 //! The SoC initialization's steps over host memory from each instance's
-//! base, against ESP-IDF 4d59230d's register headers: `lp_apm_reg.h:990`
+//! base, against ESP-IDF 4d80c1b2's register headers: `lp_apm_reg.h:990`
 //! (`FUNC_CTRL` 0xbc), `hp_apm_reg.h:1950` and `hp_mem_apm_reg.h:1214`
 //! (`FUNC_CTRL` 0xc4), `trng_reg.h` (`CONF` 0x0: NOISE_SOURCE_SEL 4:0,
 //! NOISE_POS_SEL 9:5, REPETITION_VALUE_C 18:10, ADPATIVE_VALUE_C 27:19,

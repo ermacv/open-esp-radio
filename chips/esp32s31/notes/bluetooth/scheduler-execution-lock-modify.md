@@ -1,6 +1,6 @@
 # ESP32-S31 scheduler execution lock and modify
 
-Source: `esp32s31-bt-lib` `libbtdm_common.a` (pin `10c50778`), member `18.o`
+Source: `esp32s31-bt-lib` `libbtdm_common.a` (pin `7a85006f`), member `18.o`
 `r_sym_bt_9H3AnHbaHJ3auzSvPDme` (role `r_btdm_sched_execution_lock`),
 `r_sym_bt_rPoPGH6BBYjZaunDU5FV` (role `r_btdm_sched_execution_modify`) and
 the shared idle preamble `r_sym_bt_B8fDByebTHuwRe8FZuRt`; from a vendor-code

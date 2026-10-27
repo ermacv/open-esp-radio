@@ -46,7 +46,7 @@ impl FlashRegisters {
 /// `USER1.USR_DUMMY_CYCLELEN` (zero dummy cycles leave the length 0);
 /// `SPI_read_data` @0x2f80e24a: `ADDR`, `MISO_DLEN` (bits − 1), `CMD.USR`,
 /// the data words. The read sets `USER.USR_COMMAND`, which the ROM leaves
-/// as the bootloader set it. ESP-IDF 4d59230d
+/// as the bootloader set it. ESP-IDF 4d80c1b2
 /// `components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:16` (`USR`
 /// self-clears when the command completes).
 impl<P: Placement, Q: Placement> FlashCommandRegisters for FlashRegisters<P, Q> {
@@ -322,7 +322,7 @@ impl<P: Placement, Q: Placement> FlashTimingRegisters for FlashRegisters<P, Q> {
 /// physical page and the valid flag; a flash entry maps flash alone, so a
 /// PSRAM target is written invalid and reads back otherwise.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_cache/esp32s31/include/hal/mmu_ll.h:309-366` (index,
 /// then content) and `components/soc/esp32s31/include/soc/ext_mem_defs.h:57,75`
 /// (the valid flag, 11 page bits); plaintext flash: `SENSITIVE` stays clear.

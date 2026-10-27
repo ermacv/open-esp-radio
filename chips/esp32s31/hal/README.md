@@ -33,7 +33,7 @@ Zero and out-of-range input return `InvalidDelay` before MMIO. Separate
 comparator observations at stopped count10000 cover equal/below targets;
 zero-delay arming remains outside this API.
 
-SOURCE for stop/load-zero/T0LOAD-strobe/start: ESP-IDF 4d59230d,
+SOURCE for stop/load-zero/T0LOAD-strobe/start: ESP-IDF 4d80c1b2,
 `components/esp_hal_timg/esp32s31/include/hal/timer_ll.h:236-239` (counter),
 `:293-297` (reload value), `:319-322` (software reload).
 `HW23_S31_TIMG0_RELOAD_20261027` confirms this sequence on S31 at
@@ -50,7 +50,7 @@ clear/arrival collision or exact IRQ-latency guarantee.
 The host fixture selects `Exempt(ExecutorLevel)` at P2 with a lower line ID
 than FROM_CPU2. SOURCE: `chips/espressif/platform/family.toml` [interrupts],
 RISC-V CLIC specification 3f8ee744, "Specifying Interrupt Priority";
-ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/clic_reg.h` supplies the
+ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h` supplies the
 CLIC geometry. SOURCE for priority/ID arbitration:
 [ESP32-C5 TRM v1.1](https://www.espressif.com/sites/default/files/documentation/esp32-c5_technical_reference_manual_en.pdf),
 section 2.8.2.5, p.86. `HW23_S31_P2_ARBITRATION_20261027` confirms line17
@@ -79,14 +79,14 @@ case `chip_clocks_installed_once` checks that consuming `Root` produces the
 clock owner and prevents installing it again with that root.
 
 - MPLL: the PSRAM mapping holds it for the whole image (`PsramMpll`), so a
-  radio reference is a count and no path powers MPLL down (ESP-IDF 4d59230d
+  radio reference is a count and no path powers MPLL down (ESP-IDF 4d80c1b2
   `esp_clk_tree.c` `esp_clk_tree_mpll_acquire`; esp-hal 1f646c5
   `soc/esp32s31/clocks.rs:265-321`, PSRAM's never-released reference).
 - BBPLL, the 160 MHz output's parent, stays powered for the whole image
   (the flash clock and the USB Serial/JTAG console run on it; ESP-IDF
-  4d59230d `esp_clk_tree.c:404-408`), so the 160 MHz edge is its gate only.
+  4d80c1b2 `esp_clk_tree.c:404-408`), so the 160 MHz edge is its gate only.
 - The analog-I2C master's reset is not pulsed: no ESP32-S31 ESP-IDF path
-  calls `regi2c_ctrl_ll_master_reset` (ESP-IDF 4d59230d
+  calls `regi2c_ctrl_ll_master_reset` (ESP-IDF 4d80c1b2
   `esp_hal_regi2c/esp32s31/include/hal/regi2c_ctrl_ll.h:43-53`).
 - The Wi-Fi power gate opens once, at installation, and nothing closes it
   (esp-hal 1f646c5 `rtc_cntl/rtc/esp32s31.rs:670`, `enable_wifi_power_clock`).
@@ -139,7 +139,7 @@ establish the same latch witness or timing in production's configuration.
 SOURCE: `HW22_S31_LP_COMPARE_WIDTH_20261027`,
 `HW22_S31_LP_CONDITIONAL_ACK_20261027`.
 
-Modem PLL source gating uses the pinned ESP-IDF 4d59230d whole-word sequence:
+Modem PLL source gating uses the pinned ESP-IDF 4d80c1b2 whole-word sequence:
 open `0x15 → 0x1d`, close `0x2d → 0x25`. Platform source-clock readback
 requires the open PLL image with the XTAL gate clear
 (`ESP_IDF_4D59230D_S31_MODEM_PLL_GATE`).

@@ -11,7 +11,7 @@
 //! mutually exclusive: each starts alone, once none runs. A range just
 //! mapped is dropped from the data cache ([`invalidate_data`]).
 //!
-//! SOURCE(esp32s31): ESP-IDF 4d59230d
+//! SOURCE(esp32s31): ESP-IDF 4d80c1b2
 //! `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:31,45,160-166`
 //! (64-byte lines, data map 0x10, instruction map 0x03);
 //! `components/esp_rom/patches/esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50`
@@ -45,7 +45,7 @@
 //! `Cache_Freeze_L1_ICache0_Disable` @0x2f801d82;
 //! `Cache_Resume_L1_CORE0_ICache` @0x2f8027c6 and
 //! `Cache_Resume_L1_CORE0_ICache_Autoload` @0x2f801e9e. Fields:
-//! ESP-IDF 4d59230d `cache_reg.h:16-22` (`L1_ICACHE_SHUT_IBUS0`),
+//! ESP-IDF 4d80c1b2 `cache_reg.h:16-22` (`L1_ICACHE_SHUT_IBUS0`),
 //! `:805-829` (`L1_ICACHE0_FREEZE_EN`/`_MODE`/`_DONE`), `:1496-1520`
 //! (`LOCK_DONE`), `:1574-1620` (`SYNC_DONE`), `:1672-1684`
 //! (`L1_ICACHE0_PRELOAD_DONE`), `:2049-2061` (`L1_ICACHE0_AUTOLOAD_ENA`/`_DONE`).
@@ -226,7 +226,7 @@ where
 /// lines: memory the cache served stale (a range just mapped) is read
 /// again from its device.
 ///
-/// SOURCE(esp32s31): ESP-IDF 4d59230d
+/// SOURCE(esp32s31): ESP-IDF 4d80c1b2
 /// `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h`
 /// (`Cache_Invalidate_Addr`, drop cached data for a range; data map BIT(4))
 /// and `components/soc/esp32s31/register/soc/cache_reg.h:1574-1640`

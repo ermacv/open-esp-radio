@@ -11,7 +11,7 @@ description = "SOURCE: Blobray, esp-phy-lib20f1db053a0e6cb9f1c09d255c43bf4248304
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_PMU_ACTIVE_CK_PRESERVE"
-description = "SOURCE: ESP-IDF4d59230ddff16327812782151ef0afef202dc6d7, components/esp_hw_support/port/esp32s31/pmu_init.c::pmu_hp_system_init:80-86 active branch uses components/esp_hal_pmu/esp32s31/include/hal/pmu_ll.h::pmu_ll_hp_set_ana_i2c_power:142-147, updating22/20/21 rather than assigning the whole clk_power word. components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h cpll/xtalx2/bbpll/apll/mpll enable/disable leaves at98/109,120/131,163/174,185/196,207/218 update only their named upper fields. These inspected source operations preserve low4; a zero-initialized parameter struct does not establish low4 zeroing or its physical meanings. Report: oer-notes/research/bx-pmu-ck-power.md."
+description = "SOURCE: ESP-IDF4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d, components/esp_hw_support/port/esp32s31/pmu_init.c::pmu_hp_system_init:80-86 active branch uses components/esp_hal_pmu/esp32s31/include/hal/pmu_ll.h::pmu_ll_hp_set_ana_i2c_power:142-147, updating22/20/21 rather than assigning the whole clk_power word. components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h cpll/xtalx2/bbpll/apll/mpll enable/disable leaves at98/109,120/131,163/174,185/196,207/218 update only their named upper fields. These inspected source operations preserve low4; a zero-initialized parameter struct does not establish low4 zeroing or its physical meanings. Report: oer-notes/research/bx-pmu-ck-power.md."
 
 [[sources]]
 id = "HW10_S31_PMU_ACTIVE_ICG_STARTUP_20261026"

@@ -89,23 +89,23 @@ impl PsramRegisters {
 
 /// The pads' drive strength.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:430`
 /// (`mspi_timing_ll_pin_drv_set(2)`).
 const PAD_DRIVE: Bits<3> = Bits::constant::<2>();
 
 /// The cache's 32-bit address phase, as its length − 1.
-/// SOURCE: ESP-IDF 4d59230d `psram_ctrlr_ll.h:70-362`.
+/// SOURCE: ESP-IDF 4d80c1b2 `psram_ctrlr_ll.h:70-362`.
 const ADDRESS_BITLEN: Bits<6> = Bits::constant::<31>();
 /// The cache's 16-bit synchronous read and write commands, the lengths as
 /// length − 1.
-/// SOURCE: ESP-IDF 4d59230d `psram_ctrlr_ll.h:70-362`.
+/// SOURCE: ESP-IDF 4d80c1b2 `psram_ctrlr_ll.h:70-362`.
 const COMMAND_BITLEN: Bits<4> = Bits::constant::<15>();
 
 /// The controllers' bus clock, DLL, pads, chip select and the cache's octal
 /// DDR access.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:487-503`
 /// (the bus divider: N = div − 1, H = div / 2 − 1, L = div − 1, or the
 /// undivided clock), `:513-518` (the DLL), `:535-618` (chip select:
@@ -265,7 +265,7 @@ const FIRST_WORD: Index<16> = Index::constant::<0>();
 /// (each phase enabled with its length − 1, or disabled with length 0;
 /// the address written when an address phase is set; the data words not
 /// read by the ROM beyond the 16 bits sent). Mode 7 is `OPI_DTR`: ESP-IDF
-/// 4d59230d `components/esp_rom/include/esp_rom_spiflash.h:24-37` and
+/// 4d80c1b2 `components/esp_rom/include/esp_rom_spiflash.h:24-37` and
 /// `components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:741`,
 /// esp-hal 1f646c5 `esp-hal/src/psram/oct_hex.rs:332`. The chip select:
 /// `components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:859-861`
@@ -363,7 +363,7 @@ impl<P: Placement, Q: Placement, R: Placement> PsramCommandRegisters for PsramRe
 /// maps PSRAM alone, so a flash target is written invalid and reads back
 /// otherwise.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_hal_cache/esp32s31/include/hal/mmu_ll.h:321-344` and
 /// `components/soc/esp32s31/include/soc/ext_mem_defs.h:59-76`; plaintext
 /// PSRAM: `SENSITIVE` stays clear (esp-hal 1f646c5

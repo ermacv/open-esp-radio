@@ -87,7 +87,11 @@ impl LegacyScanRxHeadProjection {
 }
 
 /// SOURCE: pinned `ble_6.o::r_sym_ble_KkAldzIlkQuEkNQp1g6q`
-/// (`r_ble_lll_scan_reset_link_state`), the restricted LE 1M reset image.
+/// (`r_ble_lll_scan_reset_link_state`), current extent 0x478. RX-path codes
+/// 4/c survive at +0x40e/+0x2fa; resolving-entry publication is +0x474.
+/// This open restricted LE 1M profile retains its explicit policy values.
+/// The current vendor option branches and +0x18/+0x48 transforms differ;
+/// whole-profile equivalence is not established by those surviving facts.
 const SCAN_RESET: LinkStateImage = LinkStateImage {
     tx_path: BleLinkStateTxPath::ZERO
         .with_max_tx_octets(0xff)

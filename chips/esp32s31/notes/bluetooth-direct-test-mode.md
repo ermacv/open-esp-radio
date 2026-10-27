@@ -17,11 +17,11 @@ graph, and supported HCI commands belong to the portable
 ## Pinned public inputs
 
 - ESP32-S31 Controller archive
-  [`espressif/esp32s31-bt-lib@10c507788e9da0993709cf82e405c896561172d8`](https://github.com/espressif/esp32s31-bt-lib/tree/10c507788e9da0993709cf82e405c896561172d8),
+  [`espressif/esp32s31-bt-lib@7a85006f35f6839ae7ea5adee16e68a757759196`](https://github.com/espressif/esp32s31-bt-lib/tree/7a85006f35f6839ae7ea5adee16e68a757759196),
   `libble_app.a` SHA-256
-  `e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723`
+  `e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6`
   and `libbtdm_common.a` SHA-256
-  `389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41`;
+  `838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0`;
 - same-chip role-name reference only:
   [`espressif/esp32s31-bt-lib@31c30949541a5d3abd4043a1cb66d55aa55577dd`](https://github.com/espressif/esp32s31-bt-lib/tree/31c30949541a5d3abd4043a1cb66d55aa55577dd),
   whose unobfuscated names reach the pinned symbols through the reviewed
@@ -46,8 +46,8 @@ through `dtm_4.o`:
 | `sym_dtm_7gOGApwmDG1TxZOfQhrh` | 288 | `r_ble_lll_dtm_reset_link_state`: reset the link-state image before every event. |
 | `sym_dtm_mmDG6dYKgcDruyC7Hgxv` | 122 | `r_ble_lll_dtm_calculate_itvl`: the transmitter interval. |
 | `sym_dtm_25YOj8pPkiCiy504xJbR` / `sym_dtm_uJXhYheB5ZvE92bMWBC4` | 512 / 200 | Create the transmitter or receiver context, reset the link state and build the first event. |
-| `sym_dtm_2zeOUjc7g55zkDNQuZkg` | 964 | Build and publish the first event of a test. |
-| `sym_dtm_C15YAGhOCEEdWMnhjaY3.part.1` | 810 | Build and publish every later event. |
+| `sym_dtm_2zeOUjc7g55zkDNQuZkg` | 984 | Build and publish the first event of a test. |
+| `sym_dtm_C15YAGhOCEEdWMnhjaY3.part.1` | 760 | Build and publish every later event. |
 | `sym_dtm_ifYtgHeQ0rvhqeqBbpl1` | 370 | `r_ble_lll_dtm_recycle_sch_item`: the completion callback installed at item `+0x58`. |
 | `sym_dtm_NsbldBIeGraE2wg0AVy7` | 140 | `r_ble_lll_dtm_end_test`: stop the scheduler and free the graph. |
 | `sym_dtm_ikQ7xyHA5qBHWlaqAjZu` / `sym_dtm_JMPstxdIRcEVY1YJeXkA` | 72 / 28 | RX result projection and the RSSI getter behind `esp_ble_get_dtm_rx_rssi`, described with the `DtmRxResultProjection` of an implementation outside this repository. |
@@ -162,19 +162,19 @@ and [`bluetooth-interrupt-runtime.md`](bluetooth-interrupt-runtime.md).
 
 ## Modem ETM channels
 
-For a test without CTE, both event bodies call
-`r_sym_ble_YpJTETFGhduIAMkkBKjc` for channels zero and one. It clears the
-channel's bit in the software ownership map of `r_sym_resMgmt_zyxoWB9DZg2URcqF30NE`
-and writes the channel bit to `MODEM_ETM.CHANNEL_ENABLE_CLEAR`. In the vendor
-Controller, channel zero carries the route that BLE PHY register
-initialization `r_sym_ble_nENHlP4KBuQYlFVffaR5` (`r_ble_phy_init_registers`)
-installs from modem event 8 to task 20; channel one is used only by the CTE
-branch. Test End calls `r_ble_phy_init` (`r_sym_ble_r39KCENxd4X4fI1qTGp9`),
-which marks the PHY for reinitialization and thereby restores the route.
+For a test without CTE, both current event bodies clear resources two and
+three through `r_sym_ble_YpJTETFGhduIAMkkBKjc`. The helper clears the
+software ownership bit and writes `MODEM_ETM.CHANNEL_ENABLE_CLEAR`.
+The initial CTE event clears 2/3, publishes event/task images 9/51/51/16
+and enables 2/3. The recurring CTE event does not rewrite those routes.
+PHY initialization still installs the event-8/task-20 route on channel zero;
+the DTM clears therefore do not establish release of that PHY route.
+Test End calls `r_ble_phy_init`, which marks the PHY for reinitialization.
 
-This repository gives channels zero and one to IEEE 802.15.4 and runs the BLE
-PHY route on channel two (the generated modem ETM part the HAL holds), so it follows the vendor
-semantically rather than by channel number. The first event of a test session
+The open affine PHY owner uses channel two; IEEE 802.15.4 owns channels
+zero and one. Its explicit DTM suspension/restoration policy retains that
+ownership allocation without asserting vendor channel-zero release.
+The first event of a test session
 returns the `EnterTest` step: the runtime disables channel two through
 `MODEM_ETM.CHANNEL_ENABLE_CLEAR` immediately before the list head is published
 and the scheduler runs, and keeps the HAL's `BlePhyEtmRouteDisabled` owner.

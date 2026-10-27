@@ -21,7 +21,7 @@
 //! `libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp` supplies the
 //! association decision through `libpp[if_hwctrl.o]::ic_set_key`
 //! and `libpp[wdev.o]::wDev_Insert_KeyEntry` (Wi-Fi library
-//! `af55a0ca258ce9d791d1661d7c2bbb65f08c0c21`).
+//! `f856b5db55cb18e2d1826044430f3f4089e47cf9`).
 //!
 //! The station has one physical GTK slot. Eviction destroys the installed
 //! owner; a saved RAM key cannot satisfy portable `select_group_key`.

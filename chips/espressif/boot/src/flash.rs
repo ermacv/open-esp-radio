@@ -16,7 +16,7 @@
 //! @0x2f80f0c2 (the read mode decoded from `CTRL`, `USER` and `USER2` set),
 //! `esp_rom_spi_set_rd_cmd_bit_len` @0x2f80e020 (`USER1`, the address and
 //! dummy phases) and `SPI_read_data` @0x2f80e24a (`ADDR`, `MISO_DLEN`,
-//! `CMD.USR`, the data words); ESP-IDF 4d59230d
+//! `CMD.USR`, the data words); ESP-IDF 4d80c1b2
 //! `components/esp_hal_mspi/spi_flash_hal_common.inc:239-252` (one read:
 //! address, input length, start, completion, data) and
 //! `components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:394-412`
@@ -49,7 +49,7 @@ use crate::{
 
 /// The data words one user command reads at most: 64 bytes.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/esp_hal_mspi/include/hal/spi_flash_hal.h:28`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/esp_hal_mspi/include/hal/spi_flash_hal.h:28`
 /// (`SPI_FLASH_HAL_MAX_READ_BYTES`) and
 /// `components/soc/esp32s31/register/soc/spi1_mem_c_struct.h:1080` (`data_buf[16]`).
 pub const CHUNK_WORDS: usize = 16;

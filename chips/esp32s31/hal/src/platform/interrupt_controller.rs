@@ -85,7 +85,7 @@ mod tests;
 /// Whether `source` is pending in `status`: source `32 * n + k` is bit `k`
 /// of the bank's status word `n`.
 ///
-/// SOURCE: ESP-IDF 4d59230d `interrupt_core0_reg.h`
+/// SOURCE: ESP-IDF 4d80c1b2 `interrupt_core0_reg.h`
 /// (`INTERRUPT_CORE0_INT_STATUS_REG_0..5`: sources 0 to 168, one bit each).
 fn pending_in(status: &impl PendingStatus, source: u16) -> bool {
     status
@@ -260,7 +260,7 @@ impl<M: Placement, C: Placement> InterruptController<M, C> {
 /// The trigger field (`ATTR_TRIG`) of `trigger`: bit 0 set for an edge, bit
 /// 1 set for the negative polarity.
 ///
-/// SOURCE: RISC-V CLIC specification (`clicintattr.trig`); ESP-IDF 4d59230d
+/// SOURCE: RISC-V CLIC specification (`clicintattr.trig`); ESP-IDF 4d80c1b2
 /// `components/soc/esp32s31/include/soc/clic_reg.h` (`CLIC_INT_ATTR_TRIG`).
 const fn trigger_bits(trigger: Trigger) -> clic::ctrl::AttrTrig {
     match trigger {
@@ -357,7 +357,7 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
     ///
     /// SOURCE: RISC-V CLIC specification 3f8ee744 `clic.adoc:377` (a word
     /// write's byte updates take effect in no specified order); ESP-IDF
-    /// 4d59230d `components/soc/esp32s31/include/soc/clic_reg.h`
+    /// 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h`
     /// `:77,:98,:104` (`CLIC_INT_CTL_S` 24, `CLIC_INT_ATTR_SHV_S` 16,
     /// `CLIC_INT_IE_S` 8).
     fn set_line(&mut self, line: u8, state: LineState) -> Result<(), Error> {

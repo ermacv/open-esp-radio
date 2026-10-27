@@ -2,7 +2,7 @@
 //! OpenThread `TxFrame::GenerateEnhAck` and the header preparation it uses
 //! (`src/core/mac/mac_frame.cpp` at OpenThread
 //! `43cc05a9bcf780bd758bad53d897e2d88cf8cb75`, the submodule of ESP-IDF
-//! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`; sha256
+//! `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`; sha256
 //! `33f704b1ee9f1026362f06bcd97a19f88e8a42ddfafe3ee9c2e42cdb91db51a1`).
 //!
 //! ESP-IDF's OpenThread port builds the enhanced ACK in its driver callback

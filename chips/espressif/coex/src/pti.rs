@@ -13,12 +13,13 @@ use oer_ieee802154_mac::RadioOperation;
 pub const COEX_EVENT_COUNT: usize = 49;
 
 /// Complete `coex_pti_tab` of esp-coex-lib
-/// `c758e7b56e0fa22177a0539796e1df59978dc322`, `coexist_core.o` section
+/// `fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9`, `coexist_core.o` section
 /// `.dram1.2`, 49 bytes. The bytes are equal in the pinned
 /// `esp32s31/libcoexist.a` sha256
-/// `13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147`
+/// `01c1b4f2b86cbc3024a2b51f3f104ea7937fc721a4ee57b53146fea6608836bb`
 /// (`chips/esp32s31/vendor/artifacts.toml`) and the ESP32-C5
 /// `esp32c5/libcoexist.a` sha256
+/// (esp-coex-lib `c758e7b56e0fa22177a0539796e1df59978dc322`)
 /// `de883d649e4e2e9407a6ab0dc28d5d2aa4cd8d30d0071abfe5a9183348ceb627`.
 /// Index is the event number.
 /// Events 1, 3, 10 and 15 are the cold Wi-Fi MAC priorities (5, 7, 3 and 1);

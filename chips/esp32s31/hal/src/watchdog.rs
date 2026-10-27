@@ -26,7 +26,7 @@ use oer_esp32s31_pac::ownership::WatchdogPeripherals;
 /// The main watchdogs' microsecond tick on the chip's 40 MHz XTAL, their
 /// clock source.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/soc/esp32s31/include/soc/clk_tree_defs.h:125-127`
 /// (the chip's XTAL is 40 MHz) and
 /// `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:273-283`
@@ -40,7 +40,7 @@ pub const MAIN_WATCHDOG_TICK: MicrosecondTick = match MicrosecondTick::from_sour
 /// last feed. It is the ESP-IDF bootloader's default backstop, the one the
 /// bootstrap's boot waits run under.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/bootloader/Kconfig.projbuild:311-315`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/bootloader/Kconfig.projbuild:311-315`
 /// (`CONFIG_BOOTLOADER_WDT_TIME_MS`, 9000 by default).
 pub const RTC_WATCHDOG_BUDGET_MS: u32 = 9_000;
 
@@ -51,7 +51,7 @@ pub const RTC_WATCHDOG_FEED_PERIOD_MS: u32 = 1_000;
 /// The RTC slow clock the RTC watchdog counts, at reset the internal RC
 /// oscillator.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/clk_tree_defs.h:52,101-104`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clk_tree_defs.h:52,101-104`
 /// (`SOC_CLK_RC_SLOW_FREQ_APPROX` 136 kHz, the default `RTC_SLOW_CLK`
 /// source).
 const RTC_SLOW_CLOCK_HZ: u32 = 136_000;
@@ -61,7 +61,7 @@ const RTC_SLOW_CLOCK_HZ: u32 = 136_000;
 /// back by one plus the eFuse `WDT_DELAY_SEL` bit, so the reset follows the
 /// budget, or twice it on a chip whose eFuse selects the longer delay.
 ///
-/// SOURCE: ESP-IDF 4d59230d `rwdt_ll.h:117-123` (`config1 = timeout_ticks
+/// SOURCE: ESP-IDF 4d80c1b2 `rwdt_ll.h:117-123` (`config1 = timeout_ticks
 /// >> (1 + EFUSE_WDT_DELAY_SEL)`) and `efuse_reg.h:650-659`
 /// (`EFUSE_WDT_DELAY_SEL`, one bit).
 pub const RTC_WATCHDOG_STAGE0_HOLD: u32 =

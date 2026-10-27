@@ -3763,6 +3763,7 @@ dependencies = [
  "oer-ieee802154-mac",
  "oer-radio-regulatory",
  "oer-tool-pins",
+ "tempfile",
 ]
 
 [[package]]

@@ -379,6 +379,18 @@ fn transmit_with_security() -> Vec<Step> {
     ]
 }
 
+// Isolate the current vendor's declared-length rejection from initialization
+// trace differences. The allocation remains complete, but its PHR is malformed.
+fn malformed_security() -> Vec<Step> {
+    let mut frame = vec![3];
+    frame.extend(secured_frame().into_iter().skip(1));
+    vec![Step::SetTransmitSecurity {
+        frame,
+        key: [7; 16],
+        address: [9; 8],
+    }]
+}
+
 /// Interface 0 owns PAN 0x1234 / short 0x0001, interface 1 PAN 0xabcd /
 /// short 0x1111; interface 1 sets the pending bit for source 0x5678.
 #[cfg(feature = "multipan")]
@@ -827,6 +839,12 @@ fn cca_busy() -> Vec<Step> {
 
 /// Every catalog scenario.
 pub const SCENARIOS: &[Scenario] = &[
+    Scenario {
+        name: "malformed-security",
+        inputs: no_inputs,
+        steps: malformed_security,
+        expected_difference: None,
+    },
     Scenario {
         name: "configuration-rx-safe-point",
         inputs: no_inputs,

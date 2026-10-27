@@ -8,7 +8,7 @@ without interrupting core 1.
 
 In the ESP32-S31 SVD the record sits in the debug-assist block, grouped as
 `BUS_MONITOR` at `0x2d00_2000` (field descriptions name it `ASSIST_DEBUG`).
-SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7,
+SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d,
 `components/soc/esp32s31/register/soc/reg_base.h:117` and
 `components/soc/esp32s31/register/soc/bus_monitor_reg.h:505-551,1174-1219`.
 

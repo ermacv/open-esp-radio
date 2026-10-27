@@ -197,7 +197,7 @@ impl<P: Placement> EndpointRegisters for UsbEndpoint<P> {
 impl<P: Placement> InterruptRegisters for UsbInterrupt<P> {
     /// Sample the console's two events and acknowledge exactly those.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `usb_serial_jtag_ll.h`
+    /// SOURCE: ESP-IDF 4d80c1b2 `usb_serial_jtag_ll.h`
     /// (`usb_serial_jtag_ll_get_intsts_mask`, `usb_serial_jtag_ll_clr_intsts_mask`).
     fn take_events(&mut self) -> Events {
         let status = self.0.sample_usb_serial_jtag_interrupt();

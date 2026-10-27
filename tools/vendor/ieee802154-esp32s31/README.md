@@ -65,6 +65,12 @@ catalog scenario, each in its own process, and fails at the first failed
 comparison. A single `compare` exits 0 for MATCH, 1 for DIFF and 2 for
 INCOMPLETE.
 
+The Cargo integration test `shim_interrupts` compiles the actual `shim/src/host.c`
+with an isolated C recorder and runs it in its own process. It checks distinct
+interrupt handles, scalar argument recording and positive/negative return
+values for `esp_intr_disable` and `esp_intr_enable`. Compiler outputs stay in
+the test's own directory under `target/`.
+
 The compiled driver keeps its state in C globals, so each process runs one
 scenario. `run` prints the scenario's boundary trace, one record per line;
 buffer addresses appear as `tx#n` (the `n`th transmitted frame) and `buf#n`

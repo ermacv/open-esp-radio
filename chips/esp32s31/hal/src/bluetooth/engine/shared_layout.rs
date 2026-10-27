@@ -284,14 +284,14 @@ pub(crate) fn clear_phy_environment(layout: &BlePhyEnvironment) {
         .word_0044_opaque()
         .write(BlePhyEnvironmentWord0044Opaque::ZERO);
     layout
+        .word_0048_opaque()
+        .write(BlePhyEnvironmentWord0048Opaque::ZERO);
+    layout
         .tx_power_levels()
         .write(BlePhyEnvironmentTxPowerLevels::ZERO);
     layout
         .tx_power_level_count()
         .write(BlePhyEnvironmentTxPowerLevelCount::ZERO);
-    layout
-        .word_0050_opaque()
-        .write(BlePhyEnvironmentWord0050Opaque::ZERO);
     layout
         .word_0054_opaque()
         .write(BlePhyEnvironmentWord0054Opaque::ZERO);
@@ -319,6 +319,9 @@ pub(crate) fn clear_phy_environment(layout: &BlePhyEnvironment) {
     layout
         .word_0074_opaque()
         .write(BlePhyEnvironmentWord0074Opaque::ZERO);
+    layout
+        .word_0078_opaque()
+        .write(BlePhyEnvironmentWord0078Opaque::ZERO);
     layout
         .tx_power_first_level()
         .write(BlePhyEnvironmentTxPowerFirstLevel::ZERO);

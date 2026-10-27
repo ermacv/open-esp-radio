@@ -216,7 +216,9 @@ fn generate(accessors: &[Accessor], out: &Path) -> PathBuf {
     recorder
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Compiler-driven integration tests use the build's host C toolchain.
+    println!("cargo::rustc-env=OER_SHIM_HOST={}", env::var("HOST")?);
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     println!("cargo::rerun-if-env-changed={SOURCE_ENV}");
@@ -283,4 +285,5 @@ fn main() {
         .file(recorder)
         .file(manifest.join("shim/src/host.c"))
         .compile("oer_esp32s31_ieee802154_vendor");
+    Ok(())
 }

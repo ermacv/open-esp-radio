@@ -530,7 +530,7 @@ fn the_router_refuses_a_table_outside_the_matrix_or_the_clic_before_any_write() 
 
 #[test]
 fn a_source_is_pending_at_its_bit_of_its_status_word() {
-    // SOURCE: ESP-IDF 4d59230d `interrupt_core0_reg.h`: the status words
+    // SOURCE: ESP-IDF 4d80c1b2 `interrupt_core0_reg.h`: the status words
     // at 0x2a8 + 4n hold sources 32n to 32n + 31.
     let mut words = vec![0; instances::interrupt_core0::SIZE / 4];
     words[0x2a8 / 4 + 2] = 1 << 4; // source 68, FROM_CPU_INTR3

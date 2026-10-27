@@ -35,7 +35,7 @@ rather than a retained calibration value.
 
 SOURCE: s31-b hardware watchpoints and call bisection in #254, E4/E5;
 HIL runs `1792554053095-001588f7` and `1792570921393-0017a8df`.
-The pinned IDF revision is `4d59230ddff16327812782151ef0afef202dc6d7`,
+The pinned IDF revision is `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`,
 vendor application SHA-256
 `e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a`,
 vendor ELF SHA-256

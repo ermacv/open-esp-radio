@@ -55,7 +55,7 @@ table-exemption-prefix = "__OER_INTERRUPT_EXEMPT_"
 vector-table-symbol = "_runtime_mtvt"
 vector-table-hart-slots = 64
 exception-entry-symbol = "_start_trap"
-# SOURCE: ESP-IDF 4d59230d `soc/esp32s31/include/soc/clic_reg.h`
+# SOURCE: ESP-IDF 4d80c1b2 `soc/esp32s31/include/soc/clic_reg.h`
 # (`INT_INFO.NUM_INT` default 48, `CLIC_EXT_INTR_NUM_OFFSET` 16).
 lines = 48
 # All lines below this boundary are reserved for core-local use, including
@@ -142,7 +142,7 @@ bootstrap-psram-bytes = 0x1_0000
 # The MMU page that maps flash and PSRAM: stage two's payload fills at least
 # one, and the bootstrap's flash text starts on one, after the image headers.
 #
-# SOURCE(esp32s31): ESP-IDF 4d59230d
+# SOURCE(esp32s31): ESP-IDF 4d80c1b2
 # `components/soc/esp32s31/include/soc/ext_mem_defs.h:14-19`
 # (`SOC_MMU_PAGE_SIZE`, default 0x10000).
 # SOURCE(esp32c5): esp-hal 1f646c5
@@ -152,7 +152,7 @@ mmu-page-bytes = 0x1_0000
 # the bootstrap's text, so that its flash and virtual addresses agree modulo
 # the MMU page.
 #
-# SOURCE: ESP-IDF 4d59230d
+# SOURCE: ESP-IDF 4d80c1b2
 # `components/esp_system/ld/esp32s31/memory.ld.in:37-45`
 # (irom origin 0x40000020; 0x20 accounts for image and segment headers).
 image-segment-header-bytes = 0x20

@@ -33,7 +33,7 @@
 //! `esp-hal/src/psram/oct_hex.rs:189-253` (step 5),
 //! `:9-21` (step 6; its fallback to 32 MiB is not kept) and `:347-460`
 //! (the command port; the ignored command timeout is not kept); ESP-IDF
-//! 4d59230d `components/esp_psram/device/esp_psram_impl_ap_oct.c:70-131`
+//! 4d80c1b2 `components/esp_psram/device/esp_psram_impl_ap_oct.c:70-131`
 //! (the mode registers' fields), `:418-475` (the order and the densities)
 //! and `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:200-208`
 //! (the memory PLL's power).
@@ -220,7 +220,7 @@ impl PsramReady {
 
 /// The mode register pairs.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:156-232,237-276`
 /// (mode-register transactions at addresses 0, 2, 4 and 8).
 const MR0_MR1: u32 = 0x0;
@@ -231,7 +231,7 @@ const MR8_MR9: u32 = 0x8;
 /// The command port's mode register commands: 16-bit command, 32-bit
 /// address, 16 data bits.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:27-31,156-174,189-206`
 /// (0x4040 read, 0xc0c0 write, 16-bit command/data and 32-bit address).
 const REGISTER_READ: u16 = 0x4040;
@@ -241,7 +241,7 @@ const REGISTER_WRITE: u16 = 0xc0c0;
 /// fixed); MR4: write latency [7:5]; MR8: burst length [1:0], burst type
 /// [2], row-boundary crossing [3], X16 [6]; MR2: density [2:0].
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:70-131`.
 mod mode {
     pub(super) const MR0_DRIVE_STRENGTH: u8 = 0b11;
@@ -259,7 +259,7 @@ mod mode {
 
 /// The bytes MR2's density code names.
 ///
-/// SOURCE: ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d80c1b2
 /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:471-475`.
 pub const fn density_bytes(code: u8) -> Option<u32> {
     const MIB: u32 = 1024 * 1024;

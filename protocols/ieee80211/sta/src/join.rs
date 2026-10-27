@@ -14,7 +14,7 @@ pub(crate) mod test_support;
 /// Vendor state timer used by ordinary Authentication and Association.
 ///
 /// SOURCE(esp32s31): complete `libnet80211.a[ieee80211_sta.o]::
-/// ieee80211_sta_new_state`, ordinary non-mesh auth branch `.L350` and
-/// association branch `.L356`, both arm their software timer with immediate
+/// ieee80211_sta_new_state`, ordinary non-mesh auth branch `ieee80211_sta_new_state+0xd12` and
+/// association branch `ieee80211_sta_new_state+0xde0`, both arm their software timer with immediate
 /// `0x3e8`.
 pub const STA_RESPONSE_TIMEOUT: oer_time::Duration = oer_time::Duration::from_secs(1);

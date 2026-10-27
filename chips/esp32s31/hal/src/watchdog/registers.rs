@@ -81,9 +81,9 @@ pub struct RwdtRegisters<P: Placement = Fixed<{ instances::lp_wdt::BASE }>>(LpWd
 #[must_use = "dropping a register owner permanently loses its register authority"]
 pub struct SwdRegisters<P: Placement = Fixed<{ instances::lp_wdt::BASE }>>(LpWdtSwd<P>);
 
-/// SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:273-301`: the watchdog source XTAL.
+/// SOURCE: ESP-IDF 4d80c1b2 `mwdt_ll.h:273-301`: the watchdog source XTAL.
 const XTAL_SOURCE: Bits<2> = Bits::constant::<0>();
-/// SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:219-222`: any store feeds, the LL writes one.
+/// SOURCE: ESP-IDF 4d80c1b2 `mwdt_ll.h:219-222`: any store feeds, the LL writes one.
 const FEED: u32 = 1;
 
 impl<P: Placement, Q: Placement> Mwdt0Registers<P, Q> {
@@ -116,7 +116,7 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
     /// bus clock on, a reset pulse, the watchdog's source XTAL and its
     /// clock on.
     ///
-    /// SOURCE: ESP-IDF 4d59230d
+    /// SOURCE: ESP-IDF 4d80c1b2
     /// `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:273-301`
     /// (XTAL source and module gate),
     /// `components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h`
@@ -153,8 +153,8 @@ impl<P: Placement> SwdRegisters<P> {
 }
 
 /// A main watchdog stage's two-bit action field.
-/// SOURCE: ESP-IDF 4d59230d `timer_group_reg.h:464-470` (`TIMG_WDT_STG0`).
-/// SOURCE: ESP-IDF 4d59230d `rtc_wdt_reg.h` (`RTC_WDT_STG0`: 4 the RTC
+/// SOURCE: ESP-IDF 4d80c1b2 `timer_group_reg.h:464-470` (`TIMG_WDT_STG0`).
+/// SOURCE: ESP-IDF 4d80c1b2 `rtc_wdt_reg.h` (`RTC_WDT_STG0`: 4 the RTC
 /// reset).
 const fn rtc_stage(action: RtcStageAction) -> Bits<3> {
     match action {
@@ -172,7 +172,7 @@ const fn main_stage(action: MainStageAction) -> Bits<2> {
 }
 
 /// A reset length's three-bit selector field.
-/// SOURCE: ESP-IDF 4d59230d `timer_group_reg.h:388-425` and `wdt_hal_iram.c:58-59,79-80`.
+/// SOURCE: ESP-IDF 4d80c1b2 `timer_group_reg.h:388-425` and `wdt_hal_iram.c:58-59,79-80`.
 const fn reset_length(length: ResetLength) -> Bits<3> {
     match length {
         ResetLength::Longest => Bits::constant::<7>(),
@@ -239,7 +239,7 @@ impl<P: Placement, Q: Placement> MainWatchdogRegisters for Mwdt1Registers<P, Q> 
         });
     }
 
-    /// SOURCE: ESP-IDF 4d59230d `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:219-222` (`mwdt_ll_feed`
+    /// SOURCE: ESP-IDF 4d80c1b2 `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:219-222` (`mwdt_ll_feed`
     /// writes one; any value feeds).
     fn feed(&mut self, _: Access<'_>) {
         self.wdt.trigger_wdtfeed_wdt_feed(FEED);
@@ -263,7 +263,7 @@ impl<P: Placement> RtcWatchdogRegisters for RwdtRegisters<P> {
 }
 
 impl<P: Placement> RtcWatchdogArm for RwdtRegisters<P> {
-    /// SOURCE: ESP-IDF 4d59230d `rwdt_ll.h:117-123` (`rwdt_ll_config_stage`
+    /// SOURCE: ESP-IDF 4d80c1b2 `rwdt_ll.h:117-123` (`rwdt_ll_config_stage`
     /// stores stage 0's hold word whole).
     fn set_stage0_hold(&mut self, _: Access<'_>, hold: u32) {
         self.0.modify_config1(|w| {
@@ -271,14 +271,14 @@ impl<P: Placement> RtcWatchdogArm for RwdtRegisters<P> {
         });
     }
 
-    /// SOURCE: ESP-IDF 4d59230d `rwdt_ll.h:117-121` (`hw->config0.wdt_stg0`).
+    /// SOURCE: ESP-IDF 4d80c1b2 `rwdt_ll.h:117-121` (`hw->config0.wdt_stg0`).
     fn set_stage0_action(&mut self, _: Access<'_>, action: RtcStageAction) {
         self.0.modify_config0(|w| {
             w.set_wdt_stg0(rtc_stage(action));
         });
     }
 
-    /// SOURCE: ESP-IDF 4d59230d `rwdt_ll.h:265-268` (`rwdt_ll_feed` sets
+    /// SOURCE: ESP-IDF 4d80c1b2 `rwdt_ll.h:265-268` (`rwdt_ll_feed` sets
     /// the one feed bit).
     fn feed(&mut self, _: Access<'_>) {
         self.0.trigger_feed_feed();

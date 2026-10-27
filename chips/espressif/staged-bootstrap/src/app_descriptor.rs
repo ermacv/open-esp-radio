@@ -1,8 +1,8 @@
 //! ESP-IDF application descriptor ABI, expressed as data rather than startup code.
 //!
-//! SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7,
+//! SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d,
 //! `components/esp_app_format/include/esp_app_desc.h:21-46`:
-//! https://github.com/espressif/esp-idf/blob/4d59230ddff16327812782151ef0afef202dc6d7/components/esp_app_format/include/esp_app_desc.h
+//! https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_app_format/include/esp_app_desc.h
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum DescriptorError {

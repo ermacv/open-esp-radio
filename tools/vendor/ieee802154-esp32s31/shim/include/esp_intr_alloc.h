@@ -7,3 +7,5 @@ typedef struct oer_host_intr_handle *intr_handle_t;
 esp_err_t esp_intr_alloc(int source, int flags, intr_handler_t handler, void *arg,
                          intr_handle_t *ret_handle);
 esp_err_t esp_intr_free(intr_handle_t handle);
+esp_err_t esp_intr_disable(intr_handle_t handle);
+esp_err_t esp_intr_enable(intr_handle_t handle);

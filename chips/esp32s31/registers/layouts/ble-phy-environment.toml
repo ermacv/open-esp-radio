@@ -2,8 +2,8 @@ schema = 1
 
 [layout]
 name = "BLE_PHY_ENVIRONMENT"
-description = "BLE PHY environment and its raw buffer pointers. PHY initialization publishes addresses of the members at +0x2c and +0x4d; their internal hardware meaning remains opaque."
-size = 128
+description = "BLE PHY environment and its raw buffer pointers. PHY initialization publishes addresses of the members at +0x2c and +0x51; their internal hardware meaning remains opaque."
+size = 132
 align = 4
 
 [layout.review]
@@ -180,8 +180,16 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words]]
-name = "TX_POWER_LEVELS"
+fields = []
+name = "WORD_0048_OPAQUE"
+opaque = true
 offset = 0x48
+access = "shared"
+description = "Observed allocation word; its meaning is not established."
+
+[[layout.words]]
+name = "TX_POWER_LEVELS"
+offset = 0x4c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
@@ -194,7 +202,7 @@ placement = ["dma-window"]
 
 [[layout.words]]
 name = "TX_POWER_LEVEL_COUNT"
-offset = 0x4c
+offset = 0x50
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
@@ -203,14 +211,6 @@ name = "VALUE"
 bits = "7:0"
 writer = "cpu"
 description = "Number of signed dBm values in the provider table."
-
-[[layout.words]]
-fields = []
-name = "WORD_0050_OPAQUE"
-opaque = true
-offset = 0x50
-access = "shared"
-description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words]]
 fields = []
@@ -285,8 +285,16 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words]]
-name = "TX_POWER_FIRST_LEVEL"
+fields = []
+name = "WORD_0078_OPAQUE"
+opaque = true
 offset = 0x78
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+name = "TX_POWER_FIRST_LEVEL"
+offset = 0x7c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
@@ -298,7 +306,7 @@ description = "Signed dBm endpoint of the provider table, sign-extended to a wor
 
 [[layout.words]]
 name = "TX_POWER_LAST_LEVEL"
-offset = 0x7c
+offset = 0x80
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 

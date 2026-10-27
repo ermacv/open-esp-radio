@@ -3,8 +3,8 @@
 The reviewed layouts describe the physical RAM format, independently of
 which CPU owner currently holds it. The allocation, initialization and
 handover facts come from `esp32s31-bt-lib` pin
-`10c507788e9da0993709cf82e405c896561172d8`, `libble_app.a` SHA-256
-`e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723`.
+`7a85006f35f6839ae7ea5adee16e68a757759196`, `libble_app.a` SHA-256
+`e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6`.
 The evidence catalog is `registers/evidence/ble-memory.toml`. Unknown
 physical meanings remain `_OPAQUE`, with `accuracy = "positional"`, only where a cited use is observed. Preserved lanes and zero-only allocation positions keep their exact storage image without field accessors.
 

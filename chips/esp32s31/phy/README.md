@@ -562,7 +562,7 @@ and documented transport/wait projections; they do not establish RF quality,
 hardware timing or live radio admission. See the
 [tracking contract](src/tracking/README.md).
 
-ESP-IDF's [open orchestration](https://github.com/espressif/esp-idf/blob/4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/src/phy_common.c)
+ESP-IDF's [open orchestration](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/src/phy_common.c)
 calls a binary parameter-tracking function from a periodic task timer and on
 eligible PHY enable. Its result flags describe selected branches, not a
 hardware quiet-window contract. The library's grant-hook names alone are not

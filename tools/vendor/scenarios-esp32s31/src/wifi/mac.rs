@@ -579,10 +579,10 @@ const IC_BYTES: usize = 0x2d0;
 const IC_STATION: usize = 0;
 const IC_STATION_MODE: usize = 0x74;
 const IC_AP_ADDRESS: usize = 0x214;
-/// Station record word at 0x1460 points to the BSS record, whose bytes
+/// Station record word at 0x14e0 points to the BSS record, whose bytes
 /// 4..10 carry the BSSID.
 const RX_STATION: u32 = 0x3fff_7000;
-const RX_STATION_BSS: u32 = 0x1460;
+const RX_STATION_BSS: u32 = 0x14e0;
 const RX_BSS: u32 = 0x3fff_9000;
 
 /// The policy's `g_ic` context and station records built from the probe

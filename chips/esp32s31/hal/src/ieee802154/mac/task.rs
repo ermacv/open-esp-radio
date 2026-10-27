@@ -2,7 +2,7 @@
 //! field accessors of the MAC's task side.
 //!
 //! SOURCE: esp-idf-7b9cc1ac-ieee802154-common-ll (`ieee802154_common_ll.h` of
-//! ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`), unless a step names
+//! ESP-IDF `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`), unless a step names
 //! another source.
 
 use oer_esp32s31_pac::ieee802154::{

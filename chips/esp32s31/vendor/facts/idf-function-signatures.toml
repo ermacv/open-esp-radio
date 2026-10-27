@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Generated ABI facts from Espressif ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7; no source code is copied.
+# Generated ABI facts from Espressif ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d; no source code is copied.
 # Regenerate with cargo registers signatures; see tools/registers/generate/README.md.
 # arguments counts occupied RV32 a-register words, capped at eight (not C parameters).
 # Context: the companion provenance document records sdkconfig and header hashes.
@@ -9,2090 +9,2097 @@
 name = "Cache_Enable_L1_CORE0_ICache"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:955"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:955"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Enable_L1_CORE1_ICache"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:993"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:993"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Enable_L1_DCache"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1031"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1031"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_FLASH_MMU_Init"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:224"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:224"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_FLASH_MMU_Set_Secure"
 arguments = 5
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:313"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:313"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Get_DROM_MMU_End"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1194"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1194"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Get_IROM_MMU_End"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1184"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1184"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Get_Mode"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:378"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:378"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Invalidate_Addr"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:476"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:476"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Invalidate_All"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:537"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:537"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Mask_All"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:591"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:591"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Resume_L1_CORE0_ICache"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:974"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:974"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Resume_L1_CORE1_ICache"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1012"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1012"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Resume_L1_DCache"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1050"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1050"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Suspend_L1_CORE0_ICache"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:964"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:964"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Suspend_L1_CORE1_ICache"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1002"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1002"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Suspend_L1_DCache"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1040"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1040"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_Wait_Idle"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:433"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:433"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "Cache_WriteBack_Addr"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:508"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:508"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "GetUartDevice"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:337"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:337"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "ROM_Boot_Cache_Init"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:406"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:406"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "ROM_Direct_Boot_Cache_Init"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:415"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:415"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "ROM_Direct_Boot_MMU_Init"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:424"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:424"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "RcvMsg"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:393"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:393"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "SendMsg"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:377"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:377"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "UartConnCheck"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:404"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:404"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "UartGetCmdLn"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:327"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:327"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "Uart_Init"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:177"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:177"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "Uart_Init_USB"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:413"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:413"
 
 # Header-SHA256: a60a53d5e4a3b0487cadb92ac3faac70ed6defd8a6e3b8cf125684df67fe4f1a
 [[function]]
 name = "__assert_func"
 arguments = 4
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/hal/platform_port/include/hal/assert.h:26"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/hal/platform_port/include/hal/assert.h:26"
 
 # Header-SHA256: a60a53d5e4a3b0487cadb92ac3faac70ed6defd8a6e3b8cf125684df67fe4f1a
 [[function]]
 name = "abort"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/hal/platform_port/include/hal/assert.h:27"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/hal/platform_port/include/hal/assert.h:27"
 
 # Header-SHA256: 1cdfdbc87ef8691cff3d0cfdba9da7d5328fdd997a467f4d97481ab57862b339
 [[function]]
 name = "adc2_wifi_acquire"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hw_support/include/esp_private/adc_share_hw_ctrl.h:129"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hw_support/include/esp_private/adc_share_hw_ctrl.h:129"
 
 # Header-SHA256: 1cdfdbc87ef8691cff3d0cfdba9da7d5328fdd997a467f4d97481ab57862b339
 [[function]]
 name = "adc2_wifi_release"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hw_support/include/esp_private/adc_share_hw_ctrl.h:141"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hw_support/include/esp_private/adc_share_hw_ctrl.h:141"
 
 # Header-SHA256: 6cd2bded3218cd80c485677358aaba351f56d53d915be87f77faa5dcf6d025cb
 [[function]]
 name = "ant_dft_cfg"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_private/phy.h:188"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_private/phy.h:188"
 
 # Header-SHA256: 2e89b64ac4357ce8c951b540355dfe3279953f96ee46fdac0ac22972bd1d070f
 [[function]]
 name = "block_absorb_post_hook"
 arguments = 3
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/tlsf/tlsf_control_functions.h:496"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/tlsf/tlsf_control_functions.h:496"
 
 # Header-SHA256: 0e7d537d90b32c0fe8202cfa878699c595996c3131bf4c50966be08cad61454b
 [[function]]
 name = "bredr_hci_trans_acl_tx_free"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/transport/include/esp_hci_internal.h:170"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/transport/include/esp_hci_internal.h:170"
 
 # Header-SHA256: 0e7d537d90b32c0fe8202cfa878699c595996c3131bf4c50966be08cad61454b
 [[function]]
 name = "bredr_hci_trans_evt_tx_free"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/transport/include/esp_hci_internal.h:172"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/transport/include/esp_hci_internal.h:172"
 
 # Header-SHA256: 0e7d537d90b32c0fe8202cfa878699c595996c3131bf4c50966be08cad61454b
 [[function]]
 name = "bredr_hci_trans_sync_tx_free"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/transport/include/esp_hci_internal.h:171"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/transport/include/esp_hci_internal.h:171"
 
 # Header-SHA256: 659a94ca15d9e7d5531f34c755476523d285bc2cbc0a378b58505e67facea289
 [[function]]
 name = "bt_bb_v2_init_cmplx"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_private/btbb.h:19"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_private/btbb.h:19"
 
 # Header-SHA256: a9138b8a24fab92653ddaecfbccf6ef60238c5981f01d8e56e2463eb0608d3a0
 [[function]]
 name = "coex_pti_get"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_coex/include/private/esp_coexist_internal.h:233"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_coex/include/private/esp_coexist_internal.h:233"
 
 # Header-SHA256: a9138b8a24fab92653ddaecfbccf6ef60238c5981f01d8e56e2463eb0608d3a0
 [[function]]
 name = "coex_schm_status_bit_clear"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_coex/include/private/esp_coexist_internal.h:242"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_coex/include/private/esp_coexist_internal.h:242"
 
 # Header-SHA256: a9138b8a24fab92653ddaecfbccf6ef60238c5981f01d8e56e2463eb0608d3a0
 [[function]]
 name = "coex_schm_status_bit_set"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_coex/include/private/esp_coexist_internal.h:250"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_coex/include/private/esp_coexist_internal.h:250"
 
 # Header-SHA256: e7e1c916e6d7fee2f4d704f7591cac53250ce61a50b2366566dcc10d64b6e722
 [[function]]
 name = "dbg_read_ax_diag"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:39"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:39"
 
 # Header-SHA256: e7e1c916e6d7fee2f4d704f7591cac53250ce61a50b2366566dcc10d64b6e722
 [[function]]
 name = "dbg_read_axtb_diag"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:38"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:38"
 
 # Header-SHA256: e7e1c916e6d7fee2f4d704f7591cac53250ce61a50b2366566dcc10d64b6e722
 [[function]]
 name = "dbg_read_muedca_timer"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:37"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:37"
 
 # Header-SHA256: e7e1c916e6d7fee2f4d704f7591cac53250ce61a50b2366566dcc10d64b6e722
 [[function]]
 name = "dbg_read_tx_mplen"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:40"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:40"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_memblock_from"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:259"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:259"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_memblock_get"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:269"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:269"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_memblock_put"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:293"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:293"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_mempool_clear"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:224"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:224"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_mempool_deinit"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:337"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:337"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_mempool_ext_init"
 arguments = 5
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:186"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:186"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_mempool_ext_register_cb"
 arguments = 5
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:200"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:200"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_mempool_flags_set"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:303"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:303"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_mempool_free_blocks_num"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:322"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:322"
 
 # Header-SHA256: 7296a58d2cef9ce8ad46d517bd0a5dec755d9cca65c12a10ae2af088b3417d20
 [[function]]
 name = "e_btdm_mempool_init"
 arguments = 5
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:168"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_mempool.h:168"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "esp_crc8"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:377"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:377"
 
 # Header-SHA256: 1456a9d9b10be6571c4f55a94f2a79148d367e93442baa8dabb6a74326eeef95
 [[function]]
 name = "esp_event_handler_register"
 arguments = 4
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_event/include/esp_event.h:137"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_event/include/esp_event.h:137"
 
 # Header-SHA256: 1456a9d9b10be6571c4f55a94f2a79148d367e93442baa8dabb6a74326eeef95
 [[function]]
 name = "esp_event_handler_unregister"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_event/include/esp_event.h:272"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_event/include/esp_event.h:272"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_available_txupQ_num"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1184"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1184"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_flush_scan_result"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1491"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1491"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_flush_upstream_packets"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1440"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1440"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_active_duty_cycle"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1619"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1619"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_ap_assoc_expire"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1110"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1110"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_ap_connections"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:968"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:968"
 
 # Header-SHA256: 19010cae1359dffcf2eb2f44690a83748f1c1f2d67cccfc1079fbc28992137ef
 [[function]]
 name = "esp_mesh_get_beacon_interval"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh_internal.h:158"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh_internal.h:158"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_layer"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:985"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:985"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_network_duty_cycle"
 arguments = 4
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1665"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1665"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_parent_bssid"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:998"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:998"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_router_bssid"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1520"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1520"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_routing_table_size"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1126"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1126"
 
 # Header-SHA256: 19010cae1359dffcf2eb2f44690a83748f1c1f2d67cccfc1079fbc28992137ef
 [[function]]
 name = "esp_mesh_get_rssi_threshold"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh_internal.h:227"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh_internal.h:227"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_running_active_duty_cycle"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1680"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1680"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_get_self_organized"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1034"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1034"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_is_my_group"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1277"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1277"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_is_root"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1005"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1005"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_is_root_conflicts_allowed"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1227"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1227"
 
 # Header-SHA256: 19010cae1359dffcf2eb2f44690a83748f1c1f2d67cccfc1079fbc28992137ef
 [[function]]
 name = "esp_mesh_print_rxQ_waiting"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh_internal.h:257"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh_internal.h:257"
 
 # Header-SHA256: 19010cae1359dffcf2eb2f44690a83748f1c1f2d67cccfc1079fbc28992137ef
 [[function]]
 name = "esp_mesh_print_txQ_waiting"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh_internal.h:248"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh_internal.h:248"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_set_active_duty_cycle"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1608"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1608"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_set_ap_connections"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:961"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:961"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_set_ap_password"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:926"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:926"
 
 # Header-SHA256: 19010cae1359dffcf2eb2f44690a83748f1c1f2d67cccfc1079fbc28992137ef
 [[function]]
 name = "esp_mesh_set_beacon_interval"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh_internal.h:148"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh_internal.h:148"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_set_id"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:851"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:851"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_set_network_duty_cycle"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:1652"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:1652"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_set_router"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:827"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:827"
 
 # Header-SHA256: 19010cae1359dffcf2eb2f44690a83748f1c1f2d67cccfc1079fbc28992137ef
 [[function]]
 name = "esp_mesh_set_rssi_threshold"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh_internal.h:216"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh_internal.h:216"
 
 # Header-SHA256: fc189e2698791888446427cef41f75f517f33c49e17aad688e32a3d540d24022
 [[function]]
 name = "esp_mesh_stop"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_mesh.h:628"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_mesh.h:628"
 
 # Header-SHA256: d02593288d76e1fe9efd271fa4cfcf449f39a663a92363fb688c58df8321d285
 [[function]]
 name = "esp_restart"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_system/include/esp_system.h:105"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_system/include/esp_system.h:105"
 
 # Header-SHA256: 9e2cbccee04490e2d8464eaf8e851c7dc89e2a5909bee3742df9d22bf6c6368c
 [[function]]
 name = "esp_rom_check_recover_key"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/km.h:33"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/km.h:33"
+
+# Header-SHA256: 2b5ba568153d34bca40bcec7ebea88757bcb861c9be78c33080e7daa429d0ad8
+[[function]]
+name = "esp_rom_get_rtc_wake_addr"
+arguments = 0
+result = "u32"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h:197"
 
 # Header-SHA256: c7083a55a89fe7210284d9941a9a6ab29faed83a3972495dd6dbaf203f4e0b07
 [[function]]
 name = "esp_rom_gpio_connect_out_signal"
 arguments = 4
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_gpio.h:76"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_gpio.h:76"
 
 # Header-SHA256: 9e2cbccee04490e2d8464eaf8e851c7dc89e2a5909bee3742df9d22bf6c6368c
 [[function]]
 name = "esp_rom_km_huk_conf"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/km.h:45"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/km.h:45"
 
 # Header-SHA256: a93b581bf6ffb0123e811b2d5931e8f0275eb043c5cbbab0c866d642b8629009
 [[function]]
 name = "esp_rom_spi_set_op_mode"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/opi_flash.h:186"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/opi_flash.h:186"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_config_clk"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:180"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:180"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_config_param"
 arguments = 6
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:202"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:202"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_config_readmode"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:166"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:166"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_erase_block"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:228"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:228"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_erase_sector"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:241"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:241"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_read"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:287"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:287"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_read_status"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:110"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:110"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_read_statushigh"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:124"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:124"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_read_user_cmd"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:152"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:152"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_select_qio_pins"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:373"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:373"
 
 # Header-SHA256: c679b09bfa771bf3e45e741aded77706975effd64a424dd2f84de0b757f811a0
 [[function]]
 name = "esp_rom_spiflash_unlock"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/spi_flash.h:228"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/spi_flash.h:228"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_wait_idle"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:354"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:354"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_write"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:271"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:271"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_write_disable"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:380"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:380"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_write_encrypted"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:341"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:341"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_write_encrypted_disable"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:321"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:321"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_write_encrypted_enable"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:297"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:297"
 
 # Header-SHA256: 960194868861f412a2b2315b3928052268efb8f7f45e1ee0e40b1f9a1f8956d3
 [[function]]
 name = "esp_rom_spiflash_write_status"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/esp_rom_spiflash.h:138"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/esp_rom_spiflash.h:138"
 
 # Header-SHA256: 6781965f297c9163dddefca2137748d33e7c820786d7e2a54a212c039218d195
 [[function]]
 name = "esp_smartconfig_internal_start"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/wifi.h:624"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/wifi.h:624"
 
 # Header-SHA256: 6781965f297c9163dddefca2137748d33e7c820786d7e2a54a212c039218d195
 [[function]]
 name = "esp_smartconfig_internal_stop"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/wifi.h:636"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/wifi.h:636"
 
 # Header-SHA256: e7e1c916e6d7fee2f4d704f7591cac53250ce61a50b2366566dcc10d64b6e722
 [[function]]
 name = "esp_test_clr_hw_statistics"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:51"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:51"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_ap_get_sta_list"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:1114"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:1114"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_clear_ap_list"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:699"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:699"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_connect"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:518"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:518"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_deauth_sta"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:553"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:553"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_disconnect"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:529"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:529"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_get_band_mode"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:1760"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:1760"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_get_config"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:1089"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:1089"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_get_country_code"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:1598"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:1598"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_get_event_mask"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:1249"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:1249"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_get_mac"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:954"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:954"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_get_mode"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:450"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:450"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_get_ps"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:738"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:738"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_scan_get_ap_num"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:647"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:647"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_scan_start"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:580"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:580"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_scan_stop"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:632"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:632"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_set_channel"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:847"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:847"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_set_config"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:1075"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:1075"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_set_country"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:906"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:906"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_set_mode"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:438"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:438"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_set_promiscuous"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:988"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:988"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_set_promiscuous_filter"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:1013"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:1013"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_set_promiscuous_rx_cb"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:977"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:977"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_set_ps"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:727"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:727"
 
 # Header-SHA256: e7e1c916e6d7fee2f4d704f7591cac53250ce61a50b2366566dcc10d64b6e722
 [[function]]
 name = "esp_wifi_sta_report_bsscolor_collision"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:43"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:43"
 
 # Header-SHA256: 4933086af7fa4d2ed10df9982b26077ed96c579e6096c1ae984a08bf97bf92e5
 [[function]]
 name = "esp_wifi_stop"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_wifi.h:480"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_wifi.h:480"
 
 # Header-SHA256: 2f744bd13b953b106ecb6f9d749dbe2914cafc2a406173d5a780ef298570b3b7
 [[function]]
 name = "ets_aes_block"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/aes.h:39"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/aes.h:39"
 
 # Header-SHA256: 2f744bd13b953b106ecb6f9d749dbe2914cafc2a406173d5a780ef298570b3b7
 [[function]]
 name = "ets_aes_enable"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/aes.h:29"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/aes.h:29"
 
 # Header-SHA256: 2f744bd13b953b106ecb6f9d749dbe2914cafc2a406173d5a780ef298570b3b7
 [[function]]
 name = "ets_aes_setkey"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/aes.h:33"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/aes.h:33"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_delay_us"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:341"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:341"
 
 # Header-SHA256: 43bfa5e7bbaae52fbf56dd9cf2b0543e734eb0cc02072bc087972567f11ec513
 [[function]]
 name = "ets_ecdsa_verify"
 arguments = 5
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ecdsa.h:25"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ecdsa.h:25"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_cache_encryption_enabled"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:294"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:294"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_clear_program_registers"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:97"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:97"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_download_modes_disabled"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:211"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:211"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_find_purpose"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:135"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:135"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_force_send_resume"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:319"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:319"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_get_flash_delay_us"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:327"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:327"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_get_key_purpose"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:126"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:126"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_get_read_register_address"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:119"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:119"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_get_uart_print_control"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:231"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:231"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_key_block_unused"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:148"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:148"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_program"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:90"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:90"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_read"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:81"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:81"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_rs_calculate"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:171"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:171"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_secure_boot_aggressive_revoke_enabled"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:289"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:289"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_secure_boot_enabled"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:284"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:284"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_security_download_modes_enabled"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:279"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:279"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_usb_download_mode_disabled"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:252"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:252"
 
 # Header-SHA256: 27fefe96d457ba7691b61b2dd22db562de614ba2c4e67d1cf947c2b5c075c2c4
 [[function]]
 name = "ets_efuse_usb_force_nopersist"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:304"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/efuse.h:304"
 
 # Header-SHA256: acc6779178af9a5bd99f6b609c6887f4e9c9a9dd83a10b4d1ba5d94c42d5c7c7
 [[function]]
 name = "ets_emsa_pss_verify"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/rsa_pss.h:32"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/rsa_pss.h:32"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_get_bootloader_offset"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:475"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:475"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_get_printf_channel"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:180"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:180"
 
 # Header-SHA256: 64b9d29c4b14ce65a9e7fa31e01153b9cbc3e890cf973f4975c043f1c5cf63da
 [[function]]
 name = "ets_hmac_calculate_downstream"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/hmac.h:41"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/hmac.h:41"
 
 # Header-SHA256: 64b9d29c4b14ce65a9e7fa31e01153b9cbc3e890cf973f4975c043f1c5cf63da
 [[function]]
 name = "ets_hmac_enable"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/hmac.h:18"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/hmac.h:18"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_install_putc1"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:200"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:200"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_install_putc2"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:210"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:210"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_install_uart_printf"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:220"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:220"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_intr_lock"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:423"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:423"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_intr_unlock"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:434"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:434"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_isr_attach"
 arguments = 3
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:390"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:390"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_isr_mask"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:401"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:401"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_isr_unmask"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:412"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:412"
 
 # Header-SHA256: acc6779178af9a5bd99f6b609c6887f4e9c9a9dd83a10b4d1ba5d94c42d5c7c7
 [[function]]
 name = "ets_mgf1_sha256"
 arguments = 4
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/rsa_pss.h:30"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/rsa_pss.h:30"
 
 # Header-SHA256: acc6779178af9a5bd99f6b609c6887f4e9c9a9dd83a10b4d1ba5d94c42d5c7c7
 [[function]]
 name = "ets_rsa_pss_verify"
 arguments = 4
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/rsa_pss.h:28"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/rsa_pss.h:28"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_run"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:71"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:71"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_set_bootloader_offset"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:487"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:487"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_set_user_start"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:135"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:135"
 
 # Header-SHA256: e5b74fb0fbfb8f12f792e53cff262517cbff91553eeaa3f0d511daa82665b47e
 [[function]]
 name = "ets_sha_disable"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:41"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:41"
 
 # Header-SHA256: e5b74fb0fbfb8f12f792e53cff262517cbff91553eeaa3f0d511daa82665b47e
 [[function]]
 name = "ets_sha_enable"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:39"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:39"
 
 # Header-SHA256: e5b74fb0fbfb8f12f792e53cff262517cbff91553eeaa3f0d511daa82665b47e
 [[function]]
 name = "ets_sha_finish"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:53"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:53"
 
 # Header-SHA256: e5b74fb0fbfb8f12f792e53cff262517cbff91553eeaa3f0d511daa82665b47e
 [[function]]
 name = "ets_sha_get_state"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:47"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:47"
 
 # Header-SHA256: e5b74fb0fbfb8f12f792e53cff262517cbff91553eeaa3f0d511daa82665b47e
 [[function]]
 name = "ets_sha_init"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:43"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:43"
 
 # Header-SHA256: e5b74fb0fbfb8f12f792e53cff262517cbff91553eeaa3f0d511daa82665b47e
 [[function]]
 name = "ets_sha_process"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:49"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:49"
 
 # Header-SHA256: e5b74fb0fbfb8f12f792e53cff262517cbff91553eeaa3f0d511daa82665b47e
 [[function]]
 name = "ets_sha_update"
 arguments = 4
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:51"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/sha.h:51"
 
 # Header-SHA256: 6e03f0f69cffe49ee28d3ae6620ceed2cbdf24427aa1eabc151955edcd32a2c2
 [[function]]
 name = "ets_update_cpu_frequency"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:351"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/ets_sys.h:351"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "flash2spiram_instruction_offset"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1212"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1212"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "flash2spiram_rodata_offset"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1213"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1213"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "flash_instr_rodata_end_page"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1215"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1215"
 
 # Header-SHA256: 2062f5358656ad0411c8d8ac687f6ee085150d5650273692bd832ef06f455c25
 [[function]]
 name = "flash_instr_rodata_start_page"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1214"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1214"
 
 # Header-SHA256: e7e1c916e6d7fee2f4d704f7591cac53250ce61a50b2366566dcc10d64b6e722
 [[function]]
 name = "hal_he_set_bf_report_rate"
 arguments = 4
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:35"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:35"
 
 # Header-SHA256: e7e1c916e6d7fee2f4d704f7591cac53250ce61a50b2366566dcc10d64b6e722
 [[function]]
 name = "hal_he_set_ul_mu"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:34"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/esp_wifi_he_private.h:34"
 
 # Header-SHA256: e6189127158eeff0eba38d027d42f52fb9aa7925a0b1db0f51e2391910e5ae89
 [[function]]
 name = "hexstr2bin"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/wpa_supplicant/src/utils/common.h:384"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/wpa_supplicant/src/utils/common.h:384"
 
-# Header-SHA256: afdb884e6dc78f19c9d72adedfc1ea7fdbbdebb86d1e7aaa80bb89e62a74bfd3
+# Header-SHA256: 5a8d7d8db146a78bb8a7281c098006375c3708b1523b8541b8e50fbee31279c5
 [[function]]
 name = "ieee802154_mac_init"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/ieee802154/private_include/esp_ieee802154_dev.h:76"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/ieee802154/private_include/esp_ieee802154_dev.h:76"
 
 # Header-SHA256: 050269fa565533478962e4048fcec8a753b542169cd5ad6ba46f4cfd7e5185a0
 [[function]]
 name = "intr_handler_set"
 arguments = 3
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/riscv/include/riscv/interrupt.h:40"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/riscv/include/riscv/interrupt.h:40"
 
 # Header-SHA256: c748ffeb54751a6e7a25b79f8c4c086ef07ee80c05329ff5f36f0b88383c84f3
 [[function]]
 name = "mz_adler32"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/miniz.h:92"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/miniz.h:92"
 
 # Header-SHA256: 6cd2bded3218cd80c485677358aaba351f56d53d915be87f77faa5dcf6d025cb
 [[function]]
 name = "phy_close_rf"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_private/phy.h:74"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_private/phy.h:74"
 
 # Header-SHA256: 6cd2bded3218cd80c485677358aaba351f56d53d915be87f77faa5dcf6d025cb
 [[function]]
 name = "phy_get_rf_cal_version"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_private/phy.h:51"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_private/phy.h:51"
 
 # Header-SHA256: 6cd2bded3218cd80c485677358aaba351f56d53d915be87f77faa5dcf6d025cb
 [[function]]
 name = "phy_get_romfunc_addr"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_private/phy.h:36"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_private/phy.h:36"
 
 # Header-SHA256: 700bf7b3865705b6d858e63a55fd5a880ebf298f700927cd642bee7536e4dc58
 [[function]]
 name = "phy_init_param_set"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_phy_init.h:286"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_phy_init.h:286"
 
 # Header-SHA256: 6cd2bded3218cd80c485677358aaba351f56d53d915be87f77faa5dcf6d025cb
 [[function]]
 name = "phy_wakeup_init"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_private/phy.h:69"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_private/phy.h:69"
 
 # Header-SHA256: 700bf7b3865705b6d858e63a55fd5a880ebf298f700927cd642bee7536e4dc58
 [[function]]
 name = "phy_wifi_enable_set"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_phy_init.h:292"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_phy_init.h:292"
 
 # Header-SHA256: 0e978b8c736b39265d4f746a081feeb65b75c74c42b610f70c990c8513916cfd
 [[function]]
 name = "r_ble_hci_trans_buf_alloc"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting/transport/include/esp_hci_internal.h:76"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting/transport/include/esp_hci_internal.h:76"
 
 # Header-SHA256: 0e978b8c736b39265d4f746a081feeb65b75c74c42b610f70c990c8513916cfd
 [[function]]
 name = "r_ble_hci_trans_buf_free"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting/transport/include/esp_hci_internal.h:84"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting/transport/include/esp_hci_internal.h:84"
 
 # Header-SHA256: 0e978b8c736b39265d4f746a081feeb65b75c74c42b610f70c990c8513916cfd
 [[function]]
 name = "r_ble_ll_hci_ev_hw_err"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting/transport/include/esp_hci_internal.h:110"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting/transport/include/esp_hci_internal.h:110"
 
 # Header-SHA256: 0e7d537d90b32c0fe8202cfa878699c595996c3131bf4c50966be08cad61454b
 [[function]]
 name = "r_btdm_get_le16"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/transport/include/esp_hci_internal.h:145"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/transport/include/esp_hci_internal.h:145"
 
 # Header-SHA256: 0e7d537d90b32c0fe8202cfa878699c595996c3131bf4c50966be08cad61454b
 [[function]]
 name = "r_btdm_hci_trans_buf_free"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/transport/include/esp_hci_internal.h:144"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/transport/include/esp_hci_internal.h:144"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "recv_packet"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:364"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:364"
 
 # Header-SHA256: 6cd2bded3218cd80c485677358aaba351f56d53d915be87f77faa5dcf6d025cb
 [[function]]
 name = "register_chipv7_phy"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_phy/include/esp_private/phy.h:45"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/include/esp_private/phy.h:45"
 
 # Header-SHA256: 1e76a5a75b760570aac0f639adf870e251abb12ae2e3fc9e25dc6358b3625484
 [[function]]
 name = "rom_gpio_output_disable"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:99"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:99"
 
 # Header-SHA256: 1e76a5a75b760570aac0f639adf870e251abb12ae2e3fc9e25dc6358b3625484
 [[function]]
 name = "rom_gpio_pad_input_enable"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:184"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:184"
 
 # Header-SHA256: 1e76a5a75b760570aac0f639adf870e251abb12ae2e3fc9e25dc6358b3625484
 [[function]]
 name = "rom_gpio_pad_pullup"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:148"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:148"
 
 # Header-SHA256: 1e76a5a75b760570aac0f639adf870e251abb12ae2e3fc9e25dc6358b3625484
 [[function]]
 name = "rom_gpio_pad_select_gpio"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:108"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:108"
 
 # Header-SHA256: 1e76a5a75b760570aac0f639adf870e251abb12ae2e3fc9e25dc6358b3625484
 [[function]]
 name = "rom_gpio_pad_set_drv"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:128"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:128"
 
 # Header-SHA256: 1e76a5a75b760570aac0f639adf870e251abb12ae2e3fc9e25dc6358b3625484
 [[function]]
 name = "rom_gpio_pad_unhold"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:202"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/gpio.h:202"
 
-# Header-SHA256: 55cfc0ca5804c772d281846304629c4e782311f736124dd0fbce5fe91be74a76
+# Header-SHA256: f222e1debcbecc1103c6394f63818bd8bef0708d375a951a69fa964e97c426f5
 [[function]]
 name = "rtc_clk_xtal_freq_get"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hw_support/port/esp32s31/include/soc/rtc.h:162"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hw_support/port/esp32s31/include/soc/rtc.h:168"
 
-# Header-SHA256: 60ae2226afc6d46cc5294ef1b3514acde6b3da35390f830e525250d3fccf0e18
+# Header-SHA256: 2b5ba568153d34bca40bcec7ebea88757bcb861c9be78c33080e7daa429d0ad8
 [[function]]
 name = "rtc_get_reset_reason"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h:139"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h:140"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "send_packet"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:349"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:349"
 
-# Header-SHA256: 60ae2226afc6d46cc5294ef1b3514acde6b3da35390f830e525250d3fccf0e18
+# Header-SHA256: 2b5ba568153d34bca40bcec7ebea88757bcb861c9be78c33080e7daa429d0ad8
 [[function]]
 name = "software_reset"
 arguments = 0
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h:169"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h:170"
 
-# Header-SHA256: 60ae2226afc6d46cc5294ef1b3514acde6b3da35390f830e525250d3fccf0e18
+# Header-SHA256: 2b5ba568153d34bca40bcec7ebea88757bcb861c9be78c33080e7daa429d0ad8
 [[function]]
 name = "software_reset_cpu"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h:181"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h:182"
 
 # Header-SHA256: 4909acbf732f1286b6e7e70ffe5d1f2e660b8b1592f4efc5b7ebd91a7bb07575
 [[function]]
 name = "spi_flash_check_and_flush_cache"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_mspi/include/esp_private/cache_utils.h:59"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_mspi/include/esp_private/cache_utils.h:59"
 
 # Header-SHA256: dd1ce77cc5ce5d6560c8ab7f57a70dab6f7904e81b48fad711466bce8ae44fbd
 [[function]]
 name = "spi_flash_chip_generic_config_host_io_mode"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/spi_flash/include/esp_flash_chips/spi_flash_chip_generic.h:375"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/spi_flash/include/esp_flash_chips/spi_flash_chip_generic.h:375"
 
 # Header-SHA256: dd1ce77cc5ce5d6560c8ab7f57a70dab6f7904e81b48fad711466bce8ae44fbd
 [[function]]
 name = "spi_flash_common_read_status_8b_rdsr2"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/spi_flash/include/esp_flash_chips/spi_flash_chip_generic.h:288"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/spi_flash/include/esp_flash_chips/spi_flash_chip_generic.h:288"
 
 # Header-SHA256: dd1ce77cc5ce5d6560c8ab7f57a70dab6f7904e81b48fad711466bce8ae44fbd
 [[function]]
 name = "spi_flash_common_set_io_mode"
 arguments = 4
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/spi_flash/include/esp_flash_chips/spi_flash_chip_generic.h:358"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/spi_flash/include/esp_flash_chips/spi_flash_chip_generic.h:358"
 
 # Header-SHA256: 06eac0e3c378ab529db28d040d3a14b659a336e17be7272890adcc83a14bc857
 [[function]]
 name = "spi_flash_mmap"
 arguments = 5
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/spi_flash/include/spi_flash_mmap.h:100"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/spi_flash/include/spi_flash_mmap.h:100"
 
 # Header-SHA256: 06eac0e3c378ab529db28d040d3a14b659a336e17be7272890adcc83a14bc857
 [[function]]
 name = "spi_flash_mmap_pages"
 arguments = 5
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/spi_flash/include/spi_flash_mmap.h:129"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/spi_flash/include/spi_flash_mmap.h:129"
 
 # Header-SHA256: 06eac0e3c378ab529db28d040d3a14b659a336e17be7272890adcc83a14bc857
 [[function]]
 name = "spi_flash_munmap"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/spi_flash/include/spi_flash_mmap.h:143"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/spi_flash/include/spi_flash_mmap.h:143"
 
 # Header-SHA256: 06eac0e3c378ab529db28d040d3a14b659a336e17be7272890adcc83a14bc857
 [[function]]
 name = "spi_flash_phys2cache"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/spi_flash/include/spi_flash_mmap.h:200"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/spi_flash/include/spi_flash_mmap.h:200"
 
 # Header-SHA256: 78ed9265703c93f3ccde51ec2a4d21099dd72cd142e0c5a4d1b0c3a3a747c6f4
 [[function]]
 name = "systimer_hal_get_counter_value"
 arguments = 2
 result = "u64"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hal_systimer/include/hal/systimer_hal.h:73"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hal_systimer/include/hal/systimer_hal.h:73"
 
 # Header-SHA256: c748ffeb54751a6e7a25b79f8c4c086ef07ee80c05329ff5f36f0b88383c84f3
 [[function]]
 name = "tdefl_compress"
 arguments = 6
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/miniz.h:750"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/miniz.h:750"
 
 # Header-SHA256: c748ffeb54751a6e7a25b79f8c4c086ef07ee80c05329ff5f36f0b88383c84f3
 [[function]]
 name = "tinfl_decompress"
 arguments = 7
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/include/miniz.h:592"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/include/miniz.h:592"
 
 # Header-SHA256: 696992ca3a74f4763c3ad33a3d2d47797f2cab19cb4e220182fc4fdded579cf1
 [[function]]
 name = "tlsf_add_pool"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/rom_patches/include/rom_patch_tlsf.h:35"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/rom_patches/include/rom_patch_tlsf.h:35"
 
 # Header-SHA256: 69799f4f1e7c5f8d3a35e89f5efb8014aa00e6e49f96939b93fc39ceb95d0e8b
 [[function]]
 name = "tlsf_check_hook"
 arguments = 3
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/tlsf/include/tlsf.h:86"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/tlsf/include/tlsf.h:86"
 
 # Header-SHA256: 696992ca3a74f4763c3ad33a3d2d47797f2cab19cb4e220182fc4fdded579cf1
 [[function]]
 name = "tlsf_create"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/rom_patches/include/rom_patch_tlsf.h:26"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/rom_patches/include/rom_patch_tlsf.h:26"
 
 # Header-SHA256: 69799f4f1e7c5f8d3a35e89f5efb8014aa00e6e49f96939b93fc39ceb95d0e8b
 [[function]]
 name = "tlsf_fit_size"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/tlsf/include/tlsf.h:57"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/tlsf/include/tlsf.h:57"
 
 # Header-SHA256: 696992ca3a74f4763c3ad33a3d2d47797f2cab19cb4e220182fc4fdded579cf1
 [[function]]
 name = "tlsf_free"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/rom_patches/include/rom_patch_tlsf.h:43"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/rom_patches/include/rom_patch_tlsf.h:43"
 
 # Header-SHA256: 696992ca3a74f4763c3ad33a3d2d47797f2cab19cb4e220182fc4fdded579cf1
 [[function]]
 name = "tlsf_get_pool"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/rom_patches/include/rom_patch_tlsf.h:32"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/rom_patches/include/rom_patch_tlsf.h:32"
 
 # Header-SHA256: 696992ca3a74f4763c3ad33a3d2d47797f2cab19cb4e220182fc4fdded579cf1
 [[function]]
 name = "tlsf_malloc"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/rom_patches/include/rom_patch_tlsf.h:39"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/rom_patches/include/rom_patch_tlsf.h:39"
 
 # Header-SHA256: 696992ca3a74f4763c3ad33a3d2d47797f2cab19cb4e220182fc4fdded579cf1
 [[function]]
 name = "tlsf_memalign_offs"
 arguments = 4
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/rom_patches/include/rom_patch_tlsf.h:41"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/rom_patches/include/rom_patch_tlsf.h:41"
 
 # Header-SHA256: 696992ca3a74f4763c3ad33a3d2d47797f2cab19cb4e220182fc4fdded579cf1
 [[function]]
 name = "tlsf_walk_pool"
 arguments = 3
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/heap/rom_patches/include/rom_patch_tlsf.h:77"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/heap/rom_patches/include/rom_patch_tlsf.h:77"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uartAttach"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:165"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:165"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_baudrate_detect"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:202"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:202"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_buff_switch"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:222"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:222"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_div_modify"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:189"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:189"
 
 # Header-SHA256: 8f1134a82d6653331658444e7a1e00b43313094a711a5351309a7d58198527a4
 [[function]]
 name = "uart_hal_rxfifo_rst"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hal_uart/include/hal/uart_hal.h:198"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hal_uart/include/hal/uart_hal.h:198"
 
 # Header-SHA256: 8f1134a82d6653331658444e7a1e00b43313094a711a5351309a7d58198527a4
 [[function]]
 name = "uart_hal_set_parity"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hal_uart/include/hal/uart_hal.h:248"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hal_uart/include/hal/uart_hal.h:248"
 
 # Header-SHA256: 8f1134a82d6653331658444e7a1e00b43313094a711a5351309a7d58198527a4
 [[function]]
 name = "uart_hal_txfifo_rst"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hal_uart/include/hal/uart_hal.h:189"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hal_uart/include/hal/uart_hal.h:189"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_rx_one_char"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:271"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:271"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_rx_readbuff"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:316"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:316"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_tx_flush"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:250"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:250"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_tx_one_char"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:231"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:231"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_tx_one_char2"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:241"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:241"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_tx_switch"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:212"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:212"
 
 # Header-SHA256: 508666b02613cddc00825157602eaabe2a4178de208a7a59649c95aca93d6314
 [[function]]
 name = "uart_tx_wait_idle"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:260"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_rom/esp32s31/include/esp32s31/rom/uart.h:260"
 
 # Header-SHA256: e12bf16b7712134e2525aad90ec6d21bb84963e772fc6e3da88aea2785b20cfe
 [[function]]
 name = "wdt_hal_set_flashboot_en"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hal_wdt/include/hal/wdt_hal.h:159"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hal_wdt/include/hal/wdt_hal.h:159"
 
 # Header-SHA256: 6781965f297c9163dddefca2137748d33e7c820786d7e2a54a212c039218d195
 [[function]]
 name = "wifi_assert"
 arguments = 4
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/esp_wifi/include/esp_private/wifi.h:1324"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_wifi/include/esp_private/wifi.h:1324"
 
 # Header-SHA256: 5f422138e2055c1273af869bbf57acbd2f06dc39878f022395e92945579b6ec1
 [[function]]
 name = "wr_btdm_external_bb_get_tx_pwr_table"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_external.h:32"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_external.h:32"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_callout_deinit"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:115"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:115"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_callout_init"
 arguments = 4
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:113"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:113"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_callout_is_active"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:119"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:119"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_callout_mem_reset"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:117"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:117"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_callout_reset"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:116"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:116"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_callout_stop"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:118"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:118"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_event_deinit"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:96"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:96"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_event_get_arg"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:99"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:99"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_event_init"
 arguments = 3
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:95"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:95"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_event_is_queued"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:98"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:98"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_event_run"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:94"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:94"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_event_set_arg"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:100"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:100"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_eventq_deinit"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:87"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:87"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_eventq_get"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:88"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:88"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_eventq_init"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:86"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:86"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_eventq_is_empty"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:92"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:92"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_eventq_put"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:89"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:89"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_eventq_put_to_front"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:90"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:90"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_eventq_remove"
 arguments = 2
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:91"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:91"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_free"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:147"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:147"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_get_time_forever"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:135"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:135"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_hw_enter_critical"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:131"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:131"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_hw_exit_critical"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:132"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:132"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_intr_alloc"
 arguments = 5
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:142"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:142"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_intr_free"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:144"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:144"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_malloc"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:146"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:146"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_mutex_deinit"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:103"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:103"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_mutex_init"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:102"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:102"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_mutex_pend"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:104"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:104"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_mutex_release"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:105"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:105"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_rand"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:158"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:158"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_read_efuse_mac"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:156"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:156"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_sem_deinit"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:108"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:108"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_sem_init"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:107"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:107"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_sem_pend"
 arguments = 2
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:109"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:109"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_sem_release"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:110"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:110"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_task_create"
 arguments = 7
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:137"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:137"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_task_delete"
 arguments = 1
 result = "void"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:140"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:140"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_time_get"
 arguments = 0
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:125"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:125"
 
 # Header-SHA256: 69ad38a2eceb3458a7175208d1913a0a836827712b3352fa4382e27b7fa6087f
 [[function]]
 name = "wr_btdm_osal_time_ms_to_ticks32"
 arguments = 1
 result = "u32"
-source = "esp-idf@4d59230ddff16327812782151ef0afef202dc6d7/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:128"
+source = "esp-idf@4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/include/btdm_osal.h:128"

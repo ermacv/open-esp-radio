@@ -816,7 +816,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// This is ESP-IDF's
     /// `modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, MAIN_XTAL, divider)`
     /// (`components/esp_hw_support/modem/modem_clock.c`, esp-idf
-    /// `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`), with the same register
+    /// `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`), with the same register
     /// writes in the same order: every source is deselected, the main
     /// crystal is selected, the S31 Bluetooth divider is written and the
     /// timer clock gate is enabled. ESP32-S31 has neither the BLE RTC-timer

@@ -196,7 +196,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     /// Publish the active modem ICG state before opening module clock gates.
     ///
-    /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP; ESP-IDF 4d59230d
+    /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP; ESP-IDF 4d80c1b2
     /// `components/esp_hw_support/port/esp32s31/pmu_init.c:93,137-138`.
     /// The maps select code two, so module gates alone cannot admit register
     /// access with the reset code zero.

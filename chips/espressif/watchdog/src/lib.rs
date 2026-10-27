@@ -77,7 +77,7 @@ mod tests;
 /// The write-protect key that unlocks a watchdog's words; any other value
 /// in the write-protect word locks them.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:243`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:243`
 /// and `rwdt_ll.h:25-27` (`RTC_WDT_WKEY_VALUE`, `RTC_WDT_SWD_WKEY_VALUE`),
 /// `components/esp_hal_wdt/esp32c5/include/hal/lpwdt_ll.h:27`: one key for
 /// the main, RTC and super watchdogs of both chips.
@@ -85,13 +85,13 @@ pub const WRITE_KEY: u32 = 0x50D8_3AA1;
 
 /// The value every operation stores to lock a watchdog again.
 ///
-/// SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:233` (`mwdt_ll_write_protect_enable`)
+/// SOURCE: ESP-IDF 4d80c1b2 `mwdt_ll.h:233` (`mwdt_ll_write_protect_enable`)
 /// and `rwdt_ll.h:275-278`.
 pub const LOCK: u32 = 0;
 
 /// What a main watchdog stage does when its timeout expires.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/register/soc/timer_group_reg.h:464-470`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/register/soc/timer_group_reg.h:464-470`
 /// (`TIMG_WDT_STG0`: 0 no effect, 1 interrupt, 2 CPU reset, 3 system reset).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MainStageAction {
@@ -110,14 +110,14 @@ impl MainStageAction {
 
 /// The length of a reset signal a watchdog drives, by its 3-bit selector.
 ///
-/// SOURCE: ESP-IDF 4d59230d `timer_group_reg.h:388-425`: 0..7 select 8, 16,
+/// SOURCE: ESP-IDF 4d80c1b2 `timer_group_reg.h:388-425`: 0..7 select 8, 16,
 /// 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResetLength {
     /// The longest reset signal (selector 7), which ESP-IDF
     /// program for both the CPU and the system reset.
     ///
-    /// SOURCE: ESP-IDF 4d59230d
+    /// SOURCE: ESP-IDF 4d80c1b2
     /// `components/esp_hal_wdt/wdt_hal_iram.c:58-59,79-80` programs
     /// `WDT_RESET_SIG_LENGTH_3_2us`, also 7.
     Longest = 7,
@@ -224,7 +224,7 @@ pub trait RtcWatchdogRegisters: WriteProtected {
 
 /// What the RTC watchdog's stage 0 does when its hold expires.
 ///
-/// SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/register/soc/rtc_wdt_reg.h`
+/// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/register/soc/rtc_wdt_reg.h`
 /// (`RTC_WDT_STG0`: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4
 /// RTC reset) and `components/bootloader_support/src/bootloader_init.c:96`
 /// (the bootloader's backstop stage 0 resets the RTC domain).
@@ -306,7 +306,7 @@ impl<R: MainWatchdogEnable> Drop for Latched<'_, R> {
 ///
 /// SOURCE: esp-hal 1f646c5 `esp-hal/src/timer/timg.rs:655-669`: the
 /// ESP32-S31 latches its configuration asynchronously, a disable included,
-/// and the ESP32-C5 applies stage writes only when latched (ESP-IDF 4d59230d
+/// and the ESP32-C5 applies stage writes only when latched (ESP-IDF 4d80c1b2
 /// `components/esp_hal_wdt/esp32c5/include/hal/mwdt_ll.h:122`). Both chips
 /// latch every session here, a disable included; esp-hal does not latch a
 /// disable on the ESP32-C5.
@@ -334,7 +334,7 @@ impl<R: MainWatchdogRegisters> MainSession<'_, R> {
     /// Stop counting and clear flash boot protection, keeping the stage
     /// actions and reset lengths.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:70-77` (`mwdt_ll_disable`
+    /// SOURCE: ESP-IDF 4d80c1b2 `mwdt_ll.h:70-77` (`mwdt_ll_disable`
     /// clears `WDT_EN` only and notes that flash boot protection still
     /// resets) and `components/bootloader_support/src/bootloader_init.c:106-110`
     /// (flash boot protection cleared field by field).
@@ -365,7 +365,7 @@ impl MicrosecondTick {
     /// The tick of a source clock of `hz`, or `None` unless `hz` is a whole
     /// number of megahertz the 16-bit prescaler holds.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `timer_group_reg.h:497-503`: one watchdog
+    /// SOURCE: ESP-IDF 4d80c1b2 `timer_group_reg.h:497-503`: one watchdog
     /// tick is the source clock period times `WDT_CLK_PRESCALE`.
     pub const fn from_source_hz(hz: u32) -> Option<Self> {
         if !hz.is_multiple_of(1_000_000) {
@@ -463,7 +463,7 @@ impl<R: MainWatchdogEnable> StoppedMainWatchdog<R> {
     /// Stop the watchdog again: disabled, flash boot protection off,
     /// latched and locked.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:70-77` and
+    /// SOURCE: ESP-IDF 4d80c1b2 `mwdt_ll.h:70-77` and
     /// `bootloader_init.c:106-110`, as [`MainSession::stop`].
     pub fn disable(&mut self) {
         let mut latched = Latched(Unlocked::new(&mut self.0));
@@ -479,7 +479,7 @@ impl<R: MainWatchdogEnable> StoppedMainWatchdog<R> {
 /// two arms it again ([`RtcWatchdog::arm_rtc_reset`]) for its executor to
 /// feed.
 ///
-/// SOURCE: ESP-IDF 4d59230d `bootloader_init.c:76-104`.
+/// SOURCE: ESP-IDF 4d80c1b2 `bootloader_init.c:76-104`.
 pub struct RtcWatchdog<R: RtcWatchdogRegisters>(R);
 
 impl<R: RtcWatchdogRegisters> RtcWatchdog<R> {
@@ -492,7 +492,7 @@ impl<R: RtcWatchdogRegisters> RtcWatchdog<R> {
     /// the stage actions and reset lengths: unlocked, the two fields
     /// written, locked.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `components/esp_system/startup_funcs.c:145-153`
+    /// SOURCE: ESP-IDF 4d80c1b2 `components/esp_system/startup_funcs.c:145-153`
     /// (`init_disable_rtc_wdt` clears `WDT_EN` alone, through
     /// `rwdt_ll_disable`) and `bootloader_init.c:86-89` (flash boot
     /// protection cleared alone). esp-hal 1f646c5
@@ -511,7 +511,7 @@ impl<R: RtcWatchdogArm> RtcWatchdog<R> {
     /// off), locked: the hold is in place before the feed and the enable
     /// comes last, as [`MainWatchdog::arm_system_reset`] orders its words.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `bootloader_init.c:92-98`
+    /// SOURCE: ESP-IDF 4d80c1b2 `bootloader_init.c:92-98`
     /// (`wdt_hal_config_stage(WDT_STAGE0, …, WDT_STAGE_ACTION_RESET_RTC)`,
     /// then `wdt_hal_enable`, which feeds and sets `WDT_EN`,
     /// `wdt_hal_iram.c`).
@@ -538,7 +538,7 @@ pub struct ArmedRtcWatchdog<R: RtcWatchdogArm>(R);
 impl<R: RtcWatchdogArm> ArmedRtcWatchdog<R> {
     /// Restart the watchdog from stage 0: unlocked, fed, locked.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `components/esp_hal_wdt/esp32s31/include/hal/rwdt_ll.h:265-268`
+    /// SOURCE: ESP-IDF 4d80c1b2 `components/esp_hal_wdt/esp32s31/include/hal/rwdt_ll.h:265-268`
     /// (`rwdt_ll_feed`).
     pub fn feed(&mut self) {
         let unlocked = Unlocked::new(&mut self.0);
@@ -576,7 +576,7 @@ impl<R: SuperWatchdogRegisters> SuperWatchdog<R> {
     /// Let the hardware feed the super watchdog, as the ESP-IDF bootloader
     /// leaves it: unlocked, the automatic feed field set, locked.
     ///
-    /// SOURCE: ESP-IDF 4d59230d `components/bootloader_support/src/esp32s31/bootloader_esp32s31.c:118-123`
+    /// SOURCE: ESP-IDF 4d80c1b2 `components/bootloader_support/src/esp32s31/bootloader_esp32s31.c:118-123`
     /// and `esp32c5/bootloader_esp32c5.c:75-80` (`bootloader_super_wdt_auto_feed`
     /// sets `SWD_AUTO_FEED_EN` alone). esp-hal 1f646c5
     /// `esp-hal/src/rtc_cntl/mod.rs:676-686` stores the whole word.

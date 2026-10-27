@@ -1,7 +1,7 @@
 //! The lines over host memory from HP_SYS's base: a raise stores one whole,
 //! a lower stores zero, and each line reaches its own word alone.
 //!
-//! Word offsets are ESP-IDF 4d59230d `hp_system_reg.h`'s
+//! Word offsets are ESP-IDF 4d80c1b2 `hp_system_reg.h`'s
 //! (`HP_SYSTEM_CPU_INT_FROM_CPU_0_REG` 0x10 .. `_3_REG` 0x1c).
 
 use std::{vec, vec::Vec};

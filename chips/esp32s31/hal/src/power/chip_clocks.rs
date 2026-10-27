@@ -130,7 +130,7 @@ impl<'a, 'b> ClockWords<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
 }
 
 impl<P: Placement, Q: Placement> ClockGates for ClockWords<P, Q> {
-    /// SOURCE: ESP-IDF 4d59230d
+    /// SOURCE: ESP-IDF 4d80c1b2
     /// `components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h:321-327`
     /// (`_clk_gate_ll_ref_160m_clk_en`); a HAL field, as the root links no
     /// instance to the 160 MHz output.
@@ -184,7 +184,7 @@ impl<G: ClockGates> ClockCounts<G> {
 
     /// Take one reference to `clock`: the first opens its gate.
     ///
-    /// SOURCE: ESP-IDF 4d59230d
+    /// SOURCE: ESP-IDF 4d80c1b2
     /// `components/esp_hw_support/port/esp32s31/esp_clk_tree.c:510-541`
     /// (`esp_clk_tree_enable_gated_clk`: the gate on the zero-to-one
     /// count), `components/esp_hw_support/include/esp_private/regi2c_ctrl.h:47-63`
