@@ -3,7 +3,7 @@ schema = 1
 
 [[sources]]
 id = "HW31_S31_FE_COMPOSITION_20261027"
-description = "SOURCE: stand s31-c rev0, run hw31-20261027-pb1e-02-registers, lease #933, selection244 tags0x3124..0x3126; report /home/ermacv/dev/oer-notes/research/hw31-tsens-feest-pmuck.md. With hardware-frequency updates disabled and channel/write strobes inactive, typed address0 produces 0x80000000 and address0x400 produces 0x800400ff after prior byte index255. Index1/255 read back 0x80000001/0x800000ff at address0 and 0x80040001/0x800400ff at address0x400. Full saved fields restore to0. This establishes low/high address and byte-channel composition/readback only; no memory operation, reset effect or engine geometry is qualified."
+description = "SOURCE: stand s31-c rev0, run hw31-20261027-pb1e-02-registers, lease #933, selection244 tags0x3124..0x3126; report /home/ermacv/dev/oer-notes/research/hw31-tsens-feest-pmuck.md. With hardware-frequency updates disabled and channel/write strobes inactive, MEMORY_ADDRESS_HIGH is requested0 then1 (positioned bit0x40000, address bit0x400). With address-high0, CHANNEL_INDEX1/255 read back full images0x80000001/0x800000ff; with address-high1 they read0x80040001/0x800400ff. Saved fields restore to0. This establishes address-high bit and CHANNEL_INDEX1/255 composition/readback only. MEMORY_ADDRESS_LOW is written only0 and reads0 throughout, so this run supplies no discriminating evidence for that field. No memory operation, reset effect or engine geometry is qualified."
 
 [[sources]]
 id = "HW31_S31_CONTROL0_READBACK_20261027"
@@ -12,10 +12,6 @@ description = "SOURCE: stand s31-c rev0, run hw31-20261027-pb1e-02-registers, le
 [[sources]]
 id = "HW31_S31_CK_POWER_READBACK_20261027"
 description = "SOURCE: stand s31-c rev0, run hw31-20261027-pb1e-02-registers, lease #933, selection244 tag0x3120; report /home/ermacv/dev/oer-notes/research/hw31-tsens-feest-pmuck.md. The existing typed CK_POWER enable image writes low4=15 and bit22=1, preserving all other lanes. Full before/after readbacks are0x44000000/0x44400000, XOR0x00400000, a subset of the sourced mask0x0040000f. Every observed lane outside that mask is unchanged, including reserved/undeclared lanes. Low4 reads0 both before and after its requested15, so a retained readable15 or any functional low-bit identity is not established. Read-zero, transient, conditional and ignored-write mechanisms remain unresolved."
-
-[[sources]]
-id = "HW31_S31_RXDESC_REPRESENTATION_20261027"
-description = "SOURCE: stand s31-c rev0, run hw31-20261027-pb1e-02-registers, lease #933, selection245 tag0x3127; report /home/ermacv/dev/oer-notes/research/hw31-tsens-feest-pmuck.md. An unpublished CPU-owned SRAM descriptor with SIZE0x123 and OWNER0 roundtrips OFFSET/SOSF0/0,1/0,0/1,1/1 as control0x00000123,0x10000123,0x20000123,0x30000123; decoded pairs are0,1,2,3. No descriptor address is published and no DMA runs. This checks generated accessor representation on CPU-owned memory only; it establishes no supported one-valued radio mode, units, completion predicate or hardware writeback."
 
 [[sources]]
 id = "HW31_S31_TSENS_COLD_DAC_20261027"

@@ -115,7 +115,7 @@ description = "Unsigned temperature-sensor code. ROM phy_tsens_code_read samples
 name = "READY"
 bits = "8"
 class = "read-only"
-description = "Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice."
+description = "Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice. HW31 forced-power cold-DAC and timed-injection captures observed READY0 while OUT followed verified DAC15/11/15 steps; this does not qualify FSM-power readiness. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027."
 
 [[registers.fields]]
 name = "SAMPLE_EN"

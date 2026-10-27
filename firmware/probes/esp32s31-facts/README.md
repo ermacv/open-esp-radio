@@ -1077,6 +1077,8 @@ PWRBANK timer0/1 harness control; ED6 and radio traffic are outside these leaves
 
 ## TSENS and analog/PMU facts (PB-1e)
 
+Observation waits use the initialized SAR owner's ticks-per-microsecond conversion.
+
 Selections 240–243 require a separate power-on/download loader entry for each
 arm: no opaque-one publication, bit23 alone, bit9 alone and the ordered
 bit23/bit9 pair. They use the existing probe-specific analog-I2C prefix, named
@@ -1103,11 +1105,11 @@ Selection244 records CK_POWER around the existing typed enable image, then
 tests CONTROL0 pair0/2 and bit22 low/high only if ENABLE=VALID=0. It restores
 the changed lanes from the owned saved image and records exact restoration
 before completion, without a descriptor or TX publication. It then holds FE
-frequency updates and strobes inactive, publishes address0/0x400 through the
-named low/high fields, and changes the byte channel index to1/255, before
-restoring the saved fields. This qualifies composition/readback only.
-Selection245 writes/reads the four OFFSET/SOSF combinations on an unpublished
-stack SRAM descriptor; no descriptor address reaches hardware.
+frequency updates and strobes inactive, changes the address-high bit
+(address0x400) and byte channel index1/255, before restoring the saved fields.
+The address-low field is written only0 and reads0 throughout, so it is not
+qualified by this experiment. This qualifies address-high/channel-index
+composition/readback only.
 
 Record tags: `0x31a0/31b0` arm; `0x3100/01/03/31ff` inherited/prepared/stable/
 final CTRL, CLK_CONF and packed LP-clock/reset + SAR-I2C power/reset state;
@@ -1115,15 +1117,14 @@ final CTRL, CLK_CONF and packed LP-clock/reset + SAR-I2C power/reset state;
 elapsed cycles/CTRL/CLK_CONF for DAC11/15; `0x31c0` injection before/after
 cycle marks/CLK_CONF. `0x3120` CK_POWER before/after/XOR; `0x3121` saved
 CONTROL0/ENABLE/VALID; `0x3122` case/request/readback; `0x3123` saved/restored;
-`0x3124/25` address or channel/full FE image; `0x3126` final FE image;
-`0x3127` RX fixture case/control word/decoded OFFSET+2*SOSF.
+`0x3124/25` address or channel/full FE image; `0x3126` final FE image.
 
 On s31-c rev0, the four cold forced-power arms have a positive DAC response
 with READY0 and both opaque CLK_CONF lanes reading0. Fifteen cold injection
 arms establish no distinct command, gate or lasting-latch effect. CK_POWER's
 requested low4 image15 reads0, while the full enable readback preserves lanes
-outside the sourced mask. FE/CONTROL0 and RXDESC results qualify only the
-composition, disabled readback and CPU-owned representation described above.
+outside the sourced mask. FE/CONTROL0 results qualify only address-high and
+byte-channel composition and disabled CONTROL0 readback described above.
 SOURCE: `HW31_S31_*_20261027` in `registers/evidence/hw-analog-pmu.toml`;
 runs `hw31-20261027-pb1e-02-registers` (lease#933),
 `hw31-20261027-pb1e-03-cold-240..243` (lease#938) and

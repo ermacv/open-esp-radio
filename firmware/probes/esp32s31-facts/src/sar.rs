@@ -90,7 +90,7 @@ impl Sar {
         self.ticks_per_us.saturating_mul(us)
     }
     #[inline(always)]
-    fn until(&self, start: u32, us: u32) {
+    pub(super) fn until(&self, start: u32, us: u32) {
         let bound = self.cycles(us);
         while oer_riscv::cycle32().wrapping_sub(start) < bound {}
     }

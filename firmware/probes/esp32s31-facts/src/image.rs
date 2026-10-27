@@ -764,10 +764,6 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(analog_pmu::registers),
     },
     Probe {
-        id: 245,
-        run: Action::Thread(analog_pmu::rxdesc),
-    },
-    Probe {
         id: 250,
         run: Action::Thread(analog_pmu::injection::<1, 0>),
     },

@@ -1,4 +1,4 @@
-//! PB-1e and the unpublished PB-1f RX descriptor fixture.
+//! PB-1e analog/PMU register experiments.
 //! SOURCE: oer-notes/research/bx-{tsens,fe-est-freq,pmu-ck-power,wifi-control0-rate}.md.
 //! Every TSENS selection requires its own power-on/download loader session.
 use super::{Bits, Index, Session, contain, emit, opaque, opaque_wave2, pac};
@@ -17,13 +17,8 @@ fn begin(s: &mut Session<'_>) {
     });
 }
 
-fn wait(us: u32) {
-    let start = oer_riscv::cycle32();
-    until(start, us);
-}
-
-fn until(start: u32, us: u32) {
-    while oer_riscv::cycle32().wrapping_sub(start) < us.saturating_mul(40) {}
+fn wait(s: &Session<'_>, us: u32) {
+    s.sar.until(oer_riscv::cycle32(), us);
 }
 
 fn state(s: &Session<'_>, tag: u32) {
@@ -91,7 +86,7 @@ fn prepare(s: &mut Session<'_>, lanes: u32) -> bool {
     s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
         w.set_rstb_perif_i2c(false);
     });
-    wait(1);
+    wait(s, 1);
     s.sar.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
         w.set_xpd_perif_i2c(true).set_rstb_perif_i2c(true);
     });
@@ -117,7 +112,7 @@ fn prepare(s: &mut Session<'_>, lanes: u32) -> bool {
         emit(0x31ee, 3, 15, 0);
         return false;
     }
-    wait(500);
+    wait(s, 500);
     state(s, 0x3103);
     verify_dac(s, 15)
 }
@@ -153,7 +148,7 @@ fn step(s: &mut Session<'_>, value: u8, lanes: u32, pattern: u32, inject: bool) 
     // Reference is the completed DAC write, before publication/readback.
     let tag = if value == 11 { 0x3111 } else { 0x3115 };
     for us in [0, 1, 2, 5, 10, 20] {
-        until(start, us);
+        s.sar.until(start, us);
         sample(s, tag, start);
         if inject {
             injection_at(s, lanes, pattern, us, start);
@@ -161,7 +156,7 @@ fn step(s: &mut Session<'_>, value: u8, lanes: u32, pattern: u32, inject: bool) 
     }
     let end = if inject { 530 } else { 500 };
     for us in (30..=end).step_by(10) {
-        until(start, us);
+        s.sar.until(start, us);
         sample(s, tag, start);
         if inject {
             injection_at(s, lanes, pattern, us, start);
@@ -286,31 +281,4 @@ pub(super) fn registers(s: &mut Session<'_>) {
             .set_memory_write_pulse(old.memory_write_pulse());
     });
     emit(0x3126, fe.read_frequency_control_image(), 0, 0);
-}
-
-pub(super) fn rxdesc(s: &mut Session<'_>) {
-    begin(s);
-    use pac::layouts::{WifiRxDmaDescriptor, WifiRxDmaDescriptorControl};
-    // CPU-owned stack fixture: its address is never published to a peripheral.
-    let descriptor = WifiRxDmaDescriptor::zeroed();
-    let seed = WifiRxDmaDescriptorControl::ZERO
-        .with_size_constant::<0x123>()
-        .with_owner(false);
-    for (case, offset, sosf) in [
-        (0, false, false),
-        (1, true, false),
-        (2, false, true),
-        (3, true, true),
-    ] {
-        descriptor
-            .control()
-            .write(seed.with_offset(offset).with_sosf(sosf));
-        let read = descriptor.control().read();
-        emit(
-            0x3127,
-            case,
-            read.bits(),
-            u32::from(read.offset()) | (u32::from(read.sosf()) << 1),
-        );
-    }
 }

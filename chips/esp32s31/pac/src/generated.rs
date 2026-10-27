@@ -241862,7 +241862,7 @@ pub mod tsens {
                 self.0 as u8
             }
 
-            /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice.
+            /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice. HW31 forced-power cold-DAC and timed-injection captures observed READY0 while OUT followed verified DAC15/11/15 steps; this does not qualify FSM-power readiness. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn ready(self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -241939,7 +241939,7 @@ pub mod tsens {
                 self.0 as u8
             }
 
-            /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice.
+            /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice. HW31 forced-power cold-DAC and timed-injection captures observed READY0 while OUT followed verified DAC15/11/15 steps; this does not qualify FSM-power readiness. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn ready(&self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -309034,10 +309034,10 @@ pub mod layouts {
         pub const OFFSET_WIDTH: u32 = 1;
         /// Greatest unsigned image of `OFFSET`.
         pub const OFFSET_MAX: u32 = 0x1;
-        /// Vendor diagnostic name for CONTROL bit 28. The inspected vendor RX initialization stores preserve its prior value; append/rearm also preserves it, including an incoming one. This does not establish an initial value, a supported one-valued mode, physical units, relation to the separate RX-control-buffer byte displacement, or hardware writeback. The possible hardware writer in the receive phase is conservative, not an observed store. It remains zero in all recorded HW18 R1/R2/R3 control samples; setting it to one on hardware is untested. It is not an established completion or ownership predicate. SOURCE: BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027. HW31 roundtrips both accessor values on an unpublished CPU-owned SRAM fixture only; no one-valued radio mode is qualified. SOURCE: HW31_S31_RXDESC_REPRESENTATION_20261027.
+        /// Vendor diagnostic name for CONTROL bit 28. The inspected vendor RX initialization stores preserve its prior value; append/rearm also preserves it, including an incoming one. This does not establish an initial value, a supported one-valued mode, physical units, relation to the separate RX-control-buffer byte displacement, or hardware writeback. The possible hardware writer in the receive phase is conservative, not an observed store. It remains zero in all recorded HW18 R1/R2/R3 control samples; setting it to one on hardware is untested. It is not an established completion or ownership predicate. SOURCE: BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
         ///
         /// `OFFSET`, bit 28; written by the participants in the declared phases. Phase `arm-rearm`: the CPU. Phase `receive`: the hardware.
-        /// SOURCE: HW31_S31_RXDESC_REPRESENTATION_20261027, HW18_RX_COMMITTED_PREFIX_20261027, VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027, BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
+        /// SOURCE: HW18_RX_COMMITTED_PREFIX_20261027, VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027, BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
         pub const fn offset(self) -> bool {
             self.0 & 0x10000000 != 0
         }
@@ -309055,10 +309055,10 @@ pub mod layouts {
         pub const SOSF_WIDTH: u32 = 1;
         /// Greatest unsigned image of `SOSF`.
         pub const SOSF_MAX: u32 = 0x1;
-        /// Vendor diagnostic name for CONTROL bit 29. Software explicitly clears it during RX descriptor initialization and append/rearm. Its acronym, physical effect, frame-boundary role and hardware writeback are unestablished. The possible hardware writer in the receive phase is conservative, not an observed store. It remains zero in all recorded HW18 R1/R2/R3 control samples; setting it to one on hardware is untested. It is not an established completion or ownership predicate. SOURCE: BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027. HW31 roundtrips both accessor values on an unpublished CPU-owned SRAM fixture only; no one-valued radio mode is qualified. SOURCE: HW31_S31_RXDESC_REPRESENTATION_20261027.
+        /// Vendor diagnostic name for CONTROL bit 29. Software explicitly clears it during RX descriptor initialization and append/rearm. Its acronym, physical effect, frame-boundary role and hardware writeback are unestablished. The possible hardware writer in the receive phase is conservative, not an observed store. It remains zero in all recorded HW18 R1/R2/R3 control samples; setting it to one on hardware is untested. It is not an established completion or ownership predicate. SOURCE: BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
         ///
         /// `SOSF`, bit 29; written by the participants in the declared phases. Phase `arm-rearm`: the CPU. Phase `receive`: the hardware.
-        /// SOURCE: HW31_S31_RXDESC_REPRESENTATION_20261027, HW18_RX_COMMITTED_PREFIX_20261027, VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027, BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
+        /// SOURCE: HW18_RX_COMMITTED_PREFIX_20261027, VENDOR_WIFI_RX_IDENTITIES, BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18, HW18_RX_CHAIN_20261027, HW18_RX_FCS_CORRELATION_20261027, BLOB_RX_DESCRIPTOR_VENDOR_NAMES_20261027, BLOB_RX_DESCRIPTOR_CPU_INIT_REARM_20261027, BLOB_RX_DESCRIPTOR_TERMINAL_CONSUMER_20261027.
         pub const fn sosf(self) -> bool {
             self.0 & 0x20000000 != 0
         }
