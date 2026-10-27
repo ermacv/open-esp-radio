@@ -29,11 +29,9 @@ libraries differ needs its own reviewed values before it uses them.
 The schedule walk, the retry ladder and the adaptive rate control (`trc`),
 which chooses a frame's first rate, live here, not in the portable package,
 because they are inseparable from the vendor schedule bytes. The rate
-control holds schedules, not PHY rates: a chip turns a schedule into its own
-rate (the ESP32-S31 MAC's `StaTxRatePolicy`, with its certification
-overrides) and programs its own beamforming report-rate registers, and a
-portable station uses it through `EspressifRateControl`, the station's
-`StaRateControl` seam, which decodes its schedules through `rate_code`.
+control holds schedules; a portable station uses it through
+`EspressifRateControl`, the station's `StaRateControl` seam, which decodes its
+schedules through `rate_code`.
 
 The portable `RatePeer` supplies all negotiated legacy rates, including the
 extended element. A DSSS/CCK-only association selects the 11b schedule.

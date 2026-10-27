@@ -63,7 +63,6 @@ pub mod lower_mac;
 pub mod monitor_injection;
 pub mod ordinary_tx;
 pub mod port;
-pub mod protected_data_rx;
 #[cfg(target_arch = "riscv32")]
 pub mod runtime;
 pub mod rx;
