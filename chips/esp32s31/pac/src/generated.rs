@@ -20570,12 +20570,19 @@ pub mod bt_mac {
         /// Positioned bits of `SOURCES_27_28`.
         pub const SOURCES_27_28_MASK: u32 = 0x18000000;
 
-        /// Width of `BITS_2_7_OPAQUE` in bits.
-        pub const BITS_2_7_OPAQUE_WIDTH: u32 = 6;
-        /// Greatest unsigned image of `BITS_2_7_OPAQUE`.
-        pub const BITS_2_7_OPAQUE_MAX: u32 = 0x3f;
-        /// Positioned bits of `BITS_2_7_OPAQUE`.
-        pub const BITS_2_7_OPAQUE_MASK: u32 = 0xfc;
+        /// Width of `ISO_CIG_RESET_SOURCE` in bits.
+        pub const ISO_CIG_RESET_SOURCE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ISO_CIG_RESET_SOURCE`.
+        pub const ISO_CIG_RESET_SOURCE_MAX: u32 = 0x1;
+        /// Positioned bits of `ISO_CIG_RESET_SOURCE`.
+        pub const ISO_CIG_RESET_SOURCE_MASK: u32 = 0x4;
+
+        /// Width of `BITS_3_7_OPAQUE` in bits.
+        pub const BITS_3_7_OPAQUE_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `BITS_3_7_OPAQUE`.
+        pub const BITS_3_7_OPAQUE_MAX: u32 = 0x1f;
+        /// Positioned bits of `BITS_3_7_OPAQUE`.
+        pub const BITS_3_7_OPAQUE_MASK: u32 = 0xf8;
 
         /// Width of `BITS_9_12_OPAQUE` in bits.
         pub const BITS_9_12_OPAQUE_WIDTH: u32 = 4;
@@ -20665,10 +20672,16 @@ pub mod bt_mac {
                 oer_mmio::Bits::truncate(self.0 >> 27)
             }
 
+            /// Software interrupt lane masked, acknowledged and reenabled by the vendor CIG reset role. Physical event identity and the NRT/output relation remain unknown. SOURCE: BLOB_S31_BLE_BANK0_CIG_RESET_20261028.
+            #[inline]
+            pub const fn iso_cig_reset_source(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_2_7_opaque(self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0 >> 2)
+            pub const fn bits_3_7_opaque(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 3)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -20754,10 +20767,16 @@ pub mod bt_mac {
                 oer_mmio::Bits::truncate(self.0 >> 27)
             }
 
+            /// Software interrupt lane masked, acknowledged and reenabled by the vendor CIG reset role. Physical event identity and the NRT/output relation remain unknown. SOURCE: BLOB_S31_BLE_BANK0_CIG_RESET_20261028.
+            #[inline]
+            pub const fn iso_cig_reset_source(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_2_7_opaque(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0 >> 2)
+            pub const fn bits_3_7_opaque(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 3)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -20846,10 +20865,17 @@ pub mod bt_mac {
                 self
             }
 
-            /// Set `BITS_2_7_OPAQUE`.
+            /// Set `ISO_CIG_RESET_SOURCE`.
             #[inline]
-            pub fn set_bits_2_7_opaque(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & 0xffffff03) | (value.get() << 2);
+            pub fn set_iso_cig_reset_source(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `BITS_3_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_3_7_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & 0xffffff07) | (value.get() << 3);
                 self
             }
 
@@ -20902,12 +20928,26 @@ pub mod bt_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x58;
 
-        /// Width of `BITS_0_6_OPAQUE` in bits.
-        pub const BITS_0_6_OPAQUE_WIDTH: u32 = 7;
-        /// Greatest unsigned image of `BITS_0_6_OPAQUE`.
-        pub const BITS_0_6_OPAQUE_MAX: u32 = 0x7f;
-        /// Positioned bits of `BITS_0_6_OPAQUE`.
-        pub const BITS_0_6_OPAQUE_MASK: u32 = 0x7f;
+        /// Width of `BITS_0_1_OPAQUE` in bits.
+        pub const BITS_0_1_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_0_1_OPAQUE`.
+        pub const BITS_0_1_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_0_1_OPAQUE`.
+        pub const BITS_0_1_OPAQUE_MASK: u32 = 0x3;
+
+        /// Width of `ISO_CIG_RESET_SOURCE` in bits.
+        pub const ISO_CIG_RESET_SOURCE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ISO_CIG_RESET_SOURCE`.
+        pub const ISO_CIG_RESET_SOURCE_MAX: u32 = 0x1;
+        /// Positioned bits of `ISO_CIG_RESET_SOURCE`.
+        pub const ISO_CIG_RESET_SOURCE_MASK: u32 = 0x4;
+
+        /// Width of `BITS_3_6_OPAQUE` in bits.
+        pub const BITS_3_6_OPAQUE_WIDTH: u32 = 4;
+        /// Greatest unsigned image of `BITS_3_6_OPAQUE`.
+        pub const BITS_3_6_OPAQUE_MAX: u32 = 0xf;
+        /// Positioned bits of `BITS_3_6_OPAQUE`.
+        pub const BITS_3_6_OPAQUE_MASK: u32 = 0x78;
 
         /// Width of `SOURCE_7` in bits.
         pub const SOURCE_7_WIDTH: u32 = 1;
@@ -20970,10 +21010,22 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_6_OPAQUE` field.
+            /// The `BITS_0_1_OPAQUE` field.
             #[inline]
-            pub const fn bits_0_6_opaque(self) -> oer_mmio::Bits<7> {
+            pub const fn bits_0_1_opaque(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Selected W1C image 4 in the vendor CIG reset role, between mask and reenable of bank0 bit2. Physical producer, recurrence and output equation remain unknown. SOURCE: BLOB_S31_BLE_BANK0_CIG_RESET_20261028.
+            #[inline]
+            pub const fn iso_cig_reset_source(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The `BITS_3_6_OPAQUE` field.
+            #[inline]
+            pub const fn bits_3_6_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 3)
             }
 
             /// Acknowledged with complete image 0x80 by the scheduler cancellation path before it sets BLUETOOTH_CONTROLLER_CORE.WORD_0204_OPAQUE bit zero.
@@ -21036,18 +21088,48 @@ pub mod bt_mac {
                 self.0 == 0
             }
 
-            /// The `BITS_0_6_OPAQUE` field.
+            /// The `BITS_0_1_OPAQUE` field.
             #[inline]
-            pub const fn bits_0_6_opaque(&self) -> oer_mmio::Bits<7> {
+            pub const fn bits_0_1_opaque(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// The snapshot without `BITS_0_6_OPAQUE` unless `keep`: it is then not acknowledged.
-            pub const fn retain_bits_0_6_opaque(self, keep: bool) -> Self {
+            /// The snapshot without `BITS_0_1_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bits_0_1_opaque(self, keep: bool) -> Self {
                 if keep {
                     self
                 } else {
-                    Self(self.0 & 0xffffff80)
+                    Self(self.0 & 0xfffffffc)
+                }
+            }
+
+            /// Selected W1C image 4 in the vendor CIG reset role, between mask and reenable of bank0 bit2. Physical producer, recurrence and output equation remain unknown. SOURCE: BLOB_S31_BLE_BANK0_CIG_RESET_20261028.
+            #[inline]
+            pub const fn iso_cig_reset_source(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The snapshot without `ISO_CIG_RESET_SOURCE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_iso_cig_reset_source(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffb)
+                }
+            }
+
+            /// The `BITS_3_6_OPAQUE` field.
+            #[inline]
+            pub const fn bits_3_6_opaque(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 3)
+            }
+
+            /// The snapshot without `BITS_3_6_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bits_3_6_opaque(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffff87)
                 }
             }
 

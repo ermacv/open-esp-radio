@@ -4,6 +4,7 @@ use oer_esp32s31_hal::usb_serial_jtag;
 use oer_espressif_staged_runtime::panic;
 
 mod gate_fault;
+mod release_fault;
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts {}
@@ -28,6 +29,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.name()),
     };
     gate_fault::report_previous();
+    release_fault::report_previous();
     if previous.is_some() {
         let _ = usb_serial_jtag::early_text(b"OER-B0-BRINGUP: previous panic\r\n");
     }

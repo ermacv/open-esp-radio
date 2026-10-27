@@ -1,0 +1,6 @@
+# Reviewed software lane; no physical producer or NRT equation is established.
+schema = 1
+
+[[sources]]
+id = "BLOB_S31_BLE_BANK0_CIG_RESET_20261028"
+description = "SOURCE: cargo blobray --format json function-records --input libble_app=pin:esp32s31/libble_app --function r_sym_ble_2QzoYDX7bG02oj5kaq9A; espressif/esp32s31-bt-lib revision 7a85006f35f6839ae7ea5adee16e68a757759196, libble_app.a sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6, ble_50.o. The function's recovered name r_ble_ll_iso_cig_reset is recorded by vendor/facts/names/libble_app.toml (exact-body origin 31c30949541a5d3abd4043a1cb66d55aa55577dd). At +0x18 it loads BT_MAC+0x54, +0x1c stores that image AND 0xfffffffb, +0x20 stores selected image 4 to BT_MAC+0x58, +0x22 loads BT_MAC+0x54 again, and +0x28 stores that image OR 4. Thus only enable bit2 is replaced, and its W1C is selected between mask and reenable. Decoding, control flow and references are complete; the later opaque call at +0x3c limits whole-function semantics but not these preceding stores. CIG reset is software context, not an established physical cause, producer, recurrence rule, output124/133 equation or NRT relation. No fixed terminal-cleanup policy is inferred."

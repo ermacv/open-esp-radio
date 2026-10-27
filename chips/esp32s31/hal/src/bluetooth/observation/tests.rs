@@ -86,3 +86,31 @@ fn production_task_enable_view_is_independent_of_the_diagnostic_word() {
     assert_eq!(task_enable(&bank), 0);
     assert_eq!(task(&bank).opaque_state, diagnostic);
 }
+
+#[test]
+fn cig_reset_enable_remains_visible_to_production_admission() {
+    let mut memory = words(0);
+    let mut bank = bt_mac::BluetoothInterruptBank::host(&mut memory).expect("instance memory");
+    bank.modify_irq_enable_0(|w| {
+        w.set_iso_cig_reset_source(true);
+    });
+    let observed = BluetoothInterruptPolicyObservation {
+        primary: primary(&bank),
+        task_enable: 0,
+    };
+    assert_eq!(
+        observed.admit(),
+        Err(BluetoothInterruptPolicyFault::ForeignEnable(observed))
+    );
+    bank.modify_irq_enable_0(|w| {
+        w.set_iso_cig_reset_source(false);
+    });
+    assert_eq!(
+        BluetoothInterruptPolicyObservation {
+            primary: primary(&bank),
+            task_enable: 0
+        }
+        .admit(),
+        Ok(())
+    );
+}

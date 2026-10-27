@@ -143,7 +143,12 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         .await
         {
             Ok(t) => t,
-            Err(mut f) => fail(&mut f, &mut boot.reply).await,
+            Err(mut failure) => {
+                if let shutdown::ControllerShutdownError::Output(cause) = failure.error() {
+                    crate::release_fault::reset(&mut failure, cause);
+                }
+                fail(&mut failure, &mut boot.reply).await
+            }
         };
         if let Err(mut retired) = actor
             .attachment_mut()

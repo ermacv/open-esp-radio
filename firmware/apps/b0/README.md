@@ -79,3 +79,11 @@ their original inputs in the same 44-byte fault slot and reset with all owners
 quarantined. The next boot prints the reason, count and raw word when present.
 Projection faults use the `OER-B0-FAULT: bluetooth-controller-time` prefix and
 the `overflows`, `raw-ticks` and `scale-shift` labels.
+
+Controller-output release failures from `shutdown::retire` retain the failed
+shutdown owner and reset through `fatal::reset_recording`. Interrupt-policy
+failures use the existing 44-byte gate record, preserving primary enables,
+status, NRT snapshots and task enables. Other output-step and scheduler-channel
+failures use a 16-byte retained record with a named reason, the published list
+index or channel error, and a checksum. The next boot reports that record once
+with the `OER-B0-FAULT: bluetooth-output-release` prefix before H4 opens.

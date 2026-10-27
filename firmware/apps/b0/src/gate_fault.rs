@@ -266,6 +266,13 @@ pub(crate) fn reset_controller_time(
 }
 
 #[cfg(target_arch = "riscv32")]
+pub(crate) fn reset_interrupt_policy(
+    fault: oer_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault,
+) -> ! {
+    reset_record(Record::interrupt_policy(fault))
+}
+
+#[cfg(target_arch = "riscv32")]
 fn reset_record(record: Record) -> ! {
     oer_espressif_staged_runtime::fatal::reset_recording(|_stop| {
         if let Some(mut slot) = RECORD.try_lock() {
