@@ -138,7 +138,7 @@ jump into a panic entry (`core::panicking::*`, `unwrap_failed`,
 `expect_failed`, the slice-index failures, `panic_already_*`,
 `rust_begin_unwind`, `oer_platform_panic_hook`) from a function that is not
 one itself. The roots are each interrupt context (hart and level, each
-hart's exception), CPU0 (stage two's entry) and each task root in the
+hart's exception), each used hart's task entry and each task root in the
 runtime, and the bootstrap root; it runs with the stack and interrupts
 checks, over their bounds' `reached` inventories. A site belongs to the
 layer of the crate its function's demangled name starts with (the self type
@@ -260,7 +260,7 @@ Each ELF contains:
   the bootstrap jumps to the constant entry the build knows (`hand_off::<ENTRY>`,
   which halts if the payload header names another), the checks find that
   jump in the bootstrap ELF, and a scan of the stage-two ELF shows every path
-  from the entry installing the CPU0 task stack's top as `sp` before anything
+  from the entry installing the boot hart task stack's top as `sp` before anything
   reads it. Otherwise the jump stays a hole.
 - `runtime-stack.txt` and `bootstrap-stack.txt` label each bound `proven`
   only when it rests on no assumption, `conditional (<assumptions>)`, such as
@@ -269,10 +269,10 @@ Each ELF contains:
   where a handler may lower the interrupt level. `runtime-stack.txt` ends with
   each task stack's allocation and where it came from: the bound (labelled
   likewise) plus the policy's reserve, the policy's `allocation_bytes`, or
-  the chip stack policy's default (`default_cpu0_task_stack_bytes`).
+  the chip stack policy's default (`default_task_stack_bytes`).
 - `runtime-indirect-sites.txt`/`.json` and `bootstrap-indirect-sites.txt`/`.json`
   list, for each root of the reachability reports (each hart/priority and its
-  exception, CPU0 and the task roots; the bootstrap root), every indirect site
+  exception, per-hart entries and the task roots; the bootstrap root), every indirect site
   its bound took (`Bound::sites`): the site, its function and offset, the
   number of targets, the facts that give them (`JumpTable` and
   `ValueAnalysis` from the machine code; `StageTwoEntry`,
@@ -280,7 +280,7 @@ Each ELF contains:
   count the distinct sites by fact and by assumption, `none` for proven
   sites. The reports read the bounds the gates computed and change no
   verdict.
-- `allocated_stacks`: linked CPU0 task stack, each hart's linked IRQ range and
+- `allocated_stacks`: each hart's linked task stack, each hart's linked IRQ range and
   the bootstrap stack, in bytes.
 - `bounds`: each task root, IRQ hart/level/exception and nested IRQ total, with
   byte bound (or resolved partial bytes), `complete`, all holes and assumptions,
@@ -331,7 +331,7 @@ The chip policies select `core::fmt::write`, `Formatter` methods, the runtime
 implementations of Debug, Display, Binary, Octal, LowerHex, UpperHex, Pointer,
 LowerExp and UpperExp. Selectors are general and may watch other functions.
 
-`runtime-reachability.txt` reports CPU0 and each task root (a recorded task
+`runtime-reachability.txt` reports each hart's task entry and each task root (a recorded task
 poll boundary, `__OER_TASK_POLL.*`) as T0, T1, ... in address order.
 `interrupt-reachability.txt` reports each hart/priority and its exception
 context with the same context-specific resolutions as the interrupt bound.

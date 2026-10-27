@@ -150,7 +150,7 @@ mod tests {
         let digest = oer_os_durable::sha256_bytes(b"unchanged");
         let placement = Placement {
             irq_stacks: Vec::new(),
-            task_stack: None,
+            task_stacks: Vec::new(),
             functions: vec![PlacedFunction {
                 name: "strict".into(),
                 symbol: "strict".into(),

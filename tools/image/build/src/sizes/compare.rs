@@ -296,12 +296,8 @@ fn compiler_flags(
                 values
                     .iter()
                     .filter(|(key, _)| {
-                        !matches!(
-                            key.as_str(),
-                            "OPEN_RADIO_CPU0_TASK_STACK_BYTES"
-                                | "OPEN_RADIO_IRQ_STACK_BYTES"
-                                | "OPEN_RADIO_UNUSED_IRQ_STACK_HARTS"
-                        )
+                        !key.starts_with("OPEN_RADIO_TASK_STACK_HART")
+                            && !key.starts_with("OPEN_RADIO_IRQ_STACK_HART")
                     })
                     .map(|(key, value)| (key.as_str(), value.as_str()))
                     .collect(),

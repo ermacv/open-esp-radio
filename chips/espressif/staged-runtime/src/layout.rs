@@ -4,6 +4,8 @@
 use core::ops::Range;
 use core::ptr::addr_of;
 
+include!(concat!(env!("OUT_DIR"), "/stack-symbols.rs"));
+
 #[allow(unsafe_code, reason = "the linker script symbols")]
 // SAFETY: the runtime linker script and generated vectors define these address
 // markers. Zero-sized byte arrays read no code, stack memory or memory at an
@@ -24,18 +26,9 @@ unsafe extern "C" {
     safe static __runtime_dma_data_end: [u8; 0];
     safe static __runtime_dma_bss_start: [u8; 0];
     safe static __runtime_dma_bss_end: [u8; 0];
-    pub(crate) safe static __runtime_cpu0_irq_stack_bottom: [u8; 0];
-    pub(crate) safe static __runtime_cpu0_irq_stack_top: [u8; 0];
-    pub(crate) safe static __runtime_cpu1_irq_stack_bottom: [u8; 0];
-    pub(crate) safe static __runtime_cpu1_irq_stack_top: [u8; 0];
-    pub(crate) safe static _stack_end: [u8; 0];
-    safe static _stack_start: [u8; 0];
+    stack_markers!();
     pub(crate) safe static _runtime_mtvt: [u8; 0];
     pub(crate) safe static _start_trap: [u8; 0];
-    pub(crate) safe static __runtime_cpu0_irq_stack_guard_bytes: [u8; 0];
-    pub(crate) safe static __runtime_cpu1_irq_stack_guard_bytes: [u8; 0];
-    pub(crate) safe static __runtime_cpu0_task_stack_bottom: [u8; 0];
-    pub(crate) safe static __runtime_cpu0_task_stack_top: [u8; 0];
 }
 
 /// The linked image's sections and stacks, as address ranges.
@@ -55,8 +48,8 @@ pub struct Sections {
     pub dma_bss: Range<usize>,
     /// Each hart's SRAM interrupt stack.
     pub irq_stacks: [Range<usize>; crate::vectors::HARTS],
-    /// The CPU0 task stack, from its bottom to its top.
-    pub task_stack: Range<usize>,
+    /// Each hart's PSRAM task stack; an unused range is empty.
+    pub task_stacks: [Range<usize>; crate::vectors::HARTS],
 }
 
 fn range(start: *const [u8; 0], end: *const [u8; 0]) -> Range<usize> {
@@ -86,16 +79,18 @@ pub fn sections() -> Sections {
             addr_of!(__runtime_dma_bss_start),
             addr_of!(__runtime_dma_bss_end),
         ),
-        irq_stacks: [
-            range(
-                addr_of!(__runtime_cpu0_irq_stack_bottom),
-                addr_of!(__runtime_cpu0_irq_stack_top),
-            ),
-            range(
-                addr_of!(__runtime_cpu1_irq_stack_bottom),
-                addr_of!(__runtime_cpu1_irq_stack_top),
-            ),
-        ],
-        task_stack: range(addr_of!(_stack_end), addr_of!(_stack_start)),
+        irq_stacks: stack_symbols().map(|stack| stack.irq),
+        task_stacks: stack_symbols().map(|stack| stack.task),
     }
+}
+
+/// Linker markers indexed by the chip's complete hart geometry.
+pub(crate) struct HartStacks {
+    pub irq: Range<usize>,
+    pub task: Range<usize>,
+    pub guard: usize,
+}
+
+pub(crate) fn stack_symbols() -> [HartStacks; crate::vectors::HARTS] {
+    stack_addresses!()
 }

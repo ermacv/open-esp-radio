@@ -312,9 +312,13 @@ impl Gates {
         let mut image_profile = input.policy.runtime_profile(input.profile)?;
         // The image linker sized a proven task stack; its range is exactly
         // that size.
-        let linked_task_stack = linker::strict::Placement::read(input.output)?.task_stack;
-        if let Some(allocation) = &linked_task_stack {
-            StackPolicy::set_task_stack_bytes(&mut image_profile, allocation.bytes)?;
+        let linked_task_stack = linker::strict::Placement::read(input.output)?.task_stacks;
+        for allocation in &linked_task_stack {
+            StackPolicy::set_task_stack_bytes(
+                &mut image_profile,
+                allocation.hart,
+                allocation.bytes,
+            )?;
         }
         let profile = &image_profile;
         let chip = |table: &str| {
@@ -491,10 +495,20 @@ impl Gates {
                                     audit.roots(input.policy),
                                 )?;
                                 audit.declared_proven = input.task_stack_proven;
-                                audit.size_source = Some(linker::task_stack::SizeSource::of(
-                                    input.policy,
-                                    linked_task_stack.as_ref(),
-                                ));
+                                for root in input.policy.runtime_task_stacks() {
+                                    if let Some(hart) = root.hart {
+                                        audit.size_sources.insert(
+                                            hart,
+                                            linker::task_stack::SizeSource::of(
+                                                input.policy,
+                                                hart,
+                                                linked_task_stack
+                                                    .iter()
+                                                    .find(|allocation| allocation.hart == hart),
+                                            ),
+                                        );
+                                    }
+                                }
                                 if let Some(sizes) = &mut outcome.sizes {
                                     for stack in &audit.stacks {
                                         sizes.task(&image, stack)?;
@@ -698,11 +712,21 @@ impl Gates {
                         )?;
                         let top = input
                             .policy
-                            .stacks()?
-                            .cpu0_task_stack
+                            .task_stack(
+                                input
+                                    .profile
+                                    .facts
+                                    .interrupts
+                                    .as_ref()
+                                    .ok_or("handoff needs hart geometry")?
+                                    .boot_hart,
+                            )
+                            .ok_or("boot task stack is missing")?
                             .top_symbol
                             .as_deref()
-                            .ok_or("the CPU0 task stack names no top symbol for the handoff")?;
+                            .ok_or(
+                                "the boot hart task stack names no top symbol for the handoff",
+                            )?;
                         Some(image.end_path_at_stage_two(symbol, stage_two, top)?)
                     }
                     None => None,
@@ -710,7 +734,7 @@ impl Gates {
                 let mut audit = crate::stack::StackAudit::of(
                     &image,
                     input.policy,
-                    &[("bootstrap stack", stack)],
+                    &[oer_chip_profile::policy::StackRoot::bootstrap(stack)],
                 )?;
                 outcome
                     .coverage_reviews

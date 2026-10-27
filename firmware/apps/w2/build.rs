@@ -13,8 +13,8 @@ const SSID: &str = "OER_W2_SSID_HEX";
 const COUNTRY: &str = "OER_W2_COUNTRY";
 const CAP: &str = "OER_W2_POWER_CAP_DBM";
 
-fn main() {
-    oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w2");
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w2")?;
     for name in [CHANNEL, BSSID, SSID, COUNTRY, CAP] {
         println!("cargo:rerun-if-env-changed={name}");
     }
@@ -56,6 +56,7 @@ fn main() {
         ),
     )
     .expect("OUT_DIR is writable");
+    Ok(())
 }
 
 /// `0x02, 0x00, …`.

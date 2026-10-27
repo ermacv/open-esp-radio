@@ -1,7 +1,8 @@
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    oer_esp32s31_layout::build::configure_runtime("oer-firmware-hil-esp32s31");
+    oer_esp32s31_layout::build::configure_runtime("oer-firmware-hil-esp32s31")?;
     enabled_features(manifest);
+    Ok(())
 }
 
 /// Lists the manifest features this build enables, as `ENABLED_FEATURES`,

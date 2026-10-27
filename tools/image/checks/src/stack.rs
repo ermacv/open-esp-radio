@@ -8,11 +8,10 @@
 //!   stack's storage the policy's minimum free bytes;
 //! - the bootstrap image's stack, from its root likewise.
 //!
-//! A task stack's bound may be `partial + ?`: the root reaches indirect sites
-//! no fact resolves (an executor's task polls, trait objects). The gate then
-//! accepts it, holds the part it proves to the budget and lists every
-//! unresolved site with its reason; the runtime's stack painting stays the
-//! check of the exercised call chains. A root symbol the image lacks fails,
+//! The boot hart's task bound may be partial unless the image declares it
+//! proven; its known part must fit and unresolved sites are reported. Other
+//! harts require complete task bounds. Bootstrap paths retain their handoff proof.
+//! A root symbol the image lacks fails,
 //! as does an image without compiler frame records or a linked function
 //! without a record that the coverage review does not explain.
 
@@ -41,7 +40,9 @@ use oer_analysis_riscv_stack::{
 use crate::stack::budget::{Budget, LIMITS};
 
 pub use coverage::{Coverage, CoverageCategory, CoveragePolicy, CoverageReview};
-use oer_chip_profile::policy::{StackPolicy, Storage, TaskStack};
+#[cfg(test)]
+use oer_chip_profile::policy::TaskStack;
+use oer_chip_profile::policy::{StackPolicy, Storage};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -115,7 +116,11 @@ pub fn audit_bootstrap_stack(
     let Some(bootstrap) = policy.stacks()?.bootstrap_stack else {
         return Ok(None);
     };
-    let audit = StackAudit::of(image, policy, &[("bootstrap stack", bootstrap)])?;
+    let audit = StackAudit::of(
+        image,
+        policy,
+        &[oer_chip_profile::policy::StackRoot::bootstrap(bootstrap)],
+    )?;
     std::fs::write(output.join(BOOTSTRAP_REPORT), audit.render())?;
     std::fs::write(
         output.join(reachability::BOOTSTRAP_REPORT),
@@ -453,8 +458,10 @@ pub struct StackAudit {
     /// The image declares these stacks proven: [`Self::check`] fails on any
     /// unresolved path in them.
     pub declared_proven: bool,
+    /// The boot identity from the image's chip contract, absent without a contract.
+    boot_hart: Option<u32>,
     /// Where the task stack's size came from, when the image's link says.
-    pub size_source: Option<crate::linker::task_stack::SizeSource>,
+    pub size_sources: BTreeMap<u32, crate::linker::task_stack::SizeSource>,
     /// The verified jump into stage two that ends the bootstrap stack's path.
     pub handoff: Option<handoff::Handoff>,
 }
@@ -462,7 +469,8 @@ pub struct StackAudit {
 /// One stack's budget and its root's bound.
 #[derive(Debug)]
 pub struct StackBound {
-    pub name: &'static str,
+    pub name: String,
+    pub hart: Option<u32>,
     pub root: String,
     /// The storage symbol, or the bottom and top symbols.
     pub storage: String,
@@ -488,16 +496,12 @@ impl StackAudit {
 
     /// Each root's report label and bound: the linked stacks, then the
     /// independent task roots.
-    pub(crate) fn roots(&self, policy: &StackPolicy) -> Vec<(String, &Bound)> {
+    pub(crate) fn roots(&self, _policy: &StackPolicy) -> Vec<(String, &Bound)> {
         let mut roots = Vec::new();
-        for (index, stack) in self.stacks.iter().enumerate() {
-            let label = if stack.name == "bootstrap stack" {
-                "bootstrap".to_owned()
-            } else if index == 0 && policy.cpu0_task_stack().is_some() {
-                "CPU0".to_owned()
-            } else {
-                format!("T{}", index.saturating_sub(1))
-            };
+        for stack in &self.stacks {
+            let label = stack
+                .hart
+                .map_or_else(|| "bootstrap".into(), |hart| format!("CPU{hart}"));
             roots.push((label, &stack.linked.1));
         }
         for (index, bound) in self.task_bounds.iter().enumerate() {
@@ -508,13 +512,22 @@ impl StackAudit {
     pub(crate) fn of(
         image: &Image,
         policy: &StackPolicy,
-        stacks: &[(&'static str, &TaskStack)],
+        stacks: &[oer_chip_profile::policy::StackRoot<'_>],
     ) -> Result<Self> {
         let coverage = CoveragePolicy::load(policy.stacks()?.coverage_policy)?
             .coverage(&image.functions, &image.stack_sizes)?;
         let ((bounds, task_bounds), witness_memory_peak) = image.with_bounds(|keep, control| {
             let mut bounds = Vec::new();
-            for &(name, stack) in stacks {
+            let mut ranges: Vec<(u64, u64, &str)> = Vec::new();
+            let mut harts = BTreeSet::new();
+            for root in stacks {
+                if let Some(hart) = root.hart
+                    && !harts.insert(hart)
+                {
+                    return Err(format!("duplicate task root for hart {hart}").into());
+                }
+                let name = &root.name;
+                let stack = root.stack;
                 let storage = match stack.storage() {
                     Storage::Symbol(symbol) => format!("`{symbol}`"),
                     Storage::Range { bottom, top } => format!("`{bottom}`..`{top}`"),
@@ -522,15 +535,22 @@ impl StackAudit {
                 let Some(storage_bounds) = image.storage(stack.storage())? else {
                     return Err(format!("the image links no {name} ({storage})").into());
                 };
-                let root = image.symbol(&stack.root).ok_or_else(|| {
+                for &(start, end, previous) in &ranges {
+                    if storage_bounds.start < end && start < storage_bounds.end {
+                        return Err(format!("{name} overlaps {previous}").into());
+                    }
+                }
+                ranges.push((storage_bounds.start, storage_bounds.end, name));
+                let root_address = image.symbol(&stack.root).ok_or_else(|| {
                     format!(
                         "the image has no `{}`, the root the policy names for its {name}",
                         stack.root
                     )
                 })?;
-                let walked = image
-                    .analysis
-                    .bound_with(root, &image.resolutions, keep, control)?;
+                let walked =
+                    image
+                        .analysis
+                        .bound_with(root_address, &image.resolutions, keep, control)?;
                 let path = walked
                     .path
                     .iter()
@@ -543,7 +563,8 @@ impl StackAudit {
                     .collect::<Vec<_>>();
                 unresolved.sort();
                 bounds.push(StackBound {
-                    name,
+                    name: name.clone(),
+                    hart: root.hart,
                     root: stack.root.clone(),
                     storage,
                     minimum_free_bytes: u64::from(stack.minimum_free_bytes),
@@ -553,7 +574,7 @@ impl StackAudit {
                 });
             }
             let mut task_bounds = Vec::new();
-            if stacks.iter().any(|(name, _)| *name == "CPU0 task stack") {
+            if stacks.iter().any(|root| root.hart.is_some()) {
                 for &address in image.resolutions.task_roots() {
                     task_bounds.push(image.analysis.bound_with(
                         address,
@@ -574,7 +595,11 @@ impl StackAudit {
             witness_memory_peak,
             task_bounds,
             declared_proven: false,
-            size_source: None,
+            boot_hart: image
+                .contract
+                .as_ref()
+                .map(|contract| contract.interrupts.boot_hart),
+            size_sources: BTreeMap::new(),
             handoff: None,
         })
     }
@@ -615,15 +640,14 @@ impl StackAudit {
                 )
                 .into());
             }
-            // A core other than core 0 runs only with a proven bound.
-            let secondary = stack.name.starts_with("CPU") && stack.name != "CPU0 task stack";
+            let secondary = stack.hart.is_some() && stack.hart != self.boot_hart;
             if (self.declared_proven || secondary)
                 && (bound.bytes.is_none() || !stack.unresolved.is_empty())
             {
                 return Err(format!(
                     "{}, but the {} has {} unresolved sites:\n{}",
                     if secondary {
-                        "a core other than core 0 runs only with a proven bound"
+                        "a secondary hart runs only with a proven bound"
                     } else {
                         "image declares task-stack proven"
                     },
@@ -714,9 +738,9 @@ impl StackAudit {
         if let Some(handoff) = &self.handoff {
             out.push_str(&handoff.render());
         }
-        if let Some(source) = self.size_source {
-            for stack in &self.stacks {
-                let source = match source {
+        for stack in &self.stacks {
+            if let Some(source) = stack.hart.and_then(|hart| self.size_sources.get(&hart)) {
+                let source = match *source {
                     crate::linker::task_stack::SizeSource::Bound => format!(
                         "the {} bound plus the policy's minimum free bytes",
                         stack.state()

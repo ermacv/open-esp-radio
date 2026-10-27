@@ -403,17 +403,23 @@ fn check_w1(root: &Path, console: &[String], result: &str, config: &w1::Config) 
         let profile = oer_chip_profile::Profile::load(root, "esp32s31")?;
         let elf = std::fs::read(root.join("target/fw/w1/runtime.elf"))?;
         let stacks = oer_image_checks::interrupts::interrupt_stacks(root, &profile, elf)?;
+        let boot_hart = profile
+            .facts
+            .interrupts
+            .as_ref()
+            .ok_or("w1 has no hart facts")?
+            .boot_hart;
         let bound = stacks
             .harts
             .iter()
-            .find(|hart| hart.core == 0)
+            .find(|hart| hart.core == boot_hart)
             .and_then(|hart| hart.bytes)
-            .ok_or("w1 has no proven hart 0 IRQ stack bound")?;
-        let used = w1::check_interrupt_stack(&report, stacks.allocated_bytes(0), bound)
+            .ok_or("w1 has no proven boot hart IRQ stack bound")?;
+        let used = w1::check_interrupt_stack(&report, stacks.allocated_bytes(boot_hart), bound)
             .map_err(|error| error.to_string())?;
         eprintln!(
             "fw: w1 IRQ stack observed {used} <= proven bound {bound} bytes; allocated {} bytes",
-            stacks.allocated_bytes(0)
+            stacks.allocated_bytes(boot_hart)
         );
     }
     Ok(checked.outcome.exit_code())

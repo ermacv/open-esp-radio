@@ -10,7 +10,7 @@ use oer_registers_model::{
 const PARTITION: &str = "RadioPhyPeripherals";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    oer_esp32s31_layout::build::configure_runtime("oer-firmware-hil-esp32s31-phy");
+    oer_esp32s31_layout::build::configure_runtime("oer-firmware-hil-esp32s31-phy")?;
 
     // Resolve the diagnostic selectors from the register model and its
     // ownership policy, in the order the PAC renders the partition's image.

@@ -962,7 +962,7 @@ async fn run(
         exit,
         ticks: &ticks,
         timers,
-        irq_bytes: stacks::irq_stack_bytes(),
+        irq_bytes: stacks::irq_stack_bytes(oer_esp32s31_hal::platform::BOOT_HART),
         irq_free,
     };
     let _ = report::print(

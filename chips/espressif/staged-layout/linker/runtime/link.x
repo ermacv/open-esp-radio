@@ -19,3 +19,4 @@ INCLUDE "oer-staged-runtime-vectors.x"
 
 INCLUDE "runtime/memory.x"
 INCLUDE "runtime/sections.x"
+INCLUDE "oer-staged-runtime-stacks.x"

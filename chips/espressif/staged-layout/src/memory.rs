@@ -112,7 +112,7 @@ pub struct Layout {
     /// Bytes of the ESP image's headers preceding the bootstrap's
     /// flash-mapped text in its first MMU page.
     pub image_segment_header_bytes: u32,
-    /// SRAM at the top the runtime's SRAM sections leave free while CPU0
+    /// SRAM at the top the runtime's SRAM sections leave free while the boot hart
     /// still runs on the bootstrap's stack.
     pub handoff_sram_margin_bytes: u32,
     /// Memory that no reset entry initializes, which keeps the panic record
@@ -121,13 +121,14 @@ pub struct Layout {
     /// Bytes at the end of [`Self::retained`] that ESP-IDF's bootloader and
     /// RTC timer keep.
     pub retained_reserved_tail: u32,
-    /// Stage two's CPU0 task stack in PSRAM when the image's policy names
-    /// none: the chip's stack policy's `default_cpu0_task_stack_bytes`.
-    pub cpu0_task_stack_bytes: u32,
-    /// Maximum IRQ allocation per hart; proven images are sized at link time.
+    /// Default task allocations indexed by hart; contained harts have zero bytes.
+    pub task_stack_bytes: &'static [u32],
+    /// Maximum IRQ allocation per used hart; proven images are sized at link time.
     pub irq_stack_bytes: u32,
-    /// The harts stage two runs on: 1 or 2.
+    /// The complete hart geometry, derived from the chip's facts.
     pub harts: u32,
+    /// The hart that performs primary initialization.
+    pub boot_hart: u32,
     /// The Flash span the bootstrap keeps cold for its Flash timing tuning;
     /// zero on a chip whose bootstrap does not tune Flash.
     pub flash_tuning_reference_bytes: u32,
@@ -167,12 +168,18 @@ impl Layout {
             self.sram.end() as u64
         ));
         assert!(self.sram.end() <= self.psram.origin);
-        assert!(self.harts == 1 || self.harts == 2);
+        assert!(self.harts > 0 && self.boot_hart < self.harts);
+        assert!(self.task_stack_bytes.len() == self.harts as usize);
+        assert!(self.task_stack_bytes[self.boot_hart as usize] > 0);
         assert!(self.retained_reserved_tail <= self.retained.length);
         // Per-hart guards belong to chip.toml and are checked by the image
         // linker; this chip-neutral layout only constrains the allocation.
         assert!(self.irq_stack_bytes >= 16 && self.irq_stack_bytes % 16 == 0);
-        assert!(self.cpu0_task_stack_bytes >= 16 && self.cpu0_task_stack_bytes.is_multiple_of(16));
+        let mut hart = 0;
+        while hart < self.task_stack_bytes.len() {
+            assert!(self.task_stack_bytes[hart].is_multiple_of(16));
+            hart += 1;
+        }
     }
 }
 

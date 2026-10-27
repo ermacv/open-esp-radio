@@ -70,16 +70,21 @@ fn memory_mismatches(profile: &Facts, layout: &Layout) -> Vec<String> {
         .placement
         .as_ref()
         .expect("a staged chip has [placement]");
-    let stack = placement
-        .range
-        .iter()
-        .find(|rule| rule.range == ["_stack_end", "_stack_start"])
-        .and_then(|rule| rule.bytes);
-    if stack != Some(u64::from(layout.cpu0_task_stack_bytes)) {
-        found.push(format!(
-            "cpu0 task stack: chip.toml {stack:?}, LAYOUT {}",
-            layout.cpu0_task_stack_bytes
-        ));
+    for (hart, &bytes) in layout.task_stack_bytes.iter().enumerate() {
+        let names = [
+            format!("__runtime_cpu{hart}_task_stack_bottom"),
+            format!("__runtime_cpu{hart}_task_stack_top"),
+        ];
+        let stack = placement
+            .range
+            .iter()
+            .find(|rule| rule.range == names)
+            .and_then(|rule| rule.bytes);
+        if stack != Some(u64::from(bytes)) {
+            found.push(format!(
+                "hart {hart} task stack: facts {stack:?}, LAYOUT {bytes}"
+            ));
+        }
     }
 
     let interrupts = profile
@@ -145,7 +150,9 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
         let mut other = layout;
         other.sram = LayoutRegion::new(layout.sram.origin(), layout.sram.length() + 16)
             .expect("region fits");
-        other.cpu0_task_stack_bytes += 16;
+        let mut defaults = layout.task_stack_bytes.to_vec();
+        *defaults.first_mut().unwrap() += 16;
+        other.task_stack_bytes = Box::leak(defaults.into_boxed_slice());
         other.irq_stack_bytes += 16;
         assert!(memory_mismatches(&base, &other).len() >= 3, "{id}");
     }

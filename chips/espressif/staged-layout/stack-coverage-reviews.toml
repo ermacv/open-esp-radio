@@ -1,0 +1,38 @@
+# Assembly entries owned by the staged platform. Each chip stack policy names this file.
+schema = 1
+
+[[reviewed]]
+symbols = ["_runtime_irq_exit", "_runtime_stack_bootstrap", "_start_trap"]
+category = "assembly"
+source = "chips/espressif/staged-runtime/src/vectors.s"
+reason = "Handwritten stack-switch, interrupt-entry and checked-exit assembly, outside compiler frame metadata. This exception supplies no frame size or call-chain bound; the interrupt-stack gate bounds the interrupt entries and checks their exit from their machine code."
+
+[[reviewed]]
+symbols = ["_runtime_start", "_runtime_enable_fpu"]
+category = "assembly"
+source = "chips/espressif/staged-runtime/src/entry.rs"
+reason = "Assembly boot entry and FPU enable run before normal tasks; no compiler frame is claimed."
+
+[[reviewed]]
+symbols = ["strlen", "memcpy", "compiler_builtins::mem::memcpy", "memset"]
+category = "compiler-runtime"
+source = "rustc 1.97.1 library/compiler-builtins/compiler-builtins/src/mem/mod.rs and src/macros.rs"
+reason = "Pinned compiler memory builtins and their assembly wrappers lack emitted frame metadata in the final image. This review supplies no frame size or call-chain bound: the stack analysis must prove their frames and every callee from machine code."
+
+[[reviewed]]
+symbols = ["_start", "_bootstrap_trap", "_bootstrap_enable_fpu"]
+category = "assembly"
+source = "chips/espressif/staged-bootstrap/src/entry.rs"
+reason = "Reset installs the stack, clears BSS and enters bootstrap_main. The trap stops the hart; no compiler frame is claimed."
+
+[[reviewed]]
+symbols = ["_runtime_mtvt"]
+category = "vector-data"
+source = "chips/espressif/staged-runtime/src/vectors.s"
+reason = "The staged runtime's own dispatch table is data, not a compiler-generated function. The interrupt-stack gate bounds its handlers."
+
+[[reviewed]]
+symbols = ["_trap_section_origin", "_rwtext_start"]
+category = "linker-label"
+source = "chips/espressif/staged-layout/linker/bootstrap/sections.x"
+reason = "Bootstrap SRAM section boundaries contain no instructions of their own. The code they precede is analysed under its own symbols."

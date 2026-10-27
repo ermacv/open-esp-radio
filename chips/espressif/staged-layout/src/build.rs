@@ -82,26 +82,18 @@ pub fn configure_runtime(
     layout: &Layout,
     runtime_psram: Region,
     chip_linker_dir: &Path,
-) {
-    println!("cargo:rerun-if-env-changed=OPEN_RADIO_CPU0_TASK_STACK_BYTES");
-    let task_stack_bytes = match std::env::var("OPEN_RADIO_CPU0_TASK_STACK_BYTES") {
-        Ok(value) => image_task_stack_bytes(&value, layout.psram.length())
-            .expect("valid image task stack allocation"),
-        Err(std::env::VarError::NotPresent) => layout.cpu0_task_stack_bytes,
-        Err(std::env::VarError::NotUnicode(_)) => panic!("task stack allocation is not Unicode"),
-    };
-    println!("cargo:rerun-if-env-changed=OPEN_RADIO_IRQ_STACK_BYTES");
-    let irq_stack_bytes = match std::env::var("OPEN_RADIO_IRQ_STACK_BYTES") {
-        Ok(value) => image_irq_stack_bytes(&value).expect("valid image IRQ stack allocation"),
-        Err(std::env::VarError::NotPresent) => layout.irq_stack_bytes,
-        Err(std::env::VarError::NotUnicode(_)) => panic!("IRQ stack allocation is not Unicode"),
-    };
-    println!("cargo:rerun-if-env-changed=OPEN_RADIO_UNUSED_IRQ_STACK_HARTS");
-    let unused_irq_harts = match std::env::var("OPEN_RADIO_UNUSED_IRQ_STACK_HARTS") {
-        Ok(value) => unused_harts(&value).expect("valid unused IRQ stack harts"),
-        Err(std::env::VarError::NotPresent) => std::vec::Vec::new(),
-        Err(std::env::VarError::NotUnicode(_)) => panic!("unused IRQ stack harts are not Unicode"),
-    };
+) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    for (hart, &default_task) in layout.task_stack_bytes.iter().enumerate() {
+        let task = stack_allocation("TASK", hart, default_task, layout.psram.length())?;
+        let default_irq = if default_task == 0 {
+            0
+        } else {
+            layout.irq_stack_bytes
+        };
+        let irq = stack_allocation("IRQ", hart, default_irq, layout.sram.length())?;
+        defsym(bin, &std::format!("TASK_STACK_HART{hart}_BYTES"), task);
+        defsym(bin, &std::format!("IRQ_STACK_HART{hart}_BYTES"), irq);
+    }
     link(
         bin,
         layout,
@@ -127,16 +119,6 @@ pub fn configure_runtime(
         ("STAGE_TWO_MAGIC", stage_two::MAGIC),
         ("STAGE_TWO_ABI_VERSION", stage_two::ABI_VERSION),
         ("STAGE_TWO_HEADER_BYTES", stage_two::HEADER_BYTES as u32),
-        ("CPU0_PSRAM_TASK_STACK_BYTES", task_stack_bytes),
-        ("IRQ_STACK_HART0_BYTES", irq_stack_bytes),
-        (
-            "IRQ_STACK_HART1_BYTES",
-            if layout.harts > 1 && !unused_irq_harts.contains(&1) {
-                irq_stack_bytes
-            } else {
-                0
-            },
-        ),
         ("HART_COUNT", layout.harts),
         ("RETAINED_RESERVED_TAIL", layout.retained_reserved_tail),
         (
@@ -148,41 +130,34 @@ pub fn configure_runtime(
     }
     println!("cargo:rerun-if-env-changed={LAYOUT_SEED_ENV}");
     let seed = std::env::var(LAYOUT_SEED_ENV).ok();
-    let seed = layout_seed(seed.as_deref()).unwrap_or_else(|error| panic!("{error}"));
+    let seed = layout_seed(seed.as_deref())?;
     for argument in shuffle_arguments(seed) {
         println!("cargo:rustc-link-arg-bin={bin}={argument}");
     }
+    Ok(())
 }
 
-/// The harts whose interrupt stack the image's policy declares unused, from
-/// the comma-separated `OPEN_RADIO_UNUSED_IRQ_STACK_HARTS`. The linker script
-/// has a stack for no hart but 0 and 1, and hart 0 runs the runtime.
-fn unused_harts(value: &str) -> Result<std::vec::Vec<u32>, &'static str> {
-    value
-        .split(',')
-        .map(|hart| match hart {
-            "1" => Ok(1),
-            _ => Err("only hart 1's interrupt stack can be unused"),
-        })
-        .collect()
-}
-
-fn image_task_stack_bytes(value: &str, psram_bytes: u32) -> Result<u32, &'static str> {
-    let bytes: u32 = value
-        .parse()
-        .map_err(|_| "task stack allocation is not a u32")?;
-    if bytes == 0 || bytes % 16 != 0 || bytes >= psram_bytes {
-        return Err("task stack allocation must be positive, aligned to 16 bytes and fit PSRAM");
+fn stack_allocation(
+    kind: &str,
+    hart: usize,
+    default: u32,
+    memory: u32,
+) -> Result<u32, std::boxed::Box<dyn std::error::Error>> {
+    let key = std::format!("OPEN_RADIO_{kind}_STACK_HART{hart}_BYTES");
+    println!("cargo:rerun-if-env-changed={key}");
+    match std::env::var(&key) {
+        Ok(value) => Ok(
+            image_stack_bytes(&value, memory).map_err(|error| std::format!("{key}: {error}"))?
+        ),
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(error) => Err(error.into()),
     }
-    Ok(bytes)
 }
 
-fn image_irq_stack_bytes(value: &str) -> Result<u32, &'static str> {
-    let bytes: u32 = value
-        .parse()
-        .map_err(|_| "IRQ stack allocation is not a u32")?;
-    if bytes == 0 || bytes % 16 != 0 {
-        return Err("IRQ stack allocation must be positive and aligned to 16 bytes");
+fn image_stack_bytes(value: &str, memory: u32) -> Result<u32, &'static str> {
+    let bytes: u32 = value.parse().map_err(|_| "stack allocation is not a u32")?;
+    if bytes % 16 != 0 || bytes >= memory {
+        return Err("stack allocation must be aligned to 16 bytes and fit its memory");
     }
     Ok(bytes)
 }
@@ -269,20 +244,15 @@ pub fn configure_bootstrap(
 mod tests {
     use super::*;
     #[test]
-    fn an_explicit_task_allocation_is_aligned_positive_and_within_psram() {
-        assert_eq!(image_task_stack_bytes("1048576", 1 << 24), Ok(1 << 20));
-        for value in ["", "-1", "0", "17", "16777216", "4294967296"] {
-            assert!(image_task_stack_bytes(value, 1 << 24).is_err(), "{value}");
+    fn stack_allocations_preserve_explicit_zero_and_reject_bad_geometry() {
+        for bytes in [0, 16, 1048576] {
+            assert_eq!(
+                image_stack_bytes(&std::format!("{bytes}"), 1 << 24),
+                Ok(bytes)
+            );
         }
-    }
-
-    #[test]
-    fn an_explicit_irq_stack_allocation_never_silently_falls_back() {
-        assert_eq!(image_irq_stack_bytes("65536"), Ok(65536));
-        // The chip contract's per-hart guards are checked at image link time.
-        assert_eq!(image_irq_stack_bytes("1024"), Ok(1024));
-        for value in ["", "0", "65537", "-1", "4294967296"] {
-            assert!(image_irq_stack_bytes(value).is_err(), "{value}");
+        for value in ["", "-1", "17", "16777216", "4294967296"] {
+            assert!(image_stack_bytes(value, 1 << 24).is_err(), "{value}");
         }
     }
 

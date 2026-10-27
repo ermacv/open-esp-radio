@@ -612,7 +612,10 @@ needs:
   panic analysis.
   `entry!` mints `StageTwoHandoff` directly and passes it to the safe
   `Handoff::from_proof` wrapper. One extern block in `layout` declares the
-  linker and vector address markers. The panic handler raises its hart's CLIC
+  linker and vector address markers. Generated per-hart declarations expand
+  inside this same block; indexed address expressions add no dereference or
+  additional unsafe site. Empty task and IRQ ranges remain explicit zero-byte
+  allocations. The panic handler raises its hart's CLIC
   threshold to the maximum, clears MIE and executes a compiler fence before
   claiming or writing its `retained_static!` slot. Its claim stays held
   through the image's hook until reset. Nested panic

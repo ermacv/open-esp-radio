@@ -46,11 +46,11 @@ fn summary() -> Summary {
                     (".data".into(), ram(100)),
                     (".bss".into(), ram(200)),
                 ]),
-                allocated_stacks: BTreeMap::from([("cpu0".into(), 8192)]),
+                allocated_stacks: BTreeMap::from([("boot".into(), 8192)]),
                 types: BTreeMap::from([("fixture::Large<u32>".into(), 256)]),
                 frames: BTreeMap::from([("fixture::poll<u32>".into(), vec![256])]),
                 bounds: BTreeMap::from([(
-                    "cpu0".into(),
+                    "boot".into(),
                     StackBound {
                         root: "main".into(),
                         bytes: 2048,
@@ -108,8 +108,8 @@ fn type_frame_and_bound_growth_is_reported_never_stopped() {
             match kind {
                 "type" => *m.types.values_mut().next().unwrap() += growth,
                 "frame" => m.frames.values_mut().next().unwrap()[0] += growth,
-                "bound" => m.bounds.get_mut("cpu0").unwrap().bytes += growth,
-                _ => m.bounds.get_mut("cpu0").unwrap().maximum_frame += growth,
+                "bound" => m.bounds.get_mut("boot").unwrap().bytes += growth,
+                _ => m.bounds.get_mut("boot").unwrap().maximum_frame += growth,
             }
             assert_eq!(
                 compare(&a, &b).unwrap().0,
@@ -140,11 +140,11 @@ fn sram_section_and_allocated_stack_growth_is_reported_never_stopped() {
         let mut b = a.clone();
         runtime(&mut b)
             .allocated_stacks
-            .insert("cpu0".into(), bytes);
+            .insert("boot".into(), bytes);
         let (verdict, _, shown) = compare(&a, &b).unwrap();
         assert_eq!(verdict, expected);
         assert_eq!(
-            shown.contains("GROWTH: ") && shown.contains("allocated stack `cpu0`"),
+            shown.contains("GROWTH: ") && shown.contains("allocated stack `boot`"),
             bytes > 8192
         );
     }
@@ -158,7 +158,7 @@ fn sram_section_and_allocated_stack_growth_is_reported_never_stopped() {
 fn a_new_hole_is_reported_and_an_equal_count_cannot_hide_a_different_one() {
     let a = summary();
     let mut b = a.clone();
-    runtime(&mut b).bounds.get_mut("cpu0").unwrap().holes = BTreeSet::from([hole("new")]);
+    runtime(&mut b).bounds.get_mut("boot").unwrap().holes = BTreeSet::from([hole("new")]);
     let (verdict, _, shown) = compare(&a, &b).unwrap();
     assert_eq!(verdict, Verdict::Report);
     assert!(shown.contains("new hole: new+0x8"));
@@ -246,18 +246,20 @@ fn stack_allocation_flags_are_reported_by_the_allocation_rule() {
         "runtime".into(),
         BTreeMap::from([
             ("RUSTFLAGS".into(), "same compiler flags".into()),
-            ("OPEN_RADIO_IRQ_STACK_BYTES".into(), "8192".into()),
+            (
+                format!("OPEN_RADIO_IRQ_STACK_HART{}_BYTES", 0),
+                "8192".into(),
+            ),
         ]),
     );
     let mut b = a.clone();
-    b.provenance
-        .flags
-        .get_mut("runtime")
-        .unwrap()
-        .insert("OPEN_RADIO_IRQ_STACK_BYTES".into(), "16384".into());
+    b.provenance.flags.get_mut("runtime").unwrap().insert(
+        format!("OPEN_RADIO_IRQ_STACK_HART{}_BYTES", 0),
+        "16384".into(),
+    );
     runtime(&mut b)
         .allocated_stacks
-        .insert("cpu0".into(), 16384);
+        .insert("boot".into(), 16384);
     assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
 }
 
@@ -376,18 +378,18 @@ fn source_hole_identity_ignores_offsets_but_retains_chain_and_multiplicity() {
         offset: 900,
         ..hole("old")
     };
-    runtime(&mut b).bounds.get_mut("cpu0").unwrap().holes = BTreeSet::from([moved.clone()]);
+    runtime(&mut b).bounds.get_mut("boot").unwrap().holes = BTreeSet::from([moved.clone()]);
     assert!(!compare(&a, &b).unwrap().2.contains("new hole:"));
     let mut changed = b.clone();
     let h = Hole {
         inline_chain: vec!["other::inline".into()],
         ..moved.clone()
     };
-    runtime(&mut changed).bounds.get_mut("cpu0").unwrap().holes = BTreeSet::from([h]);
+    runtime(&mut changed).bounds.get_mut("boot").unwrap().holes = BTreeSet::from([h]);
     assert_eq!(compare(&a, &changed).unwrap().0, Verdict::Report);
     runtime(&mut b)
         .bounds
-        .get_mut("cpu0")
+        .get_mut("boot")
         .unwrap()
         .holes
         .insert(Hole {
@@ -624,18 +626,18 @@ fn a_composition_uses_the_sum_without_weakening_same_image_provenance() {
     runtime(&mut head).sections.get_mut(".bss").unwrap().bytes = 400;
     runtime(&mut head)
         .allocated_stacks
-        .insert("cpu0".into(), 16384);
+        .insert("boot".into(), 16384);
     assert!(compare(&a, &head).is_err());
     assert_eq!(
         composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
         Verdict::Report
     );
-    *runtime(&mut head).allocated_stacks.get_mut("cpu0").unwrap() += 1;
+    *runtime(&mut head).allocated_stacks.get_mut("boot").unwrap() += 1;
     assert_eq!(
         composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
         Verdict::Report
     );
-    *runtime(&mut head).allocated_stacks.get_mut("cpu0").unwrap() -= 1;
+    *runtime(&mut head).allocated_stacks.get_mut("boot").unwrap() -= 1;
     runtime(&mut head).sections.get_mut(".bss").unwrap().bytes += 1;
     assert_eq!(
         composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
@@ -682,7 +684,7 @@ fn an_unused_interrupt_stack_is_an_allocation_difference_not_an_incompatible_bui
         .flags
         .get_mut("runtime")
         .unwrap()
-        .insert("OPEN_RADIO_UNUSED_IRQ_STACK_HARTS".into(), "1".into());
+        .insert(format!("OPEN_RADIO_IRQ_STACK_HART{}_BYTES", 3), "0".into());
     runtime(&mut a)
         .allocated_stacks
         .insert("hart1_irq".into(), 2144);

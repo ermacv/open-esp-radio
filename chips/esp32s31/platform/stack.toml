@@ -9,10 +9,9 @@ coverage_policy = "../../espressif/staged-layout/stack-coverage.toml"
 # selected runtime image.
 max_move_bytes = 4096
 
-# The CPU0 task stack of an image whose policy sets no `allocation_bytes`
-# and that does not declare it proven (192 KiB in PSRAM). The chip's layout
-# crate links it and the chip profile's placement rule holds the image to it.
-default_cpu0_task_stack_bytes = 0x30000
+# Default PSRAM task allocations, indexed by the platform hart geometry.
+# A contained hart has an explicit zero allocation.
+default_task_stack_bytes = { 0 = 0x30000, 1 = 0 }
 
 # Each stack is bounded from the function that runs on it from its top: the
 # worst-case call chain of that root, from the image's machine code and the
@@ -23,7 +22,7 @@ default_cpu0_task_stack_bytes = 0x30000
 # absolute headroom runtime stack painting holds every exercised workload to.
 
 # `_runtime_start` switches to the top of this stack (`_runtime_stack_bootstrap`)
-# and tail-calls `runtime_main`, which runs CPU0's executor for good.
+# and tail-calls `runtime_main`, which runs the boot hart's executor.
 [core.0.task_stack]
 root = "runtime_main"
 bottom_symbol = "__runtime_cpu0_task_stack_bottom"
@@ -35,9 +34,8 @@ minimum_free_bytes = 16384
 # separate fixed free-byte reserve.
 [core.0.interrupt_stack]
 
-# Core 1 runs nothing: the esp-hal fork holds it in reset
-# (chips/esp32s31/notes/core1-boot.md) and the image gate proves that no
-# image starts it, routes an interrupt to it or allocates it a stack.
+# Secondary harts remain contained by the HAL. The image gate proves no
+# linked starter, route or stack allocation admits them.
 [core.1.task_stack]
 unused = true
 
