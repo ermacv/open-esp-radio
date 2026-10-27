@@ -46,13 +46,13 @@ pub mod build {
     }
 
     /// Link binary `bin` as a stage-two runtime of this board.
-    pub fn configure_runtime(bin: &str) {
+    pub fn configure_runtime(bin: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         oer_espressif_staged_layout::build::configure_runtime(
             bin,
             &super::LAYOUT,
             const { super::LAYOUT.runtime_psram().expect("runtime PSRAM fits") },
             &linker_dir(),
-        );
+        )
     }
 
     /// Link binary `bin` as this board's Flash-resident bootstrap.

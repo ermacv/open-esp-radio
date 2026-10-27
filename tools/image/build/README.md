@@ -51,11 +51,10 @@ App builds still report task-stack bounds, the bootstrap-stack bound and placeme
 `cargo fw flash` uses an existing bundle without rerunning its checks.
 For app `build`, a `partial + ?` interrupt stack, an exceeded budget or an
 unadmitted assumption fails the build and CI; a bound conditional only on
-the admitted executor invariant passes with a warning. An image that declares
-`task-stack = "proven"` under its `[package.metadata.open-radio]` is held to
-more: any unresolved path in a task stack's bound fails its build, with the
-unresolved sites listed, and `runtime-stack.txt` says the image sizes the
-stacks from their bound. A task stack whose image declares it proven is sized
+the admitted executor invariant passes with a warning. Every used hart's task stack requires a complete bound at link time. An image
+that declares `task-stack = "proven"` under its `[package.metadata.open-radio]`
+selects sizing from those bounds, and `runtime-stack.txt` reports that source.
+A task stack whose image declares it proven is sized
 at link time to its bound (proven, or conditional on an admitted assumption)
 plus its policy's minimum free bytes, by the image linker (see the
 [image linker](../linker/README.md)); `runtime-stack.txt` names the source of
@@ -225,35 +224,19 @@ and reasons, including warnings or failures. This gate changes no compiler
 flags, frame coverage, IRQ guards, stack allocations or stack bounds.
 
 The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 6), extended
-by the HIL target's policy. Every image runs its tasks on CPU0; none starts
+by the HIL target's policy. Every image runs its tasks on the boot hart; none starts
 the second S31 core. Each stack names the function that
 runs on it from its top (its root, by symbol), its storage (a sized symbol, or a
 linker script's bottom and top symbols) and `minimum_free_bytes`: the root's
 worst-case call chain (`Analysis::bound_with`) must leave the storage that
-many bytes. The runtime's root is `runtime_main` on CPU0's task stack, which
+many bytes. The runtime's root is `runtime_main` on the boot hart's task stack, which
 the platform runtime's assembly enters at the stack's top; the bootstrap's is
 the staged bootstrap's `bootstrap_main`. A root the image lacks fails, as does a stack
 without storage.
-Unless the image declares `task-stack = "proven"`, a task stack's bound may
-be `partial + ?`: an executor's task polls and trait
-objects leave sites no fact resolves. It passes with a warning when the part
-it proves fits, and the report lists every unresolved site with its reason
-and function; runtime stack painting, with the same reserves (the build hands
-them to the firmware as `OPEN_RADIO_*_STACK_MINIMUM_FREE_BYTES`), checks the
-exercised call chains. The gate also fails an ELF without `.stack_sizes`
-records and every function of `oer-analysis-riscv-stack`'s inventory without a record
-that `stack-coverage.toml` does not review exactly once (assembly, vector data,
-compiler runtime or a linker script's section label; a review supplies no
-frame). The analysis of one image runs within
-`oer_image_checks::stack::budget`: 10^9 work units, 512 MiB of working memory
-(everything the analysis of the image and its ROM holds, as the budget's
-rustdoc lists it) and 5 minutes, chosen by the owner from the measured
-analysis of every image class; running out fails the gate
-with `ResourceLimited`. Reports go to
-`runtime-stack.txt` and `bootstrap-stack.txt`: what the analysis used of its
-work units and working memory, coverage, then per stack its bound (proven,
-conditional or partial), budget, headroom, deepest path and unresolved
-sites.
+Every used hart's task stack requires a complete bound. The image's
+`task-stack = "proven"` declaration selects sizing from that bound; without
+it, per-hart explicit allocations or chip defaults remain exact capacities.
+Unused harts link zero bytes for both stack kinds.
 
 [`oer_image_checks::interrupts`](../checks/src/interrupts.rs) implements the
 runtime's interrupt gate. It bounds each hart's interrupt stack from the

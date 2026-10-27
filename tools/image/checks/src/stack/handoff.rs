@@ -8,7 +8,7 @@
 //! 1. in the bootstrap, an indirect jump whose register provably holds the
 //!    entry's address;
 //! 2. in stage two, every path from the entry installs the stack pointer
-//!    (`sp` = the CPU0 task stack's top) before anything reads `sp` or
+//!    (`sp` = the boot hart task stack's top) before anything reads `sp` or
 //!    leaves the function other than through a call that does the same.
 //!
 //! Anything else stays a hole, as before.
@@ -317,7 +317,7 @@ pub(super) fn installs_stack_pointer(
             };
             if dest.0 != 2 || src1.0 != 2 || value.wrapping_add(imm.as_u32()) != top {
                 return Err(format!(
-                    "sp is not set to the CPU0 task stack's top at {pc:#010x}"
+                    "sp is not set to the boot hart task stack's top at {pc:#010x}"
                 ));
             }
             continue;

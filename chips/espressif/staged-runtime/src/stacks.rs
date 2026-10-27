@@ -25,7 +25,7 @@
 //! trigger watches the chip contract's guard of each hart's interrupt stack, so an
 //! overflow traps before it reaches the state below the stack.
 //!
-//! The runtime linker script reserves the CPU0 task stack and sizes each
+//! The runtime linker script reserves every hart's task stack and sizes each
 //! interrupt stack from its bound or contract maximum; this module finds them by
 //! their bounding symbols.
 
@@ -81,55 +81,36 @@ const IRQ_STACK_GUARD_TRIGGER: usize = 2;
 const TASK_STACK_GUARD_TRIGGER: usize = 0;
 
 #[cfg(target_arch = "riscv32")]
-use crate::layout::{
-    __runtime_cpu0_irq_stack_bottom, __runtime_cpu0_irq_stack_guard_bytes,
-    __runtime_cpu0_irq_stack_top, __runtime_cpu0_task_stack_bottom, __runtime_cpu0_task_stack_top,
-    __runtime_cpu1_irq_stack_bottom, __runtime_cpu1_irq_stack_guard_bytes,
-    __runtime_cpu1_irq_stack_top, _runtime_mtvt, _start_trap,
-};
+use crate::layout::{_runtime_mtvt, _start_trap};
 
-/// `hart`'s interrupt stack as `bottom..top`; `None` for a hart without one.
+/// A nonempty interrupt stack belongs to exactly one admitted hart.
 #[cfg(target_arch = "riscv32")]
 #[inline(always)]
 fn interrupt_stack(hart: usize) -> Option<core::ops::Range<usize>> {
-    let (bottom, top) = match hart {
-        0 => (
-            ptr::addr_of!(__runtime_cpu0_irq_stack_bottom),
-            ptr::addr_of!(__runtime_cpu0_irq_stack_top),
-        ),
-        1 if HARTS > 1 => (
-            ptr::addr_of!(__runtime_cpu1_irq_stack_bottom),
-            ptr::addr_of!(__runtime_cpu1_irq_stack_top),
-        ),
-        _ => return None,
-    };
-    Some(bottom as usize..top as usize)
+    crate::layout::stack_symbols()
+        .get(hart)
+        .map(|stack| stack.irq.clone())
+        .filter(|stack| !stack.is_empty())
 }
 
-/// Absolute linker symbols supplied from this chip's per-hart contract.
 #[cfg(target_arch = "riscv32")]
 #[inline(always)]
-fn interrupt_stack_guard_bytes(hart: usize) -> usize {
-    match hart {
-        0 => ptr::addr_of!(__runtime_cpu0_irq_stack_guard_bytes) as usize,
-        1 if HARTS > 1 => ptr::addr_of!(__runtime_cpu1_irq_stack_guard_bytes) as usize,
-        _ => 0,
-    }
+fn interrupt_stack_guard_bytes(hart: usize) -> Option<usize> {
+    crate::layout::stack_symbols()
+        .get(hart)
+        .map(|stack| stack.guard)
 }
 
-/// Bytes of hart 0's interrupt stack, as the runtime linker script reserved
-/// it. Other harts may have different allocations.
+/// Linked interrupt allocation for a checked hart, including explicit zero.
 #[cfg(target_arch = "riscv32")]
-pub fn irq_stack_bytes() -> usize {
-    interrupt_stack(oer_esp32s31_hal::platform::BOOT_HART.get()).map_or(0, |stack| stack.len())
+pub fn irq_stack_bytes(hart: oer_esp32s31_hal::platform::Hart) -> usize {
+    hart.at(&crate::layout::stack_symbols()).irq.len()
 }
 
-/// Bytes of the CPU0 PSRAM task stack, as the runtime linker script reserved
-/// them.
+/// Linked PSRAM task allocation for a checked hart, including explicit zero.
 #[cfg(target_arch = "riscv32")]
-pub fn cpu0_task_stack_bytes() -> usize {
-    ptr::addr_of!(__runtime_cpu0_task_stack_top) as usize
-        - ptr::addr_of!(__runtime_cpu0_task_stack_bottom) as usize
+pub fn task_stack_bytes(hart: oer_esp32s31_hal::platform::Hart) -> usize {
+    hart.at(&crate::layout::stack_symbols()).task.len()
 }
 
 /// The current hart's id.
@@ -172,7 +153,9 @@ pub unsafe fn install_current_hart_interrupt_stack() -> Result<(), crate::BootEr
         unsafe { watermark::paint(bottom as *mut u32, stack.len() / 4) };
         painted.store(true, Ordering::Release);
     }
-    guard_interrupt_stack(bottom, interrupt_stack_guard_bytes(hart))?;
+    let guard =
+        interrupt_stack_guard_bytes(hart).ok_or(crate::BootError::NoInterruptStack { hart })?;
+    guard_interrupt_stack(bottom, guard)?;
     let (mtvec, mtvt) = vectors_of(hart);
     // SAFETY: `mtvec` names `_start_trap`, which the assembly aligns to 64
     // bytes, and `mtvt` this hart's 256-byte-aligned table in SRAM; `top` is

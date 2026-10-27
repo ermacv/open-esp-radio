@@ -72,14 +72,16 @@ wrong, each a pure function of the facts; build scripts call it, and nothing
 it writes is in git:
 
 - `tracked_layout`: a chip's `LAYOUT` (`oer-espressif-staged-layout`), from
-  its facts and its stack policy's `default_cpu0_task_stack_bytes`
+  its facts and its stack policy's `default_task_stack_bytes`
   (`chips/<id>/platform/stack.toml`), which its layout crate's build writes
   and every `--defsym` of the linker scripts comes from;
 - `Vectors`: the staged runtime's vector tables, every hart's line entries
   (`RUNTIME_IRQ_ENTRIES`, `RUNTIME_VECTOR_TABLES` around the hand-written
   entry and exit of `vectors.s`), every line's default handler (the linker
   fragment `oer-staged-runtime-vectors.x`) and the interrupt table's
-  `LINES`, from the chip's harts and CLIC lines.
+  `LINES`, from the chip's harts and CLIC lines. The same geometry generates
+  `oer-staged-runtime-stacks.x`, runtime marker tables and exact vector coverage;
+  handwritten ABI reviews live in `staged-layout/stack-coverage-reviews.toml`.
 - `rom_script`: the ROM linker assignments from `[[rom.functions]]`, each
   with a `name`, `address` and pinned `SOURCE:` citation in `source`. The
   S31 layout build writes `[rom] linker-script` under its `OUT_DIR` and

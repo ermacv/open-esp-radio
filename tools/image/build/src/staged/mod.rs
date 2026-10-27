@@ -68,7 +68,7 @@ pub(crate) fn build(
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?;
     if task_stack_proven {
         // One source of the size: the bound, not also the policy.
-        policy.proven_task_stack()?;
+        policy.proven_task_stacks()?;
     }
     let Compiled {
         runtime_elf,

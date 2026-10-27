@@ -162,32 +162,40 @@ impl Source for Tree<'_> {
     }
 }
 
-/// Size the CPU0 task stack's placement rule by the chip's stack policy
-/// (`default_cpu0_task_stack_bytes`), which the chip's layout links for an
-/// image whose policy names no allocation; an image's own allocation then
-/// replaces it ([`policy::StackPolicy::runtime_profile`]).
+/// Bind each exact task range to the corresponding chip-policy default.
 fn default_task_stack(source: &mut dyn Source, facts: &mut Facts) -> Result<()> {
-    let Some(rule) = facts.placement.as_mut().and_then(|placement| {
-        placement
-            .range
-            .iter_mut()
-            .find(|rule| rule.range == ["_stack_end", "_stack_start"])
-    }) else {
+    let Some(interrupts) = &facts.interrupts else {
         return Ok(());
     };
-    if rule.bytes.is_some() {
-        return Err(
-            "the CPU0 task stack's size is the chip's stack policy's, not a placement fact".into(),
-        );
-    }
     let policy = format!(
         "{}/stack.toml",
         oer_espressif_facts::platform_dir(&facts.id)
     );
     let text = source.read(&policy)?;
-    let bytes = oer_espressif_facts::generate::default_cpu0_task_stack_bytes(&text)
-        .map_err(|error| format!("{policy}: {error}"))?;
-    rule.bytes = Some(u64::from(bytes));
+    let defaults = oer_espressif_facts::generate::default_task_stack_bytes(
+        &text,
+        interrupts.harts.len() as u32,
+    )
+    .map_err(|error| format!("{policy}: {error}"))?;
+    let placement = facts
+        .placement
+        .as_mut()
+        .ok_or("staged stacks need placement rules")?;
+    for (&hart, bytes) in interrupts.harts.iter().zip(defaults) {
+        let names = [
+            format!("__runtime_cpu{hart}_task_stack_bottom"),
+            format!("__runtime_cpu{hart}_task_stack_top"),
+        ];
+        let rule = placement
+            .range
+            .iter_mut()
+            .find(|rule| rule.range == names)
+            .ok_or("missing per-hart task stack placement rule")?;
+        if rule.bytes.is_some() {
+            return Err("task stack sizes belong to the chip stack policy".into());
+        }
+        rule.bytes = Some(u64::from(bytes));
+    }
     Ok(())
 }
 
@@ -384,17 +392,23 @@ mod tests {
             Ok(placement
                 .range
                 .into_iter()
-                .find(|rule| rule.range == ["_stack_end", "_stack_start"])
+                .find(|rule| {
+                    rule.range
+                        == [
+                            format!("__runtime_cpu{}_task_stack_bottom", 0),
+                            format!("__runtime_cpu{}_task_stack_top", 0),
+                        ]
+                })
                 .and_then(|rule| rule.bytes))
         };
         assert_eq!(bytes().unwrap(), Some(0x3_0000));
         let policy = root.join("chips/esp32s31/platform/stack.toml");
         let text = std::fs::read_to_string(&policy).unwrap();
-        let key = "default_cpu0_task_stack_bytes = 0x30000";
+        let key = "default_task_stack_bytes = { 0 = 0x30000, 1 = 0 }";
         assert!(text.contains(key));
         std::fs::write(
             &policy,
-            text.replace(key, "default_cpu0_task_stack_bytes = 0x40000"),
+            text.replace(key, "default_task_stack_bytes = { 0 = 0x40000, 1 = 0 }"),
         )
         .unwrap();
         assert_eq!(bytes().unwrap(), Some(0x4_0000));

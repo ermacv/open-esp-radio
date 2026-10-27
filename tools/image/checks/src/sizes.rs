@@ -152,7 +152,7 @@ impl Measurements {
             policy
                 .stacks()?
                 .bootstrap_stack
-                .map(|s| vec![("bootstrap stack", s)])
+                .map(|s| vec![oer_chip_profile::policy::StackRoot::bootstrap(s)])
                 .unwrap_or_default()
         } else {
             policy.runtime_task_stacks()
@@ -273,8 +273,8 @@ impl Measurements {
 
     pub(crate) fn task(&mut self, image: &Image, stack: &crate::stack::StackBound) -> Result<()> {
         self.allocated_stacks
-            .insert(stack.name.into(), stack.linked.0);
-        self.bound(image, stack.name, &stack.linked.1, 0)
+            .insert(stack.name.clone(), stack.linked.0);
+        self.bound(image, &stack.name, &stack.linked.1, 0)
     }
 
     pub(crate) fn interrupts(

@@ -66,7 +66,7 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 | Context | Runs | Rule |
 | --- | --- | --- |
-| P3, core 0 | radio interrupt handlers; the radio doorbell on `FROM_CPU` line 3, a source of its radio's interrupt part; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
+| P3, boot hart | radio interrupt handlers; the radio doorbell on `FROM_CPU` line 3, a source of its radio's interrupt part; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
 | P2 | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread | role bodies, network stack, application | — |
 
@@ -145,7 +145,7 @@ moves; ownership, orchestration and wiring are rebuilt.
   The image check applies each class's rules; the level number grants
   nothing.
 - Images have no reachable panics. The image check counts, for each root
-  (the bootstrap, CPU0 as stage two's entry, each task, each interrupt
+  (the bootstrap, each used hart's task entry, each task, each interrupt
   context), the panic sites it reaches, by the crate layer of the function
   holding them: PAC, HAL, chips, portable, protocols, firmware, core,
   embassy, third-party, unnamed (`#[no_mangle]` and assembly
@@ -160,10 +160,13 @@ moves; ownership, orchestration and wiring are rebuilt.
   enforces it.
 - Interrupt stacks have a bound, proven or conditional on an admitted
   assumption (the reports name it), and are sized from it at link time;
-  task stacks are reported, and an image may declare them proven: a task
-  stack whose image declares it proven fails the build on any unresolved path
-  and is sized at link time to its bound plus its policy's minimum free
-  bytes. The bootstrap jumps to a stage-two entry known at build time and
+  every used hart's task stack requires a complete bound. Images declaring
+  `task-stack = "proven"` size each task allocation at link time to that
+  bound plus its policy's minimum free bytes. Every hart has both stacks
+  accounted for; contained harts link explicit zero-byte ranges. Stack
+  sections, linker assertions, marker tables and vector coverage derive from
+  the same fact geometry. The bootstrap jumps to a stage-two entry known at
+  build time and
   the bootstrap stack's path ends there, once the checks verify the jump and
   that the entry installs its own stack pointer first. There is no baseline of accepted holes, and an observed depth above a
   bound fails the run. No frame
@@ -238,7 +241,7 @@ moves; ownership, orchestration and wiring are rebuilt.
   its explicit boot role. Typed indices connect their geometry to HAL reads
   and writes. Fixed indices
   and list/count mismatches fail during the build. Every current image keeps
-  secondary harts contained; `cpu1-runs` is rejected at compile time.
+  secondary harts contained; secondary execution is rejected at compile time.
   An architectural ID outside this list is `InvalidHart { raw }`, never a
   different hart. The fatal path records the full raw ID, quarantines free
   control owners and requests reset; it never takes a lent or held owner.

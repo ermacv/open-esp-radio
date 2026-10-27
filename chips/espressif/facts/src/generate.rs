@@ -15,6 +15,8 @@ use core::fmt::Write;
 
 use crate::{Facts, Region, Result, Rom};
 
+mod stacks;
+
 /// The linker assignments for exactly the ROM functions in the facts.
 /// No vendor script or libc symbols are included implicitly.
 pub fn rom_script(rom: &Rom) -> Result<String> {
@@ -32,26 +34,30 @@ pub fn rom_script(rom: &Rom) -> Result<String> {
     Ok(text)
 }
 
-/// The chip's stack policy key that sizes the CPU0 task stack of an image
-/// whose own policy names no allocation.
-pub const DEFAULT_CPU0_TASK_STACK_KEY: &str = "default_cpu0_task_stack_bytes";
-
-/// The default CPU0 task stack of a chip's stack policy
-/// (`chips/<id>/platform/stack.toml`): positive, a multiple of the 16-byte
-/// stack alignment.
-pub fn default_cpu0_task_stack_bytes(policy: &str) -> Result<u32> {
+/// Default task allocations indexed by every hart in the chip geometry.
+/// Zero is explicit storage for a contained hart.
+pub fn default_task_stack_bytes(policy: &str, harts: u32) -> Result<Vec<u32>> {
     let table: toml::Table =
         toml::from_str(policy).map_err(|error| format!("the chip's stack policy: {error}"))?;
-    let bytes = table
-        .get(DEFAULT_CPU0_TASK_STACK_KEY)
-        .ok_or_else(|| format!("the chip's stack policy names no `{DEFAULT_CPU0_TASK_STACK_KEY}`"))?
-        .as_integer()
-        .and_then(|bytes| u32::try_from(bytes).ok())
-        .filter(|bytes| *bytes > 0 && bytes % 16 == 0)
-        .ok_or_else(|| {
-            format!("`{DEFAULT_CPU0_TASK_STACK_KEY}` must be a positive u32, aligned to 16 bytes")
-        })?;
-    Ok(bytes)
+    let defaults = table
+        .get("default_task_stack_bytes")
+        .and_then(toml::Value::as_table)
+        .ok_or("the chip's stack policy needs `default_task_stack_bytes` per hart")?;
+    if defaults.len() != harts as usize {
+        return Err("task defaults must name every hart exactly once".into());
+    }
+    (0..harts)
+        .map(|hart| {
+            defaults
+                .get(&hart.to_string())
+                .and_then(toml::Value::as_integer)
+                .and_then(|bytes| u32::try_from(bytes).ok())
+                .filter(|bytes| bytes % 16 == 0)
+                .ok_or_else(|| {
+                    format!("hart {hart}'s task default must be a u32 aligned to 16 bytes").into()
+                })
+        })
+        .collect()
 }
 
 fn region(region: Region) -> String {
@@ -62,9 +68,9 @@ fn region(region: Region) -> String {
 }
 
 /// The Rust source of a chip's `LAYOUT` (`oer_espressif_staged_layout::Layout`)
-/// with its compile-time check, from its facts and the default CPU0 task
+/// with its compile-time check, from its facts and the default per-hart task
 /// stack of its stack policy.
-pub fn layout(facts: &Facts, cpu0_task_stack_bytes: u32) -> Result<String> {
+pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
     let missing = |what: &str| format!("{}: a staged layout needs {what}", facts.id);
     let memory = facts.memory.as_ref().ok_or_else(|| missing("`[memory]`"))?;
     let psram = memory.psram.ok_or_else(|| missing("the module's PSRAM"))?;
@@ -82,6 +88,13 @@ pub fn layout(facts: &Facts, cpu0_task_stack_bytes: u32) -> Result<String> {
         .ok_or_else(|| missing("`[interrupts]`"))?;
     let rom = facts.rom.as_ref().ok_or_else(|| missing("`[rom]`"))?;
     let harts = u32::try_from(interrupts.harts.len()).map_err(|_| missing("fewer harts"))?;
+    if task_stack_bytes.len() != harts as usize
+        || task_stack_bytes
+            .get(interrupts.boot_hart as usize)
+            .is_none_or(|bytes| *bytes == 0)
+    {
+        return Err("task defaults need every hart and a nonempty boot stack".into());
+    }
     let mut text = String::new();
     let _ = write!(
         text,
@@ -100,9 +113,10 @@ pub fn layout(facts: &Facts, cpu0_task_stack_bytes: u32) -> Result<String> {
          \x20   handoff_sram_margin_bytes: {margin:#x},\n\
          \x20   retained: {retained},\n\
          \x20   retained_reserved_tail: {tail},\n\
-         \x20   cpu0_task_stack_bytes: {task:#x},\n\
+         \x20   task_stack_bytes: &{task:?},\n\
          \x20   irq_stack_bytes: {irq:#x},\n\
          \x20   harts: {harts},\n\
+         \x20   boot_hart: {boot_hart},\n\
          \x20   flash_tuning_reference_bytes: {tuning:#x},\n\
          \x20   rom_script: {script:?},\n\
          }};\n\n\
@@ -122,7 +136,8 @@ pub fn layout(facts: &Facts, cpu0_task_stack_bytes: u32) -> Result<String> {
         margin = staged.handoff_sram_margin_bytes,
         retained = region(retained),
         tail = chain.retained_reserved_tail,
-        task = cpu0_task_stack_bytes,
+        task = task_stack_bytes,
+        boot_hart = interrupts.boot_hart,
         irq = interrupts.irq_stack_bytes,
         tuning = staged.flash_tuning_reference_bytes,
         script = rom.linker_script,
@@ -201,9 +216,20 @@ impl Vectors {
     pub fn assembly(&self) -> String {
         let mut text = String::from(
             "    // Generated by `oer_espressif_facts::generate::Vectors` from the\n\
-             \x20   // chip facts' interrupt contract; edit those, not this.\n\
-             \x20   .macro RUNTIME_IRQ_ENTRIES\n",
+             \x20   // chip facts' interrupt contract; edit those, not this.\n",
         );
+        for (kind, suffix) in [
+            ("TASK_BOTTOM", "task_stack_bottom"),
+            ("TASK_TOP", "task_stack_top"),
+            ("IRQ_TOP", "irq_stack_top"),
+        ] {
+            let _ = writeln!(
+                text,
+                "    .macro RUNTIME_BOOT_{kind} reg\n    la \\reg, __runtime_cpu{}_{suffix}\n    .endm",
+                self.boot_hart
+            );
+        }
+        text.push_str("    .macro RUNTIME_IRQ_ENTRIES\n");
         for (hart, line) in self.entries() {
             let _ = writeln!(text, "    IRQ_ENTRY {hart}, {line}");
         }
@@ -382,7 +408,8 @@ pub fn tracked_layout(id: &str) -> Result<(String, Vec<String>)> {
     let (facts, mut files) = tracked(id)?;
     let policy = format!("{}/stack.toml", crate::platform_dir(id));
     let text = crate::tracked::text(&policy).ok_or_else(|| format!("{policy} is not tracked"))?;
-    let layout = layout(&facts, default_cpu0_task_stack_bytes(text)?)?;
+    let harts = Vectors::of(&facts)?.harts;
+    let layout = layout(&facts, &default_task_stack_bytes(text, harts)?)?;
     files.push(policy);
     Ok((layout, files))
 }
@@ -429,25 +456,34 @@ mod tests {
     #[test]
     fn the_vectors_follow_the_chip_s_lines_and_harts() {
         let s31 = Vectors::of(&tracked("esp32s31")).expect("vectors");
-        assert_eq!((s31.lines, s31.harts, s31.slots), (48, 2, 64));
         let assembly = s31.assembly();
-        let entries: Vec<&str> = assembly
+        let entries: Vec<_> = assembly
             .lines()
             .filter_map(|line| line.trim().strip_prefix("IRQ_ENTRY "))
             .collect();
-        assert_eq!(entries.len(), 2 * 47);
-        assert_eq!(
-            (entries[0], entries[46], entries[47]),
-            ("0, 1", "0, 47", "1, 1")
-        );
-        // Each table: line 0's zero word, 47 entries, 16 words past the lines.
+        assert_eq!(entries.len(), (s31.harts * (s31.lines - 1)) as usize);
+        for hart in 0..s31.harts {
+            assert!(entries.contains(&format!("{hart}, 1").as_str()));
+            assert!(entries.contains(&format!("{hart}, {}", s31.lines - 1).as_str()));
+            assert!(!entries.contains(&format!("{hart}, 0").as_str()));
+        }
         let words = assembly
             .lines()
             .filter(|line| line.contains(".word"))
             .count();
-        assert_eq!(words, 2 * 48);
-        assert_eq!(assembly.matches(".fill 16, 4, 0").count(), 2);
-        assert_eq!(assembly.matches(".balign 256").count(), 2);
+        assert_eq!(words, (s31.harts * s31.lines) as usize);
+        assert_eq!(
+            assembly
+                .matches(&format!(".fill {}, 4, 0", s31.slots - s31.lines))
+                .count(),
+            s31.harts as usize
+        );
+        assert_eq!(
+            assembly
+                .matches(&format!(".balign {}", s31.slots * 4))
+                .count(),
+            s31.harts as usize
+        );
         assert!(!assembly.contains('{') && !assembly.contains('}'));
         // The same facts give the same text.
         let again = Vectors::of(&tracked("esp32s31")).expect("vectors");
@@ -458,62 +494,58 @@ mod tests {
     }
 
     #[test]
-    fn every_line_of_every_hart_has_its_default_handler() {
-        let vectors = Vectors {
-            lines: 4,
-            first_source_line: 2,
-            levels: 2,
-            control_bits: 1,
-            level_bits: 1,
-            tie_break: crate::TieBreak::HighestLine,
-            harts: 2,
-            boot_hart: 0,
-            slots: 8,
-        };
+    fn every_line_of_synthetic_geometries_has_a_handler_and_coverage_review() {
+        let mut vectors = Vectors::of(&tracked("esp32s31")).unwrap();
+        vectors.lines = 4;
+        vectors.slots = 8;
+        for harts in [1, 3, 7] {
+            vectors.harts = harts;
+            vectors.boot_hart = harts - 1;
+            let defaults = vectors.linker_defaults();
+            let coverage = vectors.stack_coverage().unwrap();
+            let symbols = vectors.stack_symbols();
+            let linker = vectors.stack_linker();
+            for hart in 0..harts {
+                for line in 1..vectors.lines {
+                    assert!(defaults.contains(&format!(
+                        "PROVIDE({} = oer_unhandled_interrupt);",
+                        Vectors::handler(hart, line)
+                    )));
+                    assert!(coverage.contains(&format!("{:?}", Vectors::entry(hart, line))));
+                }
+                assert!(symbols.contains(&format!("__runtime_cpu{hart}_task_stack_bottom")));
+                assert!(linker.contains(&format!("TASK_STACK_HART{hart}_BYTES")));
+            }
+            assert!(vectors.assembly().contains(&format!(
+                "__runtime_cpu{}_task_stack_top",
+                vectors.boot_hart
+            )));
+            assert_eq!(
+                entry_symbols(&vectors).len(),
+                (harts * (vectors.lines - 1)) as usize
+            );
+        }
+        let vectors = Vectors::of(&tracked("esp32s31")).unwrap();
         assert_eq!(
-            vectors
-                .linker_defaults()
-                .lines()
-                .skip(2)
-                .collect::<Vec<_>>(),
-            [
-                "PROVIDE(__oer_interrupt_h0_l1 = oer_unhandled_interrupt);",
-                "PROVIDE(__oer_interrupt_h0_l2 = oer_unhandled_interrupt);",
-                "PROVIDE(__oer_interrupt_h0_l3 = oer_unhandled_interrupt);",
-                "PROVIDE(__oer_interrupt_h1_l1 = oer_unhandled_interrupt);",
-                "PROVIDE(__oer_interrupt_h1_l2 = oer_unhandled_interrupt);",
-                "PROVIDE(__oer_interrupt_h1_l3 = oer_unhandled_interrupt);",
-            ]
+            vectors.stack_coverage().unwrap(),
+            include_str!("../../staged-layout/stack-coverage.toml")
         );
-        assert_eq!(
-            entry_symbols(&vectors),
-            [
-                "_runtime_irq_h0_l1",
-                "_runtime_irq_h0_l2",
-                "_runtime_irq_h0_l3",
-                "_runtime_irq_h1_l1",
-                "_runtime_irq_h1_l2",
-                "_runtime_irq_h1_l3",
-            ]
-        );
-        let rust = vectors.rust().expect("fits");
-        assert!(rust.contains("first: 2,\n    count: 4,\n    levels: 2,\n    harts: 2,"));
-        assert!(rust.contains("pub const VECTOR_TABLE_WORDS: usize = 8;"));
     }
 
     #[test]
     fn the_layout_is_the_facts_and_the_stack_policy_s_default() {
         let facts = tracked("esp32s31");
-        let layout = layout(&facts, 0x3_0000).expect("a staged layout");
+        let harts = Vectors::of(&facts).unwrap().harts;
+        let mut tasks = alloc::vec![0; harts as usize];
+        tasks[facts.interrupts.as_ref().unwrap().boot_hart as usize] = 0x30000;
+        let layout = layout(&facts, &tasks).expect("a staged layout");
         for field in [
             "sram: const { oer_espressif_staged_layout::Region::new(0x2f000000, 0x0007afc0).expect(\"region end fits u32\") },",
             "second_stage_loader_start: 0x2f06cfb0,",
             "psram: const { oer_espressif_staged_layout::Region::new(0x50000000, 0x01000000).expect(\"region end fits u32\") },",
             "retained: const { oer_espressif_staged_layout::Region::new(0x2e000000, 0x00008000).expect(\"region end fits u32\") },",
             "retained_reserved_tail: 24,",
-            "cpu0_task_stack_bytes: 0x30000,",
             "irq_stack_bytes: 0x8000,",
-            "harts: 2,",
             "flash_tuning_reference_bytes: 0x10000,",
             "mmu_page_bytes: 0x10000,",
             "rom_script: \"rom/esp32s31-eco0.x\",",
@@ -522,17 +554,21 @@ mod tests {
         }
         assert!(layout.contains("const _: () = LAYOUT.check();"));
         // The same facts give the same text.
-        assert_eq!(layout, super::layout(&facts, 0x3_0000).expect("again"));
+        assert_eq!(layout, super::layout(&facts, &tasks).expect("again"));
         assert!(
-            super::layout(&facts, 0x4_0000)
-                .expect("bigger")
-                .contains("0x40000,")
+            super::layout(&facts, &{
+                let mut larger = tasks.clone();
+                larger[0] = 0x40000;
+                larger
+            })
+            .expect("bigger")
+            .contains("262144")
         );
 
         let mut bare = facts.clone();
         bare.boot_chain = None;
         assert!(
-            super::layout(&bare, 0x3_0000)
+            super::layout(&bare, &tasks)
                 .expect_err("no boot chain")
                 .to_string()
                 .contains("`[boot-chain]`")
@@ -540,23 +576,31 @@ mod tests {
     }
 
     #[test]
-    fn the_default_task_stack_is_the_chip_policy_s() {
+    fn defaults_cover_the_entire_geometry_and_preserve_explicit_zeroes() {
         for id in tracked_ids() {
-            let policy = crate::tracked::text(&format!("chips/{id}/platform/stack.toml"))
-                .expect("a tracked chip stack policy");
-            assert_eq!(
-                default_cpu0_task_stack_bytes(policy).expect("named"),
-                0x3_0000
-            );
+            let policy =
+                crate::tracked::text(&format!("chips/{id}/platform/stack.toml")).expect("policy");
+            let harts = Vectors::of(&tracked(id)).unwrap().harts;
+            let defaults = default_task_stack_bytes(policy, harts).unwrap();
+            assert_eq!(defaults.len(), harts as usize);
+            assert_eq!(defaults[0], 0x30000);
+        }
+        for harts in [1, 3, 7] {
+            let values = (0..harts)
+                .map(|h| format!("{h}={}", if h == 0 { 196608 } else { 0 }))
+                .collect::<Vec<_>>()
+                .join(",");
+            let policy = format!("default_task_stack_bytes={{{values}}}");
+            assert!(default_task_stack_bytes(&policy, harts).is_ok());
+            assert!(default_task_stack_bytes(&policy, harts + 1).is_err());
         }
         for policy in [
-            "schema = 6",
-            "default_cpu0_task_stack_bytes = 0",
-            "default_cpu0_task_stack_bytes = 17",
-            "default_cpu0_task_stack_bytes = -16",
-            "default_cpu0_task_stack_bytes = 'big'",
+            "",
+            "default_task_stack_bytes={0=17}",
+            "default_task_stack_bytes={0=-16}",
+            "default_task_stack_bytes={1=16}",
         ] {
-            assert!(default_cpu0_task_stack_bytes(policy).is_err(), "{policy}");
+            assert!(default_task_stack_bytes(policy, 1).is_err());
         }
     }
 

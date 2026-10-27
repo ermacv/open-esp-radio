@@ -39,9 +39,9 @@
     .global _runtime_stack_bootstrap
     .type _runtime_stack_bootstrap, @function
 _runtime_stack_bootstrap:
-    la t0, __runtime_cpu0_task_stack_bottom
+    RUNTIME_BOOT_TASK_BOTTOM t0
     addi t0, t0, 256
-    la t1, __runtime_cpu0_task_stack_top
+    RUNTIME_BOOT_TASK_TOP t1
     addi t1, t1, -256
     li t2, 0xa55aa55a
 1:
@@ -50,8 +50,8 @@ _runtime_stack_bootstrap:
     addi t0, t0, 4
     j 1b
 2:
-    la sp, __runtime_cpu0_task_stack_top
-    la t0, __runtime_cpu0_irq_stack_top
+    RUNTIME_BOOT_TASK_TOP sp
+    RUNTIME_BOOT_IRQ_TOP t0
     csrw mscratch, t0
     ret
     .size _runtime_stack_bootstrap, . - _runtime_stack_bootstrap

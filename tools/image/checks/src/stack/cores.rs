@@ -4,7 +4,7 @@
 //!
 //! - no function that releases a core from reset or stall
 //!   (`[core-start]` of the chip profile) is linked unless a core other than
-//!   core 0 runs a task of its own, with the root the policy names;
+//!   the boot hart runs a task of its own, with the root the policy names;
 //! - no function of the cross-core call (IPC) is linked, whichever cores run;
 //! - an unused stack has no storage: its linked range is empty, or absent;
 //! - an interrupt-table entry routes to a core with an interrupt stack only
@@ -72,13 +72,22 @@ fn linked_bytes(image: &Image, bottom: &str, top: &str) -> Result<Option<u64>> {
 /// Prove the runtime `image`'s unused cores and return the report: every
 /// core with its two stacks, used or proven unused.
 pub fn audit_runtime(image: &Image, policy: &StackPolicy, profile: &Profile) -> Result<String> {
-    policy.check_cores(profile.facts.properties.cores)?;
+    let boot_hart = profile
+        .facts
+        .interrupts
+        .as_ref()
+        .ok_or("hart facts missing")?
+        .boot_hart;
+    policy.check_cores(profile.facts.properties.cores, boot_hart)?;
     let unused_tasks = policy.unused_task_cores();
     let unused_interrupts = policy.unused_interrupt_cores();
     linked_ipc(image, profile)?;
     let starters = linked_starters(image, profile);
     let mut report = String::from("core\ttask stack\tinterrupt stack\n");
-    let started: Vec<_> = unused_tasks.iter().filter(|core| **core != 0).collect();
+    let started: Vec<_> = unused_tasks
+        .iter()
+        .filter(|core| **core != boot_hart)
+        .collect();
     if !starters.is_empty() && !started.is_empty() {
         return Err(format!(
             "the image links code that starts a core, but its stack policy declares the task \
@@ -139,7 +148,7 @@ pub fn audit_runtime(image: &Image, policy: &StackPolicy, profile: &Profile) -> 
     Ok(report)
 }
 
-/// The bootstrap runs on core 0 alone: it links no starter.
+/// The bootstrap runs on the boot hart alone: it links no starter.
 pub fn audit_bootstrap(image: &Image, profile: &Profile) -> Result<()> {
     linked_ipc(image, profile)?;
     let starters = linked_starters(image, profile);
@@ -147,7 +156,7 @@ pub fn audit_bootstrap(image: &Image, profile: &Profile) -> Result<()> {
         return Ok(());
     }
     Err(format!(
-        "the bootstrap links code that starts a core; it runs on core 0 alone:\n  {}",
+        "the bootstrap links code that starts a core; it runs on the boot hart alone:\n  {}",
         starters.join("\n  ")
     )
     .into())

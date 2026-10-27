@@ -21,7 +21,7 @@ facts at build time; the host checks read the same facts.
 | Region | Current use and source |
 | --- | --- |
 | SRAM | The complete bootstrap code and ordinary constants; runtime strict and hot code, interrupt stacks, critical state and DMA storage: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
-| PSRAM | Ordinary runtime code, data and the CPU0 task stack: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
+| PSRAM | Ordinary runtime code, data and the per-hart task stacks: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 | Flash XIP | Explicit bootstrap metadata, stage-two payload and tuning-reference data: [bootstrap sections](../chips/espressif/staged-layout/linker/bootstrap/sections.x). |
 | ROM | Chip routines available to the images: [S31 ROM facts](../chips/esp32s31/platform/rom-rev0.toml) generate its ROM script in the layout build directory; [C5 ROM symbols](../chips/esp32c5/layout/linker/rom/esp32c5-eco2.x). |
 | RTC retained | Reset-retained records in `.rtc_fast.persistent`, below the reserved tail: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
@@ -53,35 +53,26 @@ contracts: [Hardware memory](hardware-memory.md).
 
 ## Stacks
 
-- **Every image accounts for every core of the chip** (`cores` in
-  `chips/<chip>/platform/chip.toml`: S31 two, C5 one), and each core has both
-  stacks, the task stack and the interrupt stack. The stack policy
-  (`[core.N.task_stack]`, `[core.N.interrupt_stack]`) names every one: a used
-  stack has a proven bound from its root; an unused stack is `unused = true`,
-  an explicit 0 bytes, which the image gate proves from the linked image.
-  Starting code on a core without a declared and proven root is a build
-  error. On S31 core 1 is unused in every image: the HAL core controller keeps it in
-  reset ([how core 1 starts](../chips/esp32s31/notes/core1-boot.md)), the
-  staged boot stops any hart but 0, no image links a core starter
-  (`[core-start]` of `chip.toml`, also forbidden in `clippy.toml`) and no
-  interrupt-table entry routes to it. The staged runtime's `critical-section`
-  is hart-local (it masks the current hart's interrupts and takes no lock),
-  so an image where hart 1 runs code may not use it until a cross-hart lock
-  without spinning exists: the runtime's `cpu1-runs` feature, which no image
-  enables, does not build
-  ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)),
-  nor does the S31 HAL's, the one that gives the cores' owner its only start
-  of hart 1 (`Cores::start_hart1`,
-  [cores rustdoc](../chips/esp32s31/hal/src/cores.rs)).
-- CPU0's task stack is in PSRAM; each used hart has an SRAM interrupt stack
-  with a guard region, a debug trigger and stack painting:
-  [stacks rustdoc](../chips/espressif/staged-runtime/src/stacks.rs).
-- An image that declares `task-stack = "proven"` gets a CPU0 task stack of
-  `align16(bound + minimum_free_bytes)`, sized by the image linker; other
-  images use their policy's `allocation_bytes`, else the chip's stack
-  policy's `default_cpu0_task_stack_bytes` (192 KiB), which the chip's
-  layout links and its profile holds the placement to.
-  See the [image linker](../tools/image/linker/README.md).
+- **Every image accounts for every hart** in the chip facts' `[interrupts] harts`.
+  Each hart has a task stack and an interrupt stack. The policy
+  (`[core.N.task_stack]`, `[core.N.interrupt_stack]`) declares both used,
+  with complete bounds, or both `unused = true`. Unused ranges link zero
+  bytes; the image gate rejects linked starters, routes or storage that
+  would use them. Every current S31 image runs on the boot hart and keeps
+  all secondary harts contained. The runtime's critical section masks only
+  its executing hart and admits no secondary execution.
+- `oer-staged-runtime-stacks.x` is generated from the same hart geometry as
+  the vectors. It places each task stack in PSRAM and each interrupt stack
+  in SRAM, with exact-size, memory-range, alignment and guard assertions.
+  Runtime linker-marker tables are generated and indexed by hart. BSS
+  follows all task ranges; empty ranges contribute no allocation.
+- An image that declares `task-stack = "proven"` sizes every used task
+  stack to `align16(bound + minimum_free_bytes)` in the final link. Other
+  images use that hart's policy `allocation_bytes`, else its
+  `default_task_stack_bytes` policy entry or chip layout default. Every used hart requires a complete
+  bound regardless of its allocation source; there is no boot-hart exception.
+  Defaults cover the entire geometry, including explicit zeroes for contained
+  harts. See the [image linker](../tools/image/linker/README.md).
 - The image linker sizes each used hart's IRQ stack to
   `align16(ceil(bound * (100 + margin) / 100)) + guard`. The contract margin
   is 10%; `irq-stack-bytes` is the maximum, used without a proven bound and

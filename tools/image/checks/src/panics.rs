@@ -6,7 +6,7 @@
 //! (over what is resolved) into a panic entry ([`panic_entry`]), from a
 //! function that is not one itself. The roots are those of the stack and
 //! interrupt analyses: each interrupt context (hart and level, and each
-//! hart's exception), CPU0 (stage two's entry) and each task root in the
+//! hart's exception), each hart's task entry and each task root in the
 //! runtime; the bootstrap root in the bootstrap. A site counts once per ELF
 //! however many roots reach it.
 //!
@@ -275,7 +275,7 @@ pub(crate) fn interrupt_roots(
     roots
 }
 
-/// The roots of a stack audit: CPU0 (stage two's entry) and each task root,
+/// The roots of a stack audit: each hart's task entry and each task root,
 /// or the bootstrap root.
 pub(crate) fn stack_roots(
     image: &crate::stack::Image,

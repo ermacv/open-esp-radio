@@ -18,6 +18,14 @@ pub(crate) fn select(stacks: &InterruptStacks, diagnostic: bool) -> Result<Vec<A
         .harts
         .iter()
         .map(|hart| {
+            require_bound(
+                hart.core,
+                hart.bytes,
+                hart.level_drops().is_empty(),
+                hart.assumptions()
+                    .iter()
+                    .all(|assumption| crate::stack::ADMITTED.contains(assumption)),
+            )?;
             let from_bound = !diagnostic
                 && hart.bytes.is_some()
                 && hart.level_drops().is_empty()
@@ -49,6 +57,14 @@ pub(super) fn verify(stacks: &InterruptStacks, planned: &[Allocation]) -> Result
             .iter()
             .find(|hart| hart.core == allocation.hart)
             .ok_or("an IRQ hart disappeared after relinking")?;
+        require_bound(
+            hart.core,
+            hart.bytes,
+            hart.level_drops().is_empty(),
+            hart.assumptions()
+                .iter()
+                .all(|assumption| crate::stack::ADMITTED.contains(assumption)),
+        )?;
         let linked = stacks
             .allocations
             .get(&hart.core)
@@ -67,6 +83,18 @@ pub(super) fn verify(stacks: &InterruptStacks, planned: &[Allocation]) -> Result
         {
             return Err(format!("after relinking: {problem}").into());
         }
+    }
+    Ok(())
+}
+
+fn require_bound(
+    hart: u32,
+    bytes: Option<u64>,
+    nesting_checked: bool,
+    assumptions_admitted: bool,
+) -> Result<()> {
+    if bytes.is_none() || !nesting_checked || !assumptions_admitted {
+        return Err(format!("hart {hart}'s used IRQ stack needs a complete bound with checked nesting and admitted assumptions").into());
     }
     Ok(())
 }
@@ -107,6 +135,16 @@ mod tests {
             .facts
             .interrupts
             .unwrap()
+    }
+
+    #[test]
+    fn every_used_irq_stack_requires_a_bound_even_at_diagnostic_capacity() {
+        for hart in [0, 3, 6] {
+            require_bound(hart, Some(1000), true, true).unwrap();
+            assert!(require_bound(hart, None, true, true).is_err());
+            assert!(require_bound(hart, Some(1000), false, true).is_err());
+            assert!(require_bound(hart, Some(1000), true, false).is_err());
+        }
     }
 
     #[test]

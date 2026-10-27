@@ -20,7 +20,7 @@
 //!
 //! The bootstrap copies stage two into PSRAM and jumps to `_runtime_start`
 //! ([`entry`](crate::entry)), which initializes the SRAM sections, switches to
-//! the CPU0 PSRAM task stack, installs the runtime's vectors and enters the
+//! the boot hart PSRAM task stack, installs the runtime's vectors and enters the
 //! image's `runtime_main` that [`entry!`] defines. The image's `main` adopts
 //! the bootstrap's PSRAM mapping through its board and takes its hart's
 //! routes and lines ([`Handoff::adopt`]), binds its interrupts through the
@@ -136,7 +136,7 @@ impl From<oer_interrupt_table::Error> for BootError {
     }
 }
 
-/// The image's control at the runtime's entry: stage two runs on CPU0 right
+/// The image's control at the runtime's entry: stage two runs on the boot hart right
 /// after `_runtime_start`, with interrupts disabled and the bootstrap's
 /// mapping intact. [`entry!`] gives it once, to the image's `main`.
 #[must_use = "the handoff adopts the bootstrap's mapping"]
@@ -152,7 +152,7 @@ impl Handoff {
     }
 
     /// Adopt the bootstrap's PSRAM mapping through `board` and install the
-    /// stage-two interrupt context of CPU0: its SRAM interrupt stack and
+    /// stage-two interrupt context of the boot hart: its SRAM interrupt stack and
     /// vectors, the task-stack watchpoint, and the hart's routes and lines,
     /// which `controller` writes. Interrupts stay disabled until
     /// [`Adopted::enable_interrupts`].
@@ -189,14 +189,14 @@ impl Handoff {
         unsafe { stacks::install_current_hart_interrupt_stack() }?;
         let router = oer_interrupt_table::Router::install(controller, interrupt_table)?;
         // Interrupts are disabled and trigger 0 is the runtime's;
-        // `_stack_end` is the word-aligned bottom of the CPU0 task stack the
-        // runtime linker script places.
-        stacks::watch_task_stack(core::ptr::addr_of!(layout::_stack_end) as usize)?;
+        // the generated table names this checked hart's word-aligned task bottom.
+        let hart = oer_esp32s31_hal::platform::BOOT_HART;
+        stacks::watch_task_stack(hart.at(&layout::stack_symbols()).task.start)?;
         Ok((mapping, Adopted { router }))
     }
 }
 
-/// The adopted stage-two interrupt context of CPU0, before interrupts are
+/// The adopted stage-two interrupt context of the boot hart, before interrupts are
 /// enabled: the hart's router, through which the image binds its entries.
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
 pub struct Adopted<C: oer_interrupt_table::Controller> {
@@ -248,7 +248,7 @@ pub fn halt() -> ! {
 }
 
 /// The image's entry: `runtime_main`, which `_runtime_start` calls once on
-/// CPU0, gives `$main` the one [`Handoff`].
+/// the boot hart, gives `$main` the one [`Handoff`].
 ///
 /// ```ignore
 /// oer_espressif_staged_runtime::entry!(main);
@@ -261,7 +261,7 @@ macro_rules! entry {
         // defining a second `runtime_main` fails the link.
         #[unsafe(no_mangle)]
         extern "C" fn runtime_main() -> ! {
-            // SAFETY: `_runtime_start` calls `runtime_main` once on CPU0,
+            // SAFETY: `_runtime_start` calls `runtime_main` once on the boot hart,
             // after initializing the SRAM sections, with interrupts disabled
             // and the bootstrap's mapping intact; this is its first statement.
             let proof = unsafe { $crate::__StageTwoHandoff::new() };

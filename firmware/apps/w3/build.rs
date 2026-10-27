@@ -13,9 +13,9 @@ const SSID: &str = "OER_W3_SSID_HEX";
 const COUNTRY: &str = "OER_W3_COUNTRY";
 const CAP: &str = "OER_W3_POWER_CAP_DBM";
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
-        oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w3");
+        oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-w3")?;
     }
     for name in [CHANNEL, BSSID, SSID, COUNTRY, CAP] {
         println!("cargo:rerun-if-env-changed={name}");
@@ -58,6 +58,7 @@ fn main() {
         ),
     )
     .expect("OUT_DIR is writable");
+    Ok(())
 }
 
 /// `0x02, 0x00, …`.

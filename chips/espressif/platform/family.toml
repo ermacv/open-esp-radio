@@ -86,7 +86,7 @@ irq-stack-margin-percent = 10
 level-writers = []
 
 # The staged runtime's placement contract (chips/espressif/staged-layout/linker/runtime):
-# code, data and the CPU0 task stack in PSRAM; interrupt entries, vector
+# code, data and the the boot hart task stack in PSRAM; interrupt entries, vector
 # tables, interrupt stacks, critical code and data, DMA data and the panic
 # entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
 # A rule with `per-hart = true` stands once for each of the chip's harts,
@@ -103,8 +103,8 @@ range = [
     { range = ["__runtime_critical_data_start", "__runtime_critical_bss_end"], region = "sram" },
     { range = ["__runtime_dma_data_start", "__runtime_dma_bss_end"], region = "sram" },
     # Sized by the image's policy, else by the chip's stack policy
-    # (`default_cpu0_task_stack_bytes` of chips/<id>/platform/stack.toml).
-    { range = ["_stack_end", "_stack_start"], region = "psram" },
+    # (`default_task_stack_bytes` of chips/<id>/platform/stack.toml).
+    { range = ["__runtime_cpu{hart}_task_stack_bottom", "__runtime_cpu{hart}_task_stack_top"], region = "psram", per-hart = true },
     { range = ["__runtime_cpu{hart}_irq_stack_bottom", "__runtime_cpu{hart}_irq_stack_top"], region = "sram", maximum-bytes = 0x8000, per-hart = true },
 ]
 symbol = [
@@ -156,7 +156,7 @@ mmu-page-bytes = 0x1_0000
 # `components/esp_system/ld/esp32s31/memory.ld.in:37-45`
 # (irom origin 0x40000020; 0x20 accounts for image and segment headers).
 image-segment-header-bytes = 0x20
-# SRAM at the top the runtime's SRAM sections leave free while CPU0 still
+# SRAM at the top the runtime's SRAM sections leave free while the boot hart still
 # runs on the bootstrap's stack, until `_runtime_stack_bootstrap` switches to
 # the PSRAM task stack; the bootstrap's largest frame is below 0.5 KiB.
 handoff-sram-margin-bytes = 0x2000

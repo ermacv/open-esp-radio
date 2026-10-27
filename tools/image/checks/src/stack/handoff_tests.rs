@@ -71,11 +71,11 @@ fn an_entry_that_uses_the_stack_first_or_installs_another_stack_is_refused() {
         ),
         (
             vec![AUIPC_SP, ADDI_SP_0, RET],
-            "not set to the CPU0 task stack's top",
+            "not set to the boot hart task stack's top",
         ),
         (
             vec![AUIPC_SP_TO_RODATA, NOP, RET],
-            "not set to the CPU0 task stack's top",
+            "not set to the boot hart task stack's top",
         ),
         // A path that returns before installing the stack pointer.
         (

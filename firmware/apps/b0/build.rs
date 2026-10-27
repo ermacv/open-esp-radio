@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf};
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
-        oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-b0");
+        oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-b0")?;
     }
     for key in ["OER_B0_COUNTRY", "OER_B0_POWER_CAP_DBM"] {
         println!("cargo:rerun-if-env-changed={key}");
@@ -26,4 +26,5 @@ fn main() {
         format!("pub const PROFILE: Option<crate::Profile> = {config};\n"),
     )
     .expect("write B0 profile");
+    Ok(())
 }

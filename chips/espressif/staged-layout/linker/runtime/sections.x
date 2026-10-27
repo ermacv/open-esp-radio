@@ -60,20 +60,6 @@ SECTIONS
     LONG(0);                       /* host packer writes payload CRC-32 */
   } > PSRAM_RUNTIME
 
-  /* SRAM starts on a 4-KiB boundary on both chips. Keep the exact stack
-     allocations first so each guard starts at its hart's stack bottom;
-     aligning a hardware guard upwards would reduce the usable stack. The
-     runtime paints these NOLOAD stacks before admitting interrupts. */
-  .irq_stacks ORIGIN(INTERNAL_LOW) (NOLOAD) :
-  {
-    __runtime_cpu0_irq_stack_bottom = ABSOLUTE(.);
-    . = . + IRQ_STACK_HART0_BYTES;
-    __runtime_cpu0_irq_stack_top = ABSOLUTE(.);
-    __runtime_cpu1_irq_stack_bottom = ABSOLUTE(.);
-    . = . + (HART_COUNT > 1 ? IRQ_STACK_HART1_BYTES : 0);
-    __runtime_cpu1_irq_stack_top = ABSOLUTE(.);
-  } > INTERNAL_LOW
-
   /* MTVT's first table requires 256-byte alignment; leave at most 255
      bytes between the stacks and code, outside either allocation. */
   .isr.text ALIGN(ADDR(.irq_stacks) + SIZEOF(.irq_stacks), 256) :
@@ -214,18 +200,7 @@ SECTIONS
     __runtime_psram_noinit_end = ABSOLUTE(.);
   } > PSRAM_RUNTIME
 
-  /* Thread-mode stacks. Interrupt and trap stacks remain in the dedicated SRAM
-     section above; these bytes are never DMA-visible and need no bootstrap
-     initialization. */
-  .psram.task_stacks ALIGN(__runtime_psram_noinit_end, 64) (NOLOAD) :
-  {
-    __runtime_cpu0_task_stack_bottom = ABSOLUTE(.);
-    . = . + CPU0_PSRAM_TASK_STACK_BYTES;
-    __runtime_cpu0_task_stack_top = ABSOLUTE(.);
-    . = ALIGN(64);
-  } > PSRAM_RUNTIME
-
-  .bss ALIGN(__runtime_cpu0_task_stack_top, 64) (NOLOAD) :
+  .bss ALIGN(__runtime_task_stacks_end, 64) (NOLOAD) :
   {
     __runtime_data_bss_start = ABSOLUTE(.);
     _bss_start = ABSOLUTE(.);
@@ -249,13 +224,7 @@ SECTIONS
   __sbss = __runtime_data_bss_start;
   __ebss = __runtime_data_bss_end;
 
-  /* The CPU0 PSRAM task stack is the ordinary stack range; CLIC and
-     exception entries use separate per-hart SRAM stacks. */
   _dram_data_start = SRAM_ORIGIN;
-  _stack_end = __runtime_cpu0_task_stack_bottom;
-  _stack_end_cpu0 = _stack_end;
-  _stack_start = __runtime_cpu0_task_stack_top;
-  _stack_start_cpu0 = _stack_start;
 
   /* Metadata that occupies no memory: debug information, the toolchain
      comment, the RISC-V attributes and the compiler's frame records
@@ -308,8 +277,6 @@ ASSERT(_rtc_fast_persistent_end <= ORIGIN(RTC_FAST) + LENGTH(RTC_FAST) - RETAINE
        "runtime RTC-fast data reaches ESP-IDF's reserved LP RAM tail");
 ASSERT(__runtime_psram_noinit_end <= ORIGIN(PSRAM_RUNTIME) + LENGTH(PSRAM_RUNTIME),
        "runtime explicit no-init storage does not fit");
-ASSERT(__runtime_cpu0_task_stack_top <= ORIGIN(PSRAM_RUNTIME) + LENGTH(PSRAM_RUNTIME),
-       "runtime task stacks do not fit");
 ASSERT(__runtime_data_bss_end <= ORIGIN(PSRAM_RUNTIME) + LENGTH(PSRAM_RUNTIME),
        "runtime data/BSS does not fit PSRAM");
 ASSERT(__runtime_data_load_start >= ORIGIN(PSRAM_RUNTIME) &&
@@ -336,7 +303,7 @@ ASSERT(__runtime_dma_bss_end <= ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW),
 INCLUDE dma-window.x
 /* The bootstrap's largest post-LTO frame is below 0.5 KiB. Keep the
    family's bounded transient handoff margin until `_runtime_stack_bootstrap`
-   switches CPU0 to PSRAM; it is not a task stack and cannot silently grow. */
+   switches the boot hart to PSRAM; it is not a task stack and cannot silently grow. */
 ASSERT(__runtime_dma_bss_end <=
        ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW) - HANDOFF_SRAM_MARGIN_BYTES,
        "runtime SRAM owners overlap the bootstrap handoff margin");
@@ -358,17 +325,6 @@ ASSERT((__runtime_critical_data_load_start & 3) == 0 &&
 ASSERT((__runtime_dma_data_load_start & 3) == 0 &&
        ((__runtime_dma_data_end - __runtime_dma_data_start) & 3) == 0,
        "runtime initialized DMA state copy must be word aligned");
-ASSERT(__runtime_cpu0_irq_stack_top - __runtime_cpu0_irq_stack_bottom == IRQ_STACK_HART0_BYTES &&
-       __runtime_cpu1_irq_stack_top - __runtime_cpu1_irq_stack_bottom ==
-           (HART_COUNT > 1 ? IRQ_STACK_HART1_BYTES : 0),
-       "runtime requires one exact SRAM IRQ stack per hart");
-ASSERT(__runtime_cpu0_irq_stack_bottom % __runtime_cpu0_irq_stack_guard_bytes == 0,
-       "hart 0 IRQ stack bottom must be guard aligned");
-ASSERT(HART_COUNT > 1 && IRQ_STACK_HART1_BYTES > 0 ?
-       __runtime_cpu1_irq_stack_bottom % __runtime_cpu1_irq_stack_guard_bytes == 0 : 1,
-       "hart 1 IRQ stack bottom must be guard aligned");
-ASSERT(__runtime_cpu0_task_stack_top - __runtime_cpu0_task_stack_bottom == CPU0_PSRAM_TASK_STACK_BYTES,
-       "runtime requires one exact CPU0 PSRAM task stack");
 ASSERT(SIZEOF(.runtime.header) == STAGE_TWO_HEADER_BYTES,
        "stage-two header does not match the platform layout");
 ASSERT(_runtime_start >= __runtime_text_start && _runtime_start < __runtime_text_end,

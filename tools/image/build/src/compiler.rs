@@ -130,7 +130,7 @@ pub struct ImageCompiler<'a> {
     pub max_move_bytes: u64,
     /// Variables the image's runtime reads at compile time (its stack
     /// policy's reserves).
-    pub runtime_environment: Vec<(&'static str, String)>,
+    pub runtime_environment: Vec<(String, String)>,
     /// The instrumentation classes whose cfgs the image is compiled under.
     pub instrumentation: Instrumentation,
 }
@@ -158,9 +158,14 @@ pub fn configure(command: &mut Command, compiler: &ImageCompiler<'_>) -> Result<
             &compiler.instrumentation,
         )?,
     );
-    command.env_remove("OPEN_RADIO_IRQ_STACK_BYTES");
-    command.env_remove("OPEN_RADIO_CPU0_TASK_STACK_BYTES");
-    command.env_remove("OPEN_RADIO_UNUSED_IRQ_STACK_HARTS");
+    for (key, _) in env::vars_os() {
+        if key.to_str().is_some_and(|key| {
+            key.starts_with("OPEN_RADIO_TASK_STACK_HART")
+                || key.starts_with("OPEN_RADIO_IRQ_STACK_HART")
+        }) {
+            command.env_remove(key);
+        }
+    }
     for (variable, value) in &compiler.runtime_environment {
         command.env(variable, value);
     }

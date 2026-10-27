@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out = PathBuf::from(std::env::var_os("OUT_DIR").ok_or("cargo sets OUT_DIR")?);
     for (name, text) in [
         ("vectors.rs", vectors.rust()?),
+        ("stack-symbols.rs", vectors.stack_symbols()),
         ("vectors.s", vectors.assembly()),
         ("oer-staged-runtime-vectors.x", vectors.linker_defaults()),
     ] {

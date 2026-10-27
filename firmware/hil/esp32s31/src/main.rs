@@ -306,20 +306,31 @@ fn validate_runtime_layout() {
     let [isr_start, isr_end] = bounds(&sections.isr);
     let [dma_data_start, dma_data_end] = bounds(&sections.dma_data);
     let [dma_bss_start, dma_bss_end] = bounds(&sections.dma_bss);
-    let [stack_bottom, stack_top] = bounds(&sections.task_stack);
+    let [stack_bottom, stack_top] =
+        bounds(oer_esp32s31_hal::platform::BOOT_HART.at(&sections.task_stacks));
     let stack = word(oer_riscv::stack_pointer());
 
-    let interrupt_stacks_valid = {
-        let [cpu0_bottom, cpu0_top] = bounds(&sections.irq_stacks[0]);
-        let [cpu1_bottom, cpu1_top] = bounds(&sections.irq_stacks[1]);
-        range_in_internal_sram(cpu0_bottom, cpu0_top)
-            && range_in_internal_sram(cpu1_bottom, cpu1_top)
-            && cpu0_top - cpu0_bottom <= oer_esp32s31_layout::LAYOUT.irq_stack_bytes
-            && cpu1_top - cpu1_bottom <= oer_esp32s31_layout::LAYOUT.irq_stack_bytes
-    };
-    let task_stack_valid = stack_bottom >= PROFILE_DATA_START
-        && stack_top <= PROFILE_DATA_END
-        && stack_top - stack_bottom == oer_esp32s31_layout::LAYOUT.cpu0_task_stack_bytes;
+    let interrupt_stacks_valid = sections.irq_stacks.iter().all(|range| {
+        let [bottom, top] = bounds(range);
+        range_in_internal_sram(bottom, top)
+            && top
+                .checked_sub(bottom)
+                .is_some_and(|bytes| bytes <= oer_esp32s31_layout::LAYOUT.irq_stack_bytes)
+    });
+    let task_stack_valid = sections
+        .task_stacks
+        .iter()
+        .enumerate()
+        .all(|(hart, range)| {
+            let [bottom, top] = bounds(range);
+            bottom >= PROFILE_DATA_START
+                && top <= PROFILE_DATA_END
+                && top.checked_sub(bottom)
+                    == oer_esp32s31_layout::LAYOUT
+                        .task_stack_bytes
+                        .get(hart)
+                        .copied()
+        });
 
     let initialized_data = INITIALIZED_DATA.load(Ordering::Relaxed);
     let bss_probe = BSS_PROBE.load(Ordering::Relaxed);

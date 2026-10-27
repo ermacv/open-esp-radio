@@ -1327,9 +1327,8 @@ mod tests {
                 .unwrap()
                 .remove(0)
         };
-        let partial = select(&stacks, false);
-        assert!(!partial.from_bound);
-        assert_eq!(partial.bytes, stacks.contract.interrupts.irq_stack_bytes);
+        assert!(crate::linker::irq_stacks::select(&stacks, false).is_err());
+        assert!(crate::linker::irq_stacks::select(&stacks, true).is_err());
         stacks.harts[0].bytes = Some(1000);
         let diagnostic = select(&stacks, true);
         assert!(!diagnostic.from_bound);

@@ -31,7 +31,7 @@ pub struct Spec {
     /// Diagnostic/probe images retain the contract maximum on every hart.
     #[serde(default)]
     pub diagnostic: bool,
-    /// The image declares its CPU0 task stack proven: the link sizes it from
+    /// The image declares its per-hart task stacks proven: the link sizes it from
     /// the bound of the first ELF.
     #[serde(default)]
     pub task_stack_proven: bool,
@@ -99,9 +99,9 @@ pub struct Placement {
     pub functions: Vec<PlacedFunction>,
     #[serde(default)]
     pub irq_stacks: Vec<super::irq_stacks::Allocation>,
-    /// The CPU0 task stack of an image that declares it proven.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub task_stack: Option<super::task_stack::Allocation>,
+    /// The per-hart task stacks of an image that declares it proven.
+    #[serde(default)]
+    pub task_stacks: Vec<super::task_stack::Allocation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<Fingerprint>,
 }
@@ -189,7 +189,7 @@ impl Placement {
         Ok(Self {
             functions,
             irq_stacks: Vec::new(),
-            task_stack: None,
+            task_stacks: Vec::new(),
             fingerprint: None,
         })
     }
@@ -325,9 +325,10 @@ pub(super) fn analyze(
     })?;
     let mut placement = Placement::select(&requested, sections, placement.free_sram() + released)?;
     placement.irq_stacks = irq_stacks;
+    let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
+    audit.check()?;
     if spec.task_stack_proven {
-        let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
-        placement.task_stack = Some(super::task_stack::select(&audit, &policy)?);
+        placement.task_stacks = super::task_stack::select(&audit, &policy)?;
     }
     Ok(placement)
 }
@@ -343,9 +344,10 @@ pub(super) fn verify(
         return Ok(());
     };
     super::irq_stacks::verify(&interrupt_stacks_of(&image)?, &placement.irq_stacks)?;
-    if let Some(planned) = &placement.task_stack {
-        let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
-        super::task_stack::verify(&audit, planned)?;
+    let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
+    audit.check()?;
+    if !placement.task_stacks.is_empty() {
+        super::task_stack::verify(&audit, &placement.task_stacks)?;
     }
     Ok(())
 }
