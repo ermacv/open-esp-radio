@@ -341,9 +341,12 @@ fn only_interrupts_rejects_failed_missing_and_absent_results() {
 }
 
 #[test]
-fn app_frame_enforcement_also_rejects_bootstrap_and_missing_results() {
+fn enforced_frame_configuration_errors_and_missing_results_still_reject_both_elfs() {
     for elf in [CheckedElf::Runtime, CheckedElf::Bootstrap] {
-        for frame_result in [Some(CheckResult::Failed("oversized frame".into())), None] {
+        for frame_result in [
+            Some(CheckResult::Failed("invalid frame exception".into())),
+            None,
+        ] {
             let directory = tempfile::tempdir().unwrap();
             let mut bundle = empty_bundle(directory.path());
             let checks = Gates {
@@ -363,6 +366,51 @@ fn app_frame_enforcement_also_rejects_bootstrap_and_missing_results() {
                 .to_string();
             assert!(error.contains(&format!("frames ({elf:?})")), "{error}");
             assert!(bundle.path(crate::bundle::files::CHECKS).is_file());
+        }
+    }
+}
+
+#[test]
+fn frame_and_panic_warnings_pass_but_stack_bound_failures_still_reject() {
+    for elf in [CheckedElf::Runtime, CheckedElf::Bootstrap] {
+        for enforced in [Enforced::All, Enforced::Only([Check::Interrupts].into())] {
+            let directory = tempfile::tempdir().unwrap();
+            let checks = Gates {
+                enforced,
+                ..Gates::all(oer_image_checks::interrupts::Required::Product)
+            };
+            let results = [
+                ("frames", CheckResult::Passed),
+                ("panics", CheckResult::Passed),
+                ("stack", CheckResult::Passed),
+                ("interrupts", CheckResult::Passed),
+                ("placement", CheckResult::Passed),
+            ];
+            let warnings = [
+                "frame `large` is 4097 bytes, above the 4096-byte move limit",
+                "runtime reaches 1 panic sites in the hal layer, over its budget of 0",
+            ];
+            let mut reported = outcome(&results);
+            reported.warnings = warnings.map(str::to_owned).into();
+            let mut bundle = empty_bundle(directory.path());
+            apply_outcome(&checks, elf, reported, &mut bundle, true).unwrap();
+            assert_eq!(bundle.warnings, warnings);
+            assert!(bundle.checks.iter().all(|record| record.result.passes()));
+
+            let mut rejected = outcome(&results);
+            rejected
+                .results
+                .iter_mut()
+                .find(|(name, _)| name == "stack")
+                .unwrap()
+                .1 = CheckResult::Failed("proven stack exceeds its allocation".into());
+            let error = apply_outcome(&checks, elf, rejected, &mut bundle, true)
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("proven stack exceeds its allocation"),
+                "{error}"
+            );
         }
     }
 }

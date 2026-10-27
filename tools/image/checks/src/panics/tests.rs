@@ -117,7 +117,7 @@ fn a_reachable_panic_counts_once_in_the_layer_of_its_caller() {
             .iter()
             .all(|site| site.entry == PANIC && site.caller != UNREACHED)
     );
-    assert_eq!(report.check(&contract).unwrap(), Vec::<String>::new());
+    assert_eq!(report.warnings(&contract), Vec::<String>::new());
     let text = report.render(&contract);
     assert!(text.contains("hal\t1\t1"), "{text}");
     assert!(text.contains("protocols\t1\t1"), "{text}");
@@ -129,17 +129,15 @@ fn a_reachable_panic_counts_once_in_the_layer_of_its_caller() {
 }
 
 #[test]
-fn a_layer_over_its_budget_fails_and_one_under_it_asks_to_lower_it() {
+fn a_layer_over_its_budget_warns_and_one_under_it_asks_to_lower_it() {
     let image = program();
     let report = Report {
         elf: CheckedElf::Runtime,
         roots: vec![root(&image, "CPU0", false)],
         names: &image.names,
     };
-    let error = report
-        .check(&contract(&[(Layer::Hal, 1)]))
-        .unwrap_err()
-        .to_string();
+    let warnings = report.warnings(&contract(&[(Layer::Hal, 1)]));
+    let error = &warnings[0];
     assert!(
         error
             .contains("runtime reaches 1 panic sites in the protocols layer, over its budget of 0"),
@@ -148,11 +146,9 @@ fn a_layer_over_its_budget_fails_and_one_under_it_asks_to_lower_it() {
     assert!(
         report
             .render(&contract(&[(Layer::Hal, 1)]))
-            .contains("FAIL: runtime reaches 1 panic sites in the protocols layer")
+            .contains("warning: runtime reaches 1 panic sites in the protocols layer")
     );
-    let warnings = report
-        .check(&contract(&[(Layer::Hal, 3), (Layer::Protocols, 1)]))
-        .unwrap();
+    let warnings = report.warnings(&contract(&[(Layer::Hal, 3), (Layer::Protocols, 1)]));
     assert_eq!(
         warnings,
         [
@@ -174,16 +170,14 @@ fn the_hardware_contexts_have_their_own_budget_over_all_layers() {
         names: &image.names,
     };
     let layers = [(Layer::Hal, 1), (Layer::Protocols, 1)];
-    let error = report
-        .check(&contract_with(&layers, 1))
-        .unwrap_err()
-        .to_string();
+    let warnings = report.warnings(&contract_with(&layers, 1));
+    let error = warnings[0].as_str();
     assert_eq!(
         error,
         "runtime reaches 2 panic sites from its hardware interrupt contexts, over its budget of 1"
     );
     assert_eq!(
-        report.check(&contract_with(&layers, 2)).unwrap(),
+        report.warnings(&contract_with(&layers, 2)),
         Vec::<String>::new()
     );
     assert!(
@@ -198,7 +192,7 @@ fn the_hardware_contexts_have_their_own_budget_over_all_layers() {
         names: &image.names,
     };
     assert_eq!(
-        task.check(&contract_with(&layers, 0)).unwrap(),
+        task.warnings(&contract_with(&layers, 0)),
         Vec::<String>::new()
     );
 }
@@ -218,25 +212,94 @@ fn the_pac_layer_is_budgeted_like_the_others() {
         ]),
         budget: Budget::parse(Some(&declared)).unwrap(),
     };
-    let error = report
-        .check(&pac(serde_json::json!({ "bootstrap": { "protocols": 1 } })))
-        .unwrap_err()
-        .to_string();
+    let warnings = report.warnings(&pac(serde_json::json!({ "bootstrap": { "protocols": 1 } })));
+    let error = &warnings[0];
     assert!(
         error.contains("bootstrap reaches 1 panic sites in the pac layer, over its budget of 0"),
         "{error}"
     );
     assert!(
         report
-            .check(&pac(
+            .warnings(&pac(
                 serde_json::json!({ "bootstrap": { "protocols": 1, "pac": 1 } })
             ))
-            .is_ok()
+            .is_empty()
     );
     let unknown = Budget::parse(Some(&serde_json::json!({ "runtime": { "drivers": 1 } })))
         .unwrap_err()
         .to_string();
     assert!(unknown.contains("unknown layer `drivers`"), "{unknown}");
+}
+
+#[test]
+fn every_category_and_hardware_excess_is_reported_without_a_failed_check() {
+    let (directory, policy) =
+        crate::stack::tests::policy_with("schema = 6\nmax_move_bytes = 4096\n", "");
+    for (path, text) in oer_espressif_facts::tracked::FILES {
+        let path = directory.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    let profile = oer_chip_profile::Profile::load(directory.path(), "esp32s31").unwrap();
+    let mut image = program();
+    image.stack_sizes.insert(UNREACHED, 4097);
+    let mut contract = Contract::default();
+    let mut names = BTreeMap::new();
+    let mut sites = BTreeSet::new();
+    for (index, layer) in Layer::ALL.into_iter().enumerate() {
+        let caller = u32::try_from(index).unwrap();
+        let name = if layer == Layer::Unnamed {
+            "_start".to_owned()
+        } else {
+            let name = format!("layer_{index}");
+            contract.layers.crates.insert(name.clone(), layer);
+            format!("{name}::may_panic")
+        };
+        names.insert(caller, name);
+        sites.insert(Site {
+            caller,
+            site: caller,
+            entry: PANIC,
+        });
+    }
+    image.names.extend(names);
+    let roots = vec![Root {
+        label: "hardware".into(),
+        hardware: true,
+        sites,
+    }];
+    let input = crate::CheckInput {
+        root: directory.path(),
+        profile: &profile,
+        policy: &policy,
+        elf: Path::new("unused.elf"),
+        flat: None,
+        output: directory.path(),
+        task_stack_proven: true,
+        critical_section_hart: 0,
+        stage_two_elf: None,
+        panics: Some(&contract),
+    };
+    let gates = crate::Gates::all(crate::interrupts::Required::Product);
+    for elf in [CheckedElf::Runtime, CheckedElf::Bootstrap] {
+        let mut outcome = crate::CheckOutcome::default();
+        gates.frames_of(&image, &input, elf, &mut outcome);
+        gates.panics_of(&image, &input, elf, Ok(roots.clone()), &mut outcome);
+        assert!(outcome.results.iter().all(|(_, result)| result.passes()));
+        assert_eq!(outcome.warnings.len(), Layer::ALL.len() + 2);
+        let name = if elf == CheckedElf::Runtime {
+            RUNTIME_REPORT
+        } else {
+            BOOTSTRAP_REPORT
+        };
+        let text = std::fs::read_to_string(directory.path().join(name)).unwrap();
+        for layer in Layer::ALL {
+            assert!(text.contains(&format!("{layer}\t1\t0")), "{text}");
+        }
+        assert!(text.contains("hardware\t10\t0"), "{text}");
+        assert!(text.contains("_start at 0x00000009"), "{text}");
+        assert!(!text.contains("FAIL:"), "{text}");
+    }
 }
 
 #[test]

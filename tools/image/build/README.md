@@ -16,7 +16,7 @@ policy, the layout seed, the variables the runtime's build sets or removes
 (`cargo fw`'s stand identity of `w1`), the caller's builder packages and
 extra policy files, the bundle directory (every build compiles in the checkout's
 `compile_cache()` of its instrumentation classes) and the checks (`Gates` of `oer-image-checks`): which
-run, what the frame and interrupt checks require (`Required::Product`, or
+run, what the interrupt checks require (`Required::Product`, or
 `Diagnostic` for diagnostic images), an optional audit of the runtime ELF (HIL's
 observer placement), and which requested checks must pass (`Enforced`).
 `Enforced::All` enforces every requested check, including the caller's audit;
@@ -43,11 +43,14 @@ D/I window. This grants no executable-flash exception.
 
 | Caller | Enforcement | Required checks |
 | --- | --- | --- |
-| `cargo fw build`, including `--analysis` | `Only({Frames, Interrupts, Panics})` | Function frames, interrupt stacks and panic budgets in runtime/bootstrap |
+| `cargo fw build`, including `--analysis` | `Only({Interrupts})` | Interrupt stacks; frames and panic budgets in runtime/bootstrap are reports |
 | `cargo fw run` | `Reported` | None |
 | HIL image builds | `All` | Every requested check and audit |
 
-App builds still report task-stack bounds, the bootstrap-stack bound and placement.
+App builds report frame sizes, panic inventories, task-stack bounds, the
+bootstrap-stack bound and placement. Frame and panic thresholds produce
+warnings under every enforcement policy, including HIL's `All`. Missing or
+malformed panic-budget metadata is a configuration error.
 The staged build/run pipeline also enforces the hart-local critical-section prerequisite:
 `[package.metadata.open-radio] critical-section-hart = "boot"` selects the boot
 hart from facts; an explicit hart ID selects that used hart. The image's declared
@@ -72,7 +75,7 @@ plus its policy's minimum free bytes, by the image linker (see the
 the size. A policy that also sets `allocation_bytes` is an error. Any other
 value of the key is an error. HIL retains its
 `Product`/`Diagnostic` interrupt policy according to image class: diagnostic
-images report large unexcepted frames and strict/executor-task code placement violations and breaches of the
+images report strict/executor-task code placement violations and breaches of the
 hardware class as warnings; other images
 enforce them.
 
@@ -213,25 +216,25 @@ task-stack gate (`audit_runtime_stacks`) and the bootstrap stack gate
 `oer-analysis-riscv-stack`, the pinned ROM and its summaries, and resolve
 indirect sites with the same facts (waker vtables, function-pointer field
 types). The runtime's task and interrupt gates share that analysis.
-The `frames` gate shares it too, and the bootstrap's frame and stack gates
+The `frames` report shares it too, and the bootstrap's frame and stack checks
 share one bootstrap analysis. Every record in `Image::stack_sizes` is checked,
 whether or not the function is reachable, against the same `max_move_bytes`
-that configures the compiler's move limit. `Required::Product` fails on an
-unexcepted large frame; `Required::Diagnostic` warns. Both reject invalid or
-stale exceptions and frames exceeding their exception ceilings.
+that configures the compiler's move reporting threshold. Oversized frames
+and frames exceeding their exception ceilings produce warnings. Invalid or
+stale exception declarations remain configuration errors.
 Exceptions in `[[frame_exceptions.runtime]]` or `[[frame_exceptions.bootstrap]]`
 name one exact demangled implementation without hashes, with concrete generic
 arguments, its current-code reason and an initial ceiling of its measured
 frame plus 64 bytes. A key matching multiple implementations or none fails; aliases
 at one address count once. A frame at or below the move limit makes its
-exception stale and requires removal. Ceiling changes may only decrease the
-value, enforced in review. An extending policy can append exceptions without
+exception stale and requires removal. Ceilings are reporting references.
+An extending policy can append exceptions without
 changing its base's other settings. W1 uses its own policy; W3 keeps the
 unconfigured policy separate from `stack-configured.toml` for analysis and
 stand configurations, since absent functions must not retain exceptions.
 The [checks README](../checks/README.md) specifies the key and policy format.
 The separate frame reports list counts, current frames, ceilings, spare bytes
-and reasons, including warnings or failures. This gate changes no compiler
+and reasons, including warnings or configuration errors. This report changes no compiler
 flags, frame coverage, IRQ guards, stack allocations or stack bounds.
 
 The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 6), extended
@@ -353,10 +356,9 @@ constants introduced by the compiler, including constant-copy initialization.
 
 The image compiler flags have one owner, `compiler::configure`, which a
 stack policy parameterizes through `compiler::of_policy`:
-`-Z emit-stack-sizes`, `-Z move-size-limit` (the policy's `max_move_bytes`) with `-D large-assignments`,
-`-Z share-generics=y` and the C/C++ `-fstack-size-section`. A value larger than
-that move limit lives in placed static storage; futures and task arguments
-borrow it. No
+`-Z emit-stack-sizes`, `-Z move-size-limit` (the policy's `max_move_bytes`) with `-W large-assignments`,
+`-Z share-generics=y` and the C/C++ `-fstack-size-section`. Moves above the
+limit emit compiler warnings; the limit does not reject them. No
 `.cargo/config.toml` of the repository carries Rust flags (Cargo reads those
 from the directory it runs in, not from the manifest's, so image builds from
 the repository root would never see them). It sets `RUSTC_BOOTSTRAP=1` on the

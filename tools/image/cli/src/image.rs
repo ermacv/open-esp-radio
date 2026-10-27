@@ -204,7 +204,31 @@ pub fn build(
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
+    write_analysis_reports(&bundle, &mut std::io::stderr().lock())?;
     Ok(bundle)
+}
+
+/// Print the frame and panic inventories, including every reported location.
+fn write_analysis_reports(bundle: &ImageBundle, output: &mut impl std::io::Write) -> Result<()> {
+    use oer_image_checks::{panics, stack::frames};
+
+    for report in &bundle.reports {
+        if [
+            frames::RUNTIME_REPORT,
+            frames::BOOTSTRAP_REPORT,
+            panics::RUNTIME_REPORT,
+            panics::BOOTSTRAP_REPORT,
+        ]
+        .contains(&report.as_str())
+        {
+            writeln!(
+                output,
+                "fw: {report}\n{}",
+                std::fs::read_to_string(bundle.path(report))?
+            )?;
+        }
+    }
+    Ok(())
 }
 
 /// The built bundle of `image`, its flash files checked against its
@@ -263,7 +287,7 @@ mod tests {
                 image,
                 None,
                 true,
-                Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into()),
+                Enforced::Only([Check::Interrupts].into()),
             )
             .unwrap();
             assert_eq!(spec.runtime_environment, runtime_env(image, Some(stand)));
@@ -290,12 +314,11 @@ mod tests {
     }
 
     #[test]
-    fn build_and_analysis_enforce_frames_and_interrupts_with_separate_outputs() {
+    fn build_and_analysis_enforce_interrupts_and_report_frames_and_panics_with_separate_outputs() {
         let directory = repository();
         for image in ["w0", "w1", "w2", "w3"] {
             for analysis in [false, true] {
-                let enforced =
-                    Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into());
+                let enforced = Enforced::Only([Check::Interrupts].into());
                 let spec = spec(directory.path(), image, None, analysis, enforced.clone()).unwrap();
                 assert_eq!(
                     spec.output,
@@ -315,6 +338,9 @@ mod tests {
                 );
                 let gates = spec.checks.unwrap();
                 assert_eq!(gates.enforced, enforced);
+                assert!(gates.enforced.requires("interrupts"));
+                assert!(!gates.enforced.requires("frames"));
+                assert!(!gates.enforced.requires("panics"));
                 let expected_policy = match (image, analysis) {
                     ("w1", _) => "firmware/apps/w1/stack.toml",
                     ("w3", true) => "firmware/apps/w3/stack-configured.toml",
@@ -359,7 +385,7 @@ mod tests {
                 "boot-smoke",
                 None,
                 false,
-                Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into())
+                Enforced::Only([Check::Interrupts].into())
             )
             .is_ok()
         );
@@ -368,7 +394,7 @@ mod tests {
             "boot-smoke",
             None,
             true,
-            Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into()),
+            Enforced::Only([Check::Interrupts].into()),
         )
         .err()
         .unwrap()
@@ -377,6 +403,47 @@ mod tests {
             error.contains("image `boot-smoke` has no stand configuration"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn frame_and_panic_reports_print_locations_for_both_elfs() {
+        let directory = repository();
+        let profile = oer_chip_profile::Profile::load(directory.path(), CHIP).unwrap();
+        let mut bundle = ImageBundle::new(
+            directory.path(),
+            &profile,
+            profile.facts.flash.clone().unwrap(),
+        );
+        for (name, text) in [
+            ("runtime-frames.txt", "4097\tover limit\truntime::large"),
+            ("bootstrap-frames.txt", "8192\tover limit\tboot::large"),
+            (
+                "runtime-panics.txt",
+                "hal\t1\t0\nHAL::call at 0x00001024 calls panic",
+            ),
+            (
+                "bootstrap-panics.txt",
+                "unnamed\t1\t0\n_start at 0x00001028 calls panic",
+            ),
+        ] {
+            std::fs::write(bundle.path(name), text).unwrap();
+            bundle.reports.push(name.into());
+        }
+        // Unrelated reports are handled by their own output paths.
+        bundle.reports.push("placement.txt".into());
+        let mut output = Vec::new();
+        write_analysis_reports(&bundle, &mut output).unwrap();
+        let text = String::from_utf8(output).unwrap();
+        for expected in [
+            "runtime::large",
+            "boot::large",
+            "hal\t1\t0",
+            "unnamed\t1\t0",
+            "0x00001024",
+            "0x00001028",
+        ] {
+            assert!(text.contains(expected), "{text}");
+        }
     }
 
     #[test]

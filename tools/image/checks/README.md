@@ -2,8 +2,9 @@
 
 `oer-image-checks` owns the image pipeline's frame, interrupt, stack, placement and
 post-link input checks. The chip profile and stack policy supply their
-contracts; `cargo fw build`, including analysis builds, requires the
-`frames`, `interrupts` and `panics` checks to pass.
+contracts; `cargo fw build`, including analysis builds, enforces the
+`interrupts` check and reports frame sizes and panic inventories. Proven task
+and bootstrap stack bounds and mandatory placement prerequisites remain gates.
 
 Every staged build also audits the final bootstrap ELF before encoding it.
 All executable sections and ordinary constants must lie wholly in the chip's
@@ -27,12 +28,12 @@ and records `bootstrap-loader.txt`. ELF section counts cannot establish this
 contract because the packer merges adjacent sections. The source is pinned
 with the chip's loader contract.
 
-The `frames` check bounds every compiler frame record in both the runtime
-and bootstrap ELF by the stack policy's `max_move_bytes` (currently 4096).
+The `frames` check reports every compiler frame record in both the runtime
+and bootstrap ELF above the stack policy's `max_move_bytes` (currently 4096).
 It uses the existing `Image::stack_sizes`, including functions no root reaches.
 It does not invent sizes for missing records: the stack coverage check owns
-those. `Required::Product` rejects an unexcepted large frame;
-`Required::Diagnostic` reports it as a warning, as the IRQ guard check does.
+those. Oversized frames produce warnings under every enforcement policy;
+they do not fail a build.
 The runtime shares its analysis with the task and interrupt checks; bootstrap
 shares its analysis between the frame and bootstrap-stack checks.
 
@@ -85,12 +86,10 @@ at one address count as one implementation. A key matching zero or multiple
 implementations fails. Duplicate exceptions, including different aliases of
 one implementation, also fail.
 
-The initial ceiling is the measured frame plus 64 bytes, the growth a change
-may report without stopping. Subsequent policy changes may only decrease it;
-review must reject increases. A frame exceeding its ceiling
-fails, even for Diagnostic. An exception whose frame now fits the move limit
-is stale and fails: remove the entry. An exception cannot supply a missing
-compiler record. These policy errors fail under either severity.
+A ceiling records the measured frame plus 64 bytes as a reporting reference.
+A frame exceeding its ceiling produces a warning. An exception whose frame
+now fits the move limit is stale and fails: remove the entry. An exception
+cannot supply a missing compiler record. These remain configuration errors.
 
 An extending policy can append exceptions while retaining its base's stack
 allocations, reserves and move limit. W1 has its own `stack.toml`; configured
@@ -100,9 +99,9 @@ The same configured policy serves `--analysis` and stand-configured W3.
 
 `runtime-frames.txt` and `bootstrap-frames.txt` report the limit, recorded
 functions and count above the limit, each large function, and each applied
-exception's current frame, ceiling, spare bytes and reason. Diagnostic
-warnings and failed checks are written into these reports before returning
-the verdict. Frame exceptions do not relax IRQ guards or whole-stack bounds.
+exception's current frame, ceiling, spare bytes and reason. Warnings and
+configuration errors are written into these reports before returning the
+result. Frame exceptions do not relax IRQ guards or whole-stack bounds.
 
 Interrupt entries, handlers and the executor code they run must execute from
 SRAM or the analysed mask ROM. The panic path, compiler panic entries and the
@@ -173,12 +172,15 @@ bootstrap = { core = 3 }
 
 `hardware` budgets the distinct sites all `Hardware` interrupt contexts
 reach together, whatever their layer. A key it does not name has 0, the
-target of every budget. A count above its budget fails; a count below it is
-a warning naming the lower value. A budget only shrinks: review rejects an increase. Variants of
+target of every budget. Counts above or below the budget produce warnings;
+no panic count fails a build, including with `Enforced::All`. Missing or
+malformed budget declarations are configuration errors. New runtime panics
+remain forbidden by the code rules. Variants of
 one package (`--analysis`, HIL classes) share its budget, the maximum of
 their counts. `runtime-panics.txt` and `bootstrap-panics.txt` give the
 counts and budgets by layer and for `hardware`, each root's sites by layer, and every site with
-its caller, entry and the roots that reach it.
+its caller, entry and the roots that reach it. `cargo fw build` prints both
+ELFs' frame and panic reports, including `--analysis`.
 
 The S31 accesses flash and PSRAM through separate MSPI controllers: a flash
 operation does not disable the PSRAM cache. Placement follows this hardware

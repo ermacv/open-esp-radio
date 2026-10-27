@@ -148,7 +148,7 @@ pub enum Check {
     Placement,
     /// Each hart's interrupt stack, proven.
     Interrupts,
-    /// The panic sites each root reaches, by layer, within the image's budget.
+    /// The panic sites each root reaches, by layer, against the image's reporting budget.
     Panics,
 }
 
@@ -192,8 +192,7 @@ pub struct Gates {
     /// Which requested checks fail the build when they do not pass;
     /// the others are reported as warnings.
     pub enforced: Enforced,
-    /// Every recorded frame, using the interrupt policy's Product/Diagnostic
-    /// severity (Product when no interrupt check is requested).
+    /// Every recorded frame, reporting move-limit and exception-ceiling excesses.
     pub frames: bool,
     /// The task and bootstrap stacks.
     pub stack: bool,
@@ -201,8 +200,8 @@ pub struct Gates {
     pub placement: bool,
     /// The interrupt code placement and stack policy, when checked.
     pub interrupts: Option<Required>,
-    /// The panic sites of the stack and interrupt roots, by layer, within
-    /// the image's budget ([`panics`]).
+    /// The panic sites of the stack and interrupt roots, by layer, compared
+    /// with the image's reporting budget ([`panics`]).
     pub panics: bool,
     /// The caller's own audit of the runtime ELF.
     pub audit: Option<Audit>,
@@ -835,7 +834,7 @@ impl Gates {
                 };
                 std::fs::write(input.output.join(name), report.render(contract))?;
                 outcome.reports.push(name.to_owned());
-                outcome.warnings.extend(report.check(contract)?);
+                outcome.warnings.extend(report.warnings(contract));
                 Ok(())
             })()),
         };
@@ -849,14 +848,10 @@ impl Gates {
         elf: CheckedElf,
         outcome: &mut CheckOutcome,
     ) {
-        let result = ran(crate::stack::frames::audit(
-            image,
-            input.policy,
-            elf,
-            self.interrupts.unwrap_or(Required::Product),
-            input.output,
-        )
-        .map(|warnings| outcome.warnings.extend(warnings)));
+        let result = ran(
+            crate::stack::frames::audit(image, input.policy, elf, input.output)
+                .map(|warnings| outcome.warnings.extend(warnings)),
+        );
         outcome.results.push((FRAMES.to_owned(), result));
         outcome.reports.push(
             match elf {

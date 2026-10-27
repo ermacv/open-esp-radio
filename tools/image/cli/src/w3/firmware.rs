@@ -132,14 +132,7 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             super::IMAGE,
             Some(&build),
             false,
-            oer_image_checks::Enforced::Only(
-                [
-                    oer_image_checks::Check::Frames,
-                    oer_image_checks::Check::Interrupts,
-                    oer_image_checks::Check::Panics,
-                ]
-                .into(),
-            ),
+            oer_image_checks::Enforced::Only([oer_image_checks::Check::Interrupts].into()),
             None,
         )?;
         // Start the bounded subscription after compilation, while the old

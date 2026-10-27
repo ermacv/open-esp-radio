@@ -218,7 +218,7 @@ pub(crate) fn from_bytes(elf: Vec<u8>) -> Image {
 
 mod frame_limits {
     use super::*;
-    use crate::{CheckedElf, interrupts::Required, stack::frames::FrameAudit};
+    use crate::{CheckedElf, stack::frames::FrameAudit};
     use oer_chip_profile::policy::FrameException;
 
     fn subject(bytes: u64) -> Image {
@@ -229,7 +229,7 @@ mod frame_limits {
                     words: vec![RET],
                     frame: Some(0),
                 },
-                // No call reaches this function: the frame gate still sees it.
+                // No call reaches this function: the frame report still sees it.
                 Code {
                     name: "test::large::<u8>",
                     words: vec![RET],
@@ -256,17 +256,14 @@ mod frame_limits {
         let (_dir, policy) = policy_with(BASE, "");
         assert!(
             FrameAudit::of(&subject(4096), &policy, CheckedElf::Runtime)
-                .check(Required::Product)
+                .check()
                 .is_ok()
         );
-        let error = FrameAudit::of(&subject(4097), &policy, CheckedElf::Runtime)
-            .check(Required::Product)
-            .unwrap_err()
-            .to_string();
-        assert!(
-            error.contains("test::large::<u8>") && error.contains("4097"),
-            "{error}"
-        );
+        let warnings = FrameAudit::of(&subject(4097), &policy, CheckedElf::Runtime)
+            .check()
+            .unwrap();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("test::large::<u8>") && warnings[0].contains("4097"));
     }
 
     #[test]
@@ -276,65 +273,58 @@ mod frame_limits {
         let mut image = subject(17);
         assert!(
             FrameAudit::of(&image, &policy, CheckedElf::Runtime)
-                .check(Required::Product)
-                .is_err()
+                .check()
+                .unwrap()[0]
+                .contains("16-byte move limit")
         );
         image.stack_sizes.clear();
         assert!(
             FrameAudit::of(&image, &policy, CheckedElf::Runtime)
-                .check(Required::Product)
+                .check()
                 .is_ok()
         );
     }
 
     #[test]
-    fn an_exception_holds_the_frame_to_its_ceiling_in_both_classes() {
+    fn an_exception_reports_growth_above_its_ceiling() {
         let (_dir, mut policy) = policy_with(BASE, "");
         exception(&mut policy, 8192);
-        for required in [Required::Product, Required::Diagnostic] {
-            for bytes in [8191, 8192] {
-                let audit = FrameAudit::of(&subject(bytes), &policy, CheckedElf::Runtime);
-                assert!(audit.check(required).unwrap().is_empty());
-                assert!(
-                    audit
-                        .render()
-                        .contains(&format!("{bytes}\t8192\t{}", 8192 - bytes))
-                );
-            }
-            let error = FrameAudit::of(&subject(8193), &policy, CheckedElf::Runtime)
-                .check(required)
-                .unwrap_err()
-                .to_string();
+        for bytes in [8191, 8192] {
+            let audit = FrameAudit::of(&subject(bytes), &policy, CheckedElf::Runtime);
+            assert!(audit.check().unwrap().is_empty());
             assert!(
-                error.contains("8193") && error.contains("ceiling of 8192"),
-                "{error}"
+                audit
+                    .render()
+                    .contains(&format!("{bytes}\t8192\t{}", 8192 - bytes))
             );
         }
+        let warnings = FrameAudit::of(&subject(8193), &policy, CheckedElf::Runtime)
+            .check()
+            .unwrap();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("8193") && warnings[0].contains("ceiling of 8192"));
     }
 
     #[test]
-    fn missing_and_fixed_functions_make_exceptions_stale_even_in_diagnostics() {
+    fn missing_and_fixed_functions_make_exception_declarations_invalid() {
         let (_dir, mut policy) = policy_with(BASE, "");
         exception(&mut policy, 8192);
-        for required in [Required::Product, Required::Diagnostic] {
-            for bytes in [0, 4096] {
-                let error = FrameAudit::of(&subject(bytes), &policy, CheckedElf::Runtime)
-                    .check(required)
-                    .unwrap_err()
-                    .to_string();
-                assert!(error.contains("stale frame exception"), "{error}");
-            }
-            // A different generic instantiation cannot keep the exception alive.
-            let mut image = subject(8192);
-            image.functions[1].names = vec!["test::large::<u16>".into()];
-            let error = FrameAudit::of(&image, &policy, CheckedElf::Runtime)
-                .check(required)
+        for bytes in [0, 4096] {
+            let error = FrameAudit::of(&subject(bytes), &policy, CheckedElf::Runtime)
+                .check()
                 .unwrap_err()
                 .to_string();
-            assert!(error.contains("matches 0 functions"), "{error}");
+            assert!(error.contains("stale frame exception"), "{error}");
         }
+        // A different generic instantiation cannot keep the exception alive.
+        let mut image = subject(8192);
+        image.functions[1].names = vec!["test::large::<u16>".into()];
+        let error = FrameAudit::of(&image, &policy, CheckedElf::Runtime)
+            .check()
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("matches 0 functions"), "{error}");
     }
-
     #[test]
     fn matching_two_implementations_fails_but_aliases_count_once() {
         let (_dir, mut policy) = policy_with(BASE, "");
@@ -343,12 +333,12 @@ mod frame_limits {
         image.functions[1].names.push("test::large::<u8>".into());
         assert!(
             FrameAudit::of(&image, &policy, CheckedElf::Runtime)
-                .check(Required::Product)
+                .check()
                 .is_ok()
         );
         image.functions[0].names.push("test::large::<u8>".into());
         let error = FrameAudit::of(&image, &policy, CheckedElf::Runtime)
-            .check(Required::Product)
+            .check()
             .unwrap_err()
             .to_string();
         assert!(error.contains("matches 2 functions"), "{error}");
@@ -363,30 +353,28 @@ mod frame_limits {
         image.functions[1].names = vec!["_ZN4test7example17h0123456789abcdefE".into()];
         assert!(
             FrameAudit::of(&image, &policy, CheckedElf::Runtime)
-                .check(Required::Product)
+                .check()
                 .is_ok()
         );
         image.functions[0].names = vec!["_ZN4test7example17hfedcba9876543210E".into()];
         let error = FrameAudit::of(&image, &policy, CheckedElf::Runtime)
-            .check(Required::Product)
+            .check()
             .unwrap_err()
             .to_string();
         assert!(error.contains("matches 2 functions"), "{error}");
     }
 
     #[test]
-    fn diagnostic_warns_and_bootstrap_uses_its_own_exceptions() {
+    fn oversized_frames_are_reported_and_bootstrap_uses_its_own_exceptions() {
         let (_dir, mut policy) = policy_with(BASE, "");
         let image = subject(8192);
         for elf in [CheckedElf::Runtime, CheckedElf::Bootstrap] {
             let audit = FrameAudit::of(&image, &policy, elf);
-            assert!(audit.check(Required::Product).is_err());
-            let warnings = audit.check(Required::Diagnostic).unwrap();
+            let warnings = audit.check().unwrap();
             assert_eq!(warnings.len(), 1);
             assert!(warnings[0].contains("test::large::<u8>"));
             let output = tempfile::tempdir().unwrap();
-            crate::stack::frames::audit(&image, &policy, elf, Required::Diagnostic, output.path())
-                .unwrap();
+            crate::stack::frames::audit(&image, &policy, elf, output.path()).unwrap();
             let report = match elf {
                 CheckedElf::Runtime => crate::stack::frames::RUNTIME_REPORT,
                 CheckedElf::Bootstrap => crate::stack::frames::BOOTSTRAP_REPORT,
@@ -398,15 +386,17 @@ mod frame_limits {
             );
         }
         exception(&mut policy, 8192);
-        assert!(
+        assert_eq!(
             FrameAudit::of(&image, &policy, CheckedElf::Bootstrap)
-                .check(Required::Product)
-                .is_err()
+                .check()
+                .unwrap()
+                .len(),
+            1
         );
         policy.frame_exceptions.bootstrap = std::mem::take(&mut policy.frame_exceptions.runtime);
         assert!(
             FrameAudit::of(&image, &policy, CheckedElf::Bootstrap)
-                .check(Required::Product)
+                .check()
                 .unwrap()
                 .is_empty()
         );

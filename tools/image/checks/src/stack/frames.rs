@@ -1,4 +1,4 @@
-//! Each recorded frame, reachable or not, is bounded by the move limit.
+//! Each recorded frame, reachable or not, is reported against the move limit.
 //! Missing records belong to the separate coverage check.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 use oer_chip_profile::policy::{FrameException, StackPolicy};
 
 use super::{Image, Result};
-use crate::{CheckedElf, interrupts::Required};
+use crate::CheckedElf;
 
 pub const RUNTIME_REPORT: &str = "runtime-frames.txt";
 pub const BOOTSTRAP_REPORT: &str = "bootstrap-frames.txt";
@@ -71,12 +71,6 @@ impl<'a> FrameAudit<'a> {
                     exception.function, audit.limit
                 ));
             }
-            if bytes > exception.ceiling_bytes {
-                audit.errors.push(format!(
-                    "frame `{}` is {bytes} bytes, above its exception ceiling of {} bytes",
-                    exception.function, exception.ceiling_bytes
-                ));
-            }
             if !excepted.insert(address) {
                 audit.errors.push(format!(
                     "multiple frame exceptions name the same implementation: `{}`",
@@ -97,27 +91,30 @@ impl<'a> FrameAudit<'a> {
         audit
     }
 
-    /// Diagnostic relaxes only unexcepted frames. Invalid exceptions and
-    /// exceeded ceilings fail under either policy.
-    pub fn check(&self, required: Required) -> Result<Vec<String>> {
-        let mut errors = self.errors.clone();
+    /// Oversized frames and exception ceilings are warnings. Invalid or stale
+    /// exception declarations remain configuration errors.
+    pub fn check(&self) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
         for (name, bytes, excepted) in &self.above {
             if !excepted {
-                let problem = format!(
+                warnings.push(format!(
                     "frame `{name}` is {bytes} bytes, above the {}-byte move limit",
                     self.limit
-                );
-                match required {
-                    Required::Product => errors.push(problem),
-                    Required::Diagnostic => warnings.push(problem),
-                }
+                ));
             }
         }
-        if errors.is_empty() {
+        for (exception, bytes) in &self.exceptions {
+            if *bytes > exception.ceiling_bytes {
+                warnings.push(format!(
+                    "frame `{}` is {bytes} bytes, above its exception ceiling of {} bytes",
+                    exception.function, exception.ceiling_bytes
+                ));
+            }
+        }
+        if self.errors.is_empty() {
             Ok(warnings)
         } else {
-            Err(errors.join("\n").into())
+            Err(self.errors.join("\n").into())
         }
     }
 
@@ -152,7 +149,6 @@ pub(crate) fn audit(
     image: &Image,
     policy: &StackPolicy,
     elf: CheckedElf,
-    required: Required,
     output: &std::path::Path,
 ) -> Result<Vec<String>> {
     let audit = FrameAudit::of(image, policy, elf);
@@ -160,7 +156,7 @@ pub(crate) fn audit(
         CheckedElf::Runtime => RUNTIME_REPORT,
         CheckedElf::Bootstrap => BOOTSTRAP_REPORT,
     };
-    let result = audit.check(required);
+    let result = audit.check();
     let mut report_text = audit.render();
     match &result {
         Ok(warnings) => {

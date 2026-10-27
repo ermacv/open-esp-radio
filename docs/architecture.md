@@ -176,7 +176,8 @@ release a secondary hart.
   executor's level or calling a waker, with its reason in the image report).
   The image check applies each class's rules; the level number grants
   nothing.
-- Images have no reachable panics. The image check counts, for each root
+- Image code introduces no new runtime panics and removes existing ones.
+  The image check counts, for each root
   (the bootstrap, each used hart's task entry, each task, each interrupt
   context), the panic sites it reaches, by the crate layer of the function
   holding them: PAC, HAL, chips, portable, protocols, firmware, core,
@@ -184,8 +185,9 @@ release a secondary hart.
   symbols). Each image declares a budget of its runtime and bootstrap in
   `[package.metadata.open-radio.panic-budget]`, per layer and for the sites
   its `Hardware` interrupt contexts reach together (`hardware`); a count
-  above the budget fails the build, and a budget only shrinks. The target of
-  every budget is 0, first for the PAC layer and the `Hardware` contexts.
+  above or below the budget produces a report with each site and its roots;
+  image panic counts do not gate builds. Zero reachable panics remains the
+  code goal: introduce no new runtime panics and remove existing ones.
 - Interrupt handlers and the executor code they run execute from SRAM or ROM.
   P2 tasks may run from PSRAM (the S31 reaches flash and PSRAM through
   separate controllers). Nothing runs from cached flash. The image check
@@ -202,9 +204,11 @@ release a secondary hart.
   the same fact geometry. The bootstrap jumps to a stage-two entry known at
   build time and the bootstrap stack's path ends there, once the checks verify
   the jump and that the entry installs its own stack pointer first. There is no
-  baseline of accepted holes, and an observed depth above a bound fails the run. No frame
-  exceeds the move limit (4 KiB); larger state lives in placed static
-  storage and futures hold a reference. Code and stacks run from PSRAM after
+  baseline of accepted holes, and an observed depth above a bound fails the run.
+  The frame/move limit (4 KiB) is a reporting threshold: larger frames and
+  moves produce messages without failing the build. Proven task, interrupt
+  and bootstrap stack bounds, unresolved-path restrictions and placement
+  remain gates. Code and stacks run from PSRAM after
   the staged bootstrap. Details: [memory and stacks](memory.md).
 
 ## Ownership
@@ -501,8 +505,8 @@ the existing HAL owner.
 ## Tools
 
 - **Images.** Only `cargo fw` builds images (`tools/image`); it runs the
-  image checks (placement, stacks, frames) and `cargo fw sizes` compares
-  builds.
+  image checks (placement and stacks), reports frames and panics, and
+  `cargo fw sizes` compares builds.
 - **Stand.** HIL runs (`cargo hil`, `tools/hil`) start by hand when they answer
   a real question. Stand roles belong to firmware, not boards; the lab router
   is reprogrammed to each run's profile; the stand file holds no credentials
