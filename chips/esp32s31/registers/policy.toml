@@ -7746,6 +7746,35 @@ value = 0x00000002
 masks = "BT_MAC.IRQ_ENABLE_1"
 sources = ["HW12_S31_BLE_OVERFLOW_ACK_20261026", "HW9_S31_MAC_MASK_ACK_20261027"]
 
+# SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027.
+# These indication discards deliberately leave delivery enables unchanged.
+# They consume only the named local timer indication, never another lane.
+[[fixed-register-images]]
+name = "discard_bluetooth_compare_0_indication"
+register = "BT_MAC.IRQ_CLEAR_1"
+value = 0x00000010
+consumed-event = "The caller consumes the local BTLC compare0 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement."
+sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027"]
+
+[[fixed-register-images]]
+name = "discard_bluetooth_compare_1_indication"
+register = "BT_MAC.IRQ_CLEAR_1"
+value = 0x00000020
+consumed-event = "The caller consumes the local BTLC compare1 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement."
+sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027"]
+
+[[fixed-register-images]]
+name = "discard_bluetooth_controller_time_overflow_indication"
+register = "BT_MAC.IRQ_CLEAR_1"
+value = 0x00000002
+consumed-event = "The caller consumes the local BTLC first-word overflow indication itself; no handler or continuous-time reconstruction may require this indication. This is a discard, not a sampled runtime acknowledgement."
+sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027"]
+
+[[register-image-reads]]
+name = "read_bluetooth_task_diagnostic_image"
+register = "BT_MAC.WORD_04BC_OPAQUE"
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+
 [[register-image-reads]]
 name = "read_bluetooth_modem_lp_status"
 register = "MODEM_PWR.WORD_0038_OPAQUE"

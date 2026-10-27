@@ -35137,6 +35137,14 @@ pub mod bt_mac {
         pub fn publish_ble_phy_init_configuration_word(&mut self) {
             self.0.write::<0x940>(0x000007d0);
         }
+
+        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`BT_MAC.WORD_04BC_OPAQUE`).
+        ///
+        /// SOURCE: S31_MMIO_USE_201014BC, S31_MMIO_DECLARED_201014BC.
+        #[inline]
+        pub fn read_bluetooth_task_diagnostic_image(&self) -> u32 {
+            self.0.read::<0x4bc>()
+        }
     }
 
     /// The `BluetoothInterruptBank` part of `BT_MAC`.
@@ -35727,6 +35735,39 @@ pub mod bt_mac {
         pub fn clear_bluetooth_controller_time_overflow(&mut self) {
             let bits = self.0.read::<0x60>();
             self.0.write::<0x60>(bits & 0xfffffffd);
+            self.0.write::<0x64>(0x00000002);
+        }
+
+        /// Acknowledge the consumed events `0x00000010` (`BT_MAC.IRQ_CLEAR_1`).
+        ///
+        /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027.
+        ///
+        /// The caller consumed these events:
+        /// The caller consumes the local BTLC compare0 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement.
+        #[inline]
+        pub fn discard_bluetooth_compare_0_indication(&mut self) {
+            self.0.write::<0x64>(0x00000010);
+        }
+
+        /// Acknowledge the consumed events `0x00000020` (`BT_MAC.IRQ_CLEAR_1`).
+        ///
+        /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027.
+        ///
+        /// The caller consumed these events:
+        /// The caller consumes the local BTLC compare1 indication itself, with its compare producer disabled; no handler or other consumer may require this indication. This is a discard, not a sampled runtime acknowledgement.
+        #[inline]
+        pub fn discard_bluetooth_compare_1_indication(&mut self) {
+            self.0.write::<0x64>(0x00000020);
+        }
+
+        /// Acknowledge the consumed events `0x00000002` (`BT_MAC.IRQ_CLEAR_1`).
+        ///
+        /// SOURCE: HW9_S31_MAC_CAUSES_20261027, HW9_S31_MAC_MASK_ACK_20261027.
+        ///
+        /// The caller consumed these events:
+        /// The caller consumes the local BTLC first-word overflow indication itself; no handler or continuous-time reconstruction may require this indication. This is a discard, not a sampled runtime acknowledgement.
+        #[inline]
+        pub fn discard_bluetooth_controller_time_overflow_indication(&mut self) {
             self.0.write::<0x64>(0x00000002);
         }
 
