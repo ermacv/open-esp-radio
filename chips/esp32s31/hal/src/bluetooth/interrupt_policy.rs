@@ -55,6 +55,15 @@ pub(super) const FAULTS_1: u32 = bt_mac::irq_enable_1::SOURCE_8_MASK
 pub(super) const CLEANUP_0: u32 = bt_mac::CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_0_IMAGE;
 pub(super) const CLEANUP_1: u32 = bt_mac::CLEAR_BLUETOOTH_TERMINAL_NON_FAULT_BANK_1_IMAGE;
 
+// Every serviced non-fault lane must be covered by the fixed W1C image.
+const _: () = assert!(CLEANUP_0 == PRODUCTION.dynamic_0.0 | FEATURES_0.0);
+const _: () = assert!(
+    CLEANUP_1
+        == PRODUCTION.dynamic_1.0
+            | FEATURES_1.0
+            | bt_mac::irq_enable_1::CONTROLLER_TIME_OVERFLOW_MASK
+);
+
 pub(super) const fn release_fault_visible(primary: BluetoothInterruptObservation) -> bool {
     unsupported_primary_pending(primary)
         || primary.status_0 & FAULTS_0 != 0
