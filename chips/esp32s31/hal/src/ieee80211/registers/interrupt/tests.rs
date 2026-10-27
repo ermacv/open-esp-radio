@@ -2,6 +2,79 @@ use crate::ieee80211::registers::{
     HostWords, MacInterruptMask, interrupt::MacInterruptEnableState,
 };
 
+#[test]
+fn rx_selection_keeps_only_sampled_selected_lanes() {
+    use super::MacRxInterrupts;
+    for selected in [
+        MacRxInterrupts::NONE,
+        MacRxInterrupts::ALL,
+        MacRxInterrupts::AUXILIARY_5,
+        MacRxInterrupts::SUCCESS,
+        MacRxInterrupts::AUXILIARY_24,
+    ] {
+        for initial in [0, u32::MAX] {
+            let mut words = HostWords::filled(initial);
+            let sample = words
+                .owners()
+                .mac_interrupt
+                .mac_interrupt_status()
+                .retain_rx_causes(selected);
+            let expected = if initial == 0 {
+                MacRxInterrupts::NONE
+            } else {
+                selected
+            };
+            assert_eq!(sample.rx_causes(), expected);
+            assert!(!sample.observation().has_unhandled_event());
+            let bits = sample.bits();
+            assert_eq!(
+                bits.count_ones(),
+                u32::from(expected.auxiliary_5)
+                    + u32::from(expected.success)
+                    + u32::from(expected.auxiliary_24)
+            );
+            let before = words.clone();
+            words
+                .owners()
+                .mac_interrupt
+                .acknowledge_mac_interrupts(sample);
+            assert_eq!(
+                values(&before.changes(&words), "interrupt"),
+                if initial == 0 {
+                    std::vec![]
+                } else {
+                    std::vec![bits]
+                }
+            );
+            assert!(
+                before
+                    .changes(&words)
+                    .iter()
+                    .all(|(part, _, _)| *part == "interrupt")
+            );
+        }
+    }
+}
+
+#[test]
+fn individual_rx_enables_preserve_unrelated_delivery_and_raw_observation() {
+    use super::MacRxInterrupts;
+    let mut words = HostWords::filled(u32::MAX);
+    let mut owners = words.owners();
+    owners
+        .mac_interrupt
+        .set_mac_rx_interrupt_enable(MacRxInterrupts::AUXILIARY_24);
+    assert_eq!(
+        owners.mac_interrupt.mac_rx_interrupt_enable(),
+        MacRxInterrupts::AUXILIARY_24
+    );
+    assert!(owners.mac_interrupt.mac.read_enable().tx_complete());
+    assert!(owners.mac_interrupt.mac.read_enable().fatal_assertion());
+    let raw = owners.mac_interrupt.mac_interrupt_raw();
+    assert_eq!(raw.bits(), u32::MAX);
+    assert_eq!(raw.fatal_assertion_raw(), Some(raw.bits()));
+}
+
 /// The value each changed word of one part holds, in memory order.
 fn values(changes: &[(&'static str, usize, u32)], part: &str) -> std::vec::Vec<u32> {
     changes

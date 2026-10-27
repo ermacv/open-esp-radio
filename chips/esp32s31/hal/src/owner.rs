@@ -659,6 +659,19 @@ impl oer_mmio::InterruptSource for MacInterruptRegisters {
 }
 
 impl MacInterruptRegisters {
+    /// Read the three RX delivery enables independently.
+    pub fn mac_rx_interrupt_enable(&self) -> crate::ieee80211::registers::MacRxInterrupts {
+        self.inner.mac_rx_interrupt_enable()
+    }
+
+    /// Change only RX delivery enables; preserve other lanes and pending events.
+    pub fn set_mac_rx_interrupt_enable(
+        &mut self,
+        enabled: crate::ieee80211::registers::MacRxInterrupts,
+    ) {
+        self.inner.set_mac_rx_interrupt_enable(enabled);
+    }
+
     /// Mask every MAC source; nothing is acknowledged.
     pub fn mask_all_mac_interrupts(&mut self) {
         self.inner.mask_all_mac_interrupts();
