@@ -211,7 +211,7 @@ fn run(s: &mut Session<'_>, stimulus: Stimulus) {
         let target = origin.wrapping_add(2048) & LOW_MAX;
         match stimulus {
             Stimulus::Compare => s.ble.timer.modify_word_006c_opaque(|w| {
-                w.set_bits_0_31_opaque(target);
+                w.set_compare_target(Bits::truncate(target));
             }),
             Stimulus::Sleep16 => {
                 s.ble.timer.modify_word_0064_opaque(|w| {
@@ -243,7 +243,7 @@ fn run(s: &mut Session<'_>, stimulus: Stimulus) {
         state(s, tag + 0x40);
         // Park compare before the next independent sleep target.
         s.ble.timer.modify_word_006c_opaque(|w| {
-            w.set_bits_0_31_opaque(LOW_MAX);
+            w.set_compare_target(Bits::truncate(LOW_MAX));
         });
     }
     cleanup(s, stimulus);

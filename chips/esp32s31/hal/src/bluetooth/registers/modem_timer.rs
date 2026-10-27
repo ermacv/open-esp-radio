@@ -13,6 +13,8 @@
 
 #![deny(unsafe_code)]
 
+use oer_mmio::Bits;
+
 use crate::bluetooth::registers::{
     BluetoothModemLpTimerRegisters, BluetoothPlacements, device_fence,
 };
@@ -314,15 +316,35 @@ trait ModemLpTimerRuntimeTransaction {
     fn disable_compare(&mut self);
     /// Store one compare image, produced only by the deadline projection of
     /// `execute_modem_lp_timer_compare_program`.
-    fn write_compare(&mut self, image: u32);
+    fn write_compare(&mut self, target: ModemLpCompareTarget);
     fn trigger_timer_command(&mut self);
     fn fence(&mut self);
 }
+
+type ModemLpCompareTarget =
+    Bits<{ oer_esp32s31_pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH }>;
+const _: () = assert!(
+    oer_esp32s31_pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH
+        == oer_esp32s31_pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH
+);
 
 const MODEM_LP_TIMER_LOW_SPAN: u32 =
     1 << oer_esp32s31_pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH;
 const MODEM_LP_TIMER_HALF_RANGE: u32 = MODEM_LP_TIMER_LOW_SPAN / 2;
 const MODEM_LP_TIMER_IMMEDIATE_TOLERANCE: i32 = 2;
+
+/// Source 127 must be serviced within one low-counter wrap (2^24 LP ticks).
+/// This bound is in main-XTAL cycles: at 40 MHz and divider 399 it is
+/// 167.77216 s (100 kHz LP ticks), from the generated width and divider.
+/// SOURCE: HW22_S31_LP_TWO_WRAPS_20261027; ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK.
+/// Two wraps coalesce; this is a service requirement, not measured IRQ latency.
+/// Any future sleep path must wake on source 127 before one wrap elapses.
+/// This constant introduces no timer, wake configuration or runtime check.
+pub const MODEM_LP_TIMER_SOURCE127_SERVICE_BOUND_XTAL_CYCLES: u64 = {
+    let span = MODEM_LP_TIMER_LOW_SPAN as u64;
+    let divisor = crate::modem::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER.get() as u64 + 1;
+    span * divisor
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ModemLpTimerInterruptDisposition {
@@ -430,10 +452,14 @@ fn execute_modem_lp_timer_compare_program(
         transaction.publish_software_pending();
         BluetoothModemLpTimerCompareDisposition::Immediate
     } else if delta < MODEM_LP_TIMER_LOW_SPAN {
-        transaction.write_compare(deadline.bits() % MODEM_LP_TIMER_LOW_SPAN);
+        transaction.write_compare(ModemLpCompareTarget::truncate(deadline.bits()));
         BluetoothModemLpTimerCompareDisposition::Deadline
     } else {
-        transaction.write_compare(counter.wrapping_add(MODEM_LP_TIMER_HALF_RANGE));
+        // SOURCE: HW22_S31_LP_COMPARE_WIDTH_20261027. Explicit wrapping
+        // in the 24-bit compare domain also covers counter+half crossing wrap.
+        transaction.write_compare(ModemLpCompareTarget::truncate(
+            counter.wrapping_add(MODEM_LP_TIMER_HALF_RANGE),
+        ));
         BluetoothModemLpTimerCompareDisposition::HalfRangeCheckpoint
     };
     transaction.trigger_timer_command();
@@ -641,7 +667,10 @@ impl<B: oer_mmio::Placement> ModemLpTimerInterruptTransaction
     }
 
     fn read_value_006c(&mut self) -> u32 {
-        self.registers.read_word_006c_opaque().bits_0_31_opaque()
+        self.registers
+            .read_word_006c_opaque()
+            .compare_target()
+            .get()
     }
 
     fn control_0058_bit_2_is_set(&mut self) -> bool {
@@ -709,9 +738,9 @@ impl<B: oer_mmio::Placement> ModemLpTimerRuntimeTransaction
         self.registers.disable_bluetooth_modem_lp_timer_compare();
     }
 
-    fn write_compare(&mut self, image: u32) {
+    fn write_compare(&mut self, target: ModemLpCompareTarget) {
         self.registers.modify_word_006c_opaque(|w| {
-            w.set_bits_0_31_opaque(image);
+            w.set_compare_target(target);
         });
     }
 

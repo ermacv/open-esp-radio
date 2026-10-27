@@ -112,6 +112,28 @@ upper bytes. SOURCE: `BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT` (L4/L6/L7).
 LP command lanes and mode controls retain their measured scope; compare disable
 does not prove all-cause quiescence.
 
+Source 127 must be serviced within one low-counter wrap (2^24 LP ticks).
+`MODEM_LP_TIMER_SOURCE127_SERVICE_BOUND_XTAL_CYCLES` derives the interval
+from the generated counter width and selected divider 399: 167.77216 s at
+40 MHz XTAL / 100 kHz LP. Two natural wraps coalesce into one visible pending
+indication; a zero-store after the second leaves no second visible credit.
+Any future sleep path must wake on 127 before one wrap elapses. This is the
+service contract; the constant adds no timer, wake programming or latency
+measurement. SOURCE: `HW22_S31_LP_TWO_WRAPS_20261027`,
+`ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK`.
+
+Compare publication uses the typed 24-bit `COMPARE_TARGET` field, preserving
+the opaque upper byte. Deadline projection and half-range checkpoints wrap
+explicitly in that 24-bit domain. Each upper bit 24–31 and all together read
+back zero and permit the future low24 compare in the short XTAL/divider 1
+probe with CONTROL4=0 and either CONTROL0 state. The production low-power
+prefix clears CONTROL0/4 and selects divider 399; its clock rate is not
+reproduced by those probes. The conditional-ack race and surviving CONTROL2
+latch were measured with CONTROL0=1/CONTROL4=0, XTAL/divider 1; they do not
+establish the same latch witness or timing in production's configuration.
+SOURCE: `HW22_S31_LP_COMPARE_WIDTH_20261027`,
+`HW22_S31_LP_CONDITIONAL_ACK_20261027`.
+
 Modem PLL source gating uses the pinned ESP-IDF 4d59230d whole-word sequence:
 open `0x15 → 0x1d`, close `0x2d → 0x25`. Platform source-clock readback
 requires the open PLL image with the XTAL gate clear

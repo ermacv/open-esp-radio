@@ -39,7 +39,7 @@ fn state(s: &Session<'_>, tag: u32) {
         tag + 3,
         u32::from(m.control_0()) + 4 * u32::from(m.control_2()) + 16 * u32::from(m.control_4()),
         t.read_word_0064_opaque().bits_0_23_opaque().get(),
-        t.read_word_006c_opaque().bits_0_31_opaque(),
+        t.read_word_006c_opaque().compare_target().get(),
     );
 }
 fn quiet(s: &mut Session<'_>) {
@@ -128,7 +128,7 @@ fn future(s: &mut Session<'_>) -> u32 {
         w.set_bits_0_23_opaque(Bits::truncate(target));
     });
     s.ble.timer.modify_word_006c_opaque(|w| {
-        w.set_bits_0_31_opaque(LOW_MAX);
+        w.set_compare_target(Bits::truncate(LOW_MAX));
     });
     target
 }

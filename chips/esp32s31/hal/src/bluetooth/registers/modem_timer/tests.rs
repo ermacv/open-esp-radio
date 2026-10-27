@@ -6,6 +6,7 @@ use super::{
     BluetoothLowPowerRuntimeControlObservation, BluetoothModemLpTimerCompareDisposition,
     BluetoothModemLpTimerEpoch, BluetoothModemLpTimerHandlerRegisterObservation,
     BluetoothModemLpTimerInstant, BluetoothModemLpTimerInterruptObservation,
+    MODEM_LP_TIMER_HALF_RANGE, MODEM_LP_TIMER_LOW_SPAN, ModemLpCompareTarget,
     ModemLpTimerHandlerRegisterDisposition, ModemLpTimerHandlerRegisterTransaction,
     ModemLpTimerInterruptDisposition, ModemLpTimerInterruptTransaction,
     ModemLpTimerLowPowerInitTransaction, ModemLpTimerRuntimeTransaction,
@@ -223,8 +224,9 @@ impl ModemLpTimerRuntimeTransaction for RuntimeRecorder {
         self.operations.push(RuntimeOperation::DisableCompare);
     }
 
-    fn write_compare(&mut self, image: u32) {
-        self.operations.push(RuntimeOperation::WriteCompare(image));
+    fn write_compare(&mut self, target: ModemLpCompareTarget) {
+        self.operations
+            .push(RuntimeOperation::WriteCompare(target.get()));
     }
 
     fn trigger_timer_command(&mut self) {
@@ -723,6 +725,32 @@ fn modem_lp_compare_uses_half_range_checkpoint_for_distant_deadline() {
 }
 
 #[test]
+fn a_half_range_checkpoint_wraps_in_the_low_counter_domain() {
+    let counter = MODEM_LP_TIMER_LOW_SPAN - 2;
+    let mut recorder = RuntimeRecorder::new(counter, 0, false);
+    let disposition = execute_modem_lp_timer_compare_program(
+        &mut recorder,
+        BluetoothModemLpTimerInstant::from_bits(counter + MODEM_LP_TIMER_LOW_SPAN),
+        BluetoothModemLpTimerEpoch::new(),
+    );
+    assert_eq!(
+        disposition,
+        BluetoothModemLpTimerCompareDisposition::HalfRangeCheckpoint
+    );
+    assert_eq!(
+        recorder.operations,
+        [
+            RuntimeOperation::DisableCompare,
+            RuntimeOperation::ReadCounter(counter),
+            RuntimeOperation::SampleRollover(false),
+            RuntimeOperation::WriteCompare(MODEM_LP_TIMER_HALF_RANGE - 2),
+            RuntimeOperation::TriggerTimerCommand,
+            RuntimeOperation::Fence,
+        ]
+    );
+}
+
+#[test]
 fn modem_lp_compare_accounts_for_unacknowledged_rollover_locally() {
     let mut recorder = RuntimeRecorder::new(0x00ff_fffe, 0x0000_0003, true);
     let epoch = BluetoothModemLpTimerEpoch::new();
@@ -811,7 +839,8 @@ fn a_rollover_between_plan_and_apply_advances_the_handler_epoch_once() {
         timer
             .runtime_control
             .read_word_006c_opaque()
-            .bits_0_31_opaque(),
+            .compare_target()
+            .get(),
         0x10
     );
     assert_ne!(timer.runtime_control.read_word_002c_opaque().low_byte(), 0);

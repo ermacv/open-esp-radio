@@ -1,5 +1,5 @@
 //! Finite arrival orderings; no simultaneous set/clear priority claim.
-use super::{Session, ble, emit};
+use super::{Bits, Session, ble, emit};
 
 const MAX: u32 = super::pac::modem_pwr::word_0048_opaque::COUNTER_LOW_MAX;
 const SHORT: u32 = 200_000;
@@ -82,7 +82,7 @@ fn stop(s: &mut Session<'_>) {
 }
 fn arm(s: &mut Session<'_>, target: u32, tag: u32) {
     s.ble.timer.modify_word_006c_opaque(|w| {
-        w.set_bits_0_31_opaque(target);
+        w.set_compare_target(Bits::truncate(target));
     });
     let before = counter(s);
     s.ble.timer.write_word_0010_opaque(|w| {
@@ -232,7 +232,8 @@ pub(super) fn rearm(s: &mut Session<'_>) {
 pub(super) fn compare_width(s: &mut Session<'_>) {
     init(s);
     const LOW_WIDTH: u32 = super::pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH;
-    const WORD_WIDTH: u32 = super::pac::modem_pwr::word_006c_opaque::BITS_0_31_OPAQUE_WIDTH;
+    const WORD_WIDTH: u32 = super::pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH
+        + super::pac::modem_pwr::word_006c_opaque::BITS_24_31_OPAQUE_WIDTH;
     const UPPER_WIDTH: u32 = WORD_WIDTH - LOW_WIDTH;
     for mode in 0..2 {
         // Baseline zero, each upper bit separately, then all upper bits.
@@ -256,9 +257,12 @@ pub(super) fn compare_width(s: &mut Session<'_>) {
             let low = origin.wrapping_add(2048) & MAX;
             let image = low | upper;
             s.ble.timer.modify_word_006c_opaque(|w| {
-                w.set_bits_0_31_opaque(image);
+                w.set_compare_target(Bits::truncate(image))
+                    .set_bits_24_31_opaque((image >> LOW_WIDTH) as u8);
             });
-            let readback = s.ble.timer.read_word_006c_opaque().bits_0_31_opaque();
+            let r = s.ble.timer.read_word_006c_opaque();
+            let readback =
+                r.compare_target().get() | (u32::from(r.bits_24_31_opaque()) << LOW_WIDTH);
             let before = counter(s);
             s.ble.timer.write_word_0010_opaque(|w| {
                 w.set_bit_18_opaque(true);

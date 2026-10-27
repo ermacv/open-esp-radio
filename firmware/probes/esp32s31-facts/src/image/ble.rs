@@ -351,7 +351,7 @@ fn lp_state(s: &Session<'_>, tag: u32) {
         tag + 0x100,
         u32::from(b.timer.read_word_0024_opaque().low_byte()),
         u32::from(b.timer.read_word_002c_opaque().low_byte()),
-        b.timer.read_word_006c_opaque().bits_0_31_opaque(),
+        b.timer.read_word_006c_opaque().compare_target().get(),
     );
 }
 pub(super) fn init_lp(s: &mut Session<'_>) {
@@ -424,7 +424,7 @@ fn start_counter(b: &mut Ble) {
 fn target(b: &mut Ble, delta: u32) {
     let value = counter(b).wrapping_add(delta) & COUNTER_MAX;
     b.timer.modify_word_006c_opaque(|w| {
-        w.set_bits_0_31_opaque(value);
+        w.set_compare_target(Bits::truncate(value));
     });
 }
 fn command18(b: &mut Ble) {
