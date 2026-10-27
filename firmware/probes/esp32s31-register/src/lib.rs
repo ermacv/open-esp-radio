@@ -43,9 +43,7 @@ fn start_session() -> u32 {
         return 5;
     };
     #[cfg(target_arch = "riscv32")]
-    oer_espressif_staged_runtime::phy_fault::report_previous();
-    #[cfg(target_arch = "riscv32")]
-    let identity = oer_espressif_staged_runtime::phy_fault::identity();
+    let identity = phy_identity();
     #[cfg(not(target_arch = "riscv32"))]
     let identity = oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test();
     let clocks = runtime.clocks;
@@ -124,5 +122,44 @@ oer_probe_macros::probe! {
                 1
             })
             .unwrap_or(0)
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "isolated verification image terminal failure"
+)]
+fn probe_halt() -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}
+#[cfg(target_arch = "riscv32")]
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+    probe_halt()
+}
+#[cfg(target_arch = "riscv32")]
+static PHY_FAULT: oer_memory::OnceValue<oer_esp32s31_hal::domain::transaction::Fault> =
+    oer_memory::OnceValue::new();
+#[cfg(target_arch = "riscv32")]
+fn report_phy_fault(fault: oer_esp32s31_hal::domain::transaction::Fault) -> ! {
+    let _first = PHY_FAULT.set(fault);
+    probe_halt()
+}
+#[cfg(target_arch = "riscv32")]
+oer_esp32s31_hal::phy_fault_reporter!(report_phy_fault);
+#[cfg(target_arch = "riscv32")]
+static PHY_SEAT: oer_esp32s31_hal::domain::transaction::TransactionSeat =
+    oer_esp32s31_hal::domain::transaction::TransactionSeat::new();
+#[cfg(target_arch = "riscv32")]
+fn phy_identity() -> oer_esp32s31_hal::domain::transaction::PhyIdentity {
+    match PHY_SEAT.claim() {
+        Some(identity) => identity,
+        None => report_phy_fault(oer_esp32s31_hal::domain::transaction::Fault {
+            reason: oer_esp32s31_hal::domain::transaction::FaultReason::IdentityClaimed,
+            registration: None,
+        }),
     }
 }

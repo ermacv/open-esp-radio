@@ -45,7 +45,10 @@ system these rules serve.
   Owned PHY transactions preserve their registration and restore obligations;
   only consuming reunion with the exact affine return owner releases their
   quarantine guard. Dropping either half records its source observations and
-  resets, without automatic restoration or owner release.
+  resets, without automatic restoration or owner release. The HAL owns both
+  signatures of its fault binding through its exported reporter macro.
+  Isolated verifier probes keep their own terminal reporter and first fault
+  in session RAM; they do not link the staged runtime.
   Remove existing runtime panics from image crates, including probes and
   HIL; image panic budgets only shrink to 0. `const` panics evaluated at
   compile time are allowed. Air, peer, host and API input return a handled

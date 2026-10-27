@@ -152,7 +152,9 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(root) = Root::take() else {
         crate::fail("root-taken")
     };
-    let runtime = root.into_runtime().unwrap_or_else(|error| crate::fail(error.name()));
+    let runtime = root
+        .into_runtime()
+        .unwrap_or_else(|error| crate::fail(error.name()));
     let (_psram, mut adopted) = match handoff.adopt(
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
@@ -179,7 +181,10 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         base_mac_address: base,
         mac_extension: factory.mac_extension(),
     };
-    let (domain, parts) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new(), oer_espressif_staged_runtime::phy_fault::identity());
+    let (domain, parts) = runtime.radio.split::<ChipClocks, _>(
+        ConcurrentPhy::new(),
+        oer_espressif_staged_runtime::phy_fault::identity(),
+    );
     let cold = ColdOwner::from_partition(parts.bluetooth);
     let (Some((end, _)), Some((inbox, cell)), Some(lp)) = (
         oer_esp32s31_radio_client::claim(),

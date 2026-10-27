@@ -227,6 +227,7 @@ struct Boot {
 /// The image's entropy owner.
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 
+oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {

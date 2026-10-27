@@ -1,7 +1,12 @@
 //! Target registration and tracking of the shared PHY domain in the radio
 //! domain.
 
+use oer_esp32s31_hal::domain::transaction::RadioTransaction;
 use oer_esp32s31_hal::power::PlatformClockBackend;
+pub(super) mod operations;
+pub use operations::{
+    close_concurrent_rf, maintain_concurrent_phy, register_concurrent_phy, wake_concurrent_rf,
+};
 
 use super::*;
 use crate::{
@@ -148,59 +153,52 @@ impl oer_diagnostics::DiagnosticPath for ConcurrentPhyTrackingError {
     clippy::result_large_err,
     reason = "fail-stop error retains the allocation-free PHY transition"
 )]
-pub fn register_concurrent_phy<'a, B: PlatformClockBackend + 'a, P, D, O>(
+async fn execute_register<'a, B: PlatformClockBackend + 'a, P, D, O>(
     timer: &'a impl oer_cooperate::CooperativeTimer,
-    radio: RadioDomain<B, ConcurrentPhy>,
+    initial: RadioTransaction<B, ConcurrentPhy>,
     platform: &'a mut P,
     clocks: &'a impl PlatformClockProvider<Backend = B>,
     config: PhyRegisterConfig,
     observer: O,
-) -> impl core::future::Future<
-    Output = (
-        RadioDomain<B, ConcurrentPhy>,
-        Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
-    ),
-> + 'a
+) -> (
+    RadioDomain<B, ConcurrentPhy>,
+    Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+)
 where
     D: PhyShortDelay + 'a,
     O: PhyTargetObserver + 'a,
 {
-    let initial = radio.detach();
-    super::domain::RegisterFuture {
-        future: async move {
-            let mut radio = initial.reunite();
-            let rejection = match radio.attachment_mut().slot_mut() {
-                Slot::Empty => None,
-                Slot::Poisoned => Some(ConcurrentPhyError::Poisoned),
-                Slot::Registered(_) | Slot::RfClosed(_) | Slot::Pending { .. } => {
-                    Some(ConcurrentPhyError::AlreadyRegistered)
-                }
-            };
-            if let Some(error) = rejection {
-                return (radio, Err(ConcurrentPhyRegisterFailure::Rejected(error)));
-            }
-            if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
-                return (
-                    radio,
-                    Err(ConcurrentPhyRegisterFailure::Rejected(
-                        ConcurrentPhyError::Clock(error),
-                    )),
-                );
-            }
-            let mut transaction = radio.detach();
-            let registered = PhyDomain::register::<P, _, D, O>(
-                timer,
-                platform,
-                transaction.hardware_mut(),
-                config,
-                observer,
-            )
-            .await;
-            let mut radio = transaction.reunite();
-            let result = finish_concurrent_registration(&mut radio, registered);
-            (radio, result)
-        },
+    let mut radio = initial.reunite();
+    let rejection = match radio.attachment_mut().slot_mut() {
+        Slot::Empty => None,
+        Slot::Poisoned => Some(ConcurrentPhyError::Poisoned),
+        Slot::Registered(_) | Slot::RfClosed(_) | Slot::Pending { .. } => {
+            Some(ConcurrentPhyError::AlreadyRegistered)
+        }
+    };
+    if let Some(error) = rejection {
+        return (radio, Err(ConcurrentPhyRegisterFailure::Rejected(error)));
     }
+    if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
+        return (
+            radio,
+            Err(ConcurrentPhyRegisterFailure::Rejected(
+                ConcurrentPhyError::Clock(error),
+            )),
+        );
+    }
+    let mut transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Register);
+    let registered = PhyDomain::register::<P, _, D, O>(
+        timer,
+        platform,
+        transaction.hardware_mut(),
+        config,
+        observer,
+    )
+    .await;
+    let mut radio = transaction.reunite();
+    let result = finish_concurrent_registration(&mut radio, registered);
+    (radio, result)
 }
 
 // Keep the consumed terminal result out of the registration poll's stack.
@@ -256,72 +254,69 @@ fn finish_concurrent_registration<B: PlatformClockBackend>(
 ///
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
-pub fn close_concurrent_rf<B: PlatformClockBackend, P, D>(
+async fn execute_close<B: PlatformClockBackend, P, D>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    radio: RadioDomain<B, ConcurrentPhy>,
+    initial: RadioTransaction<B, ConcurrentPhy>,
     platform: &mut P,
-) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
+) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)
 where
     D: PhyShortDelay,
 {
-    let initial = radio.detach();
-    async move {
-        let mut radio = initial.reunite();
-        let mut domain = match radio.attachment_mut().idle_domain() {
-            Ok(domain) => domain,
-            Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
-        };
-        let mut transaction = radio.detach();
-        let (registers, phy) = transaction.hardware_with_attachment();
-        if !domain.clients.describes(registers) {
-            *phy.slot_mut() = Slot::Registered(domain);
-            return (
-                transaction.reunite(),
-                Err(ConcurrentRfError::Rejected(
-                    ConcurrentPhyError::EpochMismatch,
-                )),
-            );
-        }
-        let closed = match radio_lifecycle::observe_temperature_with_hal::<P, D>(
-            timer,
-            platform,
-            registers,
-            domain.registered.target_state_mut(),
-        )
-        .await
-        {
-            Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D, _>(timer, registers)
-                .and_then(|()| {
-                    // SOURCE: linked IDF override releases TSENS and the last
-                    // peripheral SAR-I2C reference after phy_close_rf.
-                    oer_esp32s31_hal::phy::temperature::release(registers)
-                        .map_err(|_| PhyTargetPortError::HardwareInvariant)
-                })
-                .map_err(PhyRfCloseTemperatureFailure::HardwareAmbiguous),
-            Err(failure) => Err(failure),
-        };
-        let result = match closed {
-            Ok(()) => {
-                *phy.slot_mut() = Slot::RfClosed(domain);
-                Ok(())
-            }
-            Err(PhyRfCloseTemperatureFailure::Recoverable(error)) => {
-                *phy.slot_mut() = Slot::Registered(domain);
-                Err(ConcurrentRfError::Recoverable(error))
-            }
-            Err(PhyRfCloseTemperatureFailure::HardwareAmbiguous(error)) => {
-                *phy.slot_mut() = Slot::Poisoned;
-                Err(ConcurrentRfError::Failed(error))
-            }
-        };
-        let mut radio = transaction.reunite();
-        let result = result.and_then(|()| {
-            radio
-                .disable_phy_modem_clocks(PhyClockModule::Phy)
-                .map_err(ConcurrentRfError::Clock)
-        });
-        (radio, result)
+    let mut radio = initial.reunite();
+    let mut domain = match radio.attachment_mut().idle_domain() {
+        Ok(domain) => domain,
+        Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
+    };
+    let mut transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Close);
+    let (registers, phy) = transaction.hardware_with_attachment();
+    if !domain.clients.describes(registers) {
+        *phy.slot_mut() = Slot::Registered(domain);
+        return (
+            transaction.reunite(),
+            Err(ConcurrentRfError::Rejected(
+                ConcurrentPhyError::EpochMismatch,
+            )),
+        );
     }
+    let closed = match radio_lifecycle::observe_temperature_with_hal::<P, D>(
+        timer,
+        platform,
+        registers,
+        domain.registered.target_state_mut(),
+    )
+    .await
+    {
+        Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D, _>(timer, registers)
+            .and_then(|()| {
+                // SOURCE: linked IDF override releases TSENS and the last
+                // peripheral SAR-I2C reference after phy_close_rf.
+                oer_esp32s31_hal::phy::temperature::release(registers)
+                    .map_err(|_| PhyTargetPortError::HardwareInvariant)
+            })
+            .map_err(PhyRfCloseTemperatureFailure::HardwareAmbiguous),
+        Err(failure) => Err(failure),
+    };
+    let result = match closed {
+        Ok(()) => {
+            *phy.slot_mut() = Slot::RfClosed(domain);
+            Ok(())
+        }
+        Err(PhyRfCloseTemperatureFailure::Recoverable(error)) => {
+            *phy.slot_mut() = Slot::Registered(domain);
+            Err(ConcurrentRfError::Recoverable(error))
+        }
+        Err(PhyRfCloseTemperatureFailure::HardwareAmbiguous(error)) => {
+            *phy.slot_mut() = Slot::Poisoned;
+            Err(ConcurrentRfError::Failed(error))
+        }
+    };
+    let mut radio = transaction.reunite();
+    let result = result.and_then(|()| {
+        radio
+            .disable_phy_modem_clocks(PhyClockModule::Phy)
+            .map_err(ConcurrentRfError::Clock)
+    });
+    (radio, result)
 }
 
 /// Wake RF of the closed shared domain for its next client.
@@ -342,67 +337,64 @@ where
 ///
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
-pub fn wake_concurrent_rf<B: PlatformClockBackend, D>(
+async fn execute_wake<B: PlatformClockBackend, D>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    radio: RadioDomain<B, ConcurrentPhy>,
+    initial: RadioTransaction<B, ConcurrentPhy>,
     clocks: &impl PlatformClockProvider<Backend = B>,
-) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
+) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)
 where
     D: PhyShortDelay,
 {
-    let initial = radio.detach();
-    async move {
-        let mut radio = initial.reunite();
-        let domain = match radio.attachment_mut().closed_domain() {
-            Ok(domain) => domain,
-            Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
-        };
-        let transaction = radio.detach();
-        let describes = domain.clients.describes(transaction.hardware());
-        let mut radio = transaction.reunite();
-        if !describes {
-            *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
-            return (
-                radio,
-                Err(ConcurrentRfError::Rejected(
-                    ConcurrentPhyError::EpochMismatch,
-                )),
-            );
-        }
-        if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
-            *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
-            return (
-                radio,
-                Err(ConcurrentRfError::Rejected(ConcurrentPhyError::Clock(
-                    error,
-                ))),
-            );
-        }
-        let mut transaction = radio.detach();
-        let result = radio_lifecycle::execute_rf_wake_with_hal::<D>(
-            timer,
-            transaction.hardware_mut(),
-            domain.phy_state(),
-        )
-        .await;
-        let result = match result {
-            Ok(()) => {
-                *transaction.attachment_mut().slot_mut() = Slot::Registered(domain);
-                Ok(())
-            }
-            Err(error) => {
-                *transaction.attachment_mut().slot_mut() = Slot::Poisoned;
-                Err(ConcurrentRfError::Failed(error))
-            }
-        };
-        let mut radio = transaction.reunite();
-        let result = result.and_then(|()| {
-            radio
-                .disable_phy_modem_clocks(PhyClockModule::Calibration)
-                .map_err(ConcurrentRfError::Clock)
-        });
-        (radio, result)
+    let mut radio = initial.reunite();
+    let domain = match radio.attachment_mut().closed_domain() {
+        Ok(domain) => domain,
+        Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
+    };
+    let transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Wake);
+    let describes = domain.clients.describes(transaction.hardware());
+    let mut radio = transaction.reunite();
+    if !describes {
+        *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+        return (
+            radio,
+            Err(ConcurrentRfError::Rejected(
+                ConcurrentPhyError::EpochMismatch,
+            )),
+        );
     }
+    if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
+        *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+        return (
+            radio,
+            Err(ConcurrentRfError::Rejected(ConcurrentPhyError::Clock(
+                error,
+            ))),
+        );
+    }
+    let mut transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Wake);
+    let result = radio_lifecycle::execute_rf_wake_with_hal::<D>(
+        timer,
+        transaction.hardware_mut(),
+        domain.phy_state(),
+    )
+    .await;
+    let result = match result {
+        Ok(()) => {
+            *transaction.attachment_mut().slot_mut() = Slot::Registered(domain);
+            Ok(())
+        }
+        Err(error) => {
+            *transaction.attachment_mut().slot_mut() = Slot::Poisoned;
+            Err(ConcurrentRfError::Failed(error))
+        }
+    };
+    let mut radio = transaction.reunite();
+    let result = result.and_then(|()| {
+        radio
+            .disable_phy_modem_clocks(PhyClockModule::Calibration)
+            .map_err(ConcurrentRfError::Clock)
+    });
+    (radio, result)
 }
 
 /// Run the pending tracking request with the protocols running, as the
@@ -418,83 +410,78 @@ where
 ///
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
-pub fn maintain_concurrent_phy<B: PlatformClockBackend, P, D, O>(
+async fn execute_maintain<B: PlatformClockBackend, P, D, O>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    radio: RadioDomain<B, ConcurrentPhy>,
+    initial: RadioTransaction<B, ConcurrentPhy>,
     platform: &mut P,
     observer: O,
-) -> impl core::future::Future<
-    Output = (
-        RadioDomain<B, ConcurrentPhy>,
-        Result<PhyParamTrackingOutcome, ConcurrentPhyTrackingError>,
-    ),
->
+) -> (
+    RadioDomain<B, ConcurrentPhy>,
+    Result<PhyParamTrackingOutcome, ConcurrentPhyTrackingError>,
+)
 where
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
-    let initial = radio.detach();
-    async move {
-        let mut radio = initial.reunite();
-        if let Err(error) = admit_maintenance(&radio) {
-            return (radio, Err(ConcurrentPhyTrackingError::Rejected(error)));
-        }
-        let (mut registered, pending) = match radio.attachment_mut().take_tracking() {
-            Slot::Pending {
-                registered,
-                pending,
-            } => (registered, pending),
-            other => {
-                *radio.attachment_mut().slot_mut() = other;
-                return (
-                    radio,
-                    Err(ConcurrentPhyTrackingError::Rejected(
-                        ConcurrentPhyError::NoTrackingPending,
-                    )),
-                );
-            }
-        };
-        let mut tracking = pending.begin_tracking(registered.tracking_policy());
-        let mut transaction = radio.detach();
-        let (registers, phy, mut grant) = transaction.hardware_with_attachment_and_grant();
-        if !tracking.describes(registers) {
-            *phy.slot_mut() = Slot::Poisoned;
+    let mut radio = initial.reunite();
+    if let Err(error) = admit_maintenance(&radio) {
+        return (radio, Err(ConcurrentPhyTrackingError::Rejected(error)));
+    }
+    let (mut registered, pending) = match radio.attachment_mut().take_tracking() {
+        Slot::Pending {
+            registered,
+            pending,
+        } => (registered, pending),
+        other => {
+            *radio.attachment_mut().slot_mut() = other;
             return (
-                transaction.reunite(),
-                Err(ConcurrentPhyTrackingError::Failed(
-                    TargetPhyParamTrackingError::EpochMismatch,
+                radio,
+                Err(ConcurrentPhyTrackingError::Rejected(
+                    ConcurrentPhyError::NoTrackingPending,
                 )),
             );
         }
-        let result = {
-            let state = registered.target_state_mut();
-            let mut port = TargetPhyParamTrackingPort::<_, _, _, D, _, _>::new(
-                platform, registers, &mut grant, timer, observer,
-            );
-            run_phy_param_tracking(&mut tracking, state, &mut port)
-                .await
-                .map_err(TargetPhyParamTrackingError::Run)
-        };
-        let result = match result {
-            Err(error) => {
-                *phy.slot_mut() = Slot::Poisoned;
-                Err(ConcurrentPhyTrackingError::Failed(error))
-            }
-            Ok(outcome) => match tracking.into_owner() {
-                Ok(clients) => {
-                    *phy.slot_mut() = Slot::Registered(PhyDomain::new(registered, clients));
-                    Ok(outcome)
-                }
-                Err(_) => {
-                    *phy.slot_mut() = Slot::Poisoned;
-                    Err(ConcurrentPhyTrackingError::Failed(
-                        TargetPhyParamTrackingError::MissingCompletedOwner,
-                    ))
-                }
-            },
-        };
-        (transaction.reunite(), result)
+    };
+    let mut tracking = pending.begin_tracking(registered.tracking_policy());
+    let mut transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
+    let (registers, phy, mut grant) = transaction.hardware_with_attachment_and_grant();
+    if !tracking.describes(registers) {
+        *phy.slot_mut() = Slot::Poisoned;
+        return (
+            transaction.reunite(),
+            Err(ConcurrentPhyTrackingError::Failed(
+                TargetPhyParamTrackingError::EpochMismatch,
+            )),
+        );
     }
+    let result = {
+        let state = registered.target_state_mut();
+        let mut port = TargetPhyParamTrackingPort::<_, _, _, D, _, _>::new(
+            platform, registers, &mut grant, timer, observer,
+        );
+        run_phy_param_tracking(&mut tracking, state, &mut port)
+            .await
+            .map_err(TargetPhyParamTrackingError::Run)
+    };
+    let result = match result {
+        Err(error) => {
+            *phy.slot_mut() = Slot::Poisoned;
+            Err(ConcurrentPhyTrackingError::Failed(error))
+        }
+        Ok(outcome) => match tracking.into_owner() {
+            Ok(clients) => {
+                *phy.slot_mut() = Slot::Registered(PhyDomain::new(registered, clients));
+                Ok(outcome)
+            }
+            Err(_) => {
+                *phy.slot_mut() = Slot::Poisoned;
+                Err(ConcurrentPhyTrackingError::Failed(
+                    TargetPhyParamTrackingError::MissingCompletedOwner,
+                ))
+            }
+        },
+    };
+    (transaction.reunite(), result)
 }
 
 /// Result of one periodic tracking tick of the shared domain.
@@ -558,7 +545,7 @@ where
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
-    let initial = radio.detach();
+    let initial = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
     async move {
         let mut radio = initial.reunite();
         let due = if radio.attachment().tracking_pending() {
@@ -616,8 +603,8 @@ fn wifi_channel_state<'domain>(
 /// Select a Wi-Fi channel on the shared domain before the MAC runs, as the
 /// registered Wi-Fi route's channel selection does.
 ///
-/// `phy` and `channel` come from one radio domain: the HAL Wi-Fi client lends
-/// the channel HAL together with the domain's attachment.
+/// The HAL Wi-Fi client consumes the owned PHY transaction into channel
+/// custody, borrowing only its MAC and platform. The future owns that custody.
 ///
 /// # Errors
 ///
@@ -626,26 +613,49 @@ fn wifi_channel_state<'domain>(
 ///
 /// # Cancellation
 ///
-/// Once polled, drive this future to a terminal result.
-pub async fn select_concurrent_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObserver>(
+/// Dropping the future, including before its first poll, quarantines the
+/// transaction and records its cancelled channel/retune operation.
+pub fn select_concurrent_wifi_channel<
+    D: PhyShortDelay,
+    B: PlatformClockBackend,
+    P,
+    O: PhyTargetObserver,
+>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    phy: &mut ConcurrentPhy,
     channel_or_frequency: u16,
     cbw: u8,
-    channel: &mut oer_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
+    mut transaction: oer_esp32s31_hal::ieee80211::channel::ChannelTransaction<
+        '_,
+        B,
+        P,
+        ConcurrentPhy,
+    >,
     observer: &mut O,
-) -> Result<(), ConcurrentWifiChannelError> {
-    let state = wifi_channel_state(phy, channel)?;
-    select_phy_channel_with_hal::<D, _, _>(
-        timer,
-        state,
-        channel_or_frequency,
-        cbw,
-        channel,
-        observer,
-    )
-    .await
-    .map_err(ConcurrentWifiChannelError::Failed)
+) -> impl core::future::Future<
+    Output = (
+        RadioDomain<B, ConcurrentPhy>,
+        Result<(), ConcurrentWifiChannelError>,
+    ),
+> {
+    async move {
+        let result = {
+            let (mut channel, phy) = transaction.parts_mut();
+            match wifi_channel_state(phy, &channel) {
+                Err(error) => Err(error),
+                Ok(state) => select_phy_channel_with_hal::<D, _, _>(
+                    timer,
+                    state,
+                    channel_or_frequency,
+                    cbw,
+                    &mut channel,
+                    observer,
+                )
+                .await
+                .map_err(ConcurrentWifiChannelError::Failed),
+            }
+        };
+        (transaction.reunite(), result)
+    }
 }
 
 /// Stop the Wi-Fi MAC, retune the shared domain and restart the MAC, as the
@@ -657,24 +667,47 @@ pub async fn select_concurrent_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObs
 ///
 /// # Cancellation
 ///
-/// Once polled, drive this future to a terminal result.
-pub async fn switch_concurrent_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObserver>(
+/// Dropping the future, including before its first poll, quarantines the
+/// transaction and records its cancelled channel/retune operation.
+pub fn switch_concurrent_wifi_channel<
+    D: PhyShortDelay,
+    B: PlatformClockBackend,
+    P,
+    O: PhyTargetObserver,
+>(
     timer: &impl oer_cooperate::CooperativeTimer,
-    phy: &mut ConcurrentPhy,
     channel_or_frequency: u16,
     cbw: u8,
-    channel: &mut oer_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
+    mut transaction: oer_esp32s31_hal::ieee80211::channel::ChannelTransaction<
+        '_,
+        B,
+        P,
+        ConcurrentPhy,
+    >,
     observer: &mut O,
-) -> Result<(), ConcurrentWifiChannelError> {
-    let state = wifi_channel_state(phy, channel)?;
-    switch_phy_channel_with_hal_and_mac_restart::<D, _, _>(
-        timer,
-        state,
-        channel_or_frequency,
-        cbw,
-        channel,
-        observer,
-    )
-    .await
-    .map_err(ConcurrentWifiChannelError::Failed)
+) -> impl core::future::Future<
+    Output = (
+        RadioDomain<B, ConcurrentPhy>,
+        Result<(), ConcurrentWifiChannelError>,
+    ),
+> {
+    async move {
+        let result = {
+            let (mut channel, phy) = transaction.parts_mut();
+            match wifi_channel_state(phy, &channel) {
+                Err(error) => Err(error),
+                Ok(state) => switch_phy_channel_with_hal_and_mac_restart::<D, _, _>(
+                    timer,
+                    state,
+                    channel_or_frequency,
+                    cbw,
+                    &mut channel,
+                    observer,
+                )
+                .await
+                .map_err(ConcurrentWifiChannelError::Failed),
+            }
+        };
+        (transaction.reunite(), result)
+    }
 }

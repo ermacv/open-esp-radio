@@ -1,0 +1,5 @@
+error[E0599]: no method named `reset` found for struct `FaultHandle` in the current scope
+ --> tests/ui/phy_diagnostic_cannot_choose_fault.rs:6:12
+  |
+6 |     handle.reset(FaultReason::Cancelled(Operation::Register)); // ui-error: E0599
+  |            ^^^^^ method not found in `FaultHandle`

@@ -769,23 +769,20 @@ impl Radio {
             Point::BeforeChannel,
         )
         .await?;
-        {
-            let mut platform = ();
-            let (mut port, phy) = wifi.channel_hal_with_attachment(
-                &mut platform,
-                require_radio(self.domain.as_mut(), self.radio_fault),
-            );
-            select_concurrent_wifi_channel::<RomShortDelay, _, _>(
-                &crate::PHY_CLOCK,
-                phy,
-                u16::from(channel),
-                0,
-                &mut port,
-                &mut crate::capture_observer!(self),
-            )
-            .await
-            .map_err(|_| RejectReason::Internal)?;
-        }
+        let transaction = require_radio(self.domain.take(), self.radio_fault)
+            .detach(oer_esp32s31_hal::domain::transaction::Operation::Channel);
+        let mut platform = ();
+        let port = wifi.channel_transaction(&mut platform, transaction);
+        let (radio, selected) = select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
+            &crate::PHY_CLOCK,
+            u16::from(channel),
+            0,
+            port,
+            &mut crate::capture_observer!(self),
+        )
+        .await;
+        self.domain = Some(radio);
+        selected.map_err(|_| RejectReason::Internal)?;
         wifi = observe(
             require_radio(self.domain.as_ref(), self.radio_fault),
             wifi,
@@ -914,7 +911,8 @@ impl Radio {
     }
 
     async fn read_analog(&mut self, address: Address) -> Result<u8> {
-        let mut transaction = require_radio(self.domain.take(), self.radio_fault).detach();
+        let mut transaction = require_radio(self.domain.take(), self.radio_fault)
+            .detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
         let result = async {
             let registers = transaction.hardware_mut();
             let mut started = false;
@@ -1203,8 +1201,5 @@ pub(crate) fn require_radio<T>(
     owner: Option<T>,
     fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
 ) -> T {
-    match owner {
-        Some(owner) => owner,
-        None => fault.reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
-    }
+    fault.require_owner(owner)
 }

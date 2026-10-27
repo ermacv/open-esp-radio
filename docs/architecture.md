@@ -325,7 +325,11 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
   identity, independently of registration-epoch equality. Cancellation,
   including before the first poll, retains both payloads in quarantine and
   resets through a named retained fault; the next boot prints the reason.
-  The actor cannot retune while its domain is transferred. `admit_maintenance` checks pending tracking state; it has no hard
+  Channel selection and retune also hold an owned transaction across every
+  wait; their future owns `ChannelTransaction`, whose channel HAL lends
+  its registers within that custody. The retained
+  cancellation record is 16 bytes and names the operation and epoch. The
+  actor cannot retune while its domain is transferred. `admit_maintenance` checks pending tracking state; it has no hard
   RF-window calendar. The actor enforces no one-period maximum deferral or
   shift counter, and queued requests can postpone a tick. Grant-protect
   requests bracket RF-sensitive work without proving an exclusive RF grant.

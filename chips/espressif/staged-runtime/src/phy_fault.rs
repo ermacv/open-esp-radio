@@ -14,7 +14,6 @@ pub fn identity() -> PhyIdentity {
         Some(identity) => identity,
         None => reset(Fault {
             reason: FaultReason::IdentityClaimed,
-            owner: core::ptr::from_ref(&SEAT).addr(),
             registration: None,
         }),
     }
@@ -32,6 +31,3 @@ pub fn report_previous() {
         let _reported = record.report(oer_esp32s31_hal::usb_serial_jtag::early_text);
     }
 }
-
-#[cfg(target_arch = "riscv32")]
-oer_memory::link_fn! { define fn __oer_phy_transaction_fault(fault: Fault) -> ! = reset; }

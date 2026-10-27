@@ -748,23 +748,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         (state.registers.radio_phy_mut(), &mut state.phy)
     }
 
-    /// Borrow the shared PHY registers, the route restore state and the
-    /// attachment together.
-    pub(crate) fn phy_parts_with_attachment(
-        &mut self,
-    ) -> (
-        &mut crate::phy::RadioPhyRegisters,
-        &mut PhyRouteState,
-        &mut T,
-    ) {
-        let state = self.state_mut();
-        (
-            state.registers.radio_phy_mut(),
-            &mut state.phy,
-            &mut state.attachment,
-        )
-    }
-
     /// Enable the modem clocks of the protocol that owns `owner`.
     ///
     /// This is ESP-IDF's reference-counted `modem_clock_module_enable` for the

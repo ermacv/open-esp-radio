@@ -634,21 +634,18 @@ where
         let lowered = crate::channel::lower_wifi_channel(channel.channel());
         let mut observer = self.observer.clone();
         let mut platform = ();
-        let selected = {
-            let (mut channel, phy) = wifi.channel_hal_with_attachment(
-                &mut platform,
-                require_radio(self.radio.as_mut(), self.radio_fault),
-            );
-            select_concurrent_wifi_channel::<RomShortDelay, _, _>(
-                &self.timer,
-                phy,
-                lowered.channel_or_frequency,
-                lowered.cbw,
-                &mut channel,
-                &mut observer,
-            )
-            .await
-        };
+        let transaction = require_radio(self.radio.take(), self.radio_fault)
+            .detach(oer_esp32s31_hal::domain::transaction::Operation::Channel);
+        let channel = wifi.channel_transaction(&mut platform, transaction);
+        let (radio, selected) = select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
+            &self.timer,
+            lowered.channel_or_frequency,
+            lowered.cbw,
+            channel,
+            &mut observer,
+        )
+        .await;
+        self.radio = Some(radio);
         if let Err(error) = selected {
             let cause = match error {
                 ConcurrentWifiChannelError::Rejected(_) => {
@@ -772,15 +769,16 @@ where
         }
         let start = self.timer.now();
         let mut observer = self.observer.clone();
-        if let Err(error) = retune::select_wifi_channel(
+        let (radio, result) = retune::select_wifi_channel(
             &self.timer,
-            require_radio(self.radio.as_mut(), self.radio_fault),
+            require_radio(self.radio.take(), self.radio_fault),
             &mut wifi,
             channel,
             &mut observer,
         )
-        .await
-        {
+        .await;
+        self.radio = Some(radio);
+        if let Err(error) = result {
             return Err(Failed {
                 returned: wifi,
                 cause: match error {
@@ -900,8 +898,5 @@ fn require_radio<R>(
     owner: Option<R>,
     fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
 ) -> R {
-    match owner {
-        Some(owner) => owner,
-        None => fault.reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
-    }
+    fault.require_owner(owner)
 }

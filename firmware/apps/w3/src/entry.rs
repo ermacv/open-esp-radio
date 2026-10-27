@@ -82,20 +82,27 @@ static ACTOR: StaticCell<Actor> = StaticCell::new();
 type Actor = RadioSystem<
     oer_esp32s31_radio_client::wifi::Wifi,
     RcSlow,
-    Esp32s31Radio<ChipClocks, oer_espressif_executor::Cooperative<EmbassyClock>, NoopPhyTargetObserver>,
+    Esp32s31Radio<
+        ChipClocks,
+        oer_espressif_executor::Cooperative<EmbassyClock>,
+        NoopPhyTargetObserver,
+    >,
     EmbassyClock,
 >;
 
 /// The image's entropy owner.
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 
+oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
     let Some(root) = Root::take() else {
         fail("root-taken");
     };
-    let runtime = root.into_runtime().unwrap_or_else(|error| fail(error.name()));
+    let runtime = root
+        .into_runtime()
+        .unwrap_or_else(|error| fail(error.name()));
     oer_espressif_staged_runtime::wifi_fault::report_previous();
     let (_psram, mut adopted) = match handoff.adopt(
         INTERRUPT_TABLE,
@@ -123,9 +130,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         base_mac_address: factory.base_mac(),
         mac_extension: factory.mac_extension(),
     };
-    let (domain, partitions) = runtime
-        .radio
-        .split::<ChipClocks, _>(ConcurrentPhy::new(), oer_espressif_staged_runtime::phy_fault::identity());
+    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(
+        ConcurrentPhy::new(),
+        oer_espressif_staged_runtime::phy_fault::identity(),
+    );
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         park()
     };
@@ -202,14 +210,19 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
-    executor.run(&mut router, interrupts.wake, software.irq0, move |spawner| {
-        if AppTasks::reporting(spawner, console, pads).is_err()
-            || AppTasks::station_task(spawner, frontend_channel, config, station, seed).is_err()
-            || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
-        {
-            fail("task-start");
-        }
-    })
+    executor.run(
+        &mut router,
+        interrupts.wake,
+        software.irq0,
+        move |spawner| {
+            if AppTasks::reporting(spawner, console, pads).is_err()
+                || AppTasks::station_task(spawner, frontend_channel, config, station, seed).is_err()
+                || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
+            {
+                fail("task-start");
+            }
+        },
+    )
 }
 
 /// Feed the RTC watchdog for good: the image resets when this executor stops

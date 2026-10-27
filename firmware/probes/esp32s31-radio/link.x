@@ -2,8 +2,6 @@ ENTRY(_start)
 
 MEMORY
 {
-  /* SOURCE: probe-link.x derives these symbols from the chip LAYOUT. */
-  RTC_FAST (rw) : ORIGIN = PROBE_RETAINED_ORIGIN, LENGTH = PROBE_RETAINED_LENGTH
   TRACE (rwx) : ORIGIN = 0x10000000, LENGTH = 2M
   /* SOURCE: chips/esp32s31/layout/linker/dma-window.x requires nonzero
      low DMA address bits. Leave the null NEXT encoding outside probe storage. */
@@ -13,11 +11,6 @@ MEMORY
 
 SECTIONS
 {
-  .rtc_fast.persistent (NOLOAD) : ALIGN(4)
-  {
-    *(.rtc_fast.persistent .rtc_fast.persistent.*)
-  } > RTC_FAST
-
   .blobray.probes : { KEEP(*(.blobray.probes)) } > TRACE
 
   .rwtext : ALIGN(4)
@@ -27,8 +20,7 @@ SECTIONS
 
   .text : ALIGN(4)
   {
-    /* ENTRY(_start) retains the verifier entry; the unused staged entry
-       is not a root of this image. */
+    KEEP(*(.text._start))
     *(.text .text.*)
   } > TRACE
 

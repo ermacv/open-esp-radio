@@ -1,12 +1,11 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
 use crate::power::PlatformClockBackend;
+#[cfg(test)]
+use crate::{domain::RadioDomain, ieee80211::channel};
 
 use crate::{
-    domain::RadioDomain,
-    ieee80211::{
-        channel, dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState,
-    },
+    ieee80211::{dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState},
     phy::i2c::PhyAdcRate,
     types::{
         MacInterruptEnableState, MacInterruptMask, MacInterruptRawSnapshot, MacInterruptSnapshot,
@@ -463,18 +462,13 @@ impl RadioAccess {
         channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore)
     }
 
-    /// Borrow the channel HAL together with the domain's attachment, for a
-    /// PHY channel operation that updates the shared domain's state.
-    pub fn channel_hal_with_attachment<'hal, B: PlatformClockBackend, P, T>(
+    /// Consume PHY custody for one channel operation, borrowing its MAC and platform.
+    pub fn channel_transaction<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<B, T>,
-    ) -> (channel::RadioChannelHal<'hal, P>, &'hal mut T) {
-        let (phy, restore, attachment) = radio.phy_parts_with_attachment();
-        (
-            channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore),
-            attachment,
-        )
+        radio: crate::domain::transaction::RadioTransaction<B, T>,
+    ) -> crate::ieee80211::channel::ChannelTransaction<'hal, B, P, T> {
+        crate::ieee80211::channel::ChannelTransaction::new(radio, &mut self.registers, platform)
     }
 
     /// Read the calibrated baseband observation without exposing the PAC

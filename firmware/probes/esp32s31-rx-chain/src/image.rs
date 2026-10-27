@@ -129,6 +129,7 @@ struct Boot {
     station: [u8; 6],
     ap: [u8; 6],
 }
+oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(root) = Root::take() else {

@@ -1,7 +1,7 @@
 error[E0382]: use of moved value: `transaction`
  --> tests/ui/phy_transaction_is_affine.rs:7:18
   |
-4 |     let transaction = radio.detach();
+4 |     let transaction = radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
   |         ----------- move occurs because `transaction` has type `RadioTransaction<B, T>`, which does not implement the `Copy` trait
 5 |     let radio = transaction.reunite();
   |                             --------- `transaction` moved due to this method call

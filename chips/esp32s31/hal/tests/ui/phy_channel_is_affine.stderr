@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `channel`
+ --> tests/ui/phy_channel_is_affine.rs:8:18
+  |
+5 |     let channel = wifi.channel_transaction(&mut platform, radio.detach(Operation::Channel));
+  |         ------- move occurs because `channel` has type `ChannelTransaction<'_, B, (), T>`, which does not implement the `Copy` trait
+6 |     let radio = channel.reunite();
+  |                         --------- `channel` moved due to this method call
+7 |     #[cfg(all())]
+8 |     let _again = channel.reunite(); // ui-error: E0382
+  |                  ^^^^^^^ value used here after move
+  |
+note: `ChannelTransaction::<'a, B, P, T>::reunite` takes ownership of the receiver `self`, which moves `channel`
+ --> src/ieee80211/channel.rs
+  |
+  |     pub fn reunite(self) -> crate::domain::RadioDomain<B, T> {
+  |                    ^^^^

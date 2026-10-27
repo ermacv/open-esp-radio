@@ -22,8 +22,10 @@ contain no Bluetooth state.
   can postpone it; there is no hard-window calendar, one-period deferral bound
   or shift counter. The actor serializes its own retunes with tracking through
   the consuming owned PHY transaction. Registration, tracking, RF close and
-  retained wake return the domain with their typed result. Cancellation
-  quarantines its owners and records a named fault before reset.
+  retained wake return the domain with their typed result. Channel selection
+  and retune hold the same owned custody across waits. Cancellation
+  quarantines its owners and records the operation and registration epoch
+  in a 16-byte retained fault before reset.
 - A failure that touched shared state poisons the domain; every later answer
   hands back what was lent. The client contract's `Failure` table defines the
   classification.

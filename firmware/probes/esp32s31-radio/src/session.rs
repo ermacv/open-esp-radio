@@ -49,15 +49,16 @@ pub(crate) const INSTALLED: u32 = 4;
 pub(crate) const ROOT_INIT: u32 = 5;
 
 /// Start the session: [`STARTED`] or why it did not.
-pub(crate) fn init() -> u32 {
+pub(crate) fn init(
+    identity: impl FnOnce() -> oer_esp32s31_hal::domain::transaction::PhyIdentity,
+) -> u32 {
     let Some(root) = Root::take() else {
         return ROOT_TAKEN;
     };
     let Ok(runtime) = root.into_runtime() else {
         return ROOT_INIT;
     };
-    oer_espressif_staged_runtime::phy_fault::report_previous();
-    let transaction_identity = oer_espressif_staged_runtime::phy_fault::identity();
+    let transaction_identity = identity();
     let clocks = runtime.clocks;
     let (radio, partitions) = runtime
         .radio
@@ -104,14 +105,13 @@ pub(crate) async fn calibrated(
     clocks: ChipClocks,
     identity: oer_esp32s31_phy::PhyCalibrationIdentity,
     timer: &impl oer_cooperate::CooperativeTimer,
+    transaction_identity: oer_esp32s31_hal::domain::transaction::PhyIdentity,
 ) -> u32 {
     use oer_esp32s31_phy::{
         NoopPhyTargetObserver, PhyRegisterConfig, RomShortDelay, register_concurrent_phy,
     };
-    let (radio, partitions) = hardware.split::<ChipClocks, _>(
-        ConcurrentPhy::new(),
-        oer_espressif_staged_runtime::phy_fault::identity(),
-    );
+    let (radio, partitions) =
+        hardware.split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity);
     let (radio, registration) = register_concurrent_phy::<_, (), RomShortDelay, _>(
         timer,
         radio,
@@ -137,12 +137,7 @@ pub(crate) async fn calibrated(
 impl Session {
     pub(crate) fn measurement_clocks(&mut self, enabled: bool) -> bool {
         use oer_esp32s31_hal::domain::PhyClockModule;
-        let radio = match self.radio.as_mut() {
-            Some(radio) => radio,
-            None => self
-                .radio_fault
-                .reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
-        };
+        let radio = self.radio_fault.require_owner(self.radio.as_mut());
         if enabled {
             radio
                 .enable_phy_modem_clocks(PhyClockModule::Calibration, &self._clocks)
@@ -170,24 +165,15 @@ pub(crate) fn with<R>(entry: impl FnOnce(&mut Session) -> R) -> Option<R> {
 
 impl Session {
     pub(crate) fn radio_mut(&mut self) -> &mut RadioDomain<ChipClocks, ConcurrentPhy> {
-        match self.radio.as_mut() {
-            Some(radio) => radio,
-            None => self
-                .radio_fault
-                .reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
-        }
+        self.radio_fault.require_owner(self.radio.as_mut())
     }
     pub(crate) fn phy<R>(
         &mut self,
         operation: impl FnOnce(&mut oer_esp32s31_hal::domain::transaction::PhyHardware) -> R,
     ) -> R {
-        let radio = match self.radio.take() {
-            Some(radio) => radio,
-            None => self
-                .radio_fault
-                .reset(oer_esp32s31_hal::domain::transaction::FaultReason::OwnerUnavailable),
-        };
-        let mut transaction = radio.detach();
+        let radio = self.radio_fault.require_owner(self.radio.take());
+        let mut transaction =
+            radio.detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
         let result = operation(transaction.hardware_mut());
         self.radio = Some(transaction.reunite());
         result

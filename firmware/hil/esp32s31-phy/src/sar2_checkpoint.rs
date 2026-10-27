@@ -38,7 +38,8 @@ pub async fn observe<B: PlatformClockBackend, T>(
 ) -> Result<(), RejectReason> {
     let field = ADC_SAR2_INITIAL_CODE_HIGH_ADDR;
     let address = field.address();
-    let mut transaction = crate::radio::require_radio(domain.take(), fault).detach();
+    let mut transaction = crate::radio::require_radio(domain.take(), fault)
+        .detach(oer_esp32s31_hal::domain::transaction::Operation::Maintain);
     let result = async {
         let registers = transaction.hardware_mut();
         let mut started = false;

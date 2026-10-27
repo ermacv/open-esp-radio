@@ -136,7 +136,7 @@ started failure poisons the domain.
 For concurrently running protocols the registered domain lives beside the
 shared registers in `RadioDomain<B, ConcurrentPhy>`. Registration, tracking,
 RF close and retained wake consume that domain and return `(domain, result)`.
-`RadioDomain::detach` produces one owned `RadioTransaction`; its explicit
+`RadioDomain::detach(operation)` produces one owned `RadioTransaction`; its explicit
 reunion preserves registration epochs and pending restore obligations. The
 transaction can split into an inert return owner and a movable
 `PhyTransaction` carrying the hardware and grant-protect state. A split
@@ -147,14 +147,18 @@ consumes both halves, so a stale return token cannot remain live.
 
 Dropping either half, or a pending lifecycle/tracking future even before
 its first poll, quarantines all payloads without dropping their owners or
-restoring registers. Its named fault retains the original domain identity
-and registration observation. Firmware binds the fault directly at link
-time to `fatal::reset_recording`; a 24-byte record is printed on the next
+restoring registers. Its named fault retains the cancelled operation
+and registration observation. Both halves report the same operation,
+independently of drop order. Firmware binds the fault directly at link
+time through the HAL's `phy_fault_reporter!` macro to `fatal::reset_recording`;
+a 16-byte record naming the operation and epoch is printed on the next
 boot and cleared only after successful output. Host tests use an independent
 seat and catch their own never-returning reporter. There is no lock, unsafe
 borrow extension or automatic rollback.
 
-Client membership and channel capabilities remain short exclusive borrows: independent owner APIs enforce their existing lifecycle rules.
+Client membership uses short exclusive borrows. Channel capabilities borrow
+from an owned transaction: selection and retune retain its cancellation guard
+across every await.
 
 The production operations are:
 

@@ -10,11 +10,33 @@ pub use record::FaultRecord;
 #[cfg(target_arch = "riscv32")]
 oer_memory::link_fn! { declare fn __oer_phy_transaction_fault(fault: Fault) -> !; }
 
+/// The admitted operation whose owners must remain quarantined on cancellation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Operation {
+    Register,
+    Maintain,
+    Wake,
+    Close,
+    Channel,
+    Retune,
+}
+
+/// Define the image's reporter for the exact signature declared by this HAL.
+#[macro_export]
+macro_rules! phy_fault_reporter {
+    ($report:path) => {
+        $crate::domain::transaction::__link_fn! {
+            define fn __oer_phy_transaction_fault(fault: $crate::domain::transaction::Fault) -> ! = $report;
+        }
+    };
+}
+#[doc(hidden)]
+pub use oer_memory::link_fn as __link_fn;
+
 /// Why an owned PHY transaction was quarantined.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FaultReason {
-    TransactionDropped,
-    ReturnOwnerDropped,
+    Cancelled(Operation),
     IdentityClaimed,
     OwnerUnavailable,
 }
@@ -23,7 +45,6 @@ pub enum FaultReason {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Fault {
     pub reason: FaultReason,
-    pub owner: usize,
     pub registration: Option<PhyRegistrationEpoch>,
 }
 
@@ -104,12 +125,16 @@ pub struct FaultHandle {
     registration: Option<PhyRegistrationEpoch>,
 }
 impl FaultHandle {
-    pub fn reset(self, reason: FaultReason) -> ! {
-        self.seat.quarantine(Fault {
-            reason,
-            owner: core::ptr::from_ref(self.seat).addr(),
-            registration: self.registration,
-        })
+    /// Require an owner from its storage; absence has one fixed typed cause.
+    /// A diagnostic handle cannot select a cancellation or identity fault.
+    pub fn require_owner<T>(self, owner: Option<T>) -> T {
+        match owner {
+            Some(owner) => owner,
+            None => self.seat.quarantine(Fault {
+                reason: FaultReason::OwnerUnavailable,
+                registration: self.registration,
+            }),
+        }
     }
     pub fn fault(self) -> Option<Fault> {
         self.seat.fault()
@@ -144,7 +169,6 @@ impl Drop for Guard {
         if self.armed && !self.seat.fault.is_requested() {
             self.seat.quarantine(Fault {
                 reason: self.reason,
-                owner: core::ptr::from_ref(self.seat).addr(),
                 registration: self.registration,
             });
         }
@@ -357,7 +381,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 
     /// Consume the domain without MMIO; an affine return owner serializes it
     /// with the movable PHY transaction. Registration and restore stay intact.
-    pub fn detach(self) -> RadioTransaction<B, T> {
+    pub fn detach(self, operation: Operation) -> RadioTransaction<B, T> {
         let SharedRadioState {
             registers:
                 SharedRadioRegisters {
@@ -381,8 +405,8 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             identity,
         } = self.state;
         let registration = phy.registration_epoch();
-        let guard = Guard::new(&identity, registration, FaultReason::ReturnOwnerDropped);
-        let phy_guard = Guard::new(&identity, registration, FaultReason::TransactionDropped);
+        let guard = Guard::new(&identity, registration, FaultReason::Cancelled(operation));
+        let phy_guard = Guard::new(&identity, registration, FaultReason::Cancelled(operation));
         RadioTransaction {
             domain: DetachedRadioDomain {
                 guard,
