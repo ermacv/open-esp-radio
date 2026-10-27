@@ -146,8 +146,9 @@ registration epochs do not authorize a foreign return. Successful reunion
 consumes both halves, so a stale return token cannot remain live.
 
 Registration, RF wake and RF close construct their async state directly in
-their enclosing place and poll through a typed boundary. Registration's
-working owner remains in that retained storage across preparation and work.
+their enclosing place and use the same `executor::boundary::Boundary` as
+the radio actor. Registration retains its typed owned transaction across
+work; its constructor detaches that owner before the first poll.
 Owned lifecycle futures pin their borrowed PHY children in their retained
 state and await pinned references. The radio backend pins the owned
 operations in the same way. Completed child results remain in placed fields

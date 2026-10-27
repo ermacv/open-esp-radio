@@ -505,17 +505,18 @@ grant-protect words remain with the movable PHY half. Neither half exposes
 register ownership from the other. Channel and retune futures own
 `ChannelTransaction`, containing the PHY custody and exclusive MAC/platform
 loans, and return the domain with their result.
+Both payloads stay in `ManuallyDrop` until consuming reunion. Both guards
+record `Cancelled(Operation)` with the registration observation, independently
+of field drop order. The operation names register, maintain, wake, close,
+channel or retune. `FaultHandle::require_owner` reports only a missing owner;
+a diagnostic handle cannot select another fault reason.
+
 The radio actor keeps lifecycle results in its parent future's storage;
 only exclusive `Placed` loans cross the result-poll boundary. Completion
 consumes the result loan before returning the same domain to its backend
 slot. Cancellation retains the existing transaction guards and performs no
 hardware restoration. This uses the memory crate's existing placement core.
 
-Both payloads stay in `ManuallyDrop` until consuming reunion. Both guards
-record `Cancelled(Operation)` with the registration observation, independently
-of field drop order. The operation names register, maintain, wake, close,
-channel or retune. `FaultHandle::require_owner` reports only a missing owner;
-a diagnostic handle cannot select another fault reason.
 The SAR/PWDET pilot transfers only the movable PHY half: its calibration
 restore/epoch and grant state travel together, while the async maintenance
 future retains the exact `DetachedRadioDomain` and its cancellation guard.

@@ -8,7 +8,7 @@
 use super::*;
 use crate::domain::PhyDomain;
 
-use super::concurrent::operations::RegisterFuture;
+use crate::executor::boundary::Boundary;
 
 /// Caller-owned inputs for one production common-PHY registration.
 ///
@@ -197,20 +197,18 @@ impl PhyDomain {
         D: PhyShortDelay + 'a,
         O: PhyTargetObserver + 'a,
     {
-        RegisterFuture {
-            future: async move {
-                let mut transition = config.into_transition();
-                let (result, counters, witness) = execute_registration::<P, R, D, O>(
-                    timer,
-                    &mut transition,
-                    platform,
-                    registers,
-                    observer,
-                )
-                .await;
-                finish_registration(transition, result, counters, witness)
-            },
-        }
+        Boundary::new(async move {
+            let mut transition = config.into_transition();
+            let (result, counters, witness) = execute_registration::<P, R, D, O>(
+                timer,
+                &mut transition,
+                platform,
+                registers,
+                observer,
+            )
+            .await;
+            finish_registration(transition, result, counters, witness)
+        })
     }
 }
 

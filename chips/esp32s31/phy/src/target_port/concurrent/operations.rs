@@ -3,27 +3,6 @@
 use super::*;
 use oer_esp32s31_hal::domain::transaction::Operation;
 
-// The constructor writes its async block directly into the caller's future.
-// A fixed poll boundary keeps PHY lifecycle temporaries out of enclosing radio
-// polls without an allocation or another copy of the retained transition.
-pin_project_lite::pin_project! {
-    pub(crate) struct RegisterFuture<F> {
-        #[pin]
-        pub(crate) future: F,
-    }
-}
-impl<F: core::future::Future> core::future::Future for RegisterFuture<F> {
-    type Output = F::Output;
-
-    #[inline(never)]
-    fn poll(
-        self: core::pin::Pin<&mut Self>,
-        cx: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<Self::Output> {
-        self.project().future.poll(cx)
-    }
-}
-
 /// Register the shared PHY domain through an owned PHY transaction.
 ///
 /// This is the calibrating first `esp_phy_enable`: `PHY` and
@@ -57,17 +36,8 @@ where
     D: PhyShortDelay + 'a,
     O: PhyTargetObserver + 'a,
 {
-    let fault = radio.fault_handle();
     let initial = radio.detach(Operation::Register);
-    execute_register::<B, P, D, O>(
-        timer,
-        Some(initial),
-        fault,
-        platform,
-        clocks,
-        config,
-        observer,
-    )
+    execute_register::<B, P, D, O>(timer, initial, platform, clocks, config, observer)
 }
 
 /// Close RF after the last client left the shared domain, and release its

@@ -7,6 +7,7 @@
 //! test harness without importing an RTOS. The graph drivers and their port
 //! traits are crate-private.
 
+pub mod boundary;
 pub mod wait;
 
 #[cfg(any(target_arch = "riscv32", test))]
