@@ -577,6 +577,8 @@ registers = ["TARGET"]
 name = "WifiMacTsfLoad"
 instance = "MODEM_PWR"
 registers = ["TSF_LOAD_CONTROL", "VALUE_LOW", "VALUE_HIGH", "SNAPSHOT_LOW", "SNAPSHOT_HIGH", "TSF_DEVIATION_CONTROL"]
+description = "Serialized four-counter TSF snapshot/load staging and readback. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027."
+sources = ["BLOB_S31_TSF_COUNTER_SELECT_20261027"]
 
 [[partitions.parts]]
 name = "WifiMacTsfStatus"

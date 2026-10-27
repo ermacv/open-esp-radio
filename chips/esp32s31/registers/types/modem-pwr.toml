@@ -231,13 +231,17 @@ sources = ["BLOB_LIBPP_HAL_TSF"]
 [review.entity."TSF_LOAD_CONTROL.LOAD_SOFTAP_TSF"]
 sources = ["BLOB_LIBPP_HAL_TSF"]
 
-[review.entity."TSF_LOAD_CONTROL.BITS_2_3_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
-completeness = "partial"
+[review.entity."TSF_LOAD_CONTROL.SNAPSHOT_TSF2"]
+sources = ["BLOB_S31_TSF_COUNTER_SELECT_20261027"]
 
-[review.entity."TSF_LOAD_CONTROL.BITS_6_7_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
-completeness = "partial"
+[review.entity."TSF_LOAD_CONTROL.SNAPSHOT_TSF3"]
+sources = ["BLOB_S31_TSF_COUNTER_SELECT_20261027"]
+
+[review.entity."TSF_LOAD_CONTROL.LOAD_TSF2"]
+sources = ["BLOB_S31_TSF_COUNTER_SELECT_20261027"]
+
+[review.entity."TSF_LOAD_CONTROL.LOAD_TSF3"]
+sources = ["BLOB_S31_TSF_COUNTER_SELECT_20261027"]
 
 [review.entity."TSF_LOAD_CONTROL.BITS_9_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
@@ -753,7 +757,7 @@ sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIB
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
 
 [review.entity."ENABLE.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027"]
 
 [review.entity."ENABLE.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
@@ -793,7 +797,7 @@ sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIB
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
 
 [review.entity."RAW.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027"]
 
 [review.entity."RAW.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
@@ -868,7 +872,7 @@ sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIB
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
 
 [review.entity."CLEAR.TSF_TIMER_2"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW26_S31_TSF_TIMER2_20261027"]
 
 [review.entity."CLEAR.TSF_TIMER_1"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "HW8_S31_WIFI_TSF_MASK_20261026"]
@@ -1308,16 +1312,28 @@ class = "plain"
 description = "Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf set this bit after writing the station TBTT target."
 
 [[registers.fields]]
-name = "BITS_2_3_OPAQUE"
-bits = "3:2"
+name = "SNAPSHOT_TSF2"
+bits = "2"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Generic counter-index 2 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027."
 
 [[registers.fields]]
-name = "BITS_6_7_OPAQUE"
-bits = "7:6"
+name = "SNAPSHOT_TSF3"
+bits = "3"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Generic counter-index 3 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027."
+
+[[registers.fields]]
+name = "LOAD_TSF2"
+bits = "6"
+class = "plain"
+description = "Generic counter-index 2 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027."
+
+[[registers.fields]]
+name = "LOAD_TSF3"
+bits = "7"
+class = "plain"
+description = "Generic counter-index 3 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027."
 
 [[registers.fields]]
 name = "BITS_9_31_OPAQUE"
@@ -2116,7 +2132,7 @@ description = "Enable the guarded TSF timer-three event."
 name = "TSF_TIMER_2"
 bits = "5"
 class = "plain"
-description = "Enable the guarded TSF timer-two event."
+description = "Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
@@ -2201,7 +2217,7 @@ description = "Raw guarded TSF timer-three event."
 name = "TSF_TIMER_2"
 bits = "5"
 class = "read-only"
-description = "Raw guarded TSF timer-two event."
+description = "Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"
@@ -2367,7 +2383,7 @@ description = "Acknowledge the guarded TSF timer-three event."
 name = "TSF_TIMER_2"
 bits = "5"
 class = "write-one-to-clear"
-description = "Acknowledge the guarded TSF timer-two event."
+description = "Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027."
 
 [[registers.fields]]
 name = "TSF_TIMER_1"

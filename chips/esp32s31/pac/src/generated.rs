@@ -129187,19 +129187,33 @@ pub mod modem_pwr {
         /// Positioned bits of `LOAD_STATION_TBTT_TARGET`.
         pub const LOAD_STATION_TBTT_TARGET_MASK: u32 = 0x100;
 
-        /// Width of `BITS_2_3_OPAQUE` in bits.
-        pub const BITS_2_3_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_2_3_OPAQUE`.
-        pub const BITS_2_3_OPAQUE_MAX: u32 = 0x3;
-        /// Positioned bits of `BITS_2_3_OPAQUE`.
-        pub const BITS_2_3_OPAQUE_MASK: u32 = 0xc;
+        /// Width of `SNAPSHOT_TSF2` in bits.
+        pub const SNAPSHOT_TSF2_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SNAPSHOT_TSF2`.
+        pub const SNAPSHOT_TSF2_MAX: u32 = 0x1;
+        /// Positioned bits of `SNAPSHOT_TSF2`.
+        pub const SNAPSHOT_TSF2_MASK: u32 = 0x4;
 
-        /// Width of `BITS_6_7_OPAQUE` in bits.
-        pub const BITS_6_7_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_6_7_OPAQUE`.
-        pub const BITS_6_7_OPAQUE_MAX: u32 = 0x3;
-        /// Positioned bits of `BITS_6_7_OPAQUE`.
-        pub const BITS_6_7_OPAQUE_MASK: u32 = 0xc0;
+        /// Width of `SNAPSHOT_TSF3` in bits.
+        pub const SNAPSHOT_TSF3_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SNAPSHOT_TSF3`.
+        pub const SNAPSHOT_TSF3_MAX: u32 = 0x1;
+        /// Positioned bits of `SNAPSHOT_TSF3`.
+        pub const SNAPSHOT_TSF3_MASK: u32 = 0x8;
+
+        /// Width of `LOAD_TSF2` in bits.
+        pub const LOAD_TSF2_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LOAD_TSF2`.
+        pub const LOAD_TSF2_MAX: u32 = 0x1;
+        /// Positioned bits of `LOAD_TSF2`.
+        pub const LOAD_TSF2_MASK: u32 = 0x40;
+
+        /// Width of `LOAD_TSF3` in bits.
+        pub const LOAD_TSF3_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `LOAD_TSF3`.
+        pub const LOAD_TSF3_MAX: u32 = 0x1;
+        /// Positioned bits of `LOAD_TSF3`.
+        pub const LOAD_TSF3_MASK: u32 = 0x80;
 
         /// Width of `BITS_9_31_OPAQUE` in bits.
         pub const BITS_9_31_OPAQUE_WIDTH: u32 = 23;
@@ -129243,16 +129257,28 @@ pub mod modem_pwr {
                 (self.0 & 0x00000100) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Generic counter-index 2 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
             #[inline]
-            pub const fn bits_2_3_opaque(self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 2)
+            pub const fn snapshot_tsf2(self) -> bool {
+                (self.0 & 0x00000004) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Generic counter-index 3 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
             #[inline]
-            pub const fn bits_6_7_opaque(self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 6)
+            pub const fn snapshot_tsf3(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Generic counter-index 2 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
+            #[inline]
+            pub const fn load_tsf2(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Generic counter-index 3 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
+            #[inline]
+            pub const fn load_tsf3(self) -> bool {
+                (self.0 & 0x00000080) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -129296,16 +129322,28 @@ pub mod modem_pwr {
                 (self.0 & 0x00000100) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Generic counter-index 2 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
             #[inline]
-            pub const fn bits_2_3_opaque(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 2)
+            pub const fn snapshot_tsf2(&self) -> bool {
+                (self.0 & 0x00000004) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Generic counter-index 3 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
             #[inline]
-            pub const fn bits_6_7_opaque(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 6)
+            pub const fn snapshot_tsf3(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Generic counter-index 2 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
+            #[inline]
+            pub const fn load_tsf2(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Generic counter-index 3 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
+            #[inline]
+            pub const fn load_tsf3(&self) -> bool {
+                (self.0 & 0x00000080) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -129349,17 +129387,31 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_2_3_OPAQUE`.
+            /// Set `SNAPSHOT_TSF2`.
             #[inline]
-            pub fn set_bits_2_3_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & 0xfffffff3) | (value.get() << 2);
+            pub fn set_snapshot_tsf2(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
                 self
             }
 
-            /// Set `BITS_6_7_OPAQUE`.
+            /// Set `SNAPSHOT_TSF3`.
             #[inline]
-            pub fn set_bits_6_7_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & 0xffffff3f) | (value.get() << 6);
+            pub fn set_snapshot_tsf3(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `LOAD_TSF2`.
+            #[inline]
+            pub fn set_load_tsf2(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffbf) | (u32::from(value) << 6);
+                self
+            }
+
+            /// Set `LOAD_TSF3`.
+            #[inline]
+            pub fn set_load_tsf3(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffff7f) | (u32::from(value) << 7);
                 self
             }
 
@@ -132974,7 +133026,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Enable the guarded TSF timer-two event.
+            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133057,7 +133109,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Enable the guarded TSF timer-two event.
+            /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
             #[inline]
             pub const fn tsf_timer_2(&self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133336,7 +133388,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Raw guarded TSF timer-two event.
+            /// Raw guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133712,7 +133764,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// Acknowledge the guarded TSF timer-two event.
+            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
             #[inline]
             pub const fn tsf_timer_2(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -133847,7 +133899,7 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge the guarded TSF timer-two event.
+            /// Acknowledge the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027.
             #[inline]
             pub const fn tsf_timer_2(&self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -134556,6 +134608,10 @@ pub mod modem_pwr {
     }
 
     /// The `WifiMacTsfLoad` part of `MODEM_PWR`.
+    ///
+    /// Serialized four-counter TSF snapshot/load staging and readback. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
+    ///
+    /// SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct WifiMacTsfLoad<P: oer_mmio::Placement = oer_mmio::Fixed<0x2010d000>>(
         oer_mmio::Block<P, WifiMacTsfLoadWords>,
