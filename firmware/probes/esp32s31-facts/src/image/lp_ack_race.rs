@@ -143,8 +143,8 @@ pub(super) fn compare(s: &mut Session<'_>) {
 
 pub(super) fn wraps(s: &mut Session<'_>) {
     init(s);
-    // Prior measured wraps need ~33.55M cycles each; two are a sub-second
-    // observation at the inherited 80MHz, capped at 80M cycles altogether.
+    // Prior measured wraps need ~33.55M cycles each; two need ~1.678s
+    // at the observed 40MHz CPU, with each wait capped at40M cycles.
     for phase in 0..2 {
         let old = s.ble.timer.read_word_002c_opaque().low_byte();
         let start = oer_riscv::cycle32();
