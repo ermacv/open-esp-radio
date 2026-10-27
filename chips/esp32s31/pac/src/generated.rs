@@ -107889,7 +107889,7 @@ pub mod ieee802154 {
 
     /// The `EVENT_STATUS` register.
     ///
-    /// Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model. For tested local timer bits 8/9, reads are masked by EVENT_ENABLE: masked expiry/pending reads zero and output132 is low, but enabling reveals retained pending and raises output even with a parked route. A zero snapshot taken while masked does not clear hidden pending. A positive snapshot retained across masking does acknowledge its event while masked; selective enabled W1C preserves the other timer bit. This does not qualify other event lanes. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026.
+    /// Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model. For tested local timer bits 8/9, reads are masked by EVENT_ENABLE: masked expiry/pending reads zero and output132 is low, but enabling reveals retained pending and raises output even with a parked route. A positive snapshot retained across masking does acknowledge its event while masked; selective enabled W1C preserves the other timer bit. This does not qualify other event lanes. SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026.
     pub mod event_status {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00003fff;
@@ -108030,7 +108030,7 @@ pub mod ieee802154 {
                 (self.0 & 0x00000008) != 0
             }
 
-            /// For ED_COEX_REJECT reason26, ENA=0 hides this status but preserves hidden pending. A masked zero sample does not acknowledge it; a retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027.
+            /// For ED_COEX_REJECT reason 26, ENA=0 hides this status while retaining pending, which reappears on unmask. A retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027.
             #[inline]
             pub const fn rx_abort(self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -108162,7 +108162,7 @@ pub mod ieee802154 {
                 }
             }
 
-            /// For ED_COEX_REJECT reason26, ENA=0 hides this status but preserves hidden pending. A masked zero sample does not acknowledge it; a retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027.
+            /// For ED_COEX_REJECT reason 26, ENA=0 hides this status while retaining pending, which reappears on unmask. A retained positive sample clears under mask, and fresh enabled W1C clears it. SOURCE: HW26_S31_IEEE_ABORT_20261027.
             #[inline]
             pub const fn rx_abort(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -247399,7 +247399,7 @@ pub mod usb_serial_jtag {
 
     /// The `INT_ENA` register.
     ///
-    /// Interrupt enable status register. Interrupt enables of the serial endpoints. The tested s31-c ROM-loader path retains ENA=0x0c at the first USB observation. An explicitly seeded SOF enable survives endpoint-only enable RMW and console-only CLR, leaving source2 repeatedly deliverable; that SOF enable is not a boot observation. SOURCE: HW26_S31_USB_EVENTS_20261027.
+    /// Interrupt enable status register. Interrupt enables of the serial endpoints. In the s31-a HW7 sessions, the first probe observation after ROM-download/RAM-loader entry saw ENA=ST=0. In the s31-c hw26-20261027-generic-01 session, the first USB observation after ROM RAM loading and local digital-radio setup, before probe USB writes, saw ENA=ST=0x0c. The enable-image writer is unknown; neither session establishes a loader write or an all-boot-path value. SOURCE: HW7_S31_USB_20261026; HW26_S31_USB_EVENTS_20261027. An explicitly seeded SOF enable survives endpoint-only enable RMW and console-only CLR, leaving source2 repeatedly deliverable; that SOF enable is not a boot observation. SOURCE: HW26_S31_USB_EVENTS_20261027.
     pub mod int_ena {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x0000ffff;

@@ -104,8 +104,12 @@ impl<P: Placement> Ieee802154InterruptOwner<P> {
     }
 
     /// Acknowledge only the saved sample's events selected by `mask`.
-    /// Timer producers must stop before sampling and masking: a fresh masked
-    /// read hides retained timer pending. No status resample grants this write.
+    /// Stop timer producers before sampling and masking. Masked EVENT_STATUS
+    /// reads hide retained timer pending and the tested RX_ABORT for
+    /// ED_COEX_REJECT (reason 26); they do not expose raw pending state.
+    /// No status resample grants this write.
+    /// SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026;
+    /// HW26_S31_IEEE_ABORT_20261027 (RX_ABORT reason 26 only).
     /// Other lanes stay latched; recurrence of the same lane is not counted.
     pub fn clear_events(&mut self, snapshot: Ieee802154EventSnapshot, mask: Ieee802154EventMask) {
         let snapshot = retain(snapshot.status, mask);

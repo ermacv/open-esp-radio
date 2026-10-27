@@ -548,10 +548,13 @@ impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
     /// Mask every WDEVPWR cause without acknowledging one.
     ///
     /// Publishes the all-zero ENABLE image, then orders the write. A
-    /// pending TSF timer cause stays in RAW while STATUS and output go low.
+    /// pending local TSF timer0/1/2/3 or station TBTT0 cause stays in RAW while
+    /// STATUS and output go low in the tested configurations.
     /// A STATUS sample taken after masking cannot acknowledge hidden pending;
     /// retain a positive sample or use the masked clear-all transaction.
-    /// SOURCE: HW8_S31_WIFI_TSF_MASK_20261026 (timer0/1 only).
+    /// SOURCE: HW8_S31_WIFI_TSF_MASK_20261026 (timer0/1);
+    /// HW26_S31_LOCAL_TBTT_20261027 (TBTT0);
+    /// HW26_S31_TSF_TIMERS23_20261027 (timer2/3).
     pub fn mask_all_power_interrupts(&mut self) {
         mask_mac_power_interrupts(&mut self.power);
         oer_riscv::fence();
