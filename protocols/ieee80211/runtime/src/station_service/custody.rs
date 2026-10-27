@@ -109,7 +109,9 @@ impl<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> QuarantinedTerminals<
 impl<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> From<ContractFault<'id, B>>
     for TerminalCustody<'id, B>
 {
-    #[inline(never)]
+    // Keep construction visible at a Clear destination: an opaque return
+    // otherwise forces a temporary containing the complete terminal bank.
+    #[inline(always)]
     fn from(fault: ContractFault<'id, B>) -> Self {
         Self::Quarantined(QuarantinedTerminals {
             violation: fault.reason,

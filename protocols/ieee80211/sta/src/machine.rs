@@ -92,9 +92,10 @@ use oer_ieee80211_rsn::{
     sae::{SaeCommit, SaePassword, SaePasswordElement, SaePasswordToken},
     supplicant::{
         RsnConnectedAction, RsnConnectedProcessError, RsnConnectedSupplicant,
-        RsnConnectedSupplicantError, RsnGroupKeyInstallRequest, RsnStaDeadlineEvent,
-        RsnStaKeyInstallRequest, RsnStaReady, RsnStaResponseDeadline, RsnStaResponseWait,
-        RsnStaRetryInstall, RsnStaSupplicant, RsnStaSupplicantAction, RsnStaSupplicantError,
+        RsnConnectedSupplicantError, RsnGroupKeyDataRequest, RsnGroupKeyInstallRequest,
+        RsnStaDeadlineEvent, RsnStaKeyInstallRequest, RsnStaReady, RsnStaResponseDeadline,
+        RsnStaResponseWait, RsnStaRetryInstall, RsnStaSupplicant, RsnStaSupplicantAction,
+        RsnStaSupplicantError,
     },
 };
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
@@ -1981,47 +1982,76 @@ impl ConnectedRsn {
             return;
         }
         loop {
-            let (request, protection, rest) =
-                match core::mem::replace(&mut self.deferred, DeferredEapol::Empty) {
-                    DeferredEapol::Empty => {
-                        self.deferred = DeferredEapol::Empty;
-                        return;
-                    }
-                    DeferredEapol::Message3(PendingM3 {
-                        request,
-                        protection,
-                    }) => (request, protection, DeferredEapol::Empty),
-                    DeferredEapol::Both {
-                        message3,
-                        group: PendingGroupM1 { request },
-                    } if request.replay_counter() < message3.replay_counter() => (
-                        request,
-                        EapolProtection::Pairwise,
-                        DeferredEapol::Message3(message3),
-                    ),
-                    DeferredEapol::Both {
-                        message3:
-                            PendingM3 {
-                                request,
-                                protection,
-                            },
-                        group,
-                    } => (request, protection, DeferredEapol::GroupMessage1(group)),
-                    DeferredEapol::GroupMessage1(PendingGroupM1 { request }) => {
-                        (request, EapolProtection::Pairwise, DeferredEapol::Empty)
-                    }
-                };
-            self.deferred = rest;
-            let unwrapped = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
-            match self
-                .supplicant
-                .complete_group_key_data_unwrap(request, unwrapped)
-            {
-                Ok(install) => {
-                    self.rekey = Rekey::Install(install, protection);
-                    return;
+            let Some((request, protection)) = self.take_deferred_request() else {
+                return;
+            };
+            if self.unwrap_deferred(request, protection) {
+                return;
+            }
+        }
+    }
+
+    // Selecting a frame moves the two-place enum. Keep that work separate
+    // from the AES workspace and installation response temporaries.
+    #[inline(never)]
+    fn take_deferred_request(
+        &mut self,
+    ) -> Option<(
+        RsnGroupKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
+        EapolProtection,
+    )> {
+        let (request, protection, rest) =
+            match core::mem::replace(&mut self.deferred, DeferredEapol::Empty) {
+                DeferredEapol::Empty => {
+                    self.deferred = DeferredEapol::Empty;
+                    return None;
                 }
-                Err(_) => self.dropped.increment(),
+                DeferredEapol::Message3(PendingM3 {
+                    request,
+                    protection,
+                }) => (request, protection, DeferredEapol::Empty),
+                DeferredEapol::Both {
+                    message3,
+                    group: PendingGroupM1 { request },
+                } if request.replay_counter() < message3.replay_counter() => (
+                    request,
+                    EapolProtection::Pairwise,
+                    DeferredEapol::Message3(message3),
+                ),
+                DeferredEapol::Both {
+                    message3:
+                        PendingM3 {
+                            request,
+                            protection,
+                        },
+                    group,
+                } => (request, protection, DeferredEapol::GroupMessage1(group)),
+                DeferredEapol::GroupMessage1(PendingGroupM1 { request }) => {
+                    (request, EapolProtection::Pairwise, DeferredEapol::Empty)
+                }
+            };
+        self.deferred = rest;
+        Some((request, protection))
+    }
+
+    #[inline(never)]
+    fn unwrap_deferred(
+        &mut self,
+        request: RsnGroupKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
+        protection: EapolProtection,
+    ) -> bool {
+        let unwrapped = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
+        match self
+            .supplicant
+            .complete_group_key_data_unwrap(request, unwrapped)
+        {
+            Ok(install) => {
+                self.rekey = Rekey::Install(install, protection);
+                true
+            }
+            Err(_) => {
+                self.dropped.increment();
+                false
             }
         }
     }
