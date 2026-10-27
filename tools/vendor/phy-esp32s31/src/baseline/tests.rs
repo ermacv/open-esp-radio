@@ -1,38 +1,49 @@
 use super::*;
 use oer_vendor_phy::calibration_capture::space::Register;
 
-fn signature() -> Signature {
+pub(super) fn signature() -> Signature {
     Signature {
+        libphy_sha256: "a".repeat(64),
+    }
+}
+pub(super) fn provenance() -> Provenance {
+    Provenance {
+        vendor_application_sha256: "app".into(),
         idf_revision: "pin".into(),
         scenario_sha256: "scenario".into(),
         model_sha256: "model".into(),
         relation_sha256: "relation".into(),
         review_sha256: "reviews".into(),
         recipe_sha256: "recipe".into(),
+        retired_mmio: BTreeMap::new(),
+        retired_series: vec![],
     }
 }
-fn images() -> RegisterImages {
-    RegisterImages {
-        registers: vec![
-            Register {
+pub(super) fn images() -> Model {
+    Model {
+        reviews: compare::fixture_reviews(),
+        images: RegisterImages {
+            registers: vec![
+                Register {
+                    mask: u32::MAX,
+                    name: "control".into(),
+                    address: 4,
+                },
+                Register {
+                    mask: u32::MAX,
+                    name: "WIFI_BB.CCA_COUNTER_RESULT_1".into(),
+                    address: 8,
+                },
+            ],
+            analog: vec![Register {
                 mask: u32::MAX,
-                name: "control".into(),
-                address: 4,
-            },
-            Register {
-                mask: u32::MAX,
-                name: "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1".into(),
-                address: 8,
-            },
-        ],
-        analog: vec![Register {
-            mask: u32::MAX,
-            name: "analog".into(),
-            address: 1,
-        }],
+                name: "analog".into(),
+                address: 1,
+            }],
+        },
     }
 }
-fn identity() -> Images {
+pub(super) fn identity() -> Images {
     Images {
         vendor_idf_revision: "pin".into(),
         vendor_application_sha256: "app".into(),
@@ -41,7 +52,7 @@ fn identity() -> Images {
         ..Images::default()
     }
 }
-fn vendor(value: i16, counter: u32) -> VendorBoot {
+pub(super) fn vendor(value: i16, counter: u32) -> VendorBoot {
     let fields = compare::fields();
     let len = fields
         .iter()
@@ -68,7 +79,7 @@ fn vendor(value: i16, counter: u32) -> VendorBoot {
         ..VendorBoot::default()
     }
 }
-fn production(vendor: &VendorBoot) -> ProductionBoot {
+pub(super) fn production(vendor: &VendorBoot) -> ProductionBoot {
     let fields = compare::fields();
     let len = fields
         .iter()
@@ -89,7 +100,7 @@ fn production(vendor: &VendorBoot) -> ProductionBoot {
         analog: vendor.analog.clone(),
     }
 }
-fn input(label: &str, boots: Vec<VendorBoot>) -> Input {
+pub(super) fn input(label: &str, boots: Vec<VendorBoot>) -> Input {
     Input {
         label: label.into(),
         revision: 0,
@@ -122,6 +133,7 @@ fn fixture() -> (Reference, Vec<VendorBoot>, Vec<VendorBoot>) {
         .collect::<Vec<_>>();
     let reference = generate(
         signature(),
+        provenance(),
         vec![input("s31-a", a.clone()), input("s31-b", b.clone())],
         &images(),
     )
@@ -143,7 +155,13 @@ fn recorded_and_live_bounds_accept_only_the_same_boot_whole_initial_pair() {
         }
     }
     let boots = vec![v; 10];
-    let reference = generate(signature(), vec![input("s31-a", boots.clone())], &images()).unwrap();
+    let reference = generate(
+        signature(),
+        provenance(),
+        vec![input("s31-a", boots.clone())],
+        &images(),
+    )
+    .unwrap();
     for (pair, verdict) in [
         ([243_u16, 288], Verdict::Match),
         ([243, 303], Verdict::Diff),
@@ -162,8 +180,8 @@ fn recorded_and_live_bounds_accept_only_the_same_boot_whole_initial_pair() {
             &identity(),
             &boots,
             std::slice::from_ref(&p),
-            compare::ReviewFile::reviewed().unwrap(),
-            (&image.registers, &image.analog),
+            compare::fixture_reviews(),
+            (&image.images.registers, &image.images.analog),
         )
         .unwrap();
         let recorded = reference.check(&signature(), &image, "s31-a", 0, &identity(), &[p]);
@@ -180,7 +198,7 @@ fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_ex
         .unwrap();
     assert_eq!(reference.entries["control"].shared, Some(9));
     assert_eq!(reference.entries["common-reference"].shared, None);
-    let cca = &reference.entries["PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1"];
+    let cca = &reference.entries["WIFI_BB.CCA_COUNTER_RESULT_1"];
     assert_eq!(
         cca.excluded.as_deref(),
         Some("hardware measurement result over a window, not calibration")
@@ -196,8 +214,8 @@ fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_ex
                     &identity(),
                     boots,
                     std::slice::from_ref(&p),
-                    compare::ReviewFile::reviewed().unwrap(),
-                    (&images().registers, &images().analog),
+                    compare::fixture_reviews(),
+                    (&images().images.registers, &images().images.analog),
                 )
                 .unwrap();
                 let frozen = reference.check(
@@ -268,7 +286,7 @@ fn stale_or_missing_coverage_is_incomplete_even_when_another_value_differs() {
         Verdict::Incomplete
     );
     let mut changed = signature();
-    changed.recipe_sha256.push('x');
+    changed.libphy_sha256 = "b".repeat(64);
     assert_eq!(
         reference
             .check(
@@ -339,6 +357,7 @@ fn inconsistent_shared_values_and_vendor_discovery_gaps_cannot_be_published() {
     assert!(
         generate(
             signature(),
+            provenance(),
             vec![input("s31-a", a), input("s31-b", b)],
             &images()
         )
@@ -410,7 +429,7 @@ fn out_of_width_external_bounds_are_incomplete_without_arithmetic_overflow() {
 #[test]
 fn recorded_bounds_use_masked_samples_before_computing_spread() {
     let mut images = images();
-    images.registers[0].mask = 0xf;
+    images.images.registers[0].mask = 0xf;
     let boots = (0..10)
         .map(|i| {
             let mut boot = vendor(0, 4);
@@ -422,6 +441,7 @@ fn recorded_bounds_use_masked_samples_before_computing_spread() {
         .collect::<Vec<_>>();
     let reference = generate(
         signature(),
+        provenance(),
         vec![input("s31-a", boots.clone()), input("s31-b", boots.clone())],
         &images,
     )
@@ -432,4 +452,157 @@ fn recorded_bounds_use_masked_samples_before_computing_spread() {
     primary.registers.values.insert(4, 0x2000_0009);
     let result = reference.check(&signature(), &images, "s31-a", 0, &identity(), &[primary]);
     assert_eq!(result.verdict, Verdict::Match);
+}
+
+#[test]
+fn capture_provenance_does_not_invalidate_the_same_libphy() {
+    let (mut reference, a, _) = fixture();
+    reference.provenance.idf_revision = "historical-idf".into();
+    reference.provenance.vendor_application_sha256 = "historical-app".into();
+    reference.provenance.scenario_sha256 = "historical-scenario".into();
+    reference.provenance.model_sha256 = "historical-model".into();
+    reference.provenance.relation_sha256 = "historical-relation".into();
+    reference.provenance.review_sha256 = "historical-review".into();
+    reference.provenance.recipe_sha256 = "historical-recipe".into();
+    for (value, verdict) in [(-3, Verdict::Match), (100, Verdict::Diff)] {
+        let checked = reference.check(
+            &signature(),
+            &images(),
+            "s31-a",
+            0,
+            &identity(),
+            &[production(&vendor(value, 4))],
+        );
+        assert_eq!(checked.verdict, verdict);
+    }
+    let mut changed = signature();
+    changed.libphy_sha256 = "b".repeat(64);
+    let checked = reference.check(
+        &changed,
+        &images(),
+        "s31-a",
+        0,
+        &identity(),
+        &[production(&a[0])],
+    );
+    assert_eq!(checked.verdict, Verdict::Incomplete);
+    assert!(checked.reasons[0].contains("no PHY baseline for libphy"));
+    assert!(checked.reasons[0].contains(&changed.libphy_sha256));
+}
+
+fn pin_checkout() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    for (path, contents) in [
+        (
+            "tools/vendor/phy-esp32s31/src/tolerances.toml",
+            compare::TOLERANCES,
+        ),
+        (
+            "chips/esp32s31/knowledge/src/phy_relation.rs",
+            include_str!("../../../../../chips/esp32s31/knowledge/src/phy_relation.rs"),
+        ),
+        (
+            "chips/esp32s31/knowledge/src/phy_relation/committed.rs",
+            include_str!("../../../../../chips/esp32s31/knowledge/src/phy_relation/committed.rs"),
+        ),
+    ] {
+        let path = dir.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
+    std::fs::create_dir_all(dir.path().join("chips/esp32s31/vendor")).unwrap();
+    dir
+}
+fn write_pins(root: &Path, revision: &str, sha256: &str) {
+    std::fs::write(root.join("chips/esp32s31/vendor/artifacts.toml"), format!(
+        "[[source]]\nid = 'esp-idf'\nrevision = '{revision}'\n[[artifact]]\nid = 'libphy'\nsha256 = '{sha256}'\n[[artifact]]\nid = 'rom'\nsha256 = '{revision}'\n[[artifact]]\nid = 'esp_phy'\nsha256 = '{revision}'\n"
+    )).unwrap();
+}
+
+#[test]
+fn pin_selection_ignores_idf_rom_and_esp_phy_changes_and_names_missing_libphy() {
+    let dir = pin_checkout();
+    let key = signature();
+    let path = key.path(dir.path());
+    let (reference, _, _) = fixture();
+    reference.write(&path).unwrap();
+    for revision in ["capture-idf", "another-idf"] {
+        write_pins(dir.path(), revision, &key.libphy_sha256);
+        let selected = Signature::current(dir.path()).unwrap();
+        assert_eq!(selected, key);
+        assert_eq!(selected.path(dir.path()), path);
+        assert_eq!(selected.read_reference(dir.path()).unwrap(), reference);
+    }
+    let changed_hash = "b".repeat(64);
+    write_pins(dir.path(), "another-idf", &changed_hash);
+    let selected = Signature::current(dir.path()).unwrap();
+    assert_ne!(selected.path(dir.path()), path);
+    let checked = Check::incomplete(selected.read_reference(dir.path()).unwrap_err());
+    assert_eq!(checked.verdict, Verdict::Incomplete);
+    assert!(checked.reasons[0].contains("no PHY baseline for libphy"));
+    assert!(checked.reasons[0].contains(&changed_hash));
+}
+
+#[test]
+fn malformed_libphy_pins_cannot_select_a_reference_path() {
+    let dir = pin_checkout();
+    for hash in ["", "../escape", "short", &"A".repeat(64), &"z".repeat(64)] {
+        write_pins(dir.path(), "idf", hash);
+        assert!(Signature::current(dir.path()).is_err());
+    }
+    write_pins(dir.path(), "idf", &"a".repeat(64));
+    let path = dir.path().join("chips/esp32s31/vendor/artifacts.toml");
+    let mut pins = std::fs::read_to_string(&path).unwrap();
+    pins.push_str(&format!(
+        "[[artifact]]\nid = 'libphy'\nsha256 = '{}'\n",
+        "b".repeat(64)
+    ));
+    std::fs::write(&path, pins).unwrap();
+    assert!(Signature::current(dir.path()).is_err());
+}
+
+#[test]
+fn committed_reference_is_valid_for_the_current_libphy_and_every_recorded_board() {
+    let root = crate::registers::repository();
+    let key = Signature::current(&root).unwrap();
+    let reference = key.read_reference(&root).unwrap();
+    let images = super::model(&root).unwrap();
+    let names = crate::registers::review_names(&root).unwrap();
+    for lifecycle in [
+        Lifecycle::Cold,
+        Lifecycle::Restart,
+        Lifecycle::Ieee802154,
+        Lifecycle::Ieee802154Restart,
+    ] {
+        for name in images
+            .reviews
+            .clone()
+            .at(lifecycle)
+            .unwrap()
+            .registers
+            .keys()
+        {
+            assert!(
+                names.contains(name),
+                "review does not name a current register: {name}"
+            );
+        }
+    }
+    let reviews = images.reviews.clone().at(Lifecycle::Cold).unwrap();
+    for register in images.images.registers.iter().chain(&images.images.analog) {
+        if let Some(review) = reviews.registers.get(&register.name).filter(|r| r.excluded) {
+            assert_eq!(
+                reference.entries[&register.name].excluded.as_deref(),
+                Some(review.reason.as_str()),
+                "lost exclusion: {}",
+                register.name
+            );
+        }
+    }
+    for (label, board) in &reference.boards {
+        reference
+            .validate(&key, &images, label, board.revision)
+            .unwrap();
+        Esp32s31::recorded(&root, label, Lifecycle::Cold).unwrap();
+    }
 }

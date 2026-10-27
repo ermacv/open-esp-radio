@@ -70,6 +70,11 @@ projected as the CONTROL subject. Reported bounds and margins remain measured.
 `excluded` skips only value comparison. Every vendor-readable register,
 including an excluded one, must be read in every production boot. A missing
 or unreadable production sample yields INCOMPLETE.
+Reviews are loaded against the full current MMIO and published analog-name
+catalog before lifecycle selection; an unknown key is a hard error, including
+keys outside the active image. The host comparison receives its checkout root
+for that validation. Recorded comparisons carry the validated reviews together
+with their current register images.
 
 Each run retains per-boot captures, console evidence, image digests, reference
 ESP-IDF revision, readable/unreadable registers and the complete comparison
@@ -90,7 +95,12 @@ retain its P1 poll counts, maxima and timer lateness separately from T1 and T7.
 Associated Wi-Fi traffic is a separate workload.
 
 The [recorded vendor reference](../../../chips/esp32s31/vendor/phy-baselines/README.md)
-provides generated Wi-Fi cold bounds for labeled boards.
+provides generated Wi-Fi cold bounds for labeled boards, keyed only by the
+pinned libphy artifact SHA-256. IDF and other capture inputs remain provenance;
+changing libphy without a reference yields INCOMPLETE.
+The generator can rebuild the same authenticated archive series under current
+register metadata. Retired MMIO bounds and original per-boot observations stay
+in provenance; active coverage remains exact.
 `cargo hil run phy-recorded-calibration-cold --chip esp32s31 --board s31-b`
 captures only the diagnostic image and applies the same comparison rules;
 no vendor image is built or flashed on this path.

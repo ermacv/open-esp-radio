@@ -40,14 +40,14 @@ impl Comparison for Esp32s31 {
             return Err("no recorded reference at this lifecycle".into());
         }
         let signature = crate::baseline::Signature::current(root)?;
-        let reference = crate::baseline::Reference::read(&signature.path(root))?;
-        let images = Self::images(root)?;
+        let reference = signature.read_reference(root)?;
+        let images = crate::baseline::model(root)?;
         reference.validate(&signature, &images, board, 0)?;
         Ok(oer_vendor_phy::comparison::RecordedReference {
-            vendor_application_sha256: reference.vendor_application_sha256.clone(),
-            vendor_idf_revision: reference.signature.idf_revision.clone(),
+            vendor_application_sha256: reference.provenance.vendor_application_sha256.clone(),
+            vendor_idf_revision: reference.provenance.idf_revision.clone(),
             channel: reference.channel,
-            readable: reference.readable(board, &images)?,
+            readable: reference.readable(board, &images.images)?,
             document: serde_json::to_value(reference)?,
         })
     }
@@ -62,9 +62,16 @@ impl Comparison for Esp32s31 {
     ) -> Result<Compared> {
         let reference: crate::baseline::Reference =
             serde_json::from_value(reference.document.clone())?;
+        let model = crate::baseline::Model {
+            images: RegisterImages {
+                registers: images.registers.clone(),
+                analog: images.analog.clone(),
+            },
+            reviews: compare::ReviewFile::reviewed(root)?,
+        };
         let checked = reference.check(
             &crate::baseline::Signature::current(root)?,
-            images,
+            &model,
             board,
             0,
             identity,
@@ -78,6 +85,7 @@ impl Comparison for Esp32s31 {
     }
 
     fn compare(
+        root: &Path,
         lifecycle: Lifecycle,
         identity: &Images,
         vendor: &[VendorBoot],
@@ -89,7 +97,7 @@ impl Comparison for Esp32s31 {
             identity,
             vendor,
             production,
-            compare::ReviewFile::reviewed()?,
+            compare::ReviewFile::reviewed(root)?,
             (&images.registers, &images.analog),
         )?;
         let mismatch = (summary.verdict != compare::Verdict::Match).then(|| {

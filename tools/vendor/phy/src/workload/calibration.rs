@@ -146,7 +146,14 @@ pub(crate) fn run<C: Comparison>(
             .claim("vendor boot spread captured", &["production-equivalence"]);
         return Ok(());
     }
-    let compared = C::compare(lifecycle, &identity, &vendors, &productions, &published)?;
+    let compared = C::compare(
+        &root,
+        lifecycle,
+        &identity,
+        &vendors,
+        &productions,
+        &published,
+    )?;
     context.results.observe("comparison", &compared.summary);
     std::fs::write(
         output.join("comparison.json"),

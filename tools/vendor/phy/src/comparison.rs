@@ -64,6 +64,7 @@ pub trait Comparison: Clone + std::fmt::Debug + Default + Eq + Send + Sync + 'st
     /// Compare the `vendor` and `production` boots captured at `lifecycle`
     /// with `images` on both sides.
     fn compare(
+        root: &Path,
         lifecycle: Lifecycle,
         identity: &Images,
         vendor: &[VendorBoot],

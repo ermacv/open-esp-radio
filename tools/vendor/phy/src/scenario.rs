@@ -296,6 +296,7 @@ mod tests {
             Err("no device".into())
         }
         fn compare(
+            _: &Path,
             _: Lifecycle,
             _: &Images,
             _: &[VendorBoot],

@@ -14,23 +14,41 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod archive;
+#[cfg(test)]
+mod archive_tests;
 pub mod runs;
 #[cfg(test)]
 mod tests;
 
-pub const SCHEMA: u16 = 1;
+pub const SCHEMA: u16 = 2;
 const CHIP: &str = "esp32s31";
 const SCENARIO: &str = "phy-vendor-calibration-cold";
+
+/// The current capture image and reviews validated against the full model.
+pub struct Model {
+    pub images: RegisterImages,
+    pub reviews: compare::ReviewFile,
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Signature {
+    pub libphy_sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Provenance {
+    pub vendor_application_sha256: String,
     pub idf_revision: String,
     pub scenario_sha256: String,
     pub model_sha256: String,
     pub relation_sha256: String,
     pub review_sha256: String,
     pub recipe_sha256: String,
+    pub retired_mmio: BTreeMap<String, Entry>,
+    pub retired_series: Vec<RetiredSeries>,
 }
 fn digest(root: &Path, files: &[&str]) -> Result<String> {
     let mut bytes = Vec::new();
@@ -44,21 +62,29 @@ fn digest(root: &Path, files: &[&str]) -> Result<String> {
     Ok(oer_os_durable::sha256_bytes(&bytes))
 }
 impl Signature {
-    /// Bind interpretation and capture recipe without fetching or building vendor code.
+    /// Select only the pinned libphy artifact, without fetching or building vendor code.
     pub fn current(root: &Path) -> Result<Self> {
         let pins: toml::Value = toml::from_str(&std::fs::read_to_string(
             root.join("chips/esp32s31/vendor/artifacts.toml"),
         )?)?;
-        let revision = pins
-            .get("source")
+        let mut artifacts = pins
+            .get("artifact")
             .and_then(toml::Value::as_array)
-            .and_then(|sources| {
-                sources
-                    .iter()
-                    .find(|s| s.get("id").and_then(toml::Value::as_str) == Some("esp-idf"))
-            })
-            .and_then(|s| s.get("revision").and_then(toml::Value::as_str))
-            .ok_or("no IDF pin")?;
+            .ok_or("no artifact pins")?
+            .iter()
+            .filter(|a| a.get("id").and_then(toml::Value::as_str) == Some("libphy"));
+        let sha256 = artifacts
+            .next()
+            .and_then(|a| a.get("sha256").and_then(toml::Value::as_str))
+            .ok_or("no libphy SHA-256 pin")?;
+        if artifacts.next().is_some()
+            || sha256.len() != 64
+            || !sha256
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err("invalid or duplicate libphy SHA-256 pin".into());
+        }
         // The comparator uses compiled reviews and relations, so stale executables
         // must not sign a newer checkout's files.
         for (file, compiled) in [
@@ -84,6 +110,54 @@ impl Signature {
             }
         }
         Ok(Self {
+            libphy_sha256: sha256.into(),
+        })
+    }
+    pub fn path(&self, root: &Path) -> PathBuf {
+        root.join("chips/esp32s31/vendor/phy-baselines")
+            .join(&self.libphy_sha256)
+            .join("wifi-cold.json")
+    }
+    pub fn read_reference(&self, root: &Path) -> Result<Reference> {
+        let path = self.path(root);
+        Reference::read(&path).map_err(|error| {
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            {
+                format!(
+                    "no PHY baseline for libphy {}: {}",
+                    self.libphy_sha256,
+                    path.display()
+                )
+                .into()
+            } else {
+                error
+            }
+        })
+    }
+}
+impl Provenance {
+    /// Record the capture environment and the interpretation used by the generator.
+    pub fn current(root: &Path, identity: &Images) -> Result<Self> {
+        let pins: toml::Value = toml::from_str(&std::fs::read_to_string(
+            root.join("chips/esp32s31/vendor/artifacts.toml"),
+        )?)?;
+        let revision = pins
+            .get("source")
+            .and_then(toml::Value::as_array)
+            .and_then(|sources| {
+                sources
+                    .iter()
+                    .find(|s| s.get("id").and_then(toml::Value::as_str) == Some("esp-idf"))
+            })
+            .and_then(|s| s.get("revision").and_then(toml::Value::as_str))
+            .ok_or("no IDF pin")?;
+        if revision != identity.vendor_idf_revision {
+            return Err("vendor capture differs from the generator's IDF pin".into());
+        }
+        Ok(Self {
+            vendor_application_sha256: identity.vendor_application_sha256.clone(),
             idf_revision: revision.into(),
             scenario_sha256: digest(
                 root,
@@ -123,12 +197,9 @@ impl Signature {
                     "tools/vendor/phy-esp32s31/src/compare/initial_pair.rs",
                 ],
             )?,
+            retired_mmio: BTreeMap::new(),
+            retired_series: Vec::new(),
         })
-    }
-    pub fn path(&self, root: &Path) -> PathBuf {
-        root.join("chips/esp32s31/vendor/phy-baselines")
-            .join(&self.idf_revision)
-            .join("wifi-cold.json")
     }
 }
 
@@ -143,6 +214,14 @@ pub struct Source {
     pub date: String,
     pub samples: usize,
     pub observations_sha256: String,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RetiredSeries {
+    pub board: String,
+    pub source: Source,
+    /// Unmasked observations, in the primary series' original boot order.
+    pub boots: Vec<Readings>,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -191,7 +270,7 @@ pub struct Reference {
     pub lifecycle: Lifecycle,
     pub scenario: String,
     pub signature: Signature,
-    pub vendor_application_sha256: String,
+    pub provenance: Provenance,
     pub channel: u8,
     pub vendor_object_bytes: usize,
     pub boards: BTreeMap<String, Board>,
@@ -243,8 +322,9 @@ fn complete(
     }
     Ok(())
 }
-fn metadata(lifecycle: Lifecycle, images: &RegisterImages) -> Result<BTreeMap<String, Entry>> {
-    let reviews = compare::ReviewFile::reviewed()?.at(lifecycle)?;
+fn metadata(lifecycle: Lifecycle, model: &Model) -> Result<BTreeMap<String, Entry>> {
+    let images = &model.images;
+    let reviews = model.reviews.clone().at(lifecycle)?;
     let mut entries = BTreeMap::new();
     for f in compare::fields() {
         let r = reviews
@@ -305,9 +385,11 @@ fn metadata(lifecycle: Lifecycle, images: &RegisterImages) -> Result<BTreeMap<St
 
 pub fn generate(
     signature: Signature,
+    provenance: Provenance,
     inputs: Vec<Input>,
-    images: &RegisterImages,
+    model: &Model,
 ) -> Result<Reference> {
+    let images = &model.images;
     let first = inputs.first().ok_or("no primary vendor captures")?;
     let mut reference = Reference {
         schema: SCHEMA,
@@ -316,7 +398,7 @@ pub fn generate(
         lifecycle: Lifecycle::Cold,
         scenario: SCENARIO.into(),
         signature,
-        vendor_application_sha256: first.identity.vendor_application_sha256.clone(),
+        provenance,
         channel: first.channel,
         vendor_object_bytes: first
             .boots
@@ -325,14 +407,25 @@ pub fn generate(
             .ok_or("missing vendor calibration")?
             .len(),
         boards: BTreeMap::new(),
-        entries: metadata(Lifecycle::Cold, images)?,
+        entries: metadata(Lifecycle::Cold, model)?,
     };
     let mut boots: BTreeMap<String, Vec<VendorBoot>> = BTreeMap::new();
     let mut source_ids = BTreeSet::new();
-    for input in inputs {
+    if !reference.provenance.retired_series.is_empty() {
+        return Err("retired observations must be regenerated from primary captures".into());
+    }
+    let retired = archive::image(&reference.provenance, images)?;
+    let captured = images
+        .registers
+        .iter()
+        .chain(&retired)
+        .cloned()
+        .collect::<Vec<_>>();
+    for mut input in inputs {
         if !label(&input.label)
-            || input.identity.vendor_idf_revision != reference.signature.idf_revision
-            || input.identity.vendor_application_sha256 != reference.vendor_application_sha256
+            || input.identity.vendor_idf_revision != reference.provenance.idf_revision
+            || input.identity.vendor_application_sha256
+                != reference.provenance.vendor_application_sha256
             || input.identity.vendor_project != "calibration"
             || input.channel != reference.channel
             || input.source.samples != input.boots.len()
@@ -357,8 +450,11 @@ pub fn generate(
             return Err("board revision changed".into());
         }
         board.samples += input.boots.len();
-        board.sources.push(input.source);
-        for boot in &input.boots {
+        board.sources.push(input.source.clone());
+        let mut retired_boots = vec![];
+        for boot in &mut input.boots {
+            complete(&boot.registers, &captured, true)?;
+            retired_boots.push(archive::take(&mut boot.registers, &retired)?);
             complete(&boot.registers, &images.registers, true)?;
             complete(&boot.analog, &images.analog, false)?;
             if boot
@@ -369,9 +465,16 @@ pub fn generate(
                 return Err("vendor object length changed".into());
             }
         }
+        if !retired.is_empty() {
+            reference.provenance.retired_series.push(RetiredSeries {
+                board: input.label.clone(),
+                source: input.source,
+                boots: retired_boots,
+            });
+        }
         boots.entry(input.label).or_default().extend(input.boots);
     }
-    let reviews = compare::ReviewFile::reviewed()?.at(Lifecycle::Cold)?;
+    let reviews = model.reviews.clone().at(Lifecycle::Cold)?;
     for (name, entry) in &mut reference.entries {
         for (label, boots) in &boots {
             let state = match entry.space {
@@ -470,6 +573,14 @@ pub fn generate(
                 .then(a.repetition.cmp(&b.repetition))
         });
     }
+    reference.provenance.retired_series.sort_by(|a, b| {
+        a.board
+            .cmp(&b.board)
+            .then(a.source.run_id.cmp(&b.source.run_id))
+            .then(a.source.scenario.cmp(&b.source.scenario))
+            .then(a.source.repetition.cmp(&b.source.repetition))
+    });
+    archive::validate(&reference.provenance, &reference.boards, images)?;
     Ok(reference)
 }
 #[derive(Debug, Serialize)]
@@ -500,18 +611,21 @@ impl Reference {
     pub fn validate(
         &self,
         signature: &Signature,
-        images: &RegisterImages,
+        model: &Model,
         board: &str,
         revision: u16,
     ) -> Result<()> {
+        let images = &model.images;
+        if &self.signature != signature {
+            return Err(format!("no PHY baseline for libphy {}", signature.libphy_sha256).into());
+        }
         if self.schema != SCHEMA
             || self.chip != CHIP
             || self.lifecycle != Lifecycle::Cold
             || self.scenario != SCENARIO
-            || &self.signature != signature
             || !(1..=14).contains(&self.channel)
         {
-            return Err("unknown schema or stale source/configuration identity".into());
+            return Err("unknown schema or capture configuration".into());
         }
         let selected = self.boards.get(board).ok_or("unknown board label")?;
         if selected.revision != revision {
@@ -529,7 +643,8 @@ impl Reference {
                 return Err("invalid board sample provenance".into());
             }
         }
-        let expected = metadata(self.lifecycle, images)?;
+        archive::validate(&self.provenance, &self.boards, images)?;
+        let expected = metadata(self.lifecycle, model)?;
         if expected.len() != self.entries.len() {
             return Err("missing reference coverage".into());
         }
@@ -627,13 +742,13 @@ impl Reference {
     pub fn check(
         &self,
         signature: &Signature,
-        images: &RegisterImages,
+        model: &Model,
         board: &str,
         revision: u16,
         identity: &Images,
         production: &[ProductionBoot],
     ) -> Check {
-        match self.check_complete(signature, images, board, revision, identity, production) {
+        match self.check_complete(signature, model, board, revision, identity, production) {
             Ok(summary) => Check {
                 verdict: summary.verdict,
                 reasons: vec![],
@@ -645,17 +760,15 @@ impl Reference {
     fn check_complete(
         &self,
         signature: &Signature,
-        images: &RegisterImages,
+        model: &Model,
         board: &str,
         revision: u16,
         identity: &Images,
         production: &[ProductionBoot],
     ) -> Result<compare::Summary> {
-        self.validate(signature, images, board, revision)?;
-        if identity.vendor_application_sha256 != self.vendor_application_sha256
-            || identity.vendor_idf_revision != self.signature.idf_revision
-            || identity.vendor_project != "calibration"
-            || identity.production_image != "diagnostic-phy"
+        let images = &model.images;
+        self.validate(signature, model, board, revision)?;
+        if identity.vendor_project != "calibration" || identity.production_image != "diagnostic-phy"
         {
             return Err("capture image identity differs from the reference".into());
         }
@@ -673,8 +786,15 @@ impl Reference {
                     .ok_or("unknown register index")
             })
             .collect::<std::result::Result<Vec<_>, _>>()?;
+        let retired = archive::image(&self.provenance, images)?;
+        let mut production = production.to_vec();
+        for boot in &mut production {
+            // Archived production boots may still include the retired words.
+            // Their original attachments remain unchanged in the run store.
+            archive::take(&mut boot.registers, &retired)?;
+        }
         let mut objects = vec![];
-        for boot in production {
+        for boot in &production {
             complete(&boot.registers, &selected, false)?;
             complete(&boot.analog, &images.analog, false)?;
             objects.push(
@@ -683,7 +803,7 @@ impl Reference {
                     .ok_or("missing production projection")?,
             );
         }
-        let reviews = compare::ReviewFile::reviewed()?.at(self.lifecycle)?;
+        let reviews = model.reviews.clone().at(self.lifecycle)?;
         let mut fields = vec![];
         let mut excluded = vec![];
         for f in compare::fields() {
@@ -761,6 +881,9 @@ impl Reference {
         })
     }
 }
-pub fn images(root: &Path) -> Result<RegisterImages> {
-    Esp32s31::images(root)
+pub fn model(root: &Path) -> Result<Model> {
+    Ok(Model {
+        images: Esp32s31::images(root)?,
+        reviews: compare::ReviewFile::reviewed(root)?,
+    })
 }

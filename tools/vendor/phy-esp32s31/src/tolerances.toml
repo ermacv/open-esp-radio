@@ -20,11 +20,11 @@ schema = 3
 # s31-b E1/E3/E4/E5 (#254); chips/esp32s31/notes/phy/cca-counter.md.
 # A Wi-Fi baseband reset release restarts the measurement window. The vendor
 # leaves both result words unconsumed; window/control remains compared by value.
-[registers."PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_0"]
+[registers."WIFI_BB.CCA_COUNTER_RESULT_0"]
 excluded = true
 reason = "hardware measurement result over a window, not calibration"
 
-[registers."PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1"]
+[registers."WIFI_BB.CCA_COUNTER_RESULT_1"]
 excluded = true
 reason = "hardware measurement result over a window, not calibration"
 
@@ -111,23 +111,23 @@ reason = "temperature sensor window the calibration selected"
 # Registers of the radio-PHY image, by published name. Unreviewed registers
 # follow the vendor-spread rule. Reviews by the PHY owner, 2026-09-27.
 
-[registers."PHY_PBUS.READ_RESULT_0"]
+[registers."FE.READ_RESULT_0"]
 excluded = true
 reason = "live state: the last PBus read result, set by whichever transaction ran last"
 
-[registers."PHY_PBUS.READ_RESULT_1"]
+[registers."FE.READ_RESULT_1"]
 excluded = true
 reason = "live state: the last PBus read result, set by whichever transaction ran last"
 
-[registers."PHY_PBUS.READ_RESULT_2"]
+[registers."FE.READ_RESULT_2"]
 excluded = true
 reason = "live state: the last PBus read result, set by whichever transaction ran last"
 
-[registers."PHY_PBUS.READ_RESULT_3"]
+[registers."FE.READ_RESULT_3"]
 excluded = true
 reason = "live state: the last PBus read result, set by whichever transaction ran last"
 
-[registers."PHY_PBUS.READ_RESULT_4"]
+[registers."FE.READ_RESULT_4"]
 excluded = true
 reason = "live state: the last PBus read result, set by whichever transaction ran last"
 
@@ -143,23 +143,23 @@ reason = "live state: the last analog I2C command of its host"
 excluded = true
 reason = "live state: the read mask of the analog I2C block last addressed"
 
-[registers."PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE"]
+[registers."WIFI_BB.WORD_08B8_OPAQUE"]
 excluded = true
 reason = "live state: carrier frequency offset estimation"
 
-[registers."PHY_AGC_RECOVERED_GAPS.WORD_006C_OPAQUE"]
+[registers."WIFI_BB.WORD_006C_OPAQUE"]
 excluded = true
 reason = "live state: AGC RSSI status"
 
-[registers."PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_STATUS"]
+[registers."WIFI_BB.BASEBAND_WATCHDOG_STATUS"]
 excluded = true
 reason = "live state: baseband watchdog status"
 
-[registers."PHY_AGC_ORACLE.AGC_INIT_HIGH_CONTROL"]
+[registers."WIFI_BB.AGC_INIT_HIGH_CONTROL"]
 excluded = true
 reason = "live state: varies between production boots with the running AGC"
 
-[registers."WIFI_MAC_LOCAL_TIME.COUNTER"]
+[registers."MODEM_PWR.COUNTER"]
 excluded = true
 reason = "live state: the free-running MAC local-time counter"
 
@@ -167,15 +167,15 @@ reason = "live state: the free-running MAC local-time counter"
 excluded = true
 reason = "live state: the temperature sensor reading"
 
-[registers."MODEM_SYSCON_RADIO.CLK_CONF1"]
+[registers."MODEM_SYSCON.CLK_CONF1"]
 excluded = true
 reason = "clock policy: modem clock enables follow the active radio clients and leases, not calibration"
 
-[registers."MODEM_LPCON_SHARED_CLOCK.CLK_CONF"]
+[registers."MODEM_LPCON.CLK_CONF"]
 excluded = true
 reason = "clock policy: shared low-power clock enables follow the active radio clients"
 
-[registers."PMU_RADIO.HP_ACTIVE_HP_CK_POWER"]
+[registers."PMU.HP_ACTIVE_HP_CK_POWER"]
 excluded = true
 reason = "clock policy: active-state clock power follows the active radio clients"
 
@@ -183,25 +183,25 @@ reason = "clock policy: active-state clock power follows the active radio client
 excluded = true
 reason = "clock policy: the temperature sensor clock follows the tracking client"
 
-[registers."PHY_PBUS.COMMAND"]
+[registers."FE.PBUS_COMMAND"]
 excluded = true
 reason = "live state: the last PBus command word"
 
-[registers."HP_SYS_CLKRST_RADIO.MODEM_CONF"]
+[registers."HP_SYS_CLKRST.MODEM_CONF"]
 excluded = true
 reason = "clock policy: the modem XTAL clock enable follows the active radio modules"
 
-[[registers."MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF"]]
+[[registers."MODEM_LPCON.COEX_LP_CLK_CONF"]]
 excluded = true
 lifecycle = "ieee802154"
 reason = "lifecycle: the coex timer clock (XTAL/50, 0x314) is selected before any coex request; the vendor selects it at system start in coex_pre_init (esp_coex coexist.c init_coexist, linked with software coex), production on the first coex client (CoexArbiter::configure_timer_clock, from libcoexist coex_core_pre_init). The production IEEE 802.15.4 session runs without a coex client, whose timers are then unused (reviewed with the PHY owner)"
 
-[[registers."MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF"]]
+[[registers."MODEM_LPCON.COEX_LP_CLK_CONF"]]
 excluded = true
 lifecycle = "ieee802154-restart"
 reason = "lifecycle: the coex timer clock (XTAL/50, 0x314) is selected before any coex request; the vendor selects it at system start in coex_pre_init (esp_coex coexist.c init_coexist, linked with software coex), production on the first coex client (CoexArbiter::configure_timer_clock, from libcoexist coex_core_pre_init). The production IEEE 802.15.4 session runs without a coex client, whose timers are then unused (reviewed with the PHY owner)"
 
-[registers."PHY_AGC_ORACLE.RX_11B_WINDOW_CONTROL"]
+[registers."WIFI_BB.RX_11B_WINDOW_CONTROL"]
 excluded = true
 lifecycle = "cold"
 reason = "lifecycle: the last writer is phy_reg_update_new after cold registration and phy_bb_agc_reg_update after an RF wake or RX table init; the vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration, and production's wake keeps the vendor order"

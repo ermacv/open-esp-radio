@@ -17,13 +17,28 @@ use oer_registers_model::{
 use oer_vendor_phy::calibration_capture::space::{Register, analog_address};
 use std::path::Path;
 
+/// Every current model identity that a register review may name, including
+/// registers outside the active PHY partition and published analog bytes.
+pub fn review_names(root: &Path) -> Result<std::collections::BTreeSet<String>> {
+    let chip = Chip::load(root, CHIP)?;
+    let mut names = chip
+        .model
+        .registers()
+        .iter()
+        .filter(|r| matches!(r.location, Location::Mmio { .. }))
+        .map(|r| r.identity.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    names.extend(analog(root)?.into_iter().map(|r| r.name));
+    Ok(names)
+}
+
 /// The chip whose register model the cross-check reads.
 const CHIP: &str = "esp32s31";
 /// The ownership partition of the role-neutral RF and PHY registers.
 pub const PARTITION: &str = "RadioPhyPeripherals";
 
 /// The files the register model is loaded from, relative to the repository
-/// root, which a baseline's signature binds.
+/// root, recorded in a baseline's provenance.
 pub fn model_files(root: &Path) -> Result<Vec<String>> {
     let registers = format!("chips/{CHIP}/registers");
     let mut files = vec![

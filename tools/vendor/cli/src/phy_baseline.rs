@@ -2,7 +2,7 @@
 use crate::{Checkout, Result};
 use clap::{Args, Subcommand};
 use oer_vendor_phy_esp32s31::{
-    baseline::{self, Check, Reference, Signature},
+    baseline::{self, Check, Provenance, Reference, Signature},
     compare::Verdict,
 };
 use std::{path::Path, path::PathBuf, process::ExitCode};
@@ -22,9 +22,12 @@ enum Command {
         /// Measured silicon revision of the selected boards (rev0 = 0).
         #[arg(long, default_value_t = 0)]
         revision: u16,
-        /// Defaults to the chip's versioned Wi-Fi cold reference path.
+        /// Defaults to the chip's libphy-keyed Wi-Fi cold reference path.
         #[arg(long)]
         output: Option<PathBuf>,
+        /// Rebuild this reference's exact archived series under current metadata.
+        #[arg(long)]
+        reference: Option<PathBuf>,
     },
     /// Compare a recorded production run without building or flashing vendor code.
     Check {
@@ -46,6 +49,7 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
             source,
             revision,
             output,
+            reference,
         } => {
             let signature = Signature::current(&ctx.root)?;
             let mut inputs = vec![];
@@ -58,10 +62,20 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
                 )?);
             }
             let output = output.unwrap_or_else(|| signature.path(&ctx.root));
-            let reference = baseline::generate(signature, inputs, &baseline::images(&ctx.root)?)?;
+            let images = baseline::model(&ctx.root)?;
+            let reference = match reference {
+                Some(path) => Reference::read(&path)?.regenerate(signature, inputs, &images)?,
+                None => {
+                    let provenance = Provenance::current(
+                        &ctx.root,
+                        &inputs.first().ok_or("no primary vendor captures")?.identity,
+                    )?;
+                    baseline::generate(signature, provenance, inputs, &images)?
+                }
+            };
             reference.validate(
                 &reference.signature,
-                &baseline::images(&ctx.root)?,
+                &images,
                 reference.boards.keys().next().ok_or("no boards")?,
                 revision,
             )?;
@@ -84,16 +98,14 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
             let checked = (|| -> Result<Check> {
                 let signature = Signature::current(&ctx.root)?;
                 let reference = match reference {
-                    Some(path) => read_reference(&path, None),
-                    None => {
-                        read_reference(&signature.path(&ctx.root), Some(&signature.idf_revision))
-                    }
+                    Some(path) => read_reference(&path),
+                    None => signature.read_reference(&ctx.root),
                 }?;
                 let (identity, production) =
                     baseline::runs::production(&run, &board, reference.channel)?;
                 Ok(reference.check(
                     &signature,
-                    &baseline::images(&ctx.root)?,
+                    &baseline::model(&ctx.root)?,
                     &board,
                     revision,
                     &identity,
@@ -114,22 +126,16 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
     }
 }
 
-fn read_reference(path: &Path, current_revision: Option<&str>) -> Result<Reference> {
+fn read_reference(path: &Path) -> Result<Reference> {
     Reference::read(path).map_err(|error| {
         if error
             .downcast_ref::<std::io::Error>()
             .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
         {
-            match current_revision {
-                Some(revision) => format!(
-                    "no PHY baseline for current ESP-IDF revision {revision}: {}",
-                    path.display()
-                ),
-                None => format!(
-                    "PHY baseline reference path does not exist: {}",
-                    path.display()
-                ),
-            }
+            format!(
+                "PHY baseline reference path does not exist: {}",
+                path.display()
+            )
             .into()
         } else {
             error
@@ -145,21 +151,10 @@ mod tests {
         args: Arguments,
     }
     #[test]
-    fn absent_current_reference_is_explicitly_incomplete() {
-        let directory = tempfile::tempdir().expect("own directory");
-        let revision = "current-revision";
-        let path = directory.path().join(revision).join("wifi-cold.json");
-        let error = read_reference(&path, Some(revision)).expect_err("no reference exists");
-        let checked = Check::incomplete(error);
-        assert_eq!(checked.verdict, Verdict::Incomplete);
-        assert!(checked.reasons[0].contains("no PHY baseline for current ESP-IDF revision"));
-        assert!(checked.reasons[0].contains(revision));
-    }
-    #[test]
     fn absent_explicit_reference_names_the_requested_path() {
         let directory = tempfile::tempdir().expect("own directory");
         let path = directory.path().join("selected-reference.json");
-        let error = read_reference(&path, None).expect_err("explicit path is absent");
+        let error = read_reference(&path).expect_err("explicit path is absent");
         let checked = Check::incomplete(error);
         assert_eq!(checked.verdict, Verdict::Incomplete);
         assert_eq!(
@@ -179,6 +174,8 @@ mod tests {
             Cli::try_parse_from([
                 "phy-baseline",
                 "generate",
+                "--reference",
+                "captured-reference.json",
                 "--source",
                 "s31-a=run-a",
                 "--source",
