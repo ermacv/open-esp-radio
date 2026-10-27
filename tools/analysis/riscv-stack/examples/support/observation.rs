@@ -117,7 +117,7 @@ pub fn print(
     }
     let tables = DispatchTables {
         recognized: RecognizedTables {
-            entries: &ImageTables { image: facts },
+            entries: &image::ReadOnlyTables { image: facts },
             section: function.section as u32,
         },
         known: &jumps,

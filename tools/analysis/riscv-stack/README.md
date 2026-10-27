@@ -123,7 +123,13 @@ extends to the next one of its section. Its frame is the compiler's `.stack_size
 record, cross-checked with the deepest entry-relative `sp` the value analysis
 observes under the psABI's preserved `sp` (a deeper observation is an error);
 without a record, the observed depth counts only when the function's
-control-flow graph is complete. A sole open indirect exit whose value analysis
+local control-flow graph is complete. Calls retain their continuation under
+the psABI even when their target is unresolved, provided that continuation
+stays inside the function; this proves only the caller's frame. Its bound
+remains unknown until every callee is resolved and bounded. Fall-through
+outside the function, conflicting instruction boundaries, stop edges, decode
+gaps, unknown outgoing jumps and dynamic `sp` prevent an observed frame.
+A sole open indirect exit whose value analysis
 proves every target external is fed back through `KnownJump` for one complete
 graph analysis; neither its frame nor its callees receive an assumed bound.
 Its transfers are every direct call and
@@ -138,7 +144,11 @@ dispatch (`bltu limit, index` or `bgeu index, limit` against a constant) or
 mask (`andi`), or the size of a data object the base starts in a section
 neither writable nor executable, against which the language bounds-checks the
 index (a table in code loaded into RAM may be rewritten at run time, so its
-file bytes are no constant); a zero entry is an empty
+file bytes are no constant). Labelled relocation tables also cross-check every
+entry against the image's read-only words; a label alone cannot admit mutable
+storage. A captured indexed address can survive calls in a saved register:
+its candidate dispatch uses the same table extent and target proofs on every
+table-following pass. A zero entry is an empty
 `Option<fn>` slot, never a target, since a Rust function pointer is not
 null. Entries of a jump inside its own
 function are already in the sweep. A table of unknown length, such as a

@@ -738,23 +738,25 @@ const MAX_SLICE: usize = 32;
 
 /// The table dispatch of the jump at node `at` through register `target`:
 /// `target` is the word loaded from `base + (index << scale) + displacement`,
-/// with the load, addition and scaling on the jump's unique fall-through
-/// chain. Returns the base and index values on entry to the instructions
-/// that read them, the scale and the load displacement; the base must be a
+/// with the load on the jump's unique fall-through chain. Addition and scaling
+/// come from that chain or its load's captured address expression. Returns the
+/// base and index values at their reads, the scale and the load displacement;
+/// the base must be a
 /// constant, an image address or a symbol. A base the block or a loop's
 /// preheader forms holds on every pass while the index may merge; one
 /// a later pass merges leaves that pass without the record.
 #[allow(clippy::too_many_arguments)]
 fn table_dispatch(
+    input: &FunctionInput<'_>,
     at: usize,
     target: u8,
     nodes: &[Node],
     operations: &[Operation],
     states: &[Option<State>],
     incoming: &[u8],
-    sets: &Sets<'_>,
+    symbols: &Symbols<'_>,
     control: &mut dyn RunControl,
-) -> Result<Option<(Value, Value, u8, i32)>> {
+) -> Result<Option<(AbstractValue, AbstractValue, u8, i32)>> {
     // The nearest node before `from` on its unique fall-through chain that writes
     // `register`, within the slice's reach.
     let mut writer = |from: usize, register: u8| -> Result<Option<usize>> {
@@ -813,7 +815,11 @@ fn table_dispatch(
         return Ok(None);
     };
     let Some(add) = writer(load, address)? else {
-        return Ok(None);
+        // The psABI can retain an indexed address across a call, outside
+        // the instruction slice. Read the captured value at the load, not
+        // the current contents of the registers that originally formed it.
+        let address = value(load, address).map(|v| public(v, input, &symbols.sets));
+        return captured_dispatch(address.as_ref(), displacement, symbols, control);
     };
     let SemanticOp::Integer {
         op,
@@ -861,7 +867,7 @@ fn table_dispatch(
     let (Some(index), Some(base)) = (index, base) else {
         return Ok(None);
     };
-    let bases = sets.get(base);
+    let bases = symbols.sets.get(base);
     Ok(bases.values[..bases.len]
         .iter()
         .all(|base| {
@@ -870,7 +876,72 @@ fn table_dispatch(
                 Value::Constant(_) | Value::Image(_) | Value::Symbol(..)
             )
         })
-        .then_some((base, index, scale, displacement)))
+        .then(|| {
+            (
+                public(base, input, &symbols.sets),
+                public(index, input, &symbols.sets),
+                scale,
+                displacement,
+            )
+        }))
+}
+
+/// Locate only the captured `base + (index << scale)` expression. This names
+/// a candidate dispatch; the table consumer still proves read-only storage,
+/// its complete entry count and every target, on every table-following pass.
+fn captured_dispatch(
+    address: Option<&AbstractValue>,
+    displacement: i32,
+    symbols: &Symbols<'_>,
+    control: &mut dyn RunControl,
+) -> Result<Option<(AbstractValue, AbstractValue, u8, i32)>> {
+    control.checkpoint(1)?;
+    let Some(AbstractValue::Expression { id }) = address else {
+        return Ok(None);
+    };
+    let Some((
+        _,
+        Expression::Integer {
+            op: IntegerOp::Add,
+            left,
+            right,
+        },
+    )) = symbols.records.get(*id as usize)
+    else {
+        return Ok(None);
+    };
+    for (base, scaled) in [(left, right), (right, left)] {
+        control.checkpoint(1)?;
+        if !matches!(
+            base,
+            AbstractValue::Constant { .. }
+                | AbstractValue::ImageAddress { .. }
+                | AbstractValue::Symbol { .. }
+        ) {
+            continue;
+        }
+        let AbstractValue::Expression { id } = scaled else {
+            continue;
+        };
+        if let Some((
+            _,
+            Expression::Integer {
+                op: IntegerOp::Shl,
+                left: index,
+                right: AbstractValue::Constant { value: scale },
+            },
+        )) = symbols.records.get(*id as usize)
+            && *scale < 32
+        {
+            return Ok(Some((
+                base.clone(),
+                index.clone(),
+                *scale as u8,
+                displacement,
+            )));
+        }
+    }
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -902,7 +973,7 @@ pub(super) fn analyze(
         &mut AdmittedVec::new(memory),
         edges
             .iter()
-            .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+            .all(|edge| writes::closes_local_edge(edge.target, edge.relation, edge.external)),
         None,
     )
 }
@@ -1210,21 +1281,22 @@ fn analyze_with_symbols<'m, 's>(
                 link: false,
             } = node.decoded.flow
             && let Some((table, index, scale, displacement)) = table_dispatch(
+                input,
                 i,
                 base,
                 nodes,
                 &operations,
                 &states,
                 &incoming,
-                &symbols.sets,
+                &symbols,
                 control,
             )?
         {
             sink.record(
                 &FunctionRecord::Dispatch {
                     offset: node.offset,
-                    base: public(table, input, &symbols.sets),
-                    index: public(index, input, &symbols.sets),
+                    base: table,
+                    index,
                     scale,
                     displacement,
                 },
@@ -2943,9 +3015,9 @@ mod tests {
                 None,
                 None,
                 &mut AdmittedVec::new(&memory),
-                edges
-                    .iter()
-                    .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+                edges.iter().all(|edge| {
+                    writes::closes_local_edge(edge.target, edge.relation, edge.external)
+                }),
                 None,
             )
             .unwrap();
@@ -3412,6 +3484,15 @@ mod tests {
         jump: InstructionFlow,
         ops: Vec<SemanticOp>,
     ) -> Vec<FunctionRecord> {
+        let entered: Vec<_> = entered.iter().map(|&to| (0, to)).collect();
+        dispatch_records_with_edges(&entered, jump, ops)
+    }
+
+    fn dispatch_records_with_edges(
+        entered: &[(usize, usize)],
+        jump: InstructionFlow,
+        ops: Vec<SemanticOp>,
+    ) -> Vec<FunctionRecord> {
         let bytes: Vec<u8> = (0..ops.len()).flat_map(|i| [i as u8, 0]).collect();
         let nodes: Vec<_> = (0..ops.len())
             .map(|i| Node {
@@ -3421,7 +3502,7 @@ mod tests {
                     text: String::new(),
                     flow: if i + 1 == ops.len() {
                         jump
-                    } else if entered.is_empty() || i != 0 {
+                    } else if !entered.iter().any(|&(from, _)| from == i) {
                         InstructionFlow::Next
                     } else {
                         InstructionFlow::Branch { displacement: 0 }
@@ -3438,7 +3519,11 @@ mod tests {
         };
         let mut edges: Vec<_> = (0..ops.len() - 1)
             .map(|i| edge(i, i + 1, EdgeKind::Fallthrough))
-            .chain(entered.iter().map(|&to| edge(0, to, EdgeKind::Taken)))
+            .chain(
+                entered
+                    .iter()
+                    .map(|&(from, to)| edge(from, to, EdgeKind::Taken)),
+            )
             .collect();
         edges.sort_by_key(|e| (e.from, e.target));
         let input = FunctionInput {
@@ -3475,7 +3560,7 @@ mod tests {
             &mut AdmittedVec::new(&memory),
             edges
                 .iter()
-                .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+                .all(|edge| writes::closes_local_edge(edge.target, edge.relation, edge.external)),
             None,
         )
         .unwrap();
@@ -3483,6 +3568,70 @@ mod tests {
             .into_iter()
             .filter(|record| matches!(record, FunctionRecord::Dispatch { .. }))
             .collect()
+    }
+
+    #[test]
+    fn a_captured_indexed_address_survives_a_merge_but_not_a_clobbered_path() {
+        let jump = InstructionFlow::Indirect {
+            base: 15,
+            offset: 0,
+            link: false,
+        };
+        let ops = vec![
+            SemanticOp::Memory {
+                kind: MemoryKind::Load,
+                base: 10,
+                displacement: 0,
+                width: 1,
+                dest: Some(11),
+                source: None,
+                swap: false,
+                signed: false,
+            },
+            set(12, 0x5000),
+            SemanticOp::Integer {
+                op: IntegerOp::Shl,
+                dest: 13,
+                left: Operand::Register(11),
+                right: Operand::Immediate(2),
+            },
+            SemanticOp::Integer {
+                op: IntegerOp::Add,
+                dest: 13,
+                left: Operand::Register(13),
+                right: Operand::Register(12),
+            },
+            SemanticOp::None,
+            SemanticOp::None,
+            SemanticOp::Memory {
+                kind: MemoryKind::Load,
+                base: 13,
+                displacement: -8,
+                width: 4,
+                dest: Some(15),
+                source: None,
+                swap: false,
+                signed: false,
+            },
+            SemanticOp::None,
+        ];
+        let records = dispatch_records_with_edges(&[(4, 6)], jump, ops.clone());
+        assert!(matches!(
+            &records[..],
+            [FunctionRecord::Dispatch {
+                base: AbstractValue::Constant { value: 0x5000 },
+                index: AbstractValue::Expression { .. },
+                scale: 2,
+                displacement: -8,
+                ..
+            }]
+        ));
+        let mut clobbered = ops.clone();
+        clobbered[5] = SemanticOp::Opaque { dest: 13 };
+        assert!(dispatch_records_with_edges(&[(4, 6)], jump, clobbered).is_empty());
+        let mut unknown_base = ops;
+        unknown_base[1] = SemanticOp::Opaque { dest: 12 };
+        assert!(dispatch_records_with_edges(&[(4, 6)], jump, unknown_base).is_empty());
     }
 
     #[test]

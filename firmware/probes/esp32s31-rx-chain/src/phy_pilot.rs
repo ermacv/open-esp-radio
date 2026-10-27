@@ -30,12 +30,7 @@ pub(crate) fn init(
     let Some(cells) = CELLS.try_init_with(sar_pilot::Cells::new) else {
         reset(SarSetupFault::Storage(SarSetupStorage::Cells));
     };
-    let (client, handler) = cells.split(parts.program, &mut interrupt, &REPLY, |fault| {
-        oer_espressif_staged_runtime::phy_fault::reset(Fault {
-            reason: FaultReason::SarAlarmWithoutBundle(fault),
-            registration: None,
-        })
-    });
+    let (client, handler) = cells.split(parts.program, &mut interrupt, &REPLY);
     let Some(handler) = STATE.try_init_with(|| handler) else {
         reset(SarSetupFault::Storage(SarSetupStorage::State));
     };
@@ -52,11 +47,13 @@ pub(crate) fn init(
     client.bind(bound)
 }
 pub(crate) fn interrupt(part: &mut Timg0AlarmInterrupt) {
-    if HANDLER
-        .with(|handler| handler.service(part, &oer_embassy_time::EmbassyClock))
-        .is_none()
-    {
-        reset(SarSetupFault::Storage(SarSetupStorage::Handler));
+    match HANDLER.with(|handler| handler.service(part, &oer_embassy_time::EmbassyClock)) {
+        Some(Ok(())) => {}
+        Some(Err(fault)) => oer_espressif_staged_runtime::phy_fault::reset(Fault {
+            reason: FaultReason::SarAlarmWithoutBundle(fault),
+            registration: None,
+        }),
+        None => reset(SarSetupFault::Storage(SarSetupStorage::Handler)),
     }
 }
 

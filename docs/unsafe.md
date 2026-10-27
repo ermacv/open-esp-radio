@@ -46,6 +46,15 @@ no calling crate's count grows. Runtime panic counts never increase. Image
 panic budgets report counts and sites without gating builds; zero reachable
 panics remains the code goal.
 
+Compiler-runtime coverage reviews explain missing frame metadata only; they
+supply no trusted frame size or callee bound. A frame without metadata needs
+complete local control flow and a known entry-relative stack pointer.
+Fall-through and call continuations outside the function, conflicting
+boundaries and stop edges leave its local graph open. Unresolved callees
+still leave the stack bound unresolved. Captured indexed
+addresses require the same complete read-only table and target proofs as
+straight-line dispatches; relocation labels alone do not prove immutability.
+
 Only `oer-memory` defines `unsafe impl Sync` or `Send`; the layer test
 `unsafe_sync_and_send_impls_stay_in_oer_memory` maintains the shrinking
 file-to-count list of existing exceptions and rejects new or stale entries.
@@ -530,10 +539,12 @@ publishes facts and pends the next executor round, never a task waker.
 observation. `SarSetupFault` retains the failed storage or router binding;
 startup owners remain held on its non-returning reset path.
 `SarAlarmWithoutBundle` retains the acknowledged RAW/ST and request/reply
-lengths when a pending event has no custody. The handler, IRQ part and actor's
-owners remain held while the image records/resets; no silent return or owner
-recovery occurs. Cancelling the waiting lifecycle future leaves an in-flight
-alarm quarantined until reset; completion has stopped/masked it before reply.
+lengths when a pending event has no custody. IRQ `service` returns this fault
+through `Result`; the image immediately calls the existing retained reset
+path through a direct call. The handler, IRQ part and actor's owners remain
+held without further service or owner recovery. Cancelling the waiting lifecycle
+future leaves an in-flight alarm quarantined until reset; completion has
+stopped/masked it before reply.
 The narrow transaction reporter can report only SAR transfer faults, without
 reunion or register authority. Owners stay quarantined before record/reset;
 the existing retained codec remains 16 bytes and records the named reason and

@@ -350,9 +350,10 @@ and SAR trigger; the handler reloads them after the edge without subtracting a
 second clock reading. Crossing a microsecond boundary between the edge and
 rearm cannot shorten either interval. Handler lateness and programming overhead
 lengthen the wait; no upper latency bound is claimed.
-An acknowledged event without a request or active bundle records
-`SarAlarmWithoutBundle` with the sampled RAW/ST and both queue lengths. All
-owners remain held while the image retains the reason and resets. Cancelling
+An acknowledged event without a request or active bundle returns
+`Err(SarAlarmWithoutBundle)` with the sampled RAW/ST and both queue lengths.
+All owners remain held; the image immediately retains the reason and resets
+through its existing direct call, without further service. Cancelling
 the waiting lifecycle future records its admitted operation; an in-flight
 alarm remains quarantined until reset, while completion already stopped/masked
 it before publishing the reply.

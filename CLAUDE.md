@@ -178,8 +178,12 @@ system these rules serve.
   test -p oer-test-layers`. Images, image checks and sizes are built by CI.
   Changed chip packages may also run `cargo check` and `cargo clippy` with
   `--target riscv32imafc-unknown-none-elf -p <pkg>` as type-checks only,
-  without images or linking. One image build is allowed only to settle a
-  concrete doubt, named in the PR. Judge a check only by its own exit code,
+  without images or linking. A targeted image build measures one concrete
+  change in one image, with its reason and expected result recorded in the
+  PR before the build. First inspect captured ELF/type evidence. Image builds
+  never replace CI or survey other images/features. If three consecutive
+  builds do not improve the target metric, stop and report the reason and
+  question. Other images' results come from the PR's CI. Judge a check only by its own exit code,
   never through a pipe (redirect to a file and print `exit=$?`).
 - **Sizes.** CI reports memory growth (code, `.rodata`, SRAM and PSRAM
   sections, a type, future or frame, an allocated task or interrupt stack);

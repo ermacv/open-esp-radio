@@ -366,8 +366,9 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
   Startup stops/masks T0 and explicitly clears stale RAW before unmasking;
   rearming alone does not clear it. A pending event without a bundle is a named
   `SarAlarmWithoutBundle` fault retaining RAW/ST and request/reply lengths;
-  the image keeps the owners quarantined and records/resets. Cancellation of
-  the lifecycle future likewise retains any in-flight alarm until reset;
+  `service` returns the fault in a `Result`, and the image keeps the owners
+  quarantined while its direct retained reset call records the reason.
+  Cancellation of the lifecycle future likewise retains any in-flight alarm until reset;
   terminal completion already stops/masks it before reply. The leaf's async
   suspension count is unchanged: a reply wait replaces its timer wait.
   `Client::sample` validates/registers its receiving context in one `poll_fn`
