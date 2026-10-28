@@ -30,7 +30,7 @@ impl Source for Tree<'_> {
 
 pub fn check(root: &Path, chip: &str) -> Result<()> {
     let chip_file = oer_espressif_facts::chip_file(chip);
-    // Let the pin loader report unsupported chips with its supported list.
+    // Let the pin loader report a chip without pins with the chips that have them.
     if !root.join(&chip_file).is_file() {
         return Ok(());
     }

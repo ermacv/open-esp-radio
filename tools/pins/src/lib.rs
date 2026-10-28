@@ -26,23 +26,30 @@ pub fn manifest(chip: &str) -> String {
 }
 
 /// Tracked manifest of `chip`, relative to the repository root: an error
-/// that lists the supported chips for an unsupported one, or names the
-/// missing manifest of a chip without a vendor verification project.
+/// that lists the chips with pins when `chip` has none. The chip needs no
+/// chip profile, so a peer chip outside the supported set (an ESP-IDF
+/// reference board) pins its artifacts the same way.
 pub fn manifest_path(root: &Path, chip: &str) -> Result<String> {
-    manifest_path_with_inputs(root, chip, &mut oer_os_durable::inputs::Inputs::default())
-}
-
-fn manifest_path_with_inputs(
-    root: &Path,
-    chip: &str,
-    inputs: &mut oer_os_durable::inputs::Inputs,
-) -> Result<String> {
-    let profile = oer_chip_profile::Profile::load_with_inputs(root, chip, inputs)?;
-    let manifest = manifest(&profile.facts.id);
-    if !root.join(&manifest).is_file() {
-        return Err(format!("chip {chip} has no vendor artifact pins ({manifest})").into());
+    let plain = !chip.is_empty()
+        && chip
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+    if plain && root.join(manifest(chip)).is_file() {
+        return Ok(manifest(chip));
     }
-    Ok(manifest)
+    let mut chips = Vec::new();
+    for entry in std::fs::read_dir(root.join(CHIPS))? {
+        let id = entry?.file_name().to_string_lossy().into_owned();
+        if root.join(manifest(&id)).is_file() {
+            chips.push(id);
+        }
+    }
+    chips.sort();
+    Err(format!(
+        "chip `{chip}` has no vendor artifact pins; chips with pins: {}",
+        chips.join(", ")
+    )
+    .into())
 }
 
 /// The kind of a pinned source.
@@ -147,7 +154,7 @@ impl Manifest {
         chip: &str,
         inputs: &mut oer_os_durable::inputs::Inputs,
     ) -> Result<Self> {
-        let manifest = manifest_path_with_inputs(root, chip, inputs)?;
+        let manifest = manifest_path(root, chip)?;
         Self::parse(&inputs.read_to_string(&root.join(&manifest))?)
             .map_err(|error| format!("{manifest}: {error}").into())
     }
@@ -257,6 +264,37 @@ mod tests {
         Manifest::parse(&format!(
             "schema = 1\n[[source]]\nid = \"s\"\n{source}\n[[artifact]]\nid = \"a\"\nsource = \"s\"\npath = \"p\"\n{artifact}\n"
         ))
+    }
+
+    #[test]
+    fn a_peer_chip_without_a_profile_resolves_its_pins() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let pins = root.join("chips/peer/vendor");
+        std::fs::create_dir_all(&pins).unwrap();
+        std::fs::write(
+            pins.join("artifacts.toml"),
+            "schema = 1\n[[source]]\nid = \"idf\"\nkind = \"git\"\n\
+             repository = \"https://example.invalid/idf\"\nrevision = \"r1\"\n\
+             [[artifact]]\nid = \"a\"\nsource = \"idf\"\npath = \"p\"\nsha256 = \"00\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("chips/bare")).unwrap();
+        assert_eq!(
+            manifest_path(root, "peer").unwrap(),
+            super::manifest("peer")
+        );
+        let pins = git_pins(root, "peer").unwrap();
+        assert_eq!(
+            (pins[0].id.as_str(), pins[0].revision.as_str()),
+            ("idf", "r1")
+        );
+        assert_eq!(pins[0].artifacts, [("p".to_owned(), "00".to_owned())]);
+        for chip in ["bare", "../peer", "", "peer/vendor"] {
+            let error = manifest_path(root, chip).unwrap_err().to_string();
+            assert!(error.contains("has no vendor artifact pins"), "{error}");
+            assert!(error.ends_with("chips with pins: peer"), "{error}");
+        }
     }
 
     #[test]

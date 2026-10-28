@@ -45,8 +45,9 @@ impl Project {
     /// otherwise an error that lists the supported chips or names the
     /// missing project.
     pub fn new(root: &Path, name: &str) -> Result<Self> {
-        crate::manifest_path(root, name)?;
-        Ok(Self(oer_chip_profile::Profile::load(root, name)?.facts.id))
+        let id = oer_chip_profile::Profile::load(root, name)?.facts.id;
+        crate::manifest_path(root, &id)?;
+        Ok(Self(id))
     }
 
     pub fn name(&self) -> &str {
