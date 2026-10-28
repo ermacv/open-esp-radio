@@ -1,5 +1,13 @@
 //! Physical B0 procedure over the product's H4 boundary and pinned DTM peer.
 use crate::{command, image};
+use oer_bluetooth_hci::{
+    VendorShutdownObservationEvent,
+    bt_hci::{
+        PacketKind,
+        cmd::{Opcode, OpcodeGroup},
+    },
+    h4,
+};
 use oer_hil_link::peer::{Expected, PeerConsole, SerialLink};
 use oer_image_build::{Check, Enforced, Result, esp_idf::catalog};
 use oer_lab_arbiter::{Arbiter, Request, claims::Claim};
@@ -31,10 +39,14 @@ struct H4<S> {
 }
 impl<S: Read + Write> H4<S> {
     fn command(&mut self, opcode: u16, parameters: &[u8]) -> Result<Vec<u8>> {
-        let [low, high] = opcode.to_le_bytes();
-        let size = u8::try_from(parameters.len())?;
-        let mut command = vec![1, low, high, size];
-        command.extend_from_slice(parameters);
+        let mut command = vec![0; h4::COMMAND_FRAME_CAPACITY];
+        let length = h4::write_command(
+            Opcode::new(OpcodeGroup::new((opcode >> 10) as u8), opcode & 0x03ff),
+            parameters,
+            &mut command,
+        )
+        .map_err(|error| format!("H4 command {opcode:#06x}: {error:?}"))?;
+        command.truncate(length);
         writeln!(self.log, "tx {}", hex::encode(&command))?;
         self.serial.write_all(&command)?;
         self.serial.flush()?;
@@ -60,11 +72,13 @@ impl<S: Read + Write> H4<S> {
                 Err(e) => return Err(e.into()),
             }
             writeln!(self.log, "rx {:02x}", byte[0])?;
-            if event.is_empty() && byte[0] != 4 {
+            if event.is_empty() && byte[0] != h4::indicator(PacketKind::Event) {
                 continue;
             } // ROM text before H4.
             event.push(byte[0]);
-            if event.len() >= 3 && event.len() == usize::from(event[2]) + 3 {
+            let extent =
+                h4::frame_length(&event).map_err(|error| format!("H4 event framing: {error:?}"))?;
+            if extent == Some(event.len()) {
                 if let Some(completed) = self.receive_event(&event, opcode)? {
                     return Ok(completed);
                 }
@@ -73,7 +87,7 @@ impl<S: Read + Write> H4<S> {
         }
     }
     fn receive_event(&mut self, event: &[u8], opcode: u16) -> Result<Option<Vec<u8>>> {
-        if let Some(pending) = oer_firmware_apps_b0::shutdown_observation::pending_from_h4(event) {
+        if let Some(pending) = shutdown_pending_from_h4(event) {
             writeln!(
                 self.log,
                 "LP shutdown pending: +0x24={} +0x2c={}",
@@ -93,24 +107,36 @@ impl<S: Read + Write> H4<S> {
         Ok(u16::from_le_bytes(bytes))
     }
 }
-fn completion(event: &[u8], opcode: u16) -> Result<Vec<u8>> {
-    if let [4, 0x10, 1, code] = event {
+/// The Controller's LP pending observation, decoded only from a complete
+/// vendor event frame with the H4 event indicator.
+fn shutdown_pending_from_h4(frame: &[u8]) -> Option<[u8; 2]> {
+    let Ok((PacketKind::Event, body)) = h4::split(frame) else {
+        return None;
+    };
+    VendorShutdownObservationEvent::from_hci_bytes(body).map(|event| event.pending())
+}
+fn completion(frame: &[u8], opcode: u16) -> Result<Vec<u8>> {
+    let event = match h4::split(frame) {
+        Ok((PacketKind::Event, event)) => event,
+        _ => return Err("HCI completion has a wrong kind, extent, credit or opcode".into()),
+    };
+    if let [0x10, 1, code] = event {
         return Err(
             format!("Controller Hardware Error {code} while awaiting HCI {opcode:#06x}").into(),
         );
     }
     let [low, high] = opcode.to_le_bytes();
-    if event.len() < 7
-        || event.get(..2) != Some(&[4, 0x0e])
-        || usize::from(event[2]) + 3 != event.len()
-        || event[3..6] != [1, low, high]
+    if event.len() < 6
+        || event.first() != Some(&0x0e)
+        || usize::from(event[1]) + 2 != event.len()
+        || event[2..5] != [1, low, high]
     {
         return Err("HCI completion has a wrong kind, extent, credit or opcode".into());
     }
-    if event[6] != 0 {
-        return Err(format!("HCI {opcode:#06x} status={:#04x}", event[6]).into());
+    if event[5] != 0 {
+        return Err(format!("HCI {opcode:#06x} status={:#04x}", event[5]).into());
     }
-    Ok(event[7..].to_vec())
+    Ok(event[6..].to_vec())
 }
 fn peer_end<L: oer_hil_link::peer::PeerLink>(peer: &mut PeerConsole<L>) -> Result<u64> {
     let reports = peer.command("END", "END", TIMEOUT, &["END"])?;
@@ -431,6 +457,24 @@ mod tests {
                 .unwrap()
                 .contains("+0x24=7 +0x2c=3")
         );
+    }
+
+    #[test]
+    fn nonzero_shutdown_pending_survives_only_a_complete_event_frame() {
+        assert_eq!(
+            shutdown_pending_from_h4(&[4, 0xff, 3, 1, 7, 3]),
+            Some([7, 3])
+        );
+        for malformed in [
+            &[4, 0xff, 3, 1, 7][..],
+            &[4, 0xff, 2, 1, 7, 3],
+            &[4, 0xff, 3, 2, 7, 3],
+            &[1, 0xff, 3, 1, 7, 3],
+            &[4, 0xff, 3, 1, 7, 3, 0],
+            &[],
+        ] {
+            assert_eq!(shutdown_pending_from_h4(malformed), None);
+        }
     }
 
     #[test]

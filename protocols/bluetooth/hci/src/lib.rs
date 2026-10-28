@@ -24,8 +24,9 @@
 
 //! Sans-IO HCI packet values and codecs for an LE Controller.
 //!
-//! HCI packet bodies travel with a separate typed packet kind, so no UART/H4
-//! framing exists inside the process. [`HostToControllerFrame`] and
+//! HCI packet bodies travel with a separate typed packet kind inside the
+//! process; the [`h4`] module is the one UART framing codec for the transports
+//! that carry a packet kind as an indicator octet. [`HostToControllerFrame`] and
 //! [`HciCommandPacket`] are the borrowed Host packets a Controller consumes;
 //! [`validate_controller_to_host_packet`] checks that a Controller packet body
 //! is one complete packet.
@@ -61,6 +62,7 @@ mod controller;
 pub use controller::random::{LeRandCommand, LeRandCommandCompleteEvent};
 mod encoding;
 mod events;
+pub mod h4;
 pub use events::{CommandCompleteStatusEvent, HardwareErrorEvent, VendorShutdownObservationEvent};
 mod transport;
 mod wire;

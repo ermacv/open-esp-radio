@@ -2,7 +2,7 @@
 mod peer {
     use super::super::{
         Result, connection_reset,
-        hci::Socket,
+        hci::{Socket, event_body},
         model::{
             PeerAddress,
             security_failure::{Observation, Report},
@@ -97,11 +97,9 @@ mod peer {
     }
 
     fn observe(packet: &[u8], handle: ConnHandle, report: &mut Report) -> Result<Action> {
-        if packet.first() != Some(&4) {
-            return Err("application data during rejected encryption".into());
-        }
-        let (event, rest) = Event::from_hci_bytes(&packet[1..])
-            .map_err(|e| format!("security failure event: {e:?}"))?;
+        let body = event_body(packet).ok_or("application data during rejected encryption")?;
+        let (event, rest) =
+            Event::from_hci_bytes(body).map_err(|e| format!("security failure event: {e:?}"))?;
         if !rest.is_empty() {
             return Err("trailing security failure event bytes".into());
         }

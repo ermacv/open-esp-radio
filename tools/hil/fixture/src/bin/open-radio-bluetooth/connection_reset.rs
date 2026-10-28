@@ -2,11 +2,11 @@
 
 use super::{
     Result,
-    hci::Socket,
+    hci::{Socket, event_body},
     model::{ConnectionReset, PeerAddress},
 };
 use bt_hci::{
-    FromHciBytes,
+    FromHciBytes, PacketKind,
     cmd::{
         Cmd,
         controller_baseband::SetEventMask,
@@ -23,6 +23,7 @@ use bt_hci::{
         LeEventMask,
     },
 };
+use oer_bluetooth_hci::h4;
 use oer_hil_protocol::{
     bluetooth::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES,
     bluetooth::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS,
@@ -62,9 +63,9 @@ impl AclEchoAssembly {
         handle: ConnHandle,
         expected: &[u8; BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES],
     ) -> Result<bool> {
-        match packet.first() {
-            Some(&2) => {
-                let (packet, rest) = AclPacket::from_hci_bytes(&packet[1..])
+        match h4::split(packet) {
+            Ok((PacketKind::AclData, body)) => {
+                let (packet, rest) = AclPacket::from_hci_bytes(body)
                     .map_err(|error| format!("invalid HCI ACL echo: {error:?}"))?;
                 if !rest.is_empty() {
                     return Err("trailing HCI ACL echo bytes".into());
@@ -97,8 +98,8 @@ impl AclEchoAssembly {
                     .ok_or("HCI ACL echo fragment counter exhausted")?;
                 Ok(self.len == self.bytes.len())
             }
-            Some(&4) => {
-                let (event, rest) = Event::from_hci_bytes(&packet[1..]).map_err(|error| {
+            Ok((PacketKind::Event, body)) => {
+                let (event, rest) = Event::from_hci_bytes(body).map_err(|error| {
                     format!("invalid HCI event while awaiting ACL echo: {error:?}")
                 })?;
                 if !rest.is_empty() {
@@ -425,10 +426,9 @@ fn read_remote_version(
 }
 
 fn decode_event<'packet>(packet: &'packet [u8], context: &str) -> Result<Event<'packet>> {
-    if packet.first() != Some(&4) {
-        return Err(format!("unexpected non-event HCI packet during {context}").into());
-    }
-    let (event, rest) = Event::from_hci_bytes(&packet[1..])
+    let body = event_body(packet)
+        .ok_or_else(|| format!("unexpected non-event HCI packet during {context}"))?;
+    let (event, rest) = Event::from_hci_bytes(body)
         .map_err(|error| format!("invalid HCI event during {context}: {error:?}"))?;
     if !rest.is_empty() {
         return Err(format!("trailing HCI event bytes during {context}").into());
@@ -484,10 +484,9 @@ fn finish_connection(
 }
 
 fn peer_disconnected(packet: &[u8], handle: ConnHandle, expected_reason: u8) -> Result<bool> {
-    if packet.first() != Some(&4) {
-        return Err("unexpected non-event HCI packet while awaiting target termination".into());
-    }
-    let (event, rest) = Event::from_hci_bytes(&packet[1..])
+    let body = event_body(packet)
+        .ok_or("unexpected non-event HCI packet while awaiting target termination")?;
+    let (event, rest) = Event::from_hci_bytes(body)
         .map_err(|error| format!("invalid target termination event: {error:?}"))?;
     if !rest.is_empty() {
         return Err("trailing target termination event bytes".into());
@@ -515,10 +514,9 @@ fn connection_updated(
     handle: ConnHandle,
     interval: HciDuration<1_250>,
 ) -> Result<bool> {
-    if packet.first() != Some(&4) {
-        return Err("unexpected non-event HCI packet during connection update".into());
-    }
-    let (event, rest) = Event::from_hci_bytes(&packet[1..])
+    let body =
+        event_body(packet).ok_or("unexpected non-event HCI packet during connection update")?;
+    let (event, rest) = Event::from_hci_bytes(body)
         .map_err(|error| format!("invalid connection update event: {error:?}"))?;
     if !rest.is_empty() {
         return Err("trailing connection update event bytes".into());
@@ -554,10 +552,8 @@ fn connection_updated(
 }
 
 fn connection_created(packet: &[u8], peer: PeerAddress) -> Result<Option<ConnHandle>> {
-    if packet.first() != Some(&4) {
-        return Err("unexpected non-event HCI packet".into());
-    }
-    let (event, rest) = Event::from_hci_bytes(&packet[1..])
+    let body = event_body(packet).ok_or("unexpected non-event HCI packet")?;
+    let (event, rest) = Event::from_hci_bytes(body)
         .map_err(|error| format!("invalid connection event: {error:?}"))?;
     if !rest.is_empty() {
         return Err("trailing connection event bytes".into());
@@ -788,11 +784,9 @@ fn observe_encryption_event(
     report: &mut ConnectionReset,
     refresh: bool,
 ) -> Result<bool> {
-    if packet.first() != Some(&4) {
-        return Err("unexpected data before encryption completed".into());
-    }
+    let body = event_body(packet).ok_or("unexpected data before encryption completed")?;
     let (event, rest) =
-        Event::from_hci_bytes(&packet[1..]).map_err(|e| format!("encryption event: {e:?}"))?;
+        Event::from_hci_bytes(body).map_err(|e| format!("encryption event: {e:?}"))?;
     if !rest.is_empty() {
         return Err("trailing encryption event bytes".into());
     }
