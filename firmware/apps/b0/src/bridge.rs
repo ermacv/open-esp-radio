@@ -121,7 +121,7 @@ impl oer_esp32s31_bluetooth_driver::port::runner::ClockRequests for RuntimeClock
         let _ = CLOCK_BELL.poll_rung(cx);
         self.try_request().map_or(Poll::Pending, Poll::Ready)
     }
-    fn answer(token: Self::Request, result: Result<oer_bluetooth_le_radio::LeInstant, Fault>) {
+    fn answer(token: Self::Request, result: Result<oer_bluetooth_le_port::LeInstant, Fault>) {
         let _ = REPLY_OWNER.with(|state| {
             let held = &mut state.pending;
             if held

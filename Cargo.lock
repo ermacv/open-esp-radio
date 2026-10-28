@@ -1789,7 +1789,7 @@ dependencies = [
  "oer-bluetooth-le-ll",
  "oer-bluetooth-le-model",
  "oer-bluetooth-le-port",
- "oer-bluetooth-le-radio",
+ "oer-bluetooth-le-wire",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
@@ -1802,9 +1802,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "ccm",
- "oer-bluetooth-le-radio",
- "oer-radio-regulatory",
- "oer-wire",
+ "oer-bluetooth-le-wire",
  "zeroize",
 ]
 
@@ -1813,7 +1811,7 @@ name = "oer-bluetooth-le-model"
 version = "0.1.0"
 dependencies = [
  "oer-bluetooth-le-port",
- "oer-bluetooth-le-radio",
+ "oer-bluetooth-le-wire",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
@@ -1825,7 +1823,8 @@ dependencies = [
 name = "oer-bluetooth-le-port"
 version = "0.1.0"
 dependencies = [
- "oer-bluetooth-le-radio",
+ "oer-bluetooth-le-wire",
+ "oer-radio-coex",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
@@ -1833,12 +1832,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-bluetooth-le-radio"
+name = "oer-bluetooth-le-wire"
 version = "0.1.0"
 dependencies = [
- "oer-radio-coex",
- "oer-radio-regulatory",
- "oer-time",
+ "oer-wire",
 ]
 
 [[package]]
@@ -1899,10 +1896,8 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "embassy-futures",
- "oer-bluetooth-hci",
- "oer-bluetooth-le-ll",
  "oer-bluetooth-le-port",
- "oer-bluetooth-le-radio",
+ "oer-bluetooth-le-wire",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
@@ -2067,7 +2062,7 @@ name = "oer-esp32s31-radio-client"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "oer-bluetooth-le-radio",
+ "oer-bluetooth-le-port",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-ieee80211-wire",
@@ -2089,7 +2084,7 @@ name = "oer-esp32s31-radio-system"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "oer-bluetooth-le-radio",
+ "oer-bluetooth-le-port",
  "oer-cooperate",
  "oer-esp32s31-bluetooth-driver",
  "oer-esp32s31-hal",
@@ -2275,7 +2270,7 @@ dependencies = [
  "oer-bluetooth-hci",
  "oer-bluetooth-le-controller",
  "oer-bluetooth-le-port",
- "oer-bluetooth-le-radio",
+ "oer-bluetooth-le-wire",
  "oer-embassy-time",
  "oer-esp32s31-bluetooth-driver",
  "oer-esp32s31-board",
@@ -3583,7 +3578,6 @@ dependencies = [
  "embedded-io 0.7.1",
  "embedded-io-async",
  "libc",
- "oer-bluetooth-le-ll",
  "oer-hil-protocol",
  "oer-ieee80211-wire",
  "oer-os-process",

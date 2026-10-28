@@ -12,11 +12,11 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll},
 };
+use oer_bluetooth_le_port::{LePhys, LeRadioCapabilities};
 use oer_bluetooth_le_port::{
     backend::{OwnedCommand, OwnedRequest, OwnedSession},
     *,
 };
-use oer_bluetooth_le_radio::{LePhys, LeRadioCapabilities};
 use oer_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor, LocalSpscReceiver,
     LocalSpscSender, OnceValue,

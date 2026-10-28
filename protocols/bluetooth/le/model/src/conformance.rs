@@ -17,6 +17,7 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use oer_bluetooth_le_port::{conformance::*, *};
+use oer_bluetooth_le_wire::{TestChannel, TestPayloadType};
 use oer_radio_port::*;
 use oer_time::Duration;
 

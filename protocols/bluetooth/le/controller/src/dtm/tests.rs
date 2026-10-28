@@ -21,7 +21,7 @@ impl Entropy for Random {
     }
 }
 fn power() -> TxPower {
-    use oer_bluetooth_le_radio::{LeBand, LeTxCeiling};
+    use oer_bluetooth_le_port::{LeBand, LeTxCeiling};
     use oer_radio_regulatory::*;
     let band = TEST_DOMAIN.permit(LeBand).expect("test band");
     let ceiling = band.tx_ceiling(PowerLimits {

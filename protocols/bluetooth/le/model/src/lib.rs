@@ -56,7 +56,7 @@ pub use air::{Environment, Loss, Stimulus};
 pub use lifecycle::{Backend, Frontend, Invocation, Resources, Vacant, View};
 pub use queues::{ModelPhase, Queues};
 
-use oer_bluetooth_le_radio::{LeCapabilities, LePhys, LeRadioCapabilities};
+use oer_bluetooth_le_port::{LeCapabilities, LePhys, LeRadioCapabilities};
 /// DTM 1M-only profile. No advertising, scanning or connection capability is
 /// inferred from a test receiver.
 pub enum ModelCaps {}

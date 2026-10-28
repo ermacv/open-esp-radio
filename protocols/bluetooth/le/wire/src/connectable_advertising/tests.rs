@@ -2,8 +2,7 @@ use super::*;
 use crate::{
     advertising::LEGACY_ADVERTISING_PDU_CAPACITY,
     connection::{
-        LEGACY_CONNECT_IND_PAYLOAD_BYTES, LEGACY_CONNECT_IND_PDU_BYTES,
-        LeChannelSelectionAlgorithm, LeLegacyConnectionRequest, LePeripheralConnection,
+        LEGACY_CONNECT_IND_PAYLOAD_BYTES, LEGACY_CONNECT_IND_PDU_BYTES, LeLegacyConnectionRequest,
     },
 };
 
@@ -62,43 +61,6 @@ fn a_connection_indication_names_its_advertiser() {
     assert!(request.is_addressed_to(advertiser));
     let other = LeLegacyConnectionRequest::decode(&connection_request([9; 6], true)).unwrap();
     assert!(!other.is_addressed_to(advertiser));
-}
-
-#[test]
-fn legacy_channel_selection_uses_both_advertising_and_initiating_bits() {
-    for (advertised, peer_two, expected) in [
-        (
-            LeChannelSelectionAlgorithm::AlgorithmOne,
-            false,
-            LeChannelSelectionAlgorithm::AlgorithmOne,
-        ),
-        (
-            LeChannelSelectionAlgorithm::AlgorithmOne,
-            true,
-            LeChannelSelectionAlgorithm::AlgorithmOne,
-        ),
-        (
-            LeChannelSelectionAlgorithm::AlgorithmTwo,
-            false,
-            LeChannelSelectionAlgorithm::AlgorithmOne,
-        ),
-        (
-            LeChannelSelectionAlgorithm::AlgorithmTwo,
-            true,
-            LeChannelSelectionAlgorithm::AlgorithmTwo,
-        ),
-    ] {
-        let pdu = connection_request(ADVERTISER_BYTES, peer_two);
-        let request = LeLegacyConnectionRequest::decode(&pdu).unwrap();
-        let connection = LePeripheralConnection::from_request(request, advertised);
-        assert_eq!(connection.request(), request);
-        assert_eq!(connection.channel_selection(), expected);
-        let first = connection.prepare_event();
-        if expected == LeChannelSelectionAlgorithm::AlgorithmOne {
-            assert_eq!(first.channel().get(), 5);
-        }
-        assert_eq!(first.cancel().channel_selection(), expected);
-    }
 }
 
 #[test]

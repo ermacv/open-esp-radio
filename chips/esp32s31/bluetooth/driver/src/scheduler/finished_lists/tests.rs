@@ -113,7 +113,9 @@ fn stopped_capture_borrows_only_the_engine_and_refuses_before_mmio_without_its_r
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
             oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-        );
+        )
+        .ok()
+        .expect("host radio split");
     let (mut engine, _interrupts) =
         crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
     let mut worker = SchedulerFinishedListWorker::new();

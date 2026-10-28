@@ -18,8 +18,9 @@ use core::{
 };
 use embassy_futures::select::{Either, select};
 
-use oer_bluetooth_le_ll::dtm::{DtmPayloadPattern, DtmTest, next_window};
-use oer_bluetooth_le_radio::{LeInstant, LeWindow, RadioDuration, RadioTiming, TestPhy};
+use oer_bluetooth_le_port::dtm::{DtmTest, next_window};
+use oer_bluetooth_le_port::{LeInstant, LeWindow, RadioDuration, RadioTiming, TestPhy};
+use oer_bluetooth_le_wire::dtm::DtmPayloadPattern;
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerStop,
     engine::{

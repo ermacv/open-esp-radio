@@ -11,7 +11,9 @@ description = "Portable Bluetooth LE DTM contract and backend conformance"
 test-support = []
 
 [dependencies]
-oer-bluetooth-le-radio = { path = "../radio" }
+oer-bluetooth-le-wire = { path = "../wire" }
+oer-radio-coex = { path = "../../../radio/coex" }
+oer-radio-regulatory = { path = "../../../radio/regulatory" }
 oer-radio-port = { path = "../../../radio/port" }
 oer-time = { path = "../../../../portable/time" }
 

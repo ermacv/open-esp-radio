@@ -18,7 +18,9 @@ fn scheduler(
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
             oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-        );
+        )
+        .ok()
+        .expect("host radio split");
     let (engine, interrupts) =
         crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
     ControllerHalInitialized::initialize_for_validation(engine, interrupts, |_, _| {})

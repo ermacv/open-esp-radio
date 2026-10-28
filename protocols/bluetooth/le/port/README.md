@@ -31,7 +31,7 @@ carries correlation and epoch but grants no release authority.
 One owned event stream reports mandatory terminals. `next_event` only dequeues;
 dropping its future detaches its waker without cancelling admitted work or
 releasing a lease. Executed, NotExecuted, confirmed Aborted and Indeterminate
-retain the meanings of `le/radio`. Unknown reachability returns no reusable
+are defined by this port. Unknown reachability returns no reusable
 session. Disable settles admitted work through its terminal sink; a rejecting
 sink returns the whole terminal to quarantine. Normal uninstall requires P2's
 stop proof and the shared supervisor's timely Joined authority.
@@ -42,3 +42,11 @@ their classification when an operation is unsupported. Injected loss,
 publication holds and faults have explicit ModelOnly reasons. UI twins cover
 foreign pools, body epochs, context substitution, repeated release and session
 state. Backends keep BodyLoan conversion authority private.
+
+The port owns the backend vocabulary: capabilities, supported requests,
+radio-clock timing, outcomes and regulatory-capped transmit power. Wire PDUs,
+channels and address bytes are consumed directly from `oer-bluetooth-le-wire`.
+`dtm::next_window` is shared contract mathematics: transmitters retain the
+Core Part F interval grid and skip unreachable slots; receivers retain their
+5 ms windows. Backends progress admitted DTM tests independently of terminal
+dequeue.

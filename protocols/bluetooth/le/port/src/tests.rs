@@ -1,5 +1,5 @@
 use super::*;
-use oer_bluetooth_le_radio::{LePhys, NoCapabilities};
+use crate::{LePhys, NoCapabilities};
 
 #[test]
 fn receive_needs_supported_dtm_phy_but_no_transmit_authority() {

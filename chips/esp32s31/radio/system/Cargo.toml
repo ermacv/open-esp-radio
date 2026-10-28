@@ -26,7 +26,7 @@ oer-esp32s31-radio-client = { path = "../client" }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
 
 [dev-dependencies]
-oer-bluetooth-le-radio = { path = "../../../../protocols/bluetooth/le/radio" }
+oer-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory", features = ["test-support"] }
 oer-esp32s31-radio-client = { path = "../client", features = ["test-support"] }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }

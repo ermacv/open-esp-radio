@@ -5,11 +5,11 @@ use core::marker::PhantomData;
 
 use crate::{
     AcceptListChange, AdvertisingConfiguration, AdvertisingEvent, AdvertisingReception,
-    ConnectionConfiguration, ConnectionEvent, ConnectionEventTiming, DataPdu, LeCapabilities,
-    LeInstant, LeRadioCapabilities, LeWindow, OutsideEpoch, RadioDuration, RadioTiming,
-    ScanFilterPolicy, ScanType, ScanWindow, ScannerConfiguration, TestReceive, TestTransmit,
-    TxPower,
+    ConnectionConfiguration, ConnectionEvent, ConnectionEventTiming, LeCapabilities, LeInstant,
+    LeRadioCapabilities, LeWindow, OutsideEpoch, RadioDuration, RadioTiming, ScanFilterPolicy,
+    ScanType, ScanWindow, ScannerConfiguration, TestReceive, TestTransmit, TxPower,
 };
+use oer_bluetooth_le_wire::DataPdu;
 
 /// Header type of `ADV_IND`.
 const ADV_IND: u8 = 0x0;
@@ -42,27 +42,27 @@ pub(crate) const TEST_PAYLOAD_MAX: usize = 255;
 ///
 /// ```compile_fail,E0451
 /// # use core::marker::PhantomData;
-/// # use oer_bluetooth_le_radio::{NoCapabilities, Supported, TxPower};
+/// # use oer_bluetooth_le_port::{NoCapabilities, Supported, TxPower};
 /// let forged: Supported<NoCapabilities, TxPower> =
 ///     Supported { value: todo!(), caps: PhantomData };
 /// ```
 ///
 /// ```compile_fail,E0599
-/// # use oer_bluetooth_le_radio::{Supported, TxPower, LeCapabilities};
+/// # use oer_bluetooth_le_port::{Supported, TxPower, LeCapabilities};
 /// fn copy<K: LeCapabilities>(power: &Supported<K, TxPower>) -> Supported<K, TxPower> {
 ///     power.clone()
 /// }
 /// ```
 ///
 /// ```compile_fail,E0277
-/// # use oer_bluetooth_le_radio::{NoCapabilities, Supported, TxPower};
+/// # use oer_bluetooth_le_port::{NoCapabilities, Supported, TxPower};
 /// let _: Supported<NoCapabilities, TxPower> = Default::default();
 /// ```
 ///
 /// Nor is a value that occupies the air built without its placement:
 ///
 /// ```compile_fail,E0599
-/// # use oer_bluetooth_le_radio::{LeCapabilities, ScanWindow, Supported};
+/// # use oer_bluetooth_le_port::{LeCapabilities, ScanWindow, Supported};
 /// fn unplaced<K: LeCapabilities>(window: ScanWindow) -> Supported<K, ScanWindow> {
 ///     Supported::new(window).unwrap()
 /// }
@@ -72,12 +72,12 @@ pub(crate) const TEST_PAYLOAD_MAX: usize = 255;
 /// placed:
 ///
 /// ```
-/// # use oer_bluetooth_le_radio::{LeCapabilities, Supported, TxPower};
-/// # use oer_bluetooth_le_radio::LeTxCeiling;
+/// # use oer_bluetooth_le_port::{LeCapabilities, Supported, TxPower};
+/// # use oer_bluetooth_le_port::LeTxCeiling;
 /// fn build<K: LeCapabilities>(ceiling: LeTxCeiling, dbm: i8) -> Option<Supported<K, TxPower>> {
 ///     Supported::new(TxPower::within(ceiling, dbm).ok()?).ok()
 /// }
-/// # use oer_bluetooth_le_radio::{LeInstant, ScanWindow};
+/// # use oer_bluetooth_le_port::{LeInstant, ScanWindow};
 /// fn place<K: LeCapabilities>(window: ScanWindow, now: LeInstant) -> Option<Supported<K, ScanWindow>> {
 ///     Supported::placed(window, now).ok()
 /// }

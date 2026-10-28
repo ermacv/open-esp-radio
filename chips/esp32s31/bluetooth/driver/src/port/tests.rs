@@ -1,5 +1,6 @@
 use super::*;
 use core::pin::pin;
+use oer_bluetooth_le_wire::TestChannel;
 use oer_time_virtual::VirtualClock;
 use std::{rc::Rc, task::Waker};
 

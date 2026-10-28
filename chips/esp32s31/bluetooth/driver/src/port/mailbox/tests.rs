@@ -1,6 +1,7 @@
 use super::*;
 use core::{future::Future, pin::pin, task::Waker};
-use oer_bluetooth_le_port::{Cause, Receive, TestChannel, TestPhy};
+use oer_bluetooth_le_port::{Cause, Receive, TestPhy};
+use oer_bluetooth_le_wire::TestChannel;
 use oer_memory::Doorbell;
 use oer_time::{Clock, Instant};
 use oer_time_virtual::VirtualClock;

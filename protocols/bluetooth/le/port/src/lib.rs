@@ -42,11 +42,39 @@
 //! ```
 
 use core::{future::Future, marker::PhantomData};
-use oer_bluetooth_le_radio::{Capability, Untimed};
-pub use oer_bluetooth_le_radio::{
-    EventResult, LeCapabilities, LeRadio, LeRadioCapabilities, Supported, TestChannel,
-    TestPayloadType, TestPhy, TxPower,
+use oer_bluetooth_le_wire::{TestChannel, TestPayloadType};
+mod capabilities;
+pub mod dtm;
+mod outcome;
+mod request;
+mod supported;
+
+pub use capabilities::{
+    LeCapabilities, LeConnectionCapabilities, LePhy, LePhys, LeRadioCapabilities,
+    LegacyAdvertisingTypes, LinkAcknowledgement, NoCapabilities,
 };
+pub use oer_time::{NonZeroRadioDuration, RadioDuration, WindowError};
+
+/// The clock domain of the LE radio: its instants never mix with another
+/// radio's.
+pub enum LeRadio {}
+
+/// An instant on the LE radio's clock.
+pub type LeInstant = oer_time::RadioInstant<LeRadio>;
+
+/// A window reserved on the LE radio's clock.
+pub type LeWindow = oer_time::RadioWindow<LeRadio>;
+pub use outcome::{EventResult, ReceivedPdu, TestReport};
+pub use request::{
+    AboveCeiling, AcceptListChange, AcceptListDevice, AdvertisingConfiguration, AdvertisingEvent,
+    AdvertisingEventKind, AdvertisingReception, AdvertisingSetId, ConnectionAllowances,
+    ConnectionConfiguration, ConnectionEvent, ConnectionEventKind, ConnectionEventTiming,
+    ConnectionId, LeBand, LeTxCeiling, Operation, OutsideEpoch, RadioTiming, ScanFilterPolicy,
+    ScanType, ScanWindow, ScannerConfiguration, ScannerId, TestPhy, TestReceive, TestTransmit,
+    TxPower,
+};
+pub use supported::{Capability, Supported, Timed, Unplaced, Untimed};
+
 use oer_radio_port::{
     BodyLoan, Child, Correlation, Permit, PoolPath, PortContext, PortPhase, Seat, Slot, SlotOwner,
 };

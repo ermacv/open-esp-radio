@@ -151,6 +151,10 @@ chips/esp32s31/notes/bluetooth, chips/esp32s31/notes and the name maps
 under chips/esp32s31/vendor/facts/names). It records neither code nor
 verbatim data blocks outside the exception.
 
+The standard PRBS payload generators in protocols/bluetooth/le/wire/src/dtm.rs
+are checked against recovered LE test-payload fingerprints; the generators
+implement Core Vol 6 Part F 4.1.5 and retain MIT OR Apache-2.0 licensing.
+
 
 6. OpenThread
 -------------

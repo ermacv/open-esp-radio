@@ -6,7 +6,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll},
 };
-use oer_bluetooth_le_radio::LeInstant;
+use oer_bluetooth_le_port::LeInstant;
 use oer_memory::{Awaiting, HandlerCell, Poster, RequestSlot};
 use oer_radio_port::{ClockError, Poisoned, PortResult};
 use oer_sync::PriorityWaker;

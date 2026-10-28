@@ -3,7 +3,7 @@ use super::*;
 use core::future::{pending, poll_fn};
 use embassy_futures::select::{Either, select};
 use oer_bluetooth_le_port::TxPower;
-use oer_bluetooth_le_radio::LeBand;
+use oer_bluetooth_le_port::LeBand;
 use oer_esp32s31_bluetooth_driver::{
     modem_timer::{
         ControllerModemTimerBegin, ControllerModemTimerPlanSubmission,
@@ -138,7 +138,7 @@ pub fn permission(profile: Profile) -> (Permission, TxPower) {
         },
     );
     let power = TxPower::within(
-        oer_bluetooth_le_radio::LeTxCeiling::new(band, permission.ceiling()),
+        oer_bluetooth_le_port::LeTxCeiling::new(band, permission.ceiling()),
         profile.cap_dbm,
     )
     .expect("configured power within its ceiling");

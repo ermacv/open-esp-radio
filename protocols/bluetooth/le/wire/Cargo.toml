@@ -1,0 +1,14 @@
+[package]
+name = "oer-bluetooth-le-wire"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Stateless Bluetooth LE over-the-air formats and codecs"
+
+[dependencies]
+oer-wire = { path = "../../../../portable/wire" }
+
+[lints]
+workspace = true

@@ -132,9 +132,9 @@ impl Case {
     pub fn supported(self, caps: &LeRadioCapabilities) -> bool {
         caps.direct_test_mode
             && caps.test_phys.contains(if self == Self::Dtm2M {
-                oer_bluetooth_le_radio::LePhy::Le2M
+                crate::LePhy::Le2M
             } else {
-                oer_bluetooth_le_radio::LePhy::Le1M
+                crate::LePhy::Le1M
             })
     }
 }

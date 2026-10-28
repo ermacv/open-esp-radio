@@ -22,8 +22,9 @@ use oer_bluetooth_hci::{
 use oer_bluetooth_le_port::{
     self as port, Admitted, Command, Completion, DtmCommand, Event, EventResult, Idle,
     LeCapabilities, LeOperationId, LePhase, Receive, Request, ReturnedSession, Running, Session,
-    Supported, TestChannel, TestPayloadType, TestPhy, Transmit, TxPower,
+    Supported, TestPhy, Transmit, TxPower,
 };
+use oer_bluetooth_le_wire::{TestChannel, TestPayloadType};
 use oer_radio_port::{Child, CorrelationIds, PoolPath, PortContext, Seat};
 
 /// Entropy supplied by the composition, never synthesized from a timer.

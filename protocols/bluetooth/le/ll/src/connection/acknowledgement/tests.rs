@@ -47,29 +47,6 @@ impl Side {
 }
 
 #[test]
-fn header_flags_round_trip_and_keep_the_other_bits() {
-    let flags = HeaderFlags {
-        sn: SequenceNumber::ONE,
-        nesn: SequenceNumber::ZERO,
-        md: true,
-    };
-    let octet = flags.apply(0b1110_0110);
-    assert_eq!(HeaderFlags::from_octet(octet), flags);
-    assert_eq!(octet & 0b1110_0011, 0b1110_0010);
-    let header = ReceivedHeader::new([flags.apply(EMPTY), 0]);
-    assert!(header.empty);
-    assert!(!ReceivedHeader::new([flags.apply(EMPTY), 1]).empty);
-    assert!(!ReceivedHeader::new([flags.apply(DATA), 0]).empty);
-}
-
-#[test]
-fn sequence_numbers_wrap() {
-    assert_eq!(SequenceNumber::ZERO.next(), SequenceNumber::ONE);
-    assert_eq!(SequenceNumber::ONE.next(), SequenceNumber::ZERO);
-    assert!(!SequenceNumber::default().bit());
-}
-
-#[test]
 fn a_normal_exchange_delivers_and_acknowledges_every_pdu_in_order() {
     let mut central = Side::new(3);
     let mut peripheral = Side::new(3);

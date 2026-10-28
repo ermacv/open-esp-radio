@@ -4,9 +4,10 @@ use core::num::NonZeroU64;
 
 use oer_radio_coex::{AirClass, Operation as CoexOperation, RadioClient};
 
-use crate::{
-    AdvertisingChannels, AdvertisingPdu, DataChannel, LeInstant, LePhy, LeRadio, LeWindow,
-    NonZeroRadioDuration, RadioDuration, TestChannel, TestPayloadType, channel::AdvertisingChannel,
+use crate::{LeInstant, LePhy, LeRadio, LeWindow, NonZeroRadioDuration, RadioDuration};
+use oer_bluetooth_le_wire::{
+    AccessAddress, AdvertisingChannel, AdvertisingChannels, AdvertisingPdu, CrcInit, DataChannel,
+    TestChannel, TestPayloadType,
 };
 
 macro_rules! role_id {
@@ -130,14 +131,6 @@ impl TxPower {
         self.0
     }
 }
-
-/// Access Address octets in air order.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct AccessAddress(pub [u8; 4]);
-
-/// CRC initialization octets in air order.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct CrcInit(pub [u8; 3]);
 
 /// What an advertising set listens for after each of its PDUs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -538,11 +531,9 @@ mod tests {
         AdvertisingEvent, AdvertisingEventKind, AdvertisingSetId, ConnectionAllowances,
         ConnectionEventKind, Operation, RadioTiming,
     };
-    use crate::{
-        AdvertisingChannel, AdvertisingChannels, LeInstant, LeWindow, NonZeroRadioDuration,
-        RadioDuration,
-    };
+    use crate::{LeInstant, LeWindow, NonZeroRadioDuration, RadioDuration};
     use core::num::NonZeroU64;
+    use oer_bluetooth_le_wire::{AdvertisingChannel, AdvertisingChannels};
 
     #[test]
     fn le_band_covers_the_same_hopping_span_and_channel_width() {

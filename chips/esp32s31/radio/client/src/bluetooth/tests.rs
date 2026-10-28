@@ -1,5 +1,5 @@
 use super::*;
-use oer_bluetooth_le_radio::LeTxCeiling;
+use oer_bluetooth_le_port::LeTxCeiling;
 use oer_radio_regulatory::{Country, FrequencySpan, RegulatoryDomain, Rule, RuleFlags};
 
 fn band(passive: bool) -> Permitted<LeBand> {

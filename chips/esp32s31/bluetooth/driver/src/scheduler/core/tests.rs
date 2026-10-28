@@ -16,7 +16,9 @@ fn controller_hal_precedes_complete_scheduler_init() {
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
             oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-        );
+        )
+        .ok()
+        .expect("host radio split");
     let clocked = ClockedOwner::for_host_test(partitions.bluetooth);
     let operations = Rc::new(RefCell::new(Vec::new()));
     let hal_operations = Rc::clone(&operations);
@@ -65,7 +67,9 @@ fn initialized_for_rejection_test() -> ControllerHalInitialized<crate::test_cloc
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
             oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-        );
+        )
+        .ok()
+        .expect("host radio split");
     let (engine, interrupts) =
         crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
     ControllerHalInitialized::initialize_for_validation(engine, interrupts, |_, _| {})

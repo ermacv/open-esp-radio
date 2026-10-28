@@ -1,12 +1,15 @@
 use crate::{
-    AcceptListChange, AdvertisingChannel, AdvertisingChannels, AdvertisingConfiguration,
-    AdvertisingEvent, AdvertisingEventKind, AdvertisingPdu, AdvertisingReception, AdvertisingSetId,
-    ConnectionEvent, ConnectionEventKind, ConnectionEventTiming, ConnectionId, DataChannel,
-    DataPdu, DataPduKind, LeCapabilities, LeConnectionCapabilities, LeInstant, LePhy, LePhys,
-    LeRadioCapabilities, LeWindow, LegacyAdvertisingTypes, LinkAcknowledgement, NoCapabilities,
-    RadioDuration, RadioTiming, ScanFilterPolicy, ScanType, ScanWindow, ScannerConfiguration,
-    ScannerId, Supported, TestChannel, TestPayloadType, TestPhy, TestReceive, TestTransmit,
-    TxPower, Unplaced,
+    AcceptListChange, AdvertisingConfiguration, AdvertisingEvent, AdvertisingEventKind,
+    AdvertisingReception, AdvertisingSetId, ConnectionEvent, ConnectionEventKind,
+    ConnectionEventTiming, ConnectionId, LeCapabilities, LeConnectionCapabilities, LeInstant,
+    LePhy, LePhys, LeRadioCapabilities, LeWindow, LegacyAdvertisingTypes, LinkAcknowledgement,
+    NoCapabilities, RadioDuration, RadioTiming, ScanFilterPolicy, ScanType, ScanWindow,
+    ScannerConfiguration, ScannerId, Supported, TestPhy, TestReceive, TestTransmit, TxPower,
+    Unplaced,
+};
+use oer_bluetooth_le_wire::{
+    AdvertisingChannel, AdvertisingChannels, AdvertisingPdu, DataChannel, DataPdu, DataPduKind,
+    TestChannel, TestPayloadType,
 };
 
 /// LE 1M, a nonconnectable advertiser, a passive scanner and a peripheral
