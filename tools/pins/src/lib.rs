@@ -280,7 +280,10 @@ mod tests {
         )
         .unwrap();
         std::fs::create_dir_all(root.join("chips/bare")).unwrap();
-        assert_eq!(manifest_path(root, "peer").unwrap(), manifest("peer"));
+        assert_eq!(
+            manifest_path(root, "peer").unwrap(),
+            super::manifest("peer")
+        );
         let pins = git_pins(root, "peer").unwrap();
         assert_eq!(
             (pins[0].id.as_str(), pins[0].revision.as_str()),
