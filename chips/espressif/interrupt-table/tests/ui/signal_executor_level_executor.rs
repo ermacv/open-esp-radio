@@ -10,4 +10,4 @@ pub const fn make() -> IrqSignal<Deferred> {
     IrqSignal::new::<FromExecutorLevel<SameLevelToken>, ExecutorToken>()
 }
 
-static SIGNAL: IrqSignal<Deferred> = make();
+const SIGNAL: IrqSignal<Deferred> = make();

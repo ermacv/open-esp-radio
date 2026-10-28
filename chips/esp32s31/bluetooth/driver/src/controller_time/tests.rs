@@ -781,7 +781,7 @@ fn counted_time_survives_n_overflows_without_live_samples_or_p2_dequeues() {
     use oer_time::{Clock, Duration, Instant};
     use oer_time_virtual::VirtualClock;
     let clock = VirtualClock::<1>::starting_at(Instant::EPOCH);
-    let wake = SchedulerWakeCell::new(host::deferred_signal());
+    let wake = SchedulerWakeCell::new(host::deferred_signal().0);
     let scale = BluetoothControllerHalInitConfig::reviewed_standalone().controller_time_scale();
     let start = ControllerTimeSample::for_host_test(1);
     let count = wake.controller_time_overflows();

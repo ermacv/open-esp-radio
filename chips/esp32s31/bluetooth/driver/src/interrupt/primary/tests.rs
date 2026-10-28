@@ -93,7 +93,7 @@ fn classify(
     capture: PrimaryInterruptCapture,
 ) -> Option<Result<SchedulerWakeBatch, PrimaryWakeFault>> {
     let cell =
-        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal());
+        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal().0);
     let _ = cell.publish_from_interrupt(capture);
     cell.take()
         .expect("host P2 context")
@@ -163,7 +163,7 @@ fn a_clear_bank_captures_nothing_and_publishes_nothing() {
     assert_eq!(capture, PrimaryInterruptCapture(0));
     assert_eq!(backend.operations, [Operation::PrimaryEpoch]);
     let cell =
-        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal());
+        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal().0);
     assert_eq!(cell.publish_from_interrupt(capture), Ok(None));
 }
 
@@ -240,7 +240,7 @@ fn every_pair_of_coalesced_inputs_preserves_the_reference_marker_without_cross_p
     for first in 0..16 {
         for second in 0..16 {
             let cell = SchedulerWakeCell::new(
-                oer_espressif_interrupt_table::signal::host::deferred_signal(),
+                oer_espressif_interrupt_table::signal::host::deferred_signal().0,
             );
             let mut pending = false;
             for key in [first, second] {
@@ -281,7 +281,7 @@ fn every_pair_of_coalesced_inputs_preserves_the_reference_marker_without_cross_p
 #[test]
 fn coalesced_faults_preempt_work_and_keep_each_source_until_p2_takes_them() {
     let cell =
-        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal());
+        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal().0);
     let mut unsettled = Backend::dynamic(false, false, true, false, false, false);
     unsettled.gate = Err(Unsettled);
     for mut backend in [
@@ -319,8 +319,9 @@ fn overflow_is_counted_without_a_scheduler_suffix_and_survives_fault_coincidence
             .epoch
             .take()
             .map(BluetoothPrimaryInterruptEpoch::with_controller_time_overflow_for_host_test);
-        let cell =
-            SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal());
+        let cell = SchedulerWakeCell::new(
+            oer_espressif_interrupt_table::signal::host::deferred_signal().0,
+        );
         cell.publish_from_interrupt(execute_primary_interrupt_capture(&mut backend))
             .unwrap();
         assert_eq!(cell.controller_time_overflows().0, 1);
@@ -343,7 +344,7 @@ fn overflow_and_marked_scheduler_work_remain_independent_when_captured_together(
         .take()
         .map(BluetoothPrimaryInterruptEpoch::with_controller_time_overflow_for_host_test);
     let cell =
-        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal());
+        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal().0);
     cell.publish_from_interrupt(execute_primary_interrupt_capture(&mut backend))
         .unwrap();
     let batch = cell.take().unwrap().unwrap().classify().unwrap();

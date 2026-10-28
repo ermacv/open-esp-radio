@@ -1,0 +1,11 @@
+error[E0423]: cannot initialize a tuple struct which contains private fields
+  --> tests/ui/execution_context_cannot_be_forged.rs:10:5
+   |
+10 |     Entered(core::marker::PhantomData) // ui-error: E0423
+   |     ^^^^^^^
+   |
+note: constructor is not visible here due to private fields
+  --> src/execution_context.rs
+   |
+   | pub struct Entered<X: ExecutionContext>(PhantomData<(*mut (), X)>);
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^ private field

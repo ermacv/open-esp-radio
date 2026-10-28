@@ -25,4 +25,4 @@ pub const fn make() -> IrqSignal<Deferred> {
     IrqSignal::new::<FromExecutorLevel<SameLevelToken>, ExecutorToken>() // ui-error@outside: E0080: evaluation panicked: a same-level signal handler must be on its receiving executor's level
 }
 
-static SIGNAL: IrqSignal<Deferred> = make();
+const SIGNAL: IrqSignal<Deferred> = make();

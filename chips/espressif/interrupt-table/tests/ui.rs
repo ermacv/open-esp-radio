@@ -45,7 +45,7 @@ fn executor_level_raisers_are_checked_during_codegen() {
         let source =
             fs::read_to_string(manifest.join(format!("tests/ui/signal_executor_level_{case}.rs")))
                 .expect("read paired signal case");
-        let initializer = "static SIGNAL: IrqSignal<Deferred> = make();";
+        let initializer = "const SIGNAL: IrqSignal<Deferred> = make();";
         assert!(
             source.contains(initializer),
             "case must exercise construction"

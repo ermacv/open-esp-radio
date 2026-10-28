@@ -13,6 +13,7 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["const_ze
 
 [features]
 default = []
+host-context = []
 
 [dev-dependencies]
 oer-test-ui-cases = { path = "../../tools/test/ui-cases" }

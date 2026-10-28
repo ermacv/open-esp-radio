@@ -272,8 +272,8 @@ impl Harness {
         let rings = Arc::new(AtomicUsize::new(0));
         let storage = Box::leak(Box::new(BluetoothInterruptStorage::<Fake>::new()));
         let cells = Box::leak(Box::new(ControllerEventCells::new(
-            host::deferred_signal(),
-            host::deferred_signal(),
+            host::deferred_signal().0,
+            host::deferred_signal().0,
         )));
         let fault = Box::leak(Box::new(OnceValue::new()));
         let (ends, part) = storage.split(
@@ -281,7 +281,7 @@ impl Harness {
             model.clone(),
             Line(model.clone()),
             BluetoothInterruptSignals {
-                reply: host::deferred_signal(),
+                reply: host::deferred_signal().0,
                 cells,
                 fault,
             },

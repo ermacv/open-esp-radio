@@ -120,8 +120,8 @@ C5 code lies outside the workspace and its checks:
 
 `oer-espressif-interrupt-table` owns the Espressif interrupt matrix contract,
 CLIC encodings, vector ABI and staged-runtime symbols. Its narrow unsafe
-contracts cover signal execution contexts and the existing vector/table/
-exemption slot names and ABI types. Every safe `Entry` implementation carries
+contracts cover the existing vector/table/exemption slot names and ABI
+types; signal execution proofs belong to `oer-memory`. Every safe `Entry` implementation carries
 `EntryProof<Self>`; root Clippy policy restricts both proof and token
 constructors to the table macro. This policy requires an explicit lint waiver
 to bypass; it cannot validate scheduling metadata supplied under such a waiver.
@@ -634,20 +634,30 @@ their own reporter's unwind; both payloads remain quarantined there too.
 No new unsafe block or sharing implementation is introduced.
 
 `oer-memory` holds the shared proofs for executor-crossing storage.
+`ExecutionContext` is the unsafe execution-identity contract; its `Sharing`
+marker distinguishes a globally exclusive context from each constructing
+thread's local context. `Entered<X>` has a private constructor, checks
+`X::running()` at entry and rechecks it before every cell access. It is
+!Send/!Sync; retaining it never extends admission beyond its context.
 `ContextCell<T, P: ContextProof>` holds executor-owned signal state, signal
-list links and timer slots. The owner's private unsafe `ContextProof`
-implementation confines each cell's accesses to its one non-concurrent
-context, including across preemption and cores, and respects the payload's
-thread restrictions during initialization and destruction. Neither the proof
-nor the cell escapes the owner's checked access paths. The cell's sole
-`Sync` implementation and mutable accessor live in `oer-memory`.
-Its non-atomic borrow flag refuses a nested `with` on the same cell with
-`None`, without invoking the closure or changing the payload; borrowing
+list links and timer slots. A private unchecked owner proof or a checked
+`Entered<X>` confines each access, including across preemption and cores.
+Only a `Sync` sharing marker and a `Send` payload permit sharing the cell;
+its move restrictions also include the proof and sharing marker. Host
+contexts keep their cells and owners !Send/!Sync, including references to
+owners. The transferable host raiser contains only an atomic flag reference,
+never a signal, list, task handle or proof; it never services payload or
+invokes a waker. Host/deferred constructors return both halves.
+The cell's sole `Sync` implementation and mutable accessor live in
+`oer-memory`. Its non-atomic borrow flag refuses a nested `with` on the same
+cell with `None`, without invoking the closure or changing payload; borrowing
 another cell is permitted. A guard ends the borrow on return or unwind.
 Signal reads and registration report refusal through `ForeignContext`;
-service leaves unvisited facts pending. Timer registration wakes the task
-to register after the enclosing access ends; timer service leaves its alarm
-state untouched when refused. No interrupt masking, waiting or lock is used.
+service leaves unvisited facts pending. `SignalExecutor` is safe; each
+executor's existing unsafe implementation proves `ExecutionContext` instead.
+Timer registration wakes the task to register after the enclosing access
+ends; timer service leaves its alarm state untouched when refused. No
+interrupt masking, waiting or lock is used.
 
 Its `init_in_place!` macro writes a complete struct into exclusively borrowed
 `MaybeUninit` storage, one field at a time. An unused constructor checks field

@@ -156,7 +156,7 @@ impl Fixture {
     fn new() -> Self {
         let hardware = Hardware::new();
         let cells = Box::leak(Box::new(Cells::new()));
-        let signal = host::deferred_signal();
+        let signal = host::deferred_signal().0;
         let mut irq = IrqModel(hardware.clone());
         let (client, handler) = cells.split_with(ProgramModel(hardware.clone()), &mut irq, signal);
         Self {

@@ -22,8 +22,9 @@
 //! [`HandlerCell`] in such a static hands one value to an interrupt handler;
 //! [`ClaimCell`] lends one value to one holder at a time, without waiting,
 //! until one keeps it for good.
-//! [`ContextCell`] lends executor-owned state with a private [`ContextProof`],
-//! refusing a nested borrow without waiting.
+//! [`ContextCell`] lends executor-owned state with a private [`ContextProof`]
+//! or checked [`Entered`] proof of an [`ExecutionContext`], refusing nested
+//! access without consuming payload. Host contexts keep cells !Send/!Sync.
 //! [`RequestSlot`] carries one request at a time from a client to a server
 //! and its answer back, without a lock. [`retained`] holds records in memory
 //! that survives a reset, one holder at a time.
@@ -42,6 +43,7 @@ mod claim_cell;
 mod context_cell;
 mod dma_address;
 mod dma_bytes;
+mod execution_context;
 mod handler_cell;
 mod indexed_custody;
 mod init_in_place;
@@ -74,6 +76,9 @@ pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use context_cell::{ContextCell, ContextProof};
 pub use dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};
 pub use dma_bytes::DmaBytes;
+#[cfg(feature = "host-context")]
+pub use execution_context::HostContext;
+pub use execution_context::{Entered, ExecutionContext, Never};
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
 #[doc(hidden)]

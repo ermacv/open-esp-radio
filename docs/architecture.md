@@ -114,6 +114,15 @@ release a secondary hart.
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application | — |
 
+- `oer-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
+  `Entered<X>` is non-transferable, checks entry and rechecks each
+  `ContextCell` access. `SignalExecutor` is safe and names this context;
+  its signal payload and list use the same context type. Shared cells require
+  a `Send` payload and a `Sync` sharing marker. Host signal constructors
+  return a local owner (!Send/!Sync) and an atomic raiser (Send + Sync).
+  The raiser only publishes facts; the owner takes or services payload on
+  its constructing thread. A foreign-thread raise invokes no payload access
+  or waker. Each executor mode and software line has its own typed list.
 - An interrupt handler never shares a lock with a task and reaches tasks
   through static typed signals, never through an executor's waker.
 - Each executor starts with a borrowed affine `Hart<H>`; its interrupt entry

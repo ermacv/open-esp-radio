@@ -25,4 +25,4 @@ pub const fn make() -> IrqSignal<Deferred> {
     IrqSignal::new::<FromExecutorLevel<SameLevelToken>, ExecutorToken>() // ui-error@outside: E0080: evaluation panicked: a signal and its raiser must share a hart
 }
 
-static SIGNAL: IrqSignal<Deferred> = make();
+const SIGNAL: IrqSignal<Deferred> = make();

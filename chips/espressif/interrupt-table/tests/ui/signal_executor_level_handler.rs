@@ -13,10 +13,10 @@ pub const fn make() -> IrqSignal<Deferred> {
     IrqSignal::new::<FromExecutorLevel<SameLevelToken>, ExecutorToken>()
 }
 
-static SIGNAL: IrqSignal<Deferred> = make();
+const SIGNAL: IrqSignal<Deferred> = make();
 
 // Same-level, higher handler and lower task sources also compose in nested pairs.
-static MIXED: IrqSignal<Deferred> = IrqSignal::new::<
+const MIXED: IrqSignal<Deferred> = IrqSignal::new::<
     (
         (FromExecutorLevel<SameLevelToken>, FromHandler<IrqToken>),
         FromTask<Foreign, WakeToken>,

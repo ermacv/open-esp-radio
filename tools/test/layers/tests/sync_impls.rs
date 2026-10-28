@@ -15,7 +15,6 @@ const EXCEPTIONS: &[(&str, usize)] = &[
         1,
     ),
     ("chips/espressif/executor/src/task.rs", 1),
-    ("chips/espressif/interrupt-table/src/signal/tests.rs", 2),
 ];
 
 fn sync_or_send_trait<'a>(tokens: impl Iterator<Item = &'a TokenTree>) -> bool {

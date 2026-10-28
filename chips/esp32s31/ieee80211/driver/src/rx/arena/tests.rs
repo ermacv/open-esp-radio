@@ -28,8 +28,8 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
     let (parts, mut stop, frames) = WifiRxArena::bind(
         oer_esp32s31_hal::dma_static::Placed::host(placed),
         crate::rx::arena::WifiIrqSignals {
-            mac: oer_espressif_interrupt_table::signal::host::signal(),
-            power: oer_espressif_interrupt_table::signal::host::signal(),
+            mac: oer_espressif_interrupt_table::signal::host::signal().0,
+            power: oer_espressif_interrupt_table::signal::host::signal().0,
         },
     )
     .expect("a zeroed static binds");

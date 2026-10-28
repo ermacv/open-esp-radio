@@ -6,7 +6,7 @@ use super::{SchedulerWakeCell, SchedulerWakePublication};
 use crate::interrupt::SchedulerWorkerWakeClass;
 
 fn cell() -> SchedulerWakeCell<oer_espressif_interrupt_table::signal::host::Deferred> {
-    SchedulerWakeCell::new(host::deferred_signal())
+    SchedulerWakeCell::new(host::deferred_signal().0)
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn dequeue_closes_the_epoch_and_the_next_publication_pends_again() {
 
 #[test]
 fn the_worker_waits_for_a_batch_in_its_executor_only() {
-    let cell = SchedulerWakeCell::new(host::signal());
+    let cell = SchedulerWakeCell::new(host::signal().0);
     let mut cx = Context::from_waker(Waker::noop());
     assert_eq!(cell.poll_take(&mut cx), Poll::Pending);
     let _ = cell.publish_class_for_test(SchedulerWorkerWakeClass::Marked);

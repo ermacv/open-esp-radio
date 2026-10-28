@@ -12,15 +12,15 @@ impl oer_esp32s31_bluetooth_driver::interrupt::RadioDoorbell for Bell {
 }
 
 use oer_esp32s31_bluetooth_driver::interrupt::{BluetoothInterruptEnds, BluetoothInterrupts, ChipGate, DoorbellLine};
-use oer_espressif_interrupt_table::signal::host::Host;
+use oer_espressif_interrupt_table::signal::host::Foreign;
 pub struct Lower;
 impl DoorbellLine for Lower { fn acknowledge(&mut self) {} }
-pub fn on_bt(_: &mut BluetoothInterrupts<Host, Lower>) {}
+pub fn on_bt(_: &mut BluetoothInterrupts<Foreign, Lower>) {}
 oer_espressif_interrupt_table::interrupt_table! {
     lines: LINES, handler_attributes: [];
     contexts { radio: 3; }
-    bt: BtToken = BluetoothInterrupts<Host, Lower> => on_bt, line 18, context radio, hart 0, Hardware;
+    bt: BtToken = BluetoothInterrupts<Foreign, Lower> => on_bt, line 18, context radio, hart 0, Hardware;
 }
-pub fn attach(ends: BluetoothInterruptEnds<ChipGate, Host>, bound: &Bound<BtToken>) {
+pub fn attach(ends: BluetoothInterruptEnds<ChipGate, Foreign>, bound: &Bound<BtToken>) {
     let _ = ends.attach(bound, Bell); // ui-error@outside: E0080: evaluation panicked: a request handler must be above its executor on the same hart
 }

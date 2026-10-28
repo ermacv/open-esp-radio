@@ -82,7 +82,7 @@ fn full_event_cell_applies_backpressure_without_overwrite() {
 #[test]
 fn source_127_task_readiness_survives_late_acquisition_and_coalesces_reentry() {
     let cell = ModemLpTimerWorkerWakeCell::new(
-        oer_espressif_interrupt_table::signal::host::deferred_signal(),
+        oer_espressif_interrupt_table::signal::host::deferred_signal().0,
     );
 
     assert_eq!(
@@ -114,7 +114,7 @@ fn source_127_readiness_wakes_the_worker_without_being_taken() {
     use core::task::{Context, Poll, Waker};
 
     let cell =
-        ModemLpTimerWorkerWakeCell::new(oer_espressif_interrupt_table::signal::host::signal());
+        ModemLpTimerWorkerWakeCell::new(oer_espressif_interrupt_table::signal::host::signal().0);
     let mut cx = Context::from_waker(Waker::noop());
     assert_eq!(cell.poll_pending(&mut cx), Poll::Pending);
     let _ = ModemLpTimerStableInterruptStep::SoftwarePending.publish(&cell);
