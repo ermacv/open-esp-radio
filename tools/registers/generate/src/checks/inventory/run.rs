@@ -28,7 +28,7 @@ use std::{
 fn inputs(ctx: &Checkout, chip: &str) -> Result<(Vec<inventory::uses::Input>, Vec<Executable>)> {
     let mut inputs = Vec::new();
     let mut executables = Vec::new();
-    for pinned in oer_tool_pins::artifacts::pinned(&ctx.root, chip)? {
+    for pinned in oer_pins_artifacts::artifacts::pinned(&ctx.root, chip)? {
         if pinned.firmware {
             continue;
         }
@@ -117,7 +117,7 @@ fn accesses(
 /// Build the inventory of `chip` into `output`, by default
 /// `target/register-inventory/<chip>`.
 pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
-    oer_tool_pins::artifacts::project::Project::new(&ctx.root, chip)?;
+    oer_pins_artifacts::artifacts::project::Project::new(&ctx.root, chip)?;
     let directory = output.unwrap_or_else(|| ctx.root.join("target/register-inventory").join(chip));
     fs::create_dir_all(&directory)?;
     let (inputs, executables) = inputs(ctx, chip)?;
@@ -135,7 +135,7 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
         &inventory::arrays(&registers),
     )?;
     let cited: BTreeSet<inventory::Function> =
-        oer_tool_pins::provenance::registered(&ctx.root, chip)?
+        oer_pins_artifacts::provenance::registered(&ctx.root, chip)?
             .into_iter()
             .map(|entry| (entry.artifact, entry.symbol))
             .collect();

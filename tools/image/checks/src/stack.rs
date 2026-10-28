@@ -205,7 +205,7 @@ impl Image {
                 profile.facts.id
             )
         })?;
-        let rom_path = oer_tool_pins::artifacts::ensure_with_inputs(
+        let rom_path = oer_pins_artifacts::artifacts::ensure_with_inputs(
             root,
             &profile.facts.id,
             &rom.elf,

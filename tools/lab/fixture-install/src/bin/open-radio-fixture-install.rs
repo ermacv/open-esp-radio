@@ -2,7 +2,7 @@
 use std::{path::PathBuf, process::ExitCode};
 
 use clap::Parser as _;
-use oer_tool_lab_fixture_install::{Provider, apply_system};
+use oer_lab_fixture::{Provider, apply_system};
 
 #[derive(clap::Parser)]
 #[command(name = "open-radio-fixture-install")]

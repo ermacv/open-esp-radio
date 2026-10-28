@@ -8,8 +8,8 @@ registers = "run --quiet --profile tools -p oer-tool-registers-cli --"
 # boards (tools/image/cli/README.md).
 fw = "run --quiet --profile tools -p oer-tool-image-cli --"
 # Fetch and verify a chip's pinned vendor artifacts into the host-wide store
-# (tools/pins).
-pins = "run --quiet --profile tools -p oer-tool-pins --"
+# (tools/pins/cli).
+pins = "run --quiet --profile tools -p oer-tool-pins-cli --"
 # Regenerate the regulatory tables from a wireless-regdb db.txt
 # (tools/regulatory/generate).
 regdb = "run --quiet --profile tools -p oer-tool-regulatory-generate --"

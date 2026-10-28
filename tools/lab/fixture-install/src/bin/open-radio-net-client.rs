@@ -1,10 +1,10 @@
 //! Finite root-owned client profile, DHCP hook and bounded DHCP/ping session.
 #![forbid(unsafe_code)]
 
-use oer_os_process::{self as process, owned::Child};
-use oer_tool_lab_fixture_install::network_client::{
+use oer_lab_fixture::network_client::{
     Hook, Ipv4, Lease, Ping, Profile, SessionCommand, SessionState,
 };
+use oer_os_process::{self as process, owned::Child};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -16,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-type Result<T> = oer_tool_lab_fixture_install::Result<T>;
+type Result<T> = oer_lab_fixture::Result<T>;
 const STATE: &str = "/run/open-radio-net";
 const LEASE: &str = "/run/open-radio-net/client-lease.json";
 const PID: &str = "/run/open-radio-net/client-session.json";
@@ -36,7 +36,7 @@ fn run() -> Result<()> {
         return Err("station helper takes one finite operation".into());
     };
     if operation == "capabilities" {
-        println!("{}", oer_tool_lab_fixture_install::network_client::CONTRACT);
+        println!("{}", oer_lab_fixture::network_client::CONTRACT);
         return Ok(());
     }
     if !rustix::process::geteuid().is_root() {

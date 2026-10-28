@@ -4,7 +4,7 @@ use oer_os_process::{self as process, Checkout};
 use std::ffi::OsString;
 
 pub fn run(ctx: &Checkout, chip: &str, args: &[OsString]) -> Result<std::process::ExitCode> {
-    let chip = oer_tool_pins::artifacts::project::Project::new(&ctx.root, chip)?;
+    let chip = oer_pins_artifacts::artifacts::project::Project::new(&ctx.root, chip)?;
     let scenarios = chip.scenarios();
     if !ctx.root.join(chip.scenarios_directory()).is_dir() {
         return Err(format!("no vendor scenarios for chip {}", chip.name()).into());

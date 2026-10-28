@@ -22,7 +22,7 @@
       "oer-os-process",
       "oer-os-toolchain",
       "oer-os-command-tree",
-      "oer-tool-lab-fixture-install",
+      "oer-lab-fixture",
       "clap",
       "tempfile",
       "oer-hil-protocol",

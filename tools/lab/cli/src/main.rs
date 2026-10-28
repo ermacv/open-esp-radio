@@ -70,7 +70,7 @@ enum FixtureCli {
     Install {
         /// Finite Linux fixture provider to provision.
         #[arg(long, value_enum)]
-        provider: oer_tool_lab_fixture_install::Provider,
+        provider: oer_lab_fixture::Provider,
         /// Print the offline plan without executing any installer step.
         #[arg(long)]
         dry_run: bool,

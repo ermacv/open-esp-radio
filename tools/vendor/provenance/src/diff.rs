@@ -226,7 +226,7 @@ pub fn run(
 ) -> Result<()> {
     let pairs: Vec<(String, PathBuf, PathBuf)> = match (old, new, baseline) {
         (Some(old), Some(new), None) => vec![(new.display().to_string(), old, new)],
-        (None, None, Some(baseline)) => oer_tool_pins::artifacts::pinned(root, chip)?
+        (None, None, Some(baseline)) => oer_pins_artifacts::artifacts::pinned(root, chip)?
             .into_iter()
             .filter(|a| !a.firmware)
             .filter_map(|a| {

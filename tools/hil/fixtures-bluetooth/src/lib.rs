@@ -11,7 +11,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 pub mod att;
 pub mod att_parameters;
 pub mod discovery;
-pub use oer_tool_hil_fixture::bluetooth::model;
+pub use oer_lab_fixture::bluetooth::model;
 pub mod secure_gatt;
 
 use model::{Adapter, Check, DtmProfile, DtmVersion};

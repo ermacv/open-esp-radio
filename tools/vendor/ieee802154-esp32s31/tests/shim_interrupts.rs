@@ -7,7 +7,7 @@ fn interrupt_shims_preserve_handles_and_recorder_results() {
 
     let package = Path::new(env!("CARGO_MANIFEST_DIR"));
     let root = package.join("../../..");
-    let manifest = oer_tool_pins::Manifest::load(&root, "esp32s31").expect("pinned manifest");
+    let manifest = oer_pins_artifacts::Manifest::load(&root, "esp32s31").expect("pinned manifest");
     let source = manifest.source("esp-idf").expect("pinned IDF source");
     let idf = env::var_os("OER_ESP_IDF_DIR").map_or_else(
         || {

@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn the_tracked_pin_parses_and_locates_its_inputs_by_revision_and_hash() {
         let pin: Pin = toml::from_str(include_str!(
-            "../../../analysis/cli/tests/riscv_conformance/inputs.toml"
+            "../../../../analysis/cli/tests/riscv_conformance/inputs.toml"
         ))
         .unwrap();
         assert!(!pin.arch_test.suite.is_empty());

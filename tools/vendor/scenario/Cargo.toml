@@ -13,7 +13,7 @@ oer-analysis-elf = { path = "../../analysis/elf" }
 oer-os-process = { path = "../../os/process" }
 oer-registers-model = { path = "../../registers/model" }
 oer-os-durable = { path = "../../os/durable" }
-oer-tool-pins = { path = "../../pins" }
+oer-pins-artifacts = { path = "../../pins/artifacts" }
 oer-image-build = { path = "../../image/build" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }

@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 oer-espressif-facts = { path = "../../../chips/espressif/facts" }
-oer-tool-pins = { path = "../../pins" }
+oer-pins-artifacts = { path = "../../pins/artifacts" }
 oer-analysis-riscv-lift = { path = "../riscv-lift" }
 oer-analysis-blobray-riscv = { path = "../blobray-riscv" }
 oer-analysis-blobray-application = { path = "../blobray-application" }

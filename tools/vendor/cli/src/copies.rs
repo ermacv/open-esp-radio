@@ -421,7 +421,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
     let mut roms = Vec::new();
     let mut libraries = Vec::new();
     let mut images = Vec::new();
-    for artifact in oer_tool_pins::artifacts::pinned(root, chip)? {
+    for artifact in oer_pins_artifacts::artifacts::pinned(root, chip)? {
         let bytes = std::fs::read(&artifact.path)
             .map_err(|e| format!("{}: {e}", artifact.path.display()))?;
         if !oer_analysis_elf::is_binary(&bytes) {
@@ -442,7 +442,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
             (false, _) => libraries.push(input),
         }
     }
-    let unbuilt_images = oer_tool_pins::artifacts::unbuilt_firmware(root, chip)?;
+    let unbuilt_images = oer_pins_artifacts::artifacts::unbuilt_firmware(root, chip)?;
     // The MMIO windows: every instance of the chip root.
     let model = oer_registers_model::Chip::load(root, chip)?.model;
     let windows = model
@@ -472,7 +472,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
         }
     };
     let mut cited: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for entry in oer_tool_pins::provenance::registered(root, chip)? {
+    for entry in oer_pins_artifacts::provenance::registered(root, chip)? {
         cited.entry(entry.symbol.clone()).or_default().push(format!(
             "{}[{}]::{}",
             entry.artifact, entry.member, entry.symbol

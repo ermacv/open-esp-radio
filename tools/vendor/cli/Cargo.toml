@@ -21,7 +21,7 @@ oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
 oer-os-process = { path = "../../os/process" }
 oer-os-toolchain = { path = "../../os/toolchain" }
-oer-tool-pins = { path = "../../pins" }
+oer-pins-artifacts = { path = "../../pins/artifacts" }
 oer-vendor-lineage = { path = "../lineage" }
 oer-vendor-phy = { path = "../phy" }
 oer-vendor-phy-esp32s31 = { path = "../phy-esp32s31" }

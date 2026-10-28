@@ -27,8 +27,8 @@
 //! any longer removes its registration.
 use crate::Result;
 use crate::fingerprint::Function;
-use oer_tool_pins::artifacts::project::{self, Project};
-use oer_tool_pins::provenance::Entry;
+use oer_pins_artifacts::artifacts::project::{self, Project};
+use oer_pins_artifacts::provenance::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -361,7 +361,7 @@ fn pinned_functions(
 ) -> Result<(BTreeMap<String, (PathBuf, Vec<Function>)>, BTreeSet<String>)> {
     let mut out = BTreeMap::new();
     let mut symbols = BTreeSet::new();
-    for artifact in oer_tool_pins::artifacts::pinned(root, chip)? {
+    for artifact in oer_pins_artifacts::artifacts::pinned(root, chip)? {
         if artifact.firmware {
             continue;
         }
@@ -404,7 +404,7 @@ struct Survey {
 
 fn survey(root: &Path, chip: &str) -> Result<Survey> {
     let registry = match std::fs::read_to_string(root.join(registry_path(root, chip)?)) {
-        Ok(text) => oer_tool_pins::provenance::parse(&text)?,
+        Ok(text) => oer_pins_artifacts::provenance::parse(&text)?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => vec![],
         Err(error) => return Err(error.into()),
     };
@@ -723,7 +723,7 @@ pub fn check(root: &Path, chip: &str) -> Result<()> {
 }
 
 fn survey_count(root: &Path, chip: &str) -> Result<usize> {
-    Ok(oer_tool_pins::provenance::registered(root, chip)?.len())
+    Ok(oer_pins_artifacts::provenance::registered(root, chip)?.len())
 }
 
 /// Prints the annotated pinned code of a cited function.
@@ -878,7 +878,7 @@ pub fn update(
     let entries: Vec<Entry> = entries.into_iter().collect();
     std::fs::write(
         root.join(registry_path(root, chip)?),
-        oer_tool_pins::provenance::render(&entries),
+        oer_pins_artifacts::provenance::render(&entries),
     )?;
     println!("{} registered functions", entries.len());
     Ok(())

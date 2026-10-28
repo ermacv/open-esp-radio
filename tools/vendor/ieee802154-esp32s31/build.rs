@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_tool_pins::Manifest;
+use oer_pins_artifacts::Manifest;
 
 mod build_sources;
 
@@ -234,7 +234,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for source in &sources {
         let path = idf.join(&source.path);
         println!("cargo::rerun-if-changed={}", path.display());
-        let pinned = oer_tool_pins::artifacts::verified(&path, &source.sha256)
+        let pinned = oer_pins_artifacts::artifacts::verified(&path, &source.sha256)
             .unwrap_or_else(|error| panic!("{}: {error} (ESP-IDF {revision})", path.display()));
         assert!(
             pinned,

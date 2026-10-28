@@ -37,11 +37,11 @@ sw-coex = []
 
 [build-dependencies]
 cc = "=1.4.3"
-oer-tool-pins = { path = "../../pins" }
+oer-pins-artifacts = { path = "../../pins/artifacts" }
 
 [dev-dependencies]
 cc = "=1.4.3"
-oer-tool-pins = { path = "../../pins" }
+oer-pins-artifacts = { path = "../../pins/artifacts" }
 tempfile = "=3.27.0"
 
 [lints]

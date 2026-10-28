@@ -14,7 +14,7 @@ hex = "=0.4.3"
 oer-os-process = { path = "../../os/process" }
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-registers-model = { path = "../../registers/model" }
-oer-tool-pins = { path = "../../pins" }
+oer-pins-artifacts = { path = "../../pins/artifacts" }
 sha2 = "=0.10.9"
 toml = "=1.1.4"
 

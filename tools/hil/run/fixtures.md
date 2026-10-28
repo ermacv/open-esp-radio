@@ -135,7 +135,7 @@ classification under its locks and checks the existing policy before applying.
 The helper `capabilities` and sudoers validation subprocesses each have a
 five-second execution deadline; timeout is an installation/preparation failure.
 Bluetooth preparation and execution share the versioned contract in
-[`bluetooth_contract.rs`](../../lab/fixture-install/src/bluetooth_contract.rs).
+[`bluetooth/model.rs`](../../lab/fixture/src/bluetooth/model.rs).
 Synchronous HCI command receive failures report the command identity, elapsed
 time, packet count and last event identity in the helper's existing error
 report. They do not record event payloads or keys, retry commands, or extend

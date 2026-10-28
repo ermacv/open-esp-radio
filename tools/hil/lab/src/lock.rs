@@ -269,7 +269,7 @@ fn claims(
     claims.extend(
         crate::software::providers(lab, request.required)
             .into_iter()
-            .map(|provider| Claim::shared(oer_tool_lab_fixture_install::resource(provider))),
+            .map(|provider| Claim::shared(oer_lab_fixture::resource(provider))),
     );
     claims.extend(request.air.iter().flat_map(Spectrum::claims));
     claims
@@ -414,7 +414,7 @@ fn local_radio_key(interface: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests;
 
-fn bluetooth_key(adapter: oer_tool_hil_fixture::bluetooth::model::Adapter) -> Result<String> {
+fn bluetooth_key(adapter: oer_lab_fixture::bluetooth::model::Adapter) -> Result<String> {
     Ok(format!(
         "bluetooth:{}",
         Path::new("/sys/class/bluetooth")
@@ -431,7 +431,7 @@ pub struct BluetoothLease {
 }
 
 pub fn acquire_bluetooth(
-    adapter: oer_tool_hil_fixture::bluetooth::model::Adapter,
+    adapter: oer_lab_fixture::bluetooth::model::Adapter,
 ) -> Result<BluetoothLease> {
     let key = bluetooth_key(adapter)?;
     let grant = acquire_stand(

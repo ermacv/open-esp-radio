@@ -180,16 +180,6 @@ The tree does not yet follow these rules in these places:
   `chips/espressif/ieee80211-policy`.
 - `firmware/hil/esp32s31` -> `firmware/apps/w3` (removed by the IEEE 802.11
   facade, #844).
-- `tools/pins` is a library and a program: `tools/analysis/cli`,
-  `tools/image/checks`, `tools/image/esp-idf`, `tools/registers/generate`,
-  `tools/vendor/cli`, `tools/vendor/provenance` and `tools/vendor/scenario` ->
-  `tools/pins` (removed by the library/program split, #848).
-- `tools/lab/fixture-install` is a library and a program: `tools/hil/fixture`,
-  `tools/hil/lab`, `tools/image/cli` and `tools/lab/cli` ->
-  `tools/lab/fixture-install` (removed by the library/program split, #848).
-- `tools/hil/fixture` is a library and a program: `tools/hil/fixtures-bluetooth`,
-  `tools/hil/lab` and `tools/hil/net-traffic` -> `tools/hil/fixture` (removed by
-  the library/program split, #848).
 - `chips/espressif/executor`, `chips/espressif/staged-bootstrap` and
   `chips/espressif/staged-runtime` -> `chips/esp32s31/hal` (optional, feature
   `esp32s31`; removed by the family platform contracts, #848, B1).

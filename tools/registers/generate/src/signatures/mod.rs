@@ -61,7 +61,7 @@ pub fn run(ctx: &Checkout, options: Options) -> Result<()> {
     if options.chip != "esp32s31" {
         return Err("signature generation supports esp32s31".into());
     }
-    let manifest = oer_tool_pins::Manifest::load(&ctx.root, &options.chip)?;
+    let manifest = oer_pins_artifacts::Manifest::load(&ctx.root, &options.chip)?;
     let revision = manifest
         .source("esp-idf")?
         .revision

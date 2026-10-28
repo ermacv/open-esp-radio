@@ -2797,9 +2797,9 @@ dependencies = [
  "oer-hil-lab",
  "oer-hil-protocol",
  "oer-hil-runs",
+ "oer-lab-fixture",
  "oer-os-durable",
  "oer-os-process",
- "oer-tool-hil-fixture",
  "rustix",
  "serde",
  "serde_json",
@@ -2821,12 +2821,11 @@ dependencies = [
  "oer-hil-runs",
  "oer-lab-arbiter",
  "oer-lab-board",
+ "oer-lab-fixture",
  "oer-lab-model",
  "oer-lab-router",
  "oer-os-durable",
  "oer-os-process",
- "oer-tool-hil-fixture",
- "oer-tool-lab-fixture-install",
  "serde",
  "serde_json",
  "tempfile",
@@ -2874,8 +2873,8 @@ version = "0.1.0"
 dependencies = [
  "oer-hil-link",
  "oer-hil-protocol",
+ "oer-lab-fixture",
  "oer-os-process",
- "oer-tool-hil-fixture",
  "rustix",
  "serde",
 ]
@@ -3266,7 +3265,7 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
- "oer-tool-pins",
+ "oer-pins-artifacts",
  "rustc-demangle",
  "serde",
  "serde_json",
@@ -3289,7 +3288,7 @@ dependencies = [
  "hex",
  "oer-os-durable",
  "oer-os-process",
- "oer-tool-pins",
+ "oer-pins-artifacts",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3329,6 +3328,25 @@ dependencies = [
  "serde",
  "serde_json",
  "serialport",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-lab-fixture"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "libc",
+ "oer-hil-protocol",
+ "oer-ieee80211-wire",
+ "oer-os-durable",
+ "oer-os-process",
+ "oer-time",
+ "oer-time-virtual",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
  "tempfile",
 ]
 
@@ -3431,6 +3449,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-pins-artifacts"
+version = "0.1.0"
+dependencies = [
+ "oer-chip-profile",
+ "oer-espressif-facts",
+ "oer-os-durable",
+ "oer-os-process",
+ "serde",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "oer-probe-codegen"
 version = "0.1.0"
 dependencies = [
@@ -3506,9 +3537,9 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
+ "oer-pins-artifacts",
  "oer-registers-contracts",
  "oer-registers-model",
- "oer-tool-pins",
  "serde",
  "serde_json",
  "tempfile",
@@ -3592,7 +3623,7 @@ dependencies = [
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-espressif-facts",
- "oer-tool-pins",
+ "oer-pins-artifacts",
  "serde",
  "serde_json",
  "tempfile",
@@ -3643,9 +3674,8 @@ dependencies = [
  "libc",
  "oer-bluetooth-hci",
  "oer-hil-protocol",
- "oer-ieee80211-wire",
+ "oer-lab-fixture",
  "oer-os-process",
- "oer-tool-lab-fixture-install",
  "rustix",
  "serde",
  "serde_json",
@@ -3689,6 +3719,7 @@ dependencies = [
  "oer-image-checks",
  "oer-lab-arbiter",
  "oer-lab-board",
+ "oer-lab-fixture",
  "oer-lab-model",
  "oer-lab-router",
  "oer-memory",
@@ -3696,7 +3727,6 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-radio-regulatory",
- "oer-tool-lab-fixture-install",
  "oer-trace",
  "serde",
  "serde_json",
@@ -3730,13 +3760,13 @@ dependencies = [
  "oer-espressif-facts",
  "oer-lab-arbiter",
  "oer-lab-board",
+ "oer-lab-fixture",
  "oer-lab-model",
  "oer-lab-router",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
- "oer-tool-lab-fixture-install",
  "rustix",
  "serde_json",
  "tempfile",
@@ -3747,31 +3777,21 @@ name = "oer-tool-lab-fixture-install"
 version = "0.1.0"
 dependencies = [
  "clap",
- "libc",
- "oer-os-durable",
+ "oer-lab-fixture",
  "oer-os-process",
- "oer-time",
- "oer-time-virtual",
  "rustix",
  "serde",
  "serde_json",
- "sha2 0.10.9",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-tool-pins"
+name = "oer-tool-pins-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "oer-chip-profile",
- "oer-espressif-facts",
  "oer-os-command-tree",
- "oer-os-durable",
- "oer-os-process",
- "serde",
- "tempfile",
- "toml",
+ "oer-pins-artifacts",
 ]
 
 [[package]]
@@ -3809,9 +3829,9 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
+ "oer-pins-artifacts",
  "oer-probe-codegen",
  "oer-registers-model",
- "oer-tool-pins",
  "oer-vendor-lineage",
  "oer-vendor-phy",
  "oer-vendor-phy-esp32s31",
@@ -3853,8 +3873,8 @@ dependencies = [
  "oer-espressif-ieee802154-mac-values",
  "oer-ieee802154-port",
  "oer-ieee802154-wire",
+ "oer-pins-artifacts",
  "oer-radio-regulatory",
- "oer-tool-pins",
  "tempfile",
 ]
 
@@ -3925,8 +3945,8 @@ dependencies = [
  "hex",
  "oer-analysis-elf",
  "oer-os-process",
+ "oer-pins-artifacts",
  "oer-registers-model",
- "oer-tool-pins",
  "sha2 0.10.9",
  "tempfile",
  "toml",
@@ -3951,9 +3971,9 @@ dependencies = [
  "oer-image-esp-idf",
  "oer-os-durable",
  "oer-os-process",
+ "oer-pins-artifacts",
  "oer-probe-codegen",
  "oer-registers-model",
- "oer-tool-pins",
  "serde",
  "serde_json",
  "tempfile",
