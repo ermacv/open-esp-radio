@@ -24,31 +24,41 @@ pub(crate) const DATA_PAYLOAD_MAX: usize = 255;
 /// One encoded legacy advertising PDU: header, length and payload starting
 /// with the advertiser address. Protocol validity stays with the caller.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct AdvertisingPdu<'pdu>(&'pdu [u8]);
+pub struct AdvertisingPdu<'pdu> {
+    bytes: &'pdu [u8],
+    // Retain the admitted octet so header access needs no slice indexing.
+    header: u8,
+}
 
 impl<'pdu> AdvertisingPdu<'pdu> {
     /// Check the extent of one encoded PDU.
     pub const fn new(bytes: &'pdu [u8]) -> Result<Self, PduError> {
-        if bytes.len() < 2 + ADVERTISER_ADDRESS_BYTES {
+        let [header, length, payload @ ..] = bytes else {
+            return Err(PduError::TooShort);
+        };
+        if payload.len() < ADVERTISER_ADDRESS_BYTES {
             return Err(PduError::TooShort);
         }
-        if bytes.len() > 2 + ADVERTISING_PAYLOAD_MAX {
+        if payload.len() > ADVERTISING_PAYLOAD_MAX {
             return Err(PduError::TooLong);
         }
-        if bytes[1] as usize + 2 != bytes.len() {
+        if *length as usize != payload.len() {
             return Err(PduError::LengthMismatch);
         }
-        Ok(Self(bytes))
+        Ok(Self {
+            bytes,
+            header: *header,
+        })
     }
 
     /// The complete encoded PDU.
     pub const fn bytes(self) -> &'pdu [u8] {
-        self.0
+        self.bytes
     }
 
     /// The two-byte header's first octet.
     pub const fn header(self) -> u8 {
-        self.0[0]
+        self.header
     }
 }
 
@@ -111,6 +121,7 @@ impl TestPayloadType {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros, clippy::arithmetic_side_effects)]
 mod tests {
     use super::{AdvertisingPdu, DataPdu, DataPduKind, PduError, TestPayloadType};
 
@@ -129,6 +140,37 @@ mod tests {
         let mut long = [0u8; 40];
         long[1] = 38;
         assert_eq!(AdvertisingPdu::new(&long), Err(PduError::TooLong));
+    }
+
+    #[test]
+    fn advertising_extent_checks_preserve_error_precedence_and_header() {
+        let mut bytes = [0; 40];
+        // Cover every length octet, including values far beyond legacy PDUs,
+        // and both sides of the admitted extent. No input needs length addition.
+        for length in u8::MIN..=u8::MAX {
+            bytes[0] = length;
+            bytes[1] = length;
+            for extent in 0..=bytes.len() {
+                let input = &bytes[..extent];
+                let result = AdvertisingPdu::new(input);
+                if extent < 8 {
+                    assert_eq!(result, Err(PduError::TooShort));
+                } else if extent > 39 {
+                    assert_eq!(result, Err(PduError::TooLong));
+                } else if usize::from(length) != extent - 2 {
+                    assert_eq!(result, Err(PduError::LengthMismatch));
+                } else {
+                    let pdu = result.unwrap();
+                    assert_eq!(pdu.header(), length);
+                    assert_eq!(pdu.bytes(), input);
+                }
+            }
+        }
+        // Every header octet remains opaque to extent validation.
+        for header in u8::MIN..=u8::MAX {
+            let bytes = [header, 6, 1, 2, 3, 4, 5, 6];
+            assert_eq!(AdvertisingPdu::new(&bytes).unwrap().header(), header);
+        }
     }
 
     #[test]

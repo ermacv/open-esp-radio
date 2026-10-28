@@ -9,7 +9,9 @@
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! Portable LE submission and resource custody on `oer-radio-port` lifecycle.
@@ -294,4 +296,5 @@ pub mod backend;
 pub mod conformance;
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros)]
 mod tests;
