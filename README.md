@@ -4,12 +4,12 @@ Source-only `no_std` radio stack in Rust for the Espressif ESP32-S31:
 Wi-Fi, Bluetooth LE and IEEE 802.15.4, without the vendor's radio binaries.
 The ESP32-C5 appears only as the stand's ESP-IDF peers; it has no Rust code.
 
-**Status.** Rebuilding. The protocol crates, the register model, PAC, HAL,
-PHY and the Wi-Fi driver's DMA and MAC layers are in place and tested on the
-host; no radio works on hardware yet. The first goal is a Wi-Fi station,
-reached in steps that each show a result on a board (boot and PHY, passive
-scan, active scan, open association with traffic, WPA2). IEEE 802.15.4 and
-Bluetooth LE follow.
+**Status.** The tree contains portable protocol cores and runtimes, host
+reference models and tests, the S31 register model, PAC, HAL, PHY and drivers
+for Wi-Fi, Bluetooth LE and IEEE 802.15.4. Application images, HIL scenarios
+and ESP-IDF peers exercise those components; their implemented scope is
+documented beside the code. The [architecture](docs/architecture.md) describes
+the system and its boundaries.
 
 Not affiliated with or endorsed by Espressif Systems.
 
@@ -18,7 +18,7 @@ Not affiliated with or endorsed by Espressif Systems.
 | Path | Contents |
 | --- | --- |
 | `protocols/` | sans-IO protocols: Wi-Fi, Bluetooth LE, IEEE 802.15.4, the radio port, network, HIL ([layout](docs/repository-layout.md)) |
-| `portable/` | generic `no_std` support: time, memory, trace, Embassy bindings, the HIL agent core |
+| `portable/` | generic `no_std` support: time, memory, trace, crypto, Embassy bindings |
 | `chips/` | everything Espressif: PACs, HALs, PHY, drivers, staged boot, boards, and each chip's register model, notes and vendor pins |
 | `firmware/` | the images for a chip: apps, bootstraps, HIL agents, probes, ESP-IDF peers |
 | `tools/` | the developer's machine, by domain: `cargo registers`, `cargo fw`, `cargo stand`, `cargo hil`, ... ([tools](tools/README.md)) |

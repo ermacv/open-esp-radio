@@ -1,8 +1,6 @@
 # ripgrep, and Claude Code's Grep built on it, skip these generated files in
 # tree-wide searches; a search that names one of them as its path still reads
-# it. Git does not read this file. See CLAUDE.md, Rules.
-/chips/*/*pac/src/generated.rs
-/registers/*/published/*.svd
-/registers/*/published/*.bindings.toml
-/knowledge/*/vendor/facts/provenance.toml
-/knowledge/*/vendor/facts/names/*.toml
+# it. Git does not read this file. See CLAUDE.md, "Generated files".
+/chips/*/pac/src/generated.rs
+/chips/*/vendor/facts/**
+/chips/*/vendor/phy-baselines/*/*.json

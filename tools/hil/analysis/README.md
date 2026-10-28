@@ -1,6 +1,6 @@
 # HIL run analysis
 
-`oer-hil-analysis` reads run bundles through `oer_hil_run_bundle::RunBundle`
+`oer-hil-analysis` reads run bundles through `oer_hil_runs::format::RunBundle`
 and never decides qualification.
 
 | Module | Owns |

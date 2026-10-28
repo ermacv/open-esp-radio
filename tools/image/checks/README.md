@@ -325,7 +325,7 @@ Each ELF contains:
   is never reported as a successful partial summary.
 
 `cargo fw sizes` reads two output directories; its thresholds and verdicts are
-documented in [the build README](../build/README.md#size-summaries-and-owner-thresholds).
+documented in [the build README](../build/README.md#size-summaries-and-verdicts).
 The summary itself never changes a check's verdict.
 
 ### PR size table for an agent
@@ -394,7 +394,7 @@ Schema 2 additionally records section classes (`code`, `read_only`, `writable`,
 byte-verified embedded-runtime range in bootstrap. Net code excludes filler
 and that duplicate payload. Hole comparison uses the multiset of function,
 inline chain and reason; offsets order repeated sites. See the
-[comparison and refresh rules](../build/README.md#size-summaries-and-owner-thresholds).
+[comparison and refresh rules](../build/README.md#size-summaries-and-verdicts).
 
 Stack and reachability text reports begin with one `analysis_resources` JSON
 line. The `image-checks` profile preserves 1 GiB admission, one billion work

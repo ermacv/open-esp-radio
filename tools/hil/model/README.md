@@ -3,7 +3,9 @@
 `oer-hil-model` defines what a HIL scenario is, independently of how a run
 executes it.
 It is a `formats` package; execution lives in
-[`oer-hil-run`](../executor/README.md).
+[`oer-hil-executor`](../executor/README.md). The executable catalog envelope
+and workload context are in `tools/hil/scenario`; the runner is in
+`tools/hil/run`.
 
 | Module | Owns |
 | --- | --- |

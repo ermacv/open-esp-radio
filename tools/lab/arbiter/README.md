@@ -11,8 +11,7 @@ through board I/O (`oer-lab-board`).
 
 ## Ownership
 
-- Every lease is charged to one owner from a closed set of agents
-  (`Owner`). A checkout registers its owner once with `cargo stand owner set
+- Every lease is charged to one validated owner name (`Owner`). A checkout registers its owner once with `cargo stand owner set
   NAME`; a request from an unregistered checkout without an explicit owner is
   refused. `Arbiter::merge_owner` moves an old owner name's balance and
   history to a registered one.
@@ -35,8 +34,9 @@ through board I/O (`oer-lab-board`).
   ticket served before it is credited it once (a ticket behind its own
   owner's lease earns nothing), the mean over the owners active in the last
   day is subtracted, and they are clamped to an hour either way.
-  A process that already holds a lease, or carries its token in
-  `OER_HIL_LEASE`, joins it without waiting when the lease covers its claims;
+  A process that already holds a lease, or receives its `stand.lease` token
+  through the explicit `oer-os-process::Context`, joins it without waiting
+  when the lease covers its claims;
   a token of an ended lease or a claim outside the lease is an error.
 - `Grant` releases the lease on drop and records it in the history with its
   outcome, the time charged, the owner's balance and the balances the grant
@@ -52,19 +52,14 @@ through board I/O (`oer-lab-board`).
   preempted, which stops its charge in the next settlement, then signals its
   verified process `SIGTERM` and `SIGKILL` after the grace. The holder's
   release, or the reaping of a killed holder, records the preemption.
-- `lock` is the final exclusion layer, on the foundation's one file lock
-  (`oer_os_process::lock::FileLock`, as is the state's `arbiter.lock`):
-  `BoardLock` (one lock file per
-  board, named by its MAC) and `ResourceLock` (one per fixture key) in the
-  stand model's lock directory, `open-esp-radio/leases` of the XDG cache
-  directory, which does not move with `OER_HIL_ARBITER_DIR`. A holder takes
-  them only once granted (`Arbiter::lease_board` does both for one board;
-  the runner's fixture lock for a run's boards and fixtures) and releases
-  them before its grant; `wait_while_busy` waits for a process outside the
-  queue that still holds one.
+- Device exclusion belongs to `oer-lab-board::lock::DeviceAccess`, keyed by
+  board MAC. `Grant::operations()` admits each selected board through its
+  lifetime broker. `resource_lock::ResourceLock` holds fixture keys through
+  `oer-os-process::lock::FileLock`; the runner takes these locks after its
+  arbiter grant and releases them before the grant.
 - `jobs` are the deferred `cargo hil` runs: `jobs/<id>.json` records each
   job's command, owner, order (`--after`) and outcome, and every request its
-  process and runner make carries its id (`OER_HIL_JOB`), so the queue
+  process and runner make carries its `stand.job` context value, so the queue
   names each holder's and waiter's job and a job's phase is read from the
   queue (`jobs::phase`).
 
@@ -77,15 +72,14 @@ reset|power-cycle`. A board whose ROM answers the stand's reset is recovered
 by reflashing and never quarantined.
 
 The board journal (`journal`) reports board changes but never restores
-board state. Its only writer of a flash is `Arbiter::record_flash(owner, mac,
-ImageIdentity { name, sha256, commit, dirty, origin })`, called by the flash
-operation (`oer-hil-run`) and by `cargo stand lease --flashed`;
-`record_board` records every other change and refuses a flash.
-`latest_flash` and `carries(mac, name, sha256)` read it back. A board is
-identified by its MAC, the USB serial number Espressif USB Serial/JTAG ports
+board state. Its only writer of a flash is
+`journal::Journal::record_flash`, called by the flash operation (`oer-hil-run`) and by `cargo stand lease --flashed`;
+`Journal::record` records every other change and refuses a flash.
+`Journal::latest_flash` reads it back; the board image store's receipts decide
+what a board currently carries. A board is identified by its MAC, the USB serial number Espressif USB Serial/JTAG ports
 report. The arbiter reads the stand's boards, their chips and hub ports from
 the user's stand file and never writes it: `Arbiter::open` reads it however
-`OER_HIL_ARBITER_DIR` moves the state, `with_stand_file` names another (a
+`OER_STAND_ARBITER_DIR` moves the state, `with_stand_file` names another (a
 runner's `--stand-file`), and `Arbiter::at`, a test's arbiter, reads the
 `stand.toml` beside its own state.
 
@@ -95,8 +89,9 @@ newer schema is refused rather than rewritten.
 
 ## State
 
-The directory is `open-esp-radio/arbiter` in the XDG cache directory (`$XDG_CACHE_HOME`, else `~/.cache`), or `OER_HIL_ARBITER_DIR`, as the stand model's `paths` names it.
-Every change happens under `arbiter.lock`:
+The directory is `open-esp-radio/arbiter` in the XDG cache directory (`$XDG_CACHE_HOME`, else `~/.cache`), or `OER_STAND_ARBITER_DIR`, as the stand model's `paths` names it.
+Queue and balance transactions hold `arbiter.lock`; the board journal
+serializes its own appends with `board.lock`:
 
 | File | Content |
 | --- | --- |

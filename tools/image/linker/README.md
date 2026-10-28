@@ -1,6 +1,6 @@
 # Image linker
 
-`oer-image-linker` checks zeroed input sections, runs LLD, and reuses the
+`oer-tool-image-linker` checks zeroed input sections, runs LLD, and reuses the
 interrupt analysis to select strict SRAM code and each hart's IRQ allocation.
 Every staged runtime link needs the fingerprinted `image-linker.toml` supplied
 by `cargo fw` or `cargo hil`; ordinary and bootstrap links are unaffected.

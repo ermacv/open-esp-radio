@@ -1,8 +1,8 @@
 # oer-tool-hil-cli
 
 `cargo hil`. The workspace alias runs this package's binary
-(`run --quiet -p oer-tool-hil-cli --`); it is not part of xtask, and a stand command builds only the HIL
-host packages it uses.
+(`run --quiet --profile tools -p oer-tool-hil-cli --`). `cargo stand` is the
+separate stand CLI in `tools/lab/cli`.
 
 The binary parses one clap tree containing its host commands and the runner's
 `CliCommand` (`oer-hil-run`). It launches runner commands through the observer's
@@ -43,7 +43,7 @@ failures keep status 2.
   The installed `oer-tool-lab-cli` (`cargo stand install`) and a job's detached
   process pass it.
 - The runner locates OpenOCD of the ESP-IDF tools itself
-  (`oer_hil_board::openocd::Openocd::locate`) and builds a chip's catalog
+  (`oer_lab_board::openocd::Openocd::locate`) and builds a chip's catalog
   bootloader itself, through the image pipeline. A run that is a job carries
   the job's id to the runner, so the runner's requests are the job's tickets.
 - An explicit `--owner` overrides the enclosing owner in the runner's operation
@@ -58,5 +58,4 @@ failures keep status 2.
 cargo test -p oer-tool-hil-cli
 ```
 
-The integration tests run the real binary against a fixture checkout whose
-`cargo` and runner are shell scripts.
+Parser, forwarding and job tests live beside their modules.

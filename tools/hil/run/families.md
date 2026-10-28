@@ -1,55 +1,39 @@
 # HIL radio families
 
-Each directory is one radio family's crate, `oer-hil-family-<family>`. A
-family owns one scenario table (`[system]` in a scenario document) and
-everything that interprets it; the runner core names no family type.
+The registry in `tools/hil/run/src/scenario.rs` composes four families.
+Each owns a scenario table and its executable workload.
 
-| Crate | Owns |
+| Package path | Table and workload |
 | --- | --- |
-| `ieee80211-fixture/` | The Wi-Fi fixtures (local Linux and OpenWrt access points, hostapd, host routes, air monitors), their `FixtureProvider`, and the air-capture and BSS-protection analyses |
-| `system/` | The `[system]` table: boot smoke, watchdogs, panic reset and stand recovery |
-| `phy/`, `phy-esp32s31/` | Not a scenario family: the PHY cross-check's comparison port, its ESP32-S31 implementation and the vendor reference firmware driver |
+| `tools/hil/family-system/` | `[system]`: boot smoke, watchdog and panic reset |
+| `tools/hil/family-lower-mac/` | `[lower-mac]`: conformance and ownership-close checks |
+| `tools/hil/family-wifi/` | `[wifi]`: W4 qualification and the initial-GTK investigation |
+| `tools/vendor/phy-esp32s31/` | `[phy]`: calibration comparison and tracking investigations, composed over `tools/vendor/phy/` |
 
-## The family contract
+## Family contract
 
 A family's table implements `oer_hil_scenario::ScenarioFamily` (validation,
-plan, requirements, the image keys that serve it, the peer image it needs
-and the air it occupies) and `oer_hil_workload::family::Workload` (its
-precondition and `run`), and the crate exports `pub const FAMILY: Kind`. The
-runner lists every `FAMILY` and fixture provider once, in its `Registry`
-(`hil/host/runner/src/scenario.rs`), and dispatches through it.
+plan, requirements, image keys, peer image and air use) and
+`oer_hil_scenario::workload::family::Workload` (precondition and execution).
+It exports a `FAMILY: Kind`, listed once in the runner's `Families` registry.
+The workload receives its repetition `Context` and `Fixtures`.
 
-A workload receives the repetition `Context` and the prepared `Fixtures`. It
-reports through the context: typed values with `context.results.observe`,
-its claim with `context.results.claim` and measurements with
-`context.measurements`; `Context::finish` writes them once as the
-repetition's `observations.json`. Per-boot work goes through
-`oer_hil_workload::boots::for_each_boot`, and a workload that needs image keys
-asks `oer_hil_workload::keys::require_keys`. It talks to the target with the
-link's generic `call`, `request` and `command`; a family keeps its exchanges
-in its own module, never in `oer-hil-link`. A workload that must write
-another image onto the board under test asks `Context::images` for the run's
-`BoardImages` (the flash operation under the run's lock); it never flashes
-on its own.
+A workload reports typed observations and claims through `context.results`
+and measurements through `context.measurements`. `Context::finish` writes
+`observations.json`. Per-boot work uses
+`oer_hil_scenario::workload::boots::for_each_boot`; required image keys use
+`oer_hil_scenario::workload::require_keys`. Protocol exchanges belong to the
+family and use the generic `oer-hil-link` API. A workload writing a different
+image uses `Context::images`, the run's leased `BoardImages` port.
 
-A family depends on `oer-hil-scenario`, the link, the scenario envelope and
-the network traffic crate, never on another family. A fixture provider implements
-`oer_hil_workload::family::FixtureProvider` and inserts what it prepares into
-`Fixtures`, where a workload finds it by type.
-
-## Add a family
-
-1. A crate `family/<family>/` named `oer-hil-family-<family>`, `layer =
-   "hil"`, `hil = "orchestration"`, with its table, `Workload` and `FAMILY`.
-2. Its scenarios under `hil/scenarios/<family>/`.
-3. Its `FAMILY` in the runner's registry and its crate in the runner's
-   dependencies and in its scope of `tools/hil/model/observer-inputs.json` (the
-   observer's workload identity). A family may reach a crate of an excluded
-   workspace; the observer resolves its inherited dependencies through that
-   workspace's manifest.
+Fixture providers implement
+`oer_hil_scenario::workload::family::FixtureProvider`; the current runner's
+provider registry is empty. The Wi-Fi and lower-MAC families use their own
+managed-router operations. Scenario documents live under
+`tools/hil/scenarios/`; the observer input registry is
+`tools/hil/model/observer-inputs.json`.
 
 ```console
-cargo test -p oer-hil-family-system \
-  -p oer-hil-family-ieee80211-fixture -p oer-vendor-phy \
-  -p oer-vendor-phy-esp32s31
+cargo test -p oer-hil-family-system -p oer-hil-family-lower-mac \
+  -p oer-hil-family-wifi -p oer-vendor-phy -p oer-vendor-phy-esp32s31
 ```

@@ -1,197 +1,120 @@
 # Repository layout
 
-Where code and data live, and how packages are named.
-
-## Two kinds of package
-
-- **Libraries** are compiled into something else.
-- **Executables** link into one binary: an image for a chip (memory layout,
-  linker script, chip target) or a program for the developer's machine.
-  They live only in `firmware/` and `tools/`; no library root has a binary
-  target.
-
-A sans-IO protocol core runs unchanged in a firmware image, in a host test
-on virtual time and inside a host tool; libraries are not split into
-"device" and "host" code.
+Where code and data live, and how packages are named. The dependency and
+execution rules are in [architecture](architecture.md); component READMEs
+cover their APIs.
 
 ## Roots
 
-The root says what the code is about.
+| Root | Contents |
+| --- | --- |
+| `protocols/` | Radio and network formats, ports, cores, runtimes, host models and the HIL protocol and agent |
+| `portable/` | Generic support, architectural RISC-V operations and Embassy adapters |
+| `chips/` | Espressif family support, the S31 implementation and chip data |
+| `firmware/` | Applications, bootstrap, HIL images, probes and ESP-IDF projects |
+| `tools/` | Host libraries and programs, grouped by domain; see [tools](../tools/README.md) |
+| `docs/` | Cross-cutting documents; see the [index](README.md) |
+
+## Workspace packages
+
+Each path below contains a `Cargo.toml`. Braces list sibling package
+folders. This inventory corresponds to `cargo metadata --no-deps`.
 
 ```text
-protocols/  sans-IO protocols and their vocabularies (no_std)
-  radio/        the radio port with its FIFO permit pool, coexistence vocabulary,
-                regulatory domain
-  ieee80211/    Wi-Fi: MAC formats and state, lower and upper MAC, station,
-                access point, RSN, arbiter, ESP-NOW, runtime
-  bluetooth/    HCI and LE wire formats, link layer, controller, port, runtime and model
-  ieee802154/   IEEE 802.15.4 wire codecs, backend port, MAC core and host model
-  network/      the network stack boundary
-  hil/          the HIL protocol, with the conformance trace header, and the
-                agent core the HIL images run
-portable/   generic support no protocol or chip owns (no_std)
-  time/ time-virtual/ memory/ sync/ trace/ wire/
-  crypto/       owned operation contracts (key unwrap) and mode algorithms
-                (RFC 3394) over a synchronous block primitive, with conformance
-  riscv/        architectural RISC-V constants and instructions
-  embassy/      bindings to Embassy (time; net, with the radio TX datapath
-                contracts)
-chips/      everything about Espressif hardware
-  espressif/    IP shared by Espressif chips: analog, modem
-                clock, coexistence, the 802.15.4 engine, Wi-Fi policy, the
-                staged boot (bootstrap, runtime, layout), interrupt table,
-                executor, the platform contracts a chip HAL implements
-                (platform-port/), the chip facts model (facts/) and the
-                family and ISA fact layers (platform/); registers/ and notes/
-                shared by the chips
-  esp32s31/     PAC, HAL, PHY, drivers, radio system, board, memory layout,
-                chip knowledge, the chip's side of an image's platform
-                over the staged runtime and executor (compose/), and the
-                chip's data:
-                platform/   chip, module and board fact layers, partitions, ROM
-                            functions, stack budgets
-                registers/  block types, layouts, chip root, evidence and ownership policy
-                notes/      recovered facts and research notes
-                vendor/     the vendor pins and generated facts
-  esp32c5/      only the data of the ESP-IDF peers: vendor/artifacts.toml
-                (the pins) and platform/ (flash.toml, the flash map of the
-                peer board, and the partition table); no Rust code
-firmware/   images for a chip: apps/ bootstrap/ hil/ probes/, ESP-IDF peers/ and vendor/
-tools/      everything that runs on the developer's machine, by domain:
-  os/ test/ analysis/ chip/ pins/ regulatory/ registers/ probe/ image/ lab/ hil/ vendor/
-docs/       cross-cutting documents
+chips/esp32s31/bluetooth/driver/
+chips/esp32s31/{board, compose, hal, knowledge, layout, pac, phy}/
+chips/esp32s31/ieee80211/{driver, mac}/
+chips/esp32s31/ieee802154/driver/
+chips/esp32s31/radio/{client, system}/
+chips/espressif/{analog, boot, coex, efuse, executor, facts, ieee80211-policy,
+    ieee802154-engine, ieee802154-mac-values, interrupt-table, modem-clock,
+    platform-port, staged-bootstrap, staged-layout, staged-runtime, usb-serial-jtag,
+    watchdog}/
+firmware/apps/{b0, boot-smoke, radio-root, w0, w1, w2, w3}/
+firmware/bootstrap/esp32s31/
+firmware/hil/{esp32s31, esp32s31-lower-mac, esp32s31-phy}/
+firmware/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-chain}/
+portable/{cooperate, crypto, diagnostics, memory, mmio, riscv, sort, sync, time,
+    time-virtual, trace, wire}/
+portable/embassy/{net, time}/
+protocols/bluetooth/hci/
+protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
+protocols/hil/{agent, protocol}/
+protocols/ieee80211/{ap, arbiter, cipher, esp-now, model, port, rsn, runtime, sta,
+    upper-mac, wire}/
+protocols/ieee802154/{mac, model, port, wire}/
+protocols/network/
+protocols/radio/{coex, port, regulatory}/
+tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
+    blobray-domain, blobray-linker, blobray-riscv, blobray-verification, cli, elf,
+    riscv-analysis, riscv-decode, riscv-lift, riscv-model, riscv-program, riscv-stack}/
+tools/chip/profile/
+tools/hil/{analysis, cli, executor, family-lower-mac, family-system, family-wifi,
+    fixture, fixtures-bluetooth, lab, link, model, net-traffic, observer, run, runner,
+    runs, scenario}/
+tools/image/{build, bundle, checks, cli, compare, esp-idf, large-values, linker}/
+tools/lab/{arbiter, board, cli, fixture, fixture-install, model, router}/
+tools/os/{command-tree, durable, process, serial, toolchain}/
+tools/pins/{artifacts, cli}/
+tools/probe/{codegen, macros}/
+tools/registers/{cli, contracts, generate, model}/
+tools/regulatory/generate/
+tools/test/{layers, ui-cases}/
+tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage, phy,
+    phy-esp32s31, provenance, scenario, scenario-cli}/
 ```
 
-A domain of `tools/` holds its libraries and its program: `tools/hil/run`
-is a library, `tools/hil/cli` is `cargo hil`; the HIL acceptance catalog is
-`tools/hil/acceptance/<chip>/`.
+## Data and supporting files
 
-## Dependencies
-
-Dependency direction follows from the roots: a protocol or a portable crate
-knows no chip and no tool; chip backends build on protocol wire and port
-contracts and portable support; images and tools sit on top. Nothing depends
-on images or tools except through build, proc-macro and test dependencies
-(`tools/probe/macros`, `tools/test/ui-cases`): no package takes a normal
-dependency on a package of `firmware/` or on a program of `tools/` (a package
-with a binary target). `chips/espressif` is the family below the chips and
-depends on no `chips/<chip>` package, through a normal or a build dependency:
-a chip's HAL implements the family's platform contracts
-(`chips/espressif/platform-port`) on its own types and selects its chip
-through the port's chip feature, and `chips/<chip>/compose` holds what needs
-both the chip's HAL and the family's staged runtime or executor (the
-executor's chip binding, `bind!`, and the chip's retained fault records). `portable` depends on no protocol and no
-chip; only `portable/embassy` adapts protocol boundaries. The layer tests check
-normal transitive dependencies, including optional and target-specific
-declarations: backends and reference models do not reach protocol cores or
-runtimes.
-
-Chip knowledge (tables, constants, pure functions about a chip) lives in
-`chips/`, beside the hardware access it describes; a host tool that needs a
-chip fact takes it from a crate that does not touch hardware
-(`chips/esp32s31/knowledge`) and never links a HAL.
-
-`chips/esp32s31/ieee802154/driver` binds the family engine's LL contract to
-HAL transactions. It is a separate crate so HAL and chip knowledge have no
-normal dependency on that engine or the driver. Shared frame storage and
-opaque address tables live in `chips/espressif/ieee802154-mac-values`; HAL
-alone allocates and projects the placed storage.
-
-`chips/espressif/interrupt-table` owns the Espressif interrupt matrix,
-vector ABI and staged-runtime symbols. `portable/riscv::clic` owns architectural
-CLIC line values; chip facts select geometry and MNLBITS. `portable/memory::signal`
-owns the portable signal cells, atomic facts and intrusive lists. Its package is
-`oer-espressif-interrupt-table`; its consumers are chip crates and firmware.
-
-## A protocol: wire, port, cores, backends
-
-Each radio protocol has these layers in `protocols/<protocol>/`:
-
-| Layer | Holds | Depends on |
-|---|---|---|
-| `wire` | the over-the-air formats: parsing and building frames and PDUs, information elements; no state, no time | portable support |
-| `cipher` | frame protection transforms — CCMP, BIP — and the protocol's software block primitive under `oer-crypto`'s mode algorithms; no state, no time | `wire`, `oer-crypto` |
-| `port` | the contract with a backend: commands, events, resources, errors | `wire` |
-| cores | the sans-IO state machines (station, access point, RSN, an LE connection, the 802.15.4 MAC) | `port`, `wire`, `cipher` |
-| `runtime` | the async loop over the port: awaits port events and deadlines, feeds the cores, executes their actions; parses and builds no frame | `port`, cores, portable time, signals and `oer-crypto` contracts |
-
-A backend implements the port and depends on `port`, `wire` and `cipher` only,
-never on a core: the chip backend in `chips/<chip>/`, the reference model in
-its own host crate `protocols/<protocol>/model` for host tests and simulation.
-A core never depends on a backend. Structures both sides share belong to `port`
-or `wire`. Host tools that read frames (monitors, capture analysis, fixtures)
-take `wire`. This is smoltcp's `wire` beside its `iface` and `socket`.
-
-Wi-Fi upper-MAC and the family policy select each attempt's rate and protection,
-including the legacy control-frame rate. The hardware backend receives those
-decisions through the port, or a fixed-rate `ManagementTxPlan`, and owns EDCA
-backoff and MSDU lifetime enforcement. Core algorithms and family tables stay
-above it. `chips/espressif/ieee80211-policy` is core-side family policy,
-not a hardware backend. PN allocation, BA originator state and reorder state
-belong to the cores. The backend takes a supplied PN and reports decoded completion/RX values.
-
-Only the runtime awaits, and it binds to no executor: it takes time from
-`oer-time`'s `Timer` and interrupt signals from `portable/`, spawns nothing
-and returns futures that the composition in `firmware/` spawns. It does not
-depend on an executor, `embassy-time`, `embassy-net` or a HAL;
-`embassy-sync` and `embassy-futures` are allowed as executor-independent
-utilities. Embassy itself is bound only in `portable/embassy`, the chip's
-executor and the firmware composition.
+- `chips/espressif/platform/` holds family and ISA fact layers;
+  `chips/espressif/notes/` holds shared research notes.
+- `chips/esp32s31/platform/` holds chip, module and board facts, partitions,
+  ROM functions and stack budgets. `registers/` holds block types, layouts,
+  the chip root, evidence and ownership policy. `notes/` holds research
+  notes, and `vendor/` holds artifact pins and generated facts and PHY
+  baselines. `layout/linker/` holds the chip's linker fragments.
+- `chips/espressif/executor/` contains the executor and its `bind!` macro,
+  without a chip-specific feature or dependency. `chips/esp32s31/compose/`
+  declares the `Esp32s31` executor binding over the HAL's platform port,
+  alongside the chip's retained fault records.
+- `chips/esp32c5/` contains `vendor/artifacts.toml` and `platform/` flash
+  metadata and partitions for ESP-IDF peers; it contains no Rust package.
+- `firmware/peers/` and `firmware/vendor/` contain ESP-IDF projects, whose
+  `firmware.toml` entries form the image catalog.
+- `tools/hil/scenarios/` is the executable scenario catalog;
+  `tools/hil/acceptance/esp32s31/` documents its acceptance programs.
+  `tools/hil/linux-net/` contains the network helper and pinned build inputs;
+  `tools/hil/linux-bluetooth/` documents the Bluetooth helper.
+- The root `Cargo.toml` and `Cargo.lock` define one Rust workspace.
+  `.cargo/config.toml` defines the host command aliases.
+  `target/` holds rebuildable output; generated evidence stores and caches
+  are described by the tools that own them.
 
 ## Names
 
 A library's package name is `oer-` and its path below its root:
-`protocols/ieee80211/wire` is `oer-ieee80211-wire`, `chips/esp32s31/hal` is
-`oer-esp32s31-hal`, `tools/hil/run` is `oer-hil-run`. An executable keeps
-its root: `firmware/apps/w1` is `oer-firmware-apps-w1`, `tools/image/cli` is
-`oer-tool-image-cli`. There is no `[lib] name`; code uses the package name
-with underscores. A program called by name (the image linker, a privileged
-helper) sets that name with `[[bin]] name`.
-
-`cargo test -p oer-test-layers` checks every package's name against its path,
-the edges of Dependencies, the unsafe boundary
-([unsafe](unsafe.md)), protocol core/runtime isolation from backends and
-models through normal dependencies, the IEEE 802.11 layer table (the cipher,
-port, model and runtime dependencies) and its cores that never wait, and the
-reviewed raw-waker inventory ([notifications](execution-wakes.md)).
-
-## One workspace
-
-The repository's root is one workspace with one `Cargo.lock`. Its
-`default-members` are every package but the chip-only ones. Images build
-with `--profile firmware` for the chip target through `cargo fw`; the
-aliases in `.cargo/config.toml` run the programs with `--profile tools`.
-
-## Artifacts, not builds
-
-`cargo fw` is the one builder of images: apps, HIL agents, probes and,
-through ESP-IDF, the vendor peers and references. It writes each image and a
-manifest below `target/fw/`. Every other program takes artifacts: an ELF or
-binary path, a manifest or a byte stream from a board. A command that builds
-and runs is a thin wrapper over `cargo fw` and the program.
-
-## Scenarios
-
-| I want to | Command | Where |
-|---|---|---|
-| run an app on a board | `cargo fw run w1 --board s31-a` | `firmware/apps/w1`, `tools/image/cli` |
-| run a HIL scenario | `cargo hil run <scenario>` (builds through the image pipeline), or `--images <dir>` for images built before | `firmware/hil/*` and `tools/hil/` speak `protocols/hil/protocol` |
-| add a HIL message | edit `protocols/hil/protocol` | both sides build against one definition |
-| compare a HAL leaf with the vendor | `cargo fw probe <package>`, then `cargo vendor-check` with the probe ELF | an entry over the public API in `firmware/probes/`; catalog code in `tools/probe/` |
-| trace, profile or force a path in an image | declare `instrumentation = ["trace" \| "profile" \| "debug-control"]` under the image's `[package.metadata.open-radio]`, then `cargo fw build <image>` | code under `cfg(oer_trace)`, `cfg(oer_profile)` or `cfg(oer_debug_control)`; `tools/image/build/src/instrumentation.rs` |
-| run the 802.15.4 vendor stand | `cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare <scenario>` | vendor driver and `chips/espressif/ieee802154-engine` meet at the low-level boundary |
-| declare an image's task stacks proven | `task-stack = "proven"` under the image's `[package.metadata.open-radio]`, then `cargo fw build <image>` | `tools/image/build/src/task_stack.rs`; the check in `tools/image/checks/src/stack.rs` |
-| check an image's stack | `cargo fw build <image>` | `tools/image/checks` reads the ELF |
-| add a register field | edit `chips/<chip>/registers/`, `cargo registers generate --chip <chip>` | `chips/<chip>/pac` |
+`protocols/ieee80211/wire` is `oer-ieee80211-wire`,
+`chips/esp32s31/hal` is `oer-esp32s31-hal`, and `tools/hil/run` is
+`oer-hil-run`. An executable keeps its root: `firmware/apps/w1` is
+`oer-firmware-apps-w1`, and `tools/image/cli` is `oer-tool-image-cli`.
+Rust imports replace hyphens with underscores. A program called by name,
+such as the image linker or a privileged helper, sets its binary name
+with `[[bin]] name`.
 
 ## Known deviations
 
-The tree does not yet follow these rules in these places:
-
 - `protocols/ieee80211/runtime` has a dev-dependency on
   `chips/espressif/ieee80211-policy`.
-- `firmware/hil/esp32s31` -> `firmware/apps/w3` (removed by the IEEE 802.11
-  facade, #844).
+- `chips/espressif/ieee80211-policy` has a dev-dependency on
+  `chips/esp32s31/ieee80211/mac`.
+- `firmware/hil/esp32s31` has an optional, RISC-V-only normal dependency on
+  `firmware/apps/w3` for its `wifi-station` feature.
+- Host tests include image source files through `#[path]`:
+  `tools/image/cli/src/main.rs` includes the W1 CRC implementation;
+  `tools/vendor/phy/tests/` includes cache and hold modules of
+  `firmware/hil/esp32s31-phy`.
 
-The layer test lists each of these edges; an edge that is gone must leave the
-list, and the list gains no entry.
+The layer tests enforce the normal and build dependency exceptions in their
+own deviation lists. The family-to-chip normal/build deviation list is
+empty. Development dependencies and source-file inclusions above are
+separate from those lists.

@@ -27,28 +27,22 @@ For a leased program, separate its arguments with `--`:
 | Build or understand target firmware | [ESP32-S31 target](../../../firmware/hil/esp32s31/README.md) | Build-only sections are separate from flash/run sections |
 | Install or operate the Linux network fixture | [`linux-net`](../linux-net/) and its checked helper interface | Requires explicit host setup and, for installation, privileges |
 
-The typed scenario model that replaces the scenario documents lives in
-[`model/`](../model/README.md), its execution in
-[`host/executor/`](../executor/README.md) ().
-The wire contract lives in `protocol/`, versioned scenarios in `scenarios/`,
-host orchestration in `host/runner/`, and embedded consumers in `targets/`.
-Chip-independent target logic and its host tests live in
-[`agent/`](../../../protocols/hil/agent/README.md).
-The evidence contract — the run vocabulary and canonical scenarios — lives
-in the `schema/` crate; the observer's build identity and its content store
-live in [`observer/`](../observer/README.md), whose `producer` feature
-adds the Cargo-running operations that only the runner and repository tools
-use. The run bundle's format, writer and its one reader are
-`host/run-bundle/`.
-The PHY calibration cross-check libraries live in `phy/`: the chip-neutral
-[`capture/`](../link/src/capture), and each chip's shared relation and
-comparison, for the ESP32-S31
-[`relation/`](../../../chips/esp32s31/knowledge/PHY_RELATION.md) and
-`calibration/`.
-They belong to the root workspace; only `targets/<chip>/` builds
-in separate firmware workspaces.
-Generated runs stay below `target/hil/runs`; they are not tracked.
-A run never writes tracked files.
+The root Cargo workspace contains both host and target Rust packages. The
+wire contract and chip-independent agent are in `protocols/hil/`; images
+are in `firmware/hil/`. The executable catalog is in `tools/hil/scenarios/`,
+its envelope and workload APIs in `tools/hil/scenario/`, and runner
+orchestration in `tools/hil/run/`. `tools/hil/model/` owns typed scenario
+values, evidence schemas and image classes; it also has the separate typed
+executor in `tools/hil/executor/`.
+
+[`observer/`](../observer/README.md) builds the runner. Its identity format
+and content store, together with the bundle format, writer and reader, live
+in [`runs/`](../runs/README.md). The PHY family is composed by
+`tools/vendor/phy-esp32s31/` over `tools/vendor/phy/` and the chip-neutral
+[capture types](../link/src/capture). Its reviewed relation is in
+[chip knowledge](../../../chips/esp32s31/knowledge/PHY_RELATION.md).
+Generated runs are stored outside the checkout, with a `target/hil/runs`
+link; they are not tracked. A run never writes tracked files.
 
 ## Safe source-only route
 
@@ -66,7 +60,7 @@ artifacts. `doctor` inspects machine and fixture prerequisites; it is not a
 source-only check and does not prove that the current fixture configuration is
 ready for a scenario.
 
-`cargo hil images check --all` builds every image class on both chips and
+`cargo hil images check --all` builds the selected chips' available image classes and
 checks the linked images. Diagnostic classes use `Required::Diagnostic`:
 interrupt stacks may be `partial + ?` with their unresolved sites named, and
 strict handler/executor code or executor task code outside its permitted

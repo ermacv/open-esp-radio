@@ -1,6 +1,6 @@
 # Shared RV32 layer
 
-The `oer-riscv-*` packages are the RV32 analysis layer that two tools share:
+The `oer-analysis-riscv-*` packages are the RV32 analysis layer that two tools share:
 [Blobray](cli/README.md), which researches and compares vendor code,
 and the stack analyzer [`oer-analysis-riscv-stack`](riscv-stack/README.md), which bounds the
 stacks of our firmware images. Both read ELF through [`oer-analysis-elf`](elf/README.md),
@@ -38,11 +38,10 @@ Blobray's application.
 
 ## Dependency table
 
-Every normal or build dependency of a package of this layer or of Blobray on
-another of them is allowed by one table, `oer_repo::policy::COMPONENTS`
-([repository model](../../README.md)); every package of either application
-has a row, and this table and Blobray's state the same. Dependencies on other applications' shared libraries, such as
-Blobray's linker adapters on `oer-os-process`, follow the host-application rules.
+The workspace manifests declare these internal dependencies. Blobray's
+component boundaries are described in its
+[architecture](blobray-docs/design/architecture.md#crates-and-modules).
+Its linker adapters also use the host process library.
 
 | Package | May depend on |
 | --- | --- |
@@ -55,14 +54,12 @@ Blobray's linker adapters on `oer-os-process`, follow the host-application rules
 The rows of the `blobray-*` crates are in
 [Blobray's architecture](blobray-docs/design/architecture.md#crates-and-modules).
 
-Changing an edge changes the table, this page and Blobray's architecture in
-the same change.
+The table describes repository dependencies, excluding test-only fixtures.
 
 ## Format libraries
 
 A third-party library that reads a format has one owner, and no other
-package may take it as a normal or build dependency
-(`oer_repo::policy::EXTERNAL_OWNERS`, enforced by the same policy): `object`,
+package takes it as a normal or build dependency in this layer: `object`,
 `gimli` and `addr2line` belong to `oer-analysis-elf`, `rv-asm` to `oer-analysis-riscv-decode`.
 `object` has one more owner, `oer-analysis-blobray-artifacts`, Blobray's streaming
 reader: it reads archive members and sections metered under Blobray's work

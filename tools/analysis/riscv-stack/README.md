@@ -414,8 +414,8 @@ pointer retains the existing executor-invariant assumption.
 
 The firmware gate continues to use global field discovery. The experimental
 local resolver remains available separately; its current address-use coverage
-leaves candidate sets too broad for useful bounds. Interprocedural pointer
-propagation, constructor summaries and new memory models are later work.
+leaves candidate sets too broad for useful bounds. It does not model
+interprocedural pointer propagation or constructor summaries.
 
 `interrupt_stacks` bounds each hart's interrupt stack (`Stacks`): one
 interrupt per level the hart takes (its table entries' levels), each the worst hardware-vector entry's frame plus its

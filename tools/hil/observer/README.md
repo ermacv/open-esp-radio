@@ -1,17 +1,21 @@
-# HIL observer identity
+# HIL observer build
 
-`oer-hil-observer` owns the build identity of the HIL observer, the runner
-(`oer-tool-hil-runner`), which the runner records in every run.
+`oer-hil-observer` builds and prepares the HIL runner
+(`oer-tool-hil-runner`). The build identity and content store are format data
+of `oer-hil-runs::format::observer`; readers do not need this build library.
 
 | Module | Owns |
 | --- | --- |
-| `inputs` | The observer input registry ([`tools/hil/model/observer-inputs.json`](../model/observer-inputs.json)) and the projection of the runner's resolved graph onto each workload's dependencies |
-| `cargo_inputs` | The local package closure of a captured workspace and lock |
-| `store` | The content store of observer builds (`observers/<sha256>.json` beside the runs of a run store) and the reference form a run's record takes |
-| `compile`, `resolve`, `prepare` (feature `producer`) | Building the runner from Cargo's artifact messages, resolving its graph (the runner's build script), and its private copy under `target/hil/runners/<sha256>/` (`prepare::build`) |
+| `compile` | Building the runner and reading Cargo's artifact messages |
+| `resolve` | Capturing the runner's resolved dependency graph for its build script |
+| `prepare` | Publishing the private executable under `target/hil/runners/<sha256>/` |
 
-`cargo hil` builds the observer; `cargo hil observer` builds it alone and prints its private copy.
+The observer input registry is
+[`tools/hil/model/observer-inputs.json`](../model/observer-inputs.json).
+`cargo hil` prepares the runner before launching it; `cargo hil observer`
+prints the prepared executable without running a scenario. These modules
+are always available; the package has no feature flags.
 
 ```console
-cargo test -p oer-hil-observer --features producer
+cargo test -p oer-hil-observer
 ```
