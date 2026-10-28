@@ -4,6 +4,9 @@ use oer_analysis_riscv_model::UnknownCallBehavior;
 #[path = "waker_scope_tests.rs"]
 mod waker_scopes;
 
+#[path = "waker_location_tests.rs"]
+mod waker_locations;
+
 #[path = "recursion_tests.rs"]
 mod recursion;
 
@@ -79,7 +82,7 @@ fn analyze_within(
 }
 
 /// [`crate::analyze`] without a work budget.
-fn analyze(elf: &[u8], companions: &[&[u8]], summaries: &[Summary]) -> Result<Analysis> {
+pub(crate) fn analyze(elf: &[u8], companions: &[&[u8]], summaries: &[Summary]) -> Result<Analysis> {
     let memory = WorkingMemory::new(TEST_MEMORY)?;
     analyze_within(elf, companions, summaries, &memory, &mut || Ok(()))
 }
@@ -152,18 +155,18 @@ fn call(site: u32, target: u32) -> u32 {
         | 0x6f
 }
 
-struct Symbol {
-    name: &'static str,
-    words: Vec<u32>,
+pub(crate) struct Symbol {
+    pub(crate) name: &'static str,
+    pub(crate) words: Vec<u32>,
     /// `.stack_sizes` record, if any.
-    frame: Option<u8>,
+    pub(crate) frame: Option<u8>,
 }
 
 const RODATA: u32 = 0x2000;
 
 /// A static RV32 executable with one loaded `.text` holding the symbols in
 /// order from `TEXT`, a symbol table and `.stack_sizes`.
-fn executable(symbols: &[Symbol]) -> Vec<u8> {
+pub(crate) fn executable(symbols: &[Symbol]) -> Vec<u8> {
     image(symbols, &[], false)
 }
 
@@ -1584,11 +1587,11 @@ fn build_directory(kind: &str) -> tempfile::TempDir {
 }
 
 pub(crate) fn compiled(source: &str) -> Vec<u8> {
-    compiled_linking(source, &[])
+    compiled_linking(source, &[], "s")
 }
 
 /// [`compiled`], with the extra linker arguments `link`.
-fn compiled_linking(source: &str, link: &[&str]) -> Vec<u8> {
+fn compiled_linking(source: &str, link: &[&str], optimization: &str) -> Vec<u8> {
     let build = build_directory("program");
     let directory = build.path();
     let input = directory.join("main.rs");
@@ -1602,7 +1605,7 @@ fn compiled_linking(source: &str, link: &[&str]) -> Vec<u8> {
         .args(["--target", "riscv32imafc-unknown-none-elf"])
         .args([
             "-C",
-            "opt-level=s",
+            &format!("opt-level={optimization}"),
             "-C",
             "debuginfo=2",
             "-C",
@@ -2068,11 +2071,15 @@ fn a_waker_call_reaches_its_slot_of_the_one_waker_vtable() {
             .bytes,
         None
     );
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, Some(&vtable), &mut ledger(), &mut || {
-            Ok(())
-        })
-        .unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        &types,
+        Some(&vtable),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     // `_start`'s `wake_by_ref` reaches `by_ref` (slot 2), not `wake`.
     let site = analysis.functions[&start]
         .transfers
@@ -2112,7 +2119,7 @@ fn census(
 
 /// The census of `source`, linked keeping `undefined` too.
 fn census_of(source: &str, undefined: &str) -> Result<Option<[u32; 4]>> {
-    let elf = compiled_linking(source, &[&format!("--undefined={undefined}")]);
+    let elf = compiled_linking(source, &[&format!("--undefined={undefined}")], "s");
     let analysis = analyze(&elf, &[], &[]).unwrap();
     let (dwarf, types) = debug(&elf);
     census(&elf, &dwarf, &types, &analysis)
@@ -3114,7 +3121,7 @@ fn the_analyzers_own_structures_fail_on_working_memory() {
 #[test]
 fn a_compressed_debug_section_is_an_error_not_a_read() {
     // `oer-analysis-elf` reads no compressed section; the analysis fails closed.
-    let compressed = compiled_linking(WRITER_PROGRAM, &["--compress-debug-sections=zlib"]);
+    let compressed = compiled_linking(WRITER_PROGRAM, &["--compress-debug-sections=zlib"], "s");
     let error = crate::read_debug(
         &std::rc::Rc::from(&compressed[..]),
         DebugMetadata::Standard,

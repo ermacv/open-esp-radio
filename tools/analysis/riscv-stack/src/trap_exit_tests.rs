@@ -133,7 +133,7 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {{
         }
     }
     let link: Vec<&str> = link.iter().map(String::as_str).collect();
-    compiled_linking(&source, &link)
+    compiled_linking(&source, &link, "s")
 }
 
 /// Check every vector of `elf` with the interrupt check and the exception

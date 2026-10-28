@@ -310,6 +310,48 @@ set of found facts (the waker vtable, field types) is a hole,
   every direct call of a function, complete when `taken_addresses` holds no
   relocation that takes the function's address other than a transfer.
 
+### Waker calls from typed locations
+
+`WakerVtables` also trusts the correctness of the compiler's DWARF type
+identities, member layouts and variable/parameter location lists, just as
+the method-scope rule trusts its inline scopes. This is a premise of the
+proof, not a guarantee for arbitrary ELF or incorrect debug information;
+it introduces no additional `Assumption`. Missing or unsupported metadata
+leaves the site unresolved.
+
+With `read_debug(..., DebugMetadata::TypedLocations, ...)`,
+`waker_resolutions` can prove a target load without a Waker method scope.
+Its `TypeFacts`, `Dwarf` and `Analysis` must describe the same ELF. It
+projects the complete four-byte `vtable` field of exactly
+`core::task::wake::Waker` or `core::task::wake::RawWaker` from the DWARF
+layout. A register piece must cover the entire byte interval from the
+chosen base witness through the end of `jalr`, including every intervening
+PC. Adjacent entries for the same variable and piece may join; a gap,
+another variable, an incomplete piece, a spill or an unsupported expression
+cannot extend that interval. User types with the same unqualified names
+supply no proof.
+
+`core::option::Option<core::task::wake::Waker>` is accepted only when DWARF
+describes a two-variant null niche at that same vtable word and a local
+machine branch proves the word nonzero on every incoming path. An
+unselected variant supplies no initialized Waker field.
+
+The retained local graph and shared instruction semantics establish that
+every reaching target load uses that vtable value plus a constant, through
+register copies, `li`, `addi` and `add` only. RV32 additions wrap; every
+resulting displacement must be exactly 0, 4, 8 or 12, and the DWARF
+`RawWakerVTable` members must confirm those four slots. The existing census
+supplies the sole vtable and the reaching-target proof connects each load
+to the transfer. Joins retain all possible slots. An unknown input,
+unsupported arithmetic, memory write, call boundary, cycle or the bounded
+128-step backward search leaves a hole. The existing value-identity
+`RegisterWitness` contract is unchanged.
+
+A closed graph is required, with the existing sole-open-tail exception
+only when all selected targets lie outside the function. Multiple open
+tails remain unresolved. No source name, source line, nearby scope or MIR
+call list substitutes for these machine and location facts.
+
 `task_poll_resolutions` finds the executor's task polls: the executor
 (`oer-espressif-executor`) polls each declared task by a direct call of its
 never-inlined poll boundary, whose address each task exports in a `#[used]`

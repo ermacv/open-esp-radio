@@ -238,16 +238,26 @@ pub fn waker_vtable(
     Ok(census.found.map(|(_, vtable)| vtable))
 }
 
-/// The targets of every unresolved call or jump inside a waker method:
-/// that method's slot of `vtable`. Without a vtable each such site gets an
-/// empty set, a hole.
+/// Targets proved by Waker method scopes or typed vtable locations with
+/// constant local address arithmetic. `analysis`, `dwarf` and `types` must
+/// describe the same ELF (companions contribute no typed locations).
+/// Without a vtable each such site gets an empty set, a hole.
 pub fn waker_resolutions(
     analysis: &Analysis,
     dwarf: &Dwarf,
+    types: &TypeFacts,
     vtable: Option<&[u32; 4]>,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
+    let file = types
+        .source
+        .as_ref()
+        .map(|source| {
+            oer_analysis_elf::Elf::parse(source)
+                .map_err(|_| crate::dwarf::invalid("invalid typed-location ELF"))
+        })
+        .transpose()?;
     let vtables = vtable.as_slice();
     let mut resolutions = Resolutions::new();
     for facts in analysis.functions.values() {
@@ -278,15 +288,30 @@ pub fn waker_resolutions(
                 for load in loads {
                     control.checkpoint(1)?;
                     let chain = dwarf.inline_chain(load.site)?;
-                    let Some(slot) = chain
-                        .first()
-                        .and_then(|function| slot(function))
-                        .filter(|slot| load.offset == 4 * *slot as i32)
-                    else {
+                    if let Some(slot) = chain.first().and_then(|function| slot(function)) {
+                        if load.offset != 4 * slot as i32 {
+                            known = false;
+                            break;
+                        }
+                        scratch.add(&mut slots, slot, control)?;
+                    } else if let Some(file) = &file
+                        && let Some(proven) = crate::waker_locations::slots(
+                            file,
+                            facts,
+                            types,
+                            load,
+                            transfer.site,
+                            &mut scratch,
+                            control,
+                        )?
+                    {
+                        for slot in proven {
+                            scratch.add(&mut slots, slot, control)?;
+                        }
+                    } else {
                         known = false;
                         break;
-                    };
-                    scratch.add(&mut slots, slot, control)?;
+                    }
                 }
                 if !known || slots.is_empty() {
                     continue;

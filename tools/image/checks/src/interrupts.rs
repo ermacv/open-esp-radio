@@ -1423,6 +1423,7 @@ mod tests {
             target_loads: BTreeMap::new(),
             open_exit_target_loads: BTreeMap::new(),
             load_bases: BTreeMap::new(),
+            target_predecessors: BTreeMap::new(),
             code_facts: BTreeMap::new(),
             transfers: callee
                 .map(|target| Transfer {

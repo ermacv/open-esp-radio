@@ -38,6 +38,7 @@ mod sweep;
 mod tasks;
 mod trap;
 mod trap_semantics;
+mod waker_locations;
 mod wakers;
 #[cfg(test)]
 mod write_summary_tests;
@@ -85,7 +86,8 @@ pub fn image_resolutions(
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
     let vtable = waker_vtable(image, dwarf, types, analysis, keep, control)?;
-    let mut resolutions = waker_resolutions(analysis, dwarf, vtable.as_ref(), keep, control)?;
+    let mut resolutions =
+        waker_resolutions(analysis, dwarf, types, vtable.as_ref(), keep, control)?;
     let audit = audit_function_addresses(image, analysis, types, keep, control)?;
     let pointers = function_pointer_resolutions(&audit, keep, control)?;
     resolutions.extend(task_poll_resolutions(
@@ -144,6 +146,10 @@ pub struct FunctionFacts {
     /// Earlier equal register values for each target load's address base,
     /// bounded by the first merge, definition, memory write or unknown step.
     pub load_bases: BTreeMap<u32, LoadBase>,
+    /// Local predecessors retained only when target loads have a closed
+    /// graph (or a sole conditional external exit). Typed Waker address
+    /// proofs use every incoming path; ordinary base witnesses stay separate.
+    pub target_predecessors: BTreeMap<u32, Vec<u32>>,
     /// Bytes below the entry `sp` at each transfer the value analysis
     /// reached; a transfer it did not reach is taken at the whole frame.
     pub site_depths: BTreeMap<u32, u64>,
@@ -881,6 +887,11 @@ fn function_facts(
     };
     let terminal_recursive_callees =
         recursion::terminal_callees(elf, &function, &transfers, &swept.jumps, work, control)?;
+    let target_predecessors = if target_loads.is_empty() && open_exit_target_loads.is_empty() {
+        BTreeMap::new()
+    } else {
+        observation.predecessors
+    };
     Ok(FunctionFacts {
         function,
         frame,
@@ -896,6 +907,7 @@ fn function_facts(
         target_loads,
         open_exit_target_loads,
         load_bases,
+        target_predecessors,
         transfers,
         code_facts,
         site_depths: observation.site_depths,
@@ -915,6 +927,12 @@ impl FunctionFacts {
             + self.target_loads.len() * size_of::<(u32, Vec<Load>)>()
             + self.open_exit_target_loads.len() * size_of::<(u32, Vec<Load>)>()
             + self.load_bases.len() * size_of::<(u32, LoadBase)>()
+            + self.target_predecessors.len() * size_of::<(u32, Vec<u32>)>()
+            + self
+                .target_predecessors
+                .values()
+                .map(|incoming| incoming.capacity() * size_of::<u32>())
+                .sum::<usize>()
             + self
                 .load_bases
                 .values()
