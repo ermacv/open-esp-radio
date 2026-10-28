@@ -69,7 +69,7 @@ oer-time = { path = "../../../portable/time" }
 oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter", optional = true }
 embassy-futures = { version = "0.1.2", optional = true }
 heapless = { version = "0.9.3", optional = true }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "f8693d5c22f98988f46d158b91dd27b9da44f671", features = ["async"], optional = true }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"], optional = true }
 oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
 oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta", optional = true }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy", optional = true }
@@ -89,7 +89,7 @@ oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire", optional = tr
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", optional = true }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"], optional = true }
 oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn", optional = true }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "d5d5d7d2110a383a8ff35f0409b83eee222ae94d", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }

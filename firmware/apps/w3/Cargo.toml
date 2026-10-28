@@ -16,13 +16,13 @@ oer-embassy-net = { path = "../../../portable/embassy/net" }
 embassy-futures = "0.1.2"
 oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter" }
 oer-time = { path = "../../../portable/time" }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "d5d5d7d2110a383a8ff35f0409b83eee222ae94d", features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 embassy-sync = "0.8.0"
 heapless = "0.9.3"
 static_cell = { workspace = true }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "f8693d5c22f98988f46d158b91dd27b9da44f671", features = ["async"] }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"] }
 oer-radio-port = { path = "../../../protocols/radio/port" }
 oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
@@ -49,7 +49,7 @@ tempfile = "=3.27.0"
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "f8693d5c22f98988f46d158b91dd27b9da44f671", features = ["async"] }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"] }
 
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }
