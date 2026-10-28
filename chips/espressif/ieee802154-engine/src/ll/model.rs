@@ -4,8 +4,9 @@
 //! event image, abort reasons and measurement results the MAC would latch.
 //! The model knows nothing else about the hardware.
 
-use super::{COEX_DISABLED_PTI, Ieee802154LowLevel, Ieee802154RecentRssi};
+use super::{Ieee802154LowLevel, Ieee802154RecentRssi};
 use crate::coex::CoexPti;
+use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
@@ -364,8 +365,8 @@ pub enum ModelAddress {
 }
 
 /// The model's addresses for one engine, keyed only by slot identity.
-pub fn addresses() -> crate::engine::Ieee802154DmaAddresses<ModelAddress> {
-    crate::engine::Ieee802154DmaAddresses {
+pub fn addresses() -> oer_espressif_ieee802154_mac_values::Ieee802154DmaAddresses<ModelAddress> {
+    oer_espressif_ieee802154_mac_values::Ieee802154DmaAddresses {
         rx: core::array::from_fn(|index| ModelAddress::Receive(index as u8)),
         tx: ModelAddress::Transmit,
         enhanced_ack: ModelAddress::EnhancedAck,

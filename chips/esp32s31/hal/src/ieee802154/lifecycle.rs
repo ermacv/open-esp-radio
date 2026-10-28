@@ -15,7 +15,7 @@ use core::marker::PhantomData;
 
 use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
-use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
+use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
 
 /// Private MAC reset lines in the shared modem syscon block.
 ///

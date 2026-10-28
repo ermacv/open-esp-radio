@@ -13,7 +13,7 @@
 #![deny(missing_docs)]
 
 use crate::ieee802154::{lifecycle::Ieee802154ReadbackError, mac::Ieee802154FoundationSnapshot};
-use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
+use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
     Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154PanIdentity,

@@ -1,11 +1,12 @@
 use super::*;
 use oer_espressif_ieee802154_engine::{
     engine::{
-        FRAME_SIZE, Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo,
-        Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154TxError,
+        Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck,
+        Ieee802154RxSlot, Ieee802154TxError,
     },
     ll::model::Ieee802154LlModel,
 };
+use oer_espressif_ieee802154_mac_values::FRAME_SIZE;
 use oer_espressif_ieee802154_mac_values::{Ieee802154Channel, Ieee802154RxStatus};
 use std::boxed::Box;
 

@@ -1,6 +1,6 @@
 //! The engine and its MAC backend held as one affine owner.
 //!
-//! Entry points borrow the stored MAC internally. A chip HAL constructs this
+//! Entry points borrow the stored MAC internally. A chip adapter constructs this
 //! owner from its placed buffers and exposes only these semantic operations.
 
 use super::*;

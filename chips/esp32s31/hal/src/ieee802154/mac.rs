@@ -22,7 +22,7 @@
 //! publishing the same ten runtime events as later sessions
 //! ([`Ieee802154TaskOwner::enable_events`]) and mask them again at the end
 //! of each session ([`Ieee802154TaskOwner::mask_events`]). Or the engine pair
-//! of the [`ll`](crate::ieee802154::ll) backend holds it with the router's
+//! of the [`polled`](crate::ieee802154::polled) owner holds it with the router's
 //! `Silent` proof and polls its events. None of these types can
 //! be constructed outside the HAL:
 //! `Ieee802154FoundationConfigured::into_operational` hands them out and
@@ -133,7 +133,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154ArmedTaskOwner<P, E, B>
         self,
         interrupts: Ieee802154InterruptOwner<P>,
         silent: Silent<Ieee802154InterruptOwner<P>>,
-    ) -> super::ll::Ieee802154MacParts<P, E, B> {
+    ) -> super::polled::Ieee802154MacParts<P, E, B> {
         (self.task, interrupts, silent)
     }
 }

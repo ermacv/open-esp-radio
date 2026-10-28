@@ -23,11 +23,12 @@ use oer_esp32c5_pac::{
     Ieee802154TxAbortReasonObservation as PacTxAbortReasonObservation,
     Ieee802154TxPowerCode as PacTxPowerCode,
 };
+use oer_espressif_ieee802154_engine::coex::CoexPti;
 pub use oer_espressif_ieee802154_engine::ll::{
     Ieee802154LowLevel, event_end_process, mac_init_registers, sec_clear, set_txrx_pti,
     timer_fire_at,
 };
-use oer_espressif_ieee802154_engine::{coex::CoexPti, ll::COEX_DISABLED_PTI};
+use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,

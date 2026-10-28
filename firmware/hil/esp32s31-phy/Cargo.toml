@@ -18,6 +18,7 @@ diagnostic-phy = []
 diagnostic-radio-health = ["diagnostic-phy", "oer-hil-protocol/health", "oer-hil-agent/health", "oer-esp32s31-phy/radio-health"]
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-esp32s31-ieee802154-driver = { path = "../../../chips/esp32s31/ieee802154/driver" }
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }

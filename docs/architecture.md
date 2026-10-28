@@ -573,7 +573,14 @@ its model and conformance case.
   BLE gate slot. The separate CTE interrupt bank is outside this policy;
   production has no enabled CTE interrupt consumer. These sequential reads
   neither prove producer shutdown nor name opaque causes.
-- **IEEE 802.15.4** (`protocols/ieee802154`). The port boundary follows the
+- **IEEE 802.15.4** (`protocols/ieee802154`, driver
+  `chips/esp32s31/ieee802154/driver`). The S31 driver implements the family
+  engine's LL contract over HAL's owned polling transactions and retains the
+  engine with its placed DMA storage through detach/rebind and ISR quarantine.
+  HAL owns PAC access, startup discard, DMA allocation and projection; its
+  normal dependency closure contains neither engine nor driver. Chip knowledge
+  supplies hardware-free power facts; the driver composes the engine's typed
+  level set. The port boundary follows the
   OpenThread radio platform: the backend executes acknowledgement, CSMA-CA
   and the cipher as advertised capabilities; retries, the pending-table
   policy, keys and counters stay in the core. Configuration is admitted in

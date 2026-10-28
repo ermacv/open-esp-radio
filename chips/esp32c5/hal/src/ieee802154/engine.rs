@@ -5,13 +5,13 @@ use crate::{dma_static::Placed, layouts::DmaWindowAddress};
 use core::ops::{Deref, DerefMut};
 use oer_espressif_ieee802154_engine::{
     engine::{
-        Ieee802154DmaAddresses, Ieee802154Engine as SharedEngine, Ieee802154EngineBuffers,
-        Ieee802154Interfaces, owner::Ieee802154EngineOwner,
+        Ieee802154Engine as SharedEngine, Ieee802154Interfaces, owner::Ieee802154EngineOwner,
     },
     ll::Ieee802154LowLevel,
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
 };
 use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
+use oer_espressif_ieee802154_mac_values::{Ieee802154DmaAddresses, Ieee802154EngineBuffers};
 
 crate::dma_static! {
     #[allow(unsafe_code, reason = "DMA storage is placed through the HAL macro")]
@@ -76,7 +76,7 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         // unique static borrow for every hardware epoch; native models record
         // these identities without dereferencing them as pointers.
         let addresses = unsafe {
-            let address = |frame: &oer_espressif_ieee802154_engine::engine::DmaFrame| {
+            let address = |frame: &oer_espressif_ieee802154_mac_values::DmaFrame| {
                 crate::dma_address::placed(core::ptr::from_ref(frame).addr() as u32)
             };
             Ieee802154DmaAddresses {

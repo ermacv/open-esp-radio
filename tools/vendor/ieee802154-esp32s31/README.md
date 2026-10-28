@@ -91,7 +91,8 @@ are not compared. A vendor assertion, or a step the engine does not own, is
 content. Both sides resolve transmit power against the ESP32-S31 BTBB level
 set recovered from the vendor library (`TX_POWER_LEVELS_DBM`): the stand
 provides it as the driver's `bt_bb_get_tx_pwr_table`, and the engine uses the
-chip knowledge's `ESP32S31_TX_POWER_LEVELS` (`oer-esp32s31-knowledge`); the stand links no HAL. The catalog requires `MATCH` or its exact documented `EXPECTED` trace pair.
+a typed level set composed from chip knowledge's `TX_POWER_LEVELS_DBM`
+(`oer-esp32s31-knowledge`); the stand links no HAL. The catalog requires `MATCH` or its exact documented `EXPECTED` trace pair.
 
 The `recent-rssi` scenario reads `esp_ieee802154_get_recent_rssi` disabled,
 idle, receiving, awaiting an ACK and asleep, over receive-information images

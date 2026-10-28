@@ -273,13 +273,13 @@ encoding. Physical placement is proved by the same linker assertions. Native
 tests consume `Placed::host` with a distinct `HostDma<BASE>` per arena;
 synthetic bases and extents are checked at compile time.
 
-Each chip's 802.15.4 HAL owns the MAC token with the placed
-`Ieee802154EngineBuffers` of `.dma.bss.ieee802154`. It builds the 23 typed
+The S31 802.15.4 driver owns the MAC token with the placed
+`Ieee802154EngineBuffers` of `.dma.bss.ieee802154`. HAL builds the 23 typed
 addresses once from the allocation's actual frame projections (21 receive
 slots including the stub, TX and enhanced ACK). The common engine sees only
 `Ll::Address: Copy + Eq` and selects the table entry by slot. Host DMA inputs
 are matched against that table; an unknown identity is rejected without a
-panic. The HAL's combined owner exposes operation entries, frames and slots;
+panic. The driver's combined owner exposes operation entries, frames and slots;
 the MAC and its storage cannot be borrowed separately.
 
 TX prepare and start authorities carry `DmaRef<WifiTxDmaDescriptor>` through

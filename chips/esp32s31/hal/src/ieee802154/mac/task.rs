@@ -10,8 +10,8 @@ use oer_esp32s31_pac::ieee802154::{
     ed_config::{CcaMode, EdSampleMode},
     event_enable, rx_abort_enable, security_key, tx_abort_enable,
 };
-use oer_espressif_ieee802154_engine::coex::CoexPti;
-use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
+use oer_espressif_coex::CoexPti;
+use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154Event, Ieee802154MacControl, Ieee802154MultipanEnableState,

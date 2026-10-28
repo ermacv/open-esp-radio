@@ -15,8 +15,8 @@
 //! `ieee802154_sec_clear`. Timer callbacks, operation state and interrupt
 //! allocation stay with the driver engine.
 //!
-//! Every helper is generic over [`Ieee802154LowLevel`], which each chip's HAL
-//! implements over its own PAC, so the engine and its tests issue exactly the
+//! Every helper is generic over [`Ieee802154LowLevel`], which chip adapters
+//! implement over HAL transactions, so the engine and its tests issue exactly the
 //! accessor sequence the vendor driver issues and a recording backend can
 //! compare it with the compiled vendor driver.
 
@@ -29,10 +29,6 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
-
-/// PTI value the public common LL writes to both PTI fields when coexistence
-/// is disabled (`ieee802154_ll_disable_coex`).
-pub const COEX_DISABLED_PTI: u8 = 3;
 
 /// The `ieee802154_ll_*` accessors, the modem ETM register steps and the
 /// timer commands used by the driver's hardware helpers.

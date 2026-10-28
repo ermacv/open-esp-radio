@@ -3,10 +3,8 @@ use oer_esp32c5_hal::{
     dma_static::Placed,
     ieee802154::{engine::Ieee802154Engine, ll::Ieee802154MacOwners},
 };
-use oer_espressif_ieee802154_engine::{
-    engine::Ieee802154EngineBuffers,
-    pib::{Ieee802154Permit, Ieee802154PibDefaults},
-};
+use oer_espressif_ieee802154_engine::pib::{Ieee802154Permit, Ieee802154PibDefaults};
+use oer_espressif_ieee802154_mac_values::Ieee802154EngineBuffers;
 use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
 
 pub fn bind(

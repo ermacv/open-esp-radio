@@ -70,6 +70,12 @@ Chip knowledge (tables, constants, pure functions about a chip) lives in
 chip fact takes it from a crate that does not touch hardware
 (`chips/esp32s31/knowledge`) and never links a HAL.
 
+`chips/esp32s31/ieee802154/driver` binds the family engine's LL contract to
+HAL transactions. It is a separate crate so HAL and chip knowledge have no
+normal dependency on that engine or the driver. Shared frame storage and
+opaque address tables live in `chips/espressif/ieee802154-mac-values`; HAL
+alone allocates and projects the placed storage.
+
 `chips/espressif/interrupt-table` owns the Espressif interrupt matrix,
 CLIC encodings, vector ABI and staged-runtime symbols. Its package is
 `oer-espressif-interrupt-table`; its consumers are chip crates and firmware.

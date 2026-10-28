@@ -560,8 +560,11 @@ fn assert_startup_discard(events_7: bool, clock: bool, events_13: bool, other: b
             true,
         )
     );
-    let _owners =
-        crate::ieee802154::ll::Ieee802154MacOwners::new(startup, interrupts, super::host::silent());
+    let _owners = crate::ieee802154::polled::Ieee802154MacOwners::new(
+        startup,
+        interrupts,
+        super::host::silent(),
+    );
 }
 
 #[test]

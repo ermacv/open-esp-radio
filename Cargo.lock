@@ -1939,7 +1939,6 @@ dependencies = [
  "oer-espressif-coex",
  "oer-espressif-efuse",
  "oer-espressif-facts",
- "oer-espressif-ieee802154-engine",
  "oer-espressif-ieee802154-mac-values",
  "oer-espressif-interrupt-table",
  "oer-espressif-modem-clock",
@@ -2009,10 +2008,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-ieee802154-driver"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32s31-hal",
+ "oer-esp32s31-knowledge",
+ "oer-espressif-coex",
+ "oer-espressif-ieee802154-engine",
+ "oer-espressif-ieee802154-mac-values",
+ "oer-mmio",
+ "oer-radio-regulatory",
+ "oer-test-ui-cases",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-esp32s31-knowledge"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-ieee802154-engine",
  "oer-espressif-ieee802154-mac-values",
 ]
 
@@ -2180,6 +2193,8 @@ dependencies = [
 name = "oer-espressif-ieee802154-mac-values"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
+ "oer-memory",
  "oer-radio-regulatory",
 ]
 
@@ -2557,6 +2572,7 @@ dependencies = [
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-ieee802154-driver",
  "oer-esp32s31-knowledge",
  "oer-esp32s31-layout",
  "oer-esp32s31-phy",
