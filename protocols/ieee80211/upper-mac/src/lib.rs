@@ -98,6 +98,7 @@ pub use tx::{
 pub mod block_ack;
 
 pub mod ccmp;
+pub mod packet_number;
 
 pub mod duplicate;
 

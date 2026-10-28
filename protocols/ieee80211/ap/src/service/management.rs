@@ -80,7 +80,8 @@ pub enum ApGroupManagementError {
     InvalidFrame,
     NoManagementKey,
     OutputTooSmall,
-    PacketNumbers,
+    /// The IGTK's 48-bit IPN space is exhausted; replace the key.
+    PacketNumbersExhausted,
     InvalidKey(RsnFrameError),
 }
 
@@ -197,9 +198,14 @@ impl<S: SppScope> AccessPointService<'_, S> {
             .group_management
             .as_mut()
             .ok_or(ApGroupManagementError::NoManagementKey)?;
-        let protected = sender
-            .protect(frame, length)
-            .ok_or(ApGroupManagementError::PacketNumbers)?;
+        let protected = sender.protect(frame, length).map_err(|error| match error {
+            oer_ieee80211_rsn::bip::BipTransmitError::Exhausted => {
+                ApGroupManagementError::PacketNumbersExhausted
+            }
+            oer_ieee80211_rsn::bip::BipTransmitError::InvalidFrame => {
+                ApGroupManagementError::InvalidFrame
+            }
+        })?;
         // New associations receive the current frontier in Message 3,
         // so old group frames cannot replay under the unchanged IGTK.
         let packet_number = sender.packet_number();
