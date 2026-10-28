@@ -1802,9 +1802,7 @@ dependencies = [
  "oer-bluetooth-le-port",
  "oer-bluetooth-le-wire",
  "oer-radio-port",
- "oer-radio-regulatory",
  "oer-test-ui-cases",
- "oer-time",
 ]
 
 [[package]]

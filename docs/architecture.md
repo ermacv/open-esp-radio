@@ -46,10 +46,10 @@ platform             Espressif staged boot, interrupt table, panic record, linke
 
 Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
 contract), sans-IO cores and a `runtime`. Bluetooth LE has wire formats, a
-backend port, LL/controller cores and a reference model. IEEE 802.15.4 has
-`wire`, `port`, the `mac` core and a separate host reference `model`.
-A backend depends on its protocol's port, wire formats and implemented
-`cipher` only.
+backend port, synchronous LL/controller cores, an executor-independent
+runtime and a reference model. IEEE 802.15.4 has `wire`, `port`, the `mac`
+core and a separate host reference `model`. A backend depends on its
+protocol's port, wire formats and implemented `cipher` only.
 
 Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They
@@ -547,8 +547,13 @@ its model and conformance case.
   progress the admitted test with the Core Part F interval grid and 5 ms RX
   windows. Public backend identity crosses as an explicit wire value with
   named canonical/air byte order; the driver depends on neither LL nor HCI.
-  HCI is the world boundary. Among conflicting connections the one closest to
-  its supervision timeout wins; Host backpressure withholds acknowledgement
+  HCI is the world boundary. The controller's DTM service owns correlation,
+  command credit, pending commands, session leases and retained faulty terminals
+  without IO. The LE runtime awaits capacity and terminals and runs the HCI
+  service loop over composition-owned transport and port traits. Firmware owns
+  framing, HAL entropy, installation/shutdown and task spawning. Among
+  conflicting connections the one closest to its supervision timeout wins;
+  Host backpressure withholds acknowledgement
   instead of dropping the link. Controller memory is generated layouts with a
   HAL handover engine; no controller address reaches the driver. How much of
   an interval a connection event may take is policy of the portable link

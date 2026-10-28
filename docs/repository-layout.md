@@ -23,7 +23,7 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   radio/        the radio port, coexistence vocabulary, regulatory domain, permit pool
   ieee80211/    Wi-Fi: MAC formats and state, lower and upper MAC, station,
                 access point, RSN, arbiter, runtime, datapath
-  bluetooth/    HCI and LE wire formats, link layer, controller, port and model
+  bluetooth/    HCI and LE wire formats, link layer, controller, port, runtime and model
   ieee802154/   IEEE 802.15.4 wire codecs, backend port, MAC core and host model
   network/      the network stack boundary
   hil/          the HIL protocol and its trace header

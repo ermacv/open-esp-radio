@@ -101,14 +101,23 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
             } else {
                 None
             };
-            let Err(SubmitError::InvalidState {
-                command,
-                configuration,
-                session,
-            }) = submit_core(&mut service, &*phase).await
+            let Submission::Capacity(seat) = service.submission::<()>().unwrap() else {
+                panic!("unadmitted command retains seat")
+            };
+            let capacity = phase.take(seat).await;
+            let Err(RequestRefusal {
+                capacity,
+                error:
+                    SubmitError::InvalidState {
+                        command,
+                        configuration,
+                        session,
+                    },
+            }) = service.request::<()>(capacity)
             else {
                 panic!("inconsistent private state must be retained as a typed error")
             };
+            phase.release(capacity);
             assert_eq!(command.opcode(), opcode);
             assert_eq!(
                 configuration,
@@ -130,7 +139,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
             assert_eq!(service.lease.is_some(), retained_lease.is_none());
             assert!(service.response().is_none());
             assert!(matches!(
-                submit_core(&mut service, &*phase).await,
+                service.submission::<()>(),
                 Err(SubmitError::Poisoned)
             ));
             assert_eq!(service.completion().map(|_| ()), Err(Fault::Poisoned));
@@ -144,46 +153,34 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
     }
 }
 
-// Test orchestration obtains capacity; every production core call is synchronous.
-async fn submit_core<'p, P: PoolPath, C: LeCapabilities, F>(
-    service: &mut Service<'p, P, C>,
-    phase: &impl port::LePhase<'p, P, (), Caps = C, Fault = F>,
-) -> Result<Submitted, SubmitError<F>> {
-    let capacity = match service.submission()? {
-        Submission::Done(result) => return Ok(result),
-        Submission::Capacity(seat) => phase.take(seat).await,
-    };
-    match service.request(capacity) {
-        Err((capacity, error)) => {
-            phase.release(capacity);
-            Err(error)
-        }
-        Ok(_) => panic!("corrupt state cannot form a request"),
-    }
-}
-
 #[test]
 fn submission_retains_mismatched_configuration_and_session_and_returns_capacity() {
     for scenario in [
         Scenario::MissingConfig,
         Scenario::WrongConfig,
         Scenario::MissingLease,
-        Scenario::OldReset,
     ] {
-        run(with_local_slot(async |claim| {
-            let env = Rc::new(Environment::new(NonZeroU64::new(1000).unwrap()));
-            let mut slot = claim.place();
-            let end = LocalExecution
-                .scope(
-                    guarded(slot.register(Backend::new(env.clone())).ok().unwrap()),
-                    async |front| run_port(front, Body { scenario }).await,
-                )
-                .await;
-            assert!(matches!(end, PortEnd::FailStopped { .. }));
-            assert_eq!(env.active_radios(), 0);
-            slot.end_model_world();
-        }));
+        scenario_test(scenario);
     }
+}
+#[test]
+fn reset_rejects_the_original_installation_identity() {
+    scenario_test(Scenario::OldReset);
+}
+fn scenario_test(scenario: Scenario) {
+    run(with_local_slot(async |claim| {
+        let env = Rc::new(Environment::new(NonZeroU64::new(1000).unwrap()));
+        let mut slot = claim.place();
+        let end = LocalExecution
+            .scope(
+                guarded(slot.register(Backend::new(env.clone())).ok().unwrap()),
+                async |front| run_port(front, Body { scenario }).await,
+            )
+            .await;
+        assert!(matches!(end, PortEnd::FailStopped { .. }));
+        assert_eq!(env.active_radios(), 0);
+        slot.end_model_world();
+    }));
 }
 
 #[test]

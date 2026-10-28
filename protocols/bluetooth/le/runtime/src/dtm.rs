@@ -1,6 +1,8 @@
 //! Capacity and terminal waits around the durable synchronous controller.
 
-use oer_bluetooth_le_controller::dtm::{Fault, Service, Submission, SubmitError, Submitted};
+use oer_bluetooth_le_controller::dtm::{
+    Admission, Fault, RequestRefusal, Service, Submission, SubmitError, Submitted,
+};
 use oer_bluetooth_le_port::{LeCapabilities, LePhase};
 use oer_radio_port::PoolPath;
 
@@ -16,13 +18,13 @@ pub async fn submit<'p, P: PoolPath, C: LeCapabilities, F>(
     };
     let request = match service.request(capacity) {
         Ok(request) => request,
-        Err((capacity, error)) => {
+        Err(RequestRefusal { capacity, error }) => {
             phase.release(capacity);
             return Err(error);
         }
     };
-    let (capacity, result) = service.submitted(phase.submit(request));
-    if let Some(capacity) = capacity {
+    let Admission { release, result } = service.submitted(phase.submit(request));
+    if let Some(capacity) = release {
         phase.release(capacity);
     }
     result

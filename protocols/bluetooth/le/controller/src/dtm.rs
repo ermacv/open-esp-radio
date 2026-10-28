@@ -1,6 +1,8 @@
 //! HCI Reset/Rand/DTM 1M service over an installed LE port.
 //!
-//! The composition owns the transport, entropy and `run_port`. A Reset leaves
+//! This core never awaits or calls the port. The runtime executes its request
+//! and capacity-release actions. The composition owns transport, entropy and
+//! `run_port`. A Reset leaves
 //! this body, disables and uninstalls its port, then completes against a fresh
 //! installation's idle lease. It cannot acknowledge a software-only reset of
 //! a running test. Command capacity is one; the immutable response stays here
@@ -66,7 +68,7 @@ pub struct Busy;
 pub enum Accepted<P: PoolPath> {
     /// An immediate response is retained by the service.
     Response,
-    /// Call `submit`; only `Submitted::AwaitTerminal` needs `complete`.
+    /// Let the runtime submit; only `Submitted::AwaitTerminal` needs a terminal.
     Port,
     /// Leave the body through normal disable/uninstall, then reinstall.
     Reset(Reset<P>),
@@ -163,6 +165,23 @@ pub enum SubmitError<F> {
         configuration: Option<SubmissionConfiguration>,
         session: SubmissionSession,
     },
+}
+
+/// A request construction refusal returns the unused capacity to its caller.
+pub struct RequestRefusal<'p, P: PoolPath, F> {
+    /// Reservation not consumed by the core.
+    pub capacity: Permit<'p, port::CommandCapacity, Child<P, 0>>,
+    /// Source observations explaining the refusal.
+    pub error: SubmitError<F>,
+}
+
+/// Admission outcome and the capacity action the runtime must execute.
+#[must_use = "release unused capacity before the next wait"]
+pub struct Admission<'p, P: PoolPath, F> {
+    /// Unused reservation returned by a synchronous backend refusal.
+    pub release: Option<Permit<'p, port::CommandCapacity, Child<P, 0>>>,
+    /// Mandatory terminal, retained response or typed fault.
+    pub result: Result<Submitted, SubmitError<F>>,
 }
 
 /// The next synchronous submission action. The seat stays in the core while waiting.
@@ -362,18 +381,18 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
     pub fn request<F>(
         &mut self,
         capacity: Permit<'p, port::CommandCapacity, Child<P, 0>>,
-    ) -> Result<
-        Request<'p, P, (), C>,
-        (
-            Permit<'p, port::CommandCapacity, Child<P, 0>>,
-            SubmitError<F>,
-        ),
-    > {
+    ) -> Result<Request<'p, P, (), C>, RequestRefusal<'p, P, F>> {
         if self.faulted {
-            return Err((capacity, SubmitError::Poisoned));
+            return Err(RequestRefusal {
+                capacity,
+                error: SubmitError::Poisoned,
+            });
         }
         let Some(pending) = self.pending.as_mut().filter(|p| p.admitted.is_none()) else {
-            return Err((capacity, SubmitError::NoCommand));
+            return Err(RequestRefusal {
+                capacity,
+                error: SubmitError::NoCommand,
+            });
         };
         let command = match (self.lease.take(), pending.config.take()) {
             (Some(Lease::Idle(session)), Some(Config::Receive(config))) => {
@@ -400,7 +419,7 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                 self.lease = lease;
                 pending.config = config;
                 self.faulted = true;
-                return Err((capacity, error));
+                return Err(RequestRefusal { capacity, error });
             }
         };
         let expected = Admitted {
@@ -417,26 +436,33 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
     }
 
     /// Apply synchronous backend admission. Return any unused capacity for the
-    /// runtime to release before its next wait.
+    /// runtime to release before its next wait. Apply this immediately after
+    /// submitting the request, with no intervening wait or core transition.
     pub fn submitted<F>(
         &mut self,
         result: port::Submission<'p, P, (), C, F>,
-    ) -> (
-        Option<Permit<'p, port::CommandCapacity, Child<P, 0>>>,
-        Result<Submitted, SubmitError<F>>,
-    ) {
+    ) -> Admission<'p, P, F> {
         let Some(pending) = self.pending.as_mut() else {
             self.faulted = true;
-            return (None, Err(SubmitError::NoCommand));
+            return Admission {
+                release: None,
+                result: Err(SubmitError::NoCommand),
+            };
         };
         let opcode = pending.command.kind().opcode();
         match result {
             Ok(Ok(admitted)) => {
                 if Some(admitted) != pending.admitted {
                     self.faulted = true;
-                    return (None, Err(SubmitError::Receipt));
+                    return Admission {
+                        release: None,
+                        result: Err(SubmitError::Receipt),
+                    };
                 }
-                (None, Ok(Submitted::AwaitTerminal))
+                Admission {
+                    release: None,
+                    result: Ok(Submitted::AwaitTerminal),
+                }
             }
             Ok(Err(refused)) => {
                 let capacity = refused.request.capacity;
@@ -449,13 +475,19 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                 });
                 self.pending = None;
                 self.response = Some(status(opcode, Some(HciError::CMD_DISALLOWED)));
-                (Some(capacity), Ok(Submitted::Response))
+                Admission {
+                    release: Some(capacity),
+                    result: Ok(Submitted::Response),
+                }
             }
             Err(fault) => {
                 self.pending = None;
                 self.faulted = true;
                 self.response = Some(status(opcode, Some(HciError::HARDWARE_FAILURE)));
-                (None, Err(SubmitError::Backend(fault)))
+                Admission {
+                    release: None,
+                    result: Err(SubmitError::Backend(fault)),
+                }
             }
         }
     }

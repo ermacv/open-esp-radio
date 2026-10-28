@@ -14,7 +14,7 @@ use oer_bluetooth_hci::{
     },
 };
 use oer_bluetooth_le_controller::dtm::{self, Entropy};
-use oer_bluetooth_le_port::TxPower;
+use oer_bluetooth_le_port::{LePhase, TxPower};
 use oer_bluetooth_le_runtime::host::{self, Disposition, Transport};
 use oer_esp32s31_bluetooth_driver::port::{DtmCaps, Fault};
 use oer_firmware_apps_b0::{
@@ -90,6 +90,17 @@ impl Transport for Io {
             .map_err(|_| Fault::Hardware)
     }
 }
+struct Installed<'o, 'a, 'p>(&'o mut rp::Owner<'a, 'p, Id, Backend, rp::Enabled>);
+impl<'p> host::ControllerPort<'p, rp::Root<Id>> for Installed<'_, '_, 'p> {
+    type Caps = DtmCaps;
+    type Fault = Fault;
+    fn phase(&mut self) -> impl core::ops::DerefMut<Target: Sized + LePhase<'p, rp::Root<Id>, (), Caps = DtmCaps, Fault = Fault>> {
+        self.0.phase()
+    }
+    async fn latch(&mut self) -> rp::PortResult<(), rp::ClockError, Fault> {
+        self.0.now().await.map(|result| result.map(|_| ()))
+    }
+}
 struct Body<'a> {
     io: &'a mut Io,
     reset: Option<Reset>,
@@ -121,7 +132,7 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
         };
         let mut service =
             dtm::Service::<_, DtmCaps>::new(resources.session, seat, Some(self.power));
-        let outcome = host::serve(&mut owner, &mut service, self.io, reset, STOP)
+        let outcome = host::serve(&mut Installed(&mut owner), &mut service, self.io, reset, STOP)
             .await
             .map_err(|error| match error {
                 host::Error::Transport(fault) | host::Error::Backend(fault) => fault,

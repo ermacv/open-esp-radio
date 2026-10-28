@@ -11,7 +11,7 @@ use oer_bluetooth_le_controller::dtm::{
     Accepted, Entropy, Reset, Response, Service, SubmitError, Submitted,
 };
 use oer_bluetooth_le_port::{LeCapabilities, LePhase};
-use oer_radio_port::{Enabled, Owner, PoolPath, PortBackend, Root, SlotIdentity};
+use oer_radio_port::{ClockError, PoolPath, PortResult};
 
 /// A complete command or a framing failure reported by the transport.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -37,6 +37,21 @@ pub trait Transport {
         &mut self,
         response: &impl HciControllerResponse,
     ) -> impl core::future::Future<Output = Result<(), Self::Error>>;
+}
+
+/// Sequential access to the composition's enabled port owner. A phase loan
+/// ends before the independent physical latch, as it does in B0.
+pub trait ControllerPort<'p, P: PoolPath> {
+    type Caps: LeCapabilities;
+    type Fault;
+    fn phase(
+        &mut self,
+    ) -> impl core::ops::DerefMut<
+        Target: Sized + LePhase<'p, P, (), Caps = Self::Caps, Fault = Self::Fault>,
+    >;
+    fn latch(
+        &mut self,
+    ) -> impl core::future::Future<Output = PortResult<(), ClockError, Self::Fault>>;
 }
 
 /// Leave the service body; the composition disables and uninstalls the port.
@@ -68,19 +83,17 @@ impl HciControllerResponse for FramingError {
 /// Serve commands in B0's order: read, optional latch/entropy, accept/consume,
 /// submit, physical latch, terminal, send, then release the command credit.
 /// Installation, disable/uninstall and failure policy remain in the image.
-pub async fn serve<'a, 'p, Id, B, C, T>(
-    owner: &mut Owner<'a, 'p, Id, B, Enabled>,
-    service: &mut Service<'p, Root<Id>, C>,
+pub async fn serve<'p, P, R, T>(
+    port: &mut R,
+    service: &mut Service<'p, P, R::Caps>,
     io: &mut T,
     reset: Option<Response>,
     stop: Opcode,
-) -> Result<Disposition<Root<Id>>, Error<T::Error, B::Fault>>
+) -> Result<Disposition<P>, Error<T::Error, R::Fault>>
 where
-    Id: SlotIdentity + 'p,
-    B: PortBackend<Id> + 'p,
-    C: LeCapabilities,
+    P: PoolPath,
+    R: ControllerPort<'p, P>,
     T: Transport,
-    for<'v> B::Phase<'v, 'p>: LePhase<'p, Root<Id>, (), Caps = C>,
 {
     if let Some(response) = reset {
         io.send(&response).await.map_err(Error::Transport)?;
@@ -102,7 +115,7 @@ where
             return Ok(Disposition::Stop);
         }
         if random {
-            match owner.now().await {
+            match port.latch().await {
                 Ok(Ok(_)) => {}
                 Err(poisoned) => return Err(Error::Backend(poisoned.cause)),
                 Ok(Err(_)) => return Err(Error::ClockBusy),
@@ -119,7 +132,7 @@ where
             Accepted::Response => {}
             Accepted::Port => {
                 let submitted = {
-                    let phase = owner.phase();
+                    let phase = port.phase();
                     crate::dtm::submit(service, &*phase)
                         .await
                         .map_err(|error| match error {
@@ -131,12 +144,12 @@ where
                         })?
                 };
                 if submitted == Submitted::AwaitTerminal {
-                    match owner.now().await {
+                    match port.latch().await {
                         Ok(Ok(_)) => {}
                         Err(poisoned) => return Err(Error::Backend(poisoned.cause)),
                         Ok(Err(_)) => return Err(Error::ClockBusy),
                     }
-                    let mut phase = owner.phase();
+                    let mut phase = port.phase();
                     crate::dtm::complete(service, &mut *phase)
                         .await
                         .map_err(Error::Terminal)?;
@@ -148,3 +161,6 @@ where
         let _ = service.take_response();
     }
 }
+
+#[cfg(test)]
+mod tests;
