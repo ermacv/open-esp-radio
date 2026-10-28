@@ -2118,7 +2118,7 @@ name = "oer-espressif-coex"
 version = "0.1.0"
 dependencies = [
  "oer-ieee80211-port",
- "oer-ieee802154-mac",
+ "oer-ieee802154-port",
  "oer-radio-coex",
 ]
 
@@ -2179,7 +2179,8 @@ dependencies = [
  "bytemuck",
  "oer-espressif-coex",
  "oer-espressif-ieee802154-mac-values",
- "oer-ieee802154-mac",
+ "oer-ieee802154-port",
+ "oer-ieee802154-wire",
  "oer-memory",
  "oer-radio-regulatory",
 ]
@@ -3155,13 +3156,29 @@ dependencies = [
 name = "oer-ieee802154-mac"
 version = "0.1.0"
 dependencies = [
+ "oer-ieee802154-port",
+ "oer-ieee802154-wire",
+ "oer-radio-port",
+]
+
+[[package]]
+name = "oer-ieee802154-port"
+version = "0.1.0"
+dependencies = [
+ "oer-ieee802154-wire",
  "oer-radio-coex",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
- "oer-wire",
  "scopeguard",
+]
+
+[[package]]
+name = "oer-ieee802154-wire"
+version = "0.1.0"
+dependencies = [
+ "oer-wire",
 ]
 
 [[package]]
@@ -3787,7 +3804,8 @@ dependencies = [
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-ieee802154-mac-values",
- "oer-ieee802154-mac",
+ "oer-ieee802154-port",
+ "oer-ieee802154-wire",
  "oer-radio-regulatory",
  "oer-tool-pins",
  "tempfile",

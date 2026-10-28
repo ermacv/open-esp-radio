@@ -9,7 +9,7 @@
 
 use crate::pti::{CoexEventId, ieee802154_events, wifi_events};
 use oer_ieee80211_port::{ConnectionFrame, Operation as WifiOperation, TxOperation};
-use oer_ieee802154_mac::RadioOperation;
+use oer_ieee802154_port::RadioOperation;
 
 /// The shared-table event an IEEE 802.11 operation requests, or `None` for
 /// a data frame, which takes the MAC's static per-access-category priority

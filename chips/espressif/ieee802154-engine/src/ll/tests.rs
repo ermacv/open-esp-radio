@@ -9,10 +9,11 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
+use oer_ieee802154_port::RadioOperation;
 use std::{vec, vec::Vec};
 
 use crate::{
-    coex::{CoexPti, Ieee802154CoexPriorities, Ieee802154Coexistence, RadioOperation},
+    coex::{CoexPti, Ieee802154CoexPriorities, Ieee802154Coexistence},
     ll::*,
 };
 

@@ -28,9 +28,10 @@ use oer_espressif_ieee802154_engine::engine::{
     Ieee802154Engine, Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo,
     Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154TxError,
 };
-use oer_espressif_ieee802154_engine::pib::{AutoPendingMode, Ieee802154PibDefaults};
+use oer_espressif_ieee802154_engine::pib::Ieee802154PibDefaults;
 use oer_espressif_ieee802154_engine::{coex::CoexPti, ll::Ieee802154LowLevel};
-use oer_ieee802154_mac::FrameAddress;
+use oer_ieee802154_port::AutoPendingMode;
+use oer_ieee802154_wire::FrameAddress;
 
 use crate::{
     record::{Argument, LlModel, Record},

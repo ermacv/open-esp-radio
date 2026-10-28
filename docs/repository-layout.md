@@ -24,7 +24,7 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   ieee80211/    Wi-Fi: MAC formats and state, lower and upper MAC, station,
                 access point, RSN, arbiter, runtime, datapath
   bluetooth/    HCI and LE wire formats, link layer, controller, port and model
-  ieee802154/   the IEEE 802.15.4 MAC
+  ieee802154/   IEEE 802.15.4 wire codecs, backend port and MAC core
   network/      the network stack boundary
   hil/          the HIL protocol and its trace header
 portable/   generic support no protocol or chip owns (no_std)
@@ -59,11 +59,13 @@ is a library, `tools/hil/cli` is `cargo hil`; the HIL acceptance catalog is
 
 ## Dependencies
 
-Dependency direction is not checked. It follows from the roots: a protocol
-or a portable crate knows no chip and no tool; a chip crate builds on
-protocols and portable support; images and tools sit on top, and nothing
-depends on them except through build, proc-macro and test dependencies
-(`tools/probe/macros`, `tools/test/ui-cases`).
+Dependency direction follows from the roots: a protocol or a portable crate
+knows no chip and no tool; chip backends build on protocol wire and port
+contracts and portable support; images and tools sit on top. Nothing depends
+on images or tools except through build, proc-macro and test dependencies
+(`tools/probe/macros`, `tools/test/ui-cases`). The layer tests check normal
+transitive dependencies, including optional and target-specific declarations:
+backends and reference models do not reach protocol cores or runtimes.
 
 Chip knowledge (tables, constants, pure functions about a chip) lives in
 `chips/`, beside the hardware access it describes; a host tool that needs a
@@ -95,7 +97,8 @@ Each radio protocol has these layers in `protocols/<protocol>/`:
 A backend implements the port and depends on `port`, `wire` and `cipher` only,
 never on a core: the chip backend in `chips/<chip>/`, the reference model in
 its own host crate `protocols/<protocol>/model` for host tests and simulation.
-A core never depends on a backend. Structures both sides share belong to `port`
+A core never depends on a backend. The IEEE 802.15.4 reference model is
+currently test-only inside `mac`. Structures both sides share belong to `port`
 or `wire`. Host tools that read frames (monitors, capture analysis, fixtures)
 take `wire`. This is smoltcp's `wire` beside its `iface` and `socket`.
 
@@ -103,8 +106,9 @@ Wi-Fi upper-MAC and the family policy select each attempt's rate and protection,
 including the legacy control-frame rate. The hardware backend receives those
 decisions through the port, or a fixed-rate `ManagementTxPlan`, and owns EDCA
 backoff and MSDU lifetime enforcement. Core algorithms and family tables stay
-above it. PN allocation, BA originator state and reorder state belong to the
-cores. The backend takes a supplied PN and reports decoded completion/RX values.
+above it. `chips/espressif/ieee80211-policy` is core-side family policy,
+not a hardware backend. PN allocation, BA originator state and reorder state
+belong to the cores. The backend takes a supplied PN and reports decoded completion/RX values.
 
 Only the runtime awaits, and it binds to no executor: it takes time from
 `oer-time`'s `Timer` and interrupt signals from `portable/`, spawns nothing
@@ -125,8 +129,9 @@ with underscores. A program called by name (the image linker, a privileged
 helper) sets that name with `[[bin]] name`.
 
 `cargo test -p oer-test-layers` checks the names, the unsafe boundary
-([unsafe](unsafe.md)), the Wi-Fi chip backends' production dependencies and
-the reviewed raw-waker inventory ([notifications](execution-wakes.md)).
+([unsafe](unsafe.md)), protocol core/runtime isolation from backends and
+models through normal dependencies, and the reviewed raw-waker inventory
+([notifications](execution-wakes.md)).
 
 ## One workspace
 

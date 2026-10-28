@@ -4,7 +4,8 @@
 use std::vec::Vec;
 
 use super::MacKeys;
-use crate::{AppliedSecurity, KeyIdMode};
+use oer_ieee802154_port::AppliedSecurity;
+use oer_ieee802154_wire::KeyIdMode;
 
 #[test]
 fn counter_only_moves_back_with_replacement_keys() {
@@ -136,4 +137,67 @@ fn csl_retransmissions_take_a_new_counter() {
         keys.transmit_security_with_csl(true, false).frame_counter,
         None
     );
+}
+
+use oer_ieee802154_wire::{FrameView, generate_enhanced_ack};
+
+fn secured(key_id_mode: u8, key_index: u8) -> Vec<u8> {
+    std::vec![
+        0x69,
+        0xa8,
+        0x11,
+        0x34,
+        0x12,
+        0x01,
+        0x00,
+        0x02,
+        0x00,
+        0x05 | key_id_mode << 3,
+        0x01,
+        0x02,
+        0x03,
+        0x04,
+        key_index,
+    ]
+}
+
+/// The port selects the current key or a neighbour by key index, takes the
+/// frame counter first and refuses other key identifiers.
+#[test]
+fn mac_keys_select_by_key_index_and_take_the_frame_counter() {
+    let (previous, current, next) = ([1; 16], [2; 16], [3; 16]);
+    let mut keys = MacKeys::new(5, previous, current, next, 100);
+    for (index, key) in [(5, current), (4, previous), (6, next)] {
+        let received = secured(1, index);
+        let mut ack =
+            generate_enhanced_ack(FrameView::new(&received).unwrap(), false, &[]).unwrap();
+        let counter = keys.frame_counter();
+        assert_eq!(keys.secure(&mut ack), Some(key));
+        assert_eq!(ack.bytes()[8..12], counter.to_le_bytes());
+    }
+    assert_eq!(keys.frame_counter(), 103);
+
+    for received in [secured(1, 7), secured(1, 0), secured(0, 5), secured(2, 5)] {
+        // Mode 2 carries a key source before the index; this frame is short
+        // of it, so only modes 0 and 1 reach `secure`.
+        let Ok(mut ack) = generate_enhanced_ack(FrameView::new(&received).unwrap(), false, &[])
+        else {
+            continue;
+        };
+        let counter = keys.frame_counter();
+        assert_eq!(keys.secure(&mut ack), None);
+        assert_eq!(keys.frame_counter(), counter + 1);
+    }
+
+    // Neighbours do not wrap around the key identifier.
+    let mut keys = MacKeys::new(0, previous, current, next, 0);
+    let received = secured(1, 0xff);
+    let mut ack = generate_enhanced_ack(FrameView::new(&received).unwrap(), false, &[]).unwrap();
+    assert_eq!(keys.secure(&mut ack), None);
+
+    // An unsecured ACK needs no key and takes no frame counter.
+    let plain = [0x61, 0xa8, 0x5a, 0x34, 0x12, 0x01, 0x00, 0x02, 0x00];
+    let mut ack = generate_enhanced_ack(FrameView::new(&plain).unwrap(), false, &[]).unwrap();
+    assert_eq!(keys.secure(&mut ack), None);
+    assert_eq!(keys.frame_counter(), 1);
 }

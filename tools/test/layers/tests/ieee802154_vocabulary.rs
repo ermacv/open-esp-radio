@@ -70,12 +70,15 @@ fn the_dictionary_and_knowledge_do_not_reach_execution_and_consumers_state_the_l
     }
     for owner in [VALUES, KNOWLEDGE] {
         let dependencies = normal_closure(&graph, owner);
-        for forbidden in [ENGINE, "oer-esp32s31-hal", "oer-ieee802154-mac"] {
-            assert!(
-                !dependencies.contains(forbidden),
-                "{owner} reaches {forbidden}"
-            );
-        }
+        let forbidden = dependencies
+            .iter()
+            .filter(|name| {
+                name.as_str() == ENGINE
+                    || name.as_str() == "oer-esp32s31-hal"
+                    || name.starts_with("oer-ieee802154-")
+            })
+            .collect::<Vec<_>>();
+        assert!(forbidden.is_empty(), "{owner} reaches {forbidden:?}");
     }
     for (name, manifest) in &manifests {
         if normal_closure(&graph, name).contains(VALUES) {

@@ -1,0 +1,22 @@
+[package]
+name = "oer-ieee802154-port"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "IEEE 802.15.4 owner, radio and backend execution contracts"
+
+[dependencies]
+oer-ieee802154-wire = { path = "../wire" }
+scopeguard = { version = "1.2.0", default-features = false }
+oer-radio-coex = { path = "../../radio/coex" }
+oer-radio-port = { path = "../../radio/port" }
+oer-radio-regulatory = { path = "../../radio/regulatory" }
+oer-time = { path = "../../../portable/time" }
+[dev-dependencies]
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
+
+[lints]
+workspace = true

@@ -7,7 +7,7 @@
 use super::{ieee802154_event, wifi_event};
 use crate::{CoexPtiTable, wifi_events};
 use oer_ieee80211_port::{ConnectionFrame, Operation, TxOperation};
-use oer_ieee802154_mac::RadioOperation;
+use oer_ieee802154_port::RadioOperation;
 
 #[test]
 fn wifi_rows_name_their_events_and_data_takes_none() {

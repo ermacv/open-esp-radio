@@ -13,7 +13,7 @@
 //! a retry after a missing acknowledgement first waits a random delay whose
 //! exponent grows from 0 to 5 per such retry of the frame.
 
-use crate::mac::csma::{SYMBOL_MICROS, UNIT_BACKOFF_PERIOD_SYMBOLS};
+use oer_ieee802154_port::csma::{SYMBOL_MICROS, UNIT_BACKOFF_PERIOD_SYMBOLS};
 
 /// `OPENTHREAD_CONFIG_MAC_RETX_DELAY_MIN_BACKOFF_EXPONENT`.
 pub const RETX_DELAY_MIN_BACKOFF_EXPONENT: u8 = 0;

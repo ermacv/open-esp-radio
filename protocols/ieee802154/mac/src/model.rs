@@ -1,4 +1,4 @@
-//! An in-memory IEEE 802.15.4 backend on the owner shape ([`crate::owner`]),
+//! An in-memory IEEE 802.15.4 backend on the owner shape ([`oer_ieee802154_port::owner`]),
 //! for this crate's own tests of the shape (it compiles only under
 //! `cfg(test)`).
 //!
@@ -31,13 +31,14 @@ use oer_radio_port::{
     Root, Seat, Slot,
 };
 
-use crate::{
+use oer_ieee802154_wire::Frame;
+
+use oer_ieee802154_port::{
     CcaMode, CcaThresholdCapability, Channel, CslCapability, CslReceiver, EnhancedAckGeneration,
-    FcsStatus, Frame, FrameCounterUpdate, FramePending, Ieee802154Capabilities, Ieee802154Instant,
+    FcsStatus, FrameCounterUpdate, FramePending, Ieee802154Capabilities, Ieee802154Instant,
     Ieee802154Radio, Interface, ProbingInitiator, RadioCapabilities, ReceivedFrame, RequestId,
     RxMetadata, SecurityStatus, SentAcknowledgement, TransmitPowerCapability, TransmitPowerLevels,
     TxStatus,
-    mac::pending::AutoPendingMode,
     owner::{
         AutomaticAcknowledgement, ClearChannelAssessment, ConfiguredInterface, ExtendedPending,
         Has, Ieee802154Backend, Ieee802154Caps, Ieee802154Client, Ieee802154Clients,
@@ -47,6 +48,7 @@ use crate::{
         SupportedEnergyScan, SupportedHeaderIes, SupportedPower, SupportedScheduledReceive,
         SupportedTransmit,
     },
+    pending::AutoPendingMode,
 };
 
 /// Interfaces of the model: two PANs.
@@ -218,7 +220,7 @@ struct State {
     interfaces: [InterfaceState; MODEL_INTERFACES],
     radio: RadioWide,
     operation: Option<(Interface, RequestId, Kind)>,
-    tx_security: Option<crate::TxSecurity>,
+    tx_security: Option<oer_ieee802154_port::TxSecurity>,
     events: VecDeque<ModelEvent>,
     /// Received frames queued now.
     received: usize,
@@ -633,7 +635,7 @@ pub struct ModelHeld<Id: SlotIdentity> {
     >,
 }
 
-type LentPermits<'p, Id> = crate::owner::LentWorkPermits<
+type LentPermits<'p, Id> = oer_ieee802154_port::owner::LentWorkPermits<
     'p,
     Operation,
     ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
@@ -1282,8 +1284,8 @@ pub struct ModelFrontend<'p, Id: SlotIdentity> {
 
 impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
     type Pools = (
-        crate::owner::InterfacePool<ModelCaps, 0, MODEL_PENDING_SLOTS>,
-        crate::owner::InterfacePool<ModelCaps, 1, MODEL_PENDING_SLOTS>,
+        oer_ieee802154_port::owner::InterfacePool<ModelCaps, 0, MODEL_PENDING_SLOTS>,
+        oer_ieee802154_port::owner::InterfacePool<ModelCaps, 1, MODEL_PENDING_SLOTS>,
         oer_radio_port::Permits<Operation, 1, MODEL_INTERFACES>,
     );
     type Queues = Option<ModelQueues<Id>>;

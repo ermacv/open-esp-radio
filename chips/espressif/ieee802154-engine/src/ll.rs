@@ -20,7 +20,7 @@
 //! accessor sequence the vendor driver issues and a recording backend can
 //! compare it with the compiled vendor driver.
 
-use crate::coex::{CoexPti, Ieee802154Coexistence, RadioOperation};
+use crate::coex::{CoexPti, Ieee802154Coexistence};
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
@@ -29,6 +29,7 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
+use oer_ieee802154_port::RadioOperation;
 
 /// The `ieee802154_ll_*` accessors, the modem ETM register steps and the
 /// timer commands used by the driver's hardware helpers.

@@ -8,7 +8,7 @@
 //! port backend in this repository publishes them.
 
 use oer_espressif_ieee802154_mac_values::Ieee802154MultipanIndex;
-use oer_ieee802154_mac::{
+use oer_ieee802154_port::{
     CcaThresholdCapability, CslCapability, Ieee802154Capabilities, RadioCapabilities,
     TransmitPowerCapability, TransmitPowerLevels,
 };

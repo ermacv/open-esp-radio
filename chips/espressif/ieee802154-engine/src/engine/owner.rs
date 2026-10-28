@@ -143,7 +143,7 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
         &mut self,
         env: &mut E,
         index: Ieee802154MultipanIndex,
-        mode: oer_ieee802154_mac::AutoPendingMode,
+        mode: oer_ieee802154_port::AutoPendingMode,
     ) {
         self.engine.set_pending_mode(&mut self.ll, env, index, mode)
     }
