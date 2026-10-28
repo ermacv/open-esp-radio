@@ -8,9 +8,9 @@
 
 use core::fmt;
 
-use crate::monitor::policy::MonitorFilter;
+use crate::interface::{BoundVirtualInterface, VifId, VirtualInterface};
+use oer_ieee80211_upper_mac::monitor::MonitorFilter;
 use oer_ieee80211_port::{ChannelContextId, MacServiceCapabilities, MonitorTapPoint, VifRole};
-use oer_ieee80211_softmac::interface::{BoundVirtualInterface, VifId, VirtualInterface};
 
 use oer_ieee80211_wire::address::IndividualAddress;
 

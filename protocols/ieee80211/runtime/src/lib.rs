@@ -32,30 +32,25 @@
     )
 )]
 
-//! Chip-independent Wi-Fi execution primitives shared by chip runtimes.
+//! The asynchronous glue between the Wi-Fi lower-MAC port and the sans-IO
+//! cores: it waits on port events, `oer_time::Timer` deadlines and the
+//! application's commands, hands each input to the cores and carries out
+//! their actions through the port. It decides no protocol question and
+//! neither parses nor builds frames; it binds no executor.
 //!
-//! These async ownership contracts bind no executor. Waiting on time uses
-//! `oer_time::Timer`; bounded channels and task signals use `embassy-sync`.
-//!
-//! [`configuration`] validates the requested Wi-Fi owner topology against a
-//! backend's MAC service capabilities.
-//! [`monitor`] provides bounded capture and injection handoffs. [`connected_tasks`]
-//! coordinates finite task shutdown, and [`station_network`] retains network
-//! ownership across station associations.
-//! [`station_service`] is the station's thin service on a lower-MAC port:
-//! one waiting point, every machine's actions after each input. Hardware access and concrete
-//! task assembly belong to the chip backend and its integration.
+//! [`station_service`] is the station's service on a lower-MAC port: one
+//! waiting point, every machine's actions after each input. [`monitor`]
+//! provides bounded capture and injection handoffs. Hardware access and
+//! concrete task assembly belong to the chip backend and its integration.
 //!
 //! The station's SPSC sender waits through `ready(&mut self)`, returning a
 //! `oer_memory::WakingSpscSendPermit` that holds its exclusive producer borrow.
 //! `send` publishes without a fallible second capacity check. Cancelling the
 //! wait or dropping the permit consumes neither a value nor queue capacity;
 //! the receiver may run on another thread.
-//!
-pub mod configuration;
+
 pub mod monitor;
 pub mod station_service;
-pub mod vif;
 
 pub use monitor::injection as monitor_injection;
 pub use monitor::{

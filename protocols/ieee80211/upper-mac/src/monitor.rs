@@ -5,11 +5,27 @@
 
 use core::{fmt, num::NonZeroU16};
 
-use oer_ieee80211_port::{MonitorFrame, RxEvidence};
+use oer_ieee80211_port::{
+    MonitorFrame, MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest,
+    RxEvidence,
+};
+pub use oer_ieee80211_wire::monitor_injection::MonitorInjectionFrameError;
 use oer_ieee80211_wire::{
     channel::WifiChannel,
     frame::{FrameControlFields, FrameType},
+    monitor_injection::MonitorInjectionMpdu,
 };
+
+/// The injection request of retained no-FCS MPDU bytes, validated again as
+/// an injected MPDU before the port sees them.
+pub fn stored_injection_request(
+    binding: MonitorInjectionChannelBinding,
+    rate: MonitorInjectionRate,
+    mpdu: &[u8],
+) -> Result<MonitorInjectionRequest<'_>, MonitorInjectionFrameError> {
+    MonitorInjectionMpdu::from_no_fcs(mpdu)
+        .map(|mpdu| MonitorInjectionRequest::new(binding, rate, mpdu))
+}
 
 /// Maximum number of ordered 2.4-GHz channels in one monitor hopping cycle.
 ///

@@ -64,6 +64,12 @@ pub struct WakingSpscSender<'a, T, const DEPTH: usize> {
 }
 
 impl<T, const DEPTH: usize> WakingSpscSender<'_, T, DEPTH> {
+    /// Cells free now, observed without reserving one; a concurrent receive
+    /// may free another before the next send.
+    pub fn free_capacity(&self) -> usize {
+        self.sender.free_capacity()
+    }
+
     /// A full queue returns the original value and all its ownership.
     pub fn try_send(&self, value: T) -> Result<(), AffineSpscTrySendError<T>> {
         self.sender.try_send(value)?;

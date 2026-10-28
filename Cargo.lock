@@ -3103,7 +3103,6 @@ dependencies = [
 name = "oer-ieee80211-runtime"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
  "critical-section",
  "embassy-futures",
  "embassy-sync",
@@ -3114,7 +3113,6 @@ dependencies = [
  "oer-ieee80211-model",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
- "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
@@ -3132,6 +3130,7 @@ version = "0.1.0"
 dependencies = [
  "oer-ieee80211-port",
  "oer-ieee80211-sta",
+ "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-time",
  "zeroize",

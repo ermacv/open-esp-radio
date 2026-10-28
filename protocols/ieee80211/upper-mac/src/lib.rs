@@ -55,14 +55,16 @@
 //!   a backend draws its queues' contention below the port.
 //!
 //! Receive owners retain duplicate history, fragment reassembly, CCMP replay
-//! and Block Ack reordering. Transmit owners retain PN allocation and Block
+//! and Block Ack reordering. [`monitor`] selects the frames a monitor keeps and
+//! the channels it visits; [`vif`] routes a received MPDU of a same-channel
+//! station and SoftAP pair to its interface. Transmit owners retain PN allocation and Block
 //! Ack negotiation/originator windows. Wire formats remain in
 //! `oer-ieee80211-wire`.
 //!
 //! The package is sans-IO: completions and the radio time enter as values,
 //! attempt plans and reports leave as values, and nothing waits. The station
 //! service in `oer-ieee80211-runtime` submits to the port and feeds its
-//! terminals into rate selection. Vendor retry schedules, limits and
+//! terminals into rate selection ([`rate_selection::RateSelection::learn`]). Vendor retry schedules, limits and
 //! duration estimates are parameters a profile supplies, such as
 //! `oer-espressif-ieee80211-policy`.
 
@@ -101,6 +103,10 @@ pub mod duplicate;
 pub mod fragmentation;
 
 pub mod receive;
+
+pub mod monitor;
+
+pub mod vif;
 
 /// A literal test sequence number; panics outside twelve bits.
 #[cfg(test)]

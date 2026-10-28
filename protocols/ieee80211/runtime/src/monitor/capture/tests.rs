@@ -1,4 +1,3 @@
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use oer_ieee80211_port::{ChannelContextId, MacRxMetadata, MonitorTapPoint};
 
 use super::*;
@@ -16,7 +15,7 @@ fn frame(bytes: &[u8]) -> MonitorFrame<'_, ()> {
 #[test]
 fn capture_is_independent_from_the_borrowed_source() {
     let pool = MonitorCapturePool::<16, 1>::new();
-    let resources = MonitorCaptureResources::<NoopRawMutex, (), 1, 16, 1>::new(&pool);
+    let mut resources = MonitorCaptureResources::<(), 1, 16, 1>::new(&pool);
     let (mut sink, receiver) = resources.split();
     let mut source = [1, 2, 3, 4];
 
@@ -36,7 +35,7 @@ fn capture_is_independent_from_the_borrowed_source() {
 #[test]
 fn full_queue_drops_the_new_capture_and_restores_its_pool_slot() {
     let pool = MonitorCapturePool::<16, 2>::new();
-    let resources = MonitorCaptureResources::<NoopRawMutex, (), 1, 16, 2>::new(&pool);
+    let mut resources = MonitorCaptureResources::<(), 1, 16, 2>::new(&pool);
     let (mut sink, receiver) = resources.split();
 
     assert_eq!(
@@ -59,7 +58,7 @@ fn full_queue_drops_the_new_capture_and_restores_its_pool_slot() {
 #[test]
 fn epoch_cleanup_discards_queued_frames_and_restores_all_credits() {
     let pool = MonitorCapturePool::<16, 2>::new();
-    let resources = MonitorCaptureResources::<NoopRawMutex, (), 2, 16, 2>::new(&pool);
+    let mut resources = MonitorCaptureResources::<(), 2, 16, 2>::new(&pool);
     let (mut sink, receiver) = resources.split();
     assert_eq!(
         sink.try_publish(frame(&[1])),
@@ -79,7 +78,7 @@ fn epoch_cleanup_discards_queued_frames_and_restores_all_credits() {
 #[test]
 fn exhausted_pool_and_oversized_frames_have_distinct_reasons() {
     let pool = MonitorCapturePool::<4, 1>::new();
-    let resources = MonitorCaptureResources::<NoopRawMutex, (), 1, 4, 1>::new(&pool);
+    let mut resources = MonitorCaptureResources::<(), 1, 4, 1>::new(&pool);
     let (mut sink, receiver) = resources.split();
 
     assert_eq!(
@@ -101,7 +100,7 @@ fn exhausted_pool_and_oversized_frames_have_distinct_reasons() {
 #[test]
 fn incomplete_normalized_capture_preserves_logical_length() {
     let pool = MonitorCapturePool::<8, 1>::new();
-    let resources = MonitorCaptureResources::<NoopRawMutex, (), 1, 8, 1>::new(&pool);
+    let mut resources = MonitorCaptureResources::<(), 1, 8, 1>::new(&pool);
     let (mut sink, receiver) = resources.split();
     let bytes = [1, 2, 3, 4];
     let mut observed = frame(&bytes);
@@ -117,7 +116,7 @@ fn incomplete_normalized_capture_preserves_logical_length() {
 #[test]
 fn epoch_policy_tags_and_truncates_without_changing_logical_length() {
     let pool = MonitorCapturePool::<8, 1>::new();
-    let resources = MonitorCaptureResources::<NoopRawMutex, (), 1, 8, 1>::new(&pool);
+    let mut resources = MonitorCaptureResources::<(), 1, 8, 1>::new(&pool);
     let (mut sink, receiver) = resources.split();
     sink.configure(17, Some(3));
 

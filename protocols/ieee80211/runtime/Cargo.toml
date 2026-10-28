@@ -5,34 +5,31 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Portable Wi-Fi execution primitives: monitor handoffs, task shutdown, station network ownership and poll boundaries"
+description = "Wi-Fi async glue between the lower-MAC port and the sans-IO cores: the station service and monitor handoffs"
 
 [features]
 # Placed station construction, polling and retirement for firmware tasks.
 placement = ["oer-ieee80211-sta/placement"]
 
 [dependencies]
-atomic-waker = "1.1.2"
 heapless = "0.9.3"
 embassy-futures = "0.1.2"
-embassy-sync = "0.8.0"
 oer-memory = { path = "../../../portable/memory" }
 oer-ieee80211-port = { path = "../port" }
-oer-ieee80211-wire = { path = "../wire" }
 oer-radio-port = { path = "../../radio/port" }
 oer-time = { path = "../../../portable/time" }
 oer-ieee80211-arbiter = { path = "../arbiter" }
 oer-ieee80211-sta = { path = "../sta" }
-oer-ieee80211-softmac = { path = "../softmac" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 
 [dev-dependencies]
+# The compile-fail example of a shareable command channel.
+embassy-sync = "0.8.0"
 oer-ieee80211-model = { path = "../model", features = ["test-support"] }
 oer-ieee80211-cipher = { path = "../cipher" }
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
 oer-ieee80211-sta = { path = "../sta", features = ["test-support"] }
-# The deterministic received-byte inputs of the survey's never-panics test.
-oer-ieee80211-wire = { path = "../wire", features = ["test-support"] }
+oer-ieee80211-wire = { path = "../wire" }
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-ieee80211-port = { path = "../port", features = ["test-support"] }
