@@ -789,9 +789,6 @@ const SCAN_CAPACITY: usize = 16;
 /// A new association's QoS sequence spaces.
 const QOS_SEQUENCES: [StaSequenceCounter; 8] = [StaSequenceCounter::new(SequenceNumber::ZERO); 8];
 
-/// The reason codes of the station's Deauthentication (IEEE 802.11-2020
-/// Table 9-90).
-
 /// Statically dispatched composition hooks retained across stop/restart.
 /// The provider owns its entropy state; each nonce request must be fresh for
 /// protected handshakes and PMF. Open-only compositions never request one.

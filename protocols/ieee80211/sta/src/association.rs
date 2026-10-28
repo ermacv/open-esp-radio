@@ -113,8 +113,6 @@ pub enum StaAssociatedPeerError {
     HePeer(oer_ieee80211_wire::he::HeElementError),
 }
 
-/// Capability Information Short Preamble bit.
-
 impl StaAssociatedPeer {
     /// What the station's rate control knows of its access point.
     pub const fn rate_peer(&self) -> oer_ieee80211_upper_mac::rate_control::RatePeer {

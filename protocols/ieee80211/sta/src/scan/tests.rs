@@ -449,11 +449,11 @@ fn scan_seeds() -> std::vec::Vec<std::vec::Vec<u8>> {
 fn read_record(record: &ScanRecord) {
     let _ = record.ssid_bytes();
     let _ = crate::security::matches_security(
-        &record,
+        record,
         oer_ieee80211_wire::security::LinkProtection::Open,
     );
     let _ = crate::security::matches_security(
-        &record,
+        record,
         oer_ieee80211_wire::security::LinkProtection::Ccmp,
     );
     let _ = record.supported_rates_bytes();
