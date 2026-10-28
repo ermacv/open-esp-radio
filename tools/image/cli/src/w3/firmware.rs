@@ -243,6 +243,7 @@ pub fn run(
                     interface,
                     lease.address,
                     fs::File::create(directory.join("load-capture.txt"))?,
+                    fs::File::create(directory.join("load-capture.status.txt"))?,
                 )?,
                 None => Capture::start(&ssh, interface, lease.address, 100)?,
             };

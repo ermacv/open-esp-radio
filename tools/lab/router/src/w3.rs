@@ -257,15 +257,23 @@ pub fn parse_ping(text: &str) -> Result<Ping> {
 /// Decode only numeric IPv4 ICMP echo rows. No raw packet or identifiers are
 /// retained. A truncated, foreign or unsupported line refuses the observation.
 pub fn parse_echoes(text: &str) -> Result<Vec<Echo>> {
-    parse_echoes_bounded(text, 128 * 1024, 400)
+    parse_echoes_bounded(text, 128 * 1024, 400, false)
 }
 
-pub(crate) fn parse_echoes_bounded(text: &str, bytes: usize, rows: usize) -> Result<Vec<Echo>> {
+pub(crate) fn parse_echoes_bounded(
+    text: &str,
+    bytes: usize,
+    rows: usize,
+    allow_empty: bool,
+) -> Result<Vec<Echo>> {
     if text.len() > bytes {
         return Err("oversized ICMP observation".to_owned());
     }
     let mut echoes = Vec::new();
     for line in text.lines() {
+        if allow_empty && line.is_empty() {
+            continue;
+        }
         let p = line.split_whitespace().collect::<Vec<_>>();
         let [
             at,

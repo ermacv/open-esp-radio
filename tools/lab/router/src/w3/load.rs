@@ -161,8 +161,16 @@ printf '%s\n' "$work"
         interface: &str,
         address: Ipv4Addr,
         saved: std::fs::File,
+        status_file: std::fs::File,
     ) -> Result<Capture> {
-        Capture::start_load(&self.ssh, interface, address, &self.directory, saved)
+        Capture::start_load(
+            &self.ssh,
+            interface,
+            address,
+            &self.directory,
+            saved,
+            status_file,
+        )
     }
     fn batch(&self, address: Ipv4Addr, count: u32, interval: u32, payload: u32) -> Result<Batch> {
         if !super::usable_address(address) {
@@ -240,6 +248,12 @@ impl Drop for Source {
             let _ = self.cleanup();
         }
     }
+}
+
+/// Decode a saved load capture. tcpdump emits an empty separator on SIGINT;
+/// only this load stream accepts it. Every nonempty row remains mandatory.
+pub fn parse_capture(text: &str) -> Result<Vec<Echo>> {
+    super::parse_echoes_bounded(text, 4 * 1024 * 1024, 21000, true)
 }
 
 pub fn parse_batch(text: &str) -> Result<Batch> {

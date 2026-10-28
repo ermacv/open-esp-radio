@@ -22,6 +22,7 @@ pub struct Capture {
     diagnostics: Option<JoinHandle<(bool, Stderr)>>,
     count: u16,
     saved: Option<std::fs::File>,
+    status_file: Option<std::fs::File>,
     stop: Option<(Ssh, String)>,
     command: Option<CommandObservation>,
 }
@@ -45,7 +46,7 @@ impl Capture {
         address: std::net::Ipv4Addr,
         count: u16,
     ) -> Result<Self> {
-        Self::begin(ssh, interface, address, count, None, None)
+        Self::begin(ssh, interface, address, count, None, None, None)
     }
 
     pub(crate) fn start_load(
@@ -54,8 +55,17 @@ impl Capture {
         address: std::net::Ipv4Addr,
         directory: &str,
         saved: std::fs::File,
+        status_file: std::fs::File,
     ) -> Result<Self> {
-        Self::begin(ssh, interface, address, 10000, Some(directory), Some(saved))
+        Self::begin(
+            ssh,
+            interface,
+            address,
+            10000,
+            Some(directory),
+            Some(saved),
+            Some(status_file),
+        )
     }
 
     fn begin(
@@ -65,6 +75,7 @@ impl Capture {
         count: u16,
         directory: Option<&str>,
         saved: Option<std::fs::File>,
+        status_file: Option<std::fs::File>,
     ) -> Result<Self> {
         if !matches!(
             (count, directory.is_some()),
@@ -135,6 +146,7 @@ impl Capture {
             diagnostics: Some(diagnostics),
             count,
             saved,
+            status_file,
             stop,
             command: Some(ssh.observe(&script)),
         };
@@ -177,6 +189,13 @@ impl Capture {
             .ok_or("missing capture reader")?
             .join()
             .map_err(|_| "capture reader panicked")??;
+        if let Some(status_file) = &mut self.status_file {
+            save_status(
+                status_file,
+                waited.as_ref().is_ok_and(|s| s.success()),
+                complete,
+            )?;
+        }
         if load {
             let saved = self.saved.as_mut().ok_or("missing AP load capture sink")?;
             let echoes = decode_load(&text, saved);
@@ -236,11 +255,21 @@ impl Drop for Capture {
     }
 }
 
+fn save_status(saved: &mut impl std::io::Write, exited: bool, healthy: bool) -> Result<()> {
+    writeln!(
+        saved,
+        "exited={}\nhealthy={}",
+        u8::from(exited),
+        u8::from(healthy)
+    )
+    .map_err(|_| "cannot save AP capture status".into())
+}
+
 fn decode_load(text: &str, saved: &mut impl std::io::Write) -> Result<Vec<super::Echo>> {
     saved
         .write_all(text.as_bytes())
         .map_err(|_| "cannot save AP load capture")?;
-    super::parse_echoes_bounded(text, 4 * 1024 * 1024, 21000)
+    super::load::parse_capture(text)
 }
 
 fn load_filter(address: std::net::Ipv4Addr) -> String {
@@ -498,6 +527,24 @@ mod tests {
         assert!(departure_output(&oversized[..], ready).is_err());
     }
     #[test]
+    fn saved_capture_status_retains_health_independently_of_decoding() {
+        let mut saved = Vec::new();
+        save_status(&mut saved, true, false).unwrap();
+        assert_eq!(saved, b"exited=1\nhealthy=0\n");
+    }
+
+    #[test]
+    fn tcpdump_stop_separator_is_accepted_only_in_the_load_stream() {
+        let row = "1.000000 IP 192.0.2.1 > 192.0.2.8: ICMP echo request, id 7, seq 1, length 64\n";
+        let text = format!("\n{row}\n\n");
+        let mut saved = Vec::new();
+        assert_eq!(decode_load(&text, &mut saved).unwrap().len(), 1);
+        assert_eq!(saved, text.as_bytes());
+        assert!(super::super::parse_echoes(&text).is_err());
+        assert!(decode_load(&format!("{text}garbage\n"), &mut Vec::new()).is_err());
+    }
+
+    #[test]
     fn a_failed_load_decode_still_preserves_the_original_observation() {
         let text = "1.000000 IP 192.0.2.1 > 192.0.2.8: ICMP host unreachable\n";
         let mut saved = Vec::new();
@@ -522,12 +569,7 @@ mod tests {
         let text = "1.000000 IP 192.0.2.1 > 192.0.2.8: ICMP echo request, id 7, seq 1, length 64\n"
             .repeat(401);
         assert!(super::super::parse_echoes(&text).is_err());
-        assert_eq!(
-            super::super::parse_echoes_bounded(&text, 4 * 1024 * 1024, 21000)
-                .unwrap()
-                .len(),
-            401
-        );
+        assert_eq!(super::super::load::parse_capture(&text).unwrap().len(), 401);
         assert!(bounded(&b"oversized"[..], 2).is_err());
     }
 
