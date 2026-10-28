@@ -155,7 +155,9 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                             let phase = owner.phase();
                             service.submit(&*phase).await.map_err(|error| match error {
                                 dtm::SubmitError::Backend(poisoned) => poisoned.cause,
-                                _ => Fault::Accounting,
+                                dtm::SubmitError::Poisoned
+                                | dtm::SubmitError::Receipt
+                                | dtm::SubmitError::InvalidState { .. } => Fault::Accounting,
                             })?
                         };
                         if submitted == dtm::Submitted::AwaitTerminal {

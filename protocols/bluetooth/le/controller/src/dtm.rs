@@ -7,17 +7,12 @@
 //! until the transport confirms delivery. Admission and event waits may be
 //! cancelled and resumed without losing the HCI command or session owner.
 
-#![allow(
-    clippy::expect_used,
-    clippy::panic,
-    reason = "private state and values already validated by the HCI decoder; port accounting errors return Fault"
-)]
-
 use core::marker::PhantomData;
 
 use oer_bluetooth_hci::{
     self as hci, HciCommandPacket, HciControllerResponse, LeDtmCommand, LeDtmCommandCompleteEvent,
-    LeDtmCommandKind, LeDtmPhy, LeRandCommandCompleteEvent,
+    LeDtmCommandKind, LeDtmPhy, LeRandCommandCompleteEvent, LeReceiverTestCommand,
+    LeTestEndCommand, LeTransmitterTestCommand,
     bt_hci::{
         PacketKind,
         cmd::{Cmd, Opcode, controller_baseband::Reset as HciReset, le::LeRand},
@@ -134,7 +129,23 @@ pub enum Submitted {
     Response,
 }
 
-/// A submission failure requires the composition to fail-stop the port.
+/// The session observed when a pending command could not be submitted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SubmissionSession {
+    Missing,
+    Idle,
+    Running,
+}
+
+/// The configuration retained for a pending submission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SubmissionConfiguration {
+    Receive,
+    Transmit,
+    End,
+}
+
+/// A submission failure retains the service's command and session observations.
 #[derive(Debug)]
 pub enum SubmitError<F> {
     /// An earlier fault stopped the service; no further request was submitted.
@@ -143,6 +154,12 @@ pub enum SubmitError<F> {
     Backend(oer_radio_port::Poisoned<F>),
     /// The receipt did not name the submitted operation and installation.
     Receipt,
+    /// The retained command, configuration and session cannot form a request.
+    InvalidState {
+        command: LeDtmCommandKind,
+        configuration: Option<SubmissionConfiguration>,
+        session: SubmissionSession,
+    },
 }
 
 /// Durable state of a one-credit HCI endpoint for a single DTM session.
@@ -254,7 +271,10 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                     return Ok(self.answer(status(opcode, Some(HciError::UNSUPPORTED))));
                 }
                 let value = Receive {
-                    channel: channel(command.channel().index()),
+                    channel: match channel(command.channel().index()) {
+                        Ok(channel) => channel,
+                        Err(error) => return Ok(self.answer(status(opcode, Some(error)))),
+                    },
                     phy: TestPhy::Le1M,
                 };
                 match Supported::new(value) {
@@ -275,10 +295,15 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                     return Ok(self.answer(status(opcode, Some(HciError::CMD_DISALLOWED))));
                 };
                 let value = Transmit {
-                    channel: channel(command.channel().index()),
+                    channel: match channel(command.channel().index()) {
+                        Ok(channel) => channel,
+                        Err(error) => return Ok(self.answer(status(opcode, Some(error)))),
+                    },
                     phy: TestPhy::Le1M,
-                    payload: TestPayloadType::new(command.payload_pattern().hci_parameter())
-                        .expect("HCI decoder admitted a standard payload"),
+                    payload: match payload(command.payload_pattern().hci_parameter()) {
+                        Ok(payload) => payload,
+                        Err(error) => return Ok(self.answer(status(opcode, Some(error)))),
+                    },
                     length: command.payload_length(),
                     power,
                 };
@@ -311,18 +336,16 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
         if self.faulted {
             return Err(SubmitError::Poisoned);
         }
-        match self.pending.as_ref() {
-            None => return Ok(Submitted::Response),
-            Some(pending) if pending.admitted.is_some() => return Ok(Submitted::AwaitTerminal),
-            Some(_) => {}
+        let Some(pending) = self.pending.as_mut() else {
+            return Ok(Submitted::Response);
+        };
+        if pending.admitted.is_some() {
+            return Ok(Submitted::AwaitTerminal);
         }
+        // Borrow the command through the wait: cancellation cannot consume it.
         let capacity = phase.take(&mut self.seat).await;
-        let pending = self
-            .pending
-            .take()
-            .expect("pending command retained through capacity wait");
         let opcode = pending.command.kind().opcode();
-        let command = match (self.lease.take(), pending.config) {
+        let command = match (self.lease.take(), pending.config.take()) {
             (Some(Lease::Idle(session)), Some(Config::Receive(config))) => {
                 DtmCommand::Receive(session, config)
             }
@@ -330,7 +353,26 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                 DtmCommand::Transmit(session, config)
             }
             (Some(Lease::Running(session)), Some(Config::End)) => DtmCommand::End(session),
-            _ => panic!("accepted HCI command retains its matching affine lease"),
+            (lease, config) => {
+                let error = SubmitError::InvalidState {
+                    command: pending.command.kind(),
+                    configuration: config.as_ref().map(|config| match config {
+                        Config::Receive(_) => SubmissionConfiguration::Receive,
+                        Config::Transmit(_) => SubmissionConfiguration::Transmit,
+                        Config::End => SubmissionConfiguration::End,
+                    }),
+                    session: match &lease {
+                        None => SubmissionSession::Missing,
+                        Some(Lease::Idle(_)) => SubmissionSession::Idle,
+                        Some(Lease::Running(_)) => SubmissionSession::Running,
+                    },
+                };
+                self.lease = lease;
+                pending.config = config;
+                self.faulted = true;
+                phase.release(capacity);
+                return Err(error);
+            }
         };
         let expected = Admitted {
             id: self.ids.next::<LeOperationId>(),
@@ -344,11 +386,7 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
         };
         match phase.submit(request) {
             Ok(Ok(admitted)) => {
-                self.pending = Some(Pending {
-                    command: pending.command,
-                    config: None,
-                    admitted: Some(expected),
-                });
+                pending.admitted = Some(expected);
                 if admitted != expected {
                     self.faulted = true;
                     return Err(SubmitError::Receipt);
@@ -364,10 +402,12 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                     }
                     DtmCommand::End(session) => Lease::Running(session),
                 });
+                self.pending = None;
                 self.response = Some(status(opcode, Some(HciError::CMD_DISALLOWED)));
                 Ok(Submitted::Response)
             }
             Err(fault) => {
+                self.pending = None;
                 self.faulted = true;
                 self.response = Some(status(opcode, Some(HciError::HARDWARE_FAILURE)));
                 Err(SubmitError::Backend(fault))
@@ -401,10 +441,11 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
             self.faulted = true;
             return Err(Fault::Correlation);
         }
-        let pending = self
-            .pending
-            .take()
-            .expect("terminal has its pending HCI command");
+        let Some(mut pending) = self.pending.take() else {
+            self.retained = Some(event);
+            self.faulted = true;
+            return Err(Fault::NoCommand);
+        };
         let opcode = pending.command.kind().opcode();
         let ending = pending.command.kind() == LeDtmCommandKind::TestEnd;
         let Completion::DirectTest { session, count } = &event.completion;
@@ -439,7 +480,29 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
             self.faulted = true;
             return Err(Fault::Completion);
         }
-        let Completion::DirectTest { session, count } = event.completion;
+        let completed = if executed {
+            match (pending.command, count) {
+                (LeDtmCommand::TestEnd(command), Some(count)) => {
+                    Completed::End(command, count.packets)
+                }
+                (LeDtmCommand::ReceiverTest(command), None) => Completed::Receive(command),
+                (LeDtmCommand::TransmitterTest(command), None) => Completed::Transmit(command),
+                (command, _) => {
+                    pending.command = command;
+                    self.pending = Some(pending);
+                    self.retained = Some(event);
+                    self.faulted = true;
+                    return Err(Fault::Completion);
+                }
+            }
+        } else {
+            Completed::Status(if event.result == EventResult::Indeterminate {
+                HciError::HARDWARE_FAILURE
+            } else {
+                HciError::CMD_DISALLOWED
+            })
+        };
+        let Completion::DirectTest { session, .. } = event.completion;
         self.lease = match session {
             ReturnedSession::Idle(session) => Some(Lease::Idle(session)),
             ReturnedSession::Running(session) => Some(Lease::Running(session)),
@@ -448,36 +511,39 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                 None
             }
         };
-        self.response = Some(if executed {
-            Response::Command(match pending.command {
-                LeDtmCommand::ReceiverTest(command) => {
-                    self.transmitting = false;
-                    command.into_started_command_complete()
-                }
-                LeDtmCommand::TransmitterTest(command) => {
-                    self.transmitting = true;
-                    command.into_started_command_complete()
-                }
-                LeDtmCommand::TestEnd(command) => {
-                    command.into_ended_command_complete(count.expect("validated End count").packets)
-                }
-            })
-        } else {
-            status(
-                opcode,
-                Some(if event.result == EventResult::Indeterminate {
-                    HciError::HARDWARE_FAILURE
-                } else {
-                    HciError::CMD_DISALLOWED
-                }),
-            )
+        // Each executed variant owns its command token and, for End, the
+        // validated count. Formatting cannot require an optional value.
+        self.response = Some(match completed {
+            Completed::Receive(command) => {
+                self.transmitting = false;
+                Response::Command(command.into_started_command_complete())
+            }
+            Completed::Transmit(command) => {
+                self.transmitting = true;
+                Response::Command(command.into_started_command_complete())
+            }
+            Completed::End(command, packets) => {
+                Response::Command(command.into_ended_command_complete(packets))
+            }
+            Completed::Status(error) => status(opcode, Some(error)),
         });
+        self.pending = None;
         Ok(())
     }
 }
 
-fn channel(value: u8) -> TestChannel {
-    TestChannel::new(value).expect("HCI decoder admitted a test channel")
+enum Completed {
+    Receive(LeReceiverTestCommand),
+    Transmit(LeTransmitterTestCommand),
+    End(LeTestEndCommand, u16),
+    Status(HciError),
+}
+
+fn channel(value: u8) -> Result<TestChannel, HciError> {
+    TestChannel::new(value).map_err(|_| HciError::INVALID_HCI_PARAMETERS)
+}
+fn payload(value: u8) -> Result<TestPayloadType, HciError> {
+    TestPayloadType::new(value).map_err(|_| HciError::INVALID_HCI_PARAMETERS)
 }
 fn status(opcode: Opcode, error: Option<HciError>) -> Response {
     Response::Command(LeDtmCommandCompleteEvent::without_return_parameters(
