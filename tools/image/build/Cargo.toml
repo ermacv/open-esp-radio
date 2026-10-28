@@ -10,6 +10,7 @@ description = "The one image pipeline: build(ImageSpec) -> ImageBundle, with the
 
 [dependencies]
 oer-analysis-elf = { path = "../../analysis/elf" }
+oer-image-bundle = { path = "../bundle" }
 oer-image-checks = { path = "../checks" }
 oer-image-esp-idf = { path = "../esp-idf" }
 oer-chip-profile = { path = "../../chip/profile" }

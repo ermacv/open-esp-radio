@@ -19,7 +19,7 @@ fn summary() -> Summary {
             profile_settings: "opt-level=3".into(),
             features: vec![],
             default_features: false,
-            purpose: crate::bundle::Purpose::Analysis,
+            purpose: oer_image_bundle::Purpose::Analysis,
             layout_seed: None,
             configuration_sha256: BTreeMap::new(),
             stack_policy: "stack.toml".into(),

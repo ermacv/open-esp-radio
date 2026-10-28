@@ -1,6 +1,7 @@
 //! Reanalyse saved ELF bundles; input directories remain read-only.
 use super::{FILE, Provenance, SCHEMA, Summary};
-use crate::{Result, bundle::files};
+use crate::Result;
+use oer_image_bundle::files;
 use oer_image_checks::sizes::{Measurements, TYPE_MIN_BYTES};
 use std::{collections::BTreeMap, path::Path};
 
@@ -38,7 +39,7 @@ fn visit(input: &Path, output: &Path, root: &Path) -> Result<usize> {
         one(input, output, root)?;
         return Ok(1);
     }
-    if input.join(crate::bundle::MANIFEST).is_file() {
+    if input.join(oer_image_bundle::MANIFEST).is_file() {
         return Err(format!(
             "sizes-refresh: missing build provenance in {}",
             input.display()

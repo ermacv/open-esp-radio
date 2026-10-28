@@ -24,7 +24,8 @@ use std::fmt::Write as _;
 
 use oer_analysis_riscv_stack::Analysis;
 
-use crate::{CheckedElf, Result};
+use crate::Result;
+use oer_image_bundle::CheckedElf;
 
 /// The runtime ELF's panic report.
 pub const RUNTIME_REPORT: &str = "runtime-panics.txt";

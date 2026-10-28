@@ -19,7 +19,7 @@ use serde::Serialize;
 use oer_hil_model::image_class::NETWORK;
 use oer_hil_model::schema::image::{FeatureDelta, ImageClass};
 use oer_image_build::ImageSpec;
-use oer_image_build::bundle::ImageBundle;
+use oer_image_bundle::ImageBundle;
 use oer_image_checks::Gates;
 use oer_image_checks::interrupts::Required;
 
@@ -192,7 +192,7 @@ pub(crate) fn spec(
         .ok_or_else(|| format!("{chip} has no {} image", class.id()))?;
     let package = recipe.package.clone();
     Ok(ImageSpec {
-        purpose: oer_image_build::bundle::Purpose::Flash,
+        purpose: oer_image_bundle::Purpose::Flash,
         root: root.to_owned(),
         chip: chip.to_owned(),
         application: oer_image_build::Application {

@@ -218,8 +218,9 @@ pub(crate) fn from_bytes(elf: Vec<u8>) -> Image {
 
 mod frame_limits {
     use super::*;
-    use crate::{CheckedElf, stack::frames::FrameAudit};
+    use crate::stack::frames::FrameAudit;
     use oer_chip_profile::policy::FrameException;
+    use oer_image_bundle::CheckedElf;
 
     fn subject(bytes: u64) -> Image {
         let mut image = image(

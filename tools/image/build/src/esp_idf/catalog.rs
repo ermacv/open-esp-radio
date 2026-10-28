@@ -158,7 +158,7 @@ pub fn bundle(
     entry: &Entry,
     build: &idf::Build,
     output: &Path,
-) -> Result<crate::bundle::ImageBundle> {
+) -> Result<oer_image_bundle::ImageBundle> {
     let directory = idf::output(root, &entry.project(root)).join("build");
     only_boot_files(&directory)?;
     let chip = Chip::of(root, &entry.chip)?;
@@ -426,7 +426,7 @@ mod tests {
             [0x2000, 0x8000, 0x1_0000]
         );
         assert_eq!(
-            crate::bundle::ImageBundle::load(&output.path().join("bundle")).unwrap(),
+            oer_image_bundle::ImageBundle::load(&output.path().join("bundle")).unwrap(),
             bundle
         );
     }

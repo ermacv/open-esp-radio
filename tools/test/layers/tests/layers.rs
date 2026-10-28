@@ -33,6 +33,13 @@ fn the_name_follows_the_path() {
         ),
         ("firmware/apps/w1", true, "oer-firmware-apps-w1"),
         ("tools/image/build", false, "oer-image-build"),
+        ("tools/image/bundle", false, "oer-image-bundle"),
+        ("tools/vendor/scenario", false, "oer-vendor-scenario"),
+        (
+            "tools/vendor/scenario-cli",
+            true,
+            "oer-tool-vendor-scenario-cli",
+        ),
         ("tools/image/cli", true, "oer-tool-image-cli"),
         (
             "tools/image/large-values",

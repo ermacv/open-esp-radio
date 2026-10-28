@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use oer_hil_model::schema::image::{FeatureDelta, ImageClass};
 use oer_hil_runs::format::run::RepositoryProvenance;
-use oer_image_build::bundle::ImageBundle;
+use oer_image_bundle::ImageBundle;
 
 use crate::image::{Artifacts, LayoutSeed, Result};
 

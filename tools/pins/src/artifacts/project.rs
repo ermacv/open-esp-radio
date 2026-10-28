@@ -30,7 +30,7 @@ pub fn projects(root: &Path) -> Result<Vec<String>> {
 /// The package and binary that run a chip's typed vendor scenarios.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Scenarios {
-    /// Entry package in `tools/vendor/scenarios-<chip>-cli`.
+    /// Entry package in `tools/vendor/scenario-cli`.
     pub entry: String,
     /// Its explicitly named binary.
     pub binary: String,
@@ -66,14 +66,15 @@ impl Project {
         Ok(oer_chip_profile::Profile::load(root, &self.0)?.facts.rom)
     }
 
-    /// Directory of the chip's typed vendor scenario library.
+    /// Directory of the chip's module in the typed vendor scenario library;
+    /// it exists only for a chip with scenarios.
     pub fn scenarios_directory(&self) -> String {
-        format!("{VENDOR}/scenarios-{}", self.0)
+        format!("{VENDOR}/scenario/src/{}", self.0)
     }
 
-    /// Directory of the scenario library's decision modules.
+    /// Directory of the chip's decision modules.
     pub fn scenario_decisions(&self) -> String {
-        format!("{}/src/decisions", self.scenarios_directory())
+        format!("{}/decisions", self.scenarios_directory())
     }
 
     /// The chip's registry of reviewed vendor-function fingerprints.
@@ -84,8 +85,8 @@ impl Project {
     /// The package of the chip's typed vendor scenarios.
     pub fn scenarios(&self) -> Scenarios {
         Scenarios {
-            entry: format!("oer-tool-vendor-scenarios-{}-cli", self.0),
-            binary: format!("oer-tool-vendor-scenarios-{}", self.0),
+            entry: "oer-tool-vendor-scenario-cli".to_owned(),
+            binary: "oer-tool-vendor-scenario".to_owned(),
         }
     }
 }
@@ -124,43 +125,44 @@ mod tests {
     fn paths_follow_the_chip_directory() {
         let repository = root();
         let root = repository.path();
+        let mut with_scenarios = Vec::new();
         for name in supported(root).unwrap() {
             let Ok(chip) = Project::new(root, &name) else {
                 continue;
             };
-            // Every path of a project lies in this checkout.
-            for path in [
-                chip.artifacts(),
-                format!("{}/Cargo.toml", chip.scenarios_directory()),
-                chip.scenario_decisions(),
-            ] {
-                assert!(root.join(&path).exists(), "{path}");
-            }
+            assert!(root.join(chip.artifacts()).exists());
             assert_eq!(
                 chip.artifacts(),
                 format!("chips/{name}/vendor/artifacts.toml")
             );
             assert_eq!(
                 chip.scenarios_directory(),
-                format!("tools/vendor/scenarios-{name}")
+                format!("tools/vendor/scenario/src/{name}")
             );
-            let manifest = root.join(format!("{}-cli/Cargo.toml", chip.scenarios_directory()));
-            let entry: toml::Table = toml::from_str(
-                &std::fs::read_to_string(manifest).expect("scenario entry manifest"),
-            )
-            .expect("valid scenario entry manifest");
-            let scenarios = chip.scenarios();
-            assert_eq!(
-                entry["package"]["name"].as_str(),
-                Some(scenarios.entry.as_str())
-            );
-            assert!(
-                entry["bin"]
-                    .as_array()
-                    .expect("scenario entry declares its binary")
-                    .iter()
-                    .any(|bin| bin["name"].as_str() == Some(scenarios.binary.as_str()))
-            );
+            // Only a chip with scenarios has a module in the library.
+            if !root.join(chip.scenarios_directory()).is_dir() {
+                continue;
+            }
+            assert!(root.join(chip.scenario_decisions()).is_dir());
+            with_scenarios.push(name);
         }
+        assert_eq!(with_scenarios, ["esp32s31"]);
+        let entry: toml::Table = toml::from_str(
+            &std::fs::read_to_string(root.join("tools/vendor/scenario-cli/Cargo.toml"))
+                .expect("scenario entry manifest"),
+        )
+        .expect("valid scenario entry manifest");
+        let scenarios = Project::new(root, "esp32s31").unwrap().scenarios();
+        assert_eq!(
+            entry["package"]["name"].as_str(),
+            Some(scenarios.entry.as_str())
+        );
+        assert!(
+            entry["bin"]
+                .as_array()
+                .expect("scenario entry declares its binary")
+                .iter()
+                .any(|bin| bin["name"].as_str() == Some(scenarios.binary.as_str()))
+        );
     }
 }

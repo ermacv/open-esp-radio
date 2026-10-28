@@ -10,10 +10,8 @@ use std::{
 use serde::Deserialize;
 
 use crate::{w1, w2, w3};
-use oer_image_build::{
-    Application, Gates, ImageSpec, Result,
-    bundle::{ImageBundle, Purpose},
-};
+use oer_image_build::{Application, Gates, ImageSpec, Result};
+use oer_image_bundle::{ImageBundle, Purpose};
 use oer_image_checks::{Enforced, interrupts::Required};
 
 /// The chip every image of `firmware/apps` is built for.
@@ -454,16 +452,16 @@ mod tests {
         let root = directory.path();
         let profile = oer_chip_profile::Profile::load(root, CHIP).unwrap();
         let output = output(root, "w0");
-        let staging = oer_image_build::bundle::staging_directory(&output).unwrap();
+        let staging = oer_image_bundle::staging_directory(&output).unwrap();
         std::fs::create_dir_all(&staging).unwrap();
         let mut built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
         for segment in built.segments() {
             std::fs::write(segment.file, b"fixture").unwrap();
         }
-        built.checks.push(oer_image_checks::CheckRecord {
-            elf: oer_image_checks::CheckedElf::Runtime,
+        built.checks.push(oer_image_bundle::CheckRecord {
+            elf: oer_image_bundle::CheckedElf::Runtime,
             check: "interrupts".into(),
-            result: oer_image_checks::CheckResult::Failed("no bound".into()),
+            result: oer_image_bundle::CheckResult::Failed("no bound".into()),
         });
         let published = built.publish(&output).unwrap();
         let loaded = bundle(root, "w0").unwrap();
@@ -477,7 +475,7 @@ mod tests {
         let root = directory.path();
         let profile = oer_chip_profile::Profile::load(root, CHIP).unwrap();
         let output = output(root, "w2");
-        let staging = oer_image_build::bundle::staging_directory(&output).unwrap();
+        let staging = oer_image_bundle::staging_directory(&output).unwrap();
         for purpose in [Purpose::Analysis, Purpose::Flash] {
             std::fs::create_dir_all(&staging).unwrap();
             let mut built =

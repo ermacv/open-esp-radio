@@ -25,6 +25,7 @@ oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
 oer-image-build = { path = "../build" }
+oer-image-bundle = { path = "../bundle" }
 oer-image-checks = { path = "../checks" }
 oer-chip-profile = { path = "../../chip/profile" }
 oer-lab-board = { path = "../../lab/board" }

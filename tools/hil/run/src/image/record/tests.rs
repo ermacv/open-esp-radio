@@ -12,7 +12,7 @@ use oer_hil_runs::run::test_support::write_test_build_materials;
 
 use super::firmware;
 use crate::image::Artifacts;
-use oer_image_build::bundle::{Staged, files};
+use oer_image_bundle::{Staged, files};
 
 /// The Rust target of the fixture images.
 const TARGET: &str = "riscv32imafc-unknown-none-elf";
@@ -36,7 +36,7 @@ fn test_artifacts(
     let profile =
         oer_chip_profile::Profile::load(chip.path(), oer_hil_runs::run::test_support::TEST_CHIP)
             .unwrap();
-    let mut bundle = oer_image_build::bundle::ImageBundle::new(
+    let mut bundle = oer_image_bundle::ImageBundle::new(
         &directory,
         &profile,
         profile.facts.flash.clone().unwrap(),

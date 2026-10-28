@@ -3,11 +3,8 @@
 
 use super::{CompileInput, Compiled};
 use crate::encode::stage_two::pack_runtime;
-use crate::{
-    Result,
-    bundle::{ImageBundle, files},
-    strict,
-};
+use crate::{Result, strict};
+use oer_image_bundle::{ImageBundle, files};
 
 pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Result<Compiled> {
     let CompileInput {

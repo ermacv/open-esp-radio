@@ -23,7 +23,7 @@ tools/
               runner/ the runner the observer builds, fixture/ the Linux helpers,
               acceptance/ the acceptance catalog
   vendor/     the vendor comparison, lineage, provenance and the PHY audit; cli/ is
-              `cargo vendor-check`, scenarios-<chip>-cli/ the typed scenarios of one chip,
+              `cargo vendor-check`, scenario-cli/ the typed vendor scenarios and reviewer commands,
               ieee802154-esp32s31-cli/ the IEEE 802.15.4 host stand
 ```
 

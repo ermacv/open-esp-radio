@@ -231,7 +231,7 @@ impl LeasedBoard {
     pub fn carries(
         &self,
         store: &Store,
-        bundle: &oer_image_build::bundle::ImageBundle,
+        bundle: &oer_image_bundle::ImageBundle,
     ) -> crate::stand::Result<Option<Receipt>> {
         crate::image::carries(store, &self.access, bundle)
     }
@@ -247,7 +247,7 @@ impl LeasedBoard {
     pub fn flash(
         &self,
         store: &Store,
-        bundle: &oer_image_build::bundle::ImageBundle,
+        bundle: &oer_image_bundle::ImageBundle,
         image: &str,
         via: Via,
         by: &str,

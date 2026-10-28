@@ -1,5 +1,5 @@
 use super::*;
-use crate::bundle::{BootFiles, around};
+use crate::{BootFiles, around};
 
 fn repository() -> tempfile::TempDir {
     crate::tests::repository()
@@ -134,7 +134,10 @@ fn the_boot_files_are_encoded_into_the_bundle() {
                 (flash.otadata, "OTA selection"),
             ]
         );
-        assert_eq!(crate::bundle::ImageBundle::load(&output).unwrap(), bundle);
+        assert_eq!(
+            oer_image_bundle::ImageBundle::load(&output).unwrap(),
+            bundle
+        );
         // Boot files that are not the chip's are refused.
         assert!(
             around(
@@ -236,7 +239,7 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
         let root = repository.path();
         let profile = oer_chip_profile::Profile::load(root, "esp32s31").unwrap();
         let spec = ImageSpec {
-            purpose: crate::bundle::Purpose::Analysis,
+            purpose: oer_image_bundle::Purpose::Analysis,
             root: root.into(),
             chip: profile.facts.id.clone(),
             application: crate::Application {
@@ -313,12 +316,12 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
             !spec.output.exists(),
             "an invalid bundle must not be published"
         );
-        let staging = crate::bundle::staging_directory(&spec.output).unwrap();
+        let staging = oer_image_bundle::staging_directory(&spec.output).unwrap();
         assert!(
             !staging.join(files::APPLICATION).exists(),
             "audit precedes encoding"
         );
-        assert!(!staging.join(crate::bundle::MANIFEST).exists());
+        assert!(!staging.join(oer_image_bundle::MANIFEST).exists());
     }
 }
 

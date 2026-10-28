@@ -5,7 +5,7 @@
 //! Every case runs both sides over the whole radio register block retained
 //! from one fill pattern, so every register bit the leaf reads takes both
 //! values across the fills, and compares every register effect exactly and,
-//! where the leaf returns one, the return word. A chip's scenario crate
+//! where the leaf returns one, the return word. A chip's scenario module
 //! declares its suites of leaves; the scratch objects live in the installed
 //! chip's PHY layout.
 use crate::harness::{Arg, Buffer, Input, Result, case, direct, filled, invalid, known, selection};

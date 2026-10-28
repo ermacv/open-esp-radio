@@ -184,7 +184,7 @@ sampling from the IRQ stack or before initialization. Measurements describe
 observed writes, not the maximum possible depth or unwritten stack reservations.
 
 Each image build leaves its bundle in `target/fw/<image>/`, described by its
-`bundle.json` (`tools/image/build`): `bootloader.bin`, `partitions.bin`,
+`bundle.json` (`tools/image/bundle`): `bootloader.bin`, `partitions.bin`,
 `application.bin`, `otadata.bin`, the packed `runtime.bin`, `runtime.elf`,
 `bootstrap.elf` and the check reports. The placement check reads the
 `[placement]` contract of the chip's facts (the family layer,

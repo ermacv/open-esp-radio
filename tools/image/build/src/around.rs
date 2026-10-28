@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::bundle::ImageBundle;
+use oer_image_bundle::ImageBundle;
 
 use crate::{Boot, Result};
 

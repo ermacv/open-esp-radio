@@ -579,18 +579,14 @@ pub(crate) fn repository() -> tempfile::TempDir {
             include_str!("../../analysis/cli/tests/riscv_conformance/inputs.toml"),
         ),
         (
-            "tools/vendor/scenarios-esp32s31/Cargo.toml",
-            include_str!("../../vendor/scenarios-esp32s31/Cargo.toml"),
-        ),
-        (
-            "tools/vendor/scenarios-esp32s31-cli/Cargo.toml",
-            include_str!("../../vendor/scenarios-esp32s31-cli/Cargo.toml"),
+            "tools/vendor/scenario-cli/Cargo.toml",
+            include_str!("../../vendor/scenario-cli/Cargo.toml"),
         ),
     ]) {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
     }
-    std::fs::create_dir_all(root.join("tools/vendor/scenarios-esp32s31/src/decisions")).unwrap();
+    std::fs::create_dir_all(root.join("tools/vendor/scenario/src/esp32s31/decisions")).unwrap();
     directory
 }

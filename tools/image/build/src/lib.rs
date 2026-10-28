@@ -19,7 +19,6 @@
 
 mod around;
 pub mod build_log;
-pub mod bundle;
 pub mod cargo;
 pub mod compiler;
 mod critical_section;
@@ -50,9 +49,9 @@ pub use oer_espressif_facts::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-pub use oer_image_checks::{
-    Check, CheckInput, CheckOutcome, CheckRecord, CheckResult, CheckedElf, Enforced, Gates,
-};
+pub use around::{BootFiles, around};
+use oer_image_bundle::{CheckRecord, CheckResult, CheckedElf};
+pub use oer_image_checks::{Check, CheckInput, CheckOutcome, Enforced, Gates};
 
 /// The Cargo profile every image builds with (the root `Cargo.toml`).
 pub const FIRMWARE_PROFILE: &str = "firmware";
@@ -60,7 +59,7 @@ pub const FIRMWARE_PROFILE: &str = "firmware";
 /// What to build.
 pub struct ImageSpec {
     /// Whether this build may be flashed or is only for analysis.
-    pub purpose: bundle::Purpose,
+    pub purpose: oer_image_bundle::Purpose,
     /// The tree the image is built from: a checkout or a worktree.
     pub root: PathBuf,
     /// The chip id; its profile names the boot kind and the flash map.
@@ -108,7 +107,7 @@ impl Application {
 
 /// Build `spec`: the staged pipeline of its chip, with the instrumentation
 /// classes and the task-stack declaration its application makes.
-pub fn build(spec: &ImageSpec) -> Result<crate::bundle::ImageBundle> {
+pub fn build(spec: &ImageSpec) -> Result<oer_image_bundle::ImageBundle> {
     let profile = profile(&spec.root, &spec.chip)?;
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
@@ -316,14 +315,14 @@ mod tests;
 /// warnings beside it. A requested check without a result, or with one that
 /// does not pass, fails the build if it is enforced (a warning otherwise),
 /// after the results are written to
-/// [`files::CHECKS`](crate::bundle::files::CHECKS) in its directory. An image
+/// [`files::CHECKS`](oer_image_bundle::files::CHECKS) in its directory. An image
 /// that declares its task stacks proven (`enforce_stack`) is also held to its
 /// stack check.
 pub(crate) fn apply_outcome(
     checks: &Gates,
     elf: CheckedElf,
     outcome: CheckOutcome,
-    bundle: &mut crate::bundle::ImageBundle,
+    bundle: &mut oer_image_bundle::ImageBundle,
     enforce_stack: bool,
 ) -> Result<()> {
     let mut failed = Vec::new();
@@ -362,6 +361,9 @@ pub(crate) fn apply_outcome(
     if failed.is_empty() {
         return Ok(());
     }
-    oer_os_durable::atomic_json(&bundle.path(crate::bundle::files::CHECKS), &bundle.checks)?;
+    oer_os_durable::atomic_json(
+        &bundle.path(oer_image_bundle::files::CHECKS),
+        &bundle.checks,
+    )?;
     Err(format!("requested checks did not pass: {}", failed.join("; ")).into())
 }

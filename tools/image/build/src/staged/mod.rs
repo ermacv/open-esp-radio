@@ -11,10 +11,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::bundle::{ImageBundle, Staged, files};
 use crate::encode;
 use crate::encode::Encoding;
 use oer_chip_profile::policy::StackPolicy;
+use oer_image_bundle::{ImageBundle, Staged, files};
 
 use crate::{
     ImageSpec, Result, build_log::BuildLog, exclusion::Staging, instrumentation::Instrumentation,

@@ -55,7 +55,7 @@ use crate::Result;
 use crate::flash::After;
 pub use crate::lock::{DeviceAccess, DeviceId};
 pub use oer_espressif_facts::Start;
-use oer_image_build::bundle::{ImageBundle, Snapshot};
+use oer_image_bundle::{ImageBundle, Snapshot};
 use serde::{Deserialize, Serialize};
 
 /// Format of a receipt file.

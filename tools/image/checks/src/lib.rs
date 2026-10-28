@@ -27,65 +27,11 @@ pub mod stack;
 
 use std::{collections::BTreeSet, path::Path};
 
-use serde::{Deserialize, Serialize};
-
 use crate::interrupts::Required;
 use oer_chip_profile::{Profile, policy::StackPolicy};
+use oer_image_bundle::{CheckResult, CheckedElf};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-
-/// Which ELF of an image a check examined.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum CheckedElf {
-    /// The runtime (application) ELF.
-    Runtime,
-    /// A staged boot's bootstrap ELF.
-    Bootstrap,
-}
-
-/// The result of one requested check. Only [`CheckResult::Passed`] and
-/// [`CheckResult::NotApplicable`] pass it.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case", tag = "result", content = "reason")]
-pub enum CheckResult {
-    Passed,
-    /// The check ran and the image does not hold the property.
-    Failed(String),
-    /// The chip data or policy the check needs is absent: the property was
-    /// not shown, whether or not it applies. Fails a requested check.
-    MissingContract(String),
-    /// The property does not apply to this image, for the explicit reason
-    /// given (never because data is missing).
-    NotApplicable(String),
-}
-
-impl CheckResult {
-    /// Whether the check passed.
-    pub fn passes(&self) -> bool {
-        matches!(self, Self::Passed | Self::NotApplicable(_))
-    }
-}
-
-impl std::fmt::Display for CheckResult {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Passed => write!(formatter, "passed"),
-            Self::Failed(reason) => write!(formatter, "failed: {reason}"),
-            Self::MissingContract(what) => write!(formatter, "missing contract: {what}"),
-            Self::NotApplicable(reason) => write!(formatter, "not applicable: {reason}"),
-        }
-    }
-}
-
-/// One requested check of one ELF and its result.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct CheckRecord {
-    pub elf: CheckedElf,
-    pub check: String,
-    pub result: CheckResult,
-}
 
 /// What a check of one of an image's ELF files reads.
 pub struct CheckInput<'a> {

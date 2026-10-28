@@ -67,7 +67,7 @@ fn contract_of_metadata(metadata: &Value, package: &str) -> Result<Contract> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_image_checks::CheckedElf;
+    use oer_image_bundle::CheckedElf;
     use oer_image_checks::panics::Layer;
 
     fn metadata(declared: Value) -> Value {

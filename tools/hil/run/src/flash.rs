@@ -20,7 +20,7 @@
 
 use std::path::Path;
 
-use oer_image_build::bundle::ImageBundle;
+use oer_image_bundle::ImageBundle;
 use oer_lab_arbiter::journal::{ImageIdentity, Journal};
 use oer_lab_board::image::{Receipt, Store};
 use oer_lab_board::lock::DeviceId;
