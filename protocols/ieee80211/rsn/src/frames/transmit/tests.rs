@@ -13,7 +13,10 @@ fn ethernet_builder_owns_complete_eapol_frame() {
     let ethernet = RsnEthernetFrame::<160>::build([2; 6], &m4).unwrap();
     assert_eq!(&ethernet.as_bytes()[..6], &[1; 6]);
     assert_eq!(&ethernet.as_bytes()[6..12], &[2; 6]);
-    assert_eq!(&ethernet.as_bytes()[12..14], &EAPOL_ETHERTYPE);
+    assert_eq!(
+        &ethernet.as_bytes()[12..14],
+        &ETHER_TYPE_EAPOL.to_be_bytes()
+    );
     assert_eq!(&ethernet.as_bytes()[14 + 81..14 + 97], &[0xa5; 16]);
 }
 

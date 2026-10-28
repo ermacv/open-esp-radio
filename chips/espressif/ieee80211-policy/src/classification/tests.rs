@@ -65,3 +65,12 @@ fn default_ip_priority_ignores_ecn_version_and_flow_label() {
         }
     }
 }
+
+#[test]
+fn protocol_words_are_the_ethertype_octets_read_little_endian() {
+    assert_eq!(ETHER_TYPE_IPV4, 0x0008);
+    assert_eq!(ETHER_TYPE_ARP, 0x0608);
+    assert_eq!(ETHER_TYPE_EAPOL, 0x8e88);
+    assert_eq!(ETHER_TYPE_WAPI, 0xb488);
+    assert_eq!(ETHER_TYPE_IPV6, 0xdd86);
+}

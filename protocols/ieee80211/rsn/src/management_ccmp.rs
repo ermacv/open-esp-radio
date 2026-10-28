@@ -37,6 +37,21 @@ use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// The receive state of protected management frames under one pairwise key.
+/// Why a received protected management frame is refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ManagementCcmpReceiveError {
+    /// The frame failed CCMP.
+    Frame(ManagementCcmpError),
+    /// The packet number does not exceed the last accepted one.
+    Replay,
+}
+
+impl From<ManagementCcmpError> for ManagementCcmpReceiveError {
+    fn from(error: ManagementCcmpError) -> Self {
+        Self::Frame(error)
+    }
+}
+
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct ManagementCcmpReceiver {
     temporal_key: Ccmp128Key,
@@ -57,11 +72,14 @@ impl ManagementCcmpReceiver {
     /// its plaintext body. A frame that does not verify leaves the replay
     /// state unchanged. MIC failure erases tentative plaintext through the
     /// shared `oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation` transform; this wrapper only owns replay.
-    pub fn open<'a>(&mut self, frame: &'a mut [u8]) -> Result<&'a [u8], ManagementCcmpError> {
+    pub fn open<'a>(
+        &mut self,
+        frame: &'a mut [u8],
+    ) -> Result<&'a [u8], ManagementCcmpReceiveError> {
         let frame = ManagementCcmpFrame::parse(frame)?;
         let packet_number = frame.packet_number();
         if packet_number <= self.last_packet_number {
-            return Err(ManagementCcmpError::Replay);
+            return Err(ManagementCcmpReceiveError::Replay);
         }
 
         let body = frame.open(&self.temporal_key)?;

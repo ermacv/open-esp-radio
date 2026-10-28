@@ -15,7 +15,6 @@ test-support = []
 [dependencies]
 oer-wire = { path = "../../../portable/wire" }
 oer-radio-regulatory = { path = "../../radio/regulatory" }
-oer-time = { path = "../../../portable/time" }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]

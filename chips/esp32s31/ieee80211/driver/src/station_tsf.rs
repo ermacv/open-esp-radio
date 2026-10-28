@@ -10,12 +10,12 @@
 
 use oer_esp32s31_ieee80211_mac::tsf_relation::{TsfRelation, TsfSetKind, TsfTimingError};
 use oer_ieee80211_port::TsfGeneration;
-use oer_ieee80211_wire::tsf::TsfInstant;
+use oer_ieee80211_port::tsf::TsfInstant;
 
 /// The uncertainty of a station TSF sample: the set value and the reading
 /// beside it are each a count of the station TSF counter's microseconds.
-pub const STATION_TSF_SAMPLE_UNCERTAINTY: oer_ieee80211_wire::tsf::TsfDuration =
-    oer_ieee80211_wire::tsf::TsfDuration::from_micros(1);
+pub const STATION_TSF_SAMPLE_UNCERTAINTY: oer_ieee80211_port::tsf::TsfDuration =
+    oer_ieee80211_port::tsf::TsfDuration::from_micros(1);
 
 /// The capability to write the station TSF, which only [`StationTsf`]
 /// holds.

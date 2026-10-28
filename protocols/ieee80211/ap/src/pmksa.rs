@@ -14,21 +14,20 @@
 //! `src/ap/wpa_auth.c` (`wpa_auth_pmksa_add_sae`).
 
 use oer_ieee80211_rsn::Pmk;
+use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 
 /// Entries the vendor's authenticator PMKSA cache holds.
 pub const AP_PMKSA_CAPACITY: usize = 10;
-/// The PMKID length.
-pub const AP_PMKID_LEN: usize = 16;
 
 /// One cached security association of a station.
 pub struct ApPmksa {
     station: [u8; 6],
     pmk: Pmk,
-    pmkid: [u8; AP_PMKID_LEN],
+    pmkid: [u8; RSN_PMKID_LEN],
 }
 
 impl ApPmksa {
-    pub const fn new(station: [u8; 6], pmk: Pmk, pmkid: [u8; AP_PMKID_LEN]) -> Self {
+    pub const fn new(station: [u8; 6], pmk: Pmk, pmkid: [u8; RSN_PMKID_LEN]) -> Self {
         Self {
             station,
             pmk,
@@ -40,7 +39,7 @@ impl ApPmksa {
         &self.pmk
     }
 
-    pub const fn pmkid(&self) -> [u8; AP_PMKID_LEN] {
+    pub const fn pmkid(&self) -> [u8; RSN_PMKID_LEN] {
         self.pmkid
     }
 }
@@ -58,7 +57,7 @@ impl ApPmksaCache {
     }
 
     /// The association `station` resumes by naming `pmkid`.
-    pub fn find(&self, station: [u8; 6], pmkid: [u8; AP_PMKID_LEN]) -> Option<&ApPmksa> {
+    pub fn find(&self, station: [u8; 6], pmkid: [u8; RSN_PMKID_LEN]) -> Option<&ApPmksa> {
         self.entries
             .iter()
             .flatten()

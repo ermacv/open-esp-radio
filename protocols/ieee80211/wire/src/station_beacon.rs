@@ -50,7 +50,7 @@ pub struct StaTimObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaBeaconObservation {
     /// The beacon's Timestamp field: the access point's TSF.
-    pub timestamp_tsf: crate::tsf::TsfInstant,
+    pub timestamp_tsf: crate::tsf::TsfTimestamp,
     pub interval_tu: u16,
     pub capability_information: u16,
     pub tim: Option<StaTimObservation>,
@@ -224,9 +224,7 @@ pub fn parse_sta_beacon(
 
     let channel_switch = crate::channel_switch::parse_channel_switch(elements).transpose();
     Ok(StaBeaconObservation {
-        timestamp_tsf: crate::tsf::TsfInstant::from_micros(u64::from_le_bytes([
-            t0, t1, t2, t3, t4, t5, t6, t7,
-        ])),
+        timestamp_tsf: crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]),
         interval_tu,
         capability_information: u16::from_le_bytes([c0, c1]),
         tim,

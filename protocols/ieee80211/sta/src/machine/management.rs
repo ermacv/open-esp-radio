@@ -7,8 +7,10 @@ use oer_ieee80211_rsn::{
 use oer_ieee80211_wire::{
     address::{Bssid, OwnAddress},
     ccmp::Ccmp128Key,
-    frame::DecodedHeader,
+    frame::{DecodedHeader, FrameControlFields, ManagementSubtype},
+    management::{BROADCAST_ADDRESS, MANAGEMENT_HEADER_LEN},
     management_protection::SaQuery,
+    sequence::SequenceControl,
 };
 use oer_time::Instant;
 
@@ -57,19 +59,22 @@ impl ManagementProtection {
     ) -> Option<ManagementEvent> {
         let header = DecodedHeader::decode(frame)?;
         let control = header.control();
-        let subtype = control.get() & 0x00fc;
-        if !matches!(subtype, 0x00a0 | 0x00c0 | 0x00d0)
+        let fields = FrameControlFields::from_raw(control.get());
+        let disconnect = fields.is_management(ManagementSubtype::Disassociation)
+            || fields.is_management(ManagementSubtype::Deauthentication);
+        let action = fields.is_management(ManagementSubtype::Action);
+        if !(disconnect || action)
             || control.ds() != 0
             || control.more_fragments()
-            || header.sequence_control() & 15 != 0
+            || SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment() != 0
             || header.ht_control().is_some()
-            || (header.receiver() != local.get() && header.receiver() != [0xff; 6])
+            || (header.receiver() != local.get() && header.receiver() != BROADCAST_ADDRESS)
             || header.transmitter() != bssid.get()
             || header.address3() != bssid.get()
         {
             return None;
         }
-        let group = header.receiver() == [0xff; 6];
+        let group = header.receiver() == BROADCAST_ADDRESS;
         // All management events this machine handles fit in this bounded copy:
         // disconnect (26 + protection), SA Query (28 + protection),
         // ADDBA (33 + protection) and DELBA (30 + protection).
@@ -80,7 +85,8 @@ impl ManagementProtection {
                 return None;
             }
             self.group.as_mut()?.verify(frame).ok()?;
-            frame.get(24..frame.len().checked_sub(MANAGEMENT_MIC_ELEMENT_LEN)?)?
+            frame
+                .get(MANAGEMENT_HEADER_LEN..frame.len().checked_sub(MANAGEMENT_MIC_ELEMENT_LEN)?)?
         } else {
             let copied = copied.get_mut(..frame.len())?;
             for (destination, source) in copied.iter_mut().zip(frame) {
@@ -88,14 +94,14 @@ impl ManagementProtection {
             }
             self.individual.open(copied).ok()?
         };
-        match subtype {
-            0x00a0 | 0x00c0 => {
+        match (disconnect, action) {
+            (true, _) => {
                 let [lo, hi, ..] = *body else {
                     return None;
                 };
                 Some(ManagementEvent::Disconnect(u16::from_le_bytes([lo, hi])))
             }
-            0x00d0 if !group => SaQuery::parse(body)
+            (_, true) if !group => SaQuery::parse(body)
                 .map(ManagementEvent::Query)
                 .or_else(|| {
                     oer_ieee80211_wire::block_ack::frame::parse_block_ack_action(body)

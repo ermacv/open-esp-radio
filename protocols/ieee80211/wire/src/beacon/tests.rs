@@ -10,12 +10,8 @@ use crate::{
     ht::HtDuplicateMcs32,
     protection::{ApBssProtection, ErpProtection, HtOperationProtection, HtProtectionMode},
     scan::parse_management,
-    security::{
-        AP_SAE_H2E_RSNX_ELEMENT, AP_WPA2_PERSONAL_RSN_ELEMENT, AP_WPA3_PERSONAL_RSN_ELEMENT,
-        ApSecurityPolicy, AssociationAkm, SaePwe, StaSecurityPolicy,
-    },
+    security::{BssSecurityElements, test_elements},
     ssid::WifiSsid,
-    station::select_association_rsn,
 };
 
 fn beacon() -> [u8; 44] {
@@ -49,7 +45,7 @@ fn executor_tsf_drives_dtim_and_group_indication() {
 }
 
 #[test]
-fn a_wpa3_beacon_offers_sae_with_protected_management_frames() {
+fn a_wpa3_beacon_carries_its_rsne_and_rsnxe_to_the_scan_record() {
     let ap = [0x02, 0, 0, 0, 0, 1];
     let ssid = WifiSsid::new(b"open-radio-ap").unwrap();
     let mut bytes = [0; AP_BEACON_CAPACITY];
@@ -62,7 +58,7 @@ fn a_wpa3_beacon_offers_sae_with_protected_management_frames() {
         100,
         2,
         seq(1),
-        ApSecurityPolicy::Wpa3Personal,
+        test_elements::WPA3_PERSONAL,
         ApBssProtection::default(),
     )
     .unwrap();
@@ -70,24 +66,15 @@ fn a_wpa3_beacon_offers_sae_with_protected_management_frames() {
     assert_ne!(u16::from_le_bytes([beacon[34], beacon[35]]) & 0x0010, 0);
     assert!(
         beacon
-            .windows(AP_WPA3_PERSONAL_RSN_ELEMENT.len())
-            .any(|window| window == AP_WPA3_PERSONAL_RSN_ELEMENT)
+            .windows(test_elements::WPA3_PERSONAL_RSNE.len())
+            .any(|window| window == test_elements::WPA3_PERSONAL_RSNE)
     );
-    assert!(beacon.ends_with(&AP_SAE_H2E_RSNX_ELEMENT));
+    assert!(beacon.ends_with(&test_elements::SAE_H2E_RSNXE));
 
     let record = parse_management(beacon, 6, -40).unwrap();
-    let selected = select_association_rsn(&record, StaSecurityPolicy::Wpa3Personal).unwrap();
-    assert_eq!(
-        selected.negotiated_akm(),
-        AssociationAkm::Sae(SaePwe::HashToElement)
-    );
-    assert!(selected.security().protects_management());
-    assert_eq!(
-        select_association_rsn(&record, StaSecurityPolicy::Wpa2Personal)
-            .unwrap()
-            .negotiated_akm(),
-        AssociationAkm::Sae(SaePwe::HashToElement)
-    );
+    assert!(record.privacy);
+    assert_eq!(record.rsn_ie_bytes(), test_elements::WPA3_PERSONAL_RSNE);
+    assert_eq!(record.rsnxe_bytes(), test_elements::SAE_H2E_RSNXE);
 }
 
 #[test]
@@ -104,7 +91,7 @@ fn builds_the_bounded_wpa2_ht20_beacon() {
         100,
         2,
         seq(0x0abc),
-        ApSecurityPolicy::Wpa2Personal,
+        test_elements::WPA2_PERSONAL,
         ApBssProtection::default(),
     )
     .unwrap();
@@ -119,7 +106,7 @@ fn builds_the_bounded_wpa2_ht20_beacon() {
     assert!(
         bytes[..len]
             .windows(22)
-            .any(|window| window == AP_WPA2_PERSONAL_RSN_ELEMENT)
+            .any(|window| window == test_elements::WPA2_PERSONAL_RSNE)
     );
     assert!(bytes[..len].windows(3).any(|window| window == [3, 1, 6]));
     assert!(bytes[..len].windows(2).any(|window| window == [45, 26]));
@@ -140,7 +127,7 @@ fn ht40_beacon_advertises_the_validated_secondary_channel() {
         100,
         2,
         seq(0),
-        ApSecurityPolicy::Wpa2Personal,
+        test_elements::WPA2_PERSONAL,
         ApBssProtection::default(),
     )
     .unwrap();
@@ -185,7 +172,7 @@ fn rejects_unrepresentable_beacon_policy_before_mutation() {
             100,
             2,
             seq(0),
-            ApSecurityPolicy::Wpa2Personal,
+            test_elements::WPA2_PERSONAL,
             ApBssProtection::default(),
         ),
         Err(ApBeaconBuildError::InvalidPrimaryChannel)
@@ -205,7 +192,7 @@ fn protection_update_rewrites_only_erp_and_ht_operation_after_tim_growth() {
         100,
         2,
         seq(0),
-        ApSecurityPolicy::Open,
+        BssSecurityElements::OPEN,
         ApBssProtection::default(),
     )
     .unwrap();
@@ -246,20 +233,6 @@ fn protection_update_rewrites_only_erp_and_ht_operation_after_tim_growth() {
     );
 }
 
-/// The authentication a personal selection negotiated.
-trait NegotiatedAkm {
-    fn negotiated_akm(&self) -> crate::security::AssociationAkm;
-}
-
-impl NegotiatedAkm for crate::station::SelectedRsn {
-    fn negotiated_akm(&self) -> crate::security::AssociationAkm {
-        match self.security() {
-            crate::security::AssociationSecurity::Rsn(association) => association.akm,
-            crate::security::AssociationSecurity::Open => panic!("an Open selection has no AKM"),
-        }
-    }
-}
-
 /// The test advertisement with the OFDM rates a 5 GHz BSS carries: 6, 12
 /// and 24 Mbit/s basic.
 const OFDM_ADVERTISEMENT: crate::ap::profile::Advertisement =
@@ -293,7 +266,7 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
             100,
             1,
             seq(0),
-            ApSecurityPolicy::Wpa2Personal,
+            test_elements::WPA2_PERSONAL,
             ApBssProtection::default(),
         ),
         Err(ApBeaconBuildError::DsssRateIn5Ghz)
@@ -307,7 +280,7 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
         100,
         1,
         seq(0),
-        ApSecurityPolicy::Wpa2Personal,
+        test_elements::WPA2_PERSONAL,
         ApBssProtection::default(),
     )
     .unwrap();
@@ -374,4 +347,54 @@ fn tim_updates_refuse_hostile_lengths_and_truncated_frames_without_moving_bytes(
         );
         assert_eq!(storage, before);
     }
+}
+
+#[test]
+fn template_edits_insert_count_and_remove_elements_after_the_tim() {
+    use super::{
+        BeaconTemplateError, insert_after_tim, remove_elements, write_channel_switch_count,
+    };
+    let mut bytes = [0; AP_BEACON_CAPACITY];
+    let len = write_ht_beacon(
+        &TEST_ADVERTISEMENT,
+        &mut bytes,
+        [0x02, 0, 0, 0, 0, 1],
+        &WifiSsid::new(b"ap").unwrap(),
+        crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(6).unwrap()),
+        100,
+        2,
+        seq(1),
+        BssSecurityElements::OPEN,
+        ApBssProtection::default(),
+    )
+    .unwrap();
+    let original = bytes;
+    let (tim, _, _) = dtim(&bytes[..len]).unwrap();
+    let after_tim = tim + 2 + usize::from(bytes[tim + 1]);
+
+    // A Channel Switch Announcement: mode, new channel, count.
+    let announcement = [37, 3, 1, 11, 5];
+    let inserted = insert_after_tim(&mut bytes, len, &announcement).unwrap();
+    assert_eq!(inserted, len + announcement.len());
+    assert_eq!(&bytes[after_tim..after_tim + 5], &announcement);
+    assert_eq!(&bytes[after_tim + 5..inserted], &original[after_tim..len]);
+
+    write_channel_switch_count(&mut bytes, inserted, 2).unwrap();
+    assert_eq!(bytes[after_tim + 4], 2);
+
+    let removed = remove_elements(&mut bytes, inserted, &[37]).unwrap();
+    assert_eq!(removed, len);
+    assert_eq!(bytes, original);
+    assert_eq!(write_channel_switch_count(&mut bytes, removed, 2), None);
+
+    // A full template and one without a TIM are refused unchanged.
+    assert_eq!(
+        insert_after_tim(&mut bytes[..len + 2], len, &announcement),
+        Err(BeaconTemplateError::Full)
+    );
+    let mut no_tim = [0_u8; 40];
+    assert_eq!(
+        insert_after_tim(&mut no_tim, 36, &announcement),
+        Err(BeaconTemplateError::Malformed)
+    );
 }

@@ -122,3 +122,24 @@ fn the_qos_field_places_each_subfield() {
         [0x99, 0x72]
     );
 }
+
+#[test]
+fn named_subtypes_round_trip_through_the_frame_control_field() {
+    let beacon = FrameControlFields::management(ManagementSubtype::Beacon).unwrap();
+    assert_eq!(beacon.raw(), 0x0080);
+    assert!(beacon.is_management(ManagementSubtype::Beacon));
+    assert!(!beacon.is_management(ManagementSubtype::ProbeResponse));
+    assert!(!beacon.is_control(ControlSubtype::BlockAck));
+    let request = FrameControlFields::control(ControlSubtype::BlockAckRequest).unwrap();
+    assert_eq!(request.raw(), 0x0084);
+    assert!(request.is_control(ControlSubtype::BlockAckRequest));
+    assert_eq!(
+        FrameControlFields::from_raw(0x00d0 | 0x4000).management_subtype(),
+        ManagementSubtype::Action
+    );
+    // A reserved encoding wider than the subtype is refused.
+    assert_eq!(
+        FrameControlFields::management(ManagementSubtype::Reserved(16)),
+        None
+    );
+}

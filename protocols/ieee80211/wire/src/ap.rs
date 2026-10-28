@@ -19,7 +19,7 @@ use crate::{
     },
     protection::ApBssProtection,
     qos::WmmUserPriority,
-    security::{ApSecurityPolicy, LinkProtection},
+    security::{BssSecurityElements, LinkProtection},
     sequence::SequenceNumber,
     station::SAE_AUTHENTICATION_ALGORITHM,
     station_power_save::STA_NULL_DATA_FRAME_LEN,
@@ -978,7 +978,7 @@ pub fn write_ht_association_response_frame_for_security(
     management_sequence: SequenceNumber,
     channel: Channel,
     peer_ht: Option<HtPeerCapabilities>,
-    security: ApSecurityPolicy,
+    security: BssSecurityElements,
     protection: ApBssProtection,
 ) -> Result<usize, ApAssociationResponseError> {
     let (frame, _) = output
@@ -1007,7 +1007,7 @@ pub fn write_ht_association_response_frame_for_security(
         peer_ht,
         protection,
     )?;
-    if security == ApSecurityPolicy::Open {
+    if security.link_protection() == LinkProtection::Open {
         crate::encoding::write_array::<0, _, _>(
             body,
             &profile

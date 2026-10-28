@@ -60,15 +60,30 @@ impl BipReceiver {
     /// Verify one received group-addressed robust management frame, from its
     /// Frame Control field to the end of its body, and advance the replay
     /// state when it verifies.
-    pub fn verify(&mut self, frame: &[u8]) -> Result<(), BipError> {
+    pub fn verify(&mut self, frame: &[u8]) -> Result<(), BipReceiveError> {
         let frame = BipFrame::parse(frame, self.key_id)?;
         let received = frame.packet_number();
         if received <= self.last_packet_number {
-            return Err(BipError::Replay);
+            return Err(BipReceiveError::Replay);
         }
         frame.verify(&self.key)?;
         self.last_packet_number = received;
         Ok(())
+    }
+}
+
+/// Why a received group-addressed management frame is refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BipReceiveError {
+    /// The frame failed BIP.
+    Frame(BipError),
+    /// The IPN does not exceed the last accepted one.
+    Replay,
+}
+
+impl From<BipError> for BipReceiveError {
+    fn from(error: BipError) -> Self {
+        Self::Frame(error)
     }
 }
 

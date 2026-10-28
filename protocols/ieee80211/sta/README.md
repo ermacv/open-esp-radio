@@ -64,6 +64,13 @@ composition's fresh-randomness provider create its commit. Successful peer
 confirmation moves the negotiated PMK through association into the four-way
 handshake. The provisioned PMK is used only for a PSK offer.
 
+The station's security policy lives in `security.rs`: `StaSecurityPolicy`
+names what one request admits, `matches_security` admits a scanned BSS for
+one exact mode and `select_association_rsn` chooses the AKM and management
+protection, whose RSN element and RSNXE `oer-ieee80211-wire` encodes
+(`station::SelectedRsn::personal`). The scan table keeps each observation's
+reception time beside its decoded `ScanRecord` (`scan::BssObservation`).
+
 SAE observations consume the exchange and return it only while it continues.
 Commit and confirm have checked absolute deadlines, including time waiting
 for a TX credit. An anti-clogging token repeats the same commit without

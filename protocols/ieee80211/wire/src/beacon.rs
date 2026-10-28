@@ -11,7 +11,7 @@ use crate::{
     channel::{Band, Channel},
     ht::{ht_capability_ie, ht_operation_ie},
     protection::ApBssProtection,
-    security::ApSecurityPolicy,
+    security::BssSecurityElements,
     sequence::SequenceNumber,
     ssid::WifiSsid,
 };
@@ -175,7 +175,7 @@ pub fn write_ht_beacon(
     beacon_interval_tu: u16,
     dtim_period: u8,
     management_sequence: SequenceNumber,
-    security: ApSecurityPolicy,
+    security: BssSecurityElements,
     protection: ApBssProtection,
 ) -> Result<usize, ApBeaconBuildError> {
     // The 2.4 GHz BSS carries the DSSS Parameter Set and the ERP element;
@@ -206,8 +206,7 @@ pub fn write_ht_beacon(
     let wmm_parameter_ie = profile.wmm.element();
     let ht_capability = ht_capability_ie(profile.ht, channel);
     let ht_operation = ht_operation_ie(channel, protection.ht);
-    let advertised = security.advertisement();
-    let (rsn, rsnx) = (advertised.rsne, advertised.rsnxe);
+    let (rsn, rsnx) = (security.rsne, security.rsnxe);
     let mut fixed = [0; MANAGEMENT_HEADER_LEN + BEACON_FIXED_BODY_LEN];
     crate::encoding::write_array::<0, _, _>(&mut fixed, &0x0080_u16.to_le_bytes());
     fixed[4..10].fill(0xff);
@@ -325,6 +324,129 @@ pub fn update_bss_protection(
 pub enum ApBeaconProtectionError {
     MalformedElement,
     MissingProtectionElement,
+}
+
+/// Why an edit of a written beacon template failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BeaconTemplateError {
+    /// The template's elements do not parse, or it carries no TIM.
+    Malformed,
+    /// The template's storage cannot hold the edit.
+    Full,
+}
+
+/// Insert `elements` right after the TIM element of the `len`-byte beacon
+/// template in `template`, moving the later elements up; returns the new
+/// length.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.3.2, Table 9-34 (Beacon frame body:
+/// the Channel Switch Announcement and later elements follow the TIM).
+pub fn insert_after_tim(
+    template: &mut [u8],
+    len: usize,
+    elements: &[u8],
+) -> Result<usize, BeaconTemplateError> {
+    let (tim, _, _) = dtim(template.get(..len).ok_or(BeaconTemplateError::Malformed)?)
+        .ok_or(BeaconTemplateError::Malformed)?;
+    let &[_, tim_length] = template
+        .get(tim..)
+        .and_then(|bytes| bytes.first_chunk::<2>())
+        .ok_or(BeaconTemplateError::Malformed)?;
+    let at = tim
+        .checked_add(2)
+        .and_then(|offset| offset.checked_add(usize::from(tim_length)))
+        .ok_or(BeaconTemplateError::Malformed)?;
+    let end = len
+        .checked_add(elements.len())
+        .filter(|end| *end <= template.len())
+        .ok_or(BeaconTemplateError::Full)?;
+    if at > len {
+        return Err(BeaconTemplateError::Malformed);
+    }
+    for source in (at..len).rev() {
+        let destination = source
+            .checked_add(elements.len())
+            .ok_or(BeaconTemplateError::Full)?;
+        let byte = *template.get(source).ok_or(BeaconTemplateError::Malformed)?;
+        *template
+            .get_mut(destination)
+            .ok_or(BeaconTemplateError::Full)? = byte;
+    }
+    for (destination, byte) in template.iter_mut().skip(at).zip(elements) {
+        *destination = *byte;
+    }
+    Ok(end)
+}
+
+/// Remove every element whose ID is one of `ids` from the element list of
+/// the `len`-byte beacon template, zeroing the freed tail; returns the new
+/// length.
+pub fn remove_elements(
+    template: &mut [u8],
+    len: usize,
+    ids: &[u8],
+) -> Result<usize, BeaconTemplateError> {
+    const FIXED_BEACON_LENGTH: usize = MANAGEMENT_HEADER_LEN + BEACON_FIXED_BODY_LEN;
+    let mut len = len;
+    let mut offset = FIXED_BEACON_LENGTH;
+    while let Some([id, length]) = template
+        .get(offset..len)
+        .and_then(|bytes| bytes.first_chunk::<2>())
+        .copied()
+    {
+        let length = usize::from(length)
+            .checked_add(2)
+            .ok_or(BeaconTemplateError::Malformed)?;
+        let end = offset
+            .checked_add(length)
+            .filter(|end| *end <= len)
+            .ok_or(BeaconTemplateError::Malformed)?;
+        if ids.contains(&id) {
+            for (destination, source) in (offset..len).zip(end..len) {
+                let byte = *template.get(source).ok_or(BeaconTemplateError::Malformed)?;
+                *template
+                    .get_mut(destination)
+                    .ok_or(BeaconTemplateError::Malformed)? = byte;
+            }
+            let previous = len;
+            len = len
+                .checked_sub(length)
+                .ok_or(BeaconTemplateError::Malformed)?;
+            template
+                .get_mut(len..previous)
+                .ok_or(BeaconTemplateError::Malformed)?
+                .fill(0);
+        } else {
+            offset = end;
+        }
+    }
+    Ok(len)
+}
+
+/// Write `count` into the Channel Switch Count of the `len`-byte beacon
+/// template's Channel Switch Announcement or Extended Channel Switch
+/// Announcement; `None` when the template carries neither.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.18 (Channel Switch Announcement
+/// element: Mode, New Channel Number, Count) and 9.4.2.52 (Extended Channel
+/// Switch Announcement element: Mode, New Operating Class, New Channel
+/// Number, Count).
+pub fn write_channel_switch_count(template: &mut [u8], len: usize, count: u8) -> Option<()> {
+    const FIXED_BEACON_LENGTH: usize = MANAGEMENT_HEADER_LEN + BEACON_FIXED_BODY_LEN;
+    let mut remaining = template.get_mut(FIXED_BEACON_LENGTH..len)?;
+    while let Some(([id, length], rest)) = remaining.split_first_chunk_mut::<2>() {
+        let (body, tail) = rest.split_at_mut_checked(usize::from(*length))?;
+        if matches!(
+            (*id, *length),
+            (crate::channel_switch::CHANNEL_SWITCH_ELEMENT_ID, 3)
+                | (crate::channel_switch::EXTENDED_CHANNEL_SWITCH_ELEMENT_ID, 4)
+        ) {
+            *body.last_mut()? = count;
+            return Some(());
+        }
+        remaining = tail;
+    }
+    None
 }
 
 /// Locate the TIM element in one bounded AP beacon.

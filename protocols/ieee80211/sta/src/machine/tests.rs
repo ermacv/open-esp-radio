@@ -2452,7 +2452,10 @@ fn a_handshake_that_times_out_deauthenticates_with_its_reason() {
         let (mut world, _) = wpa2_associated::<2>(mint);
         // No Message 3: the handshake's deadline passes.
         world.advance();
-        assert_eq!(world.deauthentications, [REASON_HANDSHAKE_TIMEOUT]);
+        assert_eq!(
+            world.deauthentications,
+            [reason_code::FOUR_WAY_HANDSHAKE_TIMEOUT]
+        );
         assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
             StaDisconnectReason::HandshakeFailed
         ))));
@@ -2470,7 +2473,7 @@ fn a_message_3_whose_key_data_does_not_unwrap_deauthenticates() {
             .unwrap()
             .authenticate(&ptk);
         world.receive(at(33), &eapol_frame(message3.as_bytes()));
-        assert_eq!(world.deauthentications, [REASON_UNSPECIFIED]);
+        assert_eq!(world.deauthentications, [reason_code::UNSPECIFIED]);
     });
 }
 
@@ -2579,7 +2582,7 @@ fn leaving_on_request_deauthenticates_as_leaving() {
         let (mut world, _) = wpa2_connected::<2>(mint);
         world.command(at(50), 2, StaCommand::Disconnect).unwrap();
         world.run(at(50));
-        assert_eq!(world.deauthentications, [REASON_LEAVING]);
+        assert_eq!(world.deauthentications, [reason_code::DEAUTH_LEAVING]);
     });
 }
 
@@ -3428,7 +3431,7 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                                         .unwrap(),
                                 )
                                 .unwrap(),
-                                &REASON_UNSPECIFIED.to_le_bytes(),
+                                &reason_code::UNSPECIFIED.to_le_bytes(),
                                 TxPurpose::Deauthentication,
                                 encoding == 6,
                             )

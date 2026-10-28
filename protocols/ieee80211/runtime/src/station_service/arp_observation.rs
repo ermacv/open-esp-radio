@@ -7,6 +7,7 @@ use oer_ieee80211_wire::{
     frame::DecodedHeader,
     sequence::SequenceNumber,
 };
+use oer_ieee80211_wire::{ethertype::ETHER_TYPE_ARP, management::BROADCAST_ADDRESS};
 
 #[derive(Clone, Copy)]
 pub struct ArpFrameObservation {
@@ -35,7 +36,7 @@ impl ArpFrameObservation {
         let header = DecodedHeader::decode(bytes)?;
         let body = header.body().get(CCMP_HEADER_LEN..)?;
         let (llc, payload) = body.split_first_chunk::<LLC_SNAP_HEADER_LEN>()?;
-        if rfc1042_ether_type(*llc) != Some(0x0806) {
+        if rfc1042_ether_type(*llc) != Some(ETHER_TYPE_ARP) {
             return None;
         }
         Some(Self {
@@ -49,7 +50,7 @@ impl ArpFrameObservation {
     }
     #[inline(never)]
     pub(super) fn receive(bytes: &[u8], parts: &EthernetFrameParts<'_>) -> Option<Self> {
-        if parts.ether_type != 0x0806 {
+        if parts.ether_type != ETHER_TYPE_ARP {
             return None;
         }
         let header = DecodedHeader::decode(bytes)?;
@@ -59,7 +60,7 @@ impl ArpFrameObservation {
         let ccmp = CcmpHeader::parse(*header.body().first_chunk::<CCMP_HEADER_LEN>()?).ok()?;
         Some(Self {
             transmitted: false,
-            group_addressed: parts.destination == [0xff; 6],
+            group_addressed: parts.destination == BROADCAST_ADDRESS,
             sequence: SequenceNumber::from_sequence_control(header.sequence_control()).get(),
             packet_number: ccmp.packet_number().value(),
             key_id: ccmp.key_id().value(),

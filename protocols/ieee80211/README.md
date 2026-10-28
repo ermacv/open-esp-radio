@@ -6,29 +6,40 @@ the portable runtime drives role services over that port.
 
 | Module relative to this directory | Responsibility |
 | --- | --- |
-| `wire/src/block_ack/frame.rs` | Stateless Block Ack Action parsing and response encoding |
+| `wire/src/block_ack/frame.rs` | Block Ack Action (ADDBA, DELBA) and Compressed BlockAckReq codecs |
 | `upper-mac/src/block_ack/session.rs` | One TX agreement, negotiation generation and alarms |
 | `upper-mac/src/block_ack/originator.rs` | Per-peer/TID TX agreements, shared Dialog Token sequence and negotiation retries |
 | `upper-mac/src/block_ack/reorder.rs` | One receive agreement's bounded reorder window and slot release |
-| `wire/src/fragmentation/parsing.rs` | Fragment header/body validation |
-| `upper-mac/src/fragmentation/reassembly.rs` | Bounded reassembly, slots and admission tokens |
+| `wire/src/fragmentation/parsing.rs` | Fragment header/body validation and its frame refusals |
+| `upper-mac/src/fragmentation/reassembly.rs` | Bounded reassembly, slots, admission tokens and reassembly refusals |
 | `wire/src/ap/profile.rs` | Explicit AP advertisement values |
 | `wire/src/station/association.rs` | Association capability types, validation and encoding |
 | `wire/src/station/management.rs` | Probe/authentication management codecs |
 | `wire/src/ap.rs` | AP management/data codecs and protected management envelopes |
-| `wire/src/security.rs` | Link protection and negotiated association security vocabulary |
-| `wire/src/security/rsn.rs` | RSN element syntax and AKM suite vocabulary |
-| `wire/src/station/security.rs` | Station RSN candidate policy and association element |
+| `wire/src/security.rs` | Link protection, negotiated association security and the elements a BSS advertises |
+| `wire/src/security/rsn.rs` | RSN element and RSNXE syntax, encoders and AKM suite vocabulary |
+| `wire/src/station/security.rs` | The RSN element and RSNXE of a station's association request |
+| `wire/src/eapol.rs` | EAPOL-Key Key Information field and Key Data Encapsulations |
+| `wire/src/sae.rs` | SAE Authentication body fields and SAE extension element IDs |
+| `wire/src/status.rs` | Status and reason codes |
+| `wire/src/ethertype.rs` | EtherType values |
+| `wire/src/tsf.rs` | The Timestamp field and the time unit |
+| `sta/src/security.rs` | Station security policy: candidate admission and RSN selection |
+| `ap/src/security_policy.rs` | Access point security policy and its advertised elements |
 | `wire/src/station/data.rs` | Data codecs, with A-MSDU framing in `station/data/amsdu.rs` |
 | `wire/src/sequence.rs` | Twelve-bit sequence numbers and modulo-4096 arithmetic |
 | `sta/src/sequence.rs` | Separate management/non-QoS and per-TID TX sequence owners |
 | `upper-mac/src/duplicate.rs` | Peer-scoped receive retry history |
-| `wire/src/qos.rs` | Traffic intent, UP/AC and DSCP classification helpers |
+| `wire/src/qos.rs` | User priorities, access categories and the network header fields carrying traffic intent |
+| `upper-mac/src/qos.rs` | Ethernet traffic classification, DSCP mapping and admission downgrade |
+| `runtime/src/vif.rs` | Receive routing for one same-channel STA plus SoftAP pair |
 | `wire/src/channel.rs` | Validated 2.4/5 GHz channels and 20/40 MHz geometry |
 | `wire/src/channel_switch.rs` | Channel Switch Announcement parsing and encoding |
 | `wire/src/phy.rs` | Validated non-HT, HT and HE SU rates |
 | `wire/src/rates.rs` | Legacy rates of the (Extended) Supported Rates elements |
-| `wire/src/frame.rs` | Frame Control, the data/management MAC header codec and the QoS Control field |
+| `wire/src/frame.rs` | Frame Control with named subtypes, the data/management MAC header codec, Sequence Control access and the QoS Control field |
+| `wire/src/management.rs` | The management MAC header, Capability Information and probe requests |
+| `wire/src/beacon.rs` | Beacon encoding, DTIM/TIM stamping and template element edits |
 | `wire/src/monitor_injection.rs` | Header geometry of a monitor-injected MPDU |
 | `wire/src/extensions/wmm.rs` | WMM AC parameters and vendor IE parsing |
 | `wire/src/extensions/espressif/esp_now.rs` | ESP-NOW framing and protected-envelope validation |
@@ -47,7 +58,8 @@ state change. Physical positions are relative to the window head:
 capacity does not divide 4096. Immediate delivery checks the same slot
 ownership as the buffered path.
 
-QoS codecs provide DSCP classification and downgrade helpers. The caller
+The upper MAC's QoS module classifies traffic and downgrades access
+categories over the wire's priority values. The caller
 supplies traffic intent to the port; the backend lowers its checked access
 category to a hardware queue. Parsing a WMM Parameter Set acquires no
 admission. AP encoders take an explicit advertisement and channel: a 5 GHz

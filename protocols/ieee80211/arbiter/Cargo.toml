@@ -14,6 +14,7 @@ oer-ieee80211-wire = { path = "../wire" }
 oer-time = { path = "../../../portable/time" }
 
 oer-radio-port = { path = "../../radio/port" }
+oer-radio-regulatory = { path = "../../radio/regulatory" }
 
 [dev-dependencies]
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }

@@ -77,12 +77,11 @@ impl DataHeControl {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DataEncapPlan {
-    /// Complete DMA-resident 802.11 header. A hardware-generated HE-Control
-    /// field is inserted on air and is deliberately absent here.
+    /// The encoded 802.11 header, of `header_len` bytes. A hardware-generated
+    /// HE-Control field is inserted on air and is deliberately absent here.
     pub header: [u8; IEEE80211_QOS_DATA_HEADER_LEN],
     pub header_len: u8,
     pub llc_snap: [u8; LLC_SNAP_HEADER_LEN],
-    pub descriptor_multicast: bool,
     /// Standard WMM category; hardware queue and packet-type encoding belong to the chip.
     pub access_category: WmmAccessCategory,
     pub he_control: DataHeControl,
@@ -112,11 +111,6 @@ impl DataEncapPlan {
             .to_bytes();
         self.header[24] = low;
         self.header[25] = high;
-    }
-
-    /// Complete DMA prefix before plaintext/CCMP payload.
-    pub const fn dma_header_len(self) -> usize {
-        self.header_len as usize
     }
 }
 
@@ -413,9 +407,10 @@ pub const fn plan_data_encapsulation(
     let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = ethernet;
     let destination = [d0, d1, d2, d3, d4, d5];
     let source = [s0, s1, s2, s3, s4, s5];
-    let descriptor_multicast = matches!(role, DataInterfaceRole::AccessPoint)
+    // An access point's group-addressed data stays non-QoS.
+    let group_from_access_point = matches!(role, DataInterfaceRole::AccessPoint)
         && crate::address::AddressFlags::from_bytes([d0]).group();
-    let qos = peer_qos && !descriptor_multicast;
+    let qos = peer_qos && !group_from_access_point;
     let (direction, addresses) = match role {
         DataInterfaceRole::Station => (IEEE80211_TO_DS, [bssid, source, destination]),
         DataInterfaceRole::AccessPoint => (IEEE80211_FROM_DS, [destination, interface_mac, source]),
@@ -449,7 +444,6 @@ pub const fn plan_data_encapsulation(
             IEEE80211_LEGACY_DATA_HEADER_LEN as u8
         },
         llc_snap: [0xaa, 0xaa, 0x03, 0, 0, 0, e0, e1],
-        descriptor_multicast,
         access_category: priority.access_category(),
         he_control: DataHeControl::Disabled,
     }

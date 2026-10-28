@@ -13,10 +13,12 @@ use oer_ieee80211_sta::{
 use oer_ieee80211_upper_mac::block_ack::{RxReorderMpdu, RxReorderRelease};
 use oer_ieee80211_wire::{
     address::Bssid,
-    block_ack::frame::{BlockAckAction, DelbaParameters},
-    frame::{DecodedHeader, FrameControlFields, FrameType},
+    block_ack::frame::{
+        ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_delba, parse_compressed_block_ack_request,
+    },
+    frame::DecodedHeader,
     sequence::SequenceNumber,
-    trigger::BarControlFields,
+    status::reason_code,
 };
 use oer_time::Duration;
 
@@ -437,10 +439,14 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
                 }
                 let tid = active.tid();
                 self.stop(index, phase);
-                if let Ok(parameters) = DelbaParameters::from_bytes([0; 2]).with_tid(tid) {
-                    let [a, b] = parameters.with_initiator(false).to_bytes();
-                    // IEEE 802.11 reason 39: the requested QoS agreement timed out.
-                    let _queued = self.queue([3, 2, a, b, 39, 0, 0, 0, 0]);
+                if let Ok(delba) = encode_delba(tid, false, reason_code::TIMEOUT) {
+                    // The reply queue holds ADDBA-sized bodies; the DELBA
+                    // fills its prefix.
+                    let mut body = [0; ADDBA_ACTION_BODY_LEN];
+                    for (target, source) in body.iter_mut().zip(delba) {
+                        *target = source;
+                    }
+                    let _queued = self.queue(body);
                 }
             } else if let Some(active) = self
                 .banks
@@ -548,31 +554,10 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
 
     fn bar(&self, bytes: &[u8], local: [u8; 6]) -> Option<(u8, SequenceNumber)> {
         let (_, bssid) = self.header.association?;
-        let [a, b] = *bytes.first_chunk::<2>()?;
-        let control = FrameControlFields::from_bytes([a, b]);
-        if control.version() != 0
-            || control.kind() != FrameType::Control
-            || control.subtype() != 8
-            || control.ds() != 0
-            || control.protected()
-            || control.more_fragments()
-            || control.order()
-            || bytes.get(4..10)? != local
-            || bytes.get(10..16)? != bssid.get()
-        {
+        let request = parse_compressed_block_ack_request(bytes)?;
+        if request.receiver != local || request.transmitter != bssid.get() {
             return None;
         }
-        let parameters = BarControlFields::from_bytes(*bytes.get(16..18)?.first_chunk()?);
-        if parameters.bar_type() != 2 {
-            return None;
-        } // single-TID compressed BAR
-        let sequence = u16::from_le_bytes(*bytes.get(18..20)?.first_chunk()?);
-        if sequence & 15 != 0 {
-            return None;
-        }
-        Some((
-            parameters.tid().get(),
-            SequenceNumber::from_sequence_control(sequence),
-        ))
+        Some((request.tid, request.starting_sequence))
     }
 }

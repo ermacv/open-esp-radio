@@ -20,6 +20,7 @@ depend on it, and portable code never does.
 | `lmac` | Short and long retry limits (32), ACK-timeout accounting, the RTS threshold (2346 octets), the A-MPDU MSDU lifetime and aging margin, the A-MPDU retry policy and the default contention per access category (`DefaultContention`) | `libpp.a[lmac.o]::{lmacInit, lmacInitAc, lmacProcessAckTimeout, lmacMSDUAged}`, `libpp.a[pp.o]::ppResortTxAMPDU` |
 | `he_txop` | The HE TXOP duration RTS byte budget (`EspressifHeTxopRtsBudget`, a portable `HeTxopRtsBudget`) and the peer packet-padding code | `libpp.a[if_hwctrl.o]::ic_set_he_rts_threshold_bytes_tab` |
 | `ccmp` | The CCMP transmit packet-number step of three | `libnet80211.a[ieee80211_crypto_ccmp.o]::ccmp_encap` |
+| `classification` | The TX classifier's finite decisions: which protocols take a fixed per-packet rate, the user priority of a protocol word and the WMM admission downgrade | pinned `libnet80211.a[ieee80211_output.o]` |
 | `connection_coex` | The coexistence events (45, 46) and priorities a reconnecting station's Probe Request, Authentication, Association and EAPOL frames request, and the `ConnectionFrameCoex` port a chip implements | `libpp.a[pp.o]::pp_coex_tx_request`, `libpp.a[pm_coex.o]::pm_coex_reconnect_policy` |
 
 The values were recovered from the ESP32-S31 libraries pinned in

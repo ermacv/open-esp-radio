@@ -73,6 +73,9 @@ use core::marker::PhantomData;
 use oer_ieee80211_cipher::aes::software_aes128_key_unwrap;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
+use oer_ieee80211_wire::eapol::PAE_GROUP_ADDRESS;
+use oer_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
+use oer_ieee80211_wire::status::reason_code;
 
 use oer_ieee80211_arbiter::{
     AbsenceAnswer, AbsencePlace, Answer, ChannelRequest, Lease, LeaseId, LeasePlace, LeaveReason,
@@ -99,16 +102,20 @@ use oer_ieee80211_rsn::{
 use oer_ieee80211_upper_mac::protection::HePacketPadding;
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
 use {
-    crate::{scan::ScanTable, sequence::StaSequenceCounter},
+    crate::{
+        scan::ScanTable,
+        security::{StaSecurityPolicy, select_association_rsn},
+        sequence::StaSequenceCounter,
+    },
     oer_ieee80211_upper_mac::phy_mode::PhyMode,
     oer_ieee80211_wire::{
-        management::{MAX_SSID_LEN, ProbeRequest},
+        management::{BROADCAST_ADDRESS, MAX_SSID_LEN, ProbeRequest},
         scan::ScanRecord,
-        security::{AssociationAkm, AssociationSecurity, RsnAssociation, StaSecurityPolicy},
+        security::{AssociationAkm, AssociationSecurity, RsnAssociation},
         sequence::SequenceNumber,
         station::{
             AssociationCapabilities, AssociationRequest, OpenAuthenticationRequest, SelectedRsn,
-            StaManagementFrame, StaManagementSubtype, select_association_rsn,
+            StaManagementFrame, StaManagementSubtype,
         },
         station_beacon::parse_sta_beacon,
         station_power_save::{StaNullDataFrame, StaPowerManagement},
@@ -784,9 +791,6 @@ const QOS_SEQUENCES: [StaSequenceCounter; 8] = [StaSequenceCounter::new(Sequence
 
 /// The reason codes of the station's Deauthentication (IEEE 802.11-2020
 /// Table 9-90).
-const REASON_UNSPECIFIED: u16 = 1;
-const REASON_LEAVING: u16 = 3;
-const REASON_HANDSHAKE_TIMEOUT: u16 = 15;
 
 /// Statically dispatched composition hooks retained across stop/restart.
 /// The provider owns its entropy state; each nonce request must be fresh for
@@ -1497,7 +1501,7 @@ impl<T: StaTokens, K> State<T, K> {
             Err(_) => {
                 let deauthentication = Deauthentication {
                     bssid: handshake.bssid,
-                    reason_code: REASON_UNSPECIFIED,
+                    reason_code: reason_code::UNSPECIFIED,
                     protected: handshake.management.is_some(),
                 };
                 self.leave(
@@ -2240,11 +2244,6 @@ enum LeaveStep {
     /// The lease ends with its notice, which gives the place back.
     AwaitEnd,
 }
-
-/// The EAPOL ether type.
-const EAPOL_ETHER_TYPE: u16 = 0x888e;
-/// IEEE 802.1X Port Access Entity group address.
-const PAE_GROUP_ADDRESS: [u8; 6] = [0x01, 0x80, 0xc2, 0x00, 0x00, 0x03];
 
 /// A checked management disconnect from the selected BSS.
 fn peer_disconnect(frame: &[u8], local: OwnAddress, bssid: Bssid) -> Option<u16> {
@@ -3635,7 +3634,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             StationNotice::Leave(reason) => {
                 let reason_code = match reason {
                     LeaveReason::Stopped | LeaveReason::PortFailed => None,
-                    LeaveReason::Unservable => Some(REASON_LEAVING),
+                    LeaveReason::Unservable => Some(reason_code::DEAUTH_LEAVING),
                 };
                 match &mut *state {
                     State::Connected(connected) => leave_connected(
@@ -3724,7 +3723,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 leave_connected(
                     connected,
                     StaDisconnectReason::Requested,
-                    Some(REASON_LEAVING),
+                    Some(reason_code::DEAUTH_LEAVING),
                 )
             }
             (State::Scan(_), Done::Command(StaCommand::Disconnect)) => {
@@ -3767,7 +3766,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             (State::Join(join), done) => self.join_step(join, now, done),
             (State::Handshake(handshake), Done::Command(StaCommand::Disconnect)) => {
-                leave_handshake(handshake, REASON_LEAVING)
+                leave_handshake(handshake, reason_code::DEAUTH_LEAVING)
             }
             (State::Handshake(handshake), done) => match (&handshake.step, done) {
                 (
@@ -3786,7 +3785,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         RsnStaDeadlineEvent::Expired { .. }
                     ) =>
                 {
-                    leave_handshake(handshake, REASON_HANDSHAKE_TIMEOUT)
+                    leave_handshake(handshake, reason_code::FOUR_WAY_HANDSHAKE_TIMEOUT)
                 }
                 _ => Change::Keep,
             },
@@ -3832,13 +3831,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 leave_connected(
                     connected,
                     StaDisconnectReason::HandshakeFailed,
-                    Some(REASON_UNSPECIFIED),
+                    Some(reason_code::UNSPECIFIED),
                 )
             }
             (
                 State::Handshake(handshake),
                 TxPurpose::HandshakeResponse | TxPurpose::HandshakeLast,
-            ) => leave_handshake(handshake, REASON_UNSPECIFIED),
+            ) => leave_handshake(handshake, reason_code::UNSPECIFIED),
             (State::Join(join), TxPurpose::Authentication { attempt }) => {
                 if matches!(join.step,
                     JoinStep::Authenticate(Authenticate::Exchange {
@@ -3889,13 +3888,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 leave_connected(
                     connected,
                     StaDisconnectReason::HandshakeFailed,
-                    Some(REASON_HANDSHAKE_TIMEOUT),
+                    Some(reason_code::FOUR_WAY_HANDSHAKE_TIMEOUT),
                 )
             }
             Done::Command(StaCommand::Disconnect) => leave_connected(
                 connected,
                 StaDisconnectReason::Requested,
-                Some(REASON_LEAVING),
+                Some(reason_code::DEAUTH_LEAVING),
             ),
             Done::Tx {
                 purpose: TxPurpose::HandshakeLast,
@@ -4418,7 +4417,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         )?;
         for parts in admitted.msdus()? {
             let parts = parts?;
-            if parts.ether_type == EAPOL_ETHER_TYPE {
+            if parts.ether_type == ETHER_TYPE_EAPOL {
                 if !matches!(*self.security, StaSecurity::Open)
                     && !admitted.protected()
                     && parts.destination != self.config.address.get()
@@ -4579,7 +4578,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 let protected = match handshake.supplicant() {
                     Ok(supplicant) => supplicant.management_protection(),
                     Err(_) => {
-                        let change = leave_handshake(handshake, REASON_UNSPECIFIED);
+                        let change = leave_handshake(handshake, reason_code::UNSPECIFIED);
                         state.apply(change);
                         return;
                     }
@@ -4646,7 +4645,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             return leave_connected(
                                 connected,
                                 StaDisconnectReason::DeadlineOverflow,
-                                Some(REASON_UNSPECIFIED),
+                                Some(reason_code::UNSPECIFIED),
                             );
                         }
                         None
@@ -4967,7 +4966,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     Err(oer_ieee80211_rsn::supplicant::RsnStaProcessError::Supplicant(
                         RsnStaSupplicantError::InvalidFrame(error),
                     )) => return leave_keyed(StaDisconnectReason::InvalidEapol(error), None),
-                    Err(_) => return leave_handshake(handshake, REASON_UNSPECIFIED),
+                    Err(_) => return leave_handshake(handshake, reason_code::UNSPECIFIED),
                 }
             }
             Ok(RsnStaSupplicantAction::Ready(action)) => action,
@@ -4979,7 +4978,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             // A peer frame the supplicant rejects changes nothing.
             Err(error) if error.is_peer_input_rejection() => RsnStaReady::None,
-            Err(_) => return leave_handshake(handshake, REASON_UNSPECIFIED),
+            Err(_) => return leave_handshake(handshake, reason_code::UNSPECIFIED),
         };
         match action {
             RsnStaReady::Transmit(message) => {
@@ -4990,7 +4989,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         StaDisconnectReason::DeadlineOverflow,
                         Some(Deauthentication {
                             bssid: handshake.bssid,
-                            reason_code: REASON_UNSPECIFIED,
+                            reason_code: reason_code::UNSPECIFIED,
                             protected: false,
                         }),
                     );
@@ -5002,7 +5001,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 handshake.step = HandshakeStep::Install(request, protection);
             }
             RsnStaReady::RetryInstall(_) | RsnStaReady::Deauthenticate => {
-                return leave_handshake(handshake, REASON_UNSPECIFIED);
+                return leave_handshake(handshake, reason_code::UNSPECIFIED);
             }
             RsnStaReady::None => {}
         }
@@ -5023,7 +5022,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     Err(Unsent::NoTokens) => (HandshakeStep::Send(message), None),
                     Err(Unsent::Encode | Unsent::NoConnection) => {
                         return (
-                            leave_handshake(handshake, REASON_UNSPECIFIED),
+                            leave_handshake(handshake, reason_code::UNSPECIFIED),
                             ActionProgress::Transition,
                         );
                     }
@@ -5034,7 +5033,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     Ok(supplicant) => supplicant.management_protection(),
                     Err(_) => {
                         return (
-                            leave_handshake(handshake, REASON_UNSPECIFIED),
+                            leave_handshake(handshake, reason_code::UNSPECIFIED),
                             ActionProgress::Transition,
                         );
                     }
@@ -5043,7 +5042,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     CcmpRxReplayEpoch::pairwise(*request.pairwise().receive_sequence())
                 else {
                     return (
-                        leave_handshake(handshake, REASON_UNSPECIFIED),
+                        leave_handshake(handshake, reason_code::UNSPECIFIED),
                         ActionProgress::Transition,
                     );
                 };
@@ -5100,7 +5099,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     ),
                     Err(()) => {
                         return (
-                            leave_handshake(handshake, REASON_UNSPECIFIED),
+                            leave_handshake(handshake, reason_code::UNSPECIFIED),
                             ActionProgress::Transition,
                         );
                     }
@@ -5130,7 +5129,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     bssid,
                     destination: bssid.get(),
                     sequence_number,
-                    ether_type: EAPOL_ETHER_TYPE,
+                    ether_type: ETHER_TYPE_EAPOL,
                     payload: eapol,
                 }
                 .encode(frame)
@@ -5166,7 +5165,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 leave_connected(
                     connected,
                     StaDisconnectReason::SaQueryTimeout,
-                    Some(REASON_UNSPECIFIED),
+                    Some(reason_code::UNSPECIFIED),
                 ),
                 ActionProgress::Transition,
             );
@@ -5220,7 +5219,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             return match owed {
                 Ok(owed) => (Change::Keep, ActionProgress::Action(owed)),
                 Err(reason) => (
-                    leave_connected(connected, reason, Some(REASON_UNSPECIFIED)),
+                    leave_connected(connected, reason, Some(reason_code::UNSPECIFIED)),
                     ActionProgress::Transition,
                 ),
             };
@@ -5228,7 +5227,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         match self.owe_background(connected, now) {
             Ok(progress) => (Change::Keep, progress),
             Err(reason) => (
-                leave_connected(connected, reason, Some(REASON_UNSPECIFIED)),
+                leave_connected(connected, reason, Some(reason_code::UNSPECIFIED)),
                 ActionProgress::Transition,
             ),
         }
@@ -5989,7 +5988,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 StaDisconnectReason::DeadlineOverflow,
                 Some(Deauthentication {
                     bssid,
-                    reason_code: REASON_UNSPECIFIED,
+                    reason_code: reason_code::UNSPECIFIED,
                     protected: false,
                 }),
             );
@@ -6025,7 +6024,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 StaDisconnectReason::HandshakeFailed,
                 Some(Deauthentication {
                     bssid,
-                    reason_code: REASON_UNSPECIFIED,
+                    reason_code: reason_code::UNSPECIFIED,
                     protected: false,
                 }),
             ),
@@ -6153,7 +6152,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             user_priority: PRIORITY,
             peer_qos,
             ccmp_header: [0; 8],
-            ether_type: EAPOL_ETHER_TYPE,
+            ether_type: ETHER_TYPE_EAPOL,
             payload: eapol,
         };
         Ok(self.encode_reserved(
@@ -6176,9 +6175,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             credit,
             |output| {
                 ProbeRequest {
-                    destination: [0xff; 6],
+                    destination: BROADCAST_ADDRESS,
                     source: address,
-                    bssid: [0xff; 6],
+                    bssid: BROADCAST_ADDRESS,
                     sequence_number,
                     ssid: &ssid,
                     supported_rates: &rates,
@@ -6277,7 +6276,7 @@ fn leave_keyed<T: StaTokens, K>(
     }
 }
 fn leave_handshake<T: StaTokens, K>(handshake: &Handshake<T, K>, reason_code: u16) -> Change<T, K> {
-    let reason = if reason_code == REASON_LEAVING {
+    let reason = if reason_code == reason_code::DEAUTH_LEAVING {
         StaDisconnectReason::Requested
     } else {
         StaDisconnectReason::HandshakeFailed
@@ -6350,7 +6349,7 @@ fn finish_handshake_install<T: StaTokens, K>(
                 protection,
             },
         },
-        _ => leave_handshake(handshake, REASON_UNSPECIFIED),
+        _ => leave_handshake(handshake, reason_code::UNSPECIFIED),
     }
 }
 /// Why a frame was not handed out.

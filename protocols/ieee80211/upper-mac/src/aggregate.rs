@@ -11,6 +11,7 @@
 //! and vendor density rounding remain the encoder's admission responsibility.
 
 use oer_ieee80211_port::{AmpduCapabilities, PhyRate};
+use oer_ieee80211_wire::ht::HtAmpduParameters;
 use oer_ieee80211_wire::{ampdu, phy::LegacyRate};
 
 use crate::ampdu::MAX_AMPDU_SUBFRAMES;
@@ -54,17 +55,14 @@ pub struct AmpduLimits {
 impl AmpduLimits {
     /// The recipient's Maximum A-MPDU Length in octets.
     pub const fn peer_max_length(&self) -> u32 {
-        match self.peer_ampdu_parameters & 0x03 {
-            0 => 0x1fff,
-            1 => 0x3fff,
-            2 => 0x7fff,
-            _ => 0xffff,
-        }
+        HtAmpduParameters::from_bytes([self.peer_ampdu_parameters]).max_ampdu_length()
     }
 
     /// The recipient's Minimum MPDU Start Spacing, IEEE encoding 0-7.
     pub const fn min_mpdu_start_spacing(&self) -> u8 {
-        (self.peer_ampdu_parameters >> 2) & 0x07
+        HtAmpduParameters::from_bytes([self.peer_ampdu_parameters])
+            .spacing()
+            .get()
     }
 
     /// How many frames of `ethernet_lens`, from the first, one A-MPDU

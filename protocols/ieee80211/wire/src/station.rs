@@ -14,7 +14,7 @@ use crate::{
     management::{MANAGEMENT_HEADER_LEN, MAX_SSID_LEN, MAX_SUPPORTED_RATES_LEN},
     qos::WmmUserPriority,
     scan::ScanRecord,
-    security::{LinkProtection, StaSecurityPolicy},
+    security::LinkProtection,
     sequence::SequenceNumber,
 };
 
@@ -97,7 +97,7 @@ pub use association::{
     parse_association_response,
 };
 pub use data::{
-    EncodedStaFrame, StaDataFrame, StaProtectedAmsduFrame, StaProtectedDataFrame,
+    EncodedStaFrame, StaDataFrame, StaOpenDataFrame, StaProtectedAmsduFrame, StaProtectedDataFrame,
     StaProtectedEthernetFrame, sta_protected_amsdu_frame_length,
     sta_protected_amsdu_pair_frame_length,
 };
@@ -108,7 +108,7 @@ pub use management::{
     StaProtectedManagementFrame, parse_open_authentication_response, parse_sae_authentication,
     parse_sta_disconnect,
 };
-pub use security::{SelectedRsn, StaSecurityError, select_association_rsn};
+pub use security::SelectedRsn;
 
 pub(crate) fn validate_peer(bssid: [u8; 6]) -> Result<(), StationFrameError> {
     if bssid == [0; 6]

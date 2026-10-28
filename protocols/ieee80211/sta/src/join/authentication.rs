@@ -2,6 +2,7 @@
 
 use oer_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_ieee80211_wire::status::status_code;
 use {
     crate::sequence::StaSequenceCounter,
     oer_ieee80211_wire::station::{
@@ -140,7 +141,7 @@ impl StaAuthenticationExchange {
             return StaAuthenticationEvent::Irrelevant(self);
         };
         let runtime = self.finish_attempt();
-        if response.status_code == 0 {
+        if response.status_code == status_code::SUCCESS {
             StaAuthenticationEvent::Authenticated {
                 attempt: runtime.attempts_started,
                 total_received_frames: runtime.total_received_frames,

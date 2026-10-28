@@ -12,6 +12,7 @@
 
 use super::*;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
+use oer_ieee80211_wire::eapol::{GtkKdeInfo, KDE_HEADER_LEN, Kde, kde_header};
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct RsnGtk {
@@ -152,7 +153,7 @@ impl<const N: usize> RsnPlainKeyData<N> {
             None => rest,
         };
         if let Some(first) = padding_bytes.first_mut() {
-            *first = VENDOR_ELEMENT_ID;
+            *first = KDE_ELEMENT_ID;
         }
         Ok(Self { bytes })
     }
@@ -170,18 +171,15 @@ fn gtk_kde_bytes(gtk: &RsnGtk) -> [u8; GTK_KDE_LEN] {
             panic!("GTK KDE geometry");
         }
     }
-    let [o0, o1, o2] = RSN_OUI;
+    const HEADER: [u8; KDE_HEADER_LEN] =
+        match kde_header(GTK_KDE_TYPE, GTK_KDE_LEN - KDE_HEADER_LEN) {
+            Some(header) => header,
+            None => panic!("GTK KDE geometry"),
+        };
+    let [h0, h1, h2, h3, h4, h5] = HEADER;
+    let [info] = GtkKdeInfo::new(gtk.key_id, gtk.transmit).to_bytes();
     let mut kde = [0; GTK_KDE_LEN];
-    let header: [u8; 8] = [
-        VENDOR_ELEMENT_ID,
-        (GTK_KDE_LEN - 2) as u8,
-        o0,
-        o1,
-        o2,
-        GTK_KDE_TYPE,
-        gtk.key_id.get() | u8::from(gtk.transmit) << 2,
-        0,
-    ];
+    let header: [u8; 8] = [h0, h1, h2, h3, h4, h5, info, 0];
     for (target, source) in kde.iter_mut().zip(header.iter().chain(gtk.key())) {
         *target = *source;
     }
@@ -194,19 +192,15 @@ fn igtk_kde_bytes(igtk: &RsnIgtk) -> [u8; IGTK_KDE_LEN] {
             panic!("IGTK KDE geometry");
         }
     }
-    let [o0, o1, o2] = RSN_OUI;
+    const HEADER: [u8; KDE_HEADER_LEN] =
+        match kde_header(IGTK_KDE_TYPE, IGTK_KDE_LEN - KDE_HEADER_LEN) {
+            Some(header) => header,
+            None => panic!("IGTK KDE geometry"),
+        };
+    let [h0, h1, h2, h3, h4, h5] = HEADER;
     let [id0, id1] = u16::from(igtk.key_id()).to_le_bytes();
     let mut kde = [0; IGTK_KDE_LEN];
-    let header: [u8; 8] = [
-        VENDOR_ELEMENT_ID,
-        (IGTK_KDE_LEN - 2) as u8,
-        o0,
-        o1,
-        o2,
-        IGTK_KDE_TYPE,
-        id0,
-        id1,
-    ];
+    let header: [u8; 8] = [h0, h1, h2, h3, h4, h5, id0, id1];
     for (target, source) in kde.iter_mut().zip(
         header
             .iter()
@@ -272,7 +266,7 @@ fn parse_key_data(
 
     while let Some((&first, after_first)) = remaining.split_first() {
         if remaining.iter().all(|byte| *byte == 0)
-            || (first == VENDOR_ELEMENT_ID && after_first.iter().all(|byte| *byte == 0))
+            || (first == KDE_ELEMENT_ID && after_first.iter().all(|byte| *byte == 0))
         {
             break;
         }
@@ -313,29 +307,30 @@ fn parse_key_data(
                 }
                 saw_rsnxe = true;
             }
-            (VENDOR_ELEMENT_ID, _) => {
-                let [_, _, o0, o1, o2, kind, body @ ..] = element else {
+            (KDE_ELEMENT_ID, _) => {
+                let Some(Kde {
+                    data_type,
+                    data: body,
+                }) = Kde::parse(element)
+                else {
                     return Err(RsnFrameError::UnsupportedKeyData);
                 };
-                if [*o0, *o1, *o2] != RSN_OUI {
-                    return Err(RsnFrameError::UnsupportedKeyData);
-                }
-                match *kind {
+                match data_type {
                     GTK_KDE_TYPE => {
                         let [info, reserved, key @ ..] = body else {
                             return Err(RsnFrameError::UnsupportedKeyData);
                         };
                         let key = <&[u8; RSN_GTK_LEN]>::try_from(key)
                             .map_err(|_| RsnFrameError::UnsupportedKeyData)?;
-                        if *reserved != 0 || info & !0x07 != 0 {
+                        let info = GtkKdeInfo::from_bytes([*info]);
+                        if *reserved != 0 || info.reserved() != 0 {
                             return Err(RsnFrameError::UnsupportedKeyData);
                         }
                         if gtk.is_some() {
                             return Err(RsnFrameError::DuplicateGtk);
                         }
-                        let key_id =
-                            GroupKeyId::new(info & 0x03).ok_or(RsnFrameError::InvalidKeyId)?;
-                        gtk = Some(RsnGtk::new(key_id, info & 0x04 != 0, key));
+                        let key_id = info.group_key_id().ok_or(RsnFrameError::InvalidKeyId)?;
+                        gtk = Some(RsnGtk::new(key_id, info.transmit(), key));
                     }
                     IGTK_KDE_TYPE => {
                         if !management_protection {

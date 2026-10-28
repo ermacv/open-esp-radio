@@ -1,6 +1,7 @@
 use super::*;
 
 use oer_ieee80211_rsn::sae::anti_clogging_token;
+use oer_ieee80211_wire::status::status_code;
 
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const STATION: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -59,9 +60,9 @@ impl Station {
 
     fn status(&self) -> u16 {
         if self.h2e {
-            AP_SAE_STATUS_HASH_TO_ELEMENT
+            status_code::SAE_HASH_TO_ELEMENT
         } else {
-            AP_SAE_STATUS_SUCCESS
+            status_code::SUCCESS
         }
     }
 
@@ -162,10 +163,10 @@ fn a_wrong_password_fails_the_confirm() {
     assert_eq!(
         output.result,
         ApSaeResult::Failed {
-            status: AP_SAE_STATUS_CHALLENGE_FAILURE
+            status: status_code::CHALLENGE_FAILURE
         }
     );
-    assert_eq!(only_reply(&output).status, AP_SAE_STATUS_CHALLENGE_FAILURE);
+    assert_eq!(only_reply(&output).status, status_code::CHALLENGE_FAILURE);
 }
 
 #[test]
@@ -181,7 +182,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
             0,
             &mut random,
         );
-        assert_eq!(only_reply(&output).status, AP_SAE_STATUS_SUCCESS);
+        assert_eq!(only_reply(&output).status, status_code::SUCCESS);
     }
 
     let station = Station::new(STATION, PASSWORD, false);
@@ -193,7 +194,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
         &mut random,
     );
     let request = only_reply(&output);
-    assert_eq!(request.status, AP_SAE_STATUS_ANTI_CLOGGING_TOKEN_REQUIRED);
+    assert_eq!(request.status, status_code::ANTI_CLOGGING_TOKEN_REQUIRED);
     assert_eq!(output.result, ApSaeResult::Continue);
     let token = anti_clogging_token(request.body(), false).unwrap();
 
@@ -204,7 +205,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
         0,
         &mut random,
     );
-    assert_eq!(only_reply(&output).status, AP_SAE_STATUS_SUCCESS);
+    assert_eq!(only_reply(&output).status, status_code::SUCCESS);
 
     // A token is valid once.
     let output = access_point.receive(
@@ -217,7 +218,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
     assert_eq!(
         output.result,
         ApSaeResult::Failed {
-            status: AP_SAE_STATUS_UNSPECIFIED_FAILURE
+            status: status_code::UNSPECIFIED_FAILURE
         }
     );
 }
@@ -228,13 +229,13 @@ fn queued_commits_count_toward_anti_clogging() {
     let station = Station::new(STATION, PASSWORD, true);
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
-        frame(STATION, 1, AP_SAE_STATUS_HASH_TO_ELEMENT, &commit[..len]),
+        frame(STATION, 1, status_code::SAE_HASH_TO_ELEMENT, &commit[..len]),
         oer_time::Instant::from_micros(0),
         2,
         &mut Counter(1),
     );
     let request = only_reply(&output);
-    assert_eq!(request.status, AP_SAE_STATUS_ANTI_CLOGGING_TOKEN_REQUIRED);
+    assert_eq!(request.status, status_code::ANTI_CLOGGING_TOKEN_REQUIRED);
     assert_eq!(anti_clogging_token(request.body(), true).unwrap().len(), 32);
 }
 
@@ -251,12 +252,12 @@ fn a_commit_of_another_group_is_refused_with_its_group() {
         &mut Counter(2),
     );
     let reply = only_reply(&output);
-    assert_eq!(reply.status, AP_SAE_STATUS_UNSUPPORTED_GROUP);
+    assert_eq!(reply.status, status_code::UNSUPPORTED_FINITE_CYCLIC_GROUP);
     assert_eq!(reply.body(), [20, 0]);
     assert_eq!(
         output.result,
         ApSaeResult::Failed {
-            status: AP_SAE_STATUS_UNSUPPORTED_GROUP
+            status: status_code::UNSUPPORTED_FINITE_CYCLIC_GROUP
         }
     );
 }
@@ -305,10 +306,7 @@ fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
         0,
         &mut random,
     );
-    assert_eq!(
-        only_reply(&output).status,
-        AP_SAE_STATUS_UNABLE_TO_HANDLE_NEW_STA
-    );
+    assert_eq!(only_reply(&output).status, status_code::DENIED_NO_MORE_STAS);
 
     access_point.forget([2, 0, 0, 0, 1, 0]);
     let output = access_point.receive(
@@ -317,7 +315,7 @@ fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
         0,
         &mut random,
     );
-    assert_eq!(only_reply(&output).status, AP_SAE_STATUS_SUCCESS);
+    assert_eq!(only_reply(&output).status, status_code::SUCCESS);
 }
 
 #[test]
@@ -342,7 +340,7 @@ fn maximal_queued_commit_count_still_requests_an_anti_clogging_token() {
     );
     assert_eq!(
         only_reply(&output).status,
-        AP_SAE_STATUS_ANTI_CLOGGING_TOKEN_REQUIRED
+        status_code::ANTI_CLOGGING_TOKEN_REQUIRED
     );
     assert_eq!(output.result, ApSaeResult::Continue);
 }
@@ -410,11 +408,11 @@ fn processing_failure_keeps_both_the_commit_and_failure_reply_in_order() {
     assert_eq!(replies.len(), 2);
     assert_eq!(replies[0].body().len(), SAE_COMMIT_LEN);
     assert!(replies[1].body().is_empty());
-    assert_eq!(replies[1].status, AP_SAE_STATUS_UNSPECIFIED_FAILURE);
+    assert_eq!(replies[1].status, status_code::UNSPECIFIED_FAILURE);
     assert_eq!(
         output.result,
         ApSaeResult::Failed {
-            status: AP_SAE_STATUS_UNSPECIFIED_FAILURE
+            status: status_code::UNSPECIFIED_FAILURE
         }
     );
 }

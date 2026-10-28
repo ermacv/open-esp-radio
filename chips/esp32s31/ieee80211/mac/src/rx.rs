@@ -32,14 +32,15 @@ impl RxBufferFullCounter for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
 use oer_ieee80211_port::MacRxMetadata;
 use oer_ieee80211_wire::ccmp::CcmpHeader;
 use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
-use oer_ieee80211_wire::he::{
-    He20MuSigBMimoStreamError, He20MuSigBMimoUsers, He20MuSigBNonMimoStreamError,
-    He20MuSigBNonMimoUsers, HeMuSigBUser,
-};
+use oer_ieee80211_wire::he::HeMuSigBUser;
 use oer_ieee80211_wire::ht::HtDuplicateMcs32;
 use oer_ieee80211_wire::sequence::SequenceControl;
 use oer_ieee80211_wire::signal::{
     HeMuSigA1, HeMuSigA2, HeSuSigA1, HeSuSigA2, HeTriggerBasedSigA1, HeTriggerBasedSigA2, HtSig,
+};
+use sig_b::{
+    He20MuSigBMimoStreamError, He20MuSigBMimoUsers, He20MuSigBNonMimoStreamError,
+    He20MuSigBNonMimoUsers,
 };
 
 pub const INGRESS_STRICT_RXEND: u32 = 0x01;
@@ -1224,6 +1225,7 @@ pub mod ampdu;
 pub mod hardware;
 pub mod pool;
 mod prefix;
+pub mod sig_b;
 
 use prefix::segment_valid;
 pub use prefix::{

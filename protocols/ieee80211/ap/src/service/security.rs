@@ -2,7 +2,7 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
-use oer_ieee80211_wire::security::{SppCapability, SppError};
+use oer_ieee80211_wire::security::{SppCapability, SppError, rsn::rsnx_capabilities};
 
 /// Why an association cannot use the advertised RSN profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -652,12 +652,9 @@ pub fn admit_association_security<S: SppScope>(
     }
 }
 
-/// Whether an RSNXE announces SAE hash to element (bit 5 of its first
-/// capability octet).
+/// Whether an RSNXE announces SAE hash to element.
 fn announces_sae_h2e(rsnxe: &[u8]) -> bool {
-    rsnxe
-        .get(2)
-        .is_some_and(|capabilities| capabilities & (1 << 5) != 0)
+    rsnx_capabilities(rsnxe).is_some_and(|capabilities| capabilities.sae_h2e())
 }
 
 #[cfg(test)]

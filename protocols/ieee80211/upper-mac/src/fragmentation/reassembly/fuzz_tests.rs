@@ -9,9 +9,9 @@
 use std::vec::Vec;
 
 use super::*;
+use crate::fragmentation::OpenDataReassemblyError;
 use oer_ieee80211_wire::ccmp::{CCMP_HEADER_LEN, CcmpHeader};
 use oer_ieee80211_wire::data::{DataInterfaceRole, IEEE80211_LEGACY_DATA_HEADER_LEN};
-use oer_ieee80211_wire::fragmentation::OpenDataFragmentError;
 use oer_ieee80211_wire::fragmentation::{
     parse_ccmp_data_fragment, parse_open_data_fragment, parse_open_data_identity,
 };
@@ -198,7 +198,7 @@ fn a_sixteenth_fragment_with_more_fragments_is_refused() {
         let fragment = parse_open_data_fragment(DataInterfaceRole::Station, &frame).unwrap();
         let outcome = owner.ingest(fragment, Instant::from_micros(1), read);
         if number == 15 {
-            assert_eq!(outcome, Err(OpenDataFragmentError::TooManyFragments));
+            assert_eq!(outcome, Err(OpenDataReassemblyError::TooManyFragments));
         } else {
             assert!(matches!(
                 outcome,

@@ -1047,20 +1047,7 @@ fn ieee80211_core(name: &str) -> bool {
 /// dependency of it, optional, target-specific or transitive, reaches a core.
 #[test]
 fn the_ieee80211_port_reaches_no_core() {
-    let root = root();
-    let workspace = read_toml(&root.join("Cargo.toml"));
-    let graph: BTreeMap<String, BTreeSet<String>> = packages(&root)
-        .values()
-        .map(|manifest| {
-            (
-                manifest["package"]["name"]
-                    .as_str()
-                    .expect("name")
-                    .to_owned(),
-                normal_dependencies(manifest, &workspace["workspace"]),
-            )
-        })
-        .collect();
+    let graph = workspace_dependency_graph();
     for name in IEEE80211_CORES.iter().chain(&["oer-ieee80211-port"]) {
         assert!(graph.contains_key(*name), "{name} is a workspace package");
     }
@@ -1108,4 +1095,82 @@ model = { package = "oer-ieee80211-upper-mac", version = "1" }
         BTreeSet::from(["oer-ieee80211-wire".into(), "oer-radio-port".into()]),
     )]);
     assert!(forbidden_paths(&clean, "oer-ieee80211-port", ieee80211_core).is_empty());
+}
+
+/// What the IEEE 802.11 wire formats may not reach: time, which belongs to
+/// the cores and runtimes, and every IEEE 802.11 crate above the formats.
+fn above_ieee80211_wire(name: &str) -> bool {
+    name == "oer-time" || (name.starts_with("oer-ieee80211-") && name != "oer-ieee80211-wire")
+}
+
+fn workspace_dependency_graph() -> BTreeMap<String, BTreeSet<String>> {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    packages(&root)
+        .values()
+        .map(|manifest| {
+            (
+                manifest["package"]["name"]
+                    .as_str()
+                    .expect("name")
+                    .to_owned(),
+                normal_dependencies(manifest, &workspace["workspace"]),
+            )
+        })
+        .collect()
+}
+
+/// The wire crate holds only formats and standard constants: no normal
+/// dependency of it, optional, target-specific or transitive, reaches time
+/// or an IEEE 802.11 crate above it.
+#[test]
+fn the_ieee80211_wire_reaches_neither_time_nor_a_crate_above_it() {
+    let graph = workspace_dependency_graph();
+    for name in ["oer-ieee80211-wire", "oer-ieee80211-port", "oer-time"] {
+        assert!(graph.contains_key(name), "{name} is a workspace package");
+    }
+    let violations = forbidden_paths(&graph, "oer-ieee80211-wire", above_ieee80211_wire);
+    assert!(
+        violations.is_empty(),
+        "wire reaches time or a crate above it: {violations:?}"
+    );
+}
+
+#[test]
+fn the_ieee80211_wire_rule_rejects_direct_and_transitive_time_and_upper_paths() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+format = { package = "oer-wire", version = "1" }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+clock = { package = "oer-time", version = "1", optional = true }
+[dev-dependencies]
+model = { package = "oer-ieee80211-model", version = "1" }
+"#,
+    )
+    .expect("manifest");
+    let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
+    let graph = BTreeMap::from([
+        (
+            "oer-ieee80211-wire".into(),
+            normal_dependencies(&manifest, &workspace),
+        ),
+        ("oer-wire".into(), BTreeSet::from(["helper".into()])),
+        (
+            "helper".into(),
+            BTreeSet::from(["oer-ieee80211-port".into()]),
+        ),
+    ]);
+    assert_eq!(
+        forbidden_paths(&graph, "oer-ieee80211-wire", above_ieee80211_wire),
+        [
+            "oer-ieee80211-wire -> oer-time",
+            "oer-ieee80211-wire -> oer-wire -> helper -> oer-ieee80211-port",
+        ]
+    );
+    let clean = BTreeMap::from([(
+        "oer-ieee80211-wire".into(),
+        BTreeSet::from(["oer-wire".into(), "oer-radio-regulatory".into()]),
+    )]);
+    assert!(forbidden_paths(&clean, "oer-ieee80211-wire", above_ieee80211_wire).is_empty());
 }

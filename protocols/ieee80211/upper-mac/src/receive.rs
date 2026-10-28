@@ -12,10 +12,11 @@
 
 use crate::ccmp::{CcmpRxProtection, CcmpRxReplayEpoch};
 use oer_ieee80211_wire::{
-    address::{Bssid, OwnAddress},
+    address::{AddressFlags, Bssid, OwnAddress},
     ccmp::CcmpHeader,
     data::{EthernetFrameParts, decapsulate_payload},
-    frame::DecodedHeader,
+    frame::{DecodedHeader, FrameControlFields, QosControl},
+    sequence::SequenceControl,
 };
 
 /// Why an RX frame or one of its MSDUs was refused.
@@ -59,15 +60,20 @@ impl<'a> AdmittedData<'a> {
         replay: Option<&mut CcmpRxReplayEpoch>,
     ) -> Result<Self, RxDropReason> {
         let control = header.control();
-        if !control.is_data() || !matches!(control.subtype(), 0..=3 | 8..=11) || control.ds() != 2 {
+        let fields = FrameControlFields::from_raw(control.get());
+        if !control.is_data() || fields.no_data() || !fields.from_ds() || fields.to_ds() {
             return Err(RxDropReason::FrameKind);
         }
         let receiver = header.receiver();
-        if header.transmitter() != bssid.get() || (receiver != local.get() && receiver[0] & 1 == 0)
+        let [first, ..] = receiver;
+        if header.transmitter() != bssid.get()
+            || (receiver != local.get() && !AddressFlags::from_bytes([first]).group())
         {
             return Err(RxDropReason::Address);
         }
-        if control.more_fragments() || header.sequence_control() & 15 != 0 {
+        if control.more_fragments()
+            || SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment() != 0
+        {
             return Err(RxDropReason::Fragmented);
         }
         let mut payload = header.body();
@@ -86,7 +92,13 @@ impl<'a> AdmittedData<'a> {
                 CcmpRxProtection::Group
             };
             replay
-                .check(protection, header.qos().map(|qos| (qos & 15) as u8), ccmp)
+                .check(
+                    protection,
+                    header
+                        .qos()
+                        .map(|qos| QosControl::from_bytes(qos.to_le_bytes()).tid().get()),
+                    ccmp,
+                )
                 .map_err(|_| RxDropReason::Replay)?;
             payload = rest;
         }

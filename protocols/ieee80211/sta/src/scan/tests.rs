@@ -103,18 +103,18 @@ fn a_record_keeps_the_time_of_its_latest_observation() {
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
     table.observe_management(&frame, 1, -70, Some(Instant::from_micros(1_000)));
     assert_eq!(
-        table.records().next().unwrap().received_at,
+        table.observations().next().unwrap().received_at,
         Some(Instant::from_micros(1_000))
     );
     table.observe_management(&frame, 1, -60, Some(Instant::from_micros(2_500)));
     assert_eq!(
-        table.records().next().unwrap().received_at,
+        table.observations().next().unwrap().received_at,
         Some(Instant::from_micros(2_500))
     );
     // The record's TSF comes from the latest frame, so does its reception
     // time, even when the receiver has none for it.
     table.observe_management(&frame, 1, -60, None);
-    assert_eq!(table.records().next().unwrap().received_at, None);
+    assert_eq!(table.observations().next().unwrap().received_at, None);
 }
 
 #[test]
@@ -448,8 +448,14 @@ fn scan_seeds() -> std::vec::Vec<std::vec::Vec<u8>> {
 /// Read every accessor of a parsed record.
 fn read_record(record: &ScanRecord) {
     let _ = record.ssid_bytes();
-    let _ = record.matches_security(oer_ieee80211_wire::security::LinkProtection::Open);
-    let _ = record.matches_security(oer_ieee80211_wire::security::LinkProtection::Ccmp);
+    let _ = crate::security::matches_security(
+        &record,
+        oer_ieee80211_wire::security::LinkProtection::Open,
+    );
+    let _ = crate::security::matches_security(
+        &record,
+        oer_ieee80211_wire::security::LinkProtection::Ccmp,
+    );
     let _ = record.supported_rates_bytes();
     let _ = record.extended_supported_rates_bytes();
     let _ = record.erp_information();
@@ -562,7 +568,10 @@ fn a_rich_frame_keeps_every_retained_element() {
     );
     assert_eq!(record.rsn_ie_bytes().len(), 22);
     // Mixed WPA/WPA2 advertisements match no exact mode.
-    assert!(!record.matches_security(oer_ieee80211_wire::security::LinkProtection::Ccmp));
+    assert!(!crate::security::matches_security(
+        &record,
+        oer_ieee80211_wire::security::LinkProtection::Ccmp
+    ));
     assert!(record.legacy_wpa);
     assert_eq!(record.rsnxe_bytes(), &[244, 1, 0x20]);
     assert_eq!(record.he_capability_ie_bytes().len(), 9);

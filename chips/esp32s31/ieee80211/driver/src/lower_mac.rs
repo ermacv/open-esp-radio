@@ -134,7 +134,7 @@ use oer_time::Clock;
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
 use oer_esp32s31_ieee80211_mac::tsf_relation::TsfTimingError;
 use oer_ieee80211_port::TsfGeneration;
-use oer_ieee80211_wire::tsf::TsfInstant;
+use oer_ieee80211_port::tsf::TsfInstant;
 
 use crate::ordinary_tx::MacTxPlan;
 use crate::station_tsf::{StationTsf, StationTsfHardware};

@@ -13,6 +13,14 @@ observations, while reply bodies have fixed protocol-defined lengths.
 Initialized beacon lengths are validated, and advertisement access returns
 its typed length error if the stored invariant is broken.
 
+The security an access point offers (`security_policy.rs::ApSecurityPolicy`)
+is this crate's policy: its link and management protection and the RSN
+element and RSNXE it advertises, which `oer-ieee80211-wire` encodes into
+beacons and responses as `BssSecurityElements`. The TBTT schedule
+(`tbtt.rs::next_tbtt`) and the beacon's channel-switch announcements, edited
+in the template through the wire's beacon element edits, are its own too.
+Status codes and SAE body fields are the wire's.
+
 An access point uses 40 MHz in 2.4 GHz only under the 20/40 coexistence rules;
 a station reports 20/40 OBSS as the standard requires.
 
@@ -33,7 +41,7 @@ a station reports 20/40 OBSS as the standard requires.
 
 - **Beacon timing from executor time.** `beacon.rs::ApBeacon::prepare`
   stamps `now` as the TSF and starts the TBTT grid at the first `prepare`;
-  `mac`'s `beacon.rs::stamp` and `tbtt.rs::next_tbtt` follow it. TBTT is not
+  `wire`'s `beacon.rs::stamp` and this crate's `tbtt.rs::next_tbtt` follow it. TBTT is not
   at TSF mod BI×1024 = 0 and DTIM jitters around BI boundaries.
 - **No reassociation.** `mac`'s parser drops Reassociation Request, and
   `service/peer.rs` `associate_rsn`/`associate_open` refuse an Association

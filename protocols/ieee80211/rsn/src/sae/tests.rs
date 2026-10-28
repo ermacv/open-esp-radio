@@ -334,7 +334,7 @@ fn secret_owners_wipe_and_redact_debug() {
     keys.zeroize();
     assert_eq!(keys.kck(), &[0; SAE_KEY_LEN]);
     assert_eq!(keys.pmk(), &[0; SAE_KEY_LEN]);
-    assert_eq!(keys.pmkid(), &[0; SAE_PMKID_LEN]);
+    assert_eq!(keys.pmkid(), &[0; RSN_PMKID_LEN]);
 
     let mut comeback = SaeComebackTokens::new();
     comeback.issue(ADDR1, Instant::EPOCH, || [0x42; 32]);

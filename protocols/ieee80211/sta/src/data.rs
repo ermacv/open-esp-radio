@@ -21,8 +21,8 @@
 
 use crate::Counter;
 use oer_ieee80211_port::{
-    AckHeader, HeaderSpec, MpduLength, ResponseHeader, ReturnedMpdu, RxCryptoStatus, RxEvidence,
-    RxMeta, SingleEnd, SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
+    AckHeader, HeaderSpec, MpduLength, ReturnedMpdu, RxCryptoStatus, RxEvidence, RxMeta, SingleEnd,
+    SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_wire::{
@@ -983,50 +983,21 @@ fn encode_frame<
     output: &mut [u8],
 ) -> Option<oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>> {
     if protection == DataProtection::Open {
-        // Write the open encoding directly; it never needs a temporary CCMP
-        // gap or a second move of the payload. The exact sized header is
-        // validated once and written by the portable array encoder.
-        if link.bssid.get() == [0; 6] {
-            return None;
+        // The open encoding writes the payload once; it never needs a
+        // temporary CCMP gap or a second move of the payload.
+        let len = oer_ieee80211_wire::station::StaOpenDataFrame {
+            source: link.address,
+            bssid: link.bssid,
+            destination: msdu.destination,
+            sequence_number,
+            priority: msdu.priority,
+            peer_qos: qos,
+            ether_type: msdu.ether_type,
+            payload: msdu.payload,
         }
-        let length = mpdu_len(qos, DataProtection::Open, msdu.payload.len())?;
-        let frame = output.split_at_mut_checked(length)?.0;
-        let header = HeaderSpec::new(
-            oer_ieee80211_wire::frame::FrameControl::new(if qos {
-                oer_ieee80211_wire::frame::QOS_DATA_TO_DS
-            } else {
-                oer_ieee80211_wire::frame::DATA_TO_DS
-            })?,
-            0,
-            link.bssid.individual(),
-            link.address.get(),
-            msdu.destination,
-            sequence_number.sequence_control(),
-            None,
-            if qos {
-                Some(oer_ieee80211_port::QosControl {
-                    tid: oer_ieee80211_port::Tid::new(msdu.priority.value())?,
-                    end_of_service_period: false,
-                    amsdu_present: false,
-                    high: 0,
-                })
-            } else {
-                None
-            },
-            None,
-        )?;
-        let header_length = header.header_len();
-        AckHeader::new(header)?.encode(frame).ok()?;
-        let payload = frame.split_at_mut_checked(header_length)?.1;
-        let (llc, payload) =
-            payload.split_first_chunk_mut::<{ oer_ieee80211_wire::data::LLC_SNAP_HEADER_LEN }>()?;
-        let [e0, e1] = msdu.ether_type.to_be_bytes();
-        let [a, b, c, d, e, f] = oer_ieee80211_wire::data::RFC1042_LLC_SNAP_PREFIX;
-        *llc = [a, b, c, d, e, f, e0, e1];
-        for (to, from) in payload.iter_mut().zip(msdu.payload) {
-            *to = *from;
-        }
-        return sized(frame);
+        .encode(output)
+        .ok()?;
+        return sized(output.split_at_checked(len)?.0);
     }
     let len = StaProtectedDataFrame {
         source: link.address,

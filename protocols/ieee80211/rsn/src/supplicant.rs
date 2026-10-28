@@ -461,7 +461,7 @@ impl RsnCompletedMessage3 {
         if frame.protocol_version() != self.protocol_version {
             return Err(RsnConnectedSupplicantError::ProtocolVersionMismatch);
         }
-        if frame.key_info().descriptor_version() != akm.key_descriptor_version() {
+        if frame.key_info().descriptor_version() != akm.key_descriptor_version().get() {
             return Err(RsnConnectedSupplicantError::UnsupportedDescriptorVersion);
         }
         if frame.message() != crate::EapolKeyMessage::PairwiseMessage3
@@ -588,7 +588,7 @@ impl RsnConnectedSupplicant {
         }
         let key = frame.key_frame()?;
         if key.key_info().descriptor_version()
-            != self.key_confirmation.akm().key_descriptor_version()
+            != self.key_confirmation.akm().key_descriptor_version().get()
         {
             return Err(RsnConnectedSupplicantError::UnsupportedDescriptorVersion);
         }

@@ -154,3 +154,68 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
         );
     }
 }
+
+#[test]
+fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
+    let response = encode_addba_response(9, 0, 5, 64, 0x1234, true).unwrap();
+    assert_eq!(
+        parse_block_ack_action(&response),
+        Some(BlockAckAction::AddbaResponse {
+            dialog_token: 9,
+            status: 0,
+            tid: 5,
+            immediate: true,
+            amsdu: true,
+            window: 64,
+            timeout_tu: 0x1234,
+        })
+    );
+    assert_eq!(
+        encode_addba_response(9, 0, 16, 64, 0, false),
+        Err(RxAddbaResponseError::InvalidTid(16))
+    );
+    assert_eq!(
+        encode_addba_response(9, 0, 5, 1024, 0, false),
+        Err(RxAddbaResponseError::InvalidWindow(1024))
+    );
+
+    let delba = encode_delba(6, false, 39).unwrap();
+    assert_eq!(delba, [3, 2, 0x00, 0x60, 39, 0]);
+    assert_eq!(
+        parse_block_ack_action(&delba),
+        Some(BlockAckAction::Delba {
+            tid: 6,
+            initiator: false,
+            reason: 39,
+        })
+    );
+    assert_eq!(
+        encode_delba(16, true, 1),
+        Err(AddbaRequestError::InvalidTid(16))
+    );
+    assert_eq!(parse_block_ack_action(&delba[..5]), None);
+}
+
+#[test]
+fn a_compressed_bar_round_trips_and_other_variants_are_refused() {
+    let frame = encode_block_ack_request([2; 6], [4; 6], 6, seq(0x123));
+    assert_eq!(
+        parse_compressed_block_ack_request(&frame),
+        Some(CompressedBlockAckRequest {
+            receiver: [2; 6],
+            transmitter: [4; 6],
+            tid: 6,
+            starting_sequence: seq(0x123),
+        })
+    );
+    assert_eq!(parse_compressed_block_ack_request(&frame[..19]), None);
+    let mut basic = frame;
+    basic[16] = 0;
+    assert_eq!(parse_compressed_block_ack_request(&basic), None);
+    let mut fragment = frame;
+    fragment[18] |= 1;
+    assert_eq!(parse_compressed_block_ack_request(&fragment), None);
+    let mut protected = frame;
+    protected[1] |= 0x40;
+    assert_eq!(parse_compressed_block_ack_request(&protected), None);
+}

@@ -74,6 +74,7 @@ pub mod ampdu;
 pub mod management;
 pub mod phy_mode;
 pub mod protection;
+pub mod qos;
 pub mod rate_control;
 pub mod rate_selection;
 pub mod retry;

@@ -12,6 +12,7 @@
 
 use crate::AkmKeys;
 use crate::{Akm, Ptk, RSN_KCK_LEN, RsnInterface, RsnKeyConfirmationKey};
+use oer_ieee80211_wire::eapol::KeyInformation;
 
 pub const EAPOL_HEADER_LEN: usize = 4;
 pub const EAPOL_KEY_FIXED_LEN: usize = 95;
@@ -25,17 +26,6 @@ pub enum EapolCopyError {
     CapacityExceeded,
     Invalid(EapolParseError),
 }
-
-const KEY_INFO_DESCRIPTOR_VERSION_MASK: u16 = 0x0007;
-const KEY_INFO_PAIRWISE: u16 = 1 << 3;
-const KEY_INFO_INSTALL: u16 = 1 << 6;
-const KEY_INFO_ACK: u16 = 1 << 7;
-const KEY_INFO_MIC: u16 = 1 << 8;
-const KEY_INFO_SECURE: u16 = 1 << 9;
-const KEY_INFO_ERROR: u16 = 1 << 10;
-const KEY_INFO_REQUEST: u16 = 1 << 11;
-const KEY_INFO_ENCRYPTED_KEY_DATA: u16 = 1 << 12;
-const KEY_INFO_SMK: u16 = 1 << 13;
 
 pub(crate) const EAPOL_KEY_MIC_START: usize = 81;
 pub(crate) const EAPOL_KEY_MIC_END: usize = 97;
@@ -67,44 +57,49 @@ impl EapolKeyInfo {
         self.0
     }
 
+    /// The field's subfields.
+    pub const fn fields(self) -> KeyInformation {
+        KeyInformation::from_raw(self.0)
+    }
+
     pub const fn descriptor_version(self) -> u8 {
-        (self.0 & KEY_INFO_DESCRIPTOR_VERSION_MASK) as u8
+        self.fields().descriptor_version().get()
     }
 
     pub const fn is_pairwise(self) -> bool {
-        self.0 & KEY_INFO_PAIRWISE != 0
+        self.fields().pairwise()
     }
 
     pub const fn install(self) -> bool {
-        self.0 & KEY_INFO_INSTALL != 0
+        self.fields().install()
     }
 
     pub const fn ack(self) -> bool {
-        self.0 & KEY_INFO_ACK != 0
+        self.fields().ack()
     }
 
     pub const fn mic(self) -> bool {
-        self.0 & KEY_INFO_MIC != 0
+        self.fields().mic()
     }
 
     pub const fn secure(self) -> bool {
-        self.0 & KEY_INFO_SECURE != 0
+        self.fields().secure()
     }
 
     pub const fn error(self) -> bool {
-        self.0 & KEY_INFO_ERROR != 0
+        self.fields().error()
     }
 
     pub const fn request(self) -> bool {
-        self.0 & KEY_INFO_REQUEST != 0
+        self.fields().request()
     }
 
     pub const fn encrypted_key_data(self) -> bool {
-        self.0 & KEY_INFO_ENCRYPTED_KEY_DATA != 0
+        self.fields().encrypted_key_data()
     }
 
     pub const fn smk(self) -> bool {
-        self.0 & KEY_INFO_SMK != 0
+        self.fields().smk_message()
     }
 
     pub const fn classify(self) -> EapolKeyMessage {

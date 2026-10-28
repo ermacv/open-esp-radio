@@ -113,8 +113,12 @@ The crate uses the canonical strict lint block.
 `block_ack` owns session negotiation, the originator window and receive
 reordering. `ccmp` owns transmit PN allocation and receive replay frontiers;
 key material, headers and PN values are wire vocabulary. `duplicate` owns
-receive duplicate history, `fragmentation` bounded MSDU reassembly, and
-`receive` the replay commit boundary. These owners accept decoded wire
+receive duplicate history, `fragmentation` bounded MSDU reassembly and its
+reassembly refusals (`OpenDataReassemblyError`, over the wire's frame
+refusals), and `receive` the replay commit boundary. `ccmp`'s
+`CcmpPacketNumberStep` is how far a key's transmit PN advances per MPDU.
+`qos` classifies outgoing Ethernet frames into user priorities and access
+categories and downgrades an access category under admission control. These owners accept decoded wire
 values and retain no executor, HAL or chip dependency.
 
 Each TX Block Ack session tracks delivery and expiry in two 64-bit masks,

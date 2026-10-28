@@ -61,7 +61,8 @@ the AP lets the join proceed alone at its original earliest start.
 `coordinator` keeps the access point's follow, search and loss policies
 (`ChannelCoordinator`, `ApFollowPolicy`, `ApSearchPolicy`,
 `UpstreamLossPolicy`), and `channel` the channels an access point may not
-serve without radar detection. Coordinator facts, schedules and actions
+serve without radar detection: those whose 20 MHz primary channel overlaps a
+span `oer-radio-regulatory` names as shared with radar. Coordinator facts, schedules and actions
 carry `SupportedChannel<K>` from the backend's capability check. Applying
 a start or move therefore needs no second channel conversion that could
 discard the command after its state transition. The follow policy's
@@ -73,7 +74,8 @@ Composition passes the backend's `PUBLICATION_BOUND` to
 the gate and authority. Construction rejects inverted follow intervals,
 an absence too short for two publication/retune bounds plus minimum
 listening, and arithmetic overflow. Reserving mode also rejects absences
-longer than the Duration field; choosing `NoReservation` is explicit.
+longer than the Duration field (`MAX_RESERVATION`, from the wire's
+`frame::MAX_DURATION_MICROS`); choosing `NoReservation` is explicit.
 Absences reserve one current publication plus retune time for each move;
 `listen_until` and the return deadline leave this budget before the absence
 ends. Once the outgoing gate has closed, the late-lease check counts only

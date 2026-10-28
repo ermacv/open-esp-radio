@@ -97,6 +97,91 @@ impl ProbeRequest<'_> {
     }
 }
 
+/// The MAC header of a management frame without HT Control.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.3.2, Figure 9-49 (Management frame
+/// format: Frame Control, Duration, Address 1, Address 2, Address 3 and
+/// Sequence Control).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ManagementHeader {
+    pub frame_control: crate::frame::FrameControlFields,
+    pub duration: u16,
+    /// Address 1: the receiver.
+    pub receiver: [u8; 6],
+    /// Address 2: the transmitter.
+    pub transmitter: [u8; 6],
+    /// Address 3: the BSSID.
+    pub bssid: [u8; 6],
+    pub sequence_control: crate::sequence::SequenceControl,
+}
+
+impl ManagementHeader {
+    /// The header at the start of `frame` and the body after it; `None` for
+    /// a frame shorter than the header. The frame type is not checked.
+    pub fn split(frame: &[u8]) -> Option<(Self, &[u8])> {
+        let (header, body) = frame.split_first_chunk::<MANAGEMENT_HEADER_LEN>()?;
+        Some((Self::from_bytes(header), body))
+    }
+
+    /// The header's fields as they appear on air.
+    pub const fn from_bytes(bytes: &[u8; MANAGEMENT_HEADER_LEN]) -> Self {
+        let [
+            f0,
+            f1,
+            d0,
+            d1,
+            r0,
+            r1,
+            r2,
+            r3,
+            r4,
+            r5,
+            t0,
+            t1,
+            t2,
+            t3,
+            t4,
+            t5,
+            b0,
+            b1,
+            b2,
+            b3,
+            b4,
+            b5,
+            s0,
+            s1,
+        ] = *bytes;
+        Self {
+            frame_control: crate::frame::FrameControlFields::from_bytes([f0, f1]),
+            duration: u16::from_le_bytes([d0, d1]),
+            receiver: [r0, r1, r2, r3, r4, r5],
+            transmitter: [t0, t1, t2, t3, t4, t5],
+            bssid: [b0, b1, b2, b3, b4, b5],
+            sequence_control: crate::sequence::SequenceControl::from_bytes([s0, s1]),
+        }
+    }
+
+    /// The header as it appears on air.
+    pub const fn to_bytes(self) -> [u8; MANAGEMENT_HEADER_LEN] {
+        let [f0, f1] = self.frame_control.to_bytes();
+        let [d0, d1] = self.duration.to_le_bytes();
+        let [r0, r1, r2, r3, r4, r5] = self.receiver;
+        let [t0, t1, t2, t3, t4, t5] = self.transmitter;
+        let [b0, b1, b2, b3, b4, b5] = self.bssid;
+        let [s0, s1] = self.sequence_control.to_bytes();
+        [
+            f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, b0, b1, b2, b3, b4, b5,
+            s0, s1,
+        ]
+    }
+
+    /// Whether Address 1 is a group address.
+    pub const fn group_receiver(&self) -> bool {
+        let [first, ..] = self.receiver;
+        crate::address::AddressFlags::from_bytes([first]).group()
+    }
+}
+
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
     pub struct CapabilityInformation[2] (little) {

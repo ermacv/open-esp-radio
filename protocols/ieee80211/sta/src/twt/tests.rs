@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_wire::tsf::TsfInstant;
+use oer_ieee80211_port::tsf::TsfInstant;
 use oer_ieee80211_wire::twt::IndividualTwtFlowType;
 
 const CONFIG: IndividualTwtRequesterConfig = match IndividualTwtRequesterConfig::new(

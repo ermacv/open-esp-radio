@@ -182,7 +182,8 @@ use oer_ieee80211_port::{
     },
 };
 use oer_ieee80211_wire::ccmp::Ccmp128Key;
-use oer_ieee80211_wire::ccmp::GroupKeyId;
+use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, GroupKeyId};
+use oer_ieee80211_wire::frame::{sequence_control, set_retry_bit};
 use oer_radio_port::{
     BodyLoan, LoanedContext, ModelSlotOwner, SlotBodyOwner, SlotIdentity, SlotOwner, SlotRetire,
     SlotStopped, SlotWakes,
@@ -458,86 +459,22 @@ impl AsRef<[u8]> for ModelMemory {
         self
     }
 }
-/// Retry is bit 11 of Frame Control, bit 3 of its second wire octet.
-const RETRY_FLAG: u8 = 1 << 3;
-
 impl ModelMemory {
     fn sequence(&self) -> SequenceNumber {
-        let control = match self {
-            Self::Small(bytes) => {
-                let [
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    a,
-                    b,
-                    ..,
-                ] = bytes.as_ref();
-                [*a, *b]
-            }
-            Self::Large(bytes) => {
-                let [
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    a,
-                    b,
-                    ..,
-                ] = bytes.as_ref();
-                [*a, *b]
-            }
+        let bytes: &[u8] = match self {
+            Self::Small(bytes) => bytes.as_ref(),
+            Self::Large(bytes) => bytes.as_ref(),
         };
-        SequenceNumber::from_sequence_control(u16::from_le_bytes(control))
+        // Both memory classes hold at least a MAC header.
+        sequence_control(bytes).map_or(SequenceNumber::ZERO, SequenceNumber::from_sequence_control)
     }
     fn retry(&mut self) {
-        match self {
-            Self::Small(bytes) => {
-                let [_, flags, ..] = bytes.as_mut();
-                *flags |= RETRY_FLAG;
-            }
-            Self::Large(bytes) => {
-                let [_, flags, ..] = bytes.as_mut();
-                *flags |= RETRY_FLAG;
-            }
-        }
+        let bytes: &mut [u8] = match self {
+            Self::Small(bytes) => bytes.as_mut(),
+            Self::Large(bytes) => bytes.as_mut(),
+        };
+        // Both memory classes hold at least a MAC header.
+        let _marked: bool = set_retry_bit(bytes);
     }
 }
 
@@ -850,9 +787,10 @@ impl<B: ModelComposition> ModelMpduExecution<'_, '_, B> {
                     .ok_or(ModelFault)?
                     .1;
                 let (header, _) = tail.split_first_chunk_mut::<8>().ok_or(ModelFault)?;
-                let pn = mpdu.packet_number.ok_or(ModelFault)?.value();
-                *header = ccmp_header(pn, key.0.key_id);
-                Some(pn)
+                let pn = mpdu.packet_number.ok_or(ModelFault)?;
+                let key_id = CcmpKeyId::new(key.0.key_id).ok_or(ModelFault)?;
+                *header = CcmpHeader::new(pn, key_id).encode();
+                Some(pn.value())
             }
             None => None,
         };
@@ -1043,21 +981,6 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
                 .or_else(|| self.buffer.packet_number()),
         })
     }
-}
-
-/// The CCMP header of the packet number `number` under the key `key_id`.
-fn ccmp_header(number: u64, key_id: u8) -> [u8; 8] {
-    let pn = number.to_le_bytes();
-    [
-        pn[0],
-        pn[1],
-        0,
-        0x20 | (key_id << 6),
-        pn[2],
-        pn[3],
-        pn[4],
-        pn[5],
-    ]
 }
 
 /// Composition-selected owned contexts and their separate public body loans.

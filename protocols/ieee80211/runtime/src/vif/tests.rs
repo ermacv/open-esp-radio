@@ -1,5 +1,11 @@
 use super::*;
 
+const CONTROL_FRAME: u16 = 0x0004;
+const DATA_FRAME: u16 = 0x0008;
+const TO_DS: u16 = 0x0100;
+const FROM_DS: u16 = 0x0200;
+const PROBE_REQUEST_SUBTYPE: u16 = 4;
+
 const STA: [u8; 6] = [0x02, 0, 0, 0, 0, 1];
 const UPLINK: [u8; 6] = [0x02, 0, 0, 0, 0, 2];
 const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 3];
@@ -91,20 +97,20 @@ fn classify_sta_ap_rx_never_panics(count: usize) {
         frame(CONTROL_FRAME | 0xb0, AP, PEER, PEER),
     ];
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(<[u8; 24]>::as_slice).collect();
-    crate::fuzz::inputs(&seeds, count, 40, |mpdu| {
+    oer_ieee80211_wire::fuzz::inputs(&seeds, count, 40, |mpdu| {
         let _ = classify_sta_ap_rx(mpdu, ADDRESSES);
     });
 }
 
 #[test]
 fn classify_sta_ap_rx_never_panics_on_received_bytes() {
-    classify_sta_ap_rx_never_panics(crate::fuzz::QUICK);
+    classify_sta_ap_rx_never_panics(oer_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn classify_sta_ap_rx_never_panics_on_received_bytes_full() {
-    classify_sta_ap_rx_never_panics(crate::fuzz::FULL);
+    classify_sta_ap_rx_never_panics(oer_ieee80211_wire::fuzz::FULL);
 }
 
 #[test]

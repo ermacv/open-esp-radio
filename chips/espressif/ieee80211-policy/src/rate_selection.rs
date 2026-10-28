@@ -317,7 +317,7 @@ fn control_plan(
 impl<K: Ieee80211Capabilities, M: SignalMetadata, A: AckSnr> RateSelection<M, A>
     for EspressifRateSelection<K>
 {
-    fn packet_number_step(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(&self) -> oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep {
         crate::ccmp::TX_PACKET_NUMBER_STEP
     }
 

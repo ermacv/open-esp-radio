@@ -9,12 +9,12 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 | --- | --- |
 | `akm` | Key descriptor version, PTK expansion and EAPOL-Key MIC of each `oer_ieee80211_wire::security::rsn::Akm` |
 | `sae` | SAE commit/confirm, hunting-and-pecking and hash-to-element password elements, anti-clogging tokens |
-| `bip`, `management_ccmp` | Management IPN allocation and replay owners over the stateless transforms in `oer-ieee80211-cipher` |
+| `bip`, `management_ccmp` | Management IPN allocation and replay owners over the stateless transforms in `oer-ieee80211-cipher`; their receive errors add `Replay` to the transform's refusals |
 | `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
 | `nonce` | Boot-seeded ChaCha20 owner for fresh supplicant nonces |
 | `eapol` | Validated borrowed/owned EAPOL-Key packets and MIC verification |
-| `frames` | EAPOL-Key/Ethernet construction, GTK key data and owned security elements |
+| `frames` | EAPOL-Key/Ethernet construction, GTK key data and owned security elements; the Key Information field, KDEs, SAE element IDs and status codes are `oer-ieee80211-wire`'s |
 | `state` | Station and authenticator four-way-handshake transitions |
 | `supplicant` | Station orchestration: typed key-data unwrap and key-install requests and their completions, response deadlines |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |

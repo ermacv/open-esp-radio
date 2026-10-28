@@ -95,3 +95,25 @@ fn rejects_invalid_inputs_before_touching_output() {
         Err(ProbeRequestError::NoSupportedRates)
     );
 }
+
+#[test]
+fn a_management_header_round_trips_and_a_short_frame_is_refused() {
+    let mut frame = [0_u8; 26];
+    frame[..2].copy_from_slice(&0x40d0_u16.to_le_bytes());
+    frame[2..4].copy_from_slice(&0x013a_u16.to_le_bytes());
+    frame[4..10].copy_from_slice(&[0x01, 0, 0x5e, 0, 0, 1]);
+    frame[10..16].copy_from_slice(&[2; 6]);
+    frame[16..22].copy_from_slice(&[4; 6]);
+    frame[22..24].copy_from_slice(&0x1230_u16.to_le_bytes());
+    frame[24..].copy_from_slice(&[7, 8]);
+    let (header, body) = ManagementHeader::split(&frame).unwrap();
+    assert!(header.frame_control.protected());
+    assert_eq!(header.duration, 0x013a);
+    assert!(header.group_receiver());
+    assert_eq!(header.transmitter, [2; 6]);
+    assert_eq!(header.bssid, [4; 6]);
+    assert_eq!(header.sequence_control.sequence().get(), 0x123);
+    assert_eq!(body, &[7, 8]);
+    assert_eq!(header.to_bytes(), frame[..24]);
+    assert_eq!(ManagementHeader::split(&frame[..23]), None);
+}

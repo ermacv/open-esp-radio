@@ -21,7 +21,8 @@
 //! espressif/esp32-wifi-lib `f856b5db`; each method names the function it
 //! follows.
 
-use oer_ieee80211_wire::tsf::TsfInstant;
+use oer_ieee80211_port::tsf::TsfInstant;
+use oer_ieee80211_wire::tsf::time_units_micros;
 use oer_time::{Duration, Instant};
 
 /// Beacon receive window requested at each TBTT (`g_pm_cfg[20]`).
@@ -68,7 +69,11 @@ const DEFAULT_BEACON_PERIOD: core::num::NonZeroU32 = {
 /// Zero TU already means the default interval in the recovered PM policy.
 /// Validate once, retaining the positive period through every division.
 fn beacon_period(interval_tu: u16) -> core::num::NonZeroU32 {
-    core::num::NonZeroU32::new(u32::from(interval_tu) << 10).unwrap_or(DEFAULT_BEACON_PERIOD)
+    // `u16::MAX` TUs are below `2^26` microseconds.
+    u32::try_from(time_units_micros(interval_tu))
+        .ok()
+        .and_then(core::num::NonZeroU32::new)
+        .unwrap_or(DEFAULT_BEACON_PERIOD)
 }
 
 /// Coexistence schedule interval unit, in microseconds.
@@ -277,7 +282,7 @@ pub const PM_ACTION_CAPACITY: usize = 24;
 ///
 /// ```
 /// use oer_ieee80211_sta::modem_sleep::{CoexView, ModemSleep, PmBeacon, SleepType};
-/// use oer_ieee80211_wire::tsf::TsfInstant;
+/// use oer_ieee80211_port::tsf::TsfInstant;
 /// let mut pm = ModemSleep::new(SleepType::None);
 /// let beacon = PmBeacon { timestamp_tsf: TsfInstant::from_micros(0), interval_tu: 100, tim: None };
 /// let start = pm.start(beacon, CoexView::INACTIVE).unwrap();
@@ -291,7 +296,7 @@ pub const PM_ACTION_CAPACITY: usize = 24;
 ///
 /// ```compile_fail,E0599
 /// use oer_ieee80211_sta::modem_sleep::{CoexView, ModemSleep, PmActions, PmBeacon, SleepType};
-/// use oer_ieee80211_wire::tsf::TsfInstant;
+/// use oer_ieee80211_port::tsf::TsfInstant;
 /// let mut pm = ModemSleep::new(SleepType::None);
 /// let beacon = PmBeacon { timestamp_tsf: TsfInstant::from_micros(0), interval_tu: 100, tim: None };
 /// let mut actions = PmActions::new();

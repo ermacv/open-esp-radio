@@ -20,8 +20,8 @@ use oer_esp32s31_ieee80211_mac::{
     },
 };
 use oer_ieee80211_port::MacRxMetadata;
+use oer_ieee80211_port::tsf::TsfInstant;
 use oer_ieee80211_port::{HardwareServices, PhyRate, RxEvidence};
-use oer_ieee80211_wire::tsf::TsfInstant;
 use oer_ieee80211_wire::{
     channel::ChannelWidth,
     phy,

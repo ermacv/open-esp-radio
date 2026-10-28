@@ -3,6 +3,7 @@
 use super::*;
 use crate::sequence::StaSequenceCounter;
 use core::num::NonZeroU16;
+use oer_ieee80211_port::ResponseHeader;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, Ieee80211Capabilities, LowerMacCapabilities,

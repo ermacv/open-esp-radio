@@ -3,13 +3,42 @@
 #[cfg(test)]
 use oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
 
+use core::num::NonZeroU8;
+
 use oer_ieee80211_wire::ccmp::{
-    CCMP_HEADER_LEN, CcmpHeader, CcmpKeyId, CcmpPacketNumber, CcmpPacketNumberStep,
-    CcmpReceiveSequenceError, GroupKeyId,
+    CCMP_HEADER_LEN, CcmpHeader, CcmpKeyId, CcmpPacketNumber, CcmpReceiveSequenceError, GroupKeyId,
 };
 
 mod replay;
 pub use replay::{CcmpRxProtection, CcmpRxReplayEpoch, CcmpRxReplayError};
+
+/// How far a key's transmit packet number advances per MPDU.
+///
+/// IEEE Std 802.11-2020 12.5.3.3.2 (PN processing) requires only that the PN of each MPDU
+/// under one key increases, and that the fragments of one MSDU take
+/// consecutive PNs; one is the ordinary step. A backend or vendor profile
+/// that must stay compatible with a peer implementation's numbering supplies
+/// its own step: the Espressif `net80211` stack advances by three
+/// (`oer-espressif-ieee80211-policy`).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct CcmpPacketNumberStep(NonZeroU8);
+
+impl CcmpPacketNumberStep {
+    /// The ordinary step of one.
+    pub const ONE: Self = Self(NonZeroU8::MIN);
+
+    /// A step of `step`; `None` for zero, which would repeat a PN.
+    pub const fn new(step: u8) -> Option<Self> {
+        match NonZeroU8::new(step) {
+            Some(step) => Some(Self(step)),
+            None => None,
+        }
+    }
+
+    pub const fn get(self) -> u8 {
+        self.0.get()
+    }
+}
 
 pub const CCMP_REPLAY_LANE_COUNT: usize = 17;
 
