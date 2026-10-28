@@ -81,14 +81,17 @@ existing local entries.
 | `oer-espressif-ieee802154-engine` | `chips/espressif/ieee802154-engine` |
 | `oer-espressif-ieee802154-mac-values` | `chips/espressif/ieee802154-mac-values` |
 | `oer-espressif-modem-clock` | `chips/espressif/modem-clock` |
-| `oer-espressif-watchdog` | `chips/espressif/watchdog` |
 
 The console `oer-espressif-usb-serial-jtag` depends transitively on mmio
 through `oer-espressif-interrupt-table`, which owns platform interrupt
 bindings below the unsafe boundary. Staged-layout owns an unsafe memory/ABI
 contract;
 staged-bootstrap, staged-runtime and executor depend on the platform.
-These crates are outside the sans-IO layer. The sans-IO rules forbid unsafe
+These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
+also a platform owner: it owns hardware reset arming and the affine
+system-deadline lease. `oer-time::deadline` contains only the deadline policy,
+taking time observations and returning typed completion errors; it owns no
+hardware or reset callback. The sans-IO rules forbid unsafe
 code, runtime panic paths and dependencies on fatal, reset, retained-record,
 HAL, PAC or mmio owners. Errors cross the boundary as typed values; the
 image or HAL owner decides when to reset ([unsafe boundaries](unsafe.md)).

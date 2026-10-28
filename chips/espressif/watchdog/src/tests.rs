@@ -352,3 +352,51 @@ fn the_armed_rtc_watchdog_is_fed_every_period_while_its_task_is_polled() {
     assert!(matches!(feeding.as_mut().poll(&mut context), Poll::Pending));
     assert_eq!(log.take(), fed, "one feed per period");
 }
+
+#[test]
+fn cancellation_and_forgetting_never_disarm_a_platform_reset_lease() {
+    for forget in [false, true] {
+        let log = Log::default();
+        let clock = VirtualClock::<1>::new();
+        let lease = DeadlineWatchdog::new(owned(&log), &clock)
+            .arm(budget(100))
+            .unwrap();
+        assert_eq!(log.take(), ARM);
+        if forget {
+            core::mem::forget(lease);
+        } else {
+            drop(lease);
+        }
+        clock.advance(Duration::from_micros(100)).unwrap();
+        assert!(log.take().is_empty(), "abandonment never writes or disarms");
+    }
+}
+
+#[test]
+fn a_platform_reset_lease_retains_the_original_budget_and_refuses_late_completion() {
+    for elapsed in [100, 101] {
+        let log = Log::default();
+        let clock = VirtualClock::<1>::new();
+        let lease = DeadlineWatchdog::new(owned(&log), &clock)
+            .arm(budget(100))
+            .unwrap();
+        assert_eq!(log.take(), ARM);
+        clock.advance(Duration::from_micros(elapsed)).unwrap();
+        let (lease, error) = lease.complete().unwrap_err();
+        assert_eq!(error, DeadlineError::Expired);
+        drop(lease);
+        assert!(log.take().is_empty(), "failure retains the armed watchdog");
+    }
+}
+
+#[test]
+fn an_unrepresentable_deadline_returns_the_platform_owner_without_programming_reset() {
+    let log = Log::default();
+    let clock = VirtualClock::<1>::starting_at(oer_time::Instant::from_micros(u64::MAX));
+    let (owner, error) = DeadlineWatchdog::new(owned(&log), &clock)
+        .arm(budget(100))
+        .unwrap_err();
+    assert_eq!(error, DeadlineError::TimelineExhausted);
+    drop(owner);
+    assert!(log.take().is_empty());
+}

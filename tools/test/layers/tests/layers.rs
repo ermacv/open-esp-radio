@@ -146,7 +146,6 @@ const ESPRESSIF_SANS_IO: &[&str] = &[
     "chips/espressif/ieee802154-engine",
     "chips/espressif/ieee802154-mac-values",
     "chips/espressif/modem-clock",
-    "chips/espressif/watchdog",
 ];
 
 fn sans_io(package: &str) -> bool {

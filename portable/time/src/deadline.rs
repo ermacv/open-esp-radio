@@ -1,19 +1,20 @@
 #![forbid(unsafe_code)]
 
-//! Finite system-deadline protection, independent of any peripheral client
-//! and of the chip.
+//! Finite deadlines as values, independent of any peripheral or reset owner.
 //!
-//! No periodic feed, implicit renewal, or Drop-based disarm exists. A caller
-//! completes a lease only after its own physical postconditions hold. A chip
-//! adapter binds a [`Controller`] to its watchdog timer through [`Backend`];
-//! the controller decides when the timer may be armed and disarmed.
+//! The caller supplies each time observation. This policy records one
+//! obligation, rejects renewal and reports expired or stale completion;
+//! it owns no clock, hardware or callback. The platform owner decides how
+//! to enforce the deadline and retains its own affine hardware lease.
 
-/// Explicit caller-selected hardware timeout. There is deliberately no default.
+use crate::{Duration, Instant};
+
+/// Explicit caller-selected timeout. There is deliberately no default.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DeadlineBudget(core::num::NonZeroU32);
 
 impl DeadlineBudget {
-    /// Microseconds from arming, including the caller's restoration work.
+    /// Microseconds from starting, including the caller's restoration work.
     pub const fn from_micros(micros: core::num::NonZeroU32) -> Self {
         Self(micros)
     }
@@ -25,236 +26,159 @@ impl DeadlineBudget {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeadlineError {
-    AlreadyArmed,
+    AlreadyActive,
     TimelineExhausted,
     StaleCompletion,
     Expired,
 }
 
-/// The watchdog timer a chip adapter drives.
-pub trait Backend {
-    /// Microseconds on the timeline the deadline is measured on.
-    fn now_micros(&self) -> u64;
-    /// Program the timer to reset the chip `micros` from now and start it.
-    fn arm(&mut self, micros: u32);
-    /// Stop the timer.
-    fn disarm(&mut self);
-}
-
-/// At most one armed obligation at a time, each identified by a generation
-/// that only its own lease can complete, and only before its deadline.
-pub struct Controller<B> {
-    backend: B,
+/// At most one outstanding deadline, identified by a generation that only
+/// its own completion can retire, and only before its deadline.
+#[derive(Debug, Default)]
+pub struct Controller {
     generation: u64,
-    armed: Option<(u64, u64)>,
+    active: Option<(u64, Instant)>,
 }
 
-impl<B: Backend> Controller<B> {
-    pub const fn new(backend: B) -> Self {
+impl Controller {
+    pub const fn new() -> Self {
         Self {
-            backend,
             generation: 0,
-            armed: None,
+            active: None,
         }
     }
 
-    /// Arm once and return the obligation's generation. An existing
-    /// obligation is rejected without changing its timer.
-    pub fn arm(&mut self, budget: DeadlineBudget) -> Result<u64, DeadlineError> {
-        if self.armed.is_some() {
-            return Err(DeadlineError::AlreadyArmed);
+    /// Start once at `now` and return the obligation's generation. An
+    /// outstanding obligation or exhausted timeline leaves state unchanged.
+    pub fn start(&mut self, now: Instant, budget: DeadlineBudget) -> Result<u64, DeadlineError> {
+        if self.active.is_some() {
+            return Err(DeadlineError::AlreadyActive);
         }
         let generation = self
             .generation
             .checked_add(1)
             .ok_or(DeadlineError::TimelineExhausted)?;
-        let deadline = self
-            .backend
-            .now_micros()
-            .checked_add(u64::from(budget.as_micros()))
+        let deadline = now
+            .checked_add(Duration::from_micros(u64::from(budget.as_micros())))
             .ok_or(DeadlineError::TimelineExhausted)?;
         self.generation = generation;
-        self.armed = Some((generation, deadline));
-        self.backend.arm(budget.as_micros());
+        self.active = Some((generation, deadline));
         Ok(generation)
     }
 
-    /// Disarm the obligation `generation` before its deadline. Equality or
-    /// lateness rejects completion and leaves the hardware armed.
-    pub fn complete(&mut self, generation: u64) -> Result<(), DeadlineError> {
-        let (active, deadline) = self.armed.ok_or(DeadlineError::StaleCompletion)?;
+    /// The outstanding deadline, including after an expired completion.
+    pub const fn deadline(&self) -> Option<Instant> {
+        match self.active {
+            Some((_, deadline)) => Some(deadline),
+            None => None,
+        }
+    }
+
+    /// Complete `generation` at `now`. Equality or lateness reports
+    /// [`DeadlineError::Expired`] and retains the original obligation.
+    pub fn complete(&mut self, now: Instant, generation: u64) -> Result<(), DeadlineError> {
+        let (active, deadline) = self.active.ok_or(DeadlineError::StaleCompletion)?;
         if generation != active {
             return Err(DeadlineError::StaleCompletion);
         }
-        if self.backend.now_micros() >= deadline {
+        if now >= deadline {
             return Err(DeadlineError::Expired);
         }
-        self.backend.disarm();
-        self.armed = None;
+        self.active = None;
         Ok(())
-    }
-}
-
-/// An affine watchdog service. Arming transfers it into the obligation.
-///
-/// ```compile_fail,E0382
-/// use oer_time::deadline::{Backend, DeadlineBudget, Watchdog};
-/// fn arm_twice<B: Backend>(watchdog: Watchdog<B>, budget: DeadlineBudget) {
-///     let first = watchdog.arm(budget);
-///     let second = watchdog.arm(budget);
-/// }
-/// ```
-pub struct Watchdog<B>(Controller<B>);
-
-/// One armed obligation, retaining its complete watchdog owner.
-///
-/// ```compile_fail,E0382
-/// use oer_time::deadline::{Backend, Lease};
-/// fn complete_twice<B: Backend>(lease: Lease<B>) {
-///     let first = lease.complete();
-///     let second = lease.complete();
-/// }
-/// ```
-#[must_use = "abandoning a lease leaves the hardware watchdog armed"]
-pub struct Lease<B> {
-    owner: Watchdog<B>,
-    generation: u64,
-}
-
-impl<B> core::fmt::Debug for Watchdog<B> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Watchdog").finish_non_exhaustive()
-    }
-}
-impl<B> core::fmt::Debug for Lease<B> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Lease")
-            .field("generation", &self.generation)
-            .finish_non_exhaustive()
-    }
-}
-
-impl<B: Backend> Watchdog<B> {
-    pub const fn new(backend: B) -> Self {
-        Self(Controller::new(backend))
-    }
-
-    pub fn arm(mut self, budget: DeadlineBudget) -> Result<Lease<B>, (Self, DeadlineError)> {
-        match self.0.arm(budget) {
-            Ok(generation) => Ok(Lease {
-                owner: self,
-                generation,
-            }),
-            Err(error) => Err((self, error)),
-        }
-    }
-}
-
-impl<B: Backend> Lease<B> {
-    /// Return the watchdog only after timely completion. An expired lease
-    /// retains the armed watchdog in the error and cannot silently disarm it.
-    pub fn complete(mut self) -> Result<Watchdog<B>, (Self, DeadlineError)> {
-        match self.owner.0.complete(self.generation) {
-            Ok(()) => Ok(self.owner),
-            Err(error) => Err((self, error)),
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[derive(Default)]
-    struct Model {
-        now: u64,
-        armed: bool,
-        arms: u32,
-        disarms: u32,
+
+    fn at(micros: u64) -> Instant {
+        Instant::from_micros(micros)
     }
-    impl Backend for Model {
-        fn now_micros(&self) -> u64 {
-            self.now
-        }
-        fn arm(&mut self, _: u32) {
-            self.armed = true;
-            self.arms += 1;
-        }
-        fn disarm(&mut self) {
-            self.armed = false;
-            self.disarms += 1;
-        }
-    }
+
     fn budget() -> DeadlineBudget {
         DeadlineBudget::from_micros(core::num::NonZeroU32::new(100).unwrap())
     }
+
     #[test]
-    fn abandoned_operation_cannot_be_renewed() {
-        let mut c = Controller::new(Model::default());
-        let _abandoned = c.arm(budget()).unwrap();
-        c.backend.now = 20;
-        assert_eq!(c.arm(budget()), Err(DeadlineError::AlreadyArmed));
-        assert_eq!(c.backend.arms, 1);
-        assert!(c.backend.armed);
-        assert_eq!(c.backend.disarms, 0);
+    fn an_abandoned_obligation_cannot_be_renewed() {
+        let mut c = Controller::new();
+        let _abandoned = c.start(at(0), budget()).unwrap();
+        assert_eq!(c.start(at(20), budget()), Err(DeadlineError::AlreadyActive));
+        assert_eq!(c.deadline(), Some(at(100)));
     }
 
     #[test]
-    fn restoration_must_finish_before_original_not_refreshed_deadline() {
-        let mut c = Controller::new(Model::default());
-        let ticket = c.arm(budget()).unwrap();
-        // PHY returned at 20, but the client has not completed restoration.
-        c.backend.now = 20;
-        assert!(c.backend.armed);
-        assert_eq!(c.arm(budget()), Err(DeadlineError::AlreadyArmed));
-        c.backend.now = 100;
-        assert_eq!(c.complete(ticket), Err(DeadlineError::Expired));
-        assert_eq!(c.backend.arms, 1);
-        assert_eq!(c.backend.disarms, 0);
+    fn restoration_must_finish_before_the_original_deadline() {
+        let mut c = Controller::new();
+        let ticket = c.start(at(0), budget()).unwrap();
+        assert_eq!(c.start(at(20), budget()), Err(DeadlineError::AlreadyActive));
+        assert_eq!(c.complete(at(100), ticket), Err(DeadlineError::Expired));
+        assert_eq!(c.deadline(), Some(at(100)));
     }
 
     #[test]
-    fn safe_rejection_can_complete_and_does_not_poison_next_transaction() {
-        let mut c = Controller::new(Model::default());
-        let rejected = c.arm(budget()).unwrap();
-        c.backend.now = 1;
-        c.complete(rejected).unwrap();
-        assert!(!c.backend.armed);
-        let next = c.arm(budget()).unwrap();
+    fn timely_completion_retires_only_its_obligation() {
+        let mut c = Controller::default();
+        assert_eq!(c.deadline(), None);
+        let rejected = c.start(at(0), budget()).unwrap();
+        c.complete(at(1), rejected).unwrap();
+        assert_eq!(c.deadline(), None);
+        let next = c.start(at(1), budget()).unwrap();
         assert_ne!(next, rejected);
-        c.backend.now = 100;
-        c.complete(next).unwrap();
-        assert!(!c.backend.armed);
+        assert_eq!(c.deadline(), Some(at(101)));
+        c.complete(at(100), next).unwrap();
+        assert_eq!(c.deadline(), None);
     }
+
     #[test]
-    fn equality_and_late_completion_never_disable_reset() {
+    fn equality_and_late_completion_retain_the_deadline() {
         for now in [100, 101] {
-            let mut c = Controller::new(Model::default());
-            let ticket = c.arm(budget()).unwrap();
-            c.backend.now = now;
-            assert_eq!(c.complete(ticket), Err(DeadlineError::Expired));
-            assert!(c.backend.armed);
-            assert_eq!(c.backend.disarms, 0);
+            let mut c = Controller::new();
+            let ticket = c.start(at(0), budget()).unwrap();
+            assert_eq!(c.complete(at(now), ticket), Err(DeadlineError::Expired));
+            assert_eq!(c.deadline(), Some(at(100)));
         }
     }
+
     #[test]
-    fn old_completion_cannot_disarm_a_new_obligation() {
-        let mut c = Controller::new(Model::default());
-        let first = c.arm(budget()).unwrap();
-        c.backend.now = 99;
-        c.complete(first).unwrap();
-        let second = c.arm(budget()).unwrap();
-        assert_eq!(c.complete(first), Err(DeadlineError::StaleCompletion));
-        assert!(c.backend.armed);
-        c.complete(second).unwrap();
-        assert_eq!(c.backend.disarms, 2);
+    fn old_completion_cannot_retire_a_new_obligation() {
+        let mut c = Controller::new();
+        assert_eq!(c.complete(at(0), 0), Err(DeadlineError::StaleCompletion));
+        let first = c.start(at(0), budget()).unwrap();
+        c.complete(at(99), first).unwrap();
+        let second = c.start(at(99), budget()).unwrap();
+        assert_eq!(
+            c.complete(at(99), first),
+            Err(DeadlineError::StaleCompletion)
+        );
+        assert_eq!(c.deadline(), Some(at(199)));
+        c.complete(at(100), second).unwrap();
     }
+
     #[test]
-    fn timeline_overflow_rejects_before_hardware_programming() {
-        let mut c = Controller::new(Model {
-            now: u64::MAX,
-            ..Model::default()
-        });
-        assert_eq!(c.arm(budget()), Err(DeadlineError::TimelineExhausted));
-        assert_eq!(c.backend.arms, 0);
+    fn time_overflow_leaves_the_policy_idle_and_does_not_consume_a_generation() {
+        let mut c = Controller::new();
+        assert_eq!(
+            c.start(at(u64::MAX), budget()),
+            Err(DeadlineError::TimelineExhausted)
+        );
+        assert_eq!(c.deadline(), None);
+        assert_eq!(c.start(at(0), budget()), Ok(1));
+    }
+
+    #[test]
+    fn generation_exhaustion_leaves_the_policy_idle() {
+        let mut c = Controller {
+            generation: u64::MAX,
+            active: None,
+        };
+        assert_eq!(
+            c.start(at(0), budget()),
+            Err(DeadlineError::TimelineExhausted)
+        );
+        assert_eq!(c.deadline(), None);
+        assert_eq!(c.generation, u64::MAX);
     }
 }

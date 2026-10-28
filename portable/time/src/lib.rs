@@ -7,7 +7,18 @@
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects
+    )
 )]
 
 //! Chip-neutral monotonic and radio time.
@@ -136,12 +147,14 @@ impl Duration {
 
     /// Construct a duration from milliseconds; every `u32` fits.
     pub const fn from_millis(millis: u32) -> Self {
-        Self(millis as u64 * 1_000)
+        // Every u32 millisecond count fits in u64 microseconds.
+        Self(core::time::Duration::from_millis(millis as u64).as_micros() as u64)
     }
 
     /// Construct a duration from seconds; every `u32` fits.
     pub const fn from_secs(secs: u32) -> Self {
-        Self(secs as u64 * 1_000_000)
+        // Every u32 second count fits in u64 microseconds.
+        Self(core::time::Duration::from_secs(secs as u64).as_micros() as u64)
     }
 
     /// Microseconds.
