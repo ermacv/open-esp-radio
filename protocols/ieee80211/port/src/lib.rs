@@ -78,8 +78,8 @@ pub mod capabilities;
 pub mod conformance;
 mod layout;
 pub use layout::{
-    CheckedAggregate, CheckedSubframe, CheckedTxSource, FreshSource, FreshSubframe, HeaderLayout,
-    LaidOut, LayoutError, LayoutRefused, MpduKind, MpduLayout, MpduProtection,
+    CheckedAggregate, CheckedSubframe, CheckedTxSource, FreshSource, FreshSubframe, LaidOut,
+    LayoutError, LayoutRefused, MpduKind, MpduLayout, MpduProtection,
 };
 pub mod control;
 pub mod extensions;
@@ -138,7 +138,7 @@ pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
     AccessPoint, AckHeader, AddressSetup, BssColor, FrameHeader, GroupAddress, HeaderSpec,
     Ieee80211Capabilities, InterfaceRole, LegacyPhaseRate, LowerMacBackend, LowerMacSetup,
-    MpduLength, NoAckHeader, PhaseRate, QosAckPolicy, QosControl, ReceiverAddress, ResponseHeader,
+    MpduLength, NoAckHeader, PhaseRate, QosControl, ReceiverAddress, ResponseHeader,
     SizedFrame, Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca,
     SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };

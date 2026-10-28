@@ -6078,12 +6078,18 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             let bytes = buffer.bytes_mut().split_at_checked(len)?.0;
             let length = MpduLength::new(len)?;
             if matches!(plan, StaRatePlan::Group) {
-                let header = HeaderSpec::decode(bytes, GroupAddress::new)?;
+                let header = HeaderSpec::from_mac_header(
+                    oer_ieee80211_wire::frame::MacHeader::decode(bytes)?,
+                    GroupAddress::new,
+                )?;
                 oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(header, length)?)
                     .ok()
                     .map(StaFrame::Group)
             } else {
-                let header = HeaderSpec::decode(bytes, IndividualAddress::new)?;
+                let header = HeaderSpec::from_mac_header(
+                    oer_ieee80211_wire::frame::MacHeader::decode(bytes)?,
+                    IndividualAddress::new,
+                )?;
                 oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(
                     AckHeader::new(header)?,
                     length,

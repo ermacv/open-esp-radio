@@ -1,6 +1,6 @@
 //! Checked placement of a MAC header, optional CCMP header and external body.
 
-use crate::owner::FrameHeader;
+use crate::owner::{FrameHeader, ResponseHeader};
 use crate::{ClassSubframe, Ieee80211Capabilities, Tid, TxBufferClass, TxFrame};
 use oer_ieee80211_wire::{address::IndividualAddress, block_ack::BLOCK_ACK_REQUEST_LEN};
 
@@ -15,123 +15,6 @@ pub enum LayoutError {
     CcmpHeaderTooShort,
     /// The external body overlaps the MAC/CCMP prefix.
     BodyOverlap,
-}
-
-/// A MAC header and its exact-size writable array. Only this constructor
-/// checks storage length; the selected encoder takes an array and is total.
-///
-/// A caller cannot replace the header's acknowledgement policy at encoding:
-///
-/// ```compile_fail,E0061
-/// use oer_ieee80211_port::HeaderLayout;
-/// use oer_ieee80211_wire::address::IndividualAddress;
-/// fn policy(layout: HeaderLayout<'_, IndividualAddress>) { layout.encode(true); }
-/// ```
-///
-/// An individual header must have a checked response kind:
-///
-/// ```compile_fail,E0277
-/// use oer_ieee80211_port::{HeaderLayout, HeaderSpec};
-/// use oer_ieee80211_wire::address::IndividualAddress;
-/// fn raw(header: HeaderSpec<IndividualAddress>, out: &mut [u8]) {
-///     drop(HeaderLayout::new(header, out));
-/// }
-/// ```
-///
-/// Each accepted header type carries its own response policy:
-///
-/// ```
-/// use oer_ieee80211_port::{
-///     AckHeader, GroupAddress, HeaderLayout, HeaderSpec, LayoutError, NoAckHeader,
-/// };
-/// fn typed(
-///     ack: AckHeader, no_ack: NoAckHeader, group: HeaderSpec<GroupAddress>, out: &mut [u8],
-/// ) -> Result<(), LayoutError> {
-///     HeaderLayout::new(ack, out)?.encode();
-///     HeaderLayout::new(no_ack, out)?.encode();
-///     HeaderLayout::new(group, out)?.encode();
-///     Ok(())
-/// }
-/// ```
-pub struct HeaderLayout<'a, A> {
-    inner: HeaderStorage<'a, A>,
-}
-enum HeaderStorage<'a, A> {
-    H24(crate::owner::HeaderEncoder<A, 24>, &'a mut [u8; 24]),
-    H26(crate::owner::HeaderEncoder<A, 26>, &'a mut [u8; 26]),
-    H28(crate::owner::HeaderEncoder<A, 28>, &'a mut [u8; 28]),
-    H30(crate::owner::HeaderEncoder<A, 30>, &'a mut [u8; 30]),
-    H32(crate::owner::HeaderEncoder<A, 32>, &'a mut [u8; 32]),
-    H34(crate::owner::HeaderEncoder<A, 34>, &'a mut [u8; 34]),
-    H36(crate::owner::HeaderEncoder<A, 36>, &'a mut [u8; 36]),
-}
-impl<'a, A: crate::ReceiverAddress> HeaderLayout<'a, A> {
-    /// Prove the storage length, without writing any bytes on refusal.
-    pub fn new<H: crate::ResponseHeader<Address = A>>(
-        header: H,
-        out: &'a mut [u8],
-    ) -> Result<Self, LayoutError> {
-        use crate::owner::HeaderLength;
-        let policy = H::ACK_POLICY;
-        let header = header.into_header();
-        let inner = match header.encoder(policy) {
-            HeaderLength::L24(encoder) => HeaderStorage::H24(
-                encoder,
-                out.split_first_chunk_mut::<24>()
-                    .ok_or(LayoutError::StorageTooShort)?
-                    .0,
-            ),
-            HeaderLength::L26(encoder) => HeaderStorage::H26(
-                encoder,
-                out.split_first_chunk_mut::<26>()
-                    .ok_or(LayoutError::StorageTooShort)?
-                    .0,
-            ),
-            HeaderLength::L28(encoder) => HeaderStorage::H28(
-                encoder,
-                out.split_first_chunk_mut::<28>()
-                    .ok_or(LayoutError::StorageTooShort)?
-                    .0,
-            ),
-            HeaderLength::L30(encoder) => HeaderStorage::H30(
-                encoder,
-                out.split_first_chunk_mut::<30>()
-                    .ok_or(LayoutError::StorageTooShort)?
-                    .0,
-            ),
-            HeaderLength::L32(encoder) => HeaderStorage::H32(
-                encoder,
-                out.split_first_chunk_mut::<32>()
-                    .ok_or(LayoutError::StorageTooShort)?
-                    .0,
-            ),
-            HeaderLength::L34(encoder) => HeaderStorage::H34(
-                encoder,
-                out.split_first_chunk_mut::<34>()
-                    .ok_or(LayoutError::StorageTooShort)?
-                    .0,
-            ),
-            HeaderLength::L36(encoder) => HeaderStorage::H36(
-                encoder,
-                out.split_first_chunk_mut::<36>()
-                    .ok_or(LayoutError::StorageTooShort)?
-                    .0,
-            ),
-        };
-        Ok(Self { inner })
-    }
-    /// Encode into the array whose length this layout established.
-    pub fn encode(self) {
-        match self.inner {
-            HeaderStorage::H24(header, out) => header.encode(out),
-            HeaderStorage::H26(header, out) => header.encode(out),
-            HeaderStorage::H28(header, out) => header.encode(out),
-            HeaderStorage::H30(header, out) => header.encode(out),
-            HeaderStorage::H32(header, out) => header.encode(out),
-            HeaderStorage::H34(header, out) => header.encode(out),
-            HeaderStorage::H36(header, out) => header.encode(out),
-        }
-    }
 }
 
 /// The response kind retained by a published MPDU, independent of a new plan.
@@ -477,13 +360,13 @@ impl MpduLayout {
         let (prefix, body_memory) = self.memory(bytes)?;
         match frame {
             TxFrame::Individual { frame, .. } => {
-                HeaderLayout::new(frame.header().with_protection(self.protection), prefix)?.encode()
+                frame.header().with_protection(self.protection).encode(prefix)?;
             }
             TxFrame::IndividualNoAck { frame, .. } => {
-                HeaderLayout::new(frame.header().with_protection(self.protection), prefix)?.encode()
+                frame.header().with_protection(self.protection).encode(prefix)?;
             }
             TxFrame::Group { frame, .. } => {
-                HeaderLayout::new(frame.header().with_protection(self.protection), prefix)?.encode()
+                frame.header().with_protection(self.protection).encode(prefix)?;
             }
             TxFrame::BlockAckRequest {
                 receiver,
@@ -521,7 +404,7 @@ impl MpduLayout {
         tid: Tid,
     ) -> Result<Self, LayoutError> {
         let (prefix, body_memory) = self.memory(bytes)?;
-        HeaderLayout::new(frame.header(receiver, tid, self.protection), prefix)?.encode();
+        frame.header(receiver, tid, self.protection).encode(prefix)?;
         // The retained body view has exactly the tail length proved above.
         if let Some(body) = body {
             for (destination, source) in body_memory.iter_mut().zip(body) {

@@ -21,7 +21,8 @@
 
 use crate::Counter;
 use oer_ieee80211_port::{
-    AckHeader, HeaderSpec, MpduLength, ReturnedMpdu, RxCryptoStatus, RxEvidence, RxMeta, SingleEnd,
+    AckHeader, HeaderSpec, MpduLength, ResponseHeader, ReturnedMpdu, RxCryptoStatus, RxEvidence,
+    RxMeta, SingleEnd,
     SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
@@ -1016,9 +1017,7 @@ fn encode_frame<
             None,
         )?;
         let header_length = header.header_len();
-        oer_ieee80211_port::HeaderLayout::new(AckHeader::new(header)?, frame)
-            .ok()?
-            .encode();
+        AckHeader::new(header)?.encode(frame).ok()?;
         let payload = frame.split_at_mut_checked(header_length)?.1;
         let (llc, payload) =
             payload.split_first_chunk_mut::<{ oer_ieee80211_wire::data::LLC_SNAP_HEADER_LEN }>()?;
@@ -1049,7 +1048,10 @@ fn encode_frame<
 fn sized<K: oer_ieee80211_port::Ieee80211Capabilities, C: oer_ieee80211_port::TxBufferClass>(
     frame: &[u8],
 ) -> Option<oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>> {
-    let header = HeaderSpec::decode(frame, IndividualAddress::new)?;
+    let header = HeaderSpec::from_mac_header(
+                    oer_ieee80211_wire::frame::MacHeader::decode(frame)?,
+                    IndividualAddress::new,
+                )?;
     oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(
         AckHeader::new(header)?,
         MpduLength::new(frame.len())?,

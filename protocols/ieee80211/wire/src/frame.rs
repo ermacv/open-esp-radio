@@ -206,6 +206,221 @@ impl<'a> DecodedHeader<'a> {
     }
 }
 
+/// The Ack Policy a lower-MAC frame writes into its QoS Control field.
+/// SOURCE: IEEE Std 802.11-2020, 9.2.4.5.4 (Ack Policy subfield), Table
+/// 9-11: Normal Ack or Implicit BAR is 0, No Ack is 1.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum QosAckPolicy {
+    /// The addressed receiver acknowledges this frame.
+    Normal,
+    /// No acknowledgement is solicited.
+    NoAck,
+}
+
+impl QosAckPolicy {
+    /// The two-bit subfield.
+    pub const fn field(self) -> oer_wire::U8<2> {
+        match self {
+            Self::Normal => oer_wire::U8::constant::<0>(),
+            Self::NoAck => oer_wire::U8::constant::<1>(),
+        }
+    }
+}
+
+impl QosControl {
+    /// The QoS Control field of a QoS data frame.
+    pub const fn new(
+        tid: oer_wire::U8<4>,
+        end_of_service_period: bool,
+        ack_policy: QosAckPolicy,
+        amsdu_present: bool,
+        high: u8,
+    ) -> Self {
+        Self::from_bytes([0, high])
+            .with_tid(tid)
+            .with_eosp(end_of_service_period)
+            .with_ack_policy(ack_policy.field())
+            .with_amsdu(amsdu_present)
+    }
+}
+
+/// A data or management MAC header whose fields agree with its Frame
+/// Control: a fourth address exactly when To DS and From DS are both set, a
+/// QoS Control exactly in a QoS data frame, an HT Control exactly when the
+/// Order bit marks one ([`FrameControl::has_ht_control`]).
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.2.1 (Data frame format) and 9.3.3.2
+/// (Management frame format): Frame Control, Duration/ID, Address 1 to
+/// Address 3, Sequence Control, Address 4, QoS Control and HT Control in
+/// transmission order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MacHeader {
+    control: FrameControl,
+    duration: u16,
+    address1: [u8; 6],
+    address2: [u8; 6],
+    address3: [u8; 6],
+    sequence_control: u16,
+    address4: Option<[u8; 6]>,
+    qos: Option<QosControl>,
+    ht_control: Option<[u8; 4]>,
+}
+
+impl MacHeader {
+    /// The header, when its optional fields agree with `control`.
+    #[allow(clippy::too_many_arguments, reason = "the fields of a MAC header")]
+    pub const fn new(
+        control: FrameControl,
+        duration: u16,
+        address1: [u8; 6],
+        address2: [u8; 6],
+        address3: [u8; 6],
+        sequence_control: u16,
+        address4: Option<[u8; 6]>,
+        qos: Option<QosControl>,
+        ht_control: Option<[u8; 4]>,
+    ) -> Option<Self> {
+        if address4.is_some() == control.is_four_address()
+            && qos.is_some() == control.is_qos_data()
+            && ht_control.is_some() == control.has_ht_control()
+        {
+            Some(Self {
+                control,
+                duration,
+                address1,
+                address2,
+                address3,
+                sequence_control,
+                address4,
+                qos,
+                ht_control,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Decode the header at the start of `frame`.
+    pub fn decode(frame: &[u8]) -> Option<Self> {
+        let header = DecodedHeader::decode(frame)?;
+        Self::new(
+            header.control(),
+            header.duration(),
+            header.receiver(),
+            header.transmitter(),
+            header.address3(),
+            header.sequence_control(),
+            header.address4(),
+            header.qos().map(|field| QosControl::from_bytes(field.to_le_bytes())),
+            header.ht_control(),
+        )
+    }
+
+    /// The Frame Control field.
+    pub const fn control(&self) -> FrameControl {
+        self.control
+    }
+    /// The Duration/ID field.
+    pub const fn duration(&self) -> u16 {
+        self.duration
+    }
+    /// Address 1, the receiver.
+    pub const fn address1(&self) -> [u8; 6] {
+        self.address1
+    }
+    /// Address 2, the transmitter.
+    pub const fn address2(&self) -> [u8; 6] {
+        self.address2
+    }
+    /// Address 3.
+    pub const fn address3(&self) -> [u8; 6] {
+        self.address3
+    }
+    /// The Sequence Control field.
+    pub const fn sequence_control(&self) -> u16 {
+        self.sequence_control
+    }
+    /// Address 4 of a four-address data frame.
+    pub const fn address4(&self) -> Option<[u8; 6]> {
+        self.address4
+    }
+    /// The QoS Control field of a QoS data frame.
+    pub const fn qos(&self) -> Option<QosControl> {
+        self.qos
+    }
+    /// The HT Control field.
+    pub const fn ht_control(&self) -> Option<[u8; 4]> {
+        self.ht_control
+    }
+
+    /// The same header with the Protected flag `protected`.
+    pub const fn with_protected(mut self, protected: bool) -> Self {
+        self.control = self.control.with_protected(protected);
+        self
+    }
+    /// The same header with Address 1 `address1`.
+    pub const fn with_address1(mut self, address1: [u8; 6]) -> Self {
+        self.address1 = address1;
+        self
+    }
+    /// The same QoS data header with `qos`; `None` for a header without a
+    /// QoS Control field.
+    pub const fn with_qos(mut self, qos: QosControl) -> Option<Self> {
+        if self.qos.is_some() {
+            self.qos = Some(qos);
+            Some(self)
+        } else {
+            None
+        }
+    }
+
+    /// The header's length in octets.
+    pub const fn header_len(&self) -> usize {
+        match (
+            self.address4.is_some(),
+            self.qos.is_some(),
+            self.ht_control.is_some(),
+        ) {
+            (false, false, false) => 24,
+            (false, true, false) => 26,
+            (false, false, true) => 28,
+            (false, true, true) | (true, false, false) => 30,
+            (true, true, false) => 32,
+            (true, false, true) => 34,
+            (true, true, true) => 36,
+        }
+    }
+
+    /// Write the header at the start of `out` and return its length. A
+    /// shorter `out` is refused before any octet is written.
+    pub fn encode(&self, out: &mut [u8]) -> Result<usize, oer_wire::Error> {
+        let len = self.header_len();
+        if out.len() < len {
+            return Err(oer_wire::Error::Truncated {
+                required: len,
+                remaining: out.len(),
+            });
+        }
+        let mut writer = oer_wire::Writer::new(out);
+        writer.u16_le(self.control.get())?;
+        writer.u16_le(self.duration)?;
+        writer.write(&self.address1)?;
+        writer.write(&self.address2)?;
+        writer.write(&self.address3)?;
+        writer.u16_le(self.sequence_control)?;
+        if let Some(address4) = self.address4 {
+            writer.write(&address4)?;
+        }
+        if let Some(qos) = self.qos {
+            writer.write(&qos.to_bytes())?;
+        }
+        if let Some(ht_control) = self.ht_control {
+            writer.write(&ht_control)?;
+        }
+        Ok(len)
+    }
+}
+
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
     pub struct FrameControlFields[2] (little) {
@@ -257,6 +472,8 @@ oer_wire::bitfield! {
 
 #[cfg(test)]
 mod fuzz_tests;
+#[cfg(test)]
+mod header_tests;
 
 impl FrameControlFields {
     pub const fn from_raw(raw: u16) -> Self {
