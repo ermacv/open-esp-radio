@@ -15,10 +15,8 @@ builds run and record which ones ran.
   (`oer_image_build::compiler`).
 - `host_target()` names the host's target triple, for a workspace whose
   Cargo configuration defaults to a chip target.
-- `blobray::{cargo, binary, host}`: Cargo commands in the separate Blobray
-  workspace with its own target directory, and the built `blobray` host, as
-  every caller that builds or runs Blobray from the root workspace (the
-  vendor scenarios, the register inventory, the conformance check) reaches them.
+- `workspace::{binary, build}`: locate a host binary in this workspace's
+  `target/tools` directory, or build its package with the tools profile.
 
 It depends only on `oer-os-process`.
 

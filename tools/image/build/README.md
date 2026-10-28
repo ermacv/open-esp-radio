@@ -365,8 +365,8 @@ from the directory it runs in, not from the manifest's, so image builds from
 the repository root would never see them). It sets `RUSTC_BOOTSTRAP=1` on the
 image's Cargo command alone, only for those `-Z` flags on the exact stable
 toolchain `rust-toolchain.toml` pins. Images build without frame pointers;
-`esp-backtrace` then reports a panic's message and location without a
-frame-pointer walk.
+the staged runtime records panic diagnostics for next-boot reporting
+without a frame-pointer walk.
 
 The same setup builds the pinned [large-value reporter](../large-values/README.md)
 and installs it through `RUSTC_WRAPPER`, with an exact workspace-manifest
@@ -423,7 +423,7 @@ listings of `oer_analysis_riscv_lift::listing`: every address an instruction for
 becomes symbol+offset, legacy mangling hashes and LLVM clone numbers are
 dropped, identical-code-folded names pair by body, and a `Review` applies
 reviewed aliases and scheduling ties. `cargo fw compare` calls it;
-`compare images` builds both sides first (`oer_hil_image::compare_images`).
+`compare images` builds both sides first (`oer_hil_run::image::compare_images`).
 
 ## Exclusion
 
@@ -512,20 +512,20 @@ implementations sharing a demangled name retain their sorted individual sizes.
 
 ### PR size table for an agent
 
-Build main and the PR head in two output directories, with the same compiler,
+When a targeted image comparison is authorized, build its base and head in
+two output directories, with the same compiler,
 flags, image configuration and profile. For example, from clean main build
 `cargo fw build w3 --analysis`, then copy `target/fw/w3-analysis` to
 `target/size-base/w3-analysis`. Switch to the PR head, repeat the build and copy
-the output to `target/size-head/w3-analysis`. Include the bundles of every
-image the change reaches (app/analysis bundles, and `cargo hil images check`
-outputs for HIL classes it touches), not the whole chip. Then run:
+the output to `target/size-head/w3-analysis`. Include the selected image's
+bundles, or reuse captured bundles with matching provenance. Then run:
 
 ```console
 cargo fw sizes target/size-base target/size-head
 ```
 
-Include its table and verdict in the PR, and take any real `stop` (SRAM or
-stack growth) to the owner.
+Include its table and verdict in the PR. Growth is reported; image-specific
+limits remain the gates described above.
 Different summary schemas are incompatible, even if both files would otherwise
 have matching provenance. To reanalyse saved bundles without compiling or
 linking, write new summaries to a separate directory:

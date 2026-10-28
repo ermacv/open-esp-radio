@@ -7,57 +7,48 @@ alternative radio implementation. Read the
 bundle.
 
 ```text
-hil/
-├── protocol/          host/target command and telemetry wire protocol
-├── schema/            evidence contract
-├── model/             the typed scenario model: spec, purpose, verdict, names, derived waits, stand profile
-├── observer/          the observer's build identity and content store
-├── scenarios/         versioned, non-secret host workloads and criteria
-├── host/
-│   ├── cli/           stand CLI: stand commands, jobs, run store, runner launch
-│   ├── runner/        runner CLI, the run core and the family registry
-│   ├── workload/      repetition context, typed results, boots, fixtures, the family contract
-│   ├── lab/           a run's laboratory config and lock, recovery, post-mortem
-│   ├── stand-host/    stand discovery, host doctor, fixture probes, the SSH helper
-│   ├── flash/         the flash operation: lease, write, journal, start
-│   ├── link/          the DUT session, generic exchange, reboots, the peer console
-│   ├── net-traffic/   network sessions, paced UDP/TCP and ICMP host traffic
-│   ├── run-bundle/    the run bundle: format, writer, the one reader, run store, firmware records, replay checks
-│   ├── analysis/      run queries, the one measurement aggregation and comparison, performance, views
-│   ├── experiment/    the one run launch, revision runs, A/B comparisons and bisection
-│   ├── image/         image class specs for the image pipeline, directories of built images, firmware records, compare_images
-│   ├── scenario/      scenario envelope, catalog, campaign plan and requirements
-│   ├── executor/      typed scenario execution on the model or the stand, the tier plan and its leases
-│   ├── image-class/   image classes and the keys each serves
-│   ├── board/         board I/O: ports, the flash writer, starts, resets, OpenOCD, power, consoles
-│   ├── family/        one radio family's scenarios and workload each; the Wi-Fi fixtures
-│   ├── arbiter/       leases, claims, balances, lock files, job tickets, the board journal
-│   ├── fixture/       finite Linux helpers and their contract
-│   ├── fixture-install/ root-executed fixture installation
-│   └── linux-net/     privileged Linux AP/monitor fixture
-├── peers/             ESP-IDF reference peer images (esp32c5)
-├── bootloaders/       second-stage bootloader per chip
-├── agent/            chip-independent HIL agent logic
-└── targets/
-    └── esp32s31/      current embedded target workspace
+protocols/hil/{protocol,agent}/      wire protocol and chip-independent agent
+firmware/hil/                      S31 HIL images
+firmware/bootstrap/esp32s31/        staged bootstrap image
+firmware/peers/                     ESP-IDF reference peers
+firmware/vendor/                    vendor reference images
+
+tools/hil/
+  cli/          cargo hil: jobs, queries, experiments and runner launch
+  runner/       executable embedding the runner's build record
+  run/          runner CLI, orchestration, image and flash modules
+  scenario/     catalog, campaign plan, workload context and family contract
+  model/        typed scenario values, evidence schema and image classes
+  observer/     runner build, dependency graph and prepared executable
+  runs/         bundle format, writer, reader, store and replay
+  analysis/     queries, measurement aggregation, comparisons and views
+  lab/          run configuration, fixture locks, recovery and post-mortem
+  link/         DUT session, protocol exchanges, captures and peer console
+  family-*/     system, lower-MAC and Wi-Fi workloads
+  scenarios/    versioned workloads and criteria
+  fixture/      finite Linux helper binaries
+  linux-net/    Linux network helper and pinned build inputs
+
+tools/lab/      stand CLI, model, boards, router, arbiter and fixture software
+tools/vendor/{phy,phy-esp32s31}/     PHY comparison and executable family
 ```
 
 Target firmware lives under `firmware/hil/<chip>`. Runs are immutable bundles
 in the run store (`target/hil/runs`); Markdown is not proof input.
 
-Vendor-linked oracles remain isolated under `verification`; they are
-not HIL scenarios or runner commands.
+Vendor reference images live under `firmware/vendor/`; binary-analysis
+comparison code lives under `tools/analysis/blobray-verification/` and
+`tools/vendor/`.
 
 The ownership map and bundle contract are in the
 [execution and evidence architecture](architecture.md).
 
-`cargo hil` is the binary of [`oer-tool-hil-cli`](../cli/README.md), apart from
-xtask. It handles the
-stand's commands itself and forwards every other command to the runner: it
-builds the observer and runs its private copy. Cargo uses `--locked` and, like every Cargo
-command in this repository, runs offline (`.cargo/config.toml`); `cargo tidy
-fetch` downloads what a changed lock file needs. Cancellation of
-`cargo hil` is forwarded to its owned runner process group, with up to five minutes
+`cargo hil` is the binary of [`oer-tool-hil-cli`](../cli/README.md).
+It handles queries, jobs, experiments and the firmware catalog, and launches
+runner commands through a prepared private copy of `oer-tool-hil-runner`.
+`cargo stand` owns the stand's leases, boards, owners and queue. Runner
+builds use `--locked`; `.cargo/config.toml` does not force offline mode.
+Cancellation of `cargo hil` is forwarded to its owned runner process group, with up to five minutes
 for fixture cleanup and finishing the run; this does not limit campaign runtime.
 The wrapper returns the runner's exit code (or `128 + signal` on Unix).
 
@@ -73,145 +64,105 @@ cargo hil observer
 | --- | --- |
 | [Sharing the stand](stand.md) | Leases, owners and balances, boards and their reset paths, the ESP-IDF firmware catalog, host fixture probing, the dashboard |
 | [Runs and investigation](runs.md) | The shared run store, failure post-mortems and board recovery, enqueued runs, bisection, revision runs, A/B comparison, performance, profiles and layout seeds |
-| [Host fixtures](fixtures.md) | Network fixture preparation and restoration, evidence boundaries, Linux fixture software installation, probe load and air observers |
+| [Host fixtures](fixtures.md) | Current fixture-provider scope, Linux fixture software installation and helper interfaces |
 | [Execution and evidence architecture](architecture.md) | Package ownership, the run lifecycle and the bundle contract |
 | [Stand arbiter](../../lab/arbiter/README.md) | The queue, claims, balances and state files |
 
 ## Configure the stand
 
-Run the host interface through the workspace alias:
+The stand file is shared by this user's checkouts:
+`~/.config/open-esp-radio/stand.toml`, or under `$XDG_CONFIG_HOME`.
+`--stand-file PATH` selects another file. `oer-lab-model` owns its schema,
+board-name resolution and state paths. Scenarios contain no laboratory
+credentials or machine-specific paths.
 
 ```console
 mkdir -p ~/.config/open-esp-radio
 cp tools/lab/model/stand.example.toml ~/.config/open-esp-radio/stand.toml
 chmod 0600 ~/.config/open-esp-radio/stand.toml
-cargo hil doctor
 ```
 
-The stand file is `~/.config/open-esp-radio/stand.toml` (or under
-`$XDG_CONFIG_HOME`), shared by every checkout of this user; `--stand-file`
-names another file. Its schema and rules, the one resolver of a board name and the paths of the
-stand's state belong to `oer-lab-model`. It is the only source for
-the stand's identity, its hubs and pool of boards, STA/AP credentials and
-addresses and the fixtures; it lives outside the repository, and scenarios
-contain no lab secrets or machine-specific paths. The stand id and the
-boards' ids are written into every run manifest so results from different
-stands and boards cannot be silently mixed.
+A DUT is a board with the `dut` role and the selected chip. `--chip CHIP`
+selects the chip; otherwise the runner requires exactly one chip capable of
+building the selection. `--board ID` resolves a DUT when several qualify.
+The peer-board resolver uses the declared peer image's chip and the `peer`
+role; `--peer-board ID` selects among matching boards.
 
-A run's device under test is a board of the pool with the `dut` role and the
-run's chip, which has a profile in `chips/<chip>/platform/chip.toml`. There is no
-default chip: a command that uses a device under test takes it from its
-`--chip` or from the only chip that builds its scenarios' images, and checks
-and resolves only that board, so an absent board, or one whose chip has no
-profile yet, fails only the runs that take it. With several candidates of the
-chip, `--board ID` names one, until the stand's scheduler assigns boards.
-
-Peer scenarios run against a reference peer board, an ESP32-C5 with an
-ESP-IDF catalog image: the IEEE 802.15.4 peer,
-the [Thread peer](../../../firmware/peers/esp32c5-openthread/README.md) or the
-[Bluetooth LE Direct Test Mode peer](../../../firmware/peers/esp32c5-ble-dtm/README.md).
-The peer is a board of the pool with the `peer` role and the chip the run's
-peer images target (`hil/peers/*/firmware.toml`), other than the device under
-test; boards of other chips never compete for it, and `--peer-board ID` names
-it when several of that chip qualify. A run's peer images share one chip.
-A run of a peer scenario claims the peer board beside the device under test
-and the air in its one lease, and locks both boards. Before the first
-scenario that needs an image, the runner brings the board to that image's
-current catalog build through the flash operation's catalog flash
-(`oer_hil_flash::catalog`, unless the board journal says the board carries
-it), and writes the image, application digest and commit the board journal
-recorded for it into the scenario's `peer-image.json`. Each
-workload takes the running peer over with its `SYNC` command instead of a
-reset: a USB Serial/JTAG reset of an ESP32-C5 whose radio runs can leave it in
-ROM download. The peer drivers share one console, `oer_hil_link::peer::PeerConsole`:
-it owns the whole `@` line grammar (`@READY`, `@OK`, `@ERR` and typed
-reports), and records the transcript of every exchange.
+ESP-IDF peer projects are in `firmware/peers/`, with image names and chip
+pins in their `firmware.toml` catalog entries. The runner's peer image port
+uses `oer_hil_run::flash::catalog`; its `PeerConsole` is in `oer-hil-link`.
+Catalog building and automatic writes are described in the
+[stand guide](stand.md#esp-idf-firmware-catalog).
 
 ## Build and run
 
-`cargo hil plan <scenario>` prints the selection's plan without opening a lab
-configuration or device: each scenario's procedure digest, image, repetitions,
-requirements and the named checks it supplies. `--proof <check>` filters the selected scenarios by an actually implemented
-named check. No current scenario supplies one: the Wi-Fi and Bluetooth
-families whose scenarios went in  and . Repeated `--proof`
-arguments require all named checks, and `--tag` can restrict the profile:
+Source-only catalog operations do not open the stand file or a device:
 
 ```console
-cargo hil plan --proof <check>
+cargo hil scenario list
+cargo hil scenario validate
+cargo hil plan boot-smoke
+cargo hil plan --proof lower-mac-conformance
 ```
 
-The plan lists provided checks and selection reasons; it does not infer success
-from tags, select by changed files, or claim minimum coverage of an arbitrary
-product program. Selection never expands beyond the requested scenarios.
-Scenario digests drop null values, fill schema-5 defaults from
-`tools/hil/model/scenario-v5-defaults.json` (generated from the typed scenario
-families by the runner's catalog test) and exclude top-level `description`,
-`role`, `tags` and `unsupported`; all execution fields remain bound, including
-repetitions and the complete family table. A plan neither executes hardware
-nor invalidates finished observations.
+`plan` prints procedure identity, image, repetitions, requirements and named
+checks. Repeated `--proof` arguments require every named check. Lower-MAC and
+Wi-Fi families supply checks including `lower-mac-conformance`,
+`lower-mac-ownership-close-gate`, `w4` and `initial-gtk-diagnostic`. The plan
+neither runs the workload nor infers a passing observation from tags.
+Scenario identity and discovery are described by the
+[catalog](../scenarios/README.md).
 
-`cargo hil run <scenario>` builds and flashes the required image before the
-scenario. `cargo hil image build <class>` builds the class's image bundle through the one image pipeline
-(`oer-image-build`) with the same stack/move,
-placement and packed-image gates, encoding the bootloader, partition table
-and OTA selection at build time, without flashing or loading private stand
-file. Each successful build emits one JSON report on stdout with class, chip,
-target, profile, network, the bundle directory, its runtime ELF, application
-image and digest, its gate reports and their warnings; diagnostics stay on
-stderr. An ELF or `application.bin` left beside a failed build is not a
-successful image report. `cargo fw flash --device MAC|PORT <bundle>` writes a
-bundle to an attached board; a run writes its images through the flash operation ([stand](stand.md#the-flash-operation)).
+These commands have build or hardware effects:
 
-A run takes its images as a directory of built images (`images.json`
-beside each class's bundle, with the SHA-256 of every file): `cargo hil run`
-builds them into `target/hil/<chip>/images/<run>` from this checkout, or from
-the tree `--source DIR` names (an A/B arm's or a revision's worktree); `cargo
-hil run --images DIR` flashes images built before, and refuses one whose files
-changed. `cargo hil run … --enqueue` builds the run's images when it is
-enqueued into the job's own directory (`target/hil/jobs/images/<job>`) and the
-job flashes exactly those, whatever the checkout holds when it starts. `cargo
-hil sweep` removes these directories once they are unused for the image cache
-age. A run records each image's files by their SHA-256 and the commit of the
-tree it was built from, with whether that tree was dirty.
+| Command | Effect |
+| --- | --- |
+| `cargo hil observer` | Build and prepare the host runner only |
+| `cargo hil image build CLASS` | Build the selected firmware class and its audited image bundle, without flashing |
+| `cargo hil images check --all` | Build available HIL classes and run their image checks |
+| `cargo hil doctor SCENARIO` | Inspect the selected machine and fixture prerequisites; no reservation or DUT reset |
+| `cargo hil run SCENARIO` | Build and archive images, acquire the stand, flash and execute the workload |
+| `cargo hil run SCENARIO --images DIR` | Use a prepared image directory after checking its identities |
+| `cargo hil run SCENARIO --firmware-from RUN_ID` | Replay archived firmware after validation |
 
-Every image build compiles in one shared cache,
-`~/.cache/open-esp-radio/build/cargo/`; `cargo hil images check` builds its classes there too. At most half the host's cores, and no
-more than its memory holds at 2 GB each, compile image runtimes at once across
-all checkouts; further builds wait for a free build slot in
-`~/.cache/open-esp-radio/build/tokens/`.
+A successful image build prints a JSON artifact report with its class, chip,
+profile, bundle, ELF, application identity, reports and warnings; diagnostics
+go to stderr. A leftover ELF beside a failed build is not a successful
+artifact report. App bundles under `target/fw/` are selected separately by
+`cargo fw flash IMAGE --board BOARD`.
 
-`cargo hil run S... --repetitions N` runs each selected scenario N times
-(1 to 20) instead of its own count, for a quicker look while debugging. The run
-records the reduced count, which a requirement's minimum repetitions then judge.
+`run --source DIR` selects the image source tree. `--images` and
+`--firmware-from` are explicit artifact inputs and exclude source rebuilding
+options. `--repetitions N` overrides the catalog count within 1–20, retaining
+the requested count in the run. `run-all` supports role and tag selection,
+and requires `--all` for an unfiltered whole-catalog run.
 
-`cargo hil run-all` runs the scenarios carrying each `--tag`, or the whole
-catalog only with an explicit `--all`. It reuses each image across its scenario group but
-does not fail fast. Every invocation retains an immutable evidence bundle in
-`target/hil/runs/<run-id>/`, including a canonical JSON suite, JUnit
-XML, a standalone HTML report and the exact application image flashed for each
-firmware class. The flash operation reads that archived copy, binding firmware
-provenance to the bytes sent to the DUT. A bundle carries no seal: a run of
-another `RUN_SCHEMA` is not read, and stays in the store until it is deleted
-explicitly (`cargo hil runs prune --unreadable --apply`).
-
-The manifest records `runner.observer`, including the SHA-256 of the running
-executable and its embedded build/source identity. Firmware capture does not
-replace this identity.
-[`observer-inputs.json`](../model/observer-inputs.json) selects the relevant
-observer inputs; equality of the entire runner binary is not required.
-Its schema-4 registry identifies a workload as `<family>/<kind>` (for example
-`system/boot-smoke`), classifies its timing sensitivity, and scopes its inputs by
-the `common` group plus the scenario family's group (`system`),
-whose direct dependencies are the runner family
-packages. A workload's source inputs are the runner package, every path package
-in that projected dependency closure and the listed non-Cargo `data` files;
-source paths are never enumerated.
-Legacy bundles need an explicit provenance review before becoming applicable.
+An enqueued run builds its fixed image directory before queueing; the job
+flashes those artifacts even if the checkout changes while it waits. Queueing,
+experiments and cleanup are covered in [runs and investigation](runs.md).
+Cancellation is forwarded to the owned runner process group, with up to five
+minutes for cleanup; the wrapper returns the runner's exit status.
 
 ## Inspect evidence
 
-`cargo hil runs history <scenario>` reads a scenario's outcomes and
-measurements straight from the bundles in the store and starts with its pass
-rate and how many of its newest runs in a row did not pass; there is no
-derived history file to rebuild. Trends are scenario aggregates, not a proof
-of comparable firmware or fixture conditions.
+The shared run store is `$OER_HIL_STORE` or
+`<XDG data>/open-esp-radio/hil`. `target/hil/runs` links to its `runs/`
+directory. Every invocation keeps its manifest, selected plan, archived
+firmware, suite, scenario results and repetition attachments. JUnit and HTML
+are derived views; Markdown is not proof input.
+
+`runner.observer` records the executable and its embedded build/source
+identity. The [observer input registry](../model/observer-inputs.json)
+selects each workload's relevant dependency closure and data inputs.
+Firmware identity does not replace the observer identity.
+
+```console
+cargo hil runs list
+cargo hil runs history boot-smoke
+```
+
+Queries read the typed bundles through `oer-hil-runs::format::RunBundle`.
+A different run schema is refused and left in the store. See the
+[bundle format](../runs/README.md) and
+[execution lifecycle](architecture.md#one-run-lifecycle) before interpreting
+an outcome or replaying firmware.

@@ -25,8 +25,6 @@ An `ImageBundle` is one directory with a `bundle.json` and these files:
 | `large-values.json`, `large-values.txt` | Compiler values above the move limit and workspace coverage |
 | `build.log` | Every step's standard error |
 
-The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
-
 The manifest uses schema 7 and records `purpose: Flash` or `Analysis`, the
 chip, the boot kind, the flash map, every requested check of every ELF with its
 result (`CheckRecord`, `CheckResult`, `CheckedElf`) and the gate warnings. Older

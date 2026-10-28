@@ -67,7 +67,7 @@ check as an ordinary `build`.
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
 implicit moves above the stack policy's `max_move_bytes` reported (`-W
 large-assignments`), and through the image linker
-(`oer-image-linker` of `tools/image/linker`), which refuses bytes in an input section
+(`oer-tool-image-linker` of `tools/image/linker`), which refuses bytes in an input section
 the boot zeroes. The stack checks then bound the runtime's task and
 interrupt stacks and the bootstrap's stack under
 `chips/esp32s31/platform/stack.toml` (`runtime-stack.txt`,
@@ -238,7 +238,7 @@ interface never are, in no message, lock file or `log.txt`.
 
 `cargo fw sizes` compares `sizes.json` files without building: `same`/`report`
 exit 0, unreadable input or incompatible provenance exit 1. See the [summary format and
-owner thresholds](../build/README.md#size-summaries-and-owner-thresholds).
+owner thresholds](../build/README.md#size-summaries-and-verdicts).
 
 With `--add-base`, each directory names one `sizes.json` bundle. This explicit
 composition mode permits different image recipes and compares each SRAM section

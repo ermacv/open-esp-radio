@@ -10,7 +10,7 @@ The bundle contract is in the [architecture](architecture.md).
 
 Every checkout's `target/hil/runs` is a link to one store shared by
 all checkouts of this user, `~/.local/share/open-esp-radio/hil/runs`
-(`$XDG_DATA_HOME`, or `$OER_HIL_STORE/<target>/runs`). `cargo hil` creates the
+(`$XDG_DATA_HOME`, or `$OER_HIL_STORE/runs`). `cargo hil` creates the
 link, and refuses a checkout whose own run directory holds runs.
 
 ```console
@@ -104,7 +104,7 @@ without a reset, names the code addresses from the image's ELF and writes them
 to `post-mortem/jtag.json`, so the place it stopped survives the resets below.
 The read never changes the repetition's outcome.
 
-The `stand-recovery` scenario (`hil/scenarios/system/`, image
+The `stand-recovery` scenario (`tools/hil/scenarios/system/`, image
 `diagnostic-usb-jtag-off`) exercises this ladder on a board that really left
 USB: its image switches the USB Serial/JTAG off on request, the ladder's RTS
 and JTAG rungs cannot reach it and the power rung must bring it back; then,
@@ -119,7 +119,7 @@ runner first puts its ROM into download mode through its hub port's power (the
 ladder's download entry) and then flashes.
 
 A target that does not answer within those 20 s climbs the recovery ladder
-(`oer_hil_lab::control::climb`): the resets of its stand-file `reset`
+(`oer_lab_board::reset::climb`): the resets of its stand-file `reset`
 ladder in order (an RTS pulse on its USB Serial/JTAG port, a system reset
 through its builtin USB-JTAG with OpenOCD, whose executable the `cargo hil`
 wrapper passes to the runner, its hub port's power), each followed by the
@@ -165,22 +165,21 @@ ROM answered: the same RTS check must show the ROM booting.
 
 ## Operational commands without a rebuild
 
-`cargo hil` builds its binary, [`oer-tool-hil-cli`](../cli/README.md), from the
-caller's working tree before every command, so an edit of a HIL host package
-rebuilds it. For the operational commands (`queue`, `lease`, `devices`,
-`board`, `runs`, `perf`, `dashboard`) use the installed tool instead:
+`cargo hil` invokes its checkout's `oer-tool-hil-cli` through Cargo.
+`cargo stand install` builds `oer-tool-lab-cli` from `origin/main` into the
+user's host tool store and installs a launcher. The installed program handles
+stand operations such as `queue`, `lease`, `devices` and `board` against the
+caller's checkout, without rebuilding its sources.
 
 ```console
-cargo stand install      # build origin/main's oer-tool-hil-cli once, install oer-tool-lab-cli
+cargo stand install
 oer-tool-lab-cli queue
-oer-tool-lab-cli runs why <run-id>
+cargo hil runs why <run-id>
 ```
 
-`oer-tool-lab-cli` runs the `main` build against the caller's checkout (its Git top
-level), so owners and local paths are the caller's and every checkout writes the
-shared arbiter state with one binary. Reinstall after arbiter or stand changes
-land on `main`. Runs, image builds and flashing keep using `cargo hil`, which
-builds the runner from the caller's sources.
+Run queries, performance comparisons and the dashboard belong to `cargo hil`;
+they are not commands of the installed stand program. Runs and image builds
+also use the checkout's HIL tool and prepared runner.
 
 ## Program-counter profiles
 
@@ -402,7 +401,7 @@ the automatic rule never passes, never by its age or the size budget; a newer
 branch's run of the same schema may be among them. A run of a newer schema,
 or of an unknown one, always stays: the store is shared, and a newer branch's
 runs are only unreadable to this checkout. The size budget below weighs every
-run that stays, readable or not. The automatic rule also holds the esp32s31 store to
+run that stays, readable or not. The automatic rule also holds the shared store to
 a size budget, `OER_HIL_RUN_STORE_BUDGET_GIB` (40 GiB by default): over it, it
 deletes the oldest runs that only their age kept until the store fits, and
 every other reason above still keeps its runs. Run by hand without `--apply` it only lists the other runs and

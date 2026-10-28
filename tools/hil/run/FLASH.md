@@ -1,22 +1,26 @@
 # HIL flash operation
 
-`oer-hil-run` is the only way the host writes a board's flash:
+`oer-hil-run::flash` coordinates a HIL write through
+`oer-lab-board::stand::LeasedBoard`:
 
-1. **lease**: the caller holds the board's lock (`oer_hil_arbiter::lock::
-   BoardLock`), taken under the arbiter's grant; a lock of another board is
-   refused;
-2. **write**: the stand board (`oer-lab-board`, through `oer_lab_devices::image`) writes the image bundle;
-3. **journal**: the board journal records the image the board now carries,
-   with the SHA-256 of the bundle's application computed here;
-4. **start**: the image starts as the chip profile says, unless the write's
-   own reset started it.
+1. The arbiter grant holds the board's `DeviceAccess`.
+2. The leased board writes the bundle through `oer_lab_board::image`,
+   publishes its receipt, starts the image and confirms the start.
+3. The flash operation appends the image identity and revision to the board
+   journal. The journal records history; receipts determine what is loaded.
 
-`flash` does all four; `flash_if_changed` first asks the journal whether the
-board already carries the image with that digest. `catalog::flash` builds an
-ESP-IDF catalog image, bundles it with its own bootloader and partition
-table and flashes it. The callers are the runner's flash of its device under test and of the reference
-peers, and the calibration cross-check. A board is reached through the
-`Target` trait, which board I/O's `Board` implements and the tests fake.
+`flash_if_changed` skips a board whose receipt matches the complete bundle.
+`catalog::flash` builds an ESP-IDF catalog entry, bundles its own bootloader,
+partition table and application, checks the target chip and writes it through
+the same leased operation. A held catalog entry is refused. The runner's DUT
+and peer writes and the calibration comparison use these functions. Tests
+substitute the `Target` trait; real writes use `LeasedBoard`.
+
+`cargo hil firmware list` lists catalog entries; `cargo hil firmware build
+IMAGE` builds one without flashing. A scenario requiring a peer prepares its
+catalog image automatically. There is no `cargo hil firmware flash` command.
+`cargo fw flash IMAGE --board BOARD` writes a built S31 application bundle;
+it does not select ESP-IDF peer catalog entries.
 
 ```console
 cargo test -p oer-hil-run

@@ -113,7 +113,7 @@ Unresolved addresses remain in the output and cannot identify a register bit.
   not the research method or verdict.
 
 Related tools have different owners: `cargo registers` publishes reviewed
-hardware interfaces; `cargo xtask` checks and builds repository compositions;
+hardware interfaces; `cargo fw` builds repository images;
 `cargo hil` obtains device observations. Blobray does not decide product readiness.
 
 `cargo blobray` invokes `oer-tool-analysis-cli`; the

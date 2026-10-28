@@ -1,6 +1,6 @@
 # Versioned scenario catalog
 
-Folders identify the workload domain: system and PHY. PHY investigations
+Folders identify the workload domain: system, IEEE 802.11 and PHY. PHY investigations
 alternate the pinned Wi-Fi or IEEE 802.15.4 reference and the diagnostic calibration image,
 or measure forced tracking intervals with 802.15.4 receiving in idle.
 Scenario IDs are stable across folder moves. Tags select overlapping
@@ -38,6 +38,8 @@ kind = "boot-smoke"
 The family owns every executable value:
 
 - `[system]` is a tagged workload whose kind implies the firmware image.
+- `[lower-mac]` runs conformance and ownership-close checks.
+- `[wifi]` runs W4 station qualification or the initial-GTK investigation.
 - `[phy]` runs the vendor calibration cross-check or the quiet Wi-Fi/154 idle tracking-hold
   investigation on `diagnostic-phy`.
 Every table rejects unknown fields. Relations that remain between the image,
@@ -102,10 +104,9 @@ Both readers' tests use them; they are not part of this catalog.
 An optional top-level `[profile]` table (`harts = "both" | "core0" |
 "core1"`, `period-us` in 100..=100000) samples the program counter of the
 image's harts during the workload's measured window. No image has the sampler
-(`pc-profile`), so the runner refuses every profile request;
-when a class samples, only
-an `investigation` scenario without the `performance` tag may request it:
-sampling perturbs timing. The table is part of the procedure, so a profiled scenario
+(`pc-profile`), so the runner refuses every profile request. Sampling perturbs timing; the
+scenario validation also restricts diagnostic profiles to investigations
+without the `performance` tag. The table is part of the procedure, so a profiled scenario
 is a different scenario from its unprofiled copy, and its evidence never
 stands in for a throughput or timing measurement.
 

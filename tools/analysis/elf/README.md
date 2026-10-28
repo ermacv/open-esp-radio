@@ -60,7 +60,7 @@ through; nothing else parses `llvm-nm` or `llvm-objdump` output or walks
 
 It has no repository path dependency, so Blobray's standalone extraction
 takes it by path beside the RV32 crates. Blobray's own artifact inventory
-(`tools/analysis/cli/crates/artifacts`) stays separate: it streams member and
+(`tools/analysis/blobray-artifacts`) stays separate: it streams member and
 section bytes under Blobray's working-memory and cancellation budget and
 keeps artifact, member and symbol-table identities for evidence, which a
 whole-file view does not.
