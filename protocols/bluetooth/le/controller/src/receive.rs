@@ -29,7 +29,7 @@ pub fn decode<'a>(
         return None;
     }
     match decode_inner(encryption, pdu, decoded, random) {
-        Ok(length) => length.map(|length| &decoded[..length]),
+        Ok(length) => length.and_then(|length| decoded.get(..length)),
         Err(_) => {
             decoded.fill(0);
             encryption.fail_unexpected_physical_channel_pdu();
@@ -44,15 +44,25 @@ fn decode_inner(
     decoded: &mut [u8; PDU_CAPACITY],
     mut random: impl FnMut() -> Option<LePeripheralEncryptionRandom>,
 ) -> Result<Option<usize>, Error> {
-    if pdu.len() < 2 || usize::from(pdu[1]) + 2 != pdu.len() {
+    let [header, length, payload @ ..] = pdu else {
+        return Err(Error::UnexpectedPhysicalChannelPdu);
+    };
+    if usize::from(*length) != payload.len() {
         return Err(Error::UnexpectedPhysicalChannelPdu);
     }
-    let header = pdu[0];
-    let payload = &pdu[2..];
+    let header = *header;
     if header & 0x03 == 0x01 && payload.is_empty() {
         return Ok(None);
     }
-    decoded[..pdu.len()].copy_from_slice(pdu);
+    let [decoded_header, decoded_length, decoded_payload @ ..] = decoded;
+    *decoded_header = header;
+    *decoded_length = *length;
+    let decoded_payload = decoded_payload
+        .get_mut(..payload.len())
+        .ok_or(Error::UnexpectedPhysicalChannelPdu)?;
+    for (destination, source) in decoded_payload.iter_mut().zip(payload) {
+        *destination = *source;
+    }
     match encryption.receive_mode() {
         Mode::Plaintext => {
             if header & 0x03 == 0x03 && payload.first() == Some(&0x03) {
@@ -65,17 +75,22 @@ fn decode_inner(
             }
         }
         Mode::EncryptedStartResponse => {
-            encryption.receive_encrypted_start_response(header, &mut decoded[2..pdu.len()])?;
+            encryption.receive_encrypted_start_response(header, decoded_payload)?;
         }
-        Mode::Encrypted => {
-            match encryption.receive_active_packet(header, &mut decoded[2..pdu.len()])? {
-                Received::PauseRequest => {}
-                Received::Plaintext { length } => {
-                    decoded[1] = length as u8;
-                    return Ok(Some(length + 2));
+        Mode::Encrypted => match encryption.receive_active_packet(header, decoded_payload)? {
+            Received::PauseRequest => {}
+            Received::Plaintext { length } => {
+                if length > decoded_payload.len() {
+                    return Err(Error::UnexpectedPhysicalChannelPdu);
                 }
+                *decoded_length =
+                    u8::try_from(length).map_err(|_| Error::UnexpectedPhysicalChannelPdu)?;
+                return length
+                    .checked_add(2)
+                    .map(Some)
+                    .ok_or(Error::UnexpectedPhysicalChannelPdu);
             }
-        }
+        },
         Mode::UnencryptedPauseResponse => {
             if header & 0x03 != 0x03 {
                 return Err(Error::UnexpectedPhysicalChannelPdu);
@@ -83,7 +98,7 @@ fn decode_inner(
             encryption.receive_unencrypted_pause_response(payload)?;
         }
         Mode::RestartEncryptionRequest => {
-            if header & 0x03 != 0x03 || payload.len() != 23 || payload[0] != 0x03 {
+            if header & 0x03 != 0x03 || payload.len() != 23 || payload.first() != Some(&0x03) {
                 return Err(Error::UnexpectedPhysicalChannelPdu);
             }
             encryption.begin(payload, random().ok_or(Error::InvalidState)?)?;

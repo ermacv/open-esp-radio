@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_macros)]
+
 use std::{vec, vec::Vec};
 
 use oer_bluetooth_le_ll::security::{
@@ -190,4 +192,27 @@ fn a_mic_failure_exits_the_connection() {
     corrupted[30] ^= 0x01;
     assert_eq!(receive(&mut procedure, &pdu(0x0e, &corrupted)), None);
     assert_eq!(procedure.termination(), Some(Termination::Exit));
+}
+
+#[test]
+fn every_payload_length_fits_the_decoded_storage_exactly() {
+    for length in u8::MIN..=u8::MAX {
+        let packet = pdu(0x02, &vec![0xa5; usize::from(length)]);
+        let mut procedure = Procedure::new();
+        assert_eq!(receive(&mut procedure, &packet), Some(packet));
+        assert!(procedure.termination().is_none());
+    }
+}
+
+#[test]
+fn truncated_and_oversized_inputs_return_the_typed_length_error() {
+    for input in [vec![], vec![2], vec![2, 0, 1], vec![2; PDU_CAPACITY + 1]] {
+        let mut procedure = Procedure::new();
+        let mut decoded = [0xa5; PDU_CAPACITY];
+        assert_eq!(super::decode_inner(&mut procedure, &input, &mut decoded, random),
+            Err(oer_bluetooth_le_ll::security::LePeripheralEncryptionProcedureError::UnexpectedPhysicalChannelPdu));
+        assert_eq!(decode(&mut procedure, &input, &mut decoded, random), None);
+        assert_eq!(procedure.termination(), Some(Termination::Exit));
+        assert!(decoded.iter().all(|byte| *byte == 0));
+    }
 }

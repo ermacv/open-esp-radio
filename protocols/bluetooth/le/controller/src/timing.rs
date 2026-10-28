@@ -39,6 +39,8 @@ pub enum PlanningOperation {
 /// The failing calculation within that operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlanningCalculation {
+    /// One advertising channel's packet and response air time.
+    ChannelAir,
     /// One advertising channel's air time plus the preparation lead.
     ChannelSpacing,
     /// A whole advertising event over its channels.
@@ -203,8 +205,13 @@ fn widening(
     peer_ppm: u16,
     allowances: ConnectionAllowances,
 ) -> Result<RadioDuration<LeRadio>, EpochExhausted> {
-    let ppm = u128::from(peer_ppm) + u128::from(allowances.local_sleep_clock_ppm);
-    let drift = (u128::from(elapsed.as_micros()) / 1_000) * ppm / 1_000;
+    let ppm = u128::from(peer_ppm)
+        .checked_add(u128::from(allowances.local_sleep_clock_ppm))
+        .ok_or(error(C::Widening))?;
+    let drift = (u128::from(elapsed.as_micros()) / 1_000)
+        .checked_mul(ppm)
+        .ok_or(error(C::Widening))?
+        / 1_000;
     // A widening past `u64::MAX` cannot lie in the epoch.
     u64::try_from(drift)
         .ok()
@@ -272,45 +279,55 @@ pub enum AdvertisingResponse {
 }
 
 /// LE 1M air time of a legacy PDU of `length` bytes, header included.
-pub const fn legacy_air_micros(length: LegacyPduLength) -> NonZeroU32 {
-    // Preamble, access address, header and CRC.
-    const OVERHEAD: NonZeroU32 =
-        NonZeroU32::new((1 + 4 + 2 + 3) * 8).expect("the PDU overhead is nonzero");
-    // The length holds the header and at most 37 payload bytes: it never
-    // underflows or saturates.
-    OVERHEAD.saturating_add((length.0 as u32 - 2) * 8)
+/// Returns [`EpochExhausted`] if the calculation cannot be represented.
+pub fn legacy_air_micros(length: LegacyPduLength) -> Result<NonZeroU32, EpochExhausted> {
+    // Preamble, access address and CRC surround the bounded PDU.
+    const OVERHEAD_BYTES: u32 = 1 + 4 + 3;
+    u32::from(length.0)
+        .checked_add(OVERHEAD_BYTES)
+        .and_then(|bytes| bytes.checked_mul(8))
+        .and_then(NonZeroU32::new)
+        .ok_or(advertising_error(C::ChannelAir))
 }
 
 /// Air time of one advertising channel's `pdu_length`-byte packet and the
 /// responses it awaits: a non-scannable channel reserves the PDU's air time;
 /// a response-capable channel also covers the vendor's four-microsecond
 /// response-capable tail and the longest exchange that follows.
+/// Returns [`EpochExhausted`] if the calculation cannot be represented.
 pub fn advertising_channel_air(
     pdu_length: LegacyPduLength,
     response: AdvertisingResponse,
-) -> NonZeroRadioDuration<LeRadio> {
-    // `LegacyPduLength` bounds both lengths to 39 bytes, so every sum below
-    // stays under 10,000 us: none saturates.
-    let air = legacy_air_micros(pdu_length);
+) -> Result<NonZeroRadioDuration<LeRadio>, EpochExhausted> {
+    const RESPONSE_LEAD_MICROS: u32 = RESPONSE_CAPABLE_TAIL_MICROS + T_IFS_MICROS;
+    const DIRECTED_RESPONSE_MICROS: u32 =
+        RESPONSE_LEAD_MICROS + LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS;
+    const SCAN_REQUEST_MICROS: u32 = SCAN_REQ_AIR_MICROS + T_IFS_MICROS;
+    let outside = advertising_error(C::ChannelAir);
+    let air = legacy_air_micros(pdu_length)?;
     let responses = match response {
         AdvertisingResponse::None => 0,
-        AdvertisingResponse::Directed => {
-            RESPONSE_CAPABLE_TAIL_MICROS + T_IFS_MICROS + LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS
-        }
+        AdvertisingResponse::Directed => DIRECTED_RESPONSE_MICROS,
         AdvertisingResponse::ScanResponse {
             length,
             connectable,
         } => {
-            let scan = SCAN_REQ_AIR_MICROS + T_IFS_MICROS + legacy_air_micros(length).get();
+            let response_air = legacy_air_micros(length)?.get();
+            let scan = SCAN_REQUEST_MICROS
+                .checked_add(response_air)
+                .ok_or(outside)?;
             let exchange = if connectable {
                 scan.max(LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS)
             } else {
                 scan
             };
-            RESPONSE_CAPABLE_TAIL_MICROS + T_IFS_MICROS + exchange
+            RESPONSE_LEAD_MICROS.checked_add(exchange).ok_or(outside)?
         }
     };
-    NonZeroRadioDuration::from_micros(NonZeroU64::from(air.saturating_add(responses)))
+    air.checked_add(responses)
+        .map(NonZeroU64::from)
+        .map(NonZeroRadioDuration::from_micros)
+        .ok_or(outside)
 }
 
 /// The time between consecutive channels of an advertising event: one
@@ -342,8 +359,12 @@ pub fn advertising_event_duration(
     timing: RadioTiming,
 ) -> Result<NonZeroRadioDuration<LeRadio>, EpochExhausted> {
     let spacing = advertising_channel_spacing(channel_air, timing)?;
+    let prefix_channels = channels
+        .get()
+        .checked_sub(1)
+        .ok_or(advertising_error(C::EventDuration))?;
     spacing
-        .checked_mul(channels.get() - 1)
+        .checked_mul(prefix_channels)
         .and_then(|prefix| channel_air.checked_add(prefix))
         .ok_or(advertising_error(C::EventDuration))
 }
@@ -358,6 +379,7 @@ fn advertising_error(calculation: C) -> EpochExhausted {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_macros, clippy::arithmetic_side_effects)]
     use oer_bluetooth_le_radio::{
         ConnectionAllowances, ConnectionEventTiming, LeInstant, RadioDuration,
     };
@@ -432,6 +454,7 @@ mod tests {
 
 #[cfg(test)]
 mod boundary_tests {
+    #![allow(clippy::disallowed_macros, clippy::arithmetic_side_effects)]
     use super::*;
 
     const ALLOWANCES: ConnectionAllowances = ConnectionAllowances {
@@ -507,6 +530,7 @@ mod boundary_tests {
 
 #[cfg(test)]
 mod advertising_tests {
+    #![allow(clippy::disallowed_macros, clippy::arithmetic_side_effects)]
     use super::*;
 
     const TIMING: RadioTiming = RadioTiming {
@@ -537,7 +561,7 @@ mod advertising_tests {
         assert_eq!(LegacyPduLength::new(40), None);
         assert_eq!(LegacyPduLength::new(usize::MAX), None);
         assert_eq!(
-            legacy_air_micros(LegacyPduLength::MIN).get(),
+            legacy_air_micros(LegacyPduLength::MIN).unwrap().get(),
             (1 + 4 + 2 + 3) * 8
         );
     }
@@ -546,14 +570,15 @@ mod advertising_tests {
     fn a_legacy_pdu_takes_eight_microseconds_per_octet_on_le_1m() {
         // Preamble, access address and CRC around a 39-byte PDU.
         assert_eq!(
-            legacy_air_micros(LegacyPduLength::MAX).get(),
+            legacy_air_micros(LegacyPduLength::MAX).unwrap().get(),
             (1 + 4 + 39 + 3) * 8
         );
     }
 
     #[test]
     fn a_response_capable_channel_covers_its_longest_exchange() {
-        let plain = advertising_channel_air(LegacyPduLength::MAX, AdvertisingResponse::None);
+        let plain =
+            advertising_channel_air(LegacyPduLength::MAX, AdvertisingResponse::None).unwrap();
         assert_eq!(plain.get().as_micros(), 376);
         let scannable = advertising_channel_air(
             LegacyPduLength::MAX,
@@ -561,15 +586,16 @@ mod advertising_tests {
                 length: LegacyPduLength::MAX,
                 connectable: false,
             },
-        );
+        )
+        .unwrap();
         assert_eq!(
             scannable.get().as_micros(),
             376 + 4 + 150 + u64::from(SCAN_REQ_AIR_MICROS) + 150 + 376
         );
-        let directed = advertising_channel_air(length(14), AdvertisingResponse::Directed);
+        let directed = advertising_channel_air(length(14), AdvertisingResponse::Directed).unwrap();
         assert_eq!(
             directed.get().as_micros(),
-            u64::from(legacy_air_micros(length(14)).get())
+            u64::from(legacy_air_micros(length(14)).unwrap().get())
                 + 4
                 + 150
                 + u64::from(LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS)
@@ -578,7 +604,7 @@ mod advertising_tests {
 
     #[test]
     fn the_last_channel_needs_no_lead_after_it() {
-        let air = advertising_channel_air(LegacyPduLength::MAX, AdvertisingResponse::None);
+        let air = advertising_channel_air(LegacyPduLength::MAX, AdvertisingResponse::None).unwrap();
         assert_eq!(
             advertising_channel_spacing(air, TIMING),
             Ok(RadioDuration::from_micros(376 + 137))
@@ -592,6 +618,72 @@ mod advertising_tests {
         assert_eq!(
             advertising_event_duration(air, NonZeroU64::MIN, TIMING).map(|duration| duration.get()),
             Ok(RadioDuration::from_micros(376))
+        );
+    }
+
+    #[test]
+    fn every_legacy_length_and_response_combination_has_exact_airtime() {
+        for bytes in 2..=39 {
+            let pdu = length(bytes);
+            let air = (bytes as u64 + 8) * 8;
+            assert_eq!(u64::from(legacy_air_micros(pdu).unwrap().get()), air);
+            assert_eq!(
+                advertising_channel_air(pdu, AdvertisingResponse::None)
+                    .unwrap()
+                    .get()
+                    .as_micros(),
+                air
+            );
+            assert_eq!(
+                advertising_channel_air(pdu, AdvertisingResponse::Directed)
+                    .unwrap()
+                    .get()
+                    .as_micros(),
+                air + 4 + 150 + u64::from(LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS)
+            );
+            for response_bytes in 2..=39 {
+                for connectable in [false, true] {
+                    let scan =
+                        u64::from(SCAN_REQ_AIR_MICROS) + 150 + (response_bytes as u64 + 8) * 8;
+                    let exchange = if connectable {
+                        scan.max(u64::from(LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS))
+                    } else {
+                        scan
+                    };
+                    let response = AdvertisingResponse::ScanResponse {
+                        length: length(response_bytes),
+                        connectable,
+                    };
+                    assert_eq!(
+                        advertising_channel_air(pdu, response)
+                            .unwrap()
+                            .get()
+                            .as_micros(),
+                        air + 4 + 150 + exchange
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn advertising_spacing_and_duration_report_epoch_exhaustion() {
+        let air = NonZeroRadioDuration::from_micros(NonZeroU64::MAX);
+        assert_eq!(
+            advertising_channel_spacing(air, TIMING),
+            Err(advertising_error(C::ChannelSpacing))
+        );
+        let timing = RadioTiming {
+            preparation_lead: RadioDuration::from_micros(0),
+            ..TIMING
+        };
+        assert_eq!(
+            advertising_event_duration(air, NonZeroU64::new(2).unwrap(), timing),
+            Err(advertising_error(C::EventDuration))
+        );
+        assert_eq!(
+            advertising_event_duration(air, NonZeroU64::MIN, timing),
+            Ok(air)
         );
     }
 }

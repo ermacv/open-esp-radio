@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+
 use super::*;
 use core::{
     future::{Future, poll_fn},
@@ -66,6 +68,14 @@ enum Scenario {
     WrongReceipt,
     WrongTerminal,
     WrongCompletion,
+    MissingConfig,
+    WrongConfig,
+    MissingLease,
+    StartCount,
+    EndMissingCount,
+    EndTransmitCount,
+    EndTransmitSaturated,
+    EndReceiverCount,
     Indeterminate,
 }
 
@@ -96,6 +106,24 @@ impl<P: PoolPath> AlterTerminal for Event<'_, P, ()> {
         match scenario {
             Scenario::WrongTerminal => event.admitted.id.0 ^= 1,
             Scenario::WrongCompletion => event.result = EventResult::NotExecuted,
+            Scenario::StartCount | Scenario::EndTransmitCount | Scenario::EndReceiverCount => {
+                let Completion::DirectTest { count, .. } = &mut event.completion;
+                *count = Some(port::PacketCount {
+                    packets: 0x1234,
+                    saturated: false,
+                });
+            }
+            Scenario::EndMissingCount => {
+                let Completion::DirectTest { count, .. } = &mut event.completion;
+                *count = None;
+            }
+            Scenario::EndTransmitSaturated => {
+                let Completion::DirectTest { count, .. } = &mut event.completion;
+                *count = Some(port::PacketCount {
+                    packets: 0,
+                    saturated: true,
+                });
+            }
             _ => {}
         }
     }
@@ -182,7 +210,10 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
         let mut service = Service::<_, ModelCaps>::new(
             session,
             seat,
-            if matches!(self.scenario, Scenario::Transmitter) {
+            if matches!(
+                self.scenario,
+                Scenario::Transmitter | Scenario::EndTransmitCount | Scenario::EndTransmitSaturated
+            ) {
                 Some(power())
             } else {
                 None
@@ -190,6 +221,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
         );
         {
             let mut phase = owner.phase();
+            assert_eq!(service.complete(&mut *phase).await, Err(Fault::NoCommand));
             match self.scenario {
                 Scenario::Immediate => {
                     let mut random = Random(Ok([0x92; 8]));
@@ -256,7 +288,12 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                 }
                 scenario => 'operation: {
                     let mut random = Random(Ok([0; 8]));
-                    let transmit = matches!(scenario, Scenario::Transmitter);
+                    let transmit = matches!(
+                        scenario,
+                        Scenario::Transmitter
+                            | Scenario::EndTransmitCount
+                            | Scenario::EndTransmitSaturated
+                    );
                     let (opcode, parameters) = if transmit {
                         (hci::LE_TRANSMITTER_TEST_V2_OPCODE, &[19, 37, 0, 1][..])
                     } else {
@@ -271,6 +308,64 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                         service.accept(HciCommandPacket::new(opcode, parameters), &mut random),
                         Ok(Accepted::Port)
                     ));
+                    if matches!(
+                        scenario,
+                        Scenario::MissingConfig | Scenario::WrongConfig | Scenario::MissingLease
+                    ) {
+                        let pending = service.pending.as_mut().unwrap();
+                        let original_config = pending.config.take();
+                        pending.config = if matches!(scenario, Scenario::WrongConfig) {
+                            Some(Config::End)
+                        } else if matches!(scenario, Scenario::MissingLease) {
+                            original_config
+                        } else {
+                            None
+                        };
+                        let retained_lease = if matches!(scenario, Scenario::MissingLease) {
+                            service.lease.take()
+                        } else {
+                            None
+                        };
+                        let Err(SubmitError::InvalidState {
+                            command,
+                            configuration,
+                            session,
+                        }) = service.submit(&*phase).await
+                        else {
+                            panic!("inconsistent private state must be retained as a typed error")
+                        };
+                        assert_eq!(command.opcode(), opcode);
+                        assert_eq!(
+                            configuration,
+                            match scenario {
+                                Scenario::WrongConfig => Some(SubmissionConfiguration::End),
+                                Scenario::MissingLease => Some(SubmissionConfiguration::Receive),
+                                _ => None,
+                            }
+                        );
+                        assert_eq!(
+                            session,
+                            if matches!(scenario, Scenario::MissingLease) {
+                                SubmissionSession::Missing
+                            } else {
+                                SubmissionSession::Idle
+                            }
+                        );
+                        assert!(service.pending.is_some());
+                        assert_eq!(service.lease.is_some(), retained_lease.is_none());
+                        assert!(service.response().is_none());
+                        assert!(matches!(
+                            service.submit(&*phase).await,
+                            Err(SubmitError::Poisoned)
+                        ));
+                        assert_eq!(service.complete(&mut *phase).await, Err(Fault::Poisoned));
+                        // Both capacity permits are available: refusal returned its permit.
+                        let a = phase.take(&mut first).await;
+                        let b = phase.take(&mut second).await;
+                        phase.release(a);
+                        phase.release(b);
+                        break 'operation;
+                    }
                     if let Some((a, b)) = held {
                         {
                             let mut wait = pin!(service.submit(&*phase));
@@ -340,7 +435,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                     }
                     if matches!(
                         scenario,
-                        Scenario::WrongTerminal | Scenario::WrongCompletion
+                        Scenario::WrongTerminal | Scenario::WrongCompletion | Scenario::StartCount
                     ) {
                         let error = service
                             .complete(&mut TerminalAlter {
@@ -391,10 +486,45 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                         service.submit(&*phase).await.expect("End admission"),
                         Submitted::AwaitTerminal
                     );
-                    service.complete(&mut *phase).await.expect("End terminal");
+                    if matches!(
+                        scenario,
+                        Scenario::EndMissingCount
+                            | Scenario::EndTransmitCount
+                            | Scenario::EndTransmitSaturated
+                    ) {
+                        assert_eq!(
+                            service
+                                .complete(&mut TerminalAlter {
+                                    inner: &mut *phase,
+                                    scenario
+                                })
+                                .await,
+                            Err(Fault::Completion)
+                        );
+                        assert!(service.retained.is_some());
+                        assert!(service.pending.is_none());
+                        assert!(service.lease.is_none());
+                        assert!(service.response().is_none());
+                        break 'operation;
+                    }
+                    if matches!(scenario, Scenario::EndReceiverCount) {
+                        service
+                            .complete(&mut TerminalAlter {
+                                inner: &mut *phase,
+                                scenario,
+                            })
+                            .await
+                            .expect("counted End terminal");
+                    } else {
+                        service.complete(&mut *phase).await.expect("End terminal");
+                    }
                     assert_eq!(
                         &take(&mut service, hci::LE_TEST_END_OPCODE, 0)[6..],
-                        &[0, 0]
+                        if matches!(scenario, Scenario::EndReceiverCount) {
+                            &[0x34, 0x12]
+                        } else {
+                            &[0, 0]
+                        }
                     );
                     assert!(matches!(service.lease, Some(Lease::Idle(_))));
                 }
@@ -434,6 +564,13 @@ fn scenario(scenario: Scenario) {
             Scenario::WrongReceipt
                 | Scenario::WrongTerminal
                 | Scenario::WrongCompletion
+                | Scenario::MissingConfig
+                | Scenario::WrongConfig
+                | Scenario::MissingLease
+                | Scenario::StartCount
+                | Scenario::EndMissingCount
+                | Scenario::EndTransmitCount
+                | Scenario::EndTransmitSaturated
                 | Scenario::Indeterminate
         ) {
             assert!(matches!(end, PortEnd::FailStopped { .. }));
@@ -582,4 +719,38 @@ fn active_reset_is_acknowledged_only_after_joined_reinstallation() {
         assert!(matches!(second, PortEnd::Uninstalled { output: None, .. }));
         slot.end_model_world();
     }));
+}
+
+#[test]
+fn submission_retains_mismatched_configuration_and_session_and_returns_capacity() {
+    for input in [
+        Scenario::MissingConfig,
+        Scenario::WrongConfig,
+        Scenario::MissingLease,
+    ] {
+        scenario(input);
+    }
+}
+
+#[test]
+fn terminal_count_must_match_the_operation_and_direction() {
+    for input in [
+        Scenario::StartCount,
+        Scenario::EndMissingCount,
+        Scenario::EndTransmitCount,
+        Scenario::EndTransmitSaturated,
+        Scenario::EndReceiverCount,
+    ] {
+        scenario(input);
+    }
+}
+
+#[test]
+fn dtm_parameter_conversion_checks_the_complete_octet_domain() {
+    for value in u8::MIN..=u8::MAX {
+        assert_eq!(channel(value).is_ok(), value < 40);
+        assert_eq!(payload(value).is_ok(), value < 8);
+    }
+    assert_eq!(channel(40), Err(HciError::INVALID_HCI_PARAMETERS));
+    assert_eq!(payload(8), Err(HciError::INVALID_HCI_PARAMETERS));
 }
