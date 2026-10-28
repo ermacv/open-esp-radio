@@ -147,40 +147,11 @@ the previous reference. Errors before restoration cannot publish a successful
 outer completion. The vendor busy flag is represented by physical admission
 and exclusive ownership, not a second mutable lock inside this algorithm.
 
-Registered OER policy enables the recovered RFPLL predicate. Compiled
-comparisons include the RFPLL-enabled parent with zero, positive and negative
-corrections. Physical qualification remains a separate readiness axis.
-The ROM status-based correction is a distinct reference primitive with its
-own default threshold and fixed ±2 correction; the outer RFPLL action no
-longer selects it.
-
-Host tests cover bounded search termination, direction changes, arithmetic
-boundaries, completion ordering and channel restoration after memory updates.
-The compiled probes `open_phy_rfpll_trace_search` and
-`open_phy_rfpll_trace_maintain` invoke production target entries, including I2C
-and delay operations. Typed vendor scenarios compare the search's I2C
-commands and requested settling delays, and the frequency-control envelope
-against the admitted vendor child with zero and nonzero corrections. Every
-memory transaction and the final channel restoration are compared for the
-installed layout. `open_phy_rfpll_trace_track` additionally compares threshold,
-debug override, skipped/executed outcomes and the resulting reference against
-the admitted vendor child. Vendor-only cases retain the busy/result-flag
-characterization. Tests also
-check that a bounded I2C timeout returns without restoring hardware control.
-
-RFPLL's compiled requested-time environment assigns zero time to ready polls,
-so it compares the complete five-microsecond delay. A finite clock-query prefix
-still lets a stuck synchronous observation reach its timeout. Diagnostic
-command maxima retain the publication/readiness breakdown of the same worst
-poll; the remaining time includes engine/model/observer accounting. Formatting
-runs after the Driver await. Other observation
-probes retain their one-microsecond ticks. Virtual-clock unit tests separately
-exercise early and late RFPLL resumes; physical hold measures actual poll cost.
-The comparison preserves every requested delay, including any unexpected
-executor-added one-microsecond wait. It does not assert equal execution time or raw polling
-traces. Alternative memory layouts, linked coexistence grants and physical RF behavior
-require separate evidence. The validation-only full-parent profile is described
-in the [tracking contract](../README.md).
+Registered policy enables this thermal predicate. Host tests cover bounded
+search termination, arithmetic boundaries, completion order and channel-index
+restoration. Compiled comparisons cover ordered effects and requested delays
+for the installed layout under modeled inputs; they do not qualify physical
+RF behavior, elapsed time or linked coexistence grants.
 
 Production runs this child only inside the periodic parameter-tracking graph,
 under its normal thermal predicate; no protocol selects it alone.

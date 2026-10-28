@@ -162,8 +162,9 @@ pub struct AdvertisingConfiguration<'pdu> {
 /// Why one advertising event asks the shared antenna as it does.
 ///
 /// The Controller names the reason from the set's state; the radio's
-/// coexistence owner maps it to a priority. The rule that raises an event is
-/// recorded in `chips/esp32s31/notes/bluetooth/le-coexistence-priorities.md`.
+/// coexistence owner maps it to a priority.
+/// SOURCE: esp32s31-bt-lib 7a85006f, libble_app.a,
+/// coexAdv.c.o_1.o::r_sym_coexAdv_A5DXuOYpsXb125NuYN3d.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum AdvertisingEventKind {
     /// An event of no particular reason.
@@ -177,8 +178,9 @@ pub enum AdvertisingEventKind {
 /// Why one connection event asks the shared antenna as it does.
 ///
 /// The Controller names the reason from the link's state; the radio's
-/// coexistence owner maps it to a priority. The rule that raises an event is
-/// recorded in `chips/esp32s31/notes/bluetooth/le-coexistence-priorities.md`.
+/// coexistence owner maps it to a priority.
+/// SOURCE: esp32s31-bt-lib 7a85006f, libble_app.a,
+/// coexConn.c.o_1.o::r_sym_coexConn_zaMnJdgVnBd25ru35IkB.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum ConnectionEventKind {
     /// An event of no particular reason.

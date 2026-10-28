@@ -78,16 +78,6 @@ already precedes initialization in the S31 lifecycle. `ll::mac_init_registers`
 sets event/abort enables, ED averaging and coexistence PTIs, leaving PIB and
 identity restoration to the engine.
 
-The host vendor catalog records three intentional differences: bounded RX
-publication, promiscuous masking and retained settings. Each expectation belongs
-to its scenario and the fingerprints of both complete boundary traces, including
-every record after the first mismatch. A matching expectation reports `EXPECTED`
-with that scenario's reason and succeeds; any other `DIFF` fails without expected
-reasons. `compare all` succeeds when every scenario is `MATCH` or `EXPECTED`.
-Tests also compare the remaining radio commands, aborts, buffers and callbacks,
-and check the three differences independently against C and engine traces
-(`port <scenario>` prints the latter).
-
 ## Bring-up and teardown order
 
 The S31 diagnostic PHY image contains an RX-only assembly of the engine; its
@@ -103,10 +93,6 @@ the radio up in the order of ESP-IDF's `esp_ieee802154_enable`:
 5. the interrupt owner;
 6. the engine's `mac_init`, under the runtime's critical section;
 7. the CPU route of modem interrupt source 132.
-
-Stop reversed every step. A failure before shared state was touched rolled
-back; a started PHY or clock transaction that failed was fail-stop. The
-runtime was a process singleton: source 132 had one handler.
 
 A consuming `detach` returns the MAC only after a completed stop and the return
 of delivered RX slots, with no active operation, armed RX or pending timers.
@@ -170,11 +156,10 @@ unchanged. Finite receive, channel and PAN identities select fixed array element
 without unchecked indexing. Timer0 holds only an ACK-timeout callback; timer1 holds
 receive-window callbacks.
 
-SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`,
-[PR #689](https://github.com/ermacv/open-esp-radio/pull/689): masking hides
-timer0/timer1 status while retaining pending; a positive sample captured
-before masking still clears it under mask. These facts do not establish
-same-bit recurrence priority or the behavior of other event lanes.
+SOURCE: `HW8_S31_IEEE_MASKED_STATUS_20261026` in
+`chips/esp32s31/registers/evidence/hw-radio-local.toml`: masking hides timer
+status while retaining pending; positive pre-mask samples can acknowledge it.
+This does not qualify recurrence priority or other event lanes.
 
 ## Enhanced ACK and transmit security
 

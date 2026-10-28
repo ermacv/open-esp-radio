@@ -32,7 +32,7 @@ minimum_free_bytes = 16384
 allocation_bytes = 65536
 
 # Core 1 runs nothing: its stacks are declared unused below.
-# (chips/esp32s31/notes/core1-boot.md) and the image gate proves that no
+# SOURCE: chips/esp32s31/platform/README.md#secondary-hart-containment; the image gate proves that no
 # image starts it, routes an interrupt to it or allocates it a stack.
 [core.1.task_stack]
 unused = true

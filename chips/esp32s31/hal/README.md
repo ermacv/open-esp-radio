@@ -52,33 +52,16 @@ zero-delay arming remains outside this API.
 SOURCE for stop/load-zero/T0LOAD-strobe/start: ESP-IDF 4d80c1b2,
 `components/esp_hal_timg/esp32s31/include/hal/timer_ll.h:236-239` (counter),
 `:293-297` (reload value), `:319-322` (software reload).
-`HW23_S31_TIMG0_RELOAD_20261027` confirms this sequence on S31 at
-XTAL/divider40 for 10/100/1000 µs and with pending retained across rearm.
-LOAD resets both counter halves; programming LOADHI/LO alone does not.
-Instrumented RAW observations agree with nominal 1 MHz counting; they do
-not measure exact comparator or interrupt-entry latency.
-`HW23_S31_TIMG0_COMPARATOR_20261027` observes no expiry at/below the stopped
-count until T_EN is set, then prompt expiry; a running past target also fires.
-`HW7_S31_TIMG0_20261026` in the register evidence supports one-shot expiry,
-RAW retention under stop/mask, ENA redelivery and CLR at ENA=0/1, without a
-clear/arrival collision or exact IRQ-latency guarantee.
-
-The host fixture selects `Exempt(ExecutorLevel)` at P2 with a lower line ID
-than FROM_CPU2. SOURCE: `chips/espressif/platform/family.toml` [interrupts],
-RISC-V CLIC specification 3f8ee744, "Specifying Interrupt Priority";
-ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h` supplies the
-CLIC geometry. SOURCE for priority/ID arbitration:
-[ESP32-C5 TRM v1.1](https://www.espressif.com/sites/default/files/documentation/esp32-c5_technical_reference_manual_en.pdf),
-section 2.8.2.5, p.86. `HW23_S31_P2_ARBITRATION_20261027` confirms line17
-before16 on S31 hart0 at P2, with TIMG0/FROM_CPU2 assigned both ways and
-both positively pending before admission. Other pairs, levels and sustained
-fairness remain unmeasured. Nine images bind TIMG0 T0 for the production
-SAR/PWDET pilot: W0–W3, B0, the Wi-Fi-station HIL profile, lower-MAC HIL,
-PHY HIL and the RX-chain probe. Their permanent P2 `Exempt(ExecutorLevel)`
-handler uses line 16 below FROM_CPU2 line 17. Startup stops/masks and CLR-clears
-stale RAW; the actor arms before depositing the owned PHY bundle, and the
-handler acknowledges before each step/rearm. Completion stops/masks T0 before
-returning the bundle and raising the same-level reply signal.
+SOURCE: `HW23_S31_TIMG0_RELOAD_20261027`,
+`HW23_S31_TIMG0_COMPARATOR_20261027` and `HW7_S31_TIMG0_20261026` in
+`registers/evidence/`: LOAD strobes reset both counter halves; rearm retains
+pending. These facts do not establish exact comparator or IRQ latency.
+The SAR/PWDET composition uses a permanent P2 `Exempt(ExecutorLevel)`
+handler on line 16 below FROM_CPU2 line 17. Startup masks and clears stale
+RAW; the actor arms before transferring the bundle and the handler acknowledges
+before each step. Completion stops/masks before returning custody.
+SOURCE: `HW23_S31_P2_ARBITRATION_20261027` qualifies only hart0 P2
+line17-before16 pair; other pairs, levels and sustained fairness are unqualified.
 
 ## Platform clocks
 
@@ -118,6 +101,18 @@ clock owner and prevents installing it again with that root.
 - The Wi-Fi power gate opens once, at installation, and nothing closes it
   (esp-hal 1f646c5 `rtc_cntl/rtc/esp32s31.rs:670`, `enable_wifi_power_clock`).
 
+## TSENS and peripheral SAR-I2C
+
+The route-owned temperature resource tracks idle, acquired/restore-pending and
+poisoned states. First acquire asserts SAR-I2C reset, completes its named 1 µs
+settle, powers the bus, releases reset, then clocks/resets/enables TSENS.
+Last release after RF close disables TSENS, its clock and peripheral power.
+Pending calibration restoration prevents release; incomplete reset settling
+poisons the owner and prevents neutral-root return. The sequence assigns no
+literal zero to analog69.04. SOURCE: `phy/temperature.rs`, pinned ESP-IDF
+`phy_override.c::phy_set_tsens_power`, `sar_tsens_ctrl.c`,
+`sar_periph_ctrl_common.c` and S31 `regi2c_ctrl_ll.h`.
+
 ## Bluetooth register transactions
 
 The interrupt bank clears and enables baseline images `0x8000` / `0x1302`,
@@ -153,13 +148,9 @@ SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`,
 `BLOB_LIBBLE_ISO_COEX_REGISTERS`, `BLOB_S31_BLE_NRT_DISPOSITION_20261027`,
 `HW32_S31_BT_MASKED_FIXED_W1C_20261027` and
 `HW32_S31_BT_OUTPUT_OBSERVER_20261027` (PR #757).
-Masked W1C is hardware-confirmed only for bank1 CC0/CC1/overflow, run
-`hw32-20261027-ble-masked-01` (#757). Bank0/NRT and the other feature lanes
-have vendor coverage and are **not hardware-verified**. Opening a tested
-lane with CPU routes at MAP0 still raises matrix124 and modem wake vector
-`0x10`; terminal cleanup does not perform that transaction.
-The measured hidden/retained behavior covers those timer indications, not
-a positive fault-lane stimulus.
+Masked W1C is hardware-confirmed only for bank1 CC0/CC1/overflow.
+Bank0/NRT and other feature lanes retain vendor coverage. Masked status cannot
+prove zero pending; no positive fault-lane stimulus qualifies that conclusion.
 
 The measured overflow is visible in primary status/source124 while the NRT
 snapshots/source133 remain zero. Before either NRT acknowledgement in runtime
@@ -188,15 +179,10 @@ measurement. SOURCE: `HW22_S31_LP_TWO_WRAPS_20261027`,
 
 Compare publication uses the typed 24-bit `COMPARE_TARGET` field, preserving
 the opaque upper byte. Deadline projection and half-range checkpoints wrap
-explicitly in that 24-bit domain. Each upper bit 24–31 and all together read
-back zero and permit the future low24 compare in the short XTAL/divider 1
-probe with CONTROL4=0 and either CONTROL0 state. The production low-power
-prefix clears CONTROL0/4 and selects divider 399; its clock rate is not
-reproduced by those probes. The conditional-ack race and surviving CONTROL2
-latch were measured with CONTROL0=1/CONTROL4=0, XTAL/divider 1; they do not
-establish the same latch witness or timing in production's configuration.
-SOURCE: `HW22_S31_LP_COMPARE_WIDTH_20261027`,
-`HW22_S31_LP_CONDITIONAL_ACK_20261027`.
+explicitly in that 24-bit domain. SOURCE: `HW22_S31_LP_COMPARE_WIDTH_20261027` and
+`HW22_S31_LP_CONDITIONAL_ACK_20261027` qualify XTAL/divider1 observations
+only. Production clears CONTROL0/4 and selects divider399; those observations
+do not establish production timing or its latch witness.
 
 Modem PLL source gating uses the pinned ESP-IDF 4d80c1b2 whole-word sequence:
 open `0x15 → 0x1d`, close `0x2d → 0x25`. Platform source-clock readback
@@ -262,10 +248,9 @@ no vendor scan-truncation runtime consumer. A foreign enable, including opaque
 bank1[0,2] or task17, is `ForeignEnable` with seven source words
 (primary ENA/status/NRT and task ENA).
 Read side effects of the opaque +0x4bc view remain unestablished.
-Its cited sources establish use, not read safety, and HW25 did not read it
-on the board. hw32 preserved the three tested bank1 indications and BTLC
-progress across reads, but had no positive task indication; general read
-safety remains unqualified.
+Its cited sources establish use, not general read safety.
+`HW32_S31_BT_04BC_READ_SCOPE_20261027` covers the tested timer indications
+without a positive task cause; general read safety remains unqualified.
 
 Admission and terminal readback faults retain their owners and reach the
 image's retained reset path. B0 stores these seven words and a reserved zero

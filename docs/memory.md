@@ -71,7 +71,7 @@ contracts: [Hardware memory](hardware-memory.md).
   would use them. Every current S31 image runs on the boot hart and keeps
   all secondary harts contained: the HAL stalls them, gates their clocks,
   holds their resets and clears their ROM boot addresses
-  ([secondary boot](../chips/esp32s31/notes/core1-boot.md)). Staged entries
+  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-containment)). Staged entries
   admit only the boot hart. The runtime's critical section masks only its
   executing hart and takes no cross-hart lock
   ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)).

@@ -18,7 +18,7 @@ exclusive access to the shared radio, runs the policy recorded below
 ([Participants, status and order](#participants-status-and-order)). This
 crate does not implement
 RF grant notification. See the ESP32-S31
-[radio capabilities](../../esp32s31/FEATURES.md) for those boundaries.
+[radio capabilities](../../esp32s31/README.md) for those boundaries.
 
 The recovered values cite the ESP32-S31 archive where they were reviewed;
 the PTI table and the IEEE 802.15.4 level lookup were also reviewed against
@@ -42,8 +42,7 @@ not of the row.
 `CoexSchedule` is the recovered `coex_schm_env` of ESP32-S31 esp-coex-lib `fa152b3b`.
 Each radio publishes status bits (`set_status_bits`, `clear_status_bits`);
 the status words select one of the 107 recovered schemes of
-`coexist_scheme.o`, exactly as `coex_schm_status_change` does. The compiled
-schedule was compared with the entries of the pinned `libcoexist.a`
+`coexist_scheme.o`, exactly as `coex_schm_status_change` does. SOURCE: pinned `libcoexist.a`
 ([vendor pins](../../esp32s31/vendor/artifacts.toml)). A scheme
 divides a period into phases; a phase lasts period × interval × share
 microseconds and notifies Wi-Fi, Bluetooth or both. The schedule programs no

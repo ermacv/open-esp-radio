@@ -887,7 +887,7 @@ impl BlePhyEngineStorage {
 
     fn initialize_lookup_tables(&mut self) {
         // SOURCE: BLOB_LIBBLE_MEMORY_PHY_LOOKUPS, bt-lib pin 7a85006f;
-        // generated BLE_PHY_* byte layouts and notes/bluetooth-controller-boundary.md.
+        // SOURCE: BLOB_LIBBLE_MEMORY_PHY_LOOKUPS in registers/evidence/ble-memory.toml; generated BLE_PHY_* layouts.
         let mut frequencies =
             BlePhyChannelFrequencyOffsetsMut::new(&mut self.channel_frequency_offsets_mhz);
         for channel in 0..BlePhyChannelFrequencyOffsets::COUNT {

@@ -23,14 +23,6 @@ Names were produced with `--obfuscated-prefix r_sym_ --obfuscated-prefix sym_
 appears after `31c3094` or has an unbroken chain nowhere. Each entry's
 `weakest` field is the weakest evidence of its chain:
 
-| Evidence | `libble_app.toml` | `libbtdm_common.toml` |
-| --- | --- | --- |
-| `exact-body` | 624 | 211 |
-| `call-graph` | 354 | 5 |
-| `similar` | 329 | 2 |
-| `neighbourhood` | 146 | 2 |
-| `dominant` | 157 | 0 |
-
 `similarity-ppm` is the lowest body similarity along the chain. A name does
 not describe current behavior: statements about a function still come from
 its current body. Regenerate the maps with the command in the tool README

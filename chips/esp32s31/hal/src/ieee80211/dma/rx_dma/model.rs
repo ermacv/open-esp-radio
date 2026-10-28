@@ -8,8 +8,7 @@
 //! operation in a fixed-capacity log, so it needs no allocator on either
 //! target. Tests play the hardware's part by setting the cursor images.
 //!
-//! The doorbell follows the rule the W1 stand observed
-//! (HIL_W1_RX_WALKER_2026_10_18, `chips/esp32s31/notes/wifi/rx-walker.md`):
+//! SOURCE: HIL_W1_RX_WALKER_2026_10_18 in registers/evidence/hil-open.toml:
 //! rung on an enabled walker whose NEXT is zero, it resumes the walker at
 //! `LAST.next`, read when the doorbell is rung and applied when it clears.
 //! [`RxWalkerModel::lose_reloads`] makes doorbells miss that resumption.

@@ -13,8 +13,8 @@ there is no connected hardware HCI transport.
 Portable HCI codecs and LE Link Layer codecs live in
 [`protocols/bluetooth`](../../../../protocols/bluetooth/).
 
-The module table below is the engine API map. `FEATURES.md` records current
-limitations.
+The module table below is the engine API map. Source coverage does not imply
+RF delivery or interoperability; BR/EDR remains source inventory.
 
 | Module under `src/` | Responsibility |
 | --- | --- |
@@ -188,11 +188,11 @@ encoding the controller-SRAM fields.
 ## Bring-up and teardown order
 
 A composition runs the typed primitives of this crate in the vendor order of
-[`bt.c`](https://github.com/espressif/esp-idf/blob//components/bt/controller/esp32s31/bt.c),
-[`btdm_lp.c`](https://github.com/espressif/esp-idf/blob//components/bt/porting_btdm/controller/btdm_common/src/btdm_lp.c),
-[`modem_clock_impl.c`](https://github.com/espressif/esp-idf/blob//components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c)
+[`bt.c`](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/controller/esp32s31/bt.c),
+[`btdm_lp.c`](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/bt/porting_btdm/controller/btdm_common/src/btdm_lp.c),
+[`modem_clock_impl.c`](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c)
 and
-[`Kconfig.mac`](https://github.com/espressif/esp-idf/blob//components/esp_hw_support/port/esp32s31/Kconfig.mac).
+[`Kconfig.mac`](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hw_support/port/esp32s31/Kconfig.mac).
 
 The `bluetooth` feature of `oer-esp32s31-radio-system` composes this
 lifecycle into its single P2 actor. `BluetoothAttachment` holds Bluetooth power,
@@ -309,3 +309,19 @@ The separate CTE +0x4c4/+0x4c8/+0x4cc bank
 is outside admission/release: production publishes the disabled CTE baseline
 and has no CTE interrupt consumer (SOURCE: `BLOB_LIBBLE_PHY_INIT_REGISTERS`,
 `BLOB_LIBBLE_HW_CTE_RING_CONTROL`).
+
+## Legacy advertising and scanning
+
+The physical port runner executes DTM only. Detached advertising, scanning
+and connection builders do not provide a composed physical role service.
+
+## Capability advertisement
+
+Each optional LE feature bit returned by the portable bootstrap requires a
+complete production Controller operation.
+
+## Peripheral timing limits
+
+A peripheral composition must satisfy the Controller's clock accuracy and
+captured-anchor requirements; a raw captured anchor is not a packet-start
+timestamp.

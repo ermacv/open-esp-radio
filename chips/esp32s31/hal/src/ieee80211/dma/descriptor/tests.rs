@@ -1,6 +1,6 @@
 //! The words built through the generated layout are the words this crate
 //! published with hand-written masks before it, among them the images the W1
-//! stand runs read (`chips/esp32s31/notes/wifi/rx-walker.md`).
+//! SOURCE: HIL_W1_RX_WALKER_2026_10_18 in registers/evidence/hil-open.toml.
 
 use super::*;
 

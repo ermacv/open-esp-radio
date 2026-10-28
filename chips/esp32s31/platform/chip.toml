@@ -59,11 +59,7 @@ internal-sram = { origin = 0x2f000000, length = 0x00080000 }
 # The unified 64-MiB Flash XIP instruction/data window.
 #
 # SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/soc.h:138-141`
-# (`SOC_IROM_LOW`..`SOC_IROM_HIGH`, 64 MiB, DROM the same). Two other sources
-# state a wider window: esp-metadata's `irom` memory range is
-# 0x40000000..0x50000000 (256 MiB), and the PMA entry 15 the ESP-IDF bootloader
-# programs covers 512 MiB (`chips/esp32s31/board/README.md`, "Boot state on the
-# board"). The host checks treat only these 64 MiB as cached flash.
+# (`SOC_IROM_LOW`..`SOC_IROM_HIGH`, 64 MiB, DROM the same).
 flash-xip = { origin = 0x40000000, length = 0x04000000 }
 # Where the module's PSRAM lies: the start of the cached external RAM aperture.
 psram-origin = 0x50000000
@@ -145,7 +141,7 @@ starters = ["*Cores*::start*"]
 
 # The Rust probe images of the vendor comparison (firmware/probes),
 # in build order: the artifact role each serves. The Bluetooth probe returns
-# with its hooks (chips/esp32s31/notes/open-questions.md).
+# with its hooks.
 [[probe]]
 role = "rust-artifact"
 package = "oer-firmware-probes-esp32s31-radio"

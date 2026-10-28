@@ -1,6 +1,6 @@
 # Wi-Fi DMA ownership
 
-This crate owns stable descriptors and packet backing. MAC owners select queues,
+This HAL module owns stable descriptors and packet backing. MAC owners select queues,
 prepare transmission parameters and interpret completion; the runtime drives
 their interrupt and deadline transitions. Ordinary TX uses internal DMA SRAM.
 The diagnostic PSRAM and aggregate paths have separate admission contracts.
@@ -70,9 +70,12 @@ all but it. R is never observed, taken, leased or recycled. A detach
 the rearm sets it again. A walker reaching a detached descriptor would stop
 on it instead of writing the lease; a NEXT naming one (read by the reload
 settle and the frozen cursor) is counted, `walker_on_detached`, and fails
-closed. The rules and
-their hardware basis are in
-[the RX walker notes](../../../../notes/wifi/rx-walker.md).
+closed. SOURCE: `HIL_W1_RX_WALKER_2026_10_18` and
+`HIL_W1_OWNER_BIT_2026_10_18` in
+[the evidence catalog](../../../../registers/evidence/hil-open.toml).
+An exhausted enabled walker reloads from `LAST.next`; an owner-clear descriptor
+stops it unwritten at NEXT. The reload does not require LAST to remain owned.
+These bounded 32-descriptor W1 observations do not prove general DMA quiescence.
 
 [`PinnedTxDmaStorage`](tx_storage.rs) permanently retains its allocation.
 Dropping the movable owner does not free or detach hardware-visible memory.
@@ -115,32 +118,15 @@ An executor deadline without the required hardware event quarantines storage.
 Neither a timeout nor cancellation is an implicit completion. Per-queue turnover
 is not proof that all radio DMA has stopped during global teardown.
 
-## Vendor basis and executable boundary
+## Source and test boundary
 
-The reviewed [ordinary queue provenance](../../../../registers/evidence/vendor-libpp.toml)
-names the authenticated archive and complete function bodies. The production
-operations mirror three finite vendor queue operations:
-
-- `hal_mac_txq_enable`: the publication prefix through the call to `GetAccess`,
-  with explicit production device fences. The rest of the vendor access/HE
-  bookkeeping and statistics is outside this boundary.
-- `hal_mac_clr_txq_state`: completion selector two, queues zero through three,
-  preserving the existing clear-register image.
-- `hal_mac_txq_disable`: the complete leaf clearing ENABLE and VALID while
-  retaining the descriptor and other control fields.
-
-These operations have no native compiled vendor comparison. They do not
-establish physical DMA quiescence or memory-ordering sufficiency on silicon.
-
-The inspected `lmacProcessTxComplete` body reads the completion result and
-trigger-flow state before calling the completion acknowledgement. Full result
-decoding, descriptor preparation and the enclosing release/abort root have no
-compiled vendor comparison either.
+SOURCE: `BLOB_LIBPP_ORDINARY_TX_OWNERSHIP_EDGES` in
+[the catalog](../../../../registers/evidence/vendor-libpp.toml) names the
+publication, acknowledgement and disable bodies. The operations have no native
+compiled vendor comparison and do not establish physical DMA quiescence or
+memory-ordering sufficiency on silicon.
 
 The [storage tests](tx_storage/tests.rs) exercise publication authority and
 quarantine. The [MAC ownership tests](../../../../ieee80211/mac/tests/cases/tx_ownership.rs) exercise
 repeated generations, retained payload, stale release and failed detach. These
-are host models with explicit completion/detach inputs. An AP-loss/reconnect
-hardware run exercised ordinary authentication and association TX through the
-real owner; its functional result does not measure the exact last DMA access
-or inject a failed detach readback.
+are host models with explicit completion/detach inputs.
