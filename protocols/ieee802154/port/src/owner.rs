@@ -273,10 +273,10 @@ use oer_radio_port::{
 };
 use oer_radio_port::{PortBackend, PortPhase, RadioPortClient, RadioWork, Work};
 
-use oer_ieee802154_wire::FrameView;
+use oer_ieee802154_wire::{Channel, FrameView};
 
 use crate::{
-    AppliedSecurity, CcaMode, Channel, CslReceiver, EnhancedAckGeneration, FrameCounterUpdate,
+    AppliedSecurity, CcaMode, CslReceiver, EnhancedAckGeneration, FrameCounterUpdate,
     Ieee802154Capabilities, Ieee802154Instant, Ieee802154Radio, Interface, ProbingInitiator,
     RadioCapabilities, ReceivedFrame, RequestId, TimeSync, TxMode, TxSecurity, TxStatus,
     pending::AutoPendingMode,

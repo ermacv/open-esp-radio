@@ -1,11 +1,9 @@
-//! Portable radio values: capabilities, channels, interfaces, transmit power,
+//! Portable radio values: capabilities, interfaces, transmit power,
 //! the transmission and receive values the owner shape carries, correlation
 //! identifiers and monotonic timestamps.
 
 /// Published backend operation capabilities.
 pub mod capabilities;
-/// Validated channels in the implemented 2.4 GHz profile.
-pub mod channel;
 /// Transmission values: channel access, security and CCA mode.
 pub mod command;
 /// Backend observations and normalized receive metadata.

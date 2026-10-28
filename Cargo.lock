@@ -3198,7 +3198,6 @@ dependencies = [
  "oer-ieee802154-wire",
  "oer-radio-coex",
  "oer-radio-port",
- "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
  "scopeguard",
@@ -3208,6 +3207,7 @@ dependencies = [
 name = "oer-ieee802154-wire"
 version = "0.1.0"
 dependencies = [
+ "oer-radio-regulatory",
  "oer-wire",
 ]
 

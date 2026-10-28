@@ -12,7 +12,6 @@ oer-ieee802154-wire = { path = "../wire" }
 scopeguard = { version = "1.2.0", default-features = false }
 oer-radio-coex = { path = "../../radio/coex" }
 oer-radio-port = { path = "../../radio/port" }
-oer-radio-regulatory = { path = "../../radio/regulatory" }
 oer-time = { path = "../../../portable/time" }
 [dev-dependencies]
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }

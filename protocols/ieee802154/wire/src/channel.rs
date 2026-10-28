@@ -12,7 +12,7 @@ pub struct ChannelError {
 /// Direct tuple construction is intentionally unavailable:
 ///
 /// ```compile_fail
-/// use oer_ieee802154_port::Channel;
+/// use oer_ieee802154_wire::Channel;
 /// let invalid = Channel(10);
 /// ```
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]

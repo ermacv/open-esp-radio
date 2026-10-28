@@ -59,7 +59,7 @@ use oer_radio_port::{
 };
 use oer_radio_port::{Child, EventsLost, Mint, Poisoned, PortResult, Root, Seat, Slot};
 
-use oer_ieee802154_wire::{Frame, FrameError};
+use oer_ieee802154_wire::{Channel, Frame, FrameError};
 
 mod capacity;
 mod storage;
@@ -67,11 +67,10 @@ pub use capacity::ModelPermitPool;
 use storage::Local;
 
 use oer_ieee802154_port::{
-    CcaMode, CcaThresholdCapability, Channel, CslCapability, CslReceiver, EnhancedAckGeneration,
-    FcsStatus, FrameCounterUpdate, FramePending, Ieee802154Capabilities, Ieee802154Instant,
-    Ieee802154Radio, Interface, ProbingInitiator, RadioCapabilities, ReceivedFrame, RequestId,
-    RxMetadata, SecurityStatus, SentAcknowledgement, TransmitPowerCapability, TransmitPowerLevels,
-    TxStatus,
+    CcaMode, CcaThresholdCapability, CslCapability, CslReceiver, EnhancedAckGeneration, FcsStatus,
+    FrameCounterUpdate, FramePending, Ieee802154Capabilities, Ieee802154Instant, Ieee802154Radio,
+    Interface, ProbingInitiator, RadioCapabilities, ReceivedFrame, RequestId, RxMetadata,
+    SecurityStatus, SentAcknowledgement, TransmitPowerCapability, TransmitPowerLevels, TxStatus,
     owner::{
         AutomaticAcknowledgement, ClearChannelAssessment, ConfiguredInterface, ExtendedPending,
         Has, Ieee802154Backend, Ieee802154Caps, Ieee802154Client, Ieee802154Clients,

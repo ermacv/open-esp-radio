@@ -25,8 +25,9 @@
 
 //! IEEE 802.15.4 backend contract and shared execution vocabulary.
 //! Owner resources, configuration and futures describe backend admission;
-//! pending, probing and CSMA helpers execute below the port. Protocol keys,
-//! retry policy and network-time calculations belong to the MAC core.
+//! pending and probing helpers execute below the port. CSMA-CA backoff over
+//! single clear-channel assessments, protocol keys, retry policy and
+//! network-time calculations belong to the MAC core.
 
 #[cfg(test)]
 extern crate std;
@@ -34,8 +35,6 @@ extern crate std;
 mod coexistence;
 /// Backend capabilities and configuration values.
 pub mod config;
-/// Unslotted CSMA-CA helper for backends.
-pub mod csma;
 /// Enhanced-ACK probing configuration and lookup table.
 pub mod link_metrics;
 /// Owner, resource and backend futures contracts.
@@ -54,11 +53,9 @@ pub use config::{
     CancelError, ClockError, ClockInfo, CslCapability, CslReceiver, EnhancedAckGeneration,
     EventsLost, FrameCounterUpdate, Ieee802154Capabilities, Poisoned, PortResult,
 };
-pub use csma::CsmaCa;
 pub use link_metrics::{EnhAckProbing, LinkMetrics, ProbingError, ProbingInitiator, link_margin};
 pub use pending::{AckPending, AutoPendingMode, PendingTable, PendingTableFull, ack_pending};
 pub use radio::capabilities::{CapabilityBitsError, RadioCapabilities};
-pub use radio::channel::{Channel, ChannelError};
 pub use radio::command::{CcaMode, TxMode, TxSecurity};
 pub use radio::event::{
     AppliedSecurity, FcsStatus, FramePending, ReceivedFrame, RxMetadata, SecurityStatus,
