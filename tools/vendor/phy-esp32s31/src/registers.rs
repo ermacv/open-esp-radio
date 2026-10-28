@@ -3,7 +3,7 @@
 //!
 //! The register model's own enumeration defines the image: every readable
 //! register the ownership policy's `RadioPhyPeripherals` partition holds,
-//! in address order, named by its identity in the chip root. The
+//! in native policy-part/offset order, named by its identity in the chip root. The
 //! cross-check holds no register list of its own. The analog image comes
 //! from the model's finite read-safety qualification and explicit
 //! comparison masks. Open header geometry alone never admits an additional
@@ -108,14 +108,36 @@ fn held(
     Ok(registers)
 }
 
-/// The image of `partition`, in address order.
+/// Native wire indices concatenate policy parts, then ascending offsets within
+/// each part, exactly as the HAL's partition image. Vendor reads use addresses.
 pub fn partition(root: &Path, partition: &str) -> Result<Vec<Register>> {
     let chip = Chip::load(root, CHIP)?;
     let policy = chip.policy()?;
-    Ok(held(&chip.model, &policy, partition, &[])?
+    let mut image = held(&chip.model, &policy, partition, &[])?
         .into_iter()
-        .map(|(register, _)| register)
-        .collect())
+        .map(|(register, _)| {
+            let Some(Claim::Whole(Holder::Part(id))) = policy.claims().get(&register.name) else {
+                return Err("image word has no policy part".into());
+            };
+            let expanded = chip
+                .model
+                .register(&register.name)
+                .ok_or("missing image word")?;
+            let base = chip
+                .model
+                .instances()
+                .iter()
+                .find(|instance| instance.name == expanded.instance)
+                .ok_or("missing image instance")?
+                .base;
+            let offset = u64::from(register.address)
+                .checked_sub(base)
+                .ok_or("image word below instance")?;
+            Ok(((id.part, offset), register))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    image.sort_by_key(|(key, _)| *key);
+    Ok(image.into_iter().map(|(_, register)| register).collect())
 }
 
 /// The finite analog image: every byte the model qualifies for a read with
@@ -156,10 +178,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_partition_image_is_ordered_by_address() {
-        let registers = partition(&repository(), PARTITION).unwrap();
-        assert!(!registers.is_empty());
-        assert!(registers.windows(2).all(|w| w[0].address < w[1].address));
+    fn native_indices_follow_policy_parts_even_when_address_order_differs() {
+        let root = repository();
+        let chip = Chip::load(&root, CHIP).unwrap();
+        let policy = chip.policy().unwrap();
+        let image = partition(&root, PARTITION).unwrap();
+        let keys = image
+            .iter()
+            .map(|r| {
+                let Claim::Whole(Holder::Part(id)) = policy.claims()[&r.name] else {
+                    panic!("whole part")
+                };
+                let expanded = chip.model.register(&r.name).unwrap();
+                let base = chip
+                    .model
+                    .instances()
+                    .iter()
+                    .find(|i| i.name == expanded.instance)
+                    .unwrap()
+                    .base;
+                (id.part, u64::from(r.address) - base)
+            })
+            .collect::<Vec<_>>();
+        assert!(!keys.is_empty());
+        assert!(keys.windows(2).all(|w| w[0] < w[1]));
+        let mut vendor = image.clone();
+        vendor.sort_by_key(|r| r.address);
+        assert_ne!(
+            image.iter().map(|r| &r.name).collect::<Vec<_>>(),
+            vendor.iter().map(|r| &r.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
