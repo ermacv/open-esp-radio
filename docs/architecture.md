@@ -502,7 +502,8 @@ its model and conformance case.
 ## Protocols
 
 - **Wi-Fi** (`protocols/ieee80211`, driver `chips/esp32s31/ieee80211`). The
-  driver owns the four EDCA queues and executes each attempt's retry plan;
+  driver owns the four EDCA queues and executes caller-selected single
+  attempts, or a fixed-rate `ManagementTxPlan`;
   EDCA parameters belong to a VIF. Rate selection is its own portable
   machine: no fixed data or control-frame rate; frames before association and
   to a group use the lowest rate the BSS basic set allows. MSDU age starts at

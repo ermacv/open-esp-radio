@@ -61,9 +61,15 @@ pub enum Protection {
     /// No RTS/CTS or CTS-to-self exchange before the PPDU.
     None,
     /// RTS/CTS exchange with the receiver.
-    RtsCts,
+    RtsCts {
+        /// Legacy rate selected by the caller for RTS and CTS.
+        rate: oer_ieee80211_wire::phy::LegacyRate,
+    },
     /// CTS addressed to the transmitter itself.
-    CtsToSelf,
+    CtsToSelf {
+        /// Legacy rate selected by the caller for CTS-to-self.
+        rate: oer_ieee80211_wire::phy::LegacyRate,
+    },
 }
 
 /// Transmit power of one attempt.

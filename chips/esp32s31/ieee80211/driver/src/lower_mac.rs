@@ -123,7 +123,6 @@
 //! S31 abort path needs the queue's hardware timeout edge. A-MPDU transmission
 //! and access-point TBTT schedules are not implemented yet.
 
-use oer_ieee80211_port::backend::BackendTxProfile;
 use oer_ieee80211_wire::address::AddressFlags;
 use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
 
@@ -680,7 +679,6 @@ pub struct LowerMacConfig {
 pub struct LowerMacCoreParts<
     'core,
     'slot,
-    X: BackendTxProfile,
     P,
     E,
     T,
@@ -690,7 +688,7 @@ pub struct LowerMacCoreParts<
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
-    tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
+    tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
     config: LowerMacConfig,
     coex: &'slot C,
     keys: KeyBank<'core, Path, TICKETS>,
@@ -706,7 +704,6 @@ enum KeyToken {
 impl<
     'core,
     'slot,
-    X: BackendTxProfile,
     P,
     E,
     T,
@@ -714,9 +711,9 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> LowerMacCoreParts<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>
+> LowerMacCoreParts<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>
 {
-    pub(crate) fn into_transmitter(self) -> OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE> {
+    pub(crate) fn into_transmitter(self) -> OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE> {
         self.tx
     }
 }
@@ -756,7 +753,7 @@ struct RxBlockAckEntry {
 }
 
 /// What one queue's attempt holds.
-enum Work<'slot, X: BackendTxProfile, const BUFFER_SIZE: usize> {
+enum Work<'slot, const BUFFER_SIZE: usize> {
     /// An MPDU in its slot, not yet published: the transmit gate is
     /// closed.
     Held {
@@ -764,13 +761,13 @@ enum Work<'slot, X: BackendTxProfile, const BUFFER_SIZE: usize> {
         plan: OrdinaryTxPlan,
         single: SingleAttempt,
     },
-    Published(QueuedSingleAttempt<'slot, X, BUFFER_SIZE>),
+    Published(QueuedSingleAttempt<'slot, BUFFER_SIZE>),
     Quarantined {
         _owner: QuarantinedSingleAttempt<'slot, BUFFER_SIZE>,
     },
 }
 
-impl<X: BackendTxProfile, const BUFFER_SIZE: usize> Work<'_, X, BUFFER_SIZE> {
+impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
     const fn held(&self) -> bool {
         matches!(self, Self::Held { .. })
     }
@@ -786,14 +783,14 @@ impl<X: BackendTxProfile, const BUFFER_SIZE: usize> Work<'_, X, BUFFER_SIZE> {
 }
 
 /// The attempt occupying one queue.
-struct Attempt<'core, 'slot, X: BackendTxProfile, const BUFFER_SIZE: usize, Path: PoolPath> {
+struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
     queue: FreeQueue<'core, Path>,
     role: VifRole,
     admission: TxAdmission<'core, Path>,
     /// The rate of its publication, which its completion reports.
     rate: PhyRate,
     admitted_at: oer_time::Instant,
-    work: Work<'slot, X, BUFFER_SIZE>,
+    work: Work<'slot, BUFFER_SIZE>,
 }
 
 /// The running station TBTT schedule.
@@ -827,8 +824,8 @@ impl StationTbtt {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn borrow_tx<X: oer_ieee80211_port::backend::BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
-///     core: &LowerMacCore<'_, '_, X, P, E, T, C, N>,
+/// fn borrow_tx<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
+///     core: &LowerMacCore<'_, '_, P, E, T, C, N>,
 /// ) {
 ///     core.tx();
 /// }
@@ -842,8 +839,8 @@ impl StationTbtt {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn deadline<X: oer_ieee80211_port::backend::BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
-///     core: &LowerMacCore<'_, '_, X, P, E, T, C, N>,
+/// fn deadline<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
+///     core: &LowerMacCore<'_, '_, P, E, T, C, N>,
 /// ) -> Option<oer_time::Instant> {
 ///     core.next_deadline()
 /// }
@@ -851,7 +848,6 @@ impl StationTbtt {
 pub struct LowerMacCore<
     'core,
     'slot,
-    X: BackendTxProfile,
     P,
     E,
     T,
@@ -861,7 +857,7 @@ pub struct LowerMacCore<
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
-    tx: OrdinaryTxOwner<'slot, X, P, E, T, BUFFER_SIZE>,
+    tx: OrdinaryTxOwner<'slot, P, E, T, BUFFER_SIZE>,
     config: LowerMacConfig,
     fault: Option<LowerMacFault>,
     /// The configured channel; the radio is tuned to it unless a retune is
@@ -881,7 +877,7 @@ pub struct LowerMacCore<
     expired_msdus: u32,
     /// The attempt of each ordinary queue, by its hardware index
     /// ([`LegacyTxQueue::hardware_index`]).
-    queues: [Option<Attempt<'core, 'slot, X, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
+    queues: [Option<Attempt<'core, 'slot, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
     /// The coexistence priorities the shared radio's owner sets: the beacon
     /// window's and a connection frame's.
     coex: &'slot C,
@@ -890,7 +886,6 @@ pub struct LowerMacCore<
 impl<
     'core,
     'slot,
-    X: BackendTxProfile,
     P,
     E,
     T,
@@ -898,7 +893,7 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>
+> LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
@@ -909,7 +904,7 @@ where
     /// frames ask for the air at its priorities.
     pub fn new(
         authority: CoreAuthority<'core, Path, TICKETS>,
-        tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
+        tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
         config: LowerMacConfig,
         coex: &'slot C,
     ) -> CoreOwner<Self> {
@@ -938,7 +933,7 @@ where
     /// A disabled core over the owners a dismantled core returned: the
     /// state of the core they came from is gone, as at a radio start.
     pub fn from_parts(
-        parts: LowerMacCoreParts<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
+        parts: LowerMacCoreParts<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
     ) -> CoreOwner<Self> {
         let LowerMacCoreParts {
             authority,
@@ -1045,7 +1040,7 @@ where
         self.queues[usize::from(queue.hardware_index())].is_some()
     }
 
-    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, X, BUFFER_SIZE, Path>> {
+    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, BUFFER_SIZE, Path>> {
         self.queues.iter().flatten()
     }
 
@@ -1242,8 +1237,12 @@ where
             single: SingleAttempt {
                 protection: match protection {
                     Protection::None => SingleAttemptProtection::None,
-                    Protection::RtsCts => SingleAttemptProtection::RtsCts,
-                    Protection::CtsToSelf => SingleAttemptProtection::CtsToSelf,
+                    Protection::RtsCts { rate } => SingleAttemptProtection::RtsCts {
+                        rate: oer_esp32s31_ieee80211_mac::tx::LegacyRate::from_phy_rate(rate),
+                    },
+                    Protection::CtsToSelf { rate } => SingleAttemptProtection::CtsToSelf {
+                        rate: oer_esp32s31_ieee80211_mac::tx::LegacyRate::from_phy_rate(rate),
+                    },
                 },
                 backoff_slots,
                 power_ceiling_dbm,

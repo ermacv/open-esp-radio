@@ -25,6 +25,37 @@ impl RateLadder for StepDown {
 
 const OFDM54: PhyRate = PhyRate::Legacy(LegacyRate::Ofdm54M);
 
+#[test]
+fn detached_rate_selection_uses_mpdu_and_short_failures_without_backend_policy() {
+    for (mpdu, short, long) in [(2, 0, 0), (0, 2, 0), (1, 2, 255)] {
+        assert_eq!(
+            select_ordinary_retry_rate(OFDM54, RetryCounters { mpdu, short, long }, &StepDown),
+            Some(PhyRate::Legacy(LegacyRate::Ofdm24M))
+        );
+    }
+    let exhausted = RetryCounters {
+        mpdu: 6,
+        short: 0,
+        long: 0,
+    };
+    assert_eq!(
+        select_ordinary_retry_rate(OFDM54, exhausted, &StepDown),
+        None
+    );
+    let ht = PhyRate::Ht(
+        oer_ieee80211_wire::phy::HtRate::new(
+            oer_ieee80211_wire::phy::HtMcs::new(3).unwrap(),
+            oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+            true,
+        )
+        .unwrap(),
+    );
+    assert_eq!(
+        select_ordinary_retry_rate(ht, exhausted, &StepDown),
+        Some(ht)
+    );
+}
+
 fn retry(set_retry_bit: bool) -> RetryDecision {
     RetryDecision::Retry { set_retry_bit }
 }

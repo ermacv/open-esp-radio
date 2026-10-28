@@ -14,12 +14,12 @@
 //! later entries borrow the session's owners ([`session`]).
 
 use oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf;
-use oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
 use oer_ieee80211_port::backend::RetryCounters;
 
 mod calibration_leaves;
 mod coex;
 mod est_freq;
+mod retry;
 mod session;
 
 /// A vendor argument outside the reviewed domain, or a session that did not
@@ -220,15 +220,14 @@ oer_probe_macros::probe! {
     ///
     /// The vendor entry receives a pointer-rich descriptor and stores the chosen
     /// rate at byte `0x0c`. The wrapper performs only that ABI projection; rate
-    /// selection is owned by the compiled production function. A rate the
-    /// selector does not take leaves the descriptor unwritten.
+    /// selection is owned by the compiled production function. Zero reports
+    /// a descriptor write; a nonzero [`retry::RetryProbeStatus`] reports why
+    /// input or a selected stage was refused, leaving the descriptor unwritten.
     pub fn open_libpp_tx_retry_trace_rc_get_rate(
         _rate_context: u32,
         descriptor_address: u32,
         initial_rate: u32,
-    ) {
-        use oer_esp32s31_ieee80211_mac::tx::{HtChannelWidth, TxPhyRate};
-
+    ) -> u32 {
         let descriptor = descriptor_address as *mut u8;
         // SAFETY: every comparison case supplies a writable descriptor object
         // covering the vendor counter and selected-rate bytes.
@@ -239,17 +238,16 @@ oer_probe_macros::probe! {
                 long: descriptor.add(7).read(),
             }
         };
-        let Some(initial) = TxPhyRate::from_code(initial_rate as u8, HtChannelWidth::Mhz20) else {
-            return;
-        };
-        let Ok(selected) = oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
-            EspressifBackendTxProfile,
-            _,
-        >(initial, counters) else {
-            return;
+        let selected = match retry::select(
+            initial_rate, counters,
+            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder,
+        ) {
+            Ok(selected) => selected,
+            Err(refusal) => return refusal.status() as u32,
         };
         // SAFETY: the same descriptor object covers the selected-rate byte.
         unsafe { descriptor.add(0x0c).write(selected.code()) };
+        retry::RetryProbeStatus::Selected as u32
     }
 }
 

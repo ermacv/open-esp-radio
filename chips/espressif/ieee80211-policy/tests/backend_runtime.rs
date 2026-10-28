@@ -2,31 +2,20 @@ use oer_esp32s31_ieee80211_mac::{
     edca::*,
     tx::{runtime::*, *},
 };
-use oer_espressif_ieee80211_policy::{
-    backend::{EspressifAmpduRetryState, EspressifBackendTxProfile},
-    lmac,
-};
+use oer_espressif_ieee80211_policy::{backend::EspressifAmpduRetryState, lmac};
 use oer_ieee80211_port::backend::*;
 use oer_ieee80211_port::backend_aggregate::*;
 use oer_ieee80211_wire::{
     qos::{WmmAccessCategory, WmmUserPriority},
     sequence::SequenceNumber,
 };
-type WifiTxRuntimePolicy =
-    oer_esp32s31_ieee80211_mac::tx::runtime::WifiTxRuntimePolicy<EspressifBackendTxProfile>;
-type OrdinaryMpduRetryState = oer_ieee80211_upper_mac::backend_retry::BackendMpduRetryState<
-    EspressifBackendTxProfile,
-    TxPhyRate,
-    LegacyTxQueue,
->;
 type AmpduRetryState<const C: usize> = EspressifAmpduRetryState<C>;
 const VENDOR_SHORT_RETRY_LIMIT: u8 = lmac::SHORT_RETRY_LIMIT;
-const VENDOR_LONG_RETRY_LIMIT: u8 = lmac::LONG_RETRY_LIMIT;
 const VENDOR_AMPDU_MSDU_LIFETIME_MICROS: u32 = lmac::AMPDU_MSDU_LIFETIME_MICROS;
 
 use oer_esp32s31_ieee80211_mac::tx::test_support::model_completion;
 use oer_esp32s31_ieee80211_mac::tx::{
-    HtGuardInterval, HtMcs, HtRate, LegacyRate, TxCompletion, TxCookie,
+    LegacyRate, TxCompletion, TxCookie,
     ampdu::{HtAmpduTxCompletion, HtBlockAckObservation},
 };
 use oer_ieee80211_port::VifRole;
@@ -214,161 +203,6 @@ fn negotiated_txop_is_bounded_and_medium_ownership_stays_unsupported() {
 }
 
 #[test]
-fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
-    let mut policy = WifiTxRuntimePolicy::vendor_defaults();
-    let queue = LegacyTxQueue::BestEffort;
-    let mut retry = OrdinaryMpduRetryState::new(
-        VifRole::Station,
-        queue,
-        TxPhyRate::Legacy(LegacyRate::Ofdm54M),
-        4,
-        FrameClass::Short,
-    )
-    .unwrap();
-
-    assert_eq!(
-        retry.current_rate(),
-        Ok(TxPhyRate::Legacy(LegacyRate::Ofdm54M))
-    );
-    assert_eq!(
-        retry.observe_completion(&mut policy, oer_ieee80211_port::TxStatus::AckTimeout),
-        OrdinaryRetryDecision::Retry {
-            set_retry_bit: true
-        }
-    );
-    assert_eq!(retry.publications(), 2);
-    assert_eq!(
-        retry.counters(),
-        RetryCounters {
-            mpdu: 1,
-            short: 1,
-            long: 0
-        }
-    );
-    assert_eq!(policy.contention_exponent(queue), 5);
-    assert_eq!(
-        retry.current_rate(),
-        Ok(TxPhyRate::Legacy(LegacyRate::Ofdm54M))
-    );
-
-    assert_eq!(
-        retry.observe_completion(&mut policy, oer_ieee80211_port::TxStatus::CtsTimeout),
-        OrdinaryRetryDecision::Retry {
-            set_retry_bit: false
-        }
-    );
-    assert_eq!(retry.publications(), 3);
-    assert_eq!(
-        retry.counters(),
-        RetryCounters {
-            mpdu: 1,
-            short: 2,
-            long: 0
-        }
-    );
-    assert_eq!(policy.contention_exponent(queue), 6);
-    assert_eq!(
-        retry.current_rate(),
-        Ok(TxPhyRate::Legacy(LegacyRate::Ofdm48M))
-    );
-
-    assert_eq!(
-        retry.observe_completion(&mut policy, oer_ieee80211_port::TxStatus::Success),
-        OrdinaryRetryDecision::Complete
-    );
-    assert_eq!(policy.contention_exponent(queue), 4);
-}
-
-#[test]
-fn cts_failures_continue_the_rate_series_beyond_the_mpdu_retry_limit() {
-    for frame_class in [FrameClass::Short, FrameClass::Long] {
-        let queue = LegacyTxQueue::BestEffort;
-        let mut policy = WifiTxRuntimePolicy::vendor_defaults();
-        let mut retry = OrdinaryMpduRetryState::new(
-            VifRole::Station,
-            queue,
-            TxPhyRate::Legacy(LegacyRate::Ofdm54M),
-            1,
-            frame_class,
-        )
-        .unwrap();
-        for index in 0..usize::from(VENDOR_SHORT_RETRY_LIMIT) {
-            assert_eq!(
-                retry.current_rate(),
-                retry.rate_after_failed_attempts(index as u8)
-            );
-            assert_eq!(usize::from(retry.publications()), index + 1);
-            let decision =
-                retry.observe_completion(&mut policy, oer_ieee80211_port::TxStatus::CtsTimeout);
-            if index + 1 == usize::from(VENDOR_SHORT_RETRY_LIMIT) {
-                assert_eq!(decision, OrdinaryRetryDecision::Complete);
-            } else {
-                assert_eq!(
-                    decision,
-                    OrdinaryRetryDecision::Retry {
-                        set_retry_bit: false
-                    }
-                );
-            }
-            assert_eq!(retry.counters().mpdu, 0);
-            assert_eq!(retry.counters().long, 0);
-        }
-        assert_eq!(policy.contention_exponent(queue), 4);
-    }
-}
-
-#[test]
-fn ordinary_retry_limit_collision_and_abort_restore_the_minimum_cw() {
-    let queue = LegacyTxQueue::Voice;
-    let mut policy = WifiTxRuntimePolicy::vendor_defaults();
-    let mut retry = OrdinaryMpduRetryState::new(
-        VifRole::Station,
-        queue,
-        TxPhyRate::Legacy(LegacyRate::Ofdm6M),
-        2,
-        FrameClass::Long,
-    )
-    .unwrap();
-    assert_eq!(
-        retry.observe_collision(&mut policy),
-        OrdinaryCollisionDecision::Retry
-    );
-    assert_eq!(retry.publications(), 2);
-    assert_eq!(retry.counters().long, 1);
-    assert_eq!(retry.counters().mpdu, 0);
-    assert_eq!(retry.counters().short, 0);
-    assert_eq!(
-        retry.current_rate(),
-        Ok(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
-    );
-    assert_eq!(policy.contention_exponent(queue), 3);
-    assert_eq!(
-        retry.observe_completion(&mut policy, oer_ieee80211_port::TxStatus::AckTimeout),
-        OrdinaryRetryDecision::Retry {
-            set_retry_bit: true
-        }
-    );
-    // Outside a TXOP an ACK timeout counts short, even for a long frame.
-    assert_eq!(retry.counters().mpdu, 1);
-    assert_eq!(retry.counters().short, 1);
-    assert_eq!(retry.counters().long, 1);
-
-    retry.abort(&mut policy);
-    assert_eq!(policy.contention_exponent(queue), 2);
-    assert_eq!(
-        OrdinaryMpduRetryState::new(
-            VifRole::Station,
-            queue,
-            TxPhyRate::Legacy(LegacyRate::Ofdm6M),
-            0,
-            FrameClass::Short,
-        )
-        .err(),
-        Some(OrdinaryRetryError::ZeroMpduRetryLimit)
-    );
-}
-
-#[test]
 fn ordinary_he_retries_walk_the_dot11ax_record() {
     use oer_esp32s31_ieee80211_mac::rx::HeGuardIntervalAndLtf;
     use oer_esp32s31_ieee80211_mac::tx::{HeMcs, HeRate};
@@ -382,117 +216,45 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
         HeGuardIntervalAndLtf::TwoLtf1600Ns,
     ));
     assert_eq!(
-        oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
-            EspressifBackendTxProfile,
-            TxPhyRate,
-        >(mcs9, counters(0)),
-        Ok(mcs9)
+        oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+            mcs9.phy_rate(),
+            counters(0),
+            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
+        )
+        .and_then(|rate| TxPhyRate::try_from(rate).ok()),
+        Some(mcs9)
     );
     assert_eq!(
-        oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
-            EspressifBackendTxProfile,
-            TxPhyRate,
-        >(mcs9, counters(2)),
-        Ok(TxPhyRate::He(HeRate::new(
+        oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+            mcs9.phy_rate(),
+            counters(2),
+            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
+        )
+        .and_then(|rate| TxPhyRate::try_from(rate).ok()),
+        Some(TxPhyRate::He(HeRate::new(
             HeMcs::Mcs7,
             HeGuardIntervalAndLtf::TwoLtf1600Ns,
         )))
     );
     assert_eq!(
-        oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
-            EspressifBackendTxProfile,
-            TxPhyRate,
-        >(mcs9, counters(4)),
-        Ok(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
+        oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+            mcs9.phy_rate(),
+            counters(4),
+            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
+        )
+        .and_then(|rate| TxPhyRate::try_from(rate).ok()),
+        Some(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
     );
     // An 800-ns rate below MCS9 has no record and keeps its rate.
     let mcs8 = TxPhyRate::He(HeRate::new(HeMcs::Mcs8, HeGuardIntervalAndLtf::OneLtf800Ns));
     assert_eq!(
-        oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
-            EspressifBackendTxProfile,
-            TxPhyRate,
-        >(mcs8, counters(4)),
-        Ok(mcs8)
-    );
-}
-
-#[test]
-fn p2p_ht20_sgi_mcs0_through_mcs6_enter_same_mcs_lgi_retry_records() {
-    for mcs_index in 0..=6 {
-        let mcs = HtMcs::from_index(mcs_index).unwrap();
-        let initial = TxPhyRate::Ht(HtRate::new(
-            mcs,
-            HtGuardInterval::Short400Ns,
-            HtChannelWidth::Mhz20,
-        ));
-        let schedule = oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
-            RateScheduleKind::P2pDot11N,
-            8_u8.checked_sub(mcs_index).unwrap(),
+        oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+            mcs8.phy_rate(),
+            counters(4),
+            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
         )
-        .unwrap();
-        let schedule = P2pRetryRateSchedule::new(schedule).unwrap();
-        let mut retry = OrdinaryMpduRetryState::new_with_rate_policy(
-            VifRole::Station,
-            LegacyTxQueue::Voice,
-            initial,
-            OrdinaryRetryRatePolicy::P2pHtSgiFallback(schedule),
-            4,
-            FrameClass::Short,
-        )
-        .unwrap();
-        let mut policy = WifiTxRuntimePolicy::vendor_defaults();
-
-        assert_eq!(retry.current_rate(), Ok(initial));
-        assert_eq!(
-            retry.observe_completion(&mut policy, oer_ieee80211_port::TxStatus::AckTimeout),
-            OrdinaryRetryDecision::Retry {
-                set_retry_bit: true
-            }
-        );
-        assert_eq!(
-            retry.current_rate(),
-            Ok(TxPhyRate::Ht(HtRate::new(
-                mcs,
-                HtGuardInterval::Long800Ns,
-                HtChannelWidth::Mhz20,
-            )))
-        );
-    }
-}
-
-#[test]
-fn p2p_ht_sgi_bridge_rejects_a_different_mcs_retry_record() {
-    let initial = TxPhyRate::Ht(HtRate::new(
-        HtMcs::Mcs4,
-        HtGuardInterval::Short400Ns,
-        HtChannelWidth::Mhz20,
-    ));
-    let wrong = P2pRetryRateSchedule::new(
-        oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
-            RateScheduleKind::P2pDot11N,
-            3,
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        OrdinaryMpduRetryState::new_with_rate_policy(
-            VifRole::Station,
-            LegacyTxQueue::Voice,
-            initial,
-            OrdinaryRetryRatePolicy::P2pHtSgiFallback(wrong),
-            4,
-            FrameClass::Short,
-        )
-        .err(),
-        Some(OrdinaryRetryError::P2pHtSgiFallbackMismatch {
-            initial,
-            scheduled: TxPhyRate::Ht(HtRate::new(
-                HtMcs::Mcs5,
-                HtGuardInterval::Long800Ns,
-                HtChannelWidth::Mhz20,
-            )),
-        })
+        .and_then(|rate| TxPhyRate::try_from(rate).ok()),
+        Some(mcs8)
     );
 }
 

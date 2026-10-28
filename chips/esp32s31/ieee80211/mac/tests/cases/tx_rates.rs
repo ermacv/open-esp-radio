@@ -31,19 +31,6 @@ fn ht_rate_codes_keep_gi_separate_from_power_lookup_and_width() {
     assert_eq!(lgi.vendor_ampdu_byte_limit(), Some(65_535));
     assert_eq!(sgi.vendor_ampdu_byte_limit(), None);
     assert_eq!(sgi.vendor_control_rate(), LegacyRate::Ofdm24M);
-    assert_eq!(sgi.vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(0), Some(TxPhyRate::Ht(sgi)));
-    assert_eq!(
-        sgi.vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(2),
-        Some(TxPhyRate::Ht(HtRate::new(
-            HtMcs::Mcs6,
-            HtGuardInterval::Long800Ns,
-            HtChannelWidth::Mhz40,
-        ))),
-    );
-    assert_eq!(
-        sgi.vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(4),
-        Some(TxPhyRate::Legacy(LegacyRate::Ofdm6M)),
-    );
 
     assert_eq!(
         HtRate::new(
@@ -181,37 +168,6 @@ fn ht_duplicate_selector_reports_each_pre_hardware_rejection_without_a_plan() {
 }
 
 #[test]
-fn he_retry_rates_follow_the_owned_dot11ax_schedule_and_preserve_ldpc() {
-    let mcs9 = HeRate::ldpc(HeMcs::Mcs9, HeGuardIntervalAndLtf::TwoLtf1600Ns);
-    assert_eq!(mcs9.vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(0), Some(TxPhyRate::He(mcs9)));
-    assert_eq!(mcs9.vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(1), Some(TxPhyRate::He(mcs9)));
-    assert_eq!(
-        mcs9.vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(2),
-        Some(TxPhyRate::He(HeRate::ldpc(
-            HeMcs::Mcs7,
-            HeGuardIntervalAndLtf::TwoLtf1600Ns,
-        )))
-    );
-    assert_eq!(
-        mcs9.vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(4),
-        Some(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
-    );
-
-    let mcs9_800 = HeRate::new(HeMcs::Mcs9, HeGuardIntervalAndLtf::OneLtf800Ns);
-    assert_eq!(
-        mcs9_800.vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(2),
-        Some(TxPhyRate::He(HeRate::new(
-            HeMcs::Mcs8,
-            HeGuardIntervalAndLtf::OneLtf800Ns,
-        )))
-    );
-    assert_eq!(
-        HeRate::new(HeMcs::Mcs8, HeGuardIntervalAndLtf::OneLtf800Ns).vendor_retry_rate::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(0),
-        None
-    );
-}
-
-#[test]
 fn he_rate_control_codes_round_trip_through_the_dot11ax_arena() {
     for index in 0..=9 {
         let mcs = HeMcs::from_index(index).unwrap();
@@ -254,11 +210,16 @@ fn rate_control_code_is_decoded_in_its_ht_or_he_arena() {
         )))
     );
 
-    let he_long = TxPhyRate::from_rate_control_schedule::<
-        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-    >(
-        oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, 1)
+    let he_long = TxPhyRate::from_rate_control_code(
+        RateScheduleKind::Dot11Ax,
+        oer_espressif_ieee80211_policy::rate_schedule::schedule_state(
+            oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
+                RateScheduleKind::Dot11Ax,
+                1,
+            )
             .unwrap(),
+        )
+        .rate,
         HtChannelWidth::Mhz20,
         HeGuardIntervalAndLtf::OneLtf800Ns,
     );
@@ -270,11 +231,16 @@ fn rate_control_code_is_decoded_in_its_ht_or_he_arena() {
         )))
     );
 
-    let he_short = TxPhyRate::from_rate_control_schedule::<
-        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-    >(
-        oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, 0)
+    let he_short = TxPhyRate::from_rate_control_code(
+        RateScheduleKind::Dot11Ax,
+        oer_espressif_ieee80211_policy::rate_schedule::schedule_state(
+            oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
+                RateScheduleKind::Dot11Ax,
+                0,
+            )
             .unwrap(),
+        )
+        .rate,
         HtChannelWidth::Mhz20,
         HeGuardIntervalAndLtf::OneLtf800Ns,
     );

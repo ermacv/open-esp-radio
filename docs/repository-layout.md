@@ -93,11 +93,12 @@ A core never depends on a backend. Structures both sides share belong to `port`
 or `wire`. Host tools that read frames (monitors, capture analysis, fixtures)
 take `wire`. This is smoltcp's `wire` beside its `iface` and `socket`.
 
-Wi-Fi transmit profiles implement the generic `BackendTxProfile` in port.
-Core algorithms and family tables remain above the hardware backend; the
-runtime/image selects the static implementation. PN allocation, BA originator
-state and reorder state belong to the cores. The backend takes a supplied PN
-and reports decoded completion/RX values.
+Wi-Fi upper-MAC and the family policy select each attempt's rate and protection,
+including the legacy control-frame rate. The hardware backend receives those
+decisions through the port, or a fixed-rate `ManagementTxPlan`, and owns EDCA
+backoff and MSDU lifetime enforcement. Core algorithms and family tables stay
+above it. PN allocation, BA originator state and reorder state belong to the
+cores. The backend takes a supplied PN and reports decoded completion/RX values.
 
 Only the runtime awaits, and it binds to no executor: it takes time from
 `oer-time`'s `Timer` and interrupt signals from `portable/`, spawns nothing

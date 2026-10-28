@@ -7,9 +7,13 @@ fn stage(rate: u8) -> RetryStage<u8> {
         rate,
         transmissions: NonZeroU8::new(rate + 1).unwrap(),
         protection: if rate.is_multiple_of(2) {
-            Protection::RtsCts
+            Protection::RtsCts {
+                rate: oer_ieee80211_wire::phy::LegacyRate::Ofdm12M,
+            }
         } else {
-            Protection::CtsToSelf
+            Protection::CtsToSelf {
+                rate: oer_ieee80211_wire::phy::LegacyRate::Ofdm6M,
+            }
         },
     }
 }
@@ -121,9 +125,21 @@ fn mapping_keeps_all_stages_and_stops_at_the_first_rate_error() {
     let mapped = plan().map(|rate| rate + 10);
     assert!(mapped.stages().map(|stage| stage.rate).eq(10..14));
     assert_eq!(mapped.transmissions(), plan().transmissions());
+    assert!(
+        mapped
+            .stages()
+            .zip(plan().stages())
+            .all(|(mapped, original)| mapped.protection == original.protection)
+    );
     let mapped = plan().try_map(|rate| Ok::<_, ()>(rate + 20)).unwrap();
     assert!(mapped.stages().map(|stage| stage.rate).eq(20..24));
     assert_eq!(mapped.transmissions(), plan().transmissions());
+    assert!(
+        mapped
+            .stages()
+            .zip(plan().stages())
+            .all(|(mapped, original)| mapped.protection == original.protection)
+    );
 
     let mut visited = Vec::new();
     let failure = plan().try_map(|rate| {

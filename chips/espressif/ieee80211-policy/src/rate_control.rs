@@ -8,12 +8,13 @@
 //! independent A-MPDU schedule from BlockAck windows
 //! (`rcUpdateTxDoneAmpdu2`), filters ACK SNR (`rcUpdateAckSnr`) and selects
 //! the beamforming report rate (`trc_set_bf_report_rate`). It holds values
-//! only: a backend turns a schedule into its PHY rate and programs its own
-//! report-rate registers.
+//! only: its callers turn selected records into admitted PHY rates, and the
+//! backend receives each attempt's rate.
 
 use core::num::{NonZeroU16, NonZeroU32};
 
 use crate::rate_schedule::schedule_state;
+use oer_ieee80211_port::backend::{RateScheduleKind, RateScheduleRef};
 use oer_ieee80211_port::{BlockAckSnr, LinkMetric, SnrSample};
 use oer_ieee80211_upper_mac::rate_control::{
     AmpduUnavailable, BlockAckTally, MpduOutcome, NegotiatedLegacyRates, RateControl, RatePeer,
@@ -1397,21 +1398,3 @@ impl EspressifRateControl {
 
 #[cfg(test)]
 mod tests;
-
-use oer_ieee80211_port::backend::{RateScheduleKind, RateScheduleRef};
-
-impl oer_ieee80211_port::backend::BackendStationRateControl for StaRateControlAssociation {
-    type Profile = crate::backend::EspressifBackendTxProfile;
-    fn current_schedule(&self) -> RateScheduleRef {
-        self.current_schedule()
-    }
-    fn current_ampdu_schedule(&self) -> Option<RateScheduleRef> {
-        self.current_ampdu_schedule()
-    }
-    fn update_ack_snr(&mut self, sample: i8) {
-        self.update_ack_snr(sample)
-    }
-    fn beamforming_report(&self) -> BeamformingReportRate {
-        self.beamforming_report()
-    }
-}

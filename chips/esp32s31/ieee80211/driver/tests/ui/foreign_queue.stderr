@@ -26,7 +26,7 @@ error: lifetime may not live long enough
    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'foreign` must outlive `'core`
    |
    = help: consider adding the following bound: `'foreign: 'core`
-   = note: requirement occurs because of a mutable reference to `EnabledView<'_, LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, C, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`
+   = note: requirement occurs because of a mutable reference to `EnabledView<'_, LowerMacCore<'_, '_, P, E, T, C, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`
    = note: mutable references are invariant over their type parameter
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 

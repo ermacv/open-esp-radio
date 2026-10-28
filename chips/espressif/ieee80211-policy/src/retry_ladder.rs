@@ -18,9 +18,7 @@ use oer_ieee80211_wire::phy::{
 
 use crate::{
     rate_code::{legacy_code, legacy_rate, phy_rate},
-    rate_schedule::{
-        dot11g_schedule_for_legacy_rate, schedule_publication_limit, schedule_rate_after_failures,
-    },
+    rate_schedule::{dot11g_schedule_for_legacy_rate, schedule_rate_after_failures},
 };
 
 /// The 802.11g ladder of a non-HT rate: the complete 54 Mb/s ladder is
@@ -30,17 +28,6 @@ use crate::{
 pub fn legacy_retry_rate(initial: LegacyRate, failed_attempts: u8) -> Option<LegacyRate> {
     let schedule = dot11g_schedule_for_legacy_rate(legacy_code(initial))?;
     legacy_rate(schedule_rate_after_failures(schedule, failed_attempts)?)
-}
-
-/// Hardware publications the non-HT rate's record admits, the first
-/// included.
-///
-/// This is not the first retry pair's count: the vendor
-/// `rcReachRetryLimit` reads record byte `0x08`, while `rcGetRate` consumes
-/// the four `(rate, count)` pairs independently.
-pub fn legacy_retry_publication_limit(initial: LegacyRate) -> Option<u8> {
-    let schedule = dot11g_schedule_for_legacy_rate(legacy_code(initial))?;
-    Some(schedule_publication_limit(schedule))
 }
 
 /// The 802.11n ladder of an HT rate; the rate may leave the HT domain.
@@ -151,10 +138,6 @@ mod tests {
         assert_eq!(rate(4), Some(LegacyRate::Ofdm6M));
         assert_eq!(rate(7), Some(LegacyRate::Cck5M5(DsssPreamble::Short)));
         assert_eq!(rate(32), None);
-        assert_eq!(
-            legacy_retry_publication_limit(LegacyRate::Ofdm54M),
-            Some(32)
-        );
     }
 
     #[test]

@@ -4,7 +4,6 @@ use core::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
-use oer_ieee80211_port::backend::BackendTxProfile;
 
 mod bank;
 use bank::Phase;
@@ -172,7 +171,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -181,7 +179,7 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
+> DisabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Reset this role's contention after the final exchange terminal.
     #[inline]
@@ -193,7 +191,7 @@ impl<
     #[inline]
     pub fn dismantle(
         self,
-    ) -> LowerMacCoreParts<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS> {
+    ) -> LowerMacCoreParts<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS> {
         self.owner.phase = Phase::Vacant;
         let core = self
             .owner
@@ -227,16 +225,8 @@ impl<
     pub fn enable_checked(
         self,
     ) -> LifecycleStart<
-        EnabledView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
-        RetuningView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
+        EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
+        RetuningView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
         if self.channel == self.tuned {
             self.owner.phase = GatePhase::<G>::ENABLED;
@@ -267,7 +257,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -276,7 +265,7 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> RetuningView<'view, LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
+> RetuningView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Reset this role's contention after the final exchange terminal.
     #[inline]
@@ -295,16 +284,8 @@ impl<
         mut self,
         retuned: bool,
     ) -> Result<
-        EnabledView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
-        DisabledView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
+        EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
+        DisabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
         if retuned {
             self.tuned = self.channel;
@@ -321,7 +302,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -330,7 +310,7 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
+> EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Reset this role's contention after the final exchange terminal.
     #[inline]
@@ -369,11 +349,8 @@ impl<
         self,
         hardware: &mut H,
         sink: &mut K,
-    ) -> DisablingView<
-        'view,
-        LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-        G,
-    > {
+    ) -> DisablingView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
+    {
         self.owner
             .disable_in_place(hardware, sink, GatePhase::<G>::MODE);
         DisablingView::new(self.owner)
@@ -399,7 +376,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -408,7 +384,7 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> DisablingView<'view, LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
+> DisablingView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Reset this role's contention after the final exchange terminal.
     #[inline]
@@ -422,11 +398,7 @@ impl<
         self,
         sink: &mut K,
     ) -> Result<
-        DisabledView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
+        DisabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
         Self,
     > {
         if self
@@ -444,7 +416,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -452,12 +423,7 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
->
-    EnabledView<
-        'view,
-        LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-        OpenGate,
-    >
+> EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, OpenGate>
 {
     /// Hold new attempts while the published prefix drains.
     #[inline]
@@ -465,7 +431,7 @@ impl<
         self,
     ) -> EnabledView<
         'view,
-        LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
+        LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
         ClosingGate,
     > {
         self.owner.phase = Phase::Closing;
@@ -477,7 +443,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -488,7 +453,7 @@ impl<
 >
     EnabledView<
         'view,
-        LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
+        LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
         ClosingGate,
     >
 {
@@ -501,7 +466,7 @@ impl<
         Self,
         EnabledView<
             'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
+            LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
             ClosedGate,
         >,
     > {
@@ -519,7 +484,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -530,7 +494,7 @@ impl<
 >
     EnabledView<
         'view,
-        LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
+        LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
         ClosedGate,
     >
 {
@@ -541,11 +505,8 @@ impl<
         hardware: &mut H,
         sink: &mut K,
     ) -> Result<
-        EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>,
-        FailedGateView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-        >,
+        EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>,
+        FailedGateView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>,
     > {
         match self.open_held_gate(hardware, sink) {
             Ok(()) => {
@@ -564,7 +525,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -575,11 +535,7 @@ impl<
     G: CoreGate,
 >
     ConfiguringView<
-        DisabledView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
+        DisabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
     >
 {
     /// The published prefix's next deadline.
@@ -612,11 +568,7 @@ impl<
         hardware: &mut H,
         sink: &mut K,
     ) -> ConfigurationProgress<
-        DisabledView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
+        DisabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
         if self
             .core
@@ -634,7 +586,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -645,11 +596,7 @@ impl<
     G: CoreGate,
 >
     ConfiguringView<
-        EnabledView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
+        EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
     >
 {
     /// The published prefix's next deadline.
@@ -682,11 +629,7 @@ impl<
         hardware: &mut H,
         sink: &mut K,
     ) -> ConfigurationProgress<
-        EnabledView<
-            'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
-            G,
-        >,
+        EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
         if self
             .core
@@ -714,7 +657,6 @@ impl<
     'view,
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -722,7 +664,7 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> FailedGateView<'view, LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+> FailedGateView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
 {
     /// The publication failure that retained this prefix.
     #[inline]
@@ -758,7 +700,7 @@ impl<
     ) -> Result<
         DisabledView<
             'view,
-            LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
+            LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
             ClosedGate,
         >,
         Self,
@@ -774,7 +716,6 @@ impl<
 impl<
     'core,
     'slot,
-    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -782,7 +723,7 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>
+> LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>
 {
     // Every view transition uses these in-place hardware steps.
     #[inline(never)]

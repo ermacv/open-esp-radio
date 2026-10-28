@@ -210,3 +210,17 @@ impl MpduRetryState {
 
 #[cfg(test)]
 mod tests;
+
+/// Select a detached retry-series rate. HT/HE rates without a record retain
+/// their admitted rate; a legacy series without a rate is exhausted.
+pub fn select_ordinary_retry_rate(
+    initial: PhyRate,
+    counters: RetryCounters,
+    ladder: &impl RateLadder,
+) -> Option<PhyRate> {
+    match ladder.rate(initial, counters.ladder_step()) {
+        Some(rate) => Some(rate),
+        None if matches!(initial, PhyRate::Ht(_) | PhyRate::He(_)) => Some(initial),
+        None => None,
+    }
+}

@@ -88,7 +88,6 @@ type CorePath<Id: SlotIdentity> = Part<Id, 0>;
 type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<
     'id,
     'static,
-    <D as Device<B>>::Profile,
     <D as Device<B>>::Power,
     <D as Device<B>>::Entropy,
     <D as Device<B>>::Timer,
@@ -108,7 +107,6 @@ pub trait ReceiveUnit: 'static {
 /// themselves across `Pending`; no ISR may call any of these operations.
 /// The device owns the cooperative registers, RX ring and PHY membership.
 pub trait Device<const B: usize>: Sized + 'static {
-    type Profile: backend::BackendTxProfile;
     /// Image-selected concrete coexistence policy, statically dispatched on P2.
     type Coex: RadioCoexPriorities + 'static;
     type Power: WifiTxPowerProfile;
@@ -284,7 +282,7 @@ impl<const B: usize> Default for PortSharedStorage<B> {
 /// The complete construction resources; no DMA storage lives inline here.
 pub struct PortParts<D: Device<B>, const B: usize> {
     pub storage: &'static mut PortStorage<D, B>,
-    pub transmitter: OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>,
+    pub transmitter: OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>,
     pub buffers: [Pin<&'static mut TxSlot<B>>; TX_TICKETS],
     pub config: LowerMacConfig,
     pub access_point_address: IndividualAddress,
@@ -302,7 +300,7 @@ pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
     identity: PhantomData<fn(Id) -> Id>,
 }
 struct Initial<D: Device<B>, const B: usize> {
-    transmitter: OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>,
+    transmitter: OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>,
     config: LowerMacConfig,
     coex: &'static D::Coex,
 }
@@ -375,8 +373,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
 /// Hardware and reusable DMA owners returned after confirmed normal stopping.
 pub struct StoppedPort<Id: SlotIdentity, D: Device<B>, const B: usize> {
     storage: &'static PortStorage<D, B>,
-    transmitter:
-        Option<OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>>,
+    transmitter: Option<OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>>,
     config: LowerMacConfig,
     addresses: [IndividualAddress; 2],
     coex: &'static D::Coex,

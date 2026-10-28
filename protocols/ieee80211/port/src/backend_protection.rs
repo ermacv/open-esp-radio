@@ -1,4 +1,4 @@
-//! Values exchanged with a static transmit profile.
+//! Protection inputs and decisions shared by upper-MAC and the family policy.
 use crate::Protection;
 use core::num::NonZeroU16;
 use oer_ieee80211_wire::{
@@ -290,13 +290,12 @@ impl TxProtection {
         }
     }
 
-    /// The exchange a lower-MAC attempt requests; the backend chooses the
-    /// control frame's rate itself.
+    /// The exchange and control-frame rate a lower-MAC attempt requests.
     pub const fn port_protection(self) -> Protection {
         match self {
             Self::None => Protection::None,
-            Self::CtsToSelf { .. } => Protection::CtsToSelf,
-            Self::RtsCts { .. } => Protection::RtsCts,
+            Self::CtsToSelf { rate } => Protection::CtsToSelf { rate },
+            Self::RtsCts { rate } => Protection::RtsCts { rate },
         }
     }
 }

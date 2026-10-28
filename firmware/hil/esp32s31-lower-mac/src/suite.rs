@@ -156,7 +156,6 @@ impl WifiTxEntropy for Entropy {
 struct Fixture;
 impl Composition for Fixture {
     type Coex = Coex;
-    type Profile = oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
     type Entropy = Entropy;
     type Body = FixtureBody;
     type OwnedContext<Id: radio::SlotIdentity> = Context;
@@ -452,9 +451,7 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
     }
     let transmitter = OrdinaryTxOwner::new(WifiTxResources {
         slot: slot!(TX0, SLOT0),
-        policy: WifiTxRuntimePolicy::<
-            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-        >::vendor_defaults(),
+        policy: WifiTxRuntimePolicy::vendor_defaults(),
         power: CappedTxPowerProfile::new(power, ceiling),
         entropy: Entropy,
         timer: EmbassyClock,

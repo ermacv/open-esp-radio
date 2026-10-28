@@ -9,7 +9,7 @@ use oer_esp32s31_ieee80211_driver::{
 use oer_time::Timer;
 
 pub fn install<'id, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, H: LowerMacHardware>(
-    core: &mut LowerMacCore<'id, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, C, 512>,
+    core: &mut LowerMacCore<'id, 'slot, P, E, T, C, 512>,
     hardware: &mut H,
     association: &StationAssociation<'id>,
     slot: StationPairwiseSlot<'id>,
