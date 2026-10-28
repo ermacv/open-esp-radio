@@ -3,7 +3,7 @@ name = "oer-ieee80211-runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 repository.workspace = true
 description = "Wi-Fi async glue between the lower-MAC port and the sans-IO cores: the station service and monitor handoffs"
 

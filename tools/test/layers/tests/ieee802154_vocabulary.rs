@@ -1,4 +1,5 @@
-//! The shared MAC dictionary stays below execution and protocol policy.
+//! The shared MAC dictionary stays below execution; Apache-only dependencies
+//! determine their consumers' effective licenses across the workspace.
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -48,12 +49,31 @@ fn normal_closure(graph: &BTreeMap<String, BTreeSet<String>>, root: &str) -> BTr
     found
 }
 
+fn apache_license_violations(
+    graph: &BTreeMap<String, BTreeSet<String>>,
+    licenses: &BTreeMap<String, String>,
+) -> Vec<String> {
+    let apache_only = licenses
+        .iter()
+        .filter(|(_, license)| license.as_str() == "Apache-2.0")
+        .map(|(name, _)| name.clone())
+        .collect::<BTreeSet<_>>();
+    licenses
+        .iter()
+        .filter(|(name, license)| {
+            license.as_str() != "Apache-2.0"
+                && !normal_closure(graph, name).is_disjoint(&apache_only)
+        })
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
 #[test]
-fn the_dictionary_and_knowledge_do_not_reach_execution_and_consumers_state_the_license() {
+fn the_dictionary_stays_below_execution_and_apache_consumers_state_the_license() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let workspace: toml::Value =
         toml::from_str(&std::fs::read_to_string(root.join("Cargo.toml")).unwrap()).unwrap();
-    let mut manifests = BTreeMap::new();
+    let mut licenses = BTreeMap::new();
     let mut graph = BTreeMap::new();
     for member in workspace["workspace"]["members"].as_array().unwrap() {
         let manifest: toml::Value = toml::from_str(
@@ -66,7 +86,13 @@ fn the_dictionary_and_knowledge_do_not_reach_execution_and_consumers_state_the_l
             name.clone(),
             normal_dependencies(&manifest, &workspace["workspace"]["dependencies"]),
         );
-        manifests.insert(name, manifest);
+        let license = &manifest["package"]["license"];
+        let license = if license.get("workspace").and_then(toml::Value::as_bool) == Some(true) {
+            &workspace["workspace"]["package"]["license"]
+        } else {
+            license
+        };
+        licenses.insert(name, license.as_str().unwrap().to_owned());
     }
     for owner in [VALUES, KNOWLEDGE] {
         let dependencies = normal_closure(&graph, owner);
@@ -80,15 +106,53 @@ fn the_dictionary_and_knowledge_do_not_reach_execution_and_consumers_state_the_l
             .collect::<Vec<_>>();
         assert!(forbidden.is_empty(), "{owner} reaches {forbidden:?}");
     }
-    for (name, manifest) in &manifests {
-        if normal_closure(&graph, name).contains(VALUES) {
-            assert_eq!(
-                manifest["package"]["license"].as_str(),
-                Some("Apache-2.0"),
-                "effective license of {name}"
-            );
-        }
-    }
+    assert_eq!(
+        apache_license_violations(&graph, &licenses),
+        Vec::<String>::new(),
+        "packages whose effective license must be Apache-2.0"
+    );
+}
+
+#[test]
+fn apache_license_follows_normal_edges_and_requires_exact_apache() {
+    let target: toml::Value = toml::from_str(
+        "[target.'cfg(unix)'.dependencies]\nforward = { workspace = true, optional = true }\n",
+    )
+    .unwrap();
+    let workspace: toml::Value =
+        toml::from_str("forward = { package = 'apache-only', version = '1' }\n").unwrap();
+    let dev_and_build: toml::Value = toml::from_str(
+        "[dev-dependencies]\napache-only = '1'\n[build-dependencies]\napache-only = '1'\n",
+    )
+    .unwrap();
+    let graph = BTreeMap::from([
+        ("direct".into(), BTreeSet::from(["apache-only".into()])),
+        ("transitive".into(), BTreeSet::from(["direct".into()])),
+        ("accepted".into(), BTreeSet::from(["apache-only".into()])),
+        ("combined".into(), BTreeSet::from(["apache-only".into()])),
+        ("target".into(), normal_dependencies(&target, &workspace)),
+        (
+            "dev-and-build".into(),
+            normal_dependencies(&dev_and_build, &workspace),
+        ),
+    ]);
+    let licenses = [
+        ("apache-only", "Apache-2.0"),
+        ("direct", "MIT OR Apache-2.0"),
+        ("transitive", "MIT"),
+        ("accepted", "Apache-2.0"),
+        ("combined", "Apache-2.0 AND MIT"),
+        ("target", "MIT OR Apache-2.0"),
+        ("dev-and-build", "MIT OR Apache-2.0"),
+        ("unrelated", "MIT OR Apache-2.0"),
+    ]
+    .into_iter()
+    .map(|(name, license)| (name.to_owned(), license.to_owned()))
+    .collect();
+    assert_eq!(
+        apache_license_violations(&graph, &licenses),
+        ["combined", "direct", "target", "transitive"]
+    );
 }
 
 #[test]
