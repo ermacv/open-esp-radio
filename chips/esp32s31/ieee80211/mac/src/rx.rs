@@ -56,11 +56,8 @@ pub const CCMP_HEADER_SIZE: usize = 8;
 pub const CCMP_MIC_SIZE: usize = 8;
 
 const MLME_HEADER_SIZE: usize = 24;
-const MLME_AUTH_BODY_SIZE: usize = 6;
 const CONTROL_HEADER_MIN_SIZE: usize = 10;
-const SUBTYPE_ASSOC_RESPONSE: u16 = 1;
-const SUBTYPE_REASSOC_RESPONSE: u16 = 3;
-const SUBTYPE_AUTH: u16 = 11;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RxIngressConfig {
     pub ring_entry_limit: usize,
@@ -813,12 +810,6 @@ pub struct NormalizedRxFrame<'frame> {
     pub stamp: Option<u32>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RxDataFrame {
-    pub mpdu: RxMpduFrame,
-    pub payload_offset: usize,
-}
-
 /// Hardware-verified CCMP data MPDU before 802.11-to-Ethernet decapsulation.
 ///
 /// The S31 MAC decrypts the payload in place and reports MIC failure through
@@ -1033,92 +1024,10 @@ pub fn extract_protected_management(
     Ok(frame)
 }
 
-/// Validates one completed chain, strips the four-byte FCS and copies one
-/// unfragmented, unprotected management MPDU into caller-owned storage.
-pub fn extract_management(
-    segments: &[RxSegment<'_>],
-    config: RxIngressConfig,
-    output: &mut [u8],
-) -> Result<RxMpduFrame, RxError> {
-    let frame = extract_mpdu(segments, config, output)?;
-    if frame.length < MLME_HEADER_SIZE {
-        return Err(RxError::Bounds);
-    }
-    if FrameControlFields::from_bytes([output[0], output[1]]).version() != 0
-        || FrameControlFields::from_bytes([output[0], output[1]]).kind() != FrameType::Management
-    {
-        return Err(RxError::Ignored);
-    }
-    if FrameControlFields::from_bytes([output[0], output[1]]).more_fragments()
-        || FrameControlFields::from_bytes([output[0], output[1]]).protected()
-        || SequenceControl::from_bytes([output[22], output[23]]).fragment() != 0
-    {
-        return Err(RxError::Unsupported);
-    }
-    let subtype = FrameControlFields::from_bytes([output[0], output[1]]).subtype();
-    if matches!(
-        subtype,
-        SUBTYPE_AUTH | SUBTYPE_ASSOC_RESPONSE | SUBTYPE_REASSOC_RESPONSE
-    ) && frame.length < MLME_HEADER_SIZE + MLME_AUTH_BODY_SIZE
-    {
-        return Err(RxError::Bounds);
-    }
-    Ok(frame)
-}
-
-/// Extracts one unfragmented, unprotected 802.11 data MPDU and reports the
-/// LLC/SNAP payload offset.
-///
-/// The header length accounts for address 4, QoS control and HT control. The
-/// WPA2 four-way handshake starts before pairwise keys exist, so EAPOL M1 must
-/// arrive as an unprotected data frame; protected traffic is rejected here.
-pub fn extract_data(
-    segments: &[RxSegment<'_>],
-    config: RxIngressConfig,
-    output: &mut [u8],
-) -> Result<RxDataFrame, RxError> {
-    let frame = extract_mpdu(segments, config, output)?;
-    if frame.length < MLME_HEADER_SIZE {
-        return Err(RxError::Bounds);
-    }
-    let frame_control = FrameControlFields::from_bytes([output[0], output[1]]);
-    if frame_control.version() != 0 || frame_control.kind() != FrameType::Data {
-        return Err(RxError::Ignored);
-    }
-    if (frame_control.more_fragments() || frame_control.protected())
-        || SequenceControl::from_bytes([output[22], output[23]]).fragment() != 0
-    {
-        return Err(RxError::Unsupported);
-    }
-
-    let to_ds = frame_control.to_ds();
-    let from_ds = frame_control.from_ds();
-    let qos = frame_control.qos();
-    let ordered = frame_control.order();
-    let mut payload_offset = if to_ds && from_ds {
-        MLME_HEADER_SIZE + 6
-    } else {
-        MLME_HEADER_SIZE
-    };
-    if qos {
-        payload_offset += 2;
-        if ordered {
-            payload_offset += 4;
-        }
-    }
-    if frame.length < payload_offset {
-        return Err(RxError::Bounds);
-    }
-    Ok(RxDataFrame {
-        mpdu: frame,
-        payload_offset,
-    })
-}
-
 oer_esp32s31_hal::place_rx_hot_path! {
 /// Extracts one unfragmented CCMP data MPDU after hardware MIC verification.
 ///
-/// Unlike [`extract_data`], this entry requires the Protected bit. A returned
+/// This entry requires the Protected bit. A returned
 /// frame therefore has both a successful RX crypto status and a valid CCMP
 /// ExtIV/header shape. The payload bytes between `payload_offset` and
 /// `mic_offset` are the hardware-decrypted LLC/SNAP payload.

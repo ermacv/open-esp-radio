@@ -13,10 +13,11 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   stays in softmac, with no dedicated driver TX entry point. A protected
   MPDU is numbered at its first launch; DMA
   is reached only through its owner type, never alongside a quiescence proof.
-- **MAC ownership.** The channel switch writes only the MAC control word and
-  the REGDMA link select. TBTT events from the power interrupt are lossy, so
-  the driver times its own TBTT wakes. Coexistence values reach the driver by
-  message.
+- **MAC ownership.** The driver coordinates MAC stop, RX draining and the
+  radio client's channel retune through owned HAL transactions. P3 latches
+  power events; P2 tracks station TBTT deadlines from the installed schedule.
+  Caller-supplied coexistence intent selects the publication PTI. The `coex`
+  module's time-slice status values have no runtime publisher.
 - **MAC preparation and start.** Cold preparation programs configuration
   with the common MAC gates closed and never writes an interrupt bank;
   runtime start requires the
@@ -56,8 +57,10 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   reset. Recovery starts a new association.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole.
-- **HE trigger-based and beamformee** paths stay fail-closed until a hardware
-  path is verified.
+- **HE service.** The lower-MAC port accepts caller-selected HE SU attempts.
+  It exposes no `AmpduPhase`, Trigger-response or beamformee service. The
+  chip MAC and HAL contain HE aggregate and Trigger queue primitives; their
+  presence does not advertise those services through the port.
 - **Conformance.** The hardware lower-MAC conformance image runs every case
   the backend's declared capabilities support; A-MPDU/Block Ack cases without
   `AmpduPhase` are reported as unsupported, never as model-only. The final

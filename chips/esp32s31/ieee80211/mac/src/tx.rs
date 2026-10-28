@@ -24,9 +24,8 @@ use oer_esp32s31_hal::types::{
     MacHeTxFormat, MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation,
     MacHtChannelWidth, MacHtGuardInterval, MacHtMcs, MacHtProtectionSpacing, MacHtRate,
     MacHtTxFormat, MacHtTxParameters, MacHtTxProgram, MacInterface, MacLegacyRate,
-    MacLegacyTxParameters, MacLegacyTxProgram, MacPartialRuPowerSelector,
-    MacTxCompletionObservation, MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason,
-    MacTxProtection, MacTxQueueDetached,
+    MacLegacyTxParameters, MacLegacyTxProgram, MacTxCompletionObservation, MacTxControlFrame,
+    MacTxDetachOutcome, MacTxDetachReason, MacTxProtection, MacTxQueueDetached,
 };
 
 pub use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaState;
@@ -47,14 +46,7 @@ use oer_ieee80211_port::backend::RateScheduleKind;
 
 use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
 
-use oer_ieee80211_wire::{
-    he::HeDcmConstellation,
-    ht::HtDuplicateMcs32,
-    trigger::{
-        TriggerCommonInfo, TriggerFrame, TriggerGiLtf, TriggerParseError, TriggerRuAllocation,
-        TriggerType, TriggerUserSpatialStreamInfo, parse_trigger_user_spatial_stream,
-    },
-};
+use oer_ieee80211_wire::{he::HeDcmConstellation, ht::HtDuplicateMcs32};
 
 mod completion;
 mod cost;
@@ -2178,172 +2170,6 @@ impl HeDcmRate {
             HeDcmConstellation::Qam16 => peer_receive.supports_16qam(),
         };
         constellation_supported && (!self.0.is_ldpc() || peer_supports_ldpc)
-    }
-}
-
-/// One scheduled 1T1R HE-TB rate recovered from Trigger Common/User Info.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct HeTriggerScheduledRate {
-    pub rate: HeRate,
-    /// Exact Trigger Common Info selector retained independently from the
-    /// HE-SU formatter's different GI/LTF encoding.
-    pub trigger_gi_ltf: TriggerGiLtf,
-    pub resource_unit: HeResourceUnit,
-    pub resource_unit_index: u8,
-    pub resource_unit_region: bool,
-    pub partial_ru_power_selector: MacPartialRuPowerSelector,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HeTriggerScheduledRateError {
-    UnsupportedTriggerType,
-    UnsupportedBandwidth,
-    AssociationIdMismatch,
-    AssociationIdNotScheduled,
-    DuplicateAssociationId,
-    MalformedUserInfo(TriggerParseError),
-    UnsupportedSpatialStreams,
-    UnsupportedResourceUnit,
-    UnsupportedMcs,
-    UnsupportedGiLtf,
-    UnsupportedDcmCombination,
-}
-
-impl HeTriggerScheduledRate {
-    /// Select this station from a complete, possibly multi-user Trigger.
-    ///
-    /// [`TriggerFrame::users`] supplies the type-dependent, allocation-free
-    /// User Info iteration and its joint AID12/RU padding sentinel;
-    /// [`Self::new`] then derives the scheduled user's RU and rate.
-    ///
-    /// The entire iterator is consumed before returning. A malformed trailing
-    /// user or a duplicate assignment therefore cannot be hidden by placing a
-    /// superficially valid assignment for this station first.
-    pub fn from_trigger_frame(
-        frame: &TriggerFrame<'_>,
-        association_id: u16,
-    ) -> Result<Self, HeTriggerScheduledRateError> {
-        if !matches!(frame.common.trigger_type, TriggerType::Basic) {
-            return Err(HeTriggerScheduledRateError::UnsupportedTriggerType);
-        }
-        if frame.common.uplink_bandwidth_encoding != 0 {
-            return Err(HeTriggerScheduledRateError::UnsupportedBandwidth);
-        }
-        if association_id == 0 || association_id > 0x0fff {
-            return Err(HeTriggerScheduledRateError::AssociationIdMismatch);
-        }
-
-        let mut assigned_user = None;
-        for field in frame.users() {
-            let field = field.map_err(HeTriggerScheduledRateError::MalformedUserInfo)?;
-            if field.aid12() != association_id {
-                continue;
-            }
-            if assigned_user.is_some() {
-                return Err(HeTriggerScheduledRateError::DuplicateAssociationId);
-            }
-            assigned_user = Some(
-                parse_trigger_user_spatial_stream(field.user_info)
-                    .map_err(HeTriggerScheduledRateError::MalformedUserInfo)?,
-            );
-        }
-        let user = assigned_user.ok_or(HeTriggerScheduledRateError::AssociationIdNotScheduled)?;
-        Self::new(frame.common, user, association_id)
-    }
-
-    /// Admit the Trigger user assigned to this 1T1R HE20 station.
-    ///
-    /// SOURCE: complete pinned `libpp[hal_debug.o]::dbg_dump_trig_common_info` and `dbg_dump_trig_user_ss`, and complete
-    /// `libpp[hal_utilities.o]::ru2str`, which decode the UL bandwidth,
-    /// GI/LTF, RU allocation, UL HE-MCS, UL FEC, DCM and spatial-stream
-    /// fields. IEEE Std 802.11ax-2021 9.3.1.22 and 27.3.2 define their
-    /// meaning: the RU class follows from the raw allocation, and the rate
-    /// from the scheduled user's MCS, coding, GI and spatial-stream
-    /// allocation.
-    ///
-    /// Wider bandwidths, non-NSS1 assignments and unsupported DCM/MCS
-    /// combinations fail before they can become a transmit rate. AID zero
-    /// random-access users use a different policy and are intentionally not
-    /// accepted by this scheduled-user constructor.
-    pub const fn new(
-        common: TriggerCommonInfo,
-        user: TriggerUserSpatialStreamInfo,
-        association_id: u16,
-    ) -> Result<Self, HeTriggerScheduledRateError> {
-        if !matches!(common.trigger_type, TriggerType::Basic) {
-            return Err(HeTriggerScheduledRateError::UnsupportedTriggerType);
-        }
-        if common.uplink_bandwidth_encoding != 0 {
-            return Err(HeTriggerScheduledRateError::UnsupportedBandwidth);
-        }
-        if user.aid12 != association_id || association_id == 0 || association_id > 0x0fff {
-            return Err(HeTriggerScheduledRateError::AssociationIdMismatch);
-        }
-        if user.starting_spatial_stream != 1 || user.spatial_stream_count != 1 {
-            return Err(HeTriggerScheduledRateError::UnsupportedSpatialStreams);
-        }
-        let Some(allocation) = TriggerRuAllocation::from_encoding(user.ru_allocation) else {
-            return Err(HeTriggerScheduledRateError::UnsupportedResourceUnit);
-        };
-        let TriggerRuAllocation::Narrow {
-            resource_unit,
-            one_based_index,
-        } = allocation
-        else {
-            return Err(HeTriggerScheduledRateError::UnsupportedResourceUnit);
-        };
-        // Complete hal_mac_{get,set}_tb_max_pwr provides the hardware's
-        // narrower HE20 admission oracle. In particular ru2str can diagnose
-        // raw allocation 62 as a second RU242, but the runtime power jump
-        // tables reject it; a 20-MHz 1T1R station must not schedule it.
-        let Some(partial_ru_power_selector) =
-            MacPartialRuPowerSelector::from_trigger_encoding(user.ru_allocation)
-        else {
-            return Err(HeTriggerScheduledRateError::UnsupportedResourceUnit);
-        };
-        let Some(mcs) = HeMcs::from_index(user.mcs) else {
-            return Err(HeTriggerScheduledRateError::UnsupportedMcs);
-        };
-        let gi_ltf = match common.gi_ltf {
-            // The HE-SU rate type does not encode the Trigger-only 1x-LTF
-            // distinction. Both selectors share the same 1.6-us data-symbol
-            // rate; `trigger_gi_ltf` below retains the exact LTF count for
-            // eventual HE-TB vector programming.
-            TriggerGiLtf::OneLtf1600Ns | TriggerGiLtf::TwoLtf1600Ns => {
-                crate::rx::HeGuardIntervalAndLtf::TwoLtf1600Ns
-            }
-            TriggerGiLtf::FourLtf3200Ns => crate::rx::HeGuardIntervalAndLtf::FourLtf3200Ns,
-            TriggerGiLtf::Reserved => {
-                return Err(HeTriggerScheduledRateError::UnsupportedGiLtf);
-            }
-        };
-        let rate = match (user.dcm, user.coding_type, mcs) {
-            (false, false, _) => HeRate::new(mcs, gi_ltf),
-            (false, true, _) => HeRate::ldpc(mcs, gi_ltf),
-            (true, false, HeMcs::Mcs0) => HeRate::bcc_dcm(HeBccDcmMcs::Mcs0, gi_ltf),
-            (true, false, HeMcs::Mcs1) => HeRate::bcc_dcm(HeBccDcmMcs::Mcs1, gi_ltf),
-            (true, false, HeMcs::Mcs3) => HeRate::bcc_dcm(HeBccDcmMcs::Mcs3, gi_ltf),
-            (true, true, HeMcs::Mcs0) => HeRate::ldpc_dcm(HeLdpcDcmMcs::Mcs0, gi_ltf),
-            (true, true, HeMcs::Mcs1) => HeRate::ldpc_dcm(HeLdpcDcmMcs::Mcs1, gi_ltf),
-            (true, true, HeMcs::Mcs3) => HeRate::ldpc_dcm(HeLdpcDcmMcs::Mcs3, gi_ltf),
-            (true, true, HeMcs::Mcs4) => HeRate::ldpc_dcm(HeLdpcDcmMcs::Mcs4, gi_ltf),
-            (true, _, _) => {
-                return Err(HeTriggerScheduledRateError::UnsupportedDcmCombination);
-            }
-        };
-
-        Ok(Self {
-            rate,
-            trigger_gi_ltf: common.gi_ltf,
-            resource_unit,
-            resource_unit_index: one_based_index,
-            resource_unit_region: user.ru_allocation_region,
-            partial_ru_power_selector,
-        })
-    }
-
-    pub const fn nominal_kbps(self) -> u32 {
-        self.rate.nominal_kbps_for_resource_unit(self.resource_unit)
     }
 }
 

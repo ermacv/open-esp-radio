@@ -22,29 +22,6 @@ fn single_frame_segment<'a>(storage: &'a mut [u8; 128], frame_control_low: u8) -
 }
 
 #[test]
-fn management_rx_extracts_one_bounded_mpdu_and_strips_fcs() {
-    let mut storage = [0_u8; 128];
-    let segment = single_frame_segment(&mut storage, 0xb0);
-    let mut output = [0_u8; 64];
-    let frame = extract_management(
-        &[segment],
-        RxIngressConfig {
-            ring_entry_limit: 4,
-            csi_config: 0,
-            flags: INGRESS_STRICT_RXEND | INGRESS_STRICT_DUMP,
-        },
-        &mut output,
-    )
-    .unwrap();
-
-    assert_eq!(frame.length, 30);
-    assert_eq!(frame.signal_length, 34);
-    assert_eq!(frame.dump_length, 38);
-    assert!(frame.dump_length_matches);
-    assert_eq!(output[0], 0xb0);
-}
-
-#[test]
 fn control_rx_extracts_trigger_mpdu_without_interpreting_its_payload() {
     let mut storage = [0_u8; 128];
     let segment = single_frame_segment(&mut storage, 0x24);
@@ -63,71 +40,6 @@ fn control_rx_extracts_trigger_mpdu_without_interpreting_its_payload() {
     assert_eq!(frame.length, 30);
     assert_eq!(output[0], 0x24);
     assert_eq!(output[1], 0);
-}
-
-#[test]
-fn management_rx_rejects_failed_hardware_status() {
-    let mut storage = [0_u8; 128];
-    let mut segment = single_frame_segment(&mut storage, 0xb0);
-    let mut failed = [0_u8; 128];
-    failed.copy_from_slice(segment.buffer);
-    failed[0x38 + 4] = 0xf5;
-    segment.buffer = &failed;
-    let mut output = [0_u8; 64];
-    assert_eq!(
-        extract_management(
-            &[segment],
-            RxIngressConfig {
-                ring_entry_limit: 1,
-                csi_config: 0,
-                flags: 0,
-            },
-            &mut output,
-        ),
-        Err(RxError::MicFailure)
-    );
-}
-
-#[test]
-fn data_rx_reports_qos_llc_payload_offset() {
-    const SIGNAL_LENGTH: usize = 26 + 8 + 4;
-    const TAIL_OFFSET: usize = 0x38;
-    const FRAME_OFFSET: usize = TAIL_OFFSET + 8;
-    const RECEIVED: usize = FRAME_OFFSET + SIGNAL_LENGTH;
-
-    let mut storage = [0_u8; 128];
-    storage[TAIL_OFFSET..TAIL_OFFSET + 4].copy_from_slice(
-        &(((SIGNAL_LENGTH + 4) as u32) << 16 | SIGNAL_LENGTH as u32).to_le_bytes(),
-    );
-    storage[FRAME_OFFSET] = 0x88;
-    storage[FRAME_OFFSET + 1] = 0x02;
-    storage[FRAME_OFFSET + 22] = 0;
-    storage[FRAME_OFFSET + 26..FRAME_OFFSET + 34]
-        .copy_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0x8e]);
-    let segment = RxSegment {
-        descriptor_address: 0x2f00_4000,
-        descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
-        buffer: &storage,
-        next_descriptor_address: 0,
-    };
-    let mut output = [0_u8; 64];
-    let frame = extract_data(
-        &[segment],
-        RxIngressConfig {
-            ring_entry_limit: 1,
-            csi_config: 0,
-            flags: INGRESS_STRICT_RXEND | INGRESS_STRICT_DUMP,
-        },
-        &mut output,
-    )
-    .unwrap();
-
-    assert_eq!(frame.mpdu.length, SIGNAL_LENGTH - 4);
-    assert_eq!(frame.payload_offset, 26);
-    assert_eq!(
-        &output[frame.payload_offset..frame.payload_offset + 8],
-        &[0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0x8e]
-    );
 }
 
 #[test]

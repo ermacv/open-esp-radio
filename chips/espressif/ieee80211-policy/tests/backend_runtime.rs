@@ -5,10 +5,7 @@ use oer_esp32s31_ieee80211_mac::{
 use oer_espressif_ieee80211_policy::{backend::EspressifAmpduRetryState, lmac};
 use oer_ieee80211_port::backend::*;
 use oer_ieee80211_port::backend_aggregate::*;
-use oer_ieee80211_wire::{
-    qos::{WmmAccessCategory, WmmUserPriority},
-    sequence::SequenceNumber,
-};
+use oer_ieee80211_wire::sequence::SequenceNumber;
 type AmpduRetryState<const C: usize> = EspressifAmpduRetryState<C>;
 const VENDOR_SHORT_RETRY_LIMIT: u8 = lmac::SHORT_RETRY_LIMIT;
 const VENDOR_AMPDU_MSDU_LIFETIME_MICROS: u32 = lmac::AMPDU_MSDU_LIFETIME_MICROS;
@@ -25,14 +22,6 @@ const STANDARD_WMM: [u8; 26] = [
     221, 24, 0x00, 0x50, 0xf2, 0x02, 1, 1, 0x85, 0, 0x03, 0xa4, 0, 0, 0x27, 0xa4, 0, 0, 0x42, 0x43,
     94, 0, 0x72, 0x32, 47, 0,
 ];
-
-fn ipv4_with_dscp(dscp: u8) -> [u8; 16] {
-    let mut frame = [0_u8; 16];
-    frame[12] = 0x08;
-    frame[14] = 0x45;
-    frame[15] = dscp << 2;
-    frame
-}
 
 #[test]
 fn sta_runtime_policy_owns_peer_facts_and_standard_edca_state() {
@@ -91,87 +80,18 @@ fn vif_tables_are_separate_and_contention_belongs_to_the_ac_queue() {
 }
 
 #[test]
-fn negotiated_acm_downgrades_tid_and_queue_without_claiming_admission() {
-    let mut policy = WifiTxRuntimePolicy::vendor_defaults();
-    policy
-        .install_edca(
-            VifRole::Station,
-            oer_ieee80211_port::EdcaParameterSet::from_wmm(
-                parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
-            ),
-        )
-        .unwrap();
-
-    let voice = policy
-        .select_network_traffic(VifRole::Station, &ipv4_with_dscp(46), true)
-        .unwrap();
-    assert_eq!(voice.requested.access_category, WmmAccessCategory::Voice);
-    assert_eq!(voice.access_category, WmmAccessCategory::Video);
-    assert_eq!(voice.user_priority, WmmUserPriority::UP5);
-    assert_eq!(voice.queue(), LegacyTxQueue::Video);
-    assert_eq!(
-        voice.admission,
-        WmmAdmissionDisposition::Downgraded {
-            requested: WmmAccessCategory::Voice
-        }
-    );
-    assert_eq!(voice.txop_limit_units_32_us(), 94);
-
-    let non_qos = policy
-        .select_network_traffic(VifRole::Station, &ipv4_with_dscp(46), false)
-        .unwrap();
-    assert_eq!(non_qos.tid(), 0);
-    assert_eq!(non_qos.queue(), LegacyTxQueue::BestEffort);
-    assert_eq!(non_qos.admission, WmmAdmissionDisposition::NonQosBestEffort);
-}
-
-#[test]
-fn all_mandatory_access_categories_fail_closed() {
-    let mut element = STANDARD_WMM;
-    for offset in [10, 14, 18, 22] {
-        element[offset] |= 0x10;
-    }
-    let mut policy = WifiTxRuntimePolicy::vendor_defaults();
-    policy
-        .install_edca(
-            VifRole::Station,
-            oer_ieee80211_port::EdcaParameterSet::from_wmm(
-                parse_wmm_parameter_element(&element).unwrap(),
-            ),
-        )
-        .unwrap();
-    assert_eq!(
-        policy.select_network_traffic(VifRole::Station, &ipv4_with_dscp(0), true),
-        Err(WifiTxTrafficError::AdmissionControlRequired {
-            requested: WmmAccessCategory::BestEffort
-        })
-    );
-}
-
-#[test]
 fn negotiated_txop_is_bounded_and_medium_ownership_stays_unsupported() {
-    let mut policy = WifiTxRuntimePolicy::vendor_defaults();
-    policy
-        .install_edca(
-            VifRole::Station,
-            oer_ieee80211_port::EdcaParameterSet::from_wmm(
-                parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
-            ),
-        )
-        .unwrap();
-    let video = policy
-        .select_network_traffic(VifRole::Station, &ipv4_with_dscp(40), true)
-        .unwrap();
+    let policy = WifiTxRuntimePolicy::vendor_defaults();
     assert_eq!(
-        video.he_txop_limit(HeEdcaTxopLimit::DEFAULT),
+        he_txop_limit(94, HeEdcaTxopLimit::DEFAULT),
         Ok(HeEdcaTxopLimit::from_units_32_us(94).unwrap())
     );
     assert_eq!(
-        video.he_txop_limit(HeEdcaTxopLimit::from_units_32_us(47).unwrap()),
+        he_txop_limit(94, HeEdcaTxopLimit::from_units_32_us(47).unwrap()),
         Ok(HeEdcaTxopLimit::from_units_32_us(47).unwrap())
     );
     assert_eq!(
-        video.require_ht_txop_support(),
+        require_ht_txop_support(94),
         Err(WmmTxopUnsupported::HtAggregateDurationBudget { units_32_us: 94 })
     );
     assert_eq!(
@@ -183,21 +103,8 @@ fn negotiated_txop_is_bounded_and_medium_ownership_stays_unsupported() {
         Err(WmmTxopUnsupported::MultiPpduMediumOwnership)
     );
 
-    let mut wide = STANDARD_WMM;
-    wide[21] = 1;
-    policy
-        .install_edca(
-            VifRole::Station,
-            oer_ieee80211_port::EdcaParameterSet::from_wmm(
-                parse_wmm_parameter_element(&wide).unwrap(),
-            ),
-        )
-        .unwrap();
-    let video = policy
-        .select_network_traffic(VifRole::Station, &ipv4_with_dscp(40), true)
-        .unwrap();
     assert_eq!(
-        video.he_txop_limit(HeEdcaTxopLimit::DEFAULT),
+        he_txop_limit(350, HeEdcaTxopLimit::DEFAULT),
         Err(WmmTxopUnsupported::AdvertisedLimitTooWide { units_32_us: 350 })
     );
 }
