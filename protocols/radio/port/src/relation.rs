@@ -524,9 +524,9 @@ impl<D> fmt::Debug for ClockInfo<D> {
 /// `target_base` moved by `at - source_base`, and that distance.
 fn shift(target_base: u64, source_base: u64, at: u64) -> Result<(u64, u64), ProjectionError> {
     let shifted = if at >= source_base {
-        target_base.checked_add(at - source_base)
+        target_base.checked_add(at.abs_diff(source_base))
     } else {
-        target_base.checked_sub(source_base - at)
+        target_base.checked_sub(source_base.abs_diff(at))
     };
     shifted
         .map(|shifted| (shifted, at.abs_diff(source_base)))
@@ -536,7 +536,13 @@ fn shift(target_base: u64, source_base: u64, at: u64) -> Result<(u64, u64), Proj
 /// `uncertainty` plus `drift_ppm` parts per million of `distance`, rounded
 /// up, in microseconds.
 fn drift_bound(uncertainty: u64, distance: u64, drift_ppm: u32) -> Result<u64, ProjectionError> {
-    let drift = (u128::from(distance) * u128::from(drift_ppm)).div_ceil(1_000_000);
+    let product = u128::from(distance)
+        .checked_mul(u128::from(drift_ppm))
+        .ok_or(ProjectionError::OutOfRange)?;
+    let drift = product
+        .checked_div(1_000_000)
+        .and_then(|whole| whole.checked_add(u128::from(product % 1_000_000 != 0)))
+        .ok_or(ProjectionError::OutOfRange)?;
     u64::try_from(drift)
         .ok()
         .and_then(|drift| uncertainty.checked_add(drift))

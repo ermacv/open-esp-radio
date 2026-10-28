@@ -506,7 +506,9 @@ impl MpduLayout {
         // The same borrowed body view supplies checked()'s length and this
         // copy. memory() therefore proves exactly body.len() tail bytes.
         if let Some(body) = body {
-            body_memory.copy_from_slice(body);
+            for (destination, source) in body_memory.iter_mut().zip(body) {
+                *destination = *source;
+            }
         }
         Ok(self)
     }
@@ -522,7 +524,9 @@ impl MpduLayout {
         HeaderLayout::new(frame.header(receiver, tid, self.protection), prefix)?.encode();
         // The retained body view has exactly the tail length proved above.
         if let Some(body) = body {
-            body_memory.copy_from_slice(body);
+            for (destination, source) in body_memory.iter_mut().zip(body) {
+                *destination = *source;
+            }
         }
         Ok(self)
     }

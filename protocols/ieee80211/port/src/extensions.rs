@@ -211,10 +211,12 @@ impl TsfRelation {
     /// without breaking the relation.
     pub fn tolerance(&self, elapsed: TsfDuration) -> Result<TsfDuration, TsfTimingError> {
         // The product of a u64 span and the fixed ppm coefficient fits u128.
-        let drift = u128::from(elapsed.as_micros())
+        let product = u128::from(elapsed.as_micros())
             .checked_mul(u128::from(TSF_DRIFT_PPM))
-            .ok_or(TsfTimingError::ToleranceOverflow)?
-            .div_ceil(1_000_000);
+            .ok_or(TsfTimingError::ToleranceOverflow)?;
+        let drift = (product / 1_000_000)
+            .checked_add(u128::from(product % 1_000_000 != 0))
+            .ok_or(TsfTimingError::ToleranceOverflow)?;
         let drift = u64::try_from(drift).map_err(|_| TsfTimingError::ToleranceOverflow)?;
         TsfDuration::from_micros(drift)
             .checked_add(self.sample_uncertainty)

@@ -7,6 +7,11 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
+struct ProbeWake;
+impl std::task::Wake for ProbeWake {
+    fn wake(self: std::sync::Arc<Self>) {}
+}
+
 struct Probe {
     ready: AtomicU32,
     calls: AtomicU32,
@@ -27,6 +32,27 @@ impl Probe {
         } else {
             Poll::Ready(())
         }
+    }
+}
+
+fn prepared_probe(queues: Option<&Probe>) -> Result<&Probe, oer_radio_port::SlotInitError> {
+    queues.ok_or(oer_radio_port::SlotInitError::QueuesUnprepared)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unprepared_probe_returns_the_construction_error() {
+        assert!(matches!(
+            prepared_probe(None),
+            Err(oer_radio_port::SlotInitError::QueuesUnprepared)
+        ));
+        let probe = Probe::new();
+        assert!(
+            matches!(prepared_probe(Some(&probe)), Ok(actual) if core::ptr::eq(actual, &probe))
+        );
     }
 }
 
@@ -79,7 +105,7 @@ macro_rules! port {
                     Self: 's,
                     Id: 's,
                 {
-                    let probe = queues.expect("prepared probe");
+                    let probe = prepared_probe(*queues)?;
                     Ok((probe, probe))
                 }
                 async fn run<'s>(
@@ -324,7 +350,8 @@ macro_rules! port {
                 });
                 let bytes = core::mem::size_of_val(&future);
                 let mut future = pin!(future);
-                let mut cx = Context::from_waker(Waker::noop());
+                let waker = Waker::from(std::sync::Arc::new(ProbeWake));
+                let mut cx = Context::from_waker(&waker);
                 let _ = core::hint::black_box(future.as_mut().poll(&mut cx));
                 bytes
             }

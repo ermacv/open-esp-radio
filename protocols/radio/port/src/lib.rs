@@ -1,6 +1,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+#![cfg_attr(test, allow(clippy::disallowed_methods, clippy::disallowed_macros))]
 #![deny(
     clippy::unwrap_used,
     clippy::todo,

@@ -48,12 +48,8 @@ impl EdcaParameterSet {
     /// Convert MIB lifetime values in TUs at the record boundary.
     pub const fn from_tu(wmm: WmmParameterSet, lifetimes_tu: [u16; 4]) -> Self {
         let [be, bk, vi, vo] = lifetimes_tu;
-        #[expect(
-            clippy::arithmetic_side_effects,
-            reason = "every u16 TU value fits microseconds in u64"
-        )]
         const fn duration(tu: u16) -> oer_time::Duration {
-            oer_time::Duration::from_micros(tu as u64 * 1024)
+            oer_time::Duration::from_micros((tu as u64) << 10)
         }
         Self::new(
             wmm,
@@ -150,7 +146,10 @@ impl EdcaContention {
 
     /// The current window `CW` in slots.
     pub const fn cw(self) -> u16 {
-        ((1_u32 << self.cw_exponent()) - 1) as u16
+        match self.cw_exponent() {
+            0 => 0,
+            exponent => u16::MAX >> 16_u32.saturating_sub(exponent as u32),
+        }
     }
 
     /// Failed attempts of the current frame.
@@ -169,7 +168,7 @@ impl EdcaContention {
     /// timeout or a collision), until it reaches `CWmax`.
     pub fn record_failure(&mut self) {
         if self.cw_exponent() < self.cw_max_exponent {
-            self.retries += 1;
+            self.retries = self.retries.saturating_add(1);
         }
     }
 
@@ -186,9 +185,11 @@ impl EdcaContention {
     pub fn reconfigure(&mut self, cw_min_exponent: u8, cw_max_exponent: u8) {
         let current = self.cw_exponent();
         let bounds = Self::new(cw_min_exponent, cw_max_exponent);
-        let current = current.clamp(bounds.cw_min_exponent, bounds.cw_max_exponent);
+        let current = current
+            .max(bounds.cw_min_exponent)
+            .min(bounds.cw_max_exponent);
         *self = Self {
-            retries: current - bounds.cw_min_exponent,
+            retries: current.saturating_sub(bounds.cw_min_exponent),
             ..bounds
         };
     }

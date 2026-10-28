@@ -5,7 +5,7 @@
 //! CCA freezes, internal hardware retries and completion latency are separate
 //! observations. Unknown components prevent a complete service-cost estimate.
 
-use core::num::{NonZeroU16, NonZeroU32};
+use core::num::{NonZeroU16, NonZeroU32, NonZeroU64};
 
 /// PHY timing facts for reviewed DSSS/CCK and BCC OFDM formats. This does not
 /// approximate LDPC, HE packet extension or unsupported coding as ordinary HT.
@@ -36,7 +36,7 @@ impl PpduTiming {
                 preamble_micros,
             } => {
                 let payload_micros = micros.checked_sub(u32::from(preamble_micros))?;
-                u64::from(payload_micros) * u64::from(bitrate_kbps.get()) / 8_000
+                u64::from(payload_micros).checked_mul(u64::from(bitrate_kbps.get()))? / 8_000
             }
             Self::BccOfdm {
                 data_bits_per_symbol,
@@ -45,11 +45,13 @@ impl PpduTiming {
                 tail_bits,
                 signal_extension_micros,
             } => {
-                let payload_micros = micros
-                    .checked_sub(u32::from(preamble_micros) + u32::from(signal_extension_micros))?;
-                let symbols = u64::from(payload_micros) * 1_000 / u64::from(symbol_nanos.get());
-                let bits = symbols * u64::from(data_bits_per_symbol.get());
-                bits.checked_sub(16 + u64::from(tail_bits))? / 8
+                let payload_micros = micros.checked_sub(
+                    u32::from(preamble_micros).checked_add(u32::from(signal_extension_micros))?,
+                )?;
+                let symbols =
+                    u64::from(payload_micros).checked_mul(1_000)? / NonZeroU64::from(symbol_nanos);
+                let bits = symbols.checked_mul(u64::from(data_bits_per_symbol.get()))?;
+                bits.checked_sub(u64::from(tail_bits).checked_add(16)?)? / 8
             }
         };
         NonZeroU16::new(bytes.min(u64::from(u16::MAX)) as u16)
@@ -63,8 +65,12 @@ impl PpduTiming {
                 bitrate_kbps,
                 preamble_micros,
             } => {
-                u32::from(preamble_micros)
-                    + (u32::from(psdu_bytes) * 8_000).div_ceil(bitrate_kbps.get())
+                // A u16 PSDU contributes at most 524,280,000 microseconds,
+                // and the u16 preamble still fits u32. Widen before rounding.
+                u32::from(preamble_micros).saturating_add(ceil_div(
+                    u64::from(psdu_bytes).saturating_mul(8_000),
+                    NonZeroU64::from(bitrate_kbps),
+                ) as u32)
             }
             Self::BccOfdm {
                 data_bits_per_symbol,
@@ -73,16 +79,34 @@ impl PpduTiming {
                 tail_bits,
                 signal_extension_micros,
             } => {
-                let bits = 16 + u32::from(psdu_bytes) * 8 + u32::from(tail_bits);
-                let symbols = bits.div_ceil(u32::from(data_bits_per_symbol.get()));
-                let nanos = u64::from(symbols) * u64::from(symbol_nanos.get());
+                // At most 524,551 bits and 65,535 ns per symbol: the
+                // rounded payload is below 34,377,000 us, even at one bit/symbol.
+                // These widened operations and the final u32 conversion are exact.
+                let bits = (u64::from(psdu_bytes) << 3)
+                    .saturating_add(16)
+                    .saturating_add(u64::from(tail_bits));
+                let symbols = ceil_div(bits, NonZeroU64::from(data_bits_per_symbol));
+                let nanos = symbols.saturating_mul(u64::from(symbol_nanos.get()));
                 u32::from(preamble_micros)
-                    + u32::from(signal_extension_micros)
-                    + u32::try_from(nanos.div_ceil(1_000))
-                        .expect("bounded PSDU and symbol duration fit u32")
+                    .saturating_add(u32::from(signal_extension_micros))
+                    .saturating_add(ceil_div(
+                        nanos,
+                        const {
+                            match NonZeroU64::new(1_000) {
+                                Some(value) => value,
+                                None => panic!("nonzero nanos per microsecond"),
+                            }
+                        },
+                    ) as u32)
             }
         }
     }
+}
+
+// Nonzero division is total; rounding can add one only when the quotient
+// is strictly smaller than the numerator, so saturation is never reached.
+fn ceil_div(numerator: u64, denominator: NonZeroU64) -> u64 {
+    (numerator / denominator).saturating_add(u64::from(numerator % denominator != 0))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -170,23 +194,25 @@ impl TxCost {
             ppdu_micros: phy.map(|phy| phy.duration_micros(psdu_bytes)),
             response_micros: match response {
                 TxResponse::None => Some(0),
-                TxResponse::Ack(phy) => Some(sifs + phy.duration_micros(14)),
+                TxResponse::Ack(phy) => sifs.checked_add(phy.duration_micros(14)),
                 TxResponse::BlockAck { timing, psdu_bytes } => {
-                    Some(sifs + timing.duration_micros(psdu_bytes.get()))
+                    sifs.checked_add(timing.duration_micros(psdu_bytes.get()))
                 }
                 TxResponse::Timeout { micros } => Some(micros),
                 TxResponse::Unknown => None,
             },
             protection_micros: match protection {
                 TxProtection::None => Some(0),
-                TxProtection::CtsToSelf(phy) => Some(phy.duration_micros(14) + sifs),
-                TxProtection::RtsCts { rts, cts } => {
-                    Some(rts.duration_micros(20) + cts.duration_micros(14) + 2 * sifs)
-                }
+                TxProtection::CtsToSelf(phy) => phy.duration_micros(14).checked_add(sifs),
+                TxProtection::RtsCts { rts, cts } => rts
+                    .duration_micros(20)
+                    .checked_add(cts.duration_micros(14))
+                    .and_then(|duration| duration.checked_add(sifs.checked_mul(2)?)),
                 TxProtection::Unknown => None,
             },
             access_micros: access.and_then(|access| {
-                (u32::from(access.contention.aifsn) + u32::from(access.contention.backoff_slots))
+                u32::from(access.contention.aifsn)
+                    .checked_add(u32::from(access.contention.backoff_slots))?
                     .checked_mul(u32::from(access.slot_micros))?
                     .checked_add(sifs)
             }),

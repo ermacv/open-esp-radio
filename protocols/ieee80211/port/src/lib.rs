@@ -22,7 +22,8 @@ use oer_ieee80211_port::conformance;
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::disallowed_macros
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 #![cfg_attr(
     test,
@@ -38,6 +39,7 @@ use oer_ieee80211_port::conformance;
         clippy::todo,
         clippy::unimplemented,
         clippy::disallowed_macros,
+        clippy::disallowed_methods,
     )
 )]
 
@@ -184,126 +186,35 @@ pub use owner::CheckedPoolAggregate;
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
 )]
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod configuration;
 #[allow(
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
-)]
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
 )]
 pub mod contract;
 #[allow(
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
 )]
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod edca;
 #[allow(
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
-)]
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
 )]
 pub mod interface;
 #[allow(
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
 )]
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod monitor;
 #[allow(
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
 )]
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod tx_cost;
 #[allow(
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
-)]
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
 )]
 pub mod tx_work;
 

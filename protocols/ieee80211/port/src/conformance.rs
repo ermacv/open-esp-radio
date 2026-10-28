@@ -1,3 +1,12 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::panic,
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::unreachable
+)]
 //! Backend-independent TX ownership scenarios. The model runs these;
 //! each backend supplies a fixture for this shared contract suite.
 //! Harnesses submit the operations in `OPERATIONS`, retain the original
