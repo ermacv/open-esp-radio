@@ -1,16 +1,3 @@
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
-#![cfg_attr(test, allow(clippy::disallowed_macros, clippy::disallowed_methods))]
 //! The header every HIL conformance trace starts with.
 //!
 //! A port's conformance crate owns its bounds as a type (`struct Bounds`
@@ -18,17 +5,14 @@
 //! dependency. The HIL agent sends `(case, header, trace)`, where the
 //! header is a [`TraceHeader<Bounds>`]: the backend's actual bounds and
 //! the [`ClockDomain`] of the trace's times. The host checks the headers of
-//! one run with [`check_run`]. The crate is `no_std` and allocation-free,
-//! so the firmware uses it as it is; the `wire` feature derives
-//! `postcard_schema::Schema` for the HIL protocol.
-#![no_std]
-#![forbid(unsafe_code)]
+//! one run with [`check_run`]. The module is allocation-free, so the
+//! firmware uses it as it is, and each type derives the HIL wire schema.
 
+use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 
 /// The clock a trace's times are on.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[cfg_attr(feature = "wire", derive(postcard_schema::Schema))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Schema, Serialize)]
 #[non_exhaustive]
 pub enum Clock {
     /// The SoC system timer's monotonic microseconds.
@@ -41,8 +25,7 @@ pub enum Clock {
 /// generation when it restarts, at a boot or a port's restart (
 /// decision 6), so times of different generations are never compared
 /// directly.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[cfg_attr(feature = "wire", derive(postcard_schema::Schema))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Schema, Serialize)]
 pub struct ClockDomain {
     pub clock: Clock,
     pub generation: u32,
@@ -50,8 +33,7 @@ pub struct ClockDomain {
 
 /// What every conformance trace starts with: the backend's actual bounds,
 /// as the port's own type, and the clock of the trace's times.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[cfg_attr(feature = "wire", derive(postcard_schema::Schema))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Schema, Serialize)]
 pub struct TraceHeader<B> {
     pub bounds: B,
     pub clock: ClockDomain,
@@ -210,16 +192,16 @@ mod tests {
     #[test]
     fn a_header_round_trips_through_postcard() {
         let a = header(800, Clock::Systimer, 3);
-        let bytes = postcard::to_allocvec(&a).unwrap();
-        assert_eq!(postcard::from_bytes::<TraceHeader<u64>>(&bytes).unwrap(), a);
+        let mut buffer = [0; 16];
+        let bytes = postcard::to_slice(&a, &mut buffer).unwrap();
+        assert_eq!(postcard::from_bytes::<TraceHeader<u64>>(bytes).unwrap(), a);
     }
 
     /// The header's schema is the protocol's: its bounds' own schema, then
     /// the clock domain.
-    #[cfg(feature = "wire")]
     #[test]
     fn the_wire_schema_names_the_header_and_its_parts() {
-        use postcard_schema::{Schema, schema::DataModelType};
+        use postcard_schema::schema::DataModelType;
         let schema = TraceHeader::<u64>::SCHEMA;
         assert_eq!(schema.name, "TraceHeader");
         let DataModelType::Struct(fields) = schema.ty else {

@@ -27,7 +27,8 @@ follows its port's harness template:
 the port's `no_std` conformance crate holds its `Bounds` type with `const
 CEILINGS`, its case and trace types with a `wire` feature, the harness, and
 a public pure `verify(case, &trace, &bounds)`; the HIL agent sends `(case,
-header, trace)` with the [`oer-hil-trace-header`](../../../protocols/hil/trace-header/README.md)
+header, trace)` with the
+[`oer_hil_protocol::trace_header`](../../../protocols/hil/protocol/src/trace_header.rs)
 header; a backend checks its own bounds against the ceilings at compile
 time. The executor's
 [`harness_template` test](../executor/tests/harness_template.rs) shows

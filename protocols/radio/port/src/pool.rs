@@ -48,9 +48,10 @@
 //! [`BodyLoan`]; the owned state carries no P1 reference. Their component
 //! paths and [`index`](Permit::index) remain unchanged through that handoff.
 //!
-//! This package owns no state and never waits: it states the tokens and the
-//! rules. A pool's free list, its waiters and their wake-ups belong to a
-//! runtime crate or to the backend that keeps it. The backend never refuses
+//! The tokens and the rules own no state and never wait. A pool's free
+//! list, its waiters and their wake-ups belong to the backend that keeps
+//! it, normally as the allocation-free first-in, first-out
+//! [`FifoPermitPool`]. The backend never refuses
 //! for capacity: a caller takes synchronously from the slots it holds, and
 //! one that holds none turns that into its protocol's decision (an access
 //! point refuses an association).
@@ -189,8 +190,10 @@ use core::{future::Future, marker::PhantomData};
 /// The brand of one install.
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
 
+mod fifo;
 mod loan;
 mod mint;
+pub use fifo::FifoPermitPool;
 pub use loan::BodyLoan;
 mod path;
 pub use mint::{
@@ -289,8 +292,8 @@ impl<Kind, const N: usize, Path: PoolPath> Line<'_, Kind, N, Path> {
     }
 }
 
-/// A pool of the permits of one install of the kind `Kind`, which a runtime
-/// crate or a backend keeps; it lives in one task, shared by reference by
+/// A pool of the permits of one install of the kind `Kind`, which a
+/// backend keeps; it lives in one task, shared by reference by
 /// the port's body and its phases, never across executor tasks. Its line
 /// holds a place for each seat of its `Waiters` path, which [`Permits`] issued
 /// with its [`Line`]. `Pool` independently identifies the returned permits;

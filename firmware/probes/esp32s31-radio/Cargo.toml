@@ -12,7 +12,7 @@ description = "Retained ESP32-S31 Rust entry points for compiled vendor verifica
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 oer-probe-macros = { path = "../../../tools/probe/macros" }
-oer-esp32s31-radio-coex = { path = "../../../chips/esp32s31/radio/coex" }
+oer-espressif-coex = { path = "../../../chips/espressif/coex" }
 oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }

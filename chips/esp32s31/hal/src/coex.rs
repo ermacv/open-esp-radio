@@ -10,6 +10,10 @@
 //!
 //! Timer 5 is not lent: the domain programs it for the PHY grant-protect
 //! request (`RadioDomain::acquire_phy_grant_protect`).
+//!
+//! [`CoexDomainPorts`] binds the family policy of `oer-espressif-coex` to
+//! one radio domain: it lends the timer bank and the clock port to
+//! `CoexCore` as its `CoexTimerHardware` and `CoexClockHardware` ports.
 
 use crate::modem::{
     CoexTimerBankRegisters, CoexTimerRegister, CoexistenceLowPowerClockObservation,
@@ -21,8 +25,10 @@ use crate::modem::{
 pub use oer_espressif_coex::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable};
 
 mod clock;
+mod ports;
 
 pub use clock::timer_clock;
+pub use ports::{CoexDomainClock, CoexDomainPorts, CoexDomainTimer, TimerClockError};
 
 /// Why the PHY grant-protect request cannot change.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

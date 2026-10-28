@@ -11,7 +11,7 @@
 //!   its `Harness`, which returns the backend's `(Bounds, Trace)` or the
 //!   port's own error, and the pure `verify(case, &trace, &bounds)`.
 //! - **HIL: the scenario, the agent and the stand proxy.** They wrap a
-//!   port's result in the `oer-hil-trace-header` header, turn a failure
+//!   port's result in the `oer_hil_protocol::trace_header` header, turn a failure
 //!   into `Infrastructure`, and send or decode `(case, header, trace)`.
 
 extern crate alloc;
@@ -27,7 +27,9 @@ use oer_hil_model::{
     Composition, Conformance, ContractName, Estimate, Factor, Instance, Resources, ScenarioId,
     Spec, StandProfile, Subject, TargetCapabilities, Verdict, Wait, WaitError, name,
 };
-use oer_hil_trace_header::{Clock, ClockDomain, Restart, RunHeaderError, TraceHeader, check_run};
+use oer_hil_protocol::trace_header::{
+    Clock, ClockDomain, Restart, RunHeaderError, TraceHeader, check_run,
+};
 use port::{BoundField, Bounds, CEILINGS, Case, S31_BOUNDS, Trace, Violation, verify};
 use serde::{Deserialize, Serialize};
 

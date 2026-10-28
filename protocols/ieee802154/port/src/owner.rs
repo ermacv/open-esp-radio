@@ -25,7 +25,7 @@
 //! [`EventsLost`](oer_radio_port::EventsLost) (only received frames), a
 //! clock that could not be read, an operation's status on the air, and a
 //! cancel that finds the work already ended
-//! ([`CancelError::NotRunning`](oer_radio_port::CancelError::NotRunning)).
+//! ([`CancelError::NotRunning`](crate::CancelError::NotRunning)).
 //! The event stream alone ends with [`oer_radio_port::EventEnd`]: `Drained`
 //! accounts every admitted terminal, while `Quarantined` leaves unread
 //! ownership in `PortEnd` and requires fail-stop without further draining.
@@ -271,14 +271,15 @@ use core::{cell::RefCell, future::Future, marker::PhantomData};
 use oer_radio_port::{
     Child, Line, Permit, PermitPool, PermitSupply, Poisoned, PoolPath, Root, Seat, Slot,
 };
-use oer_radio_port::{PortBackend, PortPhase, RadioPortClient, RadioWork, Work};
+use oer_radio_port::{PortBackend, PortPhase};
 
 use oer_ieee802154_wire::{Channel, FrameView};
 
 use crate::{
     AppliedSecurity, CcaMode, CslReceiver, EnhancedAckGeneration, FrameCounterUpdate,
     Ieee802154Capabilities, Ieee802154Instant, Ieee802154Radio, Interface, ProbingInitiator,
-    RadioCapabilities, ReceivedFrame, RequestId, TimeSync, TxMode, TxSecurity, TxStatus,
+    RadioCapabilities, RadioPortClient, RadioWork, ReceivedFrame, RequestId, TimeSync, TxMode,
+    TxSecurity, TxStatus, Work,
     pending::AutoPendingMode,
     radio::power::{CcaThresholdCapability, CcaThresholdError, TransmitPowerError},
 };

@@ -167,6 +167,7 @@ const SOURCES: &[(&str, &str)] = &[
         "telemetry/profile.rs",
         include_str!("../src/telemetry/profile.rs"),
     ),
+    ("trace_header.rs", include_str!("../src/trace_header.rs")),
     ("wifi/mod.rs", include_str!("../src/wifi/mod.rs")),
     (
         "wifi/credentials.rs",

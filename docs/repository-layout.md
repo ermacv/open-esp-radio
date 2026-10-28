@@ -20,13 +20,14 @@ The root says what the code is about.
 
 ```text
 protocols/  sans-IO protocols and their vocabularies (no_std)
-  radio/        the radio port, coexistence vocabulary, regulatory domain, permit pool
+  radio/        the radio port with its FIFO permit pool, coexistence vocabulary,
+                regulatory domain
   ieee80211/    Wi-Fi: MAC formats and state, lower and upper MAC, station,
                 access point, RSN, arbiter, runtime, datapath
   bluetooth/    HCI and LE wire formats, link layer, controller, port, runtime and model
   ieee802154/   IEEE 802.15.4 wire codecs, backend port, MAC core and host model
   network/      the network stack boundary
-  hil/          the HIL protocol and its trace header
+  hil/          the HIL protocol, with the conformance trace header
 portable/   generic support no protocol or chip owns (no_std)
   time/ time-virtual/ memory/ sync/ trace/ wire/
   riscv/        architectural RISC-V constants and instructions

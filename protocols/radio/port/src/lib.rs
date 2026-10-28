@@ -63,8 +63,8 @@ pub use slot::{
 pub use work::*;
 
 pub use pool::{
-    BodyLoan, Child, Line, Mint, Permit, PermitPool, PermitSupply, PermitTokens, Permits,
-    PoolBuilder, PoolPath, PoolSet, Pools, Root, Seat, Slot, Slots, branded,
+    BodyLoan, Child, FifoPermitPool, Line, Mint, Permit, PermitPool, PermitSupply, PermitTokens,
+    Permits, PoolBuilder, PoolPath, PoolSet, Pools, Root, Seat, Slot, Slots, branded,
 };
 pub use relation::{
     ClockInfo, ClockRelation, ClockSample, Generation, GenerationSource, Projected,

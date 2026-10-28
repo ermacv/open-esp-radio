@@ -24,7 +24,6 @@ use oer_memory::{
 use oer_radio_port::*;
 use oer_time::{Clock, Duration, Instant, Timer};
 
-mod capacity;
 #[cfg(any(target_arch = "riscv32", test))]
 mod event;
 #[cfg(any(target_arch = "riscv32", test))]
@@ -40,7 +39,6 @@ mod owned;
 pub mod runner;
 #[cfg(test)]
 mod tests;
-use capacity::Pool;
 use owned::OwnedTerminal;
 
 /// Command credit count; the B0 HCI service admits one command at a time.
@@ -176,6 +174,8 @@ pub trait Device {
 
 type Path<Id> = Root<Id>;
 type Credit<Id> = Permit<'static, CommandCapacity, Child<Path<Id>, 0>>;
+/// P1-only FIFO credit pool. P2 never borrows this state.
+type Pool<Id> = FifoPermitPool<'static, CommandCapacity, COMMANDS, WAITERS, Child<Path<Id>, 0>>;
 type Work<Id, X> = (OwnedRequest<Path<Id>, X, DtmCaps>, Instant);
 type Send<'a, T> = AffineSpscSender<'a, T, COMMANDS, CompactSpscCursor>;
 type ReceiveQueue<'a, T> = AffineSpscReceiver<'a, T, COMMANDS, CompactSpscCursor>;
@@ -363,9 +363,7 @@ impl<'p, Id: SlotIdentity, D: Device, X> LePhase<'p, Path<Id>, X> for Phase<'_, 
     where
         'p: 'a,
     {
-        self.view
-            .loan
-            .lend_permit(self.view.credits.take(seat.index()).await)
+        self.view.credits.take_loaned(seat, self.view.loan).await
     }
     fn release(&self, credit: Permit<'p, CommandCapacity, Child<Path<Id>, 0>>) {
         self.view

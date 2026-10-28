@@ -11,6 +11,15 @@ permanent DMA static and projects each frame into the typed DMA window.
 and owns its service/placement wrapper above HAL. HAL has no normal or test
 engine dependency.
 
+`coex::CoexDomainPorts` binds the family coexistence policy
+([`oer-espressif-coex`](../../espressif/coex/README.md)) to one radio domain:
+it lends the timer bank, the event priorities and the clock to `CoexCore` as
+its `CoexTimerHardware` and `CoexClockHardware` ports. The domain lends only
+timers 0 through 4; timer 5 carries the PHY grant-protect request. The clock
+port decodes the coexistence low-power clock observation with the 40 MHz
+crystal of every supported board profile. The binding does not implement RF
+grant notification.
+
 The reset root's `into_bootstrap` and `into_runtime` return `Result` with
 `root::InitError`: a refused console installation, a stuck bootstrap
 monotonic latch, or a refused stage-two core-control installation is a

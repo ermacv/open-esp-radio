@@ -233,93 +233,9 @@ fn a_radio_span_converts_only_through_a_relation() {
     );
 }
 
-/// The kind of the test's permits.
-struct ModelCaps;
-
-/// A first-in, first-out pool of the test, over the permits a mint made.
-struct FifoPool<'id> {
-    free: core::cell::RefCell<std::vec::Vec<Permit<'id, ModelCaps>>>,
-    /// The tickets of the waiting takers, in arrival order.
-    line: core::cell::RefCell<std::collections::VecDeque<u32>>,
-    next: core::cell::Cell<u32>,
-}
-
-impl<'id> PermitPool<'id, ModelCaps> for FifoPool<'id> {
-    fn take<'a>(
-        &'a self,
-        _: &'a mut Seat<'id, ModelCaps>,
-    ) -> impl Future<Output = Permit<'id, ModelCaps>> + 'a {
-        let mut place = Place {
-            line: &self.line,
-            ticket: None,
-        };
-        core::future::poll_fn(move |_| {
-            // The whole place moves into the future, so dropping the future
-            // drops it; a closure that named only its field would copy that.
-            let place = &mut place;
-            let mine = *place.ticket.get_or_insert_with(|| {
-                let issued = self.next.get();
-                self.next.set(issued + 1);
-                self.line.borrow_mut().push_back(issued);
-                issued
-            });
-            if self.line.borrow().front() != Some(&mine) {
-                return core::task::Poll::Pending;
-            }
-            match self.free.borrow_mut().pop() {
-                Some(permit) => {
-                    self.line.borrow_mut().pop_front();
-                    place.ticket = None;
-                    core::task::Poll::Ready(permit)
-                }
-                None => core::task::Poll::Pending,
-            }
-        })
-    }
-
-    fn release(&self, permit: Permit<'id, ModelCaps>) {
-        self.free.borrow_mut().push(permit);
-    }
-}
-
-/// A taker's place in a [`FifoPool`]'s line, given up when its future
-/// drops before it is served.
-struct Place<'p> {
-    line: &'p core::cell::RefCell<std::collections::VecDeque<u32>>,
-    ticket: Option<u32>,
-}
-
-impl Drop for Place<'_> {
-    fn drop(&mut self) {
-        if let Some(ticket) = self.ticket {
-            self.line.borrow_mut().retain(|waiting| *waiting != ticket);
-        }
-    }
-}
-
-#[test]
-fn a_fifo_permit_pool_meets_the_conformance_rule() {
-    let PermitTokens {
-        supply,
-        line,
-        mut seats,
-    } = Mint::<Permits<ModelCaps, 2, 3>>::new().into_pools();
-    let [held, shared] = supply.into_permits();
-    assert_eq!(line.places(), 3);
-    let pool = FifoPool {
-        free: core::cell::RefCell::new(std::vec![shared]),
-        line: core::cell::RefCell::default(),
-        next: core::cell::Cell::new(0),
-    };
-    crate::conformance::permits_serve_takers_in_arrival_order(&pool, &mut seats, [held]);
-    // The rule handed every permit back and left every seat with its taker.
-    assert_eq!(pool.free.borrow().len(), 2);
-    assert_eq!(seats.map(|seat| seat.index()), [0, 1, 2]);
-}
-
 #[test]
 fn a_mint_numbers_a_lines_seats_and_sizes_its_line() {
-    let PermitTokens { line, seats, .. } = Mint::<Permits<ModelCaps, 0, 4>>::new().into_pools();
+    let PermitTokens { line, seats, .. } = Mint::<Permits<(), 0, 4>>::new().into_pools();
     assert_eq!(line.places(), 4);
     assert_eq!(seats.map(|seat| seat.index()), [0, 1, 2, 3]);
 }

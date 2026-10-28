@@ -20,7 +20,7 @@ serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 embassy-futures = "0.1.2"
-oer-hil-trace-header = { path = "../../../protocols/hil/trace-header", features = ["wire"] }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false }
 oer-time = { path = "../../../portable/time", features = ["schema"] }
 # The executor's own tests and doctests use `StandSession::for_tests`.
 oer-hil-executor = { path = ".", features = ["test-support"] }

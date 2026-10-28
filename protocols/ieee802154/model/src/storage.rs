@@ -4,12 +4,6 @@ use core::cell::Cell;
 #[derive(Default)]
 pub(crate) struct Local<T>(Cell<T>);
 
-impl<T> Local<T> {
-    pub const fn new(value: T) -> Self {
-        Self(Cell::new(value))
-    }
-}
-
 impl<T: Default> Local<T> {
     // Only inspect plain values or move owners here. In particular, clone,
     // drop and wake user Wakers after returning removed owners from this call.

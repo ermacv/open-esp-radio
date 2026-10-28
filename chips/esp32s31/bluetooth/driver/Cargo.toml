@@ -21,6 +21,7 @@ oer-time = { path = "../../../../portable/time" }
 oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table" }
 
 [dev-dependencies]
+oer-radio-port = { path = "../../../../protocols/radio/port", features = ["test-support"] }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }
 atomic-waker = "1.1.2"
 bytemuck = { version = "1.25.2", default-features = false }

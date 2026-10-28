@@ -68,6 +68,7 @@ pub struct Invocation<'s, Id: SlotIdentity, X> {
 /// Borrowed body view; its conversion authority remains private to this backend.
 pub struct View<'p, Id: SlotIdentity, X> {
     pub(crate) shared: &'p Shared<Id, X>,
+    pub(crate) pool: &'p super::queues::Pool<Id>,
     pub(crate) loan: BodyLoan<'p, Id, Backend<Id, X>>,
 }
 impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
@@ -100,7 +101,7 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
                     radio: self.radio.clone(),
                 }),
                 epoch: self.epoch,
-                pool: super::capacity::Pool::new(capacity.supply),
+                pool: Some(FifoPermitPool::new(capacity.supply, capacity.line)),
                 end: Cell::new(None),
                 fault: Cell::new(None),
                 ..Shared::vacant()
@@ -219,10 +220,16 @@ impl<Id: SlotIdentity, X> SlotBodyOwner<Id> for Backend<Id, X> {
         Id: 's,
         's: 'p,
     {
+        let pool = f
+            .shared
+            .pool
+            .as_ref()
+            .ok_or(SlotInitError::QueuesUnprepared)?;
         let resources = f.shared.lend_initial(f.initial, &loan)?;
         Ok(InstallParts {
             view: View {
                 shared: f.shared,
+                pool,
                 loan,
             },
             resources,
@@ -328,7 +335,7 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
                         cause: Fault::RejectedTerminal,
                     }));
                 }
-                q.delivered(id, capacity);
+                q.delivered(f.pool, id, capacity);
             }
             Poll::Ready(Ok(()))
         })

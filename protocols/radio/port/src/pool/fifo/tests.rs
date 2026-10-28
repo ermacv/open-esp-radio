@@ -1,5 +1,3 @@
-extern crate std;
-
 use core::{
     future::Future,
     pin::{Pin, pin},
@@ -14,7 +12,7 @@ use std::{
     task::Wake,
 };
 
-use oer_radio_port::{Permit, PermitPool, Seat, conformance};
+use crate::{Permit, PermitPool, Seat, conformance};
 
 use super::FifoPermitPool;
 
@@ -32,8 +30,8 @@ fn with_pool<const N: usize, const S: usize, C>(check: C)
 where
     C: for<'id> FnOnce(&FifoPermitPool<'id, Kind, N, S>, [Seat<'id, Kind>; S]),
 {
-    let future = oer_radio_port::branded::<oer_radio_port::Permits<Kind, N, S>, _>(async |mint| {
-        let oer_radio_port::PermitTokens {
+    let future = crate::branded::<crate::Permits<Kind, N, S>, _>(async |mint| {
+        let crate::PermitTokens {
             supply,
             line,
             seats,
@@ -324,11 +322,8 @@ fn a_leaked_leader_replaced_by_its_seat_wakes_the_taker_behind_it() {
 
 #[test]
 fn distinct_permit_pools_share_one_waiter_domain_without_sharing_capacity() {
-    type Layout = (
-        oer_radio_port::Permits<Kind, 1, 1>,
-        oer_radio_port::Permits<Kind, 1, 0>,
-    );
-    let future = oer_radio_port::branded::<Layout, _>(async |mint| {
+    type Layout = (crate::Permits<Kind, 1, 1>, crate::Permits<Kind, 1, 0>);
+    let future = crate::branded::<Layout, _>(async |mint| {
         let (a, b) = mint.into_pools();
         let [mut seat] = a.seats;
         let line = a.line;
