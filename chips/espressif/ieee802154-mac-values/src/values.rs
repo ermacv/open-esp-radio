@@ -76,31 +76,13 @@ impl Ieee802154MultipanEnableState {
 
 /// Source-confirmed energy-detection sampling rate.
 ///
-/// The discriminants are the two-bit PAC field values.
+/// The HAL selects the generated PAC field value for each rate.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[repr(u8)]
 pub enum Ieee802154EdSampleRate {
-    OnePerMicrosecond = 0,
-    TwoPerMicrosecond = 1,
-    FourPerMicrosecond = 2,
-    EightPerMicrosecond = 3,
-}
-
-impl Ieee802154EdSampleRate {
-    pub const fn field_value(self) -> u8 {
-        self as u8
-    }
-
-    #[doc(hidden)]
-    pub const fn from_field(value: u8) -> Self {
-        match value {
-            0 => Self::OnePerMicrosecond,
-            1 => Self::TwoPerMicrosecond,
-            2 => Self::FourPerMicrosecond,
-            3 => Self::EightPerMicrosecond,
-            _ => unreachable!(),
-        }
-    }
+    OnePerMicrosecond,
+    TwoPerMicrosecond,
+    FourPerMicrosecond,
+    EightPerMicrosecond,
 }
 
 /// Seven-bit transmit-security payload offset.
@@ -150,31 +132,13 @@ impl Ieee802154TransmitSecurityControl {
 
 /// One source-confirmed clear-channel-assessment mode.
 ///
-/// The discriminants are field values, not shifted register images.
+/// The HAL selects the generated PAC field value for each mode.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[repr(u8)]
 pub enum Ieee802154CcaMode {
-    Carrier = 0,
-    EnergyDetection = 1,
-    CarrierOrEnergyDetection = 2,
-    CarrierAndEnergyDetection = 3,
-}
-
-impl Ieee802154CcaMode {
-    pub const fn field_value(self) -> u8 {
-        self as u8
-    }
-
-    #[doc(hidden)]
-    pub const fn from_field(value: u8) -> Self {
-        match value {
-            0 => Self::Carrier,
-            1 => Self::EnergyDetection,
-            2 => Self::CarrierOrEnergyDetection,
-            3 => Self::CarrierAndEnergyDetection,
-            _ => unreachable!(),
-        }
-    }
+    Carrier,
+    EnergyDetection,
+    CarrierOrEnergyDetection,
+    CarrierAndEnergyDetection,
 }
 
 /// One finite energy-detection command accepted by the narrow PAC lease.

@@ -1166,9 +1166,14 @@ impl Ieee802154InterruptRegisters {
 
     /// `ieee802154_ll_get_rx_abort_reason`.
     pub fn rx_abort_reason(&self) -> Ieee802154RxAbortReasonObservation {
-        Ieee802154RxAbortReasonObservation::from_field(crate::field_byte(
-            self.registers.rx_status_readback().abort_reason_code(),
-        ))
+        codes::rx_abort_reason(
+            crate::generated::ieee802154_mac::rx_status::AbortReason::from_bits(
+                self.registers
+                    .rx_status_readback()
+                    .abort_reason_code()
+                    .get(),
+            ),
+        )
     }
 
     /// `ieee802154_ll_get_ed_rss`.
@@ -1183,9 +1188,14 @@ impl Ieee802154InterruptRegisters {
 
     /// `ieee802154_ll_get_tx_abort_reason`.
     pub fn tx_abort_reason(&self) -> Ieee802154TxAbortReasonObservation {
-        Ieee802154TxAbortReasonObservation::from_field(crate::field_byte(
-            self.registers.tx_status_readback().abort_reason_code(),
-        ))
+        codes::tx_abort_reason(
+            crate::generated::ieee802154_mac::tx_status::AbortReason::from_bits(
+                self.registers
+                    .tx_status_readback()
+                    .abort_reason_code()
+                    .get(),
+            ),
+        )
     }
 
     /// Close one finite hard-IRQ epoch and return inactive setup ownership.
@@ -1290,6 +1300,7 @@ const fn event_of(event: crate::ieee802154::ownership::RawEvent) -> Ieee802154Ev
     }
 }
 
+mod codes;
 mod etm;
 mod single_field;
 

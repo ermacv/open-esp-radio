@@ -1311,7 +1311,8 @@ description = "Sampled by the compiled ISR before event acknowledgement; reasons
 name = "STATE"
 bits = "18:16"
 class = "read-only"
-description = "Three-bit receive state. The public LL only establishes that value one is RECEIVE_SFD and tests for later states with a greater-than comparison."
+values = [{ name = "RECEIVE_SFD", value = 1 }]
+description = "Three-bit receive state. Only RECEIVE_SFD is named; the public LL tests for later states with a greater-than comparison. SOURCE: esp-idf-7b9cc1ac-ieee802154-common-ll, IEEE802154_RX_STATUS_RECEIVE_SFD and ieee802154_ll_is_current_rx_frame."
 
 [[registers.fields]]
 name = "CURRENT_CHANNEL_INDEX"

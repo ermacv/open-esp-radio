@@ -1,71 +1,52 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Receive and transmit state observations and the public LL enable sets.
 
+use core::cmp::Ordering;
+
 use crate::Ieee802154TxAbortReasonObservation;
 
-/// Opaque three-bit receive-state observation.
+/// Opaque receive-state image and its chip-classified relation to RECEIVE_SFD.
 ///
-/// Only the comparison around the publicly identified `RECEIVE_SFD` value is
-/// exposed. Zero is intentionally not named `idle` until lifecycle evidence
-/// proves that interpretation for the chip.
+/// The HAL owns field geometry and the RECEIVE_SFD code. Zero remains a numeric
+/// observation, without a claim that it means idle or reset readiness.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Ieee802154RxStateCode(u8);
+pub struct Ieee802154RxStateCode {
+    value: u8,
+    receive_sfd: Ordering,
+}
 
 impl Ieee802154RxStateCode {
-    pub const MAX: u8 = 0x07;
-    pub const RECEIVE_SFD: u8 = 1;
+    /// Combine a diagnostic image with the HAL's comparison to RECEIVE_SFD.
+    pub const fn from_parts(value: u8, receive_sfd: Ordering) -> Self {
+        Self { value, receive_sfd }
+    }
 
     pub const fn is_receive_sfd(self) -> bool {
-        self.0 == Self::RECEIVE_SFD
+        matches!(self.receive_sfd, Ordering::Equal)
     }
 
     pub const fn is_after_receive_sfd(self) -> bool {
-        self.0 > Self::RECEIVE_SFD
+        matches!(self.receive_sfd, Ordering::Greater)
     }
 
     pub const fn is_zero(self) -> bool {
-        self.0 == 0
+        self.value == 0
     }
 
     /// Numeric read-only observation for diagnostics.
     pub const fn value(self) -> u8 {
-        self.0
-    }
-
-    #[doc(hidden)]
-    pub const fn from_field(value: u8) -> Self {
-        Self(value)
-    }
-
-    /// A three-bit state observation, as a register model reports it.
-    pub const fn new(value: u8) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
-        }
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    #[doc(hidden)]
-    pub const fn for_host_test(value: u8) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
-        }
+        self.value
     }
 }
 
-/// Opaque four-bit transmit-state observation.
+/// Opaque transmit-state observation.
 ///
 /// No individual value is assigned a lifecycle meaning by this foundation.
+/// The HAL owns field geometry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ieee802154TxStateCode(u8);
 
 impl Ieee802154TxStateCode {
-    pub const MAX: u8 = 0x0f;
-
     pub const fn is_zero(self) -> bool {
         self.0 == 0
     }
@@ -75,19 +56,8 @@ impl Ieee802154TxStateCode {
         self.0
     }
 
-    #[doc(hidden)]
     pub const fn from_field(value: u8) -> Self {
         Self(value)
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    #[doc(hidden)]
-    pub const fn for_host_test(value: u8) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
-        }
     }
 }
 
@@ -172,22 +142,6 @@ pub enum Ieee802154TxSecurityErrorObservation {
     Named(Ieee802154TxSecurityError),
     /// The field value has no public-LL identity.
     Unclassified,
-}
-
-impl Ieee802154TxSecurityErrorObservation {
-    /// Classify one sampled error field.
-    #[doc(hidden)]
-    pub const fn from_field(value: u8) -> Self {
-        match value {
-            0 => Self::None,
-            1 => Self::Named(Ieee802154TxSecurityError::FrameControlNotSet),
-            2 => Self::Named(Ieee802154TxSecurityError::ReservedSecurityLevel),
-            3 => Self::Named(Ieee802154TxSecurityError::HeaderParse),
-            4 => Self::Named(Ieee802154TxSecurityError::PayloadError),
-            5 => Self::Named(Ieee802154TxSecurityError::FrameCounterSuppression),
-            _ => Self::Unclassified,
-        }
-    }
 }
 
 /// Complete `TX_STATUS` observation (`ieee802154_ll_get_tx_status`).

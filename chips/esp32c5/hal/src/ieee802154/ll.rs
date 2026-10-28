@@ -34,8 +34,8 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154EventMask, Ieee802154EventObservation, Ieee802154MacCommand,
     Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154ResolvedTxPower,
     Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
-    Ieee802154RxStateCode, Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet,
-    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
+    Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation,
 };
 use oer_espressif_interrupt_table::Silent;
 
@@ -205,7 +205,7 @@ fn rx_status_from_pac(status: PacRxStatus) -> Ieee802154RxStatus {
     Ieee802154RxStatus::new(
         status.filter_fail_reason(),
         rx_abort_reason_from_pac(status.abort_reason()),
-        proven(Ieee802154RxStateCode::new(status.state().value())),
+        status.state(),
         status.preamble_match(),
         status.sfd_match(),
     )

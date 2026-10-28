@@ -580,3 +580,28 @@ fn startup_discards_hidden_pending_even_with_an_empty_visible_image() {
         )
     );
 }
+
+#[test]
+fn transmit_status_keeps_zero_and_unclassified_observations_distinct() {
+    use oer_espressif_ieee802154_mac_values::{
+        Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityErrorObservation,
+    };
+    for (fill, security, zero) in [
+        (0, Ieee802154TxSecurityErrorObservation::None, true),
+        (
+            u32::MAX,
+            Ieee802154TxSecurityErrorObservation::Unclassified,
+            false,
+        ),
+    ] {
+        let mut memory = HostMemory::filled(fill);
+        let (task, _setup) = memory.owners();
+        let status = task.tx_status();
+        assert_eq!(
+            status.abort_reason(),
+            Ieee802154TxAbortReasonObservation::Unclassified
+        );
+        assert_eq!(status.security_error(), security);
+        assert_eq!(status.state().is_zero(), zero);
+    }
+}

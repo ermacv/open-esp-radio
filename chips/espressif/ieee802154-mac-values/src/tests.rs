@@ -3,8 +3,7 @@ use std::vec::Vec;
 
 use super::{
     Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort,
-    Ieee802154ObservedEventState, Ieee802154RxStateCode, Ieee802154StateSnapshot,
-    Ieee802154TxStateCode, execute_interrupt_arming, execute_interrupt_deactivation,
+    Ieee802154ObservedEventState, execute_interrupt_arming, execute_interrupt_deactivation,
 };
 
 #[test]
@@ -19,40 +18,6 @@ fn semantic_event_union_never_loses_ed_done_or_rx_abort_presence() {
         State::RxAbortWithOther.union(State::EdDoneWithOther),
         State::EdDoneAndRxAbortWithOther
     );
-}
-
-#[test]
-fn state_codes_are_bounded_and_expose_only_reviewed_predicates() {
-    let zero_rx = Ieee802154RxStateCode::for_host_test(0).expect("three-bit state");
-    let zero_tx = Ieee802154TxStateCode::for_host_test(0).expect("four-bit state");
-    let sfd = Ieee802154RxStateCode::for_host_test(1).expect("three-bit state");
-    let after_sfd = Ieee802154RxStateCode::for_host_test(2).expect("three-bit state");
-
-    assert!(Ieee802154StateSnapshot::new(zero_rx, zero_tx).all_codes_zero());
-    assert!(sfd.is_receive_sfd());
-    assert!(!sfd.is_after_receive_sfd());
-    assert!(after_sfd.is_after_receive_sfd());
-    assert_eq!(after_sfd.value(), 2);
-    assert_eq!(zero_tx.value(), 0);
-    assert_eq!(
-        Ieee802154RxStateCode::for_host_test(Ieee802154RxStateCode::MAX + 1),
-        None
-    );
-    assert_eq!(
-        Ieee802154TxStateCode::for_host_test(Ieee802154TxStateCode::MAX + 1),
-        None
-    );
-}
-
-#[test]
-fn nonzero_state_code_fails_only_the_numeric_zero_predicate() {
-    let rx = Ieee802154RxStateCode::for_host_test(0).expect("three-bit state");
-    let tx = Ieee802154TxStateCode::for_host_test(1).expect("four-bit state");
-    let snapshot = Ieee802154StateSnapshot::new(rx, tx);
-
-    assert!(!snapshot.all_codes_zero());
-    assert_eq!(snapshot.rx().value(), 0);
-    assert_eq!(snapshot.tx().value(), 1);
 }
 
 #[derive(Debug, Eq, PartialEq)]
