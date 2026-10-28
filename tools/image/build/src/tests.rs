@@ -72,13 +72,13 @@ fn requested(placement: bool) -> Gates {
 }
 
 /// An empty bundle in `directory` of the first chip with a flash map.
-fn empty_bundle(directory: &Path) -> crate::bundle::ImageBundle {
+fn empty_bundle(directory: &Path) -> oer_image_bundle::ImageBundle {
     let repository = repository();
     let root = repository.path();
     let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
     let profile = profile(&root, &chip).unwrap();
     let flash = profile.facts.flash.clone().unwrap();
-    crate::bundle::ImageBundle::new(directory, &profile, flash)
+    oer_image_bundle::ImageBundle::new(directory, &profile, flash)
 }
 
 fn outcome(results: &[(&str, CheckResult)]) -> CheckOutcome {
@@ -124,7 +124,7 @@ fn passed_and_not_applicable_checks_are_recorded_and_pass() {
         "{:?}",
         bundle.warnings
     );
-    assert!(!bundle.path(crate::bundle::files::CHECKS).exists());
+    assert!(!bundle.path(oer_image_bundle::files::CHECKS).exists());
 }
 
 #[test]
@@ -159,9 +159,10 @@ fn a_requested_check_with_missing_data_or_no_result_fails_the_build() {
     assert!(!error.contains("stack"), "{error}");
     // Every requested result is recorded, machine-readable, beside the
     // failed build.
-    let written: Vec<CheckRecord> =
-        serde_json::from_slice(&std::fs::read(bundle.path(crate::bundle::files::CHECKS)).unwrap())
-            .unwrap();
+    let written: Vec<CheckRecord> = serde_json::from_slice(
+        &std::fs::read(bundle.path(oer_image_bundle::files::CHECKS)).unwrap(),
+    )
+    .unwrap();
     assert_eq!(written, bundle.checks);
     assert_eq!(written.len(), 3);
     let interrupts = written.iter().find(|record| record.check == "interrupts");
@@ -205,7 +206,7 @@ fn a_reported_check_that_does_not_pass_is_a_warning() {
         "{:?}",
         bundle.warnings
     );
-    assert!(!bundle.path(crate::bundle::files::CHECKS).exists());
+    assert!(!bundle.path(oer_image_bundle::files::CHECKS).exists());
 }
 
 #[test]
@@ -215,7 +216,7 @@ fn runtime_checks_refuse_requested_link_time_gates() {
     let root = repository.path();
     let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
     let spec = ImageSpec {
-        purpose: crate::bundle::Purpose::Flash,
+        purpose: oer_image_bundle::Purpose::Flash,
         root: root.to_owned(),
         chip,
         application: Application {
@@ -336,7 +337,7 @@ fn only_interrupts_rejects_failed_missing_and_absent_results() {
                     && warning.contains("task has no bound"))
         );
         let written: Vec<CheckRecord> = serde_json::from_slice(
-            &std::fs::read(bundle.path(crate::bundle::files::CHECKS)).unwrap(),
+            &std::fs::read(bundle.path(oer_image_bundle::files::CHECKS)).unwrap(),
         )
         .unwrap();
         assert_eq!(written, bundle.checks);
@@ -369,7 +370,7 @@ fn enforced_frame_configuration_errors_and_missing_results_still_reject_both_elf
                 .unwrap_err()
                 .to_string();
             assert!(error.contains(&format!("frames ({elf:?})")), "{error}");
-            assert!(bundle.path(crate::bundle::files::CHECKS).is_file());
+            assert!(bundle.path(oer_image_bundle::files::CHECKS).is_file());
         }
     }
 }
@@ -452,7 +453,7 @@ fn only_interrupts_reports_failed_runtime_and_bootstrap_stacks() {
                         && warning.contains("outside SRAM"))
             );
         }
-        assert!(!bundle.path(crate::bundle::files::CHECKS).exists());
+        assert!(!bundle.path(oer_image_bundle::files::CHECKS).exists());
     }
 }
 

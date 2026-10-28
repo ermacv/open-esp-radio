@@ -15,7 +15,7 @@ use std::{
 use oer_chip_profile::Profile;
 
 use oer_espressif_facts::Start;
-use oer_image_build::bundle::ImageBundle;
+use oer_image_bundle::ImageBundle;
 use serde::Serialize;
 
 use crate::discovery as ports;

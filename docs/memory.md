@@ -118,7 +118,7 @@ resets the chip: [panic rustdoc](../chips/espressif/staged-runtime/src/panic.rs)
   [Gates](../tools/image/build/README.md#gates).
 - `interrupt-stack.txt`, `interrupt-placement.txt` and
   `strict-placement.toml` record bounds, placement and the link fingerprint:
-  [bundle contents](../tools/image/build/README.md#contract).
+  [bundle contents](../tools/image/bundle/README.md).
 - Image builds emit compiler frame records with `-Z emit-stack-sizes` and
   take `move-size-limit` from the stack policy as a warning threshold;
   frame sizes and image panic budgets are reports, while proven stack bounds

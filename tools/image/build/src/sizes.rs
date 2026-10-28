@@ -49,7 +49,7 @@ pub struct Provenance {
     pub profile_settings: String,
     pub features: Vec<String>,
     pub default_features: bool,
-    pub purpose: crate::bundle::Purpose,
+    pub purpose: oer_image_bundle::Purpose,
     pub layout_seed: Option<u32>,
     /// Values may contain stand credentials: record digests, never plaintext.
     pub configuration_sha256: BTreeMap<String, Option<String>>,
@@ -222,7 +222,7 @@ impl Summary {
     }
 
     fn contents(&mut self, directory: &Path) -> Result<()> {
-        use crate::bundle::files;
+        use oer_image_bundle::files;
         self.image_files.clear();
         self.embedded_payloads.clear();
         for name in [files::RUNTIME_BIN, files::APPLICATION] {

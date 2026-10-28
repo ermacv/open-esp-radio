@@ -1,6 +1,6 @@
 //! The chip a scenario binary compares.
 //!
-//! Each chip's scenario crate owns its pins, ROM facts, stack placement and
+//! Each chip's scenario module owns its pins, ROM facts, stack placement and
 //! reviewed decisions, and installs them once before any scenario runs. The
 //! engine reads them from here and holds no chip facts of its own.
 use std::sync::OnceLock;
@@ -84,7 +84,7 @@ pub fn install(chip: &'static Chip) {
 pub fn chip() -> &'static Chip {
     CHIP.get()
         .copied()
-        .expect("the scenario crate installs its chip before running scenarios")
+        .expect("the chip module installs its chip before running scenarios")
 }
 
 /// A chip for the engine's own tests, whose hardware scope is a test tree.

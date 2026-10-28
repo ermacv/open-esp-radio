@@ -2932,6 +2932,7 @@ dependencies = [
  "oer-hil-runs",
  "oer-hil-scenario",
  "oer-image-build",
+ "oer-image-bundle",
  "oer-image-checks",
  "oer-image-compare",
  "oer-lab-arbiter",
@@ -2974,7 +2975,7 @@ dependencies = [
  "oer-hil-model",
  "oer-hil-protocol",
  "oer-hil-runs",
- "oer-image-build",
+ "oer-image-bundle",
  "oer-lab-board",
  "oer-os-durable",
  "oer-os-process",
@@ -3225,6 +3226,7 @@ dependencies = [
  "oer-analysis-elf",
  "oer-chip-profile",
  "oer-espressif-facts",
+ "oer-image-bundle",
  "oer-image-checks",
  "oer-image-esp-idf",
  "oer-os-durable",
@@ -3236,6 +3238,18 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "oer-image-bundle"
+version = "0.1.0"
+dependencies = [
+ "oer-chip-profile",
+ "oer-espressif-facts",
+ "oer-os-durable",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -3252,6 +3266,7 @@ dependencies = [
  "oer-chip-profile",
  "oer-espressif-facts",
  "oer-espressif-staged-runtime",
+ "oer-image-bundle",
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
@@ -3308,7 +3323,7 @@ dependencies = [
  "hex",
  "oer-chip-profile",
  "oer-espressif-facts",
- "oer-image-build",
+ "oer-image-bundle",
  "oer-lab-model",
  "oer-lab-router",
  "oer-os-durable",
@@ -3673,6 +3688,7 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-image-build",
+ "oer-image-bundle",
  "oer-image-checks",
  "oer-lab-arbiter",
  "oer-lab-board",
@@ -3818,11 +3834,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-tool-vendor-scenarios-esp32s31-cli"
+name = "oer-tool-vendor-scenario-cli"
 version = "0.1.0"
 dependencies = [
- "oer-vendor-scenario-report",
- "oer-vendor-scenarios-esp32s31",
+ "oer-vendor-scenario",
 ]
 
 [[package]]
@@ -3925,6 +3940,7 @@ name = "oer-vendor-scenario"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "object",
  "oer-analysis-blobray-application",
  "oer-analysis-blobray-domain",
  "oer-analysis-blobray-linker",
@@ -3933,7 +3949,9 @@ dependencies = [
  "oer-analysis-elf",
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
+ "oer-esp32s31-knowledge",
  "oer-image-build",
+ "oer-image-esp-idf",
  "oer-os-durable",
  "oer-os-process",
  "oer-probe-codegen",
@@ -3942,41 +3960,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
-]
-
-[[package]]
-name = "oer-vendor-scenario-report"
-version = "0.1.0"
-dependencies = [
- "clap",
- "object",
- "oer-analysis-blobray-application",
- "oer-analysis-blobray-domain",
- "oer-analysis-elf",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
- "oer-os-process",
- "oer-vendor-scenario",
- "serde_json",
-]
-
-[[package]]
-name = "oer-vendor-scenarios-esp32s31"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-analysis-blobray-application",
- "oer-analysis-blobray-domain",
- "oer-analysis-elf",
- "oer-analysis-riscv-model",
- "oer-esp32s31-knowledge",
- "oer-image-build",
- "oer-image-esp-idf",
- "oer-os-durable",
- "oer-os-process",
- "oer-tool-pins",
- "oer-vendor-scenario",
- "serde",
  "toml",
 ]
 

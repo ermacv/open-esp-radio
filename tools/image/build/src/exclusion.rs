@@ -73,7 +73,7 @@ impl Staging {
     /// Start the build of `output`; fails at once while another build of it
     /// runs.
     pub fn begin(output: &Path) -> Result<Self> {
-        let directory = crate::bundle::staging_directory(output)?;
+        let directory = oer_image_bundle::staging_directory(output)?;
         let parent = directory
             .parent()
             .ok_or("a staging directory has a parent")?;
@@ -87,7 +87,7 @@ impl Staging {
             Mode::Exclusive,
         )?
         .ok_or_else(|| format!("another build owns {}", output.display()))?;
-        crate::bundle::remove_directory(&directory)?;
+        oer_image_bundle::remove_directory(&directory)?;
         fs::create_dir_all(&directory)?;
         Ok(Self {
             output: output.to_owned(),
@@ -103,7 +103,10 @@ impl Staging {
 
     /// Publish `bundle`, built in [`Staging::directory`], as the bundle in
     /// the output.
-    pub fn publish(self, bundle: crate::bundle::ImageBundle) -> Result<crate::bundle::ImageBundle> {
+    pub fn publish(
+        self,
+        bundle: oer_image_bundle::ImageBundle,
+    ) -> Result<oer_image_bundle::ImageBundle> {
         bundle.publish(&self.output)
     }
 }

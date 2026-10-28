@@ -20,7 +20,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "1.1"
 oer-hil-runs = { path = "../runs" }
-oer-image-build = { path = "../../image/build" }
+oer-image-bundle = { path = "../../image/bundle" }
 oer-hil-lab = { path = "../lab" }
 oer-lab-board = { path = "../../lab/board" }
 oer-hil-link = { path = "../link" }

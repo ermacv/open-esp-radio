@@ -17,7 +17,7 @@ pub fn record(
     session: &mut RunSession,
     image: ImageClass,
     artifacts: &Artifacts,
-) -> Result<oer_image_build::bundle::ImageBundle> {
+) -> Result<oer_image_bundle::ImageBundle> {
     let context = session.firmware_archive(image)?;
     let flash = context
         .target_directory

@@ -1,18 +1,18 @@
 # Verification harness
 
-The harness holds the chip-neutral parts of vendor verification:
+`oer-vendor-scenario` holds the vendor verification: the chip-neutral engine,
+the ESP32-S31 scenarios on it and the reviewer reports:
 
 | Package | Path | Owns |
 | --- | --- | --- |
 | `oer-probe-codegen` | `tools/probe/codegen/` | Rust declaration grammar, image catalog, linker roots and post-link validation |
 | `oer-probe-macros` | `tools/probe/macros/` | Procedural-macro frontend of the declarations |
-| `oer-vendor-scenario` | `tools/vendor/scenario/` | Scenario engine: authenticated artifacts, Blobray sessions, comparison harness, observation and state analysis |
-| `oer-vendor-scenario-report` | `tools/vendor/scenario-report/` | Unclaimed compared pairs, the shared scenario command line and the `xref`, `show`, `fields` and `prints` inspection commands |
+| `oer-vendor-scenario` | `tools/vendor/scenario/` | The engine at the crate root: authenticated artifacts, Blobray sessions, comparison harness, observation and state analysis; `esp32s31`: the chip's scenarios, addresses, pins and reviewed decisions; `report`: unclaimed compared pairs, the shared scenario command line and the `xref`, `show`, `fields` and `prints` inspection commands |
 
-Each chip's entry package `oer-tool-vendor-scenarios-<chip>`
-(`tools/vendor/scenarios-<chip>-cli`) installs its scenario library and runs
-one scenario or inspection command. `cargo vendor-check scenario --chip <chip>`
-builds and runs that entry package.
+The entry package `oer-tool-vendor-scenario-cli` (`tools/vendor/scenario-cli`)
+installs the ESP32-S31 scenarios and runs one scenario or inspection command.
+`cargo vendor-check scenario --chip esp32s31` builds and runs it; a chip
+without a module below `tools/vendor/scenario/src/` has no scenarios.
 
 Observation decisions name the file and trimmed source text ending at the
 reviewed line. Include preceding lines when an identical statement occurs in
@@ -23,7 +23,7 @@ identical statement in another context remains unobserved.
 The probe compiler is a host build tool; it owns no production behavior and
 does not depend on Blobray's executor. The
 [ESP32-S31](../../../firmware/probes/esp32s31.md) probe packages consume it. A chip's
-scenario crate installs its `Chip` description into the engine and keeps its
+scenario module installs its `Chip` description into the engine and keeps its
 addresses, pins and reviewed decisions; the
 [ESP32-S31 probes](../../../firmware/probes/esp32s31.md) describe the inputs.
 

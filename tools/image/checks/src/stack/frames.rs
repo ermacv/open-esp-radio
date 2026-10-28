@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 use oer_chip_profile::policy::{FrameException, StackPolicy};
 
 use super::{Image, Result};
-use crate::CheckedElf;
+use oer_image_bundle::CheckedElf;
 
 pub const RUNTIME_REPORT: &str = "runtime-frames.txt";
 pub const BOOTSTRAP_REPORT: &str = "bootstrap-frames.txt";

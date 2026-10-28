@@ -62,8 +62,8 @@ fn summaries(directory: &Path) -> Result<BTreeMap<String, Summary>> {
                 p.binary,
                 p.features.join(","),
                 match p.purpose {
-                    crate::bundle::Purpose::Analysis => "analysis",
-                    crate::bundle::Purpose::Flash => "flash",
+                    oer_image_bundle::Purpose::Analysis => "analysis",
+                    oer_image_bundle::Purpose::Flash => "flash",
                 }
             );
             if out.insert(key.clone(), summary).is_some() {
@@ -71,10 +71,10 @@ fn summaries(directory: &Path) -> Result<BTreeMap<String, Summary>> {
             }
             return Ok(());
         }
-        if directory.join(crate::bundle::MANIFEST).is_file() {
+        if directory.join(oer_image_bundle::MANIFEST).is_file() {
             return Err(format!(
                 "missing sizes.json beside {}",
-                directory.join(crate::bundle::MANIFEST).display()
+                directory.join(oer_image_bundle::MANIFEST).display()
             )
             .into());
         }

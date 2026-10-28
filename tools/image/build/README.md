@@ -129,25 +129,10 @@ runtime and the bootstrap with the classes' cfgs (`oer_trace`,
 `cfg(oer_probe)` for its own builds alone, no production crate reads it, no
 crate has a probe feature, and production has no item only a probe uses.
 
-An `ImageBundle` is one directory with a `bundle.json`:
+An image build fills an `ImageBundle` (format and contents:
+[`oer-image-bundle`](../bundle/README.md)) with the files below the bundle's
+own, and records `purpose: Flash` or `Analysis`.
 
-| File | Content |
-| --- | --- |
-| `runtime.elf` | The application ELF (the staged boot's stage-two runtime) |
-| `application.bin` | The encoded ESP application image (the staged boot's bootstrap with the packed runtime embedded) |
-| `bootloader.bin`, `partitions.bin` | The second-stage bootloader and the binary partition table |
-| `otadata.bin` | The OTA selection of the first slot (staged only) |
-| `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
-| `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
-| `bootstrap-placement.txt` | Mandatory cache-off bootstrap code/constant placement |
-| `bootstrap-loader.txt` | Encoded mapped-segment count required by the chip's loader, when specified |
-| `runtime-frames.txt`, `bootstrap-frames.txt` | All recorded frames against the move limit, exceptions with ceilings and spare bytes, Diagnostic warnings |
-| `interrupt-placement.txt` | Interrupt code placement, paths to cached functions, static data references and objects, and free SRAM |
-| `image-linker.toml`, `strict-text.x`, `strict-placement.toml` | Runtime linker analysis inputs, generated strict-code fragment and the functions moved with their input sections |
-| `large-values.json`, `large-values.txt` | Compiler values above the move limit and workspace coverage |
-| `build.log` | Every step's standard error |
-
-The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
 Every link using the staged runtime script (`-Truntime/link.x` from
 `configure_runtime`) requires an `OER_IMAGE_INTERRUPTS` specification and
 runs the final check's analysis after the first link. It links once more
@@ -167,11 +152,6 @@ mismatch invalidates the runtime package through Cargo and rebuilds it once;
 dependencies remain cached. A second mismatch fails the build. The bootstrap
 has no such invalidation or interrupt analysis; its cache-off placement audit
 always runs before encoding. The existing interrupt check remains final.
-Older schemas must be rebuilt; a missing purpose never defaults to `Flash`.
-`ImageBundle::load` verifies files for either purpose. The shared flash
-snapshot reader refuses `Analysis` before supplying bytes to any USB or
-JTAG writer, including `cargo fw` and HIL. Copies made with
-`with_application` retain the original purpose.
 
 `cargo fw probe <package>` supplies the same specification and uses the same
 fingerprint check and single rebuild. It keeps `image-linker.toml`,
@@ -183,24 +163,14 @@ script's `__runtime_image_start` boundary and need fingerprint validation.
 Standalone probe bins in the same package do not run the analysis or overwrite
 the runtime's fragment and placement record.
 
-`ImageBundle::segments` is what a flash writes: bootloader, partition table
-and application at the flash map's offsets, the OTA selection last. Board
-support writes these files and encodes nothing.
-
-A bundle is published whole. A build takes its output's lease
-(`.<name>.build.lease` beside it: a second build of the same output fails at
-once), fills the sibling staging directory `.<name>.staging`, and
-`ImageBundle::publish` records each flash file's SHA-256 and length in
-`bundle.json` and renames the staging directory into place. A build that
-fails publishes nothing: the bundle published before stays as it was, and
-the staging directory keeps the failed build's `build.log` and `checks.json`
-until the next build of that output. `ImageBundle::load` verifies every
-flash file against its recorded digest, and a write reads the flash files
-once into an `ImageBundle::snapshot`, verified the same way, which it hashes
-into its receipt and writes over USB or JTAG. `bundle::around` makes the
-bundle of an application encoded earlier (a run's archive, a vendor
-ESP-IDF build), so replays and foreign applications are flashed the same
-way.
+A build takes its output's lease (`.<name>.build.lease` beside it: a second
+build of the same output fails at once), fills the sibling staging directory
+`.<name>.staging` and publishes it whole ([publication](../bundle/README.md#publication)).
+A build that fails publishes nothing: the staging directory keeps the failed
+build's `build.log` and `checks.json` until the next build of that output.
+`around` makes the bundle of an application encoded earlier (a run's archive,
+a vendor ESP-IDF build), so replays and foreign applications are flashed the
+same way.
 
 ## Flash map
 

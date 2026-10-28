@@ -3,10 +3,10 @@ name = "oer-vendor-scenario"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 repository.workspace = true
 publish = false
-description = "Chip-neutral engine of the typed vendor-comparison scenarios: Blobray sessions, comparison harness, observation and state analysis"
+description = "The typed vendor-comparison scenarios: the chip-neutral engine (Blobray sessions, comparison harness, observation and state analysis), the ESP32-S31 scenarios and the reviewer reports"
 
 [dependencies]
 oer-analysis-elf = { path = "../../analysis/elf" }
@@ -23,10 +23,16 @@ oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
 oer-analysis-blobray-linker = { path = "../../analysis/blobray-linker" }
 oer-analysis-blobray-verification = { path = "../../analysis/blobray-verification" }
 oer-probe-codegen = { path = "../../probe/codegen" }
+oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 clap = { version = "=4.5.48", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 tempfile = "=3.27.0"
+toml = "=1.1.4"
+
+[dev-dependencies]
+object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
+oer-image-esp-idf = { path = "../../image/esp-idf" }
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 //! Guest placement and peripheral models of Espressif PHY sessions.
 //!
-//! A chip's scenario crate supplies its [`PhyLayout`]: pinned artifact ids,
+//! A chip's scenario module supplies its [`PhyLayout`]: pinned artifact ids,
 //! ROM pointers, scratch placement and the radio and analog I2C transport
 //! addresses. The analog command encoding, fill patterns and event capacity
 //! are shared.

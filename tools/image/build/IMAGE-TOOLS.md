@@ -5,7 +5,7 @@ Image packages share one directory, grouped by their contracts.
 | Path | Owns |
 | --- | --- |
 | pipeline (`oer-image-build`) | `build(ImageSpec) -> ImageBundle`, boot flows, build exclusion and source inputs |
-| `bundle/` (`oer-image-build`) | The bundle format, verified snapshots and flash segments; device writers consume it without the build pipeline |
+| `bundle/` (`oer-image-bundle`) | The bundle format, verified snapshots and flash segments; device writers consume it without the build pipeline |
 | `encode/` (`oer-image-build`) | Build-time ESP image encoding and stage-two packing |
 | `policy/` (`oer-chip-profile`) | Stack policy and compiler limits |
 | `checks/` (`oer-image-checks`) | Optional pipeline checks assembled for a caller |
