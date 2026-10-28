@@ -414,11 +414,6 @@ interface without a channel.
 - Before signalling a stored PID on the router, check that it still
   belongs to `wpa_supplicant`.
 
-### Linux Bluetooth peer
-
-[linux-bluetooth.md](linux-bluetooth.md): adapter ownership, DTM,
-connection and pairing quirks of a Linux host as the BLE peer.
-
 The optional W3 `--load-1ms` recipe runs the pinned #486 fping 5.3 source
 from a temporary extraction, without installing packages or changing the
 W3 AP profile. The caller holds the board/router/air leases across source

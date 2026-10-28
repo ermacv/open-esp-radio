@@ -1,6 +1,6 @@
 # RV32 stack bounds
 
-The opt-in [stack-address context](validation/irq-signal/stack-context.md)
+The opt-in stack-address context
 connects canonical machine setup and call inputs to numerical word-proof
 premises. It is scoped to an image capture and invocation; placement or a
 partial stack budget alone never establishes a current-SP interval.
@@ -417,12 +417,6 @@ local resolver remains available separately; its current address-use coverage
 leaves candidate sets too broad for useful bounds. Interprocedural pointer
 propagation, constructor summaries and new memory models are later work.
 
-The [callback audit validation](validation/callback-address-audit.md) records
-real w0/w1 unknown-use classes, missing facts, before/after results and the
-commands to reproduce the diagnostic without function/address allowlists. The
-[PC-relative validation](validation/pcrel/README.md) additionally explains every
-normalized pair, changed use and changed candidate in the real w0/w1 results.
-
 `interrupt_stacks` bounds each hart's interrupt stack (`Stacks`): one
 interrupt per level the hart takes (its table entries' levels), each the worst hardware-vector entry's frame plus its
 handler's bound, where the dispatcher's calls through the source table reach
@@ -503,16 +497,7 @@ gate refuses it, and requires a review for every function without a record.
 cargo test -p oer-analysis-riscv-stack
 ```
 
-The optional [stack-call validation](validation/call-spills/README.md) reuses
+The optional stack-call research reuses
 `FunctionWrites` and `call_writes` to preserve a captured entry-stack word only
-through complete disjoint effects. Its companion-ROM diagnostic records why the
-selected real publisher copy call still lacks that proof; reviewed frame/call
+through complete disjoint effects. Reviewed frame/call
 summaries alone do not establish memory noninterference.
-The [alignment-loop validation](validation/alignment-writes/README.md) proves a
-finite footprint for one byte-store instruction through the same trampoline and
-actual caller arguments. The other eleven unknown store sites still prevent
-preserving the selected caller spill across the full call.
-The [exit-value validation](validation/alignment-exit/README.md) reuses that
-induction witness for an explicit edge postcondition and proves the pointer's
-align-up value at the real ROM merge, through both incoming paths. Store effects
-and the full-call barrier retain their previous results.
