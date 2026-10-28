@@ -413,6 +413,56 @@ fn sans_io_has_no_normal_dependency_on_platform_or_terminal_fault_owners() {
 }
 
 #[test]
+fn ieee802154_engine_has_no_terminal_custody_or_retained_policy() {
+    let root = root();
+    let packages = packages(&root);
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let graph = packages
+        .values()
+        .map(|manifest| {
+            (
+                manifest["package"]["name"]
+                    .as_str()
+                    .expect("package name")
+                    .to_owned(),
+                normal_dependencies(manifest, &workspace["workspace"]),
+            )
+        })
+        .collect();
+    assert!(
+        forbidden_paths(&graph, "oer-espressif-ieee802154-engine", |name| {
+            forbidden_dependency(name) || name == "oer-espressif-staged-runtime"
+        })
+        .is_empty()
+    );
+    let mut pending = vec![root.join("chips/espressif/ieee802154-engine/src")];
+    while let Some(path) = pending.pop() {
+        if path.is_dir() {
+            pending.extend(
+                std::fs::read_dir(path)
+                    .expect("engine sources")
+                    .map(|entry| entry.expect("source entry").path()),
+            );
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            let source = std::fs::read_to_string(&path).expect("source text");
+            for terminal in [
+                "Quarantined",
+                "FaultRecord",
+                "retained_static",
+                "reset_recording",
+                "fatal::",
+            ] {
+                assert!(
+                    !source.contains(terminal),
+                    "{} contains {terminal}",
+                    path.display()
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn normal_dependency_graph_includes_aliases_inheritance_targets_and_optional_edges() {
     let manifest: toml::Value = toml::from_str(
         r#"

@@ -1912,31 +1912,34 @@ fn unhandled_7_10_13_fault_before_ack_or_any_simultaneous_dispatch() {
 
         let drops = std::rc::Rc::new(std::cell::Cell::new(0));
         bench.hw.drop_witness = Some(DropWitness(drops.clone()));
-        let owner = super::owner::Ieee802154EngineOwner::new(bench.engine, bench.hw);
-        let quarantine = match owner.isr(&mut bench.env) {
-            Ok(_) => panic!("unsupported event cannot return usable owners"),
-            Err(quarantine) => quarantine,
-        };
+        let mut owner = super::owner::Ieee802154EngineOwner::new(bench.engine, bench.hw);
         assert_eq!(
-            quarantine.fault(),
-            super::Fault::UnhandledEvents {
+            owner.service(&mut bench.env),
+            Err(super::Fault::UnhandledEvents {
                 observation,
                 state: Ieee802154State::Rx
-            }
+            })
         );
-        drop(quarantine);
-        assert_eq!(drops.get(), 0, "quarantine never releases the MAC owner");
+        assert_eq!(owner.model_ll().calls, [Call::Events, Call::Events]);
+        assert_eq!(owner.state(), Ieee802154State::Rx);
+        assert_eq!(drops.get(), 0, "borrowed service retains ownership");
+        drop(owner);
+        assert_eq!(
+            drops.get(),
+            1,
+            "the family engine imposes no terminal custody"
+        );
     }
 }
 
 #[test]
-fn a_handled_entry_returns_the_same_reusable_mac_owner() {
+fn a_handled_entry_borrows_the_same_reusable_mac_owner() {
     let mut bench = Bench::enabled();
     let drops = std::rc::Rc::new(std::cell::Cell::new(0));
     bench.hw.drop_witness = Some(DropWitness(drops.clone()));
-    let owner = super::owner::Ieee802154EngineOwner::new(bench.engine, bench.hw);
-    let owner = owner
-        .isr(&mut bench.env)
+    let mut owner = super::owner::Ieee802154EngineOwner::new(bench.engine, bench.hw);
+    owner
+        .service(&mut bench.env)
         .expect("empty event sample is handled");
     assert_eq!(drops.get(), 0);
     drop(owner);

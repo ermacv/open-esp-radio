@@ -2020,6 +2020,7 @@ dependencies = [
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-ieee802154-mac-values",
+ "oer-ieee802154-port",
  "oer-mmio",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
@@ -2185,7 +2186,6 @@ dependencies = [
 name = "oer-espressif-ieee802154-engine"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "oer-espressif-coex",
  "oer-espressif-ieee802154-mac-values",
  "oer-ieee802154-port",
@@ -2569,6 +2569,7 @@ dependencies = [
 name = "oer-firmware-hil-esp32s31-phy"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "embassy-sync",
  "heapless",
  "oer-diagnostics",

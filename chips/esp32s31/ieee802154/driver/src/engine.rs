@@ -1,11 +1,11 @@
 //! The IEEE 802.15.4 MAC and its placed DMA buffers, owned together.
 
 use super::ll::S31Mac;
-use core::ops::{Deref, DerefMut};
+use core::{mem::ManuallyDrop, ops::Deref};
 use oer_esp32s31_hal::{dma_static::Placed, ieee802154::frames, layouts::DmaWindowAddress};
 use oer_espressif_ieee802154_engine::{
     engine::{
-        Ieee802154Engine as SharedEngine, Ieee802154Interfaces,
+        Fault, Ieee802154Engine as SharedEngine, Ieee802154Interfaces,
         owner::{DetachedIeee802154Engine as DetachedEngine, Ieee802154EngineOwner},
     },
     ll::Ieee802154LowLevel,
@@ -16,9 +16,58 @@ use oer_espressif_ieee802154_mac_values::{Ieee802154EngineBuffers, Ieee802154TxP
 ///
 /// Its operations borrow its own MAC; callers see frames and slots, never
 /// DMA addresses or an independently reusable register owner.
+///
+/// ```compile_fail,E0596
+/// use oer_esp32s31_ieee802154_driver::engine::Ieee802154Engine;
+/// use oer_espressif_ieee802154_engine::engine::Ieee802154Environment;
+/// fn bypass(engine: &mut Ieee802154Engine, env: &mut impl Ieee802154Environment) {
+///     engine.service(env);
+/// }
+/// ```
 #[must_use = "retain the MAC with its placed storage for the hardware epoch"]
 pub struct Ieee802154Engine<Ll: Ieee802154LowLevel<Address = DmaWindowAddress> = S31Mac> {
     inner: Ieee802154EngineOwner<'static, Ll>,
+}
+
+/// Absorbing quarantine: the MAC and placed frame owners cannot be recovered.
+/// Dropping this value retains its owners until reset.
+///
+/// ```compile_fail,E0599
+/// use oer_esp32s31_ieee802154_driver::engine::{Ieee802154Engine, Quarantined};
+/// fn release(fault: Quarantined<Ieee802154Engine>) {
+///     fault.detach();
+/// }
+/// ```
+/// ```compile_fail,E0599
+/// use oer_esp32s31_ieee802154_driver::engine::{Ieee802154Engine, Quarantined};
+/// fn reuse(fault: Quarantined<Ieee802154Engine>) {
+///     fault.enable();
+/// }
+/// ```
+#[must_use = "record the fault and reset with the owners quarantined"]
+pub struct Quarantined<Owner> {
+    fault: Fault,
+    _owners: ManuallyDrop<Owner>,
+}
+
+impl<Owner> Quarantined<Owner> {
+    fn new(owner: Owner, fault: Fault) -> Self {
+        Self {
+            fault,
+            _owners: ManuallyDrop::new(owner),
+        }
+    }
+
+    /// Source observations only; this grants no owner or register access.
+    pub const fn fault(&self) -> Fault {
+        self.fault
+    }
+}
+
+impl<Owner> core::fmt::Debug for Quarantined<Owner> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.fault.fmt(f)
+    }
 }
 
 /// Quiescent engine retaining the HAL's placed DMA storage between MAC epochs.
@@ -66,11 +115,13 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         reason = "quarantine retains the complete affine owner"
     )]
     pub fn isr<E: oer_espressif_ieee802154_engine::engine::Ieee802154Environment + ?Sized>(
-        self,
+        mut self,
         env: &mut E,
-    ) -> Result<Self, oer_espressif_ieee802154_engine::engine::owner::Quarantined<'static, Ll>>
-    {
-        self.inner.isr(env).map(|inner| Self { inner })
+    ) -> Result<Self, Quarantined<Self>> {
+        match self.inner.service(env) {
+            Ok(()) => Ok(self),
+            Err(fault) => Err(Quarantined::new(self, fault)),
+        }
     }
 
     /// Detach a quiescent MAC, retaining the DMA placement proof for rebind.
@@ -156,11 +207,9 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Deref for Ieee802154Eng
     }
 }
 
-impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> DerefMut for Ieee802154Engine<Ll> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
+// Only shared observations use Deref. Mutable entries are explicit so the
+// family's borrowed service cannot bypass the driver's consuming quarantine.
+mod operations;
 
 #[cfg(test)]
 mod tests;

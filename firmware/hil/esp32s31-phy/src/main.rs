@@ -1,6 +1,8 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 #![forbid(unsafe_code)]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
+#[cfg(any(target_arch = "riscv32", test))]
+mod ieee802154_fault;
 #[cfg(target_arch = "riscv32")]
 include!("entry.rs");
 #[cfg(all(test, not(target_arch = "riscv32")))]

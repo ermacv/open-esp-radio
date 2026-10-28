@@ -141,10 +141,12 @@ fn detach_rebind_reuses_placed_storage_across_mac_epochs() {
 fn service_quarantines_the_placed_owner_with_its_exact_fault() {
     let (mut engine, _, _) = model();
     engine.model_ll().events = Ieee802154Event::ClockCountMatch.mask();
-    let fault = match engine.isr(&mut Environment) {
+    let before = std::format!("{:?}", engine.model_ll());
+    let mut fault = match engine.isr(&mut Environment) {
         Ok(_) => panic!("unsupported event must quarantine the owner"),
         Err(quarantined) => quarantined,
     };
+    assert_eq!(std::format!("{:?}", fault._owners.inner.model_ll()), before);
     assert_eq!(
         fault.fault(),
         oer_espressif_ieee802154_engine::engine::Fault::UnhandledEvents {
@@ -157,4 +159,45 @@ fn service_quarantines_the_placed_owner_with_its_exact_fault() {
             state: oer_espressif_ieee802154_engine::engine::Ieee802154State::Disable,
         }
     );
+}
+
+#[test]
+fn dropping_quarantine_keeps_both_affine_owners_without_reuse() {
+    use std::{cell::Cell, rc::Rc};
+    struct Owner(Rc<Cell<usize>>);
+    impl Drop for Owner {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    let mac_drops = Rc::new(Cell::new(0));
+    let dma_drops = Rc::new(Cell::new(0));
+    let fault = Fault::UnhandledEvents {
+        observation: oer_espressif_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
+            Ieee802154Event::RxDone.mask(),
+            true,
+            true,
+        ),
+        state: oer_espressif_ieee802154_engine::engine::Ieee802154State::Rx,
+    };
+    let quarantine = Quarantined::new((Owner(mac_drops.clone()), Owner(dma_drops.clone())), fault);
+    assert_eq!(quarantine.fault(), fault);
+    drop(quarantine);
+    assert_eq!(mac_drops.get(), 0);
+    assert_eq!(dma_drops.get(), 0);
+}
+
+#[test]
+fn successful_service_returns_the_same_placed_owner_for_the_next_entry() {
+    let (engine, _, tx) = model();
+    let mut engine = engine
+        .isr(&mut Environment)
+        .expect("empty sample is handled");
+    assert_eq!(engine.model_transmit_address().get(), tx);
+    engine.model_ll().events = Ieee802154Event::ClockCountMatch.mask();
+    let quarantine = match engine.isr(&mut Environment) {
+        Ok(_) => panic!("next entry must quarantine"),
+        Err(quarantine) => quarantine,
+    };
+    assert_eq!(quarantine._owners.model_transmit_address().get(), tx);
 }

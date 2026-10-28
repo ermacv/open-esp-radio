@@ -4,36 +4,6 @@
 //! owner from its placed buffers and exposes only these semantic operations.
 
 use super::*;
-use core::mem::ManuallyDrop;
-
-/// Absorbing quarantine: the MAC and frame owners cannot be recovered or used.
-/// Dropping this value retains both owners until reset.
-///
-/// ```compile_fail,E0599
-/// use oer_espressif_ieee802154_engine::{engine::owner::Quarantined, ll::Ieee802154LowLevel};
-/// fn release<L: Ieee802154LowLevel>(fault: Quarantined<'_, L>) {
-///     fault.detach();
-/// }
-/// ```
-#[must_use = "record the fault and reset with the owners quarantined"]
-pub struct Quarantined<'storage, Ll: Ieee802154LowLevel> {
-    fault: Fault,
-    _owners: ManuallyDrop<Ieee802154EngineOwner<'storage, Ll>>,
-}
-
-impl<Ll: Ieee802154LowLevel> Quarantined<'_, Ll> {
-    /// Source observations only; this grants no owner or register access.
-    pub const fn fault(&self) -> Fault {
-        self.fault
-    }
-}
-
-impl<Ll: Ieee802154LowLevel> core::fmt::Debug for Quarantined<'_, Ll> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.fault.fmt(f)
-    }
-}
-
 /// Quiescent engine retaining its unique frame storage while its MAC is absent.
 /// No operation or storage access is available until it is rebound.
 #[must_use = "retain the detached engine to reuse its frame storage"]
@@ -426,24 +396,15 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
         self.engine.cca(&mut self.ll, env)
     }
 
-    /// [`Ieee802154Engine::isr`], using this owner's MAC.
+    /// [`Ieee802154Engine::isr`], borrowing this owner's MAC.
     ///
     /// # Errors
-    /// Unsupported events consume this owner into absorbing quarantine.
-    #[allow(
-        clippy::result_large_err,
-        reason = "quarantine retains the complete affine owner"
-    )]
-    pub fn isr<E>(mut self, env: &mut E) -> Result<Self, Quarantined<'storage, Ll>>
+    /// Unsupported events return the complete observation and entry state.
+    /// No owner is consumed; the chip driver controls terminal custody.
+    pub fn service<E>(&mut self, env: &mut E) -> Result<(), Fault>
     where
         E: Ieee802154Environment + ?Sized,
     {
-        match self.engine.isr(&mut self.ll, env) {
-            Ok(()) => Ok(self),
-            Err(fault) => Err(Quarantined {
-                fault,
-                _owners: ManuallyDrop::new(self),
-            }),
-        }
+        self.engine.isr(&mut self.ll, env)
     }
 }

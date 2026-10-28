@@ -1,6 +1,6 @@
 #[test]
 fn ui() {
-    let output = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../target/r4c");
+    let output = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../target/r4d");
     std::fs::create_dir_all(&output).expect("UI output directory");
     let scratch = tempfile::Builder::new()
         .prefix("driver-ui-")
