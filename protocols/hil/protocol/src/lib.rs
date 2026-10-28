@@ -32,6 +32,7 @@
 //! the firmware adapter.
 
 pub mod feature_keys;
+pub mod trace_header;
 
 // The framework: message identity, framing and the envelope.
 mod envelope;

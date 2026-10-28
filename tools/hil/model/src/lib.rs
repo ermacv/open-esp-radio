@@ -13,7 +13,7 @@
 //!
 //! A contract's bounds are its port conformance crate's own type, with a
 //! `CEILINGS` constant; a conformance trace starts with the
-//! `oer-hil-trace-header` header that carries the backend's actual bounds.
+//! `oer_hil_protocol::trace_header` header that carries the backend's actual bounds.
 //!
 //! Time is never a literal here. A [`Wait`] is a contract ceiling, a typed
 //! protocol interval ([`ProtocolQuantity`]) or a span measured on the
