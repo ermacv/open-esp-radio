@@ -1,7 +1,7 @@
 //! Bounded multi-peer AP MLME and security ownership.
 
 use core::fmt;
-use oer_ieee80211_cipher::aes::SoftwareAesKeyWrapError;
+use oer_crypto::rfc3394::KeyWrapError;
 use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::security::spp::SppScope;
@@ -367,7 +367,7 @@ impl From<TxBlockAckOriginatorError> for ApServiceError {
 pub enum ApWpa2Error {
     Service(ApServiceError),
     Frame(RsnFrameError),
-    KeyWrap(SoftwareAesKeyWrapError),
+    KeyWrap(KeyWrapError),
     MissingPairwiseKey,
     UnexpectedAction,
     Retry(RsnRetryError),
@@ -397,8 +397,8 @@ impl From<RsnFrameError> for ApWpa2Error {
     }
 }
 
-impl From<SoftwareAesKeyWrapError> for ApWpa2Error {
-    fn from(error: SoftwareAesKeyWrapError) -> Self {
+impl From<KeyWrapError> for ApWpa2Error {
+    fn from(error: KeyWrapError) -> Self {
         Self::KeyWrap(error)
     }
 }

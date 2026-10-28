@@ -10,7 +10,6 @@ use crate::{
     EapolKeyMessage, RsnInterface,
     frames::{OwnedRsnIe, RsnGtk, parse_gtk_key_data},
 };
-use oer_ieee80211_cipher::aes::software_aes128_key_unwrap;
 use oer_ieee80211_wire::{ccmp::GroupKeyId, security::rsn::Akm};
 
 const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 1];
@@ -88,7 +87,7 @@ fn a_verified_handshake_wraps_message3_and_authorizes_on_message4() {
     let key_frame = message3.key_frame().unwrap();
     assert_eq!(key_frame.message(), EapolKeyMessage::PairwiseMessage3);
     assert!(key_frame.verify_mic(&ptk));
-    let plain = software_aes128_key_unwrap(ptk.kek(), key_frame.key_data()).unwrap();
+    let plain = crate::test_unwrap_bytes(ptk.kek(), key_frame.key_data()).unwrap();
     assert!(parse_gtk_key_data(plain.as_bytes(), &AP_RSN, &[], false).is_ok());
     // A retransmission carries the same key data under the same PTK.
     let again = authenticator

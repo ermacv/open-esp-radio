@@ -2994,6 +2994,7 @@ dependencies = [
 name = "oer-ieee80211-ap"
 version = "0.1.0"
 dependencies = [
+ "oer-crypto",
  "oer-ieee80211-cipher",
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
@@ -3021,9 +3022,9 @@ dependencies = [
  "aes",
  "ccm",
  "cmac",
+ "oer-crypto",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
- "oer-wire",
  "subtle",
  "zeroize",
 ]
@@ -3083,6 +3084,7 @@ dependencies = [
  "cmac",
  "heapless",
  "hmac",
+ "oer-crypto",
  "oer-ieee80211-cipher",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",

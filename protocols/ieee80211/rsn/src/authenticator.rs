@@ -18,7 +18,8 @@ use crate::{
     frames::{RsnFrameError, RsnPlainKeyData, RsnTxFrame, build_ap_action_frame},
     state::{RsnApAction, RsnApPhase, RsnApState, RsnStateError, RsnTicket, RsnTransmit},
 };
-use oer_ieee80211_cipher::aes::{SoftwareAesKeyWrapError, software_aes128_key_wrap};
+use oer_crypto::rfc3394::KeyWrapError;
+use oer_ieee80211_cipher::aes::software_aes128_key_wrap;
 
 /// Why the authenticator refused a step.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,7 +30,7 @@ pub enum RsnAuthenticatorError {
     /// A transition of an admitted frame failed.
     State(RsnStateError),
     Frame(RsnFrameError),
-    KeyWrap(SoftwareAesKeyWrapError),
+    KeyWrap(KeyWrapError),
     /// Message 3 or Message 4 needs the PTK of a verified Message 2.
     MissingPairwiseKey,
     /// The state machine asked for an action this step does not take.
@@ -54,8 +55,8 @@ impl From<RsnFrameError> for RsnAuthenticatorError {
     }
 }
 
-impl From<SoftwareAesKeyWrapError> for RsnAuthenticatorError {
-    fn from(error: SoftwareAesKeyWrapError) -> Self {
+impl From<KeyWrapError> for RsnAuthenticatorError {
+    fn from(error: KeyWrapError) -> Self {
         Self::KeyWrap(error)
     }
 }

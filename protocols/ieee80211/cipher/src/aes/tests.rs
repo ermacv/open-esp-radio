@@ -1,113 +1,57 @@
 use super::*;
+use oer_crypto::{KeyUnwrapError, KeyUnwrapRequest, conformance};
+
+fn unwrap(kek: &[u8; 16], wrapped: &[u8]) -> Result<RsnKeyData, KeyUnwrapError> {
+    SoftwareKeyUnwrap::new(SoftwareAes128)
+        .unwrap_now(KeyUnwrapRequest::new(
+            Aes128Key::copy_from(kek),
+            RsnKeyData::try_copy(wrapped).unwrap(),
+        ))
+        .into_plaintext()
+}
 
 #[test]
-fn unwraps_rfc3394_vector_and_rejects_changed_integrity() {
-    let kek = [
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-        0x0f,
-    ];
-    let encrypted = [
-        0x1f, 0xa6, 0x8b, 0x0a, 0x81, 0x12, 0xb4, 0x47, 0xae, 0xf3, 0x4b, 0xd8, 0xfb, 0x5a, 0x7b,
-        0x82, 0x9d, 0x3e, 0x86, 0x23, 0x71, 0xd2, 0xcf, 0xe5,
-    ];
-    let expected = [
-        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
-        0xff,
-    ];
-    let plain = software_aes128_key_unwrap(&kek, &encrypted).unwrap();
-    assert_eq!(plain.as_bytes(), &expected);
-
-    let mut changed = encrypted;
-    changed[23] ^= 1;
-    assert_eq!(
-        software_aes128_key_unwrap(&kek, &changed).err(),
-        Some(SoftwareAesKeyUnwrapError::IntegrityCheckFailed)
-    );
+fn the_software_engine_passes_the_key_unwrap_conformance_cases() {
+    let engine = SoftwareKeyUnwrap::new(SoftwareAes128);
+    let _ = conformance::key_unwrap_rfc3394::<_, RSN_KEY_DATA_CAPACITY>(engine, || {
+        panic!("the software operation is ready on its first poll")
+    });
 }
 
 #[test]
 fn wraps_rfc3394_vector_and_round_trips_through_unwrap() {
-    let kek = [
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-        0x0f,
-    ];
-    let plaintext = [
-        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
-        0xff,
-    ];
-    let expected = [
-        0x1f, 0xa6, 0x8b, 0x0a, 0x81, 0x12, 0xb4, 0x47, 0xae, 0xf3, 0x4b, 0xd8, 0xfb, 0x5a, 0x7b,
-        0x82, 0x9d, 0x3e, 0x86, 0x23, 0x71, 0xd2, 0xcf, 0xe5,
-    ];
-    let wrapped = software_aes128_key_wrap(&kek, &plaintext).unwrap();
-    assert_eq!(wrapped.as_bytes(), &expected);
-    let unwrapped = software_aes128_key_unwrap(&kek, wrapped.as_bytes()).unwrap();
-    assert_eq!(unwrapped.as_bytes(), &plaintext);
+    let wrapped = software_aes128_key_wrap(
+        &conformance::RFC3394_4_1_KEK,
+        &conformance::RFC3394_4_1_KEY_DATA,
+    )
+    .unwrap();
+    assert_eq!(wrapped.as_bytes(), conformance::RFC3394_4_1_CIPHERTEXT);
+    let unwrapped = unwrap(&conformance::RFC3394_4_1_KEK, wrapped.as_bytes()).unwrap();
+    assert_eq!(unwrapped.as_bytes(), conformance::RFC3394_4_1_KEY_DATA);
 }
 
 #[test]
 fn wrap_rejects_non_rfc3394_lengths() {
     assert_eq!(
         software_aes128_key_wrap(&[0; 16], &[0; 8]).err(),
-        Some(SoftwareAesKeyWrapError::InvalidLength)
+        Some(KeyWrapError::InvalidLength)
     );
     assert_eq!(
         software_aes128_key_wrap(&[0; 16], &[0; 17]).err(),
-        Some(SoftwareAesKeyWrapError::InvalidLength)
+        Some(KeyWrapError::InvalidLength)
     );
-}
-
-#[test]
-fn rejects_non_rfc3394_lengths() {
-    assert_eq!(
-        software_aes128_key_unwrap(&[0; 16], &[0; 16]).err(),
-        Some(SoftwareAesKeyUnwrapError::InvalidLength)
-    );
-    assert_eq!(
-        software_aes128_key_unwrap(&[0; 16], &[0; 25]).err(),
-        Some(SoftwareAesKeyUnwrapError::InvalidLength)
-    );
-}
-
-#[test]
-fn external_unwrap_backends_can_construct_only_bounded_plaintext() {
-    let bytes = [0x5a; RSN_UNWRAPPED_KEY_DATA_CAPACITY];
-    let owned = RsnUnwrappedKeyData::try_copy(&bytes).unwrap();
-    assert_eq!(owned.as_bytes(), &bytes);
-
-    let oversized = [0; RSN_UNWRAPPED_KEY_DATA_CAPACITY + 1];
-    assert_eq!(
-        RsnUnwrappedKeyData::try_copy(&oversized).err(),
-        Some(RsnUnwrappedKeyDataCapacityError)
-    );
-}
-
-#[test]
-fn key_data_zeroization_resets_the_proved_prefix_and_all_storage() {
-    let mut wrapped = software_aes128_key_wrap(&[7; 16], &[9; 16]).unwrap();
-    wrapped.zeroize();
-    assert!(wrapped.as_bytes().is_empty());
-    assert!(wrapped.bytes.iter().all(|byte| *byte == 0));
-    let mut plain =
-        RsnUnwrappedKeyData::try_copy(&[0x5a; RSN_UNWRAPPED_KEY_DATA_CAPACITY]).unwrap();
-    plain.zeroize();
-    assert!(plain.as_bytes().is_empty());
-    assert!(plain.bytes.iter().all(|byte| *byte == 0));
 }
 
 #[test]
 fn rfc3394_uses_the_full_bounded_buffer_and_refuses_the_next_block() {
-    let plaintext = [0x91; RSN_UNWRAPPED_KEY_DATA_CAPACITY];
+    let plaintext = [0x91; RSN_KEY_DATA_CAPACITY - 8];
     let wrapped = software_aes128_key_wrap(&[0x27; 16], &plaintext).unwrap();
     assert_eq!(wrapped.as_bytes().len(), RSN_KEY_DATA_CAPACITY);
-    let unwrapped = software_aes128_key_unwrap(&[0x27; 16], wrapped.as_bytes()).unwrap();
+    let unwrapped = unwrap(&[0x27; 16], wrapped.as_bytes()).unwrap();
     assert_eq!(unwrapped.as_bytes(), plaintext);
     assert_eq!(
         software_aes128_key_wrap(&[0; 16], &[0; RSN_KEY_DATA_CAPACITY]).err(),
-        Some(SoftwareAesKeyWrapError::CapacityExceeded)
+        Some(KeyWrapError::CapacityExceeded)
     );
-    assert_eq!(
-        software_aes128_key_unwrap(&[0; 16], &[0; RSN_KEY_DATA_CAPACITY + 8]).err(),
-        Some(SoftwareAesKeyUnwrapError::CapacityExceeded)
-    );
+    assert!(RsnKeyData::try_copy(&[0; RSN_KEY_DATA_CAPACITY + 8]).is_err());
 }
