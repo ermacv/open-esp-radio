@@ -65,6 +65,27 @@ fn extreme_values_and_pseudo_random_inputs_sort_correctly() {
 }
 
 #[test]
+fn sifting_a_leaf_in_a_maximum_length_zero_sized_heap_does_not_overflow() {
+    // A zero-sized slice can exceed isize::MAX without an allocation. A leaf's
+    // conceptual child index may exceed usize::MAX, but there is no child to
+    // visit and no comparison to perform.
+    #[derive(Clone, Copy, Eq, PartialEq)]
+    struct Leaf;
+    impl Ord for Leaf {
+        fn cmp(&self, _: &Self) -> core::cmp::Ordering {
+            panic!("a leaf has no children to compare");
+        }
+    }
+    impl PartialOrd for Leaf {
+        fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    let mut values = [Leaf; usize::MAX];
+    super::sift_down(&mut values, usize::MAX - 1);
+}
+
+#[test]
 fn comparisons_stay_within_n_log_n_on_sorted_and_reversed_input() {
     use core::cell::Cell;
     use core::cmp::Ordering;

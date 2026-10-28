@@ -8,7 +8,9 @@
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! Notification across task priorities, without a lock or a critical section.
@@ -130,4 +132,8 @@ impl Default for PriorityWaker {
 #[cfg(test)]
 extern crate std;
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    reason = "tests assert notification and ownership behavior"
+)]
 mod tests;
