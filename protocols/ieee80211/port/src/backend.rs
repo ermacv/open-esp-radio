@@ -1,11 +1,11 @@
 //! Association rate-record decoding and backend observation values.
 
-/// Octets in a profile-owned opaque rate record.
+/// Octets in an opaque rate record supplied by the family policy.
 pub const RATE_SCHEDULE_RECORD_SIZE: usize = 12;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
-/// Format family of one profile-owned rate-schedule record.
+/// Format family of one rate-schedule record supplied by the family policy.
 pub enum RateScheduleKind {
     // Deliberately sparse internal tags keep LLVM from materializing a
     // nine-pointer jump table in internal SRAM.  These values never cross the
@@ -31,25 +31,25 @@ pub enum RateScheduleKind {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-/// Immutable record identity supplied by a transmit profile; contains no retry state.
+/// Immutable record identity supplied by the family rate policy; contains no retry state.
 pub struct RateScheduleRef {
     kind: RateScheduleKind,
     record: &'static [u8; RATE_SCHEDULE_RECORD_SIZE],
 }
 
 impl RateScheduleRef {
-    /// Bind one profile-owned immutable schedule record to its format family.
+    /// Bind an immutable record from the family rate policy to its format family.
     pub const fn from_record(
         kind: RateScheduleKind,
         record: &'static [u8; RATE_SCHEDULE_RECORD_SIZE],
     ) -> Self {
         Self { kind, record }
     }
-    /// The exact immutable record supplied by the profile.
+    /// The exact immutable record supplied by the family policy.
     pub const fn record(self) -> &'static [u8; RATE_SCHEDULE_RECORD_SIZE] {
         self.record
     }
-    /// The profile record format family.
+    /// The format family of the supplied record.
     pub const fn kind(self) -> RateScheduleKind {
         self.kind
     }
@@ -61,15 +61,15 @@ impl RateScheduleRef {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-/// Decoded record values supplied by the profile.
+/// Decoded record values supplied by the family rate policy.
 pub struct RateScheduleRecordState {
-    /// Initial rate code in the profile domain.
+    /// Initial rate code in the family's domain.
     pub rate: u8,
     /// Publication budget carried by the record.
     pub retry_limit: u8,
     /// Record index used by adaptive rate control.
     pub index: u8,
-    /// Profile-specific adaptive rate-control selector.
+    /// Selector used by the family's adaptive rate control.
     pub adaptive: u8,
 }
 
@@ -118,7 +118,7 @@ pub struct DefaultContention {
     /// Maximum contention exponent.
     pub ecw_max: u8,
 }
-/// Hardware inputs selected by the association rate-control profile.
+/// Hardware inputs selected by the family's association rate-control policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BeamformingReportRate {
     mode: u8,

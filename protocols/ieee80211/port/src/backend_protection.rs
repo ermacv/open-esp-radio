@@ -1,4 +1,4 @@
-//! Values exchanged with a static transmit profile.
+//! Protection inputs and decisions shared by upper-MAC and the family policy.
 use crate::Protection;
 use core::num::NonZeroU16;
 use oer_ieee80211_wire::{
