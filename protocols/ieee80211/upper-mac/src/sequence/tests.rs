@@ -2,8 +2,8 @@ use super::*;
 use crate::seq;
 
 #[test]
-fn sta_sequence_counter_is_monotonic_across_twelve_bit_wrap() {
-    let mut sequence = StaSequenceCounter::new(seq(0x0ffe));
+fn a_counter_wraps_from_4095_to_zero_and_keeps_counting() {
+    let mut sequence = SequenceCounter::new(seq(0x0ffe));
     assert_eq!(sequence.take(), seq(0x0ffe));
     assert_eq!(sequence.take(), seq(0x0fff));
     assert_eq!(sequence.take(), seq(0x0000));
@@ -11,8 +11,8 @@ fn sta_sequence_counter_is_monotonic_across_twelve_bit_wrap() {
 }
 
 #[test]
-fn sta_tx_sequence_spaces_do_not_advance_each_other() {
-    let mut sequences = StaTxSequenceCounters::new(seq(25));
+fn sequence_spaces_do_not_advance_each_other() {
+    let mut sequences = TxSequenceCounters::new(seq(25));
 
     assert_eq!(sequences.take_non_qos(), seq(25));
     assert_eq!(sequences.take_non_qos(), seq(26));
@@ -28,8 +28,8 @@ fn sta_tx_sequence_spaces_do_not_advance_each_other() {
 }
 
 #[test]
-fn sta_tx_sequence_space_rejects_invalid_tid_and_wraps_independently() {
-    let mut sequences = StaTxSequenceCounters::new(seq(0x0fff));
+fn a_sequence_space_rejects_an_invalid_tid_and_wraps_independently() {
+    let mut sequences = TxSequenceCounters::new(seq(0x0fff));
 
     assert_eq!(sequences.take_data(Some(15)), Some(seq(0x0fff)));
     assert_eq!(sequences.peek_qos(15), Some(seq(0)));

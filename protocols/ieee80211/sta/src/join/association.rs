@@ -5,7 +5,7 @@ use oer_ieee80211_wire::sequence::SequenceNumber;
 use oer_ieee80211_wire::status::status_code;
 use oer_ieee80211_wire::tsf::MICROS_PER_TIME_UNIT;
 use {
-    crate::sequence::StaSequenceCounter,
+    oer_ieee80211_upper_mac::sequence::SequenceCounter,
     oer_ieee80211_wire::{
         security::LinkProtection,
         station::{
@@ -200,7 +200,7 @@ impl StaAssociationRuntime {
     /// Advance to `now`: expire the epoch started at construction and its
     /// one-second deadline, or consume a management sequence number exactly
     /// when the retry schedule calls for a new request.
-    pub fn poll(mut self, now: Instant, sequence: &mut StaSequenceCounter) -> StaAssociationPoll {
+    pub fn poll(mut self, now: Instant, sequence: &mut SequenceCounter) -> StaAssociationPoll {
         if let AssociationStage::Comeback(epoch) = self.stage {
             if now < epoch.start {
                 self.stage = AssociationStage::Comeback(epoch);

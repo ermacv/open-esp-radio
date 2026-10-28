@@ -107,9 +107,8 @@ use {
     crate::{
         scan::ScanTable,
         security::{StaSecurityPolicy, select_association_rsn},
-        sequence::StaSequenceCounter,
     },
-    oer_ieee80211_upper_mac::phy_mode::PhyMode,
+    oer_ieee80211_upper_mac::{phy_mode::PhyMode, sequence::SequenceCounter},
     oer_ieee80211_wire::{
         management::{BROADCAST_ADDRESS, MAX_SSID_LEN, ProbeRequest},
         scan::ScanRecord,
@@ -798,10 +797,10 @@ pub struct LinkView<'a, 'id, T: StaTokens> {
 /// which its own frames share.
 pub enum LinkMode<'a> {
     /// A QoS BSS: QoS Data, a sequence space per TID.
-    Qos(&'a mut [StaSequenceCounter; 8]),
+    Qos(&'a mut [SequenceCounter; 8]),
     /// A non-QoS BSS: Data in the station's sequence space, which its
     /// management frames share.
-    NonQos(&'a mut StaSequenceCounter),
+    NonQos(&'a mut SequenceCounter),
 }
 
 /// How data is protected on a link.
@@ -882,7 +881,7 @@ const CHANNEL_CAPACITY: usize = 16;
 const SCAN_CAPACITY: usize = 16;
 
 /// A new association's QoS sequence spaces.
-const QOS_SEQUENCES: [StaSequenceCounter; 8] = [StaSequenceCounter::new(SequenceNumber::ZERO); 8];
+const QOS_SEQUENCES: [SequenceCounter; 8] = [SequenceCounter::new(SequenceNumber::ZERO); 8];
 
 /// Statically dispatched composition hooks retained across stop/restart.
 /// The provider owns its entropy state; each nonce request must be fresh for
@@ -988,7 +987,7 @@ pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     absence: Option<Lease<'id, K, T::GatePath>>,
     /// Each admitted application request reserves its own terminal cell.
     commands: Commands<'id, T::ConfigurationPath>,
-    sequence: StaSequenceCounter,
+    sequence: SequenceCounter,
     scan: ScanTable<SCAN_CAPACITY>,
     pmksa: StaPmksaCache,
     /// The connection attempt that owns new TX operations.
@@ -1010,7 +1009,7 @@ pub struct RetiredStation<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCal
     tickets: Pool<T::Ticket>,
     buffers: Pool<T::SmallBuffer>,
     commands: Commands<'id, T::ConfigurationPath>,
-    sequence: StaSequenceCounter,
+    sequence: SequenceCounter,
     pmksa: StaPmksaCache,
     notice: Option<StaNotice>,
 }
@@ -1562,7 +1561,7 @@ struct NewConnection<T: StaTokens, K> {
     association_id: u16,
     qos: bool,
     peer: Peer<T::RxMeta>,
-    qos_sequences: [StaSequenceCounter; 8],
+    qos_sequences: [SequenceCounter; 8],
     confirmation: Option<RsnStaResponseDeadline>,
 }
 impl<T: StaTokens, K> State<T, K> {
@@ -1874,7 +1873,7 @@ struct NewHandshake<T: StaTokens, K> {
     supplicant: Option<RsnStaSupplicant>,
     spp: oer_ieee80211_wire::security::Spp,
     pmk: Pmk,
-    qos_sequences: [StaSequenceCounter; 8],
+    qos_sequences: [SequenceCounter; 8],
     /// The deadline of the message the station waits for.
     deadline: RsnStaResponseDeadline,
     management: Option<ManagementProtection>,
@@ -1889,7 +1888,7 @@ struct Handshake<T: StaTokens, K> {
     supplicant: Option<RsnStaSupplicant>,
     spp: oer_ieee80211_wire::security::Spp,
     pmk: Pmk,
-    qos_sequences: [StaSequenceCounter; 8],
+    qos_sequences: [SequenceCounter; 8],
     /// The deadline of the message the station waits for.
     deadline: RsnStaResponseDeadline,
     step: HandshakeStep,
@@ -1932,7 +1931,7 @@ struct Connected<T: StaTokens, K> {
     peer: Peer<T::RxMeta>,
     /// The association's QoS sequence spaces, one per TID: its EAPOL's and,
     /// lent through the link, its data's.
-    qos_sequences: [StaSequenceCounter; 8],
+    qos_sequences: [SequenceCounter; 8],
     /// The upstream fact the arbiter has yet to hear.
     report: Option<UpstreamFact<K>>,
     /// The access point's beacons announced another EDCA set, already in
@@ -2779,7 +2778,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 absence_place: Some(absence_place),
                 absence: None,
                 commands,
-                sequence: StaSequenceCounter::new(SequenceNumber::ZERO),
+                sequence: SequenceCounter::new(SequenceNumber::ZERO),
                 scan: ScanTable::new(),
                 pmksa: StaPmksaCache::new(),
                 epoch: None,
@@ -2834,7 +2833,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 absence_place: Some(absence_place),
                 absence: None,
                 commands: commands,
-                sequence: StaSequenceCounter::new(SequenceNumber::ZERO),
+                sequence: SequenceCounter::new(SequenceNumber::ZERO),
                 scan => ScanTable::init_in_place,
                 pmksa: StaPmksaCache::new(),
                 epoch: None,
@@ -3304,7 +3303,7 @@ struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: Sta
     absence: &'s mut Option<Lease<'id, K, T::GatePath>>,
     /// Each admitted application request reserves its own terminal cell.
     commands: &'s mut Commands<'id, T::ConfigurationPath>,
-    sequence: &'s mut StaSequenceCounter,
+    sequence: &'s mut SequenceCounter,
     scan: &'s mut ScanTable<SCAN_CAPACITY>,
     pmksa: &'s mut StaPmksaCache,
     /// The connection attempt that owns new TX operations.
@@ -5385,7 +5384,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     fn encode_eapol_response(
         &mut self,
         bssid: Bssid,
-        qos: Option<&mut [StaSequenceCounter; 8]>,
+        qos: Option<&mut [SequenceCounter; 8]>,
         response: &EapolResponse,
         purpose: TxPurpose,
     ) -> Result<Owed<'id, T, K>, Unsent> {
@@ -6222,7 +6221,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     fn encode_protected_eapol(
         &mut self,
         bssid: Bssid,
-        qos: Option<&mut [StaSequenceCounter; 8]>,
+        qos: Option<&mut [SequenceCounter; 8]>,
         eapol: &[u8],
         purpose: TxPurpose,
     ) -> Result<StaTransmit<'id, T, K>, Unsent> {

@@ -1,4 +1,5 @@
-//! Separate management/non-QoS and per-TID transmit sequence owners.
+//! Separate management/non-QoS and per-TID transmit sequence owners, shared
+//! by the station, the access point and ESP-NOW.
 
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
@@ -10,7 +11,7 @@ use oer_ieee80211_wire::sequence::SequenceNumber;
 ///
 /// This value deliberately represents only one space. Management/non-QoS
 /// traffic and every QoS TID have independent counters, owned together by
-/// [`StaTxSequenceCounters`].
+/// [`TxSequenceCounters`].
 ///
 /// SOURCE(esp32s31): complete `libnet80211.a[ieee80211_ht.o]::
 /// ieee80211_ampdu_request` instructions 0x9a..0xa2 load the AddBA Starting
@@ -22,11 +23,11 @@ use oer_ieee80211_wire::sequence::SequenceNumber;
 /// retry attached to the already encoded frame, so retries do not consume a
 /// new protocol sequence number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StaSequenceCounter {
+pub struct SequenceCounter {
     next: SequenceNumber,
 }
 
-impl StaSequenceCounter {
+impl SequenceCounter {
     pub const fn new(first: SequenceNumber) -> Self {
         Self { next: first }
     }
@@ -44,7 +45,7 @@ impl StaSequenceCounter {
     }
 }
 
-/// Allocation-free owner of all STA transmit sequence-number spaces.
+/// Allocation-free owner of all transmit sequence-number spaces of one peer.
 ///
 /// IEEE 802.11 QoS traffic has one sequence space per TID. Management and
 /// non-QoS data use the separate non-QoS space. Keeping the counters behind
@@ -55,16 +56,16 @@ impl StaSequenceCounter {
 /// independent; callers may seed it from per-association entropy so a reset
 /// does not reproduce the previous peer epoch's initial values.
 #[derive(Debug, Eq, PartialEq)]
-pub struct StaTxSequenceCounters {
-    non_qos: StaSequenceCounter,
-    qos: [StaSequenceCounter; 16],
+pub struct TxSequenceCounters {
+    non_qos: SequenceCounter,
+    qos: [SequenceCounter; 16],
 }
 
-impl StaTxSequenceCounters {
+impl TxSequenceCounters {
     pub const QOS_TID_COUNT: u8 = 16;
 
     pub const fn new(first: SequenceNumber) -> Self {
-        let counter = StaSequenceCounter::new(first);
+        let counter = SequenceCounter::new(first);
         Self {
             non_qos: counter,
             qos: [counter; Self::QOS_TID_COUNT as usize],
@@ -72,7 +73,7 @@ impl StaTxSequenceCounters {
     }
 
     /// Borrow the management/non-QoS sequence-number owner.
-    pub const fn non_qos_mut(&mut self) -> &mut StaSequenceCounter {
+    pub const fn non_qos_mut(&mut self) -> &mut SequenceCounter {
         &mut self.non_qos
     }
 
@@ -85,16 +86,16 @@ impl StaTxSequenceCounters {
     }
 
     /// Borrow one QoS/TID sequence-number owner.
-    pub fn qos_mut(&mut self, tid: u8) -> Option<&mut StaSequenceCounter> {
+    pub fn qos_mut(&mut self, tid: u8) -> Option<&mut SequenceCounter> {
         self.qos.get_mut(usize::from(tid))
     }
 
     pub fn peek_qos(&self, tid: u8) -> Option<SequenceNumber> {
-        self.qos.get(usize::from(tid)).map(StaSequenceCounter::peek)
+        self.qos.get(usize::from(tid)).map(SequenceCounter::peek)
     }
 
     pub fn take_qos(&mut self, tid: u8) -> Option<SequenceNumber> {
-        self.qos_mut(tid).map(StaSequenceCounter::take)
+        self.qos_mut(tid).map(SequenceCounter::take)
     }
 
     /// Consume a data-frame sequence number from the wire-format-selected

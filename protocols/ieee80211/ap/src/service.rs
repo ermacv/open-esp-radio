@@ -4,6 +4,7 @@ use core::fmt;
 use oer_ieee80211_cipher::aes::{SoftwareAesKeyWrapError, software_aes128_key_wrap};
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::security::spp::SppScope;
+use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 mod block_ack;
@@ -445,7 +446,7 @@ struct ApPeer {
     /// and receiver reorder state are peer+TID agreements; sharing these
     /// counters across AP clients creates artificial holes whenever the
     /// scheduler switches peers.
-    next_qos_sequences: [SequenceNumber; 8],
+    qos_sequences: [SequenceCounter; 8],
     tx_block_ack: TxBlockAckOriginator<1>,
     power_state: ApPeerPowerState,
     buffered_unicast_frames: u16,
@@ -601,7 +602,7 @@ impl ApPeer {
             short_preamble: false,
             ht: None,
             qos_supported: false,
-            next_qos_sequences: [SequenceNumber::ZERO; 8],
+            qos_sequences: [SequenceCounter::new(SequenceNumber::ZERO); 8],
             tx_block_ack: new_ap_tx_block_ack()?,
             power_state: ApPeerPowerState::Active,
             buffered_unicast_frames: 0,
@@ -737,8 +738,8 @@ pub struct AccessPointService<'peers, S: SppScope> {
     peer_storage: AccessPointPeers<'peers>,
     client_limit: AccessPointClientLimit,
     inactive_timeout: AccessPointInactiveTimeout,
-    next_management_sequence: SequenceNumber,
-    next_data_sequence: SequenceNumber,
+    management_sequence: SequenceCounter,
+    data_sequence: SequenceCounter,
     status_revision: u32,
     associated_count: u8,
     authorized_count: u8,
@@ -839,8 +840,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             peer_storage,
             client_limit,
             inactive_timeout,
-            next_management_sequence: SequenceNumber::ZERO,
-            next_data_sequence: SequenceNumber::ZERO,
+            management_sequence: SequenceCounter::new(SequenceNumber::ZERO),
+            data_sequence: SequenceCounter::new(SequenceNumber::ZERO),
             status_revision: 0,
             associated_count: 0,
             authorized_count: 0,

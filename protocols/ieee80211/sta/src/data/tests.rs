@@ -1,7 +1,7 @@
 //! The data machine's encapsulation, tokens and admission.
 
 use super::*;
-use crate::sequence::StaSequenceCounter;
+use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use core::num::NonZeroU16;
 use oer_ieee80211_port::ResponseHeader;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
@@ -162,13 +162,13 @@ fn qos_link<'a>(
         association_id: 1,
         // The station's QoS sequence spaces, which the link lends.
         mode: LinkMode::Qos(std::boxed::Box::leak(std::boxed::Box::new(
-            [StaSequenceCounter::new(SequenceNumber::ZERO); 8],
+            [SequenceCounter::new(SequenceNumber::ZERO); 8],
         ))),
         protection: LinkProtection::Ccmp { key, replay },
     }
 }
 
-fn open_link(counter: &mut StaSequenceCounter) -> LinkView<'_, 'static, Station<'static>> {
+fn open_link(counter: &mut SequenceCounter) -> LinkView<'_, 'static, Station<'static>> {
     LinkView {
         epoch: LinkEpoch::for_test(1),
         address: oer_ieee80211_wire::address::OwnAddress::new(
@@ -569,7 +569,7 @@ fn a_protected_qos_msdu_leaves_room_for_the_ccmp_header_and_contends_by_its_prio
 #[test]
 fn an_open_non_qos_msdu_takes_the_stations_sequence_number_and_no_ccmp_room() {
     let mut data = machine();
-    let mut counter = StaSequenceCounter::new(SequenceNumber::new(42).unwrap());
+    let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
     let mut link = open_link(&mut counter);
     data.input(DataInput {
         msdu: msdu(0),
@@ -592,7 +592,7 @@ fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
         [Buffer(std::vec![0; 200])],
         core::num::NonZeroU8::new(8).unwrap(),
     );
-    let mut counter = StaSequenceCounter::new(SequenceNumber::new(42).unwrap());
+    let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
     let long = Msdu {
         payload: &[0; 200],
         ..msdu(0)
@@ -625,7 +625,7 @@ fn open_mpdu_fits_exactly_without_a_temporary_ccmp_gap() {
         [Buffer(std::vec![0; 24 + 8 + 100])],
         core::num::NonZeroU8::new(8).unwrap(),
     );
-    let mut counter = StaSequenceCounter::new(SequenceNumber::new(42).unwrap());
+    let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
     data.input(DataInput {
         msdu: msdu(0),
         link: &mut open_link(&mut counter),

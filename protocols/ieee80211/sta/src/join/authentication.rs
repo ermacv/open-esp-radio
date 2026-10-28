@@ -4,7 +4,7 @@ use oer_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_ieee80211_wire::sequence::SequenceNumber;
 use oer_ieee80211_wire::status::status_code;
 use {
-    crate::sequence::StaSequenceCounter,
+    oer_ieee80211_upper_mac::sequence::SequenceCounter,
     oer_ieee80211_wire::station::{
         StaDisconnect, parse_open_authentication_response, parse_sta_disconnect,
     },
@@ -95,7 +95,7 @@ impl StaAuthenticationRuntime {
     /// operation; only `Retry` below can produce another runtime owner.
     pub fn begin_attempt(
         mut self,
-        sequence: &mut StaSequenceCounter,
+        sequence: &mut SequenceCounter,
     ) -> (StaAuthenticationExchange, StaAuthenticationAttempt) {
         // Only `new` or a retry below the three-attempt limit creates this
         // owner, so the increment cannot reach the integer bound.

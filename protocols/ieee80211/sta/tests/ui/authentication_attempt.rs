@@ -1,8 +1,8 @@
 #![no_std]
-use oer_ieee80211_sta::sequence::StaSequenceCounter;
+use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use oer_ieee80211_sta::join::authentication::{StaAuthenticationEvent, StaAuthenticationRuntime};
 
-pub fn retry(ready: StaAuthenticationRuntime, sequence: &mut StaSequenceCounter) {
+pub fn retry(ready: StaAuthenticationRuntime, sequence: &mut SequenceCounter) {
     let (active, _) = ready.begin_attempt(sequence);
     #[cfg(ui_reject)]
     let _ = active.begin_attempt(sequence); // ui-error: E0599

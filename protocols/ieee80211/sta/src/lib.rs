@@ -37,8 +37,7 @@
 //! Protocol crates own scan records, IEEE 802.11 framing and WPA state. This
 //! crate owns the station: [`machine`], one sans-IO machine for the whole
 //! lifecycle, its Authentication/Association state machines ([`join`]), its
-//! BSS observation table ([`scan`]), transmit sequence counters ([`sequence`]),
-//! power-save decisions and the application's station vocabulary
+//! BSS observation table ([`scan`]), power-save decisions and the application's station vocabulary
 //! ([`station`]). It never waits: a thin service loop over the port, the
 //! channel arbiter and time drives it.
 //!
@@ -72,16 +71,5 @@ pub mod data;
 pub mod epoch;
 pub mod port;
 
-pub mod sequence;
-
 pub mod scan;
 pub mod security;
-
-/// A literal test sequence number; panics outside twelve bits.
-#[cfg(test)]
-pub(crate) const fn seq(value: u16) -> oer_ieee80211_wire::sequence::SequenceNumber {
-    match oer_ieee80211_wire::sequence::SequenceNumber::new(value) {
-        Some(sequence) => sequence,
-        None => panic!("test sequence number exceeds twelve bits"),
-    }
-}

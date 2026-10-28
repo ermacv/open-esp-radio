@@ -12,7 +12,7 @@ use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use {
-    oer_ieee80211_sta::sequence::StaSequenceCounter,
+    oer_ieee80211_upper_mac::sequence::SequenceCounter,
     oer_ieee80211_wire::{
         channel::WifiChannel,
         extensions::espressif::esp_now::{
@@ -1182,7 +1182,7 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
     pub fn prepare_v1_tx<'payload>(
         &mut self,
         peer: EspNowEncryptedPeerId,
-        sequence: &mut StaSequenceCounter,
+        sequence: &mut SequenceCounter,
         random_value: EspNowRandomValue,
         payload: &'payload [u8],
     ) -> Result<EspNowPreparedEncryptedV1Tx<'payload>, EspNowEncryptedSendError> {

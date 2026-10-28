@@ -298,7 +298,7 @@ fn encrypted_length_validation_precedes_packet_and_sequence_consumption() {
     .unwrap();
     let mut protocol = EspNowEncryptedProtocol::<1>::new(config, EspNowPmk::new([1; 16]));
     let peer = protocol.add_peer(peer(2, 2)).unwrap();
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::ZERO);
+    let mut sequence = SequenceCounter::new(SequenceNumber::ZERO);
     let random = EspNowRandomValue::new([1; 4]);
     assert!(matches!(
         protocol.prepare_v1_tx(peer, &mut sequence, random, &[0; 251]),

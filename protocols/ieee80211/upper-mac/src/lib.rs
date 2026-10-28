@@ -57,8 +57,8 @@
 //! Receive owners retain duplicate history, fragment reassembly, CCMP replay
 //! and Block Ack reordering. [`monitor`] selects the frames a monitor keeps and
 //! the channels it visits; [`vif`] routes a received MPDU of a same-channel
-//! station and SoftAP pair to its interface. Transmit owners retain PN allocation and Block
-//! Ack negotiation/originator windows. Wire formats remain in
+//! station and SoftAP pair to its interface. Transmit owners retain PN allocation,
+//! the [`sequence`] number spaces and Block Ack negotiation/originator windows. Wire formats remain in
 //! `oer-ieee80211-wire`.
 //!
 //! The package is sans-IO: completions and the radio time enter as values,
@@ -80,6 +80,7 @@ pub mod qos;
 pub mod rate_control;
 pub mod rate_selection;
 pub mod retry;
+pub mod sequence;
 pub mod tx;
 
 pub use ampdu::{
