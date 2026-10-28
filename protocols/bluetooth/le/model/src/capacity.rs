@@ -1,97 +1,92 @@
-//! FIFO over durable capacity and body-loaned seats. Only tokens cross the
-//! private BodyLoan conversion; a borrowed waiter seat never has to move.
-#![allow(
-    clippy::indexing_slicing,
-    reason = "the typed seats are minted once with exactly SEATS indices"
-)]
-use super::queues::{CAPACITY, SEATS};
-use alloc::vec::Vec;
+//! FIFO over durable capacity and body-loaned seats. Waiters carry seat
+//! identities directly; cancellation removes the corresponding queue entry.
+use super::{queues::CAPACITY, storage::Local};
+use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
 use core::{
-    cell::{Cell, RefCell},
     future::poll_fn,
     task::{Poll, Waker},
 };
 use oer_bluetooth_le_port::CommandCapacity;
 use oer_radio_port::{Child, Permit, PermitSupply, Root, SlotIdentity};
 
+type Capacity<Id> = Permit<'static, CommandCapacity, Child<Root<Id>, 0>>;
+struct Waiter {
+    index: u8,
+    waker: Rc<Waker>,
+}
 pub(crate) struct Pool<Id: SlotIdentity> {
-    free: RefCell<Vec<Permit<'static, CommandCapacity, Child<Root<Id>, 0>>>>,
-    waiters: RefCell<[Option<(u32, Waker)>; SEATS]>,
-    next: Cell<u32>,
+    free: Local<Vec<Capacity<Id>>>,
+    waiters: Local<VecDeque<Waiter>>,
 }
 impl<Id: SlotIdentity> Pool<Id> {
+    pub const fn vacant() -> Self {
+        Self {
+            free: Local::new(Vec::new()),
+            waiters: Local::new(VecDeque::new()),
+        }
+    }
     pub fn new(
         supply: PermitSupply<'static, CommandCapacity, CAPACITY, Child<Root<Id>, 0>>,
     ) -> Self {
         Self {
-            free: RefCell::new(supply.into_permits().into_iter().collect()),
-            waiters: RefCell::new([const { None }; SEATS]),
-            next: Cell::new(0),
+            free: Local::new(supply.into_permits().into_iter().collect()),
+            waiters: Local::new(VecDeque::new()),
         }
-    }
-    fn leader(&self) -> Option<u32> {
-        self.waiters
-            .borrow()
-            .iter()
-            .flatten()
-            .map(|(ticket, _)| *ticket)
-            .min_by_key(|ticket| ticket.wrapping_sub(self.next.get()))
     }
     fn wake(&self) {
-        if self.free.borrow().is_empty() {
+        if self.free.with(|free| free.is_empty()) {
             return;
         }
-        if let Some(leader) = self.leader() {
-            let wake = self
-                .waiters
-                .borrow()
-                .iter()
-                .flatten()
-                .find(|(ticket, _)| *ticket == leader)
-                .map(|(_, w)| w.clone());
-            if let Some(w) = wake {
-                w.wake();
-            }
+        let wake = self
+            .waiters
+            .with(|waiters| waiters.front().map(|w| w.waker.clone()));
+        if let Some(waker) = wake {
+            waker.wake_by_ref();
         }
     }
-    fn leave(&self, index: usize, ticket: u32) {
-        let mut waiters = self.waiters.borrow_mut();
-        if waiters[index].as_ref().is_some_and(|(t, _)| *t == ticket) {
-            waiters[index] = None;
-        }
-        drop(waiters);
+    fn leave(&self, index: u8) {
+        let removed = self.waiters.with(|waiters| {
+            let position = waiters.iter().position(|w| w.index == index)?;
+            waiters.remove(position)
+        });
+        drop(removed);
         self.wake();
     }
-    pub fn release(&self, permit: Permit<'static, CommandCapacity, Child<Root<Id>, 0>>) {
-        self.free.borrow_mut().push(permit);
+    pub fn release(&self, permit: Capacity<Id>) {
+        self.free.with(|free| free.push(permit));
         self.wake();
     }
-    pub async fn take(&self, index: u8) -> Permit<'static, CommandCapacity, Child<Root<Id>, 0>> {
+    pub async fn take(&self, index: u8) -> Capacity<Id> {
         let mut place = Place {
             pool: self,
-            index: usize::from(index),
-            ticket: None,
+            index,
+            registered: false,
         };
         poll_fn(move |cx| {
             let place = &mut place;
-            let ticket = match place.ticket {
-                Some(ticket) => ticket,
-                None => {
-                    let ticket = self.next.get();
-                    self.next.set(ticket.wrapping_add(1));
-                    place.ticket = Some(ticket);
-                    ticket
+            let waker = Rc::new(cx.waker().clone());
+            let previous = self.waiters.with(|waiters| {
+                if let Some(waiter) = waiters.iter_mut().find(|w| w.index == index) {
+                    Some(core::mem::replace(&mut waiter.waker, waker))
+                } else {
+                    waiters.push_back(Waiter { index, waker });
+                    None
                 }
-            };
-            self.waiters.borrow_mut()[place.index] = Some((ticket, cx.waker().clone()));
-            if self.leader() != Some(ticket) {
+            });
+            place.registered = true;
+            drop(previous);
+            if self
+                .waiters
+                .with(|waiters| waiters.front().map(|w| w.index))
+                != Some(index)
+            {
                 return Poll::Pending;
             }
-            let Some(permit) = self.free.borrow_mut().pop() else {
+            let Some(permit) = self.free.with(Vec::pop) else {
                 return Poll::Pending;
             };
-            self.leave(place.index, ticket);
-            place.ticket = None;
+            place.registered = false;
+            self.leave(index);
             Poll::Ready(permit)
         })
         .await
@@ -99,13 +94,38 @@ impl<Id: SlotIdentity> Pool<Id> {
 }
 struct Place<'a, Id: SlotIdentity> {
     pool: &'a Pool<Id>,
-    index: usize,
-    ticket: Option<u32>,
+    index: u8,
+    registered: bool,
 }
 impl<Id: SlotIdentity> Drop for Place<'_, Id> {
     fn drop(&mut self) {
-        if let Some(ticket) = self.ticket {
-            self.pool.leave(self.index, ticket);
+        if self.registered {
+            self.pool.leave(self.index);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::{future::Future, pin::pin, task::Context};
+    #[test]
+    fn waiter_identity_is_not_an_array_offset_and_cancellation_removes_it() {
+        let pool = Pool::<oer_radio_port::LocalId<'static>>::vacant();
+        {
+            let mut waiter = pin!(pool.take(u8::MAX));
+            assert!(
+                waiter
+                    .as_mut()
+                    .poll(&mut Context::from_waker(Waker::noop()))
+                    .is_pending()
+            );
+            assert_eq!(
+                pool.waiters
+                    .with(|waiters| waiters.front().map(|w| w.index)),
+                Some(u8::MAX)
+            );
+        }
+        assert!(pool.waiters.with(|waiters| waiters.is_empty()));
     }
 }

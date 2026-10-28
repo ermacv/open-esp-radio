@@ -8,7 +8,7 @@ use core::{
 use oer_bluetooth_le_port::*;
 use oer_time::Duration;
 
-fn run<F: Future>(future: F) -> F::Output {
+pub(super) fn run<F: Future>(future: F) -> F::Output {
     let mut future = pin!(future);
     for _ in 0..10_000 {
         if let Poll::Ready(value) = future
@@ -34,13 +34,13 @@ fn power() -> TxPower {
 fn env() -> Environment {
     Environment::new(NonZeroU64::new(1_000).expect("nonzero test period"))
 }
-fn rx(channel: u8) -> Receive {
+pub(super) fn rx(channel: u8) -> Receive {
     Receive {
         channel: TestChannel::new(channel).expect("test channel"),
         phy: TestPhy::Le1M,
     }
 }
-fn tx(channel: u8) -> Transmit {
+pub(super) fn tx(channel: u8) -> Transmit {
     Transmit {
         channel: TestChannel::new(channel).expect("test channel"),
         phy: TestPhy::Le1M,
@@ -78,40 +78,40 @@ fn medium_is_independent_of_backend_progress_and_has_exact_loss_phase() {
     let a = air.attach();
     let b = air.attach();
     let c = air.attach();
-    air.receive(b, rx(19));
-    air.receive(c, rx(20));
-    air.transmit(a, tx(19));
+    air.receive(&b, rx(19));
+    air.receive(&c, rx(20));
+    air.transmit(&a, tx(19));
     air.set_loss(Loss::EveryNth(NonZeroU32::new(3).expect("nonzero loss")));
     air.advance(Duration::from_micros(2_500)).expect("advance");
     air.advance(Duration::from_micros(2_500)).expect("advance");
     assert_eq!(
-        air.stop(b),
+        air.stop(&b),
         PacketCount {
             packets: 4,
             saturated: false
         }
     );
-    assert_eq!(air.stop(c), PacketCount::default());
-    air.stop(a);
-    air.receive(b, rx(19));
+    assert_eq!(air.stop(&c), PacketCount::default());
+    air.stop(&a);
+    air.receive(&b, rx(19));
     air.advance(Duration::from_micros(10_000))
         .expect("quiet advance");
-    assert_eq!(air.stop(b), PacketCount::default());
+    assert_eq!(air.stop(&b), PacketCount::default());
 }
 #[test]
 fn receiver_only_counts_packets_after_it_starts_and_loss_changes_are_inputs() {
     let air = env();
     let a = air.attach();
     let b = air.attach();
-    air.transmit(a, tx(19));
+    air.transmit(&a, tx(19));
     air.advance(Duration::from_micros(9_500)).expect("advance");
-    air.receive(b, rx(19));
+    air.receive(&b, rx(19));
     air.advance(Duration::from_micros(500)).expect("advance");
     air.set_loss(Loss::All);
     air.advance(Duration::from_micros(10_000))
         .expect("loss advance");
-    assert_eq!(air.stop(b).packets, 1);
-    air.detach(a);
+    assert_eq!(air.stop(&b).packets, 1);
+    air.detach(&a);
     assert_eq!(air.active_radios(), 0);
 }
 #[test]
@@ -119,12 +119,12 @@ fn count_saturation_and_time_overflow_are_explicit() {
     let air = env();
     let a = air.attach();
     let b = air.attach();
-    air.transmit(a, tx(19));
-    air.receive(b, rx(19));
+    air.transmit(&a, tx(19));
+    air.receive(&b, rx(19));
     air.advance(Duration::from_micros(65_536_000))
         .expect("advance");
     assert_eq!(
-        air.stop(b),
+        air.stop(&b),
         PacketCount {
             packets: u16::MAX,
             saturated: true
@@ -152,7 +152,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
     async fn run<'a, 'p>(
         self,
         owner: oer_radio_port::Owner<'a, 'p, Id, Backend<Id, Tracked>, oer_radio_port::Disabled>,
-        resources: Resources<'p, Id>,
+        resources: Result<Resources<'p, Id>, Fault>,
     ) -> oer_radio_port::Ended<Id, Backend<Id, Tracked>, ()>
     where
         Backend<Id, Tracked>: 'p,
@@ -166,7 +166,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
         let Resources {
             seats: [mut seat, ..],
             session,
-        } = resources;
+        } = resources.expect("prepared initial model resources");
         {
             let phase = owner.phase();
             let capacity = phase.take(&mut seat).await;
@@ -236,7 +236,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id>>
     async fn run<'a, 'p>(
         self,
         owner: oer_radio_port::Owner<'a, 'p, Id, Backend<Id>, oer_radio_port::Disabled>,
-        _: Resources<'p, Id>,
+        _: Result<Resources<'p, Id>, Fault>,
     ) -> oer_radio_port::Ended<Id, Backend<Id>, ()>
     where
         Backend<Id>: 'p,
@@ -296,7 +296,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
     async fn run<'a, 'p>(
         self,
         owner: oer_radio_port::Owner<'a, 'p, Id, Backend<Id, Tracked>, oer_radio_port::Disabled>,
-        resources: Resources<'p, Id>,
+        resources: Result<Resources<'p, Id>, Fault>,
     ) -> oer_radio_port::Ended<Id, Backend<Id, Tracked>, ()>
     where
         Backend<Id, Tracked>: 'p,
@@ -313,7 +313,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
             let Resources {
                 seats: [mut seat, ..],
                 session,
-            } = resources;
+            } = resources.expect("prepared initial model resources");
             let capacity = phase.take(&mut seat).await;
             let config = Supported::new(rx(19)).expect("supported RX");
             assert!(matches!(
@@ -352,8 +352,15 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
                     cause: Fault::Injected
                 })
             ));
-            assert!(phase.view.shared.pending.borrow().is_empty());
-            assert_eq!(phase.view.shared.poisoned_requests.borrow().len(), 1);
+            assert!(phase.view.shared.pending.with(|pending| pending.is_empty()));
+            assert_eq!(
+                phase
+                    .view
+                    .shared
+                    .poisoned_requests
+                    .with(|requests| requests.len()),
+                1
+            );
             assert!(matches!(
                 phase.next_event().await,
                 Err(EventEnd::Drained {
