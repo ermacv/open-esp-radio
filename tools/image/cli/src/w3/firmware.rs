@@ -239,7 +239,11 @@ pub fn run(
             };
             let router_address=ssh.run(&format!("set -e\nip -4 route get {} | awk '{{for(i=1;i<NF;i++) if($i==\"src\") print $(i+1)}}'",lease.address))?.trim().parse().map_err(|_|"ambiguous W3 router route source")?;
             let capture = match &source {
-                Some(source) => source.capture(interface, lease.address)?,
+                Some(source) => source.capture(
+                    interface,
+                    lease.address,
+                    fs::File::create(directory.join("load-capture.txt"))?,
+                )?,
                 None => Capture::start(&ssh, interface, lease.address, 100)?,
             };
             report.observations = Some(Evidence {

@@ -62,7 +62,8 @@ and single configured build. The host prepares a temporary, hash-checked
 OpenWrt fping 5.3 extraction without installation; the router sends the #486
 56-byte, 1 ms × 10,000-request flood after two consecutive 5/5 readiness
 batches. Recovery batches are 5/5 at +0/1/5/15/30 s. A ready AP tcpdump stream
-covers the complete echo workload and must report zero kernel drops.
+covers the complete echo workload (ICMP types 0/8) and must report zero kernel
+drops. Its original numeric text is retained even if decoding fails.
 The mode records its own load result and a loss table in `report.json`; the
 ordinary version-1 console block remains unchanged. Flood/recovery identities
 are separate from its 100-pair peer gate. All AP-initiated echoes, including

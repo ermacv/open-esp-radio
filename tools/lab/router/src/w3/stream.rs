@@ -21,6 +21,7 @@ pub struct Capture {
     output: Option<JoinHandle<Result<String>>>,
     diagnostics: Option<JoinHandle<(bool, Stderr)>>,
     count: u16,
+    saved: Option<std::fs::File>,
     stop: Option<(Ssh, String)>,
     command: Option<CommandObservation>,
 }
@@ -44,7 +45,7 @@ impl Capture {
         address: std::net::Ipv4Addr,
         count: u16,
     ) -> Result<Self> {
-        Self::begin(ssh, interface, address, count, None)
+        Self::begin(ssh, interface, address, count, None, None)
     }
 
     pub(crate) fn start_load(
@@ -52,8 +53,9 @@ impl Capture {
         interface: &str,
         address: std::net::Ipv4Addr,
         directory: &str,
+        saved: std::fs::File,
     ) -> Result<Self> {
-        Self::begin(ssh, interface, address, 10000, Some(directory))
+        Self::begin(ssh, interface, address, 10000, Some(directory), Some(saved))
     }
 
     fn begin(
@@ -62,6 +64,7 @@ impl Capture {
         address: std::net::Ipv4Addr,
         count: u16,
         directory: Option<&str>,
+        saved: Option<std::fs::File>,
     ) -> Result<Self> {
         if !matches!(
             (count, directory.is_some()),
@@ -84,7 +87,7 @@ impl Capture {
             let script = format!(
                 "printf '%s\\n' \"$$\" > {pid}; exec tcpdump -n -tt -l -i {} {}",
                 quote(interface)?,
-                quote(&format!("icmp and host {address}"))?
+                quote(&load_filter(address))?
             );
             (
                 script,
@@ -131,6 +134,7 @@ impl Capture {
             output: Some(output),
             diagnostics: Some(diagnostics),
             count,
+            saved,
             stop,
             command: Some(ssh.observe(&script)),
         };
@@ -173,14 +177,16 @@ impl Capture {
             .ok_or("missing capture reader")?
             .join()
             .map_err(|_| "capture reader panicked")??;
-        stopped?;
         if load {
-            let echoes = super::parse_echoes_bounded(&text, 4 * 1024 * 1024, 21000)?;
+            let saved = self.saved.as_mut().ok_or("missing AP load capture sink")?;
+            let echoes = decode_load(&text, saved);
+            stopped?;
             return Ok((
-                echoes,
+                echoes?,
                 waited.is_ok_and(|status| status.success()) && complete,
             ));
         }
+        stopped?;
         completed_observation(
             &text,
             waited.is_ok_and(|status| status.success()),
@@ -220,9 +226,25 @@ impl Drop for Capture {
             );
         }
         if let Some(output) = self.output.take() {
-            let _ = output.join();
+            if let Ok(Ok(text)) = output.join() {
+                if let Some(saved) = &mut self.saved {
+                    use std::io::Write;
+                    let _ = saved.write_all(text.as_bytes());
+                }
+            }
         }
     }
+}
+
+fn decode_load(text: &str, saved: &mut impl std::io::Write) -> Result<Vec<super::Echo>> {
+    saved
+        .write_all(text.as_bytes())
+        .map_err(|_| "cannot save AP load capture")?;
+    super::parse_echoes_bounded(text, 4 * 1024 * 1024, 21000)
+}
+
+fn load_filter(address: std::net::Ipv4Addr) -> String {
+    format!("icmp and host {address} and (icmp[0] = 0 or icmp[0] = 8)")
 }
 
 fn completed_observation(
@@ -475,6 +497,26 @@ mod tests {
         let oversized = vec![b'x'; 128 * 1024 + 1];
         assert!(departure_output(&oversized[..], ready).is_err());
     }
+    #[test]
+    fn a_failed_load_decode_still_preserves_the_original_observation() {
+        let text = "1.000000 IP 192.0.2.1 > 192.0.2.8: ICMP host unreachable\n";
+        let mut saved = Vec::new();
+        assert!(decode_load(text, &mut saved).is_err());
+        assert_eq!(saved, text.as_bytes());
+        let text = "1.000000 IP 192.0.2.1 > 192.0.2.8: ICMP echo request, id 7, seq 1, length 64\n";
+        let mut saved = Vec::new();
+        assert_eq!(decode_load(text, &mut saved).unwrap().len(), 1);
+        assert_eq!(saved, text.as_bytes());
+    }
+
+    #[test]
+    fn load_filter_selects_echoes_without_treating_icmp_errors_as_echo_rows() {
+        assert_eq!(
+            load_filter("192.0.2.8".parse().unwrap()),
+            "icmp and host 192.0.2.8 and (icmp[0] = 0 or icmp[0] = 8)"
+        );
+    }
+
     #[test]
     fn load_capture_bounds_do_not_relax_the_standard_console_observation() {
         let text = "1.000000 IP 192.0.2.1 > 192.0.2.8: ICMP echo request, id 7, seq 1, length 64\n"

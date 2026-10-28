@@ -156,8 +156,13 @@ printf '%s\n' "$work"
             directory,
         })
     }
-    pub fn capture(&self, interface: &str, address: Ipv4Addr) -> Result<Capture> {
-        Capture::start_load(&self.ssh, interface, address, &self.directory)
+    pub fn capture(
+        &self,
+        interface: &str,
+        address: Ipv4Addr,
+        saved: std::fs::File,
+    ) -> Result<Capture> {
+        Capture::start_load(&self.ssh, interface, address, &self.directory, saved)
     }
     fn batch(&self, address: Ipv4Addr, count: u32, interval: u32, payload: u32) -> Result<Batch> {
         if !super::usable_address(address) {
