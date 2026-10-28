@@ -418,6 +418,11 @@ and sleep. Clients reach it through per-client cells; PHY membership is a
 typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
 `RadioDomain` by value.
 
+The radio system depends on client contracts, never on protocol drivers,
+including through optional, target-specific or transitive normal dependencies.
+`oer-esp32s31-radio-client::bluetooth::RadioController` defines the controller
+lifecycle operations the actor invokes; the Bluetooth driver implements it.
+
 - **PHY.** Constructing the actor does not calibrate. After the executor
   starts, the first client join calls `prepare` → `register_concurrent_phy`
   → `run_phy_register` in the P2 actor, including cold calibration or the

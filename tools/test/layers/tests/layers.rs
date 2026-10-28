@@ -690,6 +690,83 @@ fn the_ieee802154_boundary_rejects_the_indirect_knowledge_path() {
     assert!(forbidden_paths(&graph, "unrelated", ieee802154_execution).is_empty());
 }
 
+/// The shared RF owner consumes client contracts, never protocol drivers,
+/// including optional, target-specific and transitive normal dependencies.
+#[test]
+fn radio_systems_do_not_reach_protocol_drivers() {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let packages = packages(&root);
+    let drivers: BTreeSet<_> = packages
+        .iter()
+        .filter(|(path, _)| path.starts_with("chips/") && path.ends_with("/driver"))
+        .map(|(_, manifest)| manifest["package"]["name"].as_str().expect("name"))
+        .collect();
+    let graph = packages
+        .values()
+        .map(|manifest| {
+            (
+                manifest["package"]["name"]
+                    .as_str()
+                    .expect("name")
+                    .to_owned(),
+                normal_dependencies(manifest, &workspace["workspace"]),
+            )
+        })
+        .collect();
+    for (_, manifest) in packages
+        .iter()
+        .filter(|(path, _)| path.starts_with("chips/") && path.ends_with("/radio/system"))
+    {
+        let owner = manifest["package"]["name"].as_str().expect("name");
+        let violations = forbidden_paths(&graph, owner, |name| drivers.contains(name));
+        assert!(violations.is_empty(), "{owner}: {violations:?}");
+    }
+}
+
+#[test]
+fn radio_system_boundary_rejects_optional_target_and_transitive_driver_paths() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+bluetooth = { package = "bluetooth-driver", version = "1", optional = true }
+client = "1"
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+wifi = { workspace = true }
+[dev-dependencies]
+test-driver = "1"
+[build-dependencies]
+build-driver = "1"
+"#,
+    )
+    .expect("manifest");
+    let workspace: toml::Value =
+        toml::from_str("[dependencies]\nwifi = { package = 'wifi-driver', version = '1' }")
+            .expect("workspace");
+    let graph = BTreeMap::from([
+        ("system".into(), normal_dependencies(&manifest, &workspace)),
+        (
+            "client".into(),
+            BTreeSet::from(["hal".into(), "phy".into()]),
+        ),
+        (
+            "phy".into(),
+            BTreeSet::from(["client".into(), "ieee802154-driver".into()]),
+        ),
+        ("allowed".into(), BTreeSet::from(["hal".into()])),
+    ]);
+    let driver = |name: &str| name.ends_with("-driver");
+    assert_eq!(
+        forbidden_paths(&graph, "system", driver),
+        [
+            "system -> bluetooth-driver",
+            "system -> client -> phy -> ieee802154-driver",
+            "system -> wifi-driver",
+        ]
+    );
+    assert!(forbidden_paths(&graph, "allowed", driver).is_empty());
+}
+
 /// Protocol roles follow the leaf directory, including nested protocols such
 /// as bluetooth/le. Shared radio, network and HIL vocabulary is infrastructure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
