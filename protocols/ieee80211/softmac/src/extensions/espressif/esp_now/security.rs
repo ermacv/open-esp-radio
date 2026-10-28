@@ -16,8 +16,7 @@ use {
     oer_ieee80211_wire::{
         channel::WifiChannel,
         extensions::espressif::esp_now::{
-            ESP_NOW_CCMP_HEADER_LEN, ESP_NOW_CCMP_MIC_LEN, ESP_NOW_MANAGEMENT_HEADER_LEN,
-            ESP_NOW_V1_ACTION_OVERHEAD, EspNowCcmpPacketNumber, EspNowDestination,
+            ESP_NOW_V1_MIN_PROTECTED_MPDU_LEN, EspNowCcmpPacketNumber, EspNowDestination,
             EspNowEncryptedV1Unavailable, EspNowProtectedV1Envelope, EspNowProtectedV1WireError,
             EspNowRandomValue, EspNowUnicastAddress, EspNowV1Payload, EspNowV1WireError,
         },
@@ -148,22 +147,25 @@ impl EspNowPmkOwner {
         current: EspNowPmkId,
         replacement: EspNowPmk,
     ) -> Result<(EspNowPmkId, EspNowPmk), EspNowPmkMutationFailure> {
-        if self.current_id() != Some(current) {
+        if self.generation != current.generation {
             return Err(EspNowPmkMutationFailure::new(
                 EspNowPmkError::Stale(current),
                 replacement,
             ));
         }
+        let Some(installed) = self.key.as_mut() else {
+            return Err(EspNowPmkMutationFailure::new(
+                EspNowPmkError::Stale(current),
+                replacement,
+            ));
+        };
         let Some(generation) = self.generation.checked_add(1) else {
             return Err(EspNowPmkMutationFailure::new(
                 EspNowPmkError::GenerationExhausted,
                 replacement,
             ));
         };
-        let old = self
-            .key
-            .replace(replacement)
-            .expect("validated ESP-NOW PMK owner is occupied");
+        let old = core::mem::replace(installed, replacement);
         self.generation = generation;
         Ok((EspNowPmkId { generation }, old))
     }
@@ -433,49 +435,52 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             ));
         }
 
-        let mut reusable = None;
-        let mut exhausted_slot = false;
-        for (index, slot) in self.slots.iter().enumerate() {
-            if slot
-                .state
+        if self.slots.iter().any(|slot| {
+            slot.state
                 .as_ref()
                 .is_some_and(|peer| peer.config.destination == config.destination)
-            {
-                return Err(self.mutation_failure(
-                    EspNowEncryptedPeerError::Duplicate(config.destination),
-                    config,
-                ));
-            }
-            if slot.state.is_none() && reusable.is_none() {
-                if slot.generation == u32::MAX {
-                    exhausted_slot = true;
-                } else {
-                    reusable = Some(index);
-                }
-            }
+        }) {
+            return Err(self.mutation_failure(
+                EspNowEncryptedPeerError::Duplicate(config.destination),
+                config,
+            ));
         }
-
-        let Some(index) = reusable else {
-            let error = if exhausted_slot && self.length < N {
+        let Some((index, slot)) = self
+            .slots
+            .iter_mut()
+            .enumerate()
+            .find(|(_, slot)| slot.state.is_none() && slot.generation < u32::MAX)
+        else {
+            let error = if self.slots.iter().any(|slot| slot.state.is_none()) {
                 EspNowEncryptedPeerError::GenerationExhausted
             } else {
                 EspNowEncryptedPeerError::Full
             };
             return Err(self.mutation_failure(error, config));
         };
-        let slot = &mut self.slots[index];
-        slot.generation += 1;
+        let Some(generation) = slot.generation.checked_add(1) else {
+            return Err(
+                self.mutation_failure(EspNowEncryptedPeerError::GenerationExhausted, config)
+            );
+        };
+        let Some(length) = self.length.checked_add(1).filter(|length| *length <= N) else {
+            return Err(self.mutation_failure(
+                EspNowEncryptedPeerError::InvalidCount {
+                    count: self.length,
+                    capacity: N,
+                },
+                config,
+            ));
+        };
+        slot.generation = generation;
         slot.state = Some(EspNowEncryptedPeerState {
             config,
             last_tx_packet_number: 0,
             replay: EspNowReplayWindow::default(),
         });
-        self.length += 1;
+        self.length = length;
         self.diagnostics.installs = self.diagnostics.installs.saturating_add(1);
-        Ok(EspNowEncryptedPeerId {
-            index,
-            generation: slot.generation,
-        })
+        Ok(EspNowEncryptedPeerId { index, generation })
     }
 
     /// Atomically rotate or replace a peer. Failure retains the proposed LMK
@@ -485,12 +490,15 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         peer: EspNowEncryptedPeerId,
         replacement: EspNowEncryptedPeerConfig,
     ) -> Result<EspNowEncryptedPeerReplacement, EspNowEncryptedPeerMutationFailure> {
-        let Some(slot) = self.slots.get(peer.index) else {
+        let Some(slot) = self.slots.get_mut(peer.index) else {
             return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
         };
-        if slot.generation != peer.generation || slot.state.is_none() {
+        if slot.generation != peer.generation {
             return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
         }
+        let Some(installed) = slot.state.as_mut() else {
+            return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
+        };
         if replacement.channel != self.home_channel {
             return Err(self.mutation_failure(
                 EspNowEncryptedPeerError::ChannelMismatch {
@@ -500,12 +508,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                 replacement,
             ));
         }
-        let installed_destination = self.slots[peer.index]
-            .state
-            .as_ref()
-            .expect("validated ESP-NOW encrypted peer slot is occupied")
-            .config
-            .destination;
+        let installed_destination = installed.config.destination;
         if replacement.destination != installed_destination {
             return Err(self.mutation_failure(
                 EspNowEncryptedPeerError::ReplacementDestinationMismatch {
@@ -521,19 +524,10 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             );
         };
 
-        let slot = &mut self.slots[peer.index];
-        let old = slot
-            .state
-            .take()
-            .expect("validated ESP-NOW encrypted peer slot is occupied");
         // Preserve both packet-number spaces across replacement. This is
         // conservative for a fresh LMK and prevents nonce reuse if a caller
         // supplies the same LMK bytes again.
-        slot.state = Some(EspNowEncryptedPeerState {
-            config: replacement,
-            last_tx_packet_number: old.last_tx_packet_number,
-            replay: old.replay,
-        });
+        let replaced = core::mem::replace(&mut installed.config, replacement);
         slot.generation = generation;
         self.diagnostics.replacements = self.diagnostics.replacements.saturating_add(1);
         Ok(EspNowEncryptedPeerReplacement {
@@ -541,7 +535,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                 index: peer.index,
                 generation,
             },
-            replaced: old.config,
+            replaced,
         })
     }
 
@@ -549,12 +543,21 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &mut self,
         peer: EspNowEncryptedPeerId,
     ) -> Result<EspNowRemovedEncryptedPeer, EspNowEncryptedPeerError> {
+        self.state(peer)?;
+        let length = self
+            .length
+            .checked_sub(1)
+            .filter(|length| *length < N)
+            .ok_or(EspNowEncryptedPeerError::InvalidCount {
+                count: self.length,
+                capacity: N,
+            })?;
         let slot = self.slot_mut(peer)?;
         let state = slot
             .state
             .take()
             .ok_or(EspNowEncryptedPeerError::Stale(peer))?;
-        self.length -= 1;
+        self.length = length;
         self.diagnostics.removals = self.diagnostics.removals.saturating_add(1);
         Ok(EspNowRemovedEncryptedPeer {
             index: peer.index,
@@ -617,6 +620,21 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             });
         }
 
+        let Some(length) = self.length.checked_add(1).filter(|length| *length <= N) else {
+            return Err(EspNowEncryptedPeerRestoreFailure {
+                error: EspNowEncryptedPeerError::InvalidCount {
+                    count: self.length,
+                    capacity: N,
+                },
+                removed,
+            });
+        };
+        let Some(slot) = self.slots.get_mut(removed.index) else {
+            return Err(EspNowEncryptedPeerRestoreFailure {
+                error: EspNowEncryptedPeerError::Stale(removed.previous_id()),
+                removed,
+            });
+        };
         let EspNowRemovedEncryptedPeer {
             index,
             generation: _,
@@ -624,7 +642,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             last_tx_packet_number,
             replay,
         } = removed;
-        self.slots[index] = EspNowEncryptedPeerSlot {
+        *slot = EspNowEncryptedPeerSlot {
             generation,
             state: Some(EspNowEncryptedPeerState {
                 config,
@@ -632,7 +650,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                 replay,
             }),
         };
-        self.length += 1;
+        self.length = length;
         self.diagnostics.remove_rollbacks = self.diagnostics.remove_rollbacks.saturating_add(1);
         Ok(EspNowEncryptedPeerId { index, generation })
     }
@@ -640,12 +658,11 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
     /// Drop and zeroize every LMK. Existing handles become stale immediately;
     /// a later install advances each reused slot generation.
     pub fn clear_on_shutdown(&mut self) -> usize {
-        let mut cleared = 0;
-        for slot in &mut self.slots {
-            if slot.state.take().is_some() {
-                cleared += 1;
-            }
-        }
+        let cleared = self
+            .slots
+            .iter_mut()
+            .filter_map(|slot| slot.state.take())
+            .count();
         self.length = 0;
         self.diagnostics.cleared_on_shutdown = self
             .diagnostics
@@ -695,16 +712,19 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         peer: EspNowEncryptedPeerId,
     ) -> Result<EspNowCcmpPacketNumber, EspNowEncryptedPeerError> {
         let state = self.state_mut(peer)?;
-        if state.last_tx_packet_number == ESP_NOW_PACKET_NUMBER_MAX {
+        let packet_number = state
+            .last_tx_packet_number
+            .checked_add(1)
+            .filter(|next| *next <= ESP_NOW_PACKET_NUMBER_MAX)
+            .and_then(|next| EspNowCcmpPacketNumber::new(next).ok());
+        let Some(packet_number) = packet_number else {
             self.diagnostics.tx_packet_number_exhaustions = self
                 .diagnostics
                 .tx_packet_number_exhaustions
                 .saturating_add(1);
             return Err(EspNowEncryptedPeerError::TxPacketNumberExhausted(peer));
-        }
-        state.last_tx_packet_number += 1;
-        let packet_number = EspNowCcmpPacketNumber::new(state.last_tx_packet_number)
-            .expect("bounded nonzero ESP-NOW TX packet number");
+        };
+        state.last_tx_packet_number = packet_number.value();
         self.diagnostics.tx_packet_numbers_allocated = self
             .diagnostics
             .tx_packet_numbers_allocated
@@ -724,16 +744,18 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         let (highest, bitmap) = match state.replay.highest {
             None => (packet_number, 1),
             Some(highest) if packet_number > highest => {
-                let shift = packet_number.value() - highest.value();
+                let shift = packet_number.value().abs_diff(highest.value());
                 let bitmap = if shift >= u64::from(ESP_NOW_RX_REPLAY_WINDOW_BITS) {
                     1
                 } else {
-                    (state.replay.bitmap << shift) | 1
+                    // The replay bitmap intentionally discards bits beyond
+                    // its window; the guard bounds this shift below 64.
+                    state.replay.bitmap.wrapping_shl(shift as u32) | 1
                 };
                 (packet_number, bitmap)
             }
             Some(highest) => {
-                let distance = highest.value() - packet_number.value();
+                let distance = highest.value().abs_diff(packet_number.value());
                 if distance >= u64::from(ESP_NOW_RX_REPLAY_WINDOW_BITS) {
                     self.diagnostics.replay_too_old =
                         self.diagnostics.replay_too_old.saturating_add(1);
@@ -743,7 +765,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                         highest,
                     });
                 }
-                let bit = 1_u64 << distance;
+                let bit = 1_u64.wrapping_shl(distance as u32);
                 if state.replay.bitmap & bit != 0 {
                     self.diagnostics.replay_duplicates =
                         self.diagnostics.replay_duplicates.saturating_add(1);
@@ -973,6 +995,10 @@ impl fmt::Debug for EspNowEncryptedPeerMutationFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EspNowEncryptedPeerError {
     Full,
+    InvalidCount {
+        count: usize,
+        capacity: usize,
+    },
     Duplicate(EspNowUnicastAddress),
     ReplacementDestinationMismatch {
         installed: EspNowUnicastAddress,
@@ -1002,6 +1028,10 @@ impl fmt::Display for EspNowEncryptedPeerError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Full => formatter.write_str("the encrypted ESP-NOW peer table is full"),
+            Self::InvalidCount { count, capacity } => write!(
+                formatter,
+                "encrypted ESP-NOW peer count {count} is inconsistent with capacity {capacity}"
+            ),
             Self::Duplicate(destination) => {
                 write!(
                     formatter,
@@ -1156,6 +1186,8 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
         payload: &'payload [u8],
     ) -> Result<EspNowPreparedEncryptedV1Tx<'payload>, EspNowEncryptedSendError> {
         let payload = EspNowV1Payload::new(payload).map_err(EspNowEncryptedSendError::Wire)?;
+        let encoded_len =
+            encrypted_v1_encoded_len(payload.len()).map_err(EspNowEncryptedSendError::Wire)?;
         let peer_view = self
             .peers
             .get(peer)
@@ -1175,6 +1207,7 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
             packet_number,
             random_value,
             payload,
+            encoded_len,
         })
     }
 
@@ -1229,6 +1262,14 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
     }
 }
 
+fn encrypted_v1_encoded_len(payload_length: usize) -> Result<usize, EspNowV1WireError> {
+    ESP_NOW_V1_MIN_PROTECTED_MPDU_LEN
+        .checked_add(payload_length)
+        .ok_or(EspNowV1WireError::PayloadTooLong {
+            length: payload_length,
+        })
+}
+
 /// Portable encrypted TX metadata. No method exposes the LMK and `encode`
 /// always fails at the first unproven interoperable stage.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1243,6 +1284,7 @@ pub struct EspNowPreparedEncryptedV1Tx<'payload> {
     packet_number: EspNowCcmpPacketNumber,
     random_value: EspNowRandomValue,
     payload: EspNowV1Payload<'payload>,
+    encoded_len: usize,
 }
 
 impl<'payload> EspNowPreparedEncryptedV1Tx<'payload> {
@@ -1295,11 +1337,7 @@ impl<'payload> EspNowPreparedEncryptedV1Tx<'payload> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        ESP_NOW_MANAGEMENT_HEADER_LEN
-            + ESP_NOW_CCMP_HEADER_LEN
-            + ESP_NOW_V1_ACTION_OVERHEAD
-            + self.payload.len()
-            + ESP_NOW_CCMP_MIC_LEN
+        self.encoded_len
     }
 
     pub fn encode(self, _output: &mut [u8]) -> Result<usize, EspNowEncryptedV1Unavailable> {
@@ -1404,3 +1442,7 @@ pub const fn esp_now_encrypted_v1_codec_status() -> Result<(), EspNowEncryptedV1
 pub const fn encrypted_peer_destination(address: EspNowUnicastAddress) -> EspNowDestination {
     EspNowDestination::Unicast(address)
 }
+
+#[cfg(test)]
+#[allow(clippy::disallowed_macros)]
+mod tests;
