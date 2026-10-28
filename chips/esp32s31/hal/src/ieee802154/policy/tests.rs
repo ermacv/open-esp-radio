@@ -1,16 +1,16 @@
+use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanEnableState,
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
+    Ieee802154MultipanEnableState, Ieee802154PanIdentity,
 };
 use std::vec::Vec;
 
 use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
 use super::{
-    COEX_DISABLED_PTI, IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS, Ieee802154AckTimeout,
-    Ieee802154MacControl, Ieee802154MacPolicy, Ieee802154MacPolicyBackend,
-    Ieee802154MacPolicyCheckpoint, Ieee802154MacPolicyReadback, Ieee802154MacPolicySnapshot,
-    Ieee802154MacPolicyWrites, Ieee802154PanIdentity, configure_ieee802154_mac_policy,
-    verify_ieee802154_mac_policy,
+    Ieee802154MacPolicy, Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
+    Ieee802154MacPolicyReadback, Ieee802154MacPolicySnapshot, Ieee802154MacPolicyWrites,
+    configure_ieee802154_mac_policy, verify_ieee802154_mac_policy,
 };
 use crate::ieee802154::lifecycle::Ieee802154ReadbackError;
 
@@ -110,55 +110,6 @@ fn backend_with_foundation(
         operations: Vec::new(),
         readback: Ieee802154MacPolicyReadback::new(foundation, snapshot),
     }
-}
-
-#[test]
-fn timeout_conversion_is_exhaustive_over_every_accepted_microsecond() {
-    for microseconds in 0..=IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS {
-        let timeout = Ieee802154AckTimeout::from_microseconds(microseconds)
-            .expect("enumerated accepted value");
-        let expected_units = microseconds / 16 + u32::from(microseconds % 16 != 0);
-        assert_eq!(u32::from(timeout.units()), expected_units);
-        assert!(timeout.effective_microseconds() >= microseconds);
-        assert!(timeout.effective_microseconds() - microseconds < 16);
-    }
-}
-
-#[test]
-fn timeout_boundaries_and_complete_field_domain_are_honest() {
-    for units in 0..=u16::MAX {
-        let timeout = Ieee802154AckTimeout::from_units(units);
-        assert_eq!(timeout.units(), units);
-        assert_eq!(
-            Ieee802154AckTimeout::from_microseconds(timeout.effective_microseconds()),
-            Ok(timeout)
-        );
-    }
-
-    assert_eq!(
-        Ieee802154AckTimeout::from_microseconds(1)
-            .expect("one quantum")
-            .effective_microseconds(),
-        16
-    );
-    assert_eq!(
-        Ieee802154AckTimeout::from_microseconds(IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS)
-            .expect("maximum")
-            .units(),
-        u16::MAX
-    );
-    assert_eq!(
-        Ieee802154AckTimeout::from_microseconds(IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS + 1)
-            .expect_err("overflowing field")
-            .attempted_microseconds(),
-        IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS + 1
-    );
-    assert_eq!(
-        Ieee802154AckTimeout::from_microseconds(u32::MAX)
-            .expect_err("addition-free conversion must reject, not wrap")
-            .attempted_microseconds(),
-        u32::MAX
-    );
 }
 
 #[test]
@@ -307,15 +258,65 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 snapshot.cca_mode = Ieee802154CcaMode::Carrier
             }
             Ieee802154MacPolicyCheckpoint::CcaThreshold => snapshot.cca_threshold_code += 1,
-            Ieee802154MacPolicyCheckpoint::TxAutoAck => snapshot.control.tx_auto_ack = false,
-            Ieee802154MacPolicyCheckpoint::RxAutoAck => snapshot.control.rx_auto_ack = false,
-            Ieee802154MacPolicyCheckpoint::EnhancedAckTx => {
-                snapshot.control.enhanced_ack_tx = false
+            Ieee802154MacPolicyCheckpoint::TxAutoAck => {
+                snapshot.control = Ieee802154MacControl::new(
+                    false,
+                    snapshot.control.rx_auto_ack(),
+                    snapshot.control.enhanced_ack_tx(),
+                    snapshot.control.coordinator(),
+                    snapshot.control.promiscuous(),
+                    snapshot.control.enhanced_pending(),
+                )
             }
-            Ieee802154MacPolicyCheckpoint::Coordinator => snapshot.control.coordinator = false,
-            Ieee802154MacPolicyCheckpoint::Promiscuous => snapshot.control.promiscuous = false,
+            Ieee802154MacPolicyCheckpoint::RxAutoAck => {
+                snapshot.control = Ieee802154MacControl::new(
+                    snapshot.control.tx_auto_ack(),
+                    false,
+                    snapshot.control.enhanced_ack_tx(),
+                    snapshot.control.coordinator(),
+                    snapshot.control.promiscuous(),
+                    snapshot.control.enhanced_pending(),
+                )
+            }
+            Ieee802154MacPolicyCheckpoint::EnhancedAckTx => {
+                snapshot.control = Ieee802154MacControl::new(
+                    snapshot.control.tx_auto_ack(),
+                    snapshot.control.rx_auto_ack(),
+                    false,
+                    snapshot.control.coordinator(),
+                    snapshot.control.promiscuous(),
+                    snapshot.control.enhanced_pending(),
+                )
+            }
+            Ieee802154MacPolicyCheckpoint::Coordinator => {
+                snapshot.control = Ieee802154MacControl::new(
+                    snapshot.control.tx_auto_ack(),
+                    snapshot.control.rx_auto_ack(),
+                    snapshot.control.enhanced_ack_tx(),
+                    false,
+                    snapshot.control.promiscuous(),
+                    snapshot.control.enhanced_pending(),
+                )
+            }
+            Ieee802154MacPolicyCheckpoint::Promiscuous => {
+                snapshot.control = Ieee802154MacControl::new(
+                    snapshot.control.tx_auto_ack(),
+                    snapshot.control.rx_auto_ack(),
+                    snapshot.control.enhanced_ack_tx(),
+                    snapshot.control.coordinator(),
+                    false,
+                    snapshot.control.enhanced_pending(),
+                )
+            }
             Ieee802154MacPolicyCheckpoint::EnhancedPending => {
-                snapshot.control.enhanced_pending = false
+                snapshot.control = Ieee802154MacControl::new(
+                    snapshot.control.tx_auto_ack(),
+                    snapshot.control.rx_auto_ack(),
+                    snapshot.control.enhanced_ack_tx(),
+                    snapshot.control.coordinator(),
+                    snapshot.control.promiscuous(),
+                    false,
+                )
             }
             Ieee802154MacPolicyCheckpoint::AckTimeout => {
                 snapshot.ack_timeout = Ieee802154AckTimeout::from_units(0)
@@ -323,10 +324,28 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
             Ieee802154MacPolicyCheckpoint::PrimaryPanEnabled => {
                 snapshot.multipan_enable_state = Ieee802154MultipanEnableState::NONE
             }
-            Ieee802154MacPolicyCheckpoint::PanId => snapshot.identity.pan_id ^= 1,
-            Ieee802154MacPolicyCheckpoint::ShortAddress => snapshot.identity.short_address ^= 1,
+            Ieee802154MacPolicyCheckpoint::PanId => {
+                snapshot.identity = Ieee802154PanIdentity::new(
+                    snapshot.identity.pan_id() ^ 1,
+                    snapshot.identity.short_address(),
+                    snapshot.identity.extended_address(),
+                )
+            }
+            Ieee802154MacPolicyCheckpoint::ShortAddress => {
+                snapshot.identity = Ieee802154PanIdentity::new(
+                    snapshot.identity.pan_id(),
+                    snapshot.identity.short_address() ^ 1,
+                    snapshot.identity.extended_address(),
+                )
+            }
             Ieee802154MacPolicyCheckpoint::ExtendedAddress => {
-                snapshot.identity.extended_address[7] ^= 1
+                let mut address = snapshot.identity.extended_address();
+                address[7] ^= 1;
+                snapshot.identity = Ieee802154PanIdentity::new(
+                    snapshot.identity.pan_id(),
+                    snapshot.identity.short_address(),
+                    address,
+                )
             }
         }
 
@@ -360,7 +379,13 @@ fn readback_reports_the_first_failed_checkpoint() {
     let policy = policy();
     let mut snapshot = Ieee802154MacPolicySnapshot::from_policy(policy);
     snapshot.cca_mode = Ieee802154CcaMode::Carrier;
-    snapshot.identity.extended_address[0] ^= 1;
+    let mut address = snapshot.identity.extended_address();
+    address[0] ^= 1;
+    snapshot.identity = Ieee802154PanIdentity::new(
+        snapshot.identity.pan_id(),
+        snapshot.identity.short_address(),
+        address,
+    );
 
     let failure =
         configure_ieee802154_mac_policy(backend(snapshot), policy).expect_err("two corrupt fields");

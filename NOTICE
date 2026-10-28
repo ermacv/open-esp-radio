@@ -25,7 +25,7 @@ License:   Apache-2.0 (LICENSE-APACHE)
 Ported and modified by Vladislav Ermachenkov; each file carries the
 modification notice:
 
-- chips/espressif/ieee802154-mac-values/src/{lib,mac,channel,tx_power,events}.rs
+- chips/espressif/ieee802154-mac-values/src/{mac,channel,tx_power}.rs
   (crate Apache-2.0): the shared MAC low-level vocabulary, channel conversion
   and transmit-power resolution of components/ieee802154/driver/
   esp_ieee802154_{dev,util,timer,pib}.c and its public low-level vocabulary;

@@ -8,12 +8,11 @@
 //! adds, merges or reorders register transactions.
 
 use oer_esp32c5_pac::{
-    Ieee802154AckTimeoutUnits as PacAckTimeoutUnits, Ieee802154DebugCounter as PacDebugCounter,
-    Ieee802154EdSampleMode as PacEdSampleMode, Ieee802154EtmChannel as PacEtmChannel,
-    Ieee802154EtmRoute as PacEtmRoute, Ieee802154Event as PacEvent,
-    Ieee802154EventMask as PacEventMask, Ieee802154EventObservation as PacEventObservation,
-    Ieee802154FrequencyCode as PacFrequencyCode, Ieee802154MacCommand as PacMacCommand,
-    Ieee802154MultipanEnableState as PacMultipanEnableState,
+    Ieee802154DebugCounter as PacDebugCounter, Ieee802154EdSampleMode as PacEdSampleMode,
+    Ieee802154EtmChannel as PacEtmChannel, Ieee802154EtmRoute as PacEtmRoute,
+    Ieee802154Event as PacEvent, Ieee802154EventMask as PacEventMask,
+    Ieee802154EventObservation as PacEventObservation, Ieee802154FrequencyCode as PacFrequencyCode,
+    Ieee802154MacCommand as PacMacCommand, Ieee802154MultipanEnableState as PacMultipanEnableState,
     Ieee802154MultipanIndex as PacMultipanIndex, Ieee802154Pti as PacPti,
     Ieee802154RxAbortEnableSet as PacRxAbortEnableSet, Ieee802154RxAbortReason as PacRxAbortReason,
     Ieee802154RxAbortReasonObservation as PacRxAbortReasonObservation,
@@ -30,13 +29,13 @@ pub use oer_espressif_ieee802154_engine::ll::{
 };
 use oer_espressif_ieee802154_engine::{coex::CoexPti, ll::COEX_DISABLED_PTI};
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
-    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
-    Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
-    Ieee802154MultipanIndex, Ieee802154ResolvedTxPower, Ieee802154RxAbortEnableSet,
-    Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
-    Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
-    Ieee802154TxAbortReasonObservation,
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
+    Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
+    Ieee802154EventMask, Ieee802154EventObservation, Ieee802154MacCommand,
+    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154ResolvedTxPower,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet,
+    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
 };
 use oer_espressif_interrupt_table::Silent;
 
@@ -517,11 +516,11 @@ impl Ieee802154LowLevel for Ieee802154MacOwners {
     fn set_ack_timeout(&mut self, units: u16) {
         self.task
             .lease()
-            .set_ack_timeout(PacAckTimeoutUnits::new(units));
+            .set_ack_timeout(Ieee802154AckTimeout::from_units(units));
     }
 
     fn ack_timeout(&mut self) -> u16 {
-        self.task.lease().ack_timeout().value()
+        self.task.lease().ack_timeout().units()
     }
 
     fn set_security_address(&mut self, address: &[u8; 8]) {

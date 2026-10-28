@@ -2,9 +2,10 @@
 //! what it keeps, and the ownership of the interrupt side.
 
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
-    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
-    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet,
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
+    Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
+    Ieee802154EventMask, Ieee802154MacControl, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet,
     Ieee802154RxAbortReasonObservation, Ieee802154TxAbortEnableSet,
 };
 use std::{vec, vec::Vec};
@@ -18,9 +19,7 @@ use super::{
     Ieee802154Pti,
     host::{HostMemory, changed},
 };
-use crate::ieee802154::policy::{
-    Ieee802154AckTimeout, Ieee802154MacControl, Ieee802154MacPolicySnapshot, Ieee802154PanIdentity,
-};
+use crate::ieee802154::policy::Ieee802154MacPolicySnapshot;
 
 fn mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
     events

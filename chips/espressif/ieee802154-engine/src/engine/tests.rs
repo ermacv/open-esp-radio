@@ -3,9 +3,12 @@
 
 use crate::ll::model::ModelAddress;
 use crate::ll::model::{DEBUG_COUNTERS, debug_slot};
-use crate::{coex::*, ll::*};
+use crate::{
+    coex::{CoexPti, Ieee802154CoexPriorities, Ieee802154Coexistence},
+    ll::*,
+};
 use oer_espressif_ieee802154_mac_values::{
-    AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
     Ieee802154EventMask, Ieee802154EventObservation, Ieee802154MacCommand,
     Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154ResolvedTxPower,
@@ -1286,7 +1289,10 @@ fn identity_and_ack_timeout_address_interface_zero() {
     engine.set_panid(hw, 0x1234);
     engine.set_short_address(hw, 0x5678);
     engine.set_extended_address(hw, [1, 2, 3, 4, 5, 6, 7, 8]);
-    engine.set_ack_timeout(hw, AckTimeout::new(200).expect("bounded timeout"));
+    engine.set_ack_timeout(
+        hw,
+        Ieee802154AckTimeout::from_microseconds(200).expect("bounded timeout"),
+    );
     assert_eq!(
         hw.calls,
         [
@@ -1639,7 +1645,10 @@ fn settings_before_first_enable_are_kept_including_disabled_pib_edits() {
     };
     let mut env = Env::default();
     engine.set_panid(&mut hw, 0x1234);
-    engine.set_ack_timeout(&mut hw, AckTimeout::new(200).expect("bounded timeout"));
+    engine.set_ack_timeout(
+        &mut hw,
+        Ieee802154AckTimeout::from_microseconds(200).expect("bounded timeout"),
+    );
     hw.calls.clear();
     engine.update_pib(&mut hw, &mut env, |pib| {
         pib.set_promiscuous(false);

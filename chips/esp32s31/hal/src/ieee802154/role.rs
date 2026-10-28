@@ -18,6 +18,9 @@
 
 use crate::power::PlatformClockBackend;
 use core::fmt;
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154PanIdentity,
+};
 
 use crate::phy::RadioPhyRegisters;
 
@@ -40,15 +43,13 @@ use crate::{
             Ieee802154TaskOwner,
         },
         policy::{
-            Ieee802154AckTimeout, Ieee802154MacControl, Ieee802154MacPolicy,
-            Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
+            Ieee802154MacPolicy, Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
             Ieee802154MacPolicyFailure as EngineMacPolicyFailure, Ieee802154MacPolicyReadback,
-            Ieee802154MacPolicyWrites, Ieee802154PanIdentity, configure_ieee802154_mac_policy,
+            Ieee802154MacPolicyWrites, configure_ieee802154_mac_policy,
         },
     },
     root::Ieee802154RadioPartition,
 };
-use oer_espressif_ieee802154_mac_values::Ieee802154CcaMode;
 
 /// The IEEE 802.15.4 partition split into its task and inactive interrupt
 /// halves.

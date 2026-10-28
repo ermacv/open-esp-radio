@@ -126,8 +126,8 @@ pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>) ->
 pub use ieee802154::mac::{Ieee802154PolledRegisterLease, Ieee802154RegisterLease};
 
 pub use ieee802154::mac::{
-    Ieee802154AckTimeoutUnits, Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdCcaSnapshot,
-    Ieee802154EdCommand, Ieee802154EdDurationUnits, Ieee802154EdSampleMode, Ieee802154EdSampleRate,
+    Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdCcaSnapshot, Ieee802154EdCommand,
+    Ieee802154EdDurationUnits, Ieee802154EdSampleMode, Ieee802154EdSampleRate,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventEnableState,
     Ieee802154EventMask, Ieee802154EventObservation, Ieee802154EventObservationError,
     Ieee802154FoundationSnapshot, Ieee802154FrequencyCode, Ieee802154MacCommand,

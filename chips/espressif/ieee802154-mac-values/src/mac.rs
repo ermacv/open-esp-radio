@@ -8,56 +8,72 @@
 
 use crate::{Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode};
 
-/// An ACK timeout rounded up to sixteen-microsecond units and checked
-/// against the hardware's sixteen-bit field.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AckTimeout(u16);
+/// Hardware quantum used by the source-confirmed vendor ACK-timeout conversion.
+pub const IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS: u32 = 16;
 
-/// The rounded ACK timeout exceeds the hardware field.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AckTimeoutTooLarge;
+/// Largest microsecond request that fits the complete sixteen-bit timeout field.
+pub const IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS: u32 =
+    u16::MAX as u32 * IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS;
 
-impl AckTimeout {
-    /// Round up to sixteen microseconds, refusing an unrepresentable value.
-    pub const fn new(microseconds: u32) -> Result<Self, AckTimeoutTooLarge> {
-        let units = microseconds.div_ceil(16);
-        if units > u16::MAX as u32 {
-            Err(AckTimeoutTooLarge)
+/// Checked ACK timeout represented in complete hardware field units.
+///
+/// The vendor conversion is `ceil(microseconds / 16)`. Construction from
+/// microseconds rejects values that need more than sixteen field bits; it
+/// never truncates or wraps. [`Self::from_units`] also represents every field
+/// image, including zero, without inventing a narrower semantic domain.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Ieee802154AckTimeout {
+    units: u16,
+}
+
+/// A requested ACK timeout that cannot be represented by the hardware field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Ieee802154AckTimeoutError {
+    attempted_microseconds: u32,
+}
+
+impl Ieee802154AckTimeoutError {
+    /// Return the rejected duration.
+    pub const fn attempted_microseconds(self) -> u32 {
+        self.attempted_microseconds
+    }
+}
+
+impl Ieee802154AckTimeout {
+    /// Construct any of the complete sixteen-bit hardware field values.
+    pub const fn from_units(units: u16) -> Self {
+        Self { units }
+    }
+
+    /// Convert microseconds with the source-confirmed `(micros + 15) / 16`
+    /// rule, expressed without an overflowing addition.
+    pub const fn from_microseconds(microseconds: u32) -> Result<Self, Ieee802154AckTimeoutError> {
+        let units = microseconds.div_ceil(IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS);
+
+        if units <= u16::MAX as u32 {
+            Ok(Self {
+                units: units as u16,
+            })
         } else {
-            Ok(Self(units as u16))
+            Err(Ieee802154AckTimeoutError {
+                attempted_microseconds: microseconds,
+            })
         }
     }
 
-    /// The checked value in hardware units.
+    /// Return the complete sixteen-bit field value.
     pub const fn units(self) -> u16 {
-        self.0
+        self.units
+    }
+
+    /// Return the effective, upward-quantized timeout in microseconds.
+    pub const fn effective_microseconds(self) -> u32 {
+        self.units as u32 * IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS
     }
 }
 
 #[cfg(test)]
-mod ack_timeout_tests {
-    use super::{AckTimeout, AckTimeoutTooLarge};
-
-    #[test]
-    fn rounds_up_without_wrapping_at_the_field_boundary() {
-        for (micros, units) in [
-            (0, 0),
-            (1, 1),
-            (16, 1),
-            (17, 2),
-            (200, 13),
-            (1_048_560, 65_535),
-        ] {
-            assert_eq!(
-                AckTimeout::new(micros).expect("representable").units(),
-                units
-            );
-        }
-        for micros in [1_048_561, 1_048_575, 1_048_576, u32::MAX] {
-            assert_eq!(AckTimeout::new(micros), Err(AckTimeoutTooLarge));
-        }
-    }
-}
+mod ack_timeout_tests;
 
 /// Complete `RX_STATUS` observation (`ieee802154_ll_get_rx_status`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

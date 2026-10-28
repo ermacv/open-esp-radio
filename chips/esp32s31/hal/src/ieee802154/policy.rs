@@ -12,183 +12,12 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use crate::ieee802154::{
-    lifecycle::{COEX_DISABLED_PTI, Ieee802154ReadbackError},
-    mac::Ieee802154FoundationSnapshot,
-};
+use crate::ieee802154::{lifecycle::Ieee802154ReadbackError, mac::Ieee802154FoundationSnapshot};
+use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
+    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154PanIdentity,
 };
-
-/// Hardware quantum used by the source-confirmed vendor ACK-timeout conversion.
-pub const IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS: u32 = 16;
-
-/// Largest microsecond request that fits the complete sixteen-bit timeout field.
-pub const IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS: u32 =
-    u16::MAX as u32 * IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS;
-
-/// Checked ACK timeout represented in complete hardware field units.
-///
-/// The vendor conversion is `ceil(microseconds / 16)`. Construction from
-/// microseconds rejects values that need more than sixteen field bits; it
-/// never truncates or wraps. [`Self::from_units`] also represents every field
-/// image, including zero, without inventing a narrower semantic domain.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Ieee802154AckTimeout {
-    units: u16,
-}
-
-/// A requested ACK timeout that cannot be represented by the hardware field.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Ieee802154AckTimeoutError {
-    attempted_microseconds: u32,
-}
-
-impl Ieee802154AckTimeoutError {
-    /// Return the rejected duration.
-    pub const fn attempted_microseconds(self) -> u32 {
-        self.attempted_microseconds
-    }
-}
-
-impl Ieee802154AckTimeout {
-    /// Construct any of the complete sixteen-bit hardware field values.
-    pub const fn from_units(units: u16) -> Self {
-        Self { units }
-    }
-
-    /// Convert microseconds with the source-confirmed `(micros + 15) / 16`
-    /// rule, expressed without an overflowing addition.
-    pub const fn from_microseconds(microseconds: u32) -> Result<Self, Ieee802154AckTimeoutError> {
-        let whole_units = microseconds / IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS;
-        let rounded_unit =
-            if microseconds.is_multiple_of(IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS) {
-                0
-            } else {
-                1
-            };
-        let units = whole_units + rounded_unit;
-
-        if units <= u16::MAX as u32 {
-            Ok(Self {
-                units: units as u16,
-            })
-        } else {
-            Err(Ieee802154AckTimeoutError {
-                attempted_microseconds: microseconds,
-            })
-        }
-    }
-
-    /// Return the complete sixteen-bit field value.
-    pub const fn units(self) -> u16 {
-        self.units
-    }
-
-    /// Return the effective, upward-quantized timeout in microseconds.
-    pub const fn effective_microseconds(self) -> u32 {
-        self.units as u32 * IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS
-    }
-}
-
-/// Source-confirmed automatic-ACK and address-filter control policy.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Ieee802154MacControl {
-    tx_auto_ack: bool,
-    rx_auto_ack: bool,
-    enhanced_ack_tx: bool,
-    coordinator: bool,
-    promiscuous: bool,
-    enhanced_pending: bool,
-}
-
-impl Ieee802154MacControl {
-    /// Construct the six independently controlled policy flags in the order
-    /// TX auto-ACK, RX auto-ACK, enhanced-ACK TX, coordinator, promiscuous,
-    /// and enhanced-pending mode.
-    pub const fn new(
-        tx_auto_ack: bool,
-        rx_auto_ack: bool,
-        enhanced_ack_tx: bool,
-        coordinator: bool,
-        promiscuous: bool,
-        enhanced_pending: bool,
-    ) -> Self {
-        Self {
-            tx_auto_ack,
-            rx_auto_ack,
-            enhanced_ack_tx,
-            coordinator,
-            promiscuous,
-            enhanced_pending,
-        }
-    }
-
-    /// Return whether hardware automatically transmits an ACK.
-    pub const fn tx_auto_ack(self) -> bool {
-        self.tx_auto_ack
-    }
-
-    /// Return whether hardware automatically waits for a received ACK.
-    pub const fn rx_auto_ack(self) -> bool {
-        self.rx_auto_ack
-    }
-
-    /// Return whether enhanced-ACK transmission is enabled.
-    pub const fn enhanced_ack_tx(self) -> bool {
-        self.enhanced_ack_tx
-    }
-
-    /// Return whether coordinator filtering behavior is enabled.
-    pub const fn coordinator(self) -> bool {
-        self.coordinator
-    }
-
-    /// Return whether promiscuous reception is enabled.
-    pub const fn promiscuous(self) -> bool {
-        self.promiscuous
-    }
-
-    /// Return the one-bit enhanced-pending policy projection.
-    pub const fn enhanced_pending(self) -> bool {
-        self.enhanced_pending
-    }
-}
-
-/// Address-filter identity for the primary PAN context.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Ieee802154PanIdentity {
-    pan_id: u16,
-    short_address: u16,
-    extended_address: [u8; 8],
-}
-
-impl Ieee802154PanIdentity {
-    /// Construct the primary PAN identity from host-order short values and the
-    /// public eight-byte extended-address order.
-    pub const fn new(pan_id: u16, short_address: u16, extended_address: [u8; 8]) -> Self {
-        Self {
-            pan_id,
-            short_address,
-            extended_address,
-        }
-    }
-
-    /// Return the primary PAN identifier.
-    pub const fn pan_id(self) -> u16 {
-        self.pan_id
-    }
-
-    /// Return the primary short address.
-    pub const fn short_address(self) -> u16 {
-        self.short_address
-    }
-
-    /// Return the primary extended address in public byte order.
-    pub const fn extended_address(self) -> [u8; 8] {
-        self.extended_address
-    }
-}
 
 /// Static, interrupt-masked MAC policy subset whose register semantics are known.
 ///
@@ -560,27 +389,27 @@ fn verify_mac_policy_snapshot(
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::TxAutoAck,
-        snapshot.control.tx_auto_ack == expected.control.tx_auto_ack,
+        snapshot.control.tx_auto_ack() == expected.control.tx_auto_ack(),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::RxAutoAck,
-        snapshot.control.rx_auto_ack == expected.control.rx_auto_ack,
+        snapshot.control.rx_auto_ack() == expected.control.rx_auto_ack(),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::EnhancedAckTx,
-        snapshot.control.enhanced_ack_tx == expected.control.enhanced_ack_tx,
+        snapshot.control.enhanced_ack_tx() == expected.control.enhanced_ack_tx(),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::Coordinator,
-        snapshot.control.coordinator == expected.control.coordinator,
+        snapshot.control.coordinator() == expected.control.coordinator(),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::Promiscuous,
-        snapshot.control.promiscuous == expected.control.promiscuous,
+        snapshot.control.promiscuous() == expected.control.promiscuous(),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::EnhancedPending,
-        snapshot.control.enhanced_pending == expected.control.enhanced_pending,
+        snapshot.control.enhanced_pending() == expected.control.enhanced_pending(),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::AckTimeout,
@@ -594,15 +423,15 @@ fn verify_mac_policy_snapshot(
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::PanId,
-        snapshot.identity.pan_id == expected.identity.pan_id,
+        snapshot.identity.pan_id() == expected.identity.pan_id(),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::ShortAddress,
-        snapshot.identity.short_address == expected.identity.short_address,
+        snapshot.identity.short_address() == expected.identity.short_address(),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::ExtendedAddress,
-        snapshot.identity.extended_address == expected.identity.extended_address,
+        snapshot.identity.extended_address() == expected.identity.extended_address(),
     )
 }
 

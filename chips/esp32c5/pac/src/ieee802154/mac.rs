@@ -8,6 +8,10 @@
 #![forbid(unsafe_code)]
 
 use core::ops::{Deref, DerefMut};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154AckTimeout, Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort,
+    execute_interrupt_arming, execute_interrupt_deactivation,
+};
 
 pub use crate::generated::{
     Ieee802154EdDurationUnits, Ieee802154Timer0ThresholdWord, Ieee802154Timer0ValueWord,
@@ -15,22 +19,17 @@ pub use crate::generated::{
 };
 use crate::{Ieee802154InterruptRegisters, Ieee802154InterruptSetup, Ieee802154TaskRegisters};
 pub use oer_espressif_ieee802154_mac_values::{
-    Ieee802154AckTimeoutUnits, Ieee802154CcaMode, Ieee802154EdCommand, Ieee802154EdSampleMode,
-    Ieee802154EdSampleRate, Ieee802154Event, Ieee802154EventEnableState, Ieee802154EventMask,
-    Ieee802154EventObservation, Ieee802154EventObservationError, Ieee802154MacCommand,
-    Ieee802154MacControl, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
-    Ieee802154ObservedEventState, Ieee802154OperationEventEnableObservation,
-    Ieee802154OperationRxAbortEnableObservation, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet,
-    Ieee802154RxAbortEnableState, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
-    Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset, Ieee802154StateSnapshot,
-    Ieee802154TransmitSecurityControl, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
-    Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityError,
-    Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
-    Ieee802154ValidationEdDurationState, Ieee802154ValidationEventEnableState,
-};
-use oer_espressif_ieee802154_mac_values::{
-    Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort, execute_interrupt_arming,
-    execute_interrupt_deactivation,
+    Ieee802154CcaMode, Ieee802154EdCommand, Ieee802154EdSampleMode, Ieee802154EdSampleRate,
+    Ieee802154Event, Ieee802154EventEnableState, Ieee802154EventMask, Ieee802154EventObservation,
+    Ieee802154EventObservationError, Ieee802154MacCommand, Ieee802154MacControl,
+    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154ObservedEventState,
+    Ieee802154OperationEventEnableObservation, Ieee802154OperationRxAbortEnableObservation,
+    Ieee802154PanIdentity, Ieee802154RxAbortEnableSet, Ieee802154RxAbortEnableState,
+    Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
+    Ieee802154SecurityPayloadOffset, Ieee802154StateSnapshot, Ieee802154TransmitSecurityControl,
+    Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
+    Ieee802154TxSecurityError, Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode,
+    Ieee802154TxStatus, Ieee802154ValidationEdDurationState, Ieee802154ValidationEventEnableState,
 };
 use oer_espressif_interrupt_table::EventAuthority;
 use oer_mmio::InterruptSource;
@@ -291,7 +290,7 @@ pub struct Ieee802154MacPolicySnapshot {
     frequency_code: Ieee802154FrequencyCode,
     cca_mode: Ieee802154CcaMode,
     cca_threshold_code: i8,
-    ack_timeout: Ieee802154AckTimeoutUnits,
+    ack_timeout: Ieee802154AckTimeout,
     control: Ieee802154MacControl,
     multipan_enable_state: Ieee802154MultipanEnableState,
     identity: Ieee802154PanIdentity,
@@ -310,7 +309,7 @@ pub struct Ieee802154MacConfigurationReadback {
     cca_mode: Ieee802154CcaMode,
     cca_threshold_code: i8,
     ed_sample_rate: Ieee802154EdSampleRate,
-    ack_timeout: Ieee802154AckTimeoutUnits,
+    ack_timeout: Ieee802154AckTimeout,
     control: Ieee802154MacControl,
     multipan_enable_state: Ieee802154MultipanEnableState,
     identities: [Ieee802154PanIdentity; 4],
@@ -333,7 +332,7 @@ impl Ieee802154MacPolicySnapshot {
         frequency_code: Ieee802154FrequencyCode,
         cca_mode: Ieee802154CcaMode,
         cca_threshold_code: i8,
-        ack_timeout: Ieee802154AckTimeoutUnits,
+        ack_timeout: Ieee802154AckTimeout,
         control: Ieee802154MacControl,
         multipan_enable_state: Ieee802154MultipanEnableState,
         identity: Ieee802154PanIdentity,
@@ -361,7 +360,7 @@ impl Ieee802154MacPolicySnapshot {
         self.cca_threshold_code
     }
 
-    pub const fn ack_timeout(self) -> Ieee802154AckTimeoutUnits {
+    pub const fn ack_timeout(self) -> Ieee802154AckTimeout {
         self.ack_timeout
     }
 
@@ -399,7 +398,7 @@ impl Ieee802154MacConfigurationReadback {
         self.ed_sample_rate
     }
 
-    pub const fn ack_timeout(self) -> Ieee802154AckTimeoutUnits {
+    pub const fn ack_timeout(self) -> Ieee802154AckTimeout {
         self.ack_timeout
     }
 
@@ -680,9 +679,9 @@ impl Ieee802154RegisterLease<'_> {
         self.registers.set_ed_sample_rate(rate.field_value());
     }
 
-    /// Replace the ACK timeout field without assigning units at the PAC layer.
-    pub fn set_ack_timeout(&mut self, timeout: Ieee802154AckTimeoutUnits) {
-        self.registers.set_ack_timeout(timeout.value());
+    /// Replace the ACK timeout field with the checked value’s hardware units.
+    pub fn set_ack_timeout(&mut self, timeout: Ieee802154AckTimeout) {
+        self.registers.set_ack_timeout(timeout.units());
     }
 
     /// Apply the six public PIB control fields in vendor update order.
@@ -822,7 +821,7 @@ impl Ieee802154RegisterLease<'_> {
             frequency_code: Ieee802154FrequencyCode::from_field(readback.frequency_code()),
             cca_mode: Ieee802154CcaMode::from_field(crate::field_byte(readback.cca_mode())),
             cca_threshold_code: readback.cca_threshold_code() as i8,
-            ack_timeout: Ieee802154AckTimeoutUnits::new(readback.ack_timeout()),
+            ack_timeout: Ieee802154AckTimeout::from_units(readback.ack_timeout()),
             control: Ieee802154MacControl::new(
                 readback.auto_ack_tx(),
                 readback.auto_ack_rx(),
@@ -863,7 +862,7 @@ impl Ieee802154RegisterLease<'_> {
             ed_sample_rate: Ieee802154EdSampleRate::from_field(crate::field_byte(
                 readback.ed_sample_rate(),
             )),
-            ack_timeout: Ieee802154AckTimeoutUnits::new(readback.ack_timeout()),
+            ack_timeout: Ieee802154AckTimeout::from_units(readback.ack_timeout()),
             control: Ieee802154MacControl::new(
                 readback.auto_ack_tx(),
                 readback.auto_ack_rx(),

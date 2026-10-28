@@ -22,7 +22,6 @@ use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
 /// the pinned ESP-IDF never calls. With the flag set the provider would
 /// instead copy its sixteen-byte `.rodata` table; that configuration is not
 /// modelled. IEEE 802.15.4 selects its `TXPOWER` code from this set.
-
 pub const TX_POWER_LEVELS_DBM: [i8; 16] = [
     -15, -15, -15, -15, -12, -9, -6, -3, 0, 3, 6, 9, 12, 15, 18, 20,
 ];

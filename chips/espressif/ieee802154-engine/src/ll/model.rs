@@ -5,7 +5,7 @@
 //! The model knows nothing else about the hardware.
 
 use super::{COEX_DISABLED_PTI, Ieee802154LowLevel, Ieee802154RecentRssi};
-use crate::coex::*;
+use crate::coex::CoexPti;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,

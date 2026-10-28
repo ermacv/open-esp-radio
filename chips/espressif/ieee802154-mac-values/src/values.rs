@@ -177,23 +177,6 @@ impl Ieee802154CcaMode {
     }
 }
 
-/// Sixteen-bit ACK-timeout field value.
-///
-/// The PAC deliberately does not assign physical units. The HAL owns the
-/// source-confirmed conversion between microseconds and this field.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Ieee802154AckTimeoutUnits(u16);
-
-impl Ieee802154AckTimeoutUnits {
-    pub const fn new(value: u16) -> Self {
-        Self(value)
-    }
-
-    pub const fn value(self) -> u16 {
-        self.0
-    }
-}
-
 /// One finite energy-detection command accepted by the narrow PAC lease.
 ///
 /// `Stop` maps to the source-confirmed common MAC `STOP` opcode, but this type

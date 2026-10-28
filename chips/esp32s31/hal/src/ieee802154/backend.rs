@@ -12,7 +12,8 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154Channel, Ieee802154EdSampleMode, Ieee802154StateSnapshot,
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154EdSampleMode,
+    Ieee802154MacControl, Ieee802154PanIdentity, Ieee802154StateSnapshot,
 };
 use oer_mmio::Placement;
 
@@ -21,10 +22,7 @@ use crate::ieee802154::{
         EtmPlacement, Ieee802154FoundationSnapshot, Ieee802154InterruptSetupOwner, Ieee802154Pti,
         Ieee802154TaskOwner, MacPlacement, RxInfoPlacement,
     },
-    policy::{
-        Ieee802154AckTimeout, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
-        Ieee802154PanIdentity,
-    },
+    policy::Ieee802154MacPolicySnapshot,
 };
 
 /// Typed register operations required by the first IEEE 802.15.4 foundation.

@@ -755,7 +755,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     pub fn set_ack_timeout<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
-        timeout: oer_espressif_ieee802154_mac_values::AckTimeout,
+        timeout: oer_espressif_ieee802154_mac_values::Ieee802154AckTimeout,
     ) {
         let units = timeout.units();
         self.settings.ack_timeout = Some(units);
@@ -767,7 +767,8 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self,
         ll: &mut L,
     ) -> u32 {
-        u32::from(ll.ack_timeout()) * 16
+        oer_espressif_ieee802154_mac_values::Ieee802154AckTimeout::from_units(ll.ack_timeout())
+            .effective_microseconds()
     }
 
     /// Arm security only after the complete secured header has been validated.

@@ -15,8 +15,7 @@ use core::marker::PhantomData;
 
 use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
-/// PTI value used by the public vendor LL when coexistence is disabled.
-pub(crate) const COEX_DISABLED_PTI: u8 = 3;
+use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
 
 /// Private MAC reset lines in the shared modem syscon block.
 ///

@@ -9,17 +9,16 @@
 //! rendered as the vendor's direct register reads and writes.
 
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
-    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
-    Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
-    Ieee802154MultipanIndex, Ieee802154ResolvedTxPower, Ieee802154RxAbortEnableSet,
-    Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
-    Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
-    Ieee802154TxAbortReasonObservation,
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
+    Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
+    Ieee802154EventMask, Ieee802154EventObservation, Ieee802154MacCommand,
+    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154ResolvedTxPower,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet,
+    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
 };
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
-#[cfg(feature = "sw-coex")]
 #[cfg(feature = "sw-coex")]
 use oer_espressif_coex::{CoexEventId, CoexPtiTable};
 #[cfg(feature = "sw-coex")]
@@ -931,7 +930,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             }
             Step::SetAckTimeout(timeout) => engine.set_ack_timeout(
                 &mut ll,
-                oer_espressif_ieee802154_mac_values::AckTimeout::new(timeout)
+                Ieee802154AckTimeout::from_microseconds(timeout)
                     .map_err(|_| "ACK timeout exceeds the hardware field")?,
             ),
             Step::GetIdentity => {

@@ -7,6 +7,11 @@ identities, ACK timeouts, diagnostic counters, ETM routes and timer identities.
 It also validates 2.4 GHz channels and provider-relative transmit-power level
 sets, retaining the channel and level-storage lifetime in each resolved power.
 
+`Ieee802154AckTimeout` represents every sixteen-bit timeout field value.
+`from_microseconds` rounds upward in 16 µs units and retains the rejected
+request in its error; `from_units` accepts an already bounded field value.
+`units` and `effective_microseconds` expose the programmed duration.
+
 The event observation keeps unnamed lanes 7 and 13 in separate named fields.
 It gives them no invented meaning and grants no acknowledgement authority.
 Any asserted unnamed lane makes classification fail without losing either

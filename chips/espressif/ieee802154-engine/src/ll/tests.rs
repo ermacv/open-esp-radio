@@ -11,7 +11,10 @@ use oer_espressif_ieee802154_mac_values::{
 };
 use std::{vec, vec::Vec};
 
-use crate::{coex::*, ll::*};
+use crate::{
+    coex::{CoexPti, Ieee802154CoexPriorities, Ieee802154Coexistence, RadioOperation},
+    ll::*,
+};
 
 /// One recorded accessor call.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

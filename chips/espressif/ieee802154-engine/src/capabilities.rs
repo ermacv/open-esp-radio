@@ -6,12 +6,6 @@
 //! those of an IEEE 802.15.4 radio role. The operation set is that role's
 //! without `CSMA_CA` and `TRANSMIT_RETRIES`, which belong above the port. No
 //! port backend in this repository publishes them.
-//!
-//! The validated-level adapter is from ESP-IDF
-//! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`,
-//! `components/ieee802154/driver/esp_ieee802154_pib.c` (Copyright Espressif
-//! Systems (Shanghai) Co Ltd, Apache-2.0), ported and modified by Vladislav
-//! Ermachenkov; see the root `NOTICE`.
 
 use oer_espressif_ieee802154_mac_values::Ieee802154MultipanIndex;
 use oer_ieee802154_mac::{

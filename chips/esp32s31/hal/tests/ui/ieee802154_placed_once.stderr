@@ -1,36 +1,36 @@
 error[E0382]: use of moved value: `buffers`
-  --> tests/ui/ieee802154_placed_once.rs:14:20
+  --> tests/ui/ieee802154_placed_once.rs:22:20
    |
-10 |     buffers: Placed<Ieee802154EngineBuffers>, levels: Ieee802154TxPowerLevels<'static>,
+15 |     buffers: Placed<Ieee802154EngineBuffers>,
    |     ------- move occurs because `buffers` has type `Placed<Ieee802154EngineBuffers>`, which does not implement the `Copy` trait
-11 |     defaults: Ieee802154PibDefaults, start: Ieee802154Permit) {
-12 |     let _engine = Ieee802154Engine::place(mac, buffers, levels, defaults, start);
+...
+20 |     let _engine = Ieee802154Engine::place(mac, buffers, levels, defaults, start);
    |                                                ------- value moved here
-13 |     #[cfg(all())]
-14 |     let _storage = buffers.into_inner(); // ui-error: E0382
+21 |     #[cfg(all())]
+22 |     let _storage = buffers.into_inner(); // ui-error: E0382
    |                    ^^^^^^^ value used here after move
 
 error[E0382]: use of moved value: `mac`
-  --> tests/ui/ieee802154_placed_once.rs:16:16
+  --> tests/ui/ieee802154_placed_once.rs:24:16
    |
- 9 | pub fn bind<Mac: Ieee802154LowLevel<Address = DmaWindowAddress>>(mac: Mac,
-   |                                                                  --- move occurs because `mac` has type `Mac`, which does not implement the `Copy` trait
+14 |     mac: Mac,
+   |     --- move occurs because `mac` has type `Mac`, which does not implement the `Copy` trait
 ...
-12 |     let _engine = Ieee802154Engine::place(mac, buffers, levels, defaults, start);
+20 |     let _engine = Ieee802154Engine::place(mac, buffers, levels, defaults, start);
    |                                           --- value moved here
 ...
-16 |     let _mac = mac; // ui-error: E0382
+24 |     let _mac = mac; // ui-error: E0382
    |                ^^^ value used here after move
    |
 help: if `Mac` implemented `Clone`, you could clone the value
-  --> tests/ui/ieee802154_placed_once.rs:9:13
+  --> tests/ui/ieee802154_placed_once.rs:13:13
    |
- 9 | pub fn bind<Mac: Ieee802154LowLevel<Address = DmaWindowAddress>>(mac: Mac,
+13 | pub fn bind<Mac: Ieee802154LowLevel<Address = DmaWindowAddress>>(
    |             ^^^ consider constraining this type parameter with `Clone`
 ...
-12 |     let _engine = Ieee802154Engine::place(mac, buffers, levels, defaults, start);
+20 |     let _engine = Ieee802154Engine::place(mac, buffers, levels, defaults, start);
    |                                           --- you could clone this value
 help: consider further restricting type parameter `Mac` with trait `Copy`
    |
- 9 | pub fn bind<Mac: Ieee802154LowLevel<Address = DmaWindowAddress> + Copy>(mac: Mac,
+13 | pub fn bind<Mac: Ieee802154LowLevel<Address = DmaWindowAddress> + Copy>(
    |                                                                 ++++++

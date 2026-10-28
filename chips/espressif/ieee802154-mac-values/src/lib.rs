@@ -9,11 +9,6 @@
 //! Closed typed IEEE 802.15.4 MAC values and transactions shared between
 //! chips.
 //!
-//! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
-//! `components/ieee802154/driver` and its public MAC low-level vocabulary
-//! (Copyright Espressif Systems (Shanghai) Co Ltd, Apache-2.0)
-//! and modified by Vladislav Ermachenkov; see the root `NOTICE`.
-//!
 //! The ESP32-S31 and ESP32-C5 place MAC blocks of the same design at their
 //! own addresses, with a few fields of different width and a chip-specific
 //! interrupt route. Their chip PACs own the generated register blocks and the

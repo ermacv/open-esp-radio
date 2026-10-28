@@ -1,10 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Events, abort reasons and their enable and observation vocabularies.
-//!
-//! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
-//! `components/ieee802154/driver` and its public MAC low-level vocabulary
-//! (Copyright Espressif Systems (Shanghai) Co Ltd, Apache-2.0)
-//! and modified by Vladislav Ermachenkov; see the root `NOTICE`.
 
 /// One source-confirmed IEEE 802.15.4 MAC event.
 ///
@@ -699,7 +694,9 @@ pub struct Ieee802154EventObservation {
 impl Ieee802154EventObservation {
     /// Combine named events with the individual observations of lanes 7 and 13.
     /// A chip without a lane supplies `false` for that lane.
-    #[doc(hidden)]
+    ///
+    /// The lanes are retained independently without assigning either a meaning.
+    /// Constructing this value grants no acknowledgement or write authority.
     pub const fn from_parts(events: Ieee802154EventMask, lane_7: bool, lane_13: bool) -> Self {
         Self {
             events,
