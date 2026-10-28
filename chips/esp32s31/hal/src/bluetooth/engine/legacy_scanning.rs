@@ -311,7 +311,7 @@ impl SchedulerRoleStorage for LegacyScanStorage {
             .set_free_head(Some(binding.items[ITEMS - 1]));
         self.scan_request_header
             .initialize_bound_tx(binding.scan_request_packet);
-        self.scan_request_packet = LeTxPacketStorage::new();
+        self.scan_request_packet.clear();
         LegacyScanState::Empty
     }
 

@@ -67,7 +67,7 @@ impl<const N: usize> LegacyAdvertisingTxPacketStorage<N> {
         length: LeTxPacketPreparedLength<N>,
         advertiser: [u8; 6],
     ) -> std::vec::Vec<u8> {
-        let stored = self.controller.prepared_pdu(length);
+        let stored: std::vec::Vec<u8> = self.controller.prepared_pdu(length).collect();
         let mut pdu = stored[..2].to_vec();
         pdu.extend(advertiser);
         pdu.extend_from_slice(&stored[2..length.pdu_bytes() - 6]);

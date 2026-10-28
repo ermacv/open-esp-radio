@@ -258,11 +258,11 @@ impl<'pool, 'epoch, const N: usize> DtmPool<'pool, 'epoch, N> {
         Ok(())
     }
 
-    /// The prepared packet prefix and payload.
+    /// Read the prepared packet prefix and payload.
     pub fn prepared_packet_bytes(
         &self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
-    ) -> Option<&[u8]> {
+    ) -> Option<impl ExactSizeIterator<Item = u8> + '_> {
         let (graph, _, state) = self.shared(instance).ok()?;
         match *state {
             DtmState::Packet(length) => Some(graph.prepared_tx_packet_bytes(length)),

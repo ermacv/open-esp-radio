@@ -644,7 +644,7 @@ impl DtmStorage {
     pub(super) fn prepared_tx_packet_bytes(
         &self,
         packet_length: LeTxPacketPreparedLength<BLUETOOTH_DTM_TX_PACKET_BYTES>,
-    ) -> &[u8] {
+    ) -> impl ExactSizeIterator<Item = u8> + '_ {
         self.tx_packet.prepared_allocation(packet_length)
     }
 
