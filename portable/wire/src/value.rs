@@ -19,7 +19,9 @@ macro_rules! unsigned {
             /// Admit a dynamic value without discarding any bit.
             pub const fn new(value: $raw) -> Option<Self> {
                 const {
-                    assert!(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize);
+                    if !(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize) {
+                        panic!("invalid wire field geometry or value");
+                    }
                 }
                 if value <= const { <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH) } {
                     Some(Self(value))
@@ -31,8 +33,12 @@ macro_rules! unsigned {
             /// Admit a literal at compile time, including in runtime callers.
             pub const fn constant<const VALUE: $raw>() -> Self {
                 const {
-                    assert!(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize);
-                    assert!(VALUE <= <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH));
+                    if !(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize) {
+                        panic!("invalid wire field geometry or value");
+                    }
+                    if !(VALUE <= <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH)) {
+                        panic!("invalid wire field geometry or value");
+                    }
                 }
                 Self(VALUE)
             }
@@ -41,7 +47,9 @@ macro_rules! unsigned {
             /// wire format defines truncation, or the source is a decoded field.
             pub const fn from_low_bits(value: $raw) -> Self {
                 const {
-                    assert!(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize);
+                    if !(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize) {
+                        panic!("invalid wire field geometry or value");
+                    }
                 }
                 Self(value & const { <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH) })
             }
@@ -62,8 +70,12 @@ macro_rules! unsigned {
                 bytes: &[u8; N],
             ) -> Self {
                 const {
-                    assert!(START < END && END - START == WIDTH);
-                    assert!(WIDTH <= <$raw>::BITS as usize);
+                    if !(START < END && END - START == WIDTH) {
+                        panic!("invalid wire field geometry or value");
+                    }
+                    if !(WIDTH <= <$raw>::BITS as usize) {
+                        panic!("invalid wire field geometry or value");
+                    }
                 }
                 // Extraction returns exactly END-START bits; the const proof
                 // makes this narrowing lossless, without a second mask.
@@ -77,7 +89,9 @@ macro_rules! unsigned {
             /// Widen a proof without validating the same value again.
             pub const fn widen<const NEW_WIDTH: usize>(self) -> $name<NEW_WIDTH> {
                 const {
-                    assert!(NEW_WIDTH >= WIDTH && NEW_WIDTH <= <$raw>::BITS as usize);
+                    if !(NEW_WIDTH >= WIDTH && NEW_WIDTH <= <$raw>::BITS as usize) {
+                        panic!("invalid wire field geometry or value");
+                    }
                 }
                 $name(self.0)
             }
@@ -108,7 +122,9 @@ impl<const N: usize> PrefixLength<N> {
 
     pub const fn constant<const LENGTH: usize>() -> Self {
         const {
-            assert!(LENGTH <= N);
+            if !(LENGTH <= N) {
+                panic!("invalid wire field geometry or value");
+            }
         }
         Self(LENGTH)
     }

@@ -8,7 +8,9 @@
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! Allocation-free wire fields and byte cursors shared by radio protocols.
@@ -74,7 +76,11 @@ macro_rules! bitfield {
     ($(#[$meta:meta])* $vis:vis enum $name:ident : $raw:ident ($decode:ident, $encode:ident) {
         $($(#[$variant_meta:meta])* $variant:ident = $value:literal),* $(,)?
     }) => {
-        const _: () = { assert!($raw::MIN == 0 && $raw::BITS <= 64); };
+        const _: () = {
+            if !($raw::MIN == 0 && $raw::BITS <= 64) {
+                panic!("wire enum requires an unsigned integer of at most 64 bits");
+            }
+        };
         $(#[$meta])*
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         $vis enum $name {
@@ -99,15 +105,17 @@ macro_rules! bitfield {
         #[repr(transparent)]
         $vis struct $name([u8; $size]);
         const _: () = {
-            assert!($size > 0);
+            if !($size > 0) { panic!("wire value must contain at least one byte"); }
             let _ = $crate::bitfield!(@order $order);
             $(
-                assert!($start < $end && $end <= $size * 8);
+                if !($start < $end && $end <= $size * 8) { panic!("wire field must be nonempty and fit its array"); }
                 $crate::bitfield!(@width $ty, $end - $start);
             )*
-            assert!($crate::__private::valid_overlaps(&[
+            if !$crate::__private::valid_overlaps(&[
                 $(($start, $end, $crate::bitfield!(@view $($view)?)),)*
-            ]), "overlapping wire fields require an explicit view");
+            ]) {
+                panic!("overlapping wire fields require an explicit view");
+            }
         };
         impl $name {
             pub const fn from_bytes(bytes: [u8; $size]) -> Self { Self(bytes) }
@@ -120,10 +128,18 @@ macro_rules! bitfield {
     };
     (@view) => { false };
     (@view view) => { true };
-    (@width bool, $width:expr) => { assert!($width == 1); };
-    (@width [$ty:ident], $width:expr) => { assert!($width <= $ty::BITS); };
+    (@width bool, $width:expr) => {
+        const { if !($width == 1) { panic!("boolean wire field must contain one bit"); } }
+    };
+    (@width [$ty:ident], $width:expr) => {
+        const { if !($width <= $ty::BITS) { panic!("wire field exceeds its enum width"); } }
+    };
     (@width $ty:ident, $width:expr) => {
-        assert!($ty::MIN == 0 && $ty::BITS <= 64 && $width <= $ty::BITS as usize);
+        const {
+            if !($ty::MIN == 0 && $ty::BITS <= 64 && $width <= $ty::BITS as usize) {
+                panic!("wire field requires a fitting unsigned integer of at most 64 bits");
+            }
+        }
     };
     (@order little) => { true };
     (@order big) => { false };
@@ -131,11 +147,11 @@ macro_rules! bitfield {
         $start:literal, $end:literal, $size:literal, $order:ident) => {
         $(#[$meta])*
         $vis const fn $get(self) -> bool {
-            const { assert!($start < $end && $end <= $size * 8 && $end - $start == 1); }
+            const { if !($start < $end && $end <= $size * 8 && $end - $start == 1) { panic!("invalid wire field geometry or value"); } }
             $crate::__private::get::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&self.0) != 0
         }
         $vis const fn $set(mut self, value: bool) -> Self {
-            const { assert!($start < $end && $end <= $size * 8 && $end - $start == 1); }
+            const { if !($start < $end && $end <= $size * 8 && $end - $start == 1) { panic!("invalid wire field geometry or value"); } }
             $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, value as u64);
             self
         }
@@ -158,12 +174,14 @@ macro_rules! bitfield {
     (@bounded u16, $width:expr) => { $crate::U16<$width> };
     (@bounded u32, $width:expr) => { $crate::U32<$width> };
     (@bounded u64, $width:expr) => { $crate::U64<$width> };
-    (@width ($ty:ident), $width:expr) => { assert!($width <= $ty::BITS as usize); };
+    (@width ($ty:ident), $width:expr) => {
+        const { if !($width <= $ty::BITS as usize) { panic!("wire field exceeds its integer width"); } }
+    };
     (@field $(#[$meta:meta])* $vis:vis $get:ident, $set:ident: [$ty:ident],
         $start:literal, $end:literal, $size:literal, $order:ident) => {
         $(#[$meta])*
         $vis const fn $get(self) -> $ty {
-            const { assert!($start < $end && $end <= $size * 8 && $end - $start <= 64); }
+            const { if !($start < $end && $end <= $size * 8 && $end - $start <= 64) { panic!("invalid wire field geometry or value"); } }
             $ty::from_encoding($crate::__private::get::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&self.0) as _)
         }
         $vis const fn $set(mut self, value: $ty) -> Result<Self, $crate::Error> {
@@ -177,11 +195,11 @@ macro_rules! bitfield {
         $start:literal, $end:literal, $size:literal, $order:ident) => {
         $(#[$meta])*
         $vis const fn $get(self) -> $ty {
-            const { assert!($start < $end && $end <= $size * 8 && $end - $start <= $ty::BITS as usize && $ty::MIN == 0); }
+            const { if !($start < $end && $end <= $size * 8 && $end - $start <= $ty::BITS as usize && $ty::MIN == 0) { panic!("invalid wire field geometry or value"); } }
             $crate::__private::get::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&self.0) as $ty
         }
         $vis const fn $set(mut self, value: $ty) -> Result<Self, $crate::Error> {
-            const { assert!($start < $end && $end <= $size * 8 && $end - $start <= $ty::BITS as usize && $ty::MIN == 0); }
+            const { if !($start < $end && $end <= $size * 8 && $end - $start <= $ty::BITS as usize && $ty::MIN == 0) { panic!("invalid wire field geometry or value"); } }
             if !$crate::__private::fits(value as u64, $end - $start) { return Err($crate::Error::ValueOutOfRange); }
             $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, value as u64);
             Ok(self)
@@ -212,29 +230,21 @@ pub mod __private {
         width >= 64 || value < (1_u64 << width)
     }
 
-    // The slice endpoints and all counter ranges depend only on the const
-    // geometry. Saturating counter steps cannot saturate: the span is at most
-    // 64 bits and each iteration consumes one of its admitted octets.
+    // The array and const geometry prove that every field octet is present.
+    // Traversal skips lower octets and stops at the field's end, retaining
+    // surrounding bits without any panicking slice operations. Saturating
+    // counter steps cannot saturate: each step consumes admitted octets/bits.
     #[inline(always)]
     pub const fn get<const START: usize, const END: usize, const LITTLE: bool, const N: usize>(
         bytes: &[u8; N],
     ) -> u64 {
         const {
-            assert!(START < END && END <= N * 8 && END - START <= 64);
+            if !(START < END && END <= N * 8 && END - START <= 64) {
+                panic!("invalid wire field geometry or value");
+            }
         }
-        let mut bytes = if LITTLE {
-            bytes
-                .split_at(const { END.div_ceil(8) })
-                .0
-                .split_at(const { START / 8 })
-                .1
-        } else {
-            bytes
-                .split_at(const { N - START / 8 })
-                .0
-                .split_at(const { N - END.div_ceil(8) })
-                .1
-        };
+        let mut bytes = bytes.as_slice();
+        let mut skip = const { START / 8 };
         let mut result = 0;
         let mut shift = const { START % 8 };
         let mut remaining = const { END - START };
@@ -244,6 +254,11 @@ pub mod __private {
         } else {
             bytes.split_last()
         } {
+            bytes = rest;
+            if skip != 0 {
+                skip = skip.saturating_sub(1);
+                continue;
+            }
             let available = 8_usize.saturating_sub(shift);
             let count = if remaining < available {
                 remaining
@@ -253,9 +268,11 @@ pub mod __private {
             let mask = u8::MAX >> 8_usize.saturating_sub(count);
             result |= (((byte >> shift) & mask) as u64) << destination;
             remaining = remaining.saturating_sub(count);
+            if remaining == 0 {
+                break;
+            }
             destination = destination.saturating_add(count);
             shift = 0;
-            bytes = rest;
         }
         result
     }
@@ -266,21 +283,12 @@ pub mod __private {
         value: u64,
     ) {
         const {
-            assert!(START < END && END <= N * 8 && END - START <= 64);
+            if !(START < END && END <= N * 8 && END - START <= 64) {
+                panic!("invalid wire field geometry or value");
+            }
         }
-        let mut bytes = if LITTLE {
-            bytes
-                .split_at_mut(const { END.div_ceil(8) })
-                .0
-                .split_at_mut(const { START / 8 })
-                .1
-        } else {
-            bytes
-                .split_at_mut(const { N - START / 8 })
-                .0
-                .split_at_mut(const { N - END.div_ceil(8) })
-                .1
-        };
+        let mut bytes = bytes.as_mut_slice();
+        let mut skip = const { START / 8 };
         let mut shift = const { START % 8 };
         let mut remaining = const { END - START };
         let mut source = 0_usize;
@@ -289,6 +297,11 @@ pub mod __private {
         } else {
             bytes.split_last_mut()
         } {
+            bytes = rest;
+            if skip != 0 {
+                skip = skip.saturating_sub(1);
+                continue;
+            }
             let available = 8_usize.saturating_sub(shift);
             let count = if remaining < available {
                 remaining
@@ -298,9 +311,11 @@ pub mod __private {
             let mask = (u8::MAX >> 8_usize.saturating_sub(count)) << shift;
             *byte = (*byte & !mask) | (((value >> source) as u8) << shift & mask);
             remaining = remaining.saturating_sub(count);
+            if remaining == 0 {
+                break;
+            }
             source = source.saturating_add(count);
             shift = 0;
-            bytes = rest;
         }
     }
 }
@@ -361,6 +376,9 @@ pub struct InvalidDeclarations;
 /// let _ = oer_wire::U8::<0>::new(0);
 /// ```
 /// ```compile_fail
+/// let _ = oer_wire::U8::<9>::from_low_bits(0);
+/// ```
+/// ```compile_fail
 /// let _ = oer_wire::U16::<12>::ZERO.widen::<8>();
 /// ```
 /// ```compile_fail
@@ -369,6 +387,12 @@ pub struct InvalidDeclarations;
 /// ```compile_fail
 /// let length = oer_wire::PrefixLength::<4>::constant::<3>();
 /// let _ = length.borrow(&[0; 5]);
+/// ```
+/// ```compile_fail
+/// let _ = oer_wire::Reader::new(&[0]).bits::<0>(0);
+/// ```
+/// ```compile_fail
+/// let _ = oer_wire::Reader::new(&[0; 9]).bits::<65>(0);
 /// ```
 #[cfg(doctest)]
 pub struct InvalidProofs;
