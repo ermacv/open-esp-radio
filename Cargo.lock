@@ -2232,6 +2232,14 @@ name = "oer-espressif-modem-clock"
 version = "0.1.0"
 
 [[package]]
+name = "oer-espressif-platform-port"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-facts",
+ "oer-mmio",
+]
+
+[[package]]
 name = "oer-espressif-staged-bootstrap"
 version = "0.1.0"
 dependencies = [
