@@ -35,6 +35,11 @@ impl BootstrapCommandCompleteEvent {
         self.status
     }
 
+    /// Successful Command Complete carrying `return_parameters`.
+    pub fn success<const N: usize>(opcode: Opcode, return_parameters: &[u8; N]) -> Self {
+        Self::new(opcode, Status::SUCCESS, return_parameters)
+    }
+
     /// Command Complete refusing a bootstrap command with `error`, as the
     /// Controller does when its role state forbids the command.
     pub fn error(opcode: Opcode, error: HciError) -> Self {
@@ -63,13 +68,6 @@ impl BootstrapCommandCompleteEvent {
             status,
         }
     }
-}
-
-pub(super) fn command_success<const N: usize>(
-    opcode: Opcode,
-    parameters: &[u8; N],
-) -> BootstrapCommandCompleteEvent {
-    BootstrapCommandCompleteEvent::new(opcode, Status::SUCCESS, parameters)
 }
 
 pub(super) fn command_error(opcode: Opcode, error: HciError) -> BootstrapCommandCompleteEvent {

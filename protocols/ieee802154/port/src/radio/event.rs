@@ -1,7 +1,7 @@
 //! Backend-to-caller observations, completion categories and receive metadata.
 
-use super::{Ieee802154Instant, channel::Channel, interface::Interface};
-use oer_ieee802154_wire::FrameView;
+use super::{Ieee802154Instant, interface::Interface};
+use oer_ieee802154_wire::{Channel, FrameView};
 
 /// How a backend validated the received frame check sequence.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

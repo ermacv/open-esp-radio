@@ -30,6 +30,8 @@
 #[cfg(test)]
 extern crate std;
 
+/// Validated channels of the 2.4 GHz O-QPSK PHY.
+pub mod channel;
 /// Coordinated Sampled Listening IE encoding.
 pub mod csl;
 /// Enhanced acknowledgement construction.
@@ -45,6 +47,7 @@ pub mod security;
 /// Thread Time IE encoding from a ready network timestamp.
 pub mod time_sync;
 
+pub use channel::{Channel, ChannelError};
 pub use csl::{CSL_IE_ID, CSL_IE_TEMPLATE, write_csl_ie};
 pub use enhanced_ack::{
     EnhancedAck, EnhancedAckError, EnhancedAckSecurity, KeyIdMode, generate_enhanced_ack,

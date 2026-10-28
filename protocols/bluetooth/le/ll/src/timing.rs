@@ -16,6 +16,10 @@ use oer_bluetooth_le_port::{
     ConnectionAllowances, ConnectionEventTiming, LeInstant, LeWindow, NonZeroRadioDuration,
     RadioDuration, RadioTiming,
 };
+use oer_bluetooth_le_wire::air_time::{
+    LE_1M_MICROS_PER_OCTET, LE_1M_PACKET_OVERHEAD_OCTETS, LEGACY_SCAN_REQ_LE_1M_AIRTIME_MICROS,
+    LegacyPduLength, T_IFS_MICROS,
+};
 use oer_bluetooth_le_wire::connection::LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS;
 
 use PlanningCalculation as C;
@@ -227,38 +231,8 @@ fn error(calculation: C) -> EpochExhausted {
     )
 }
 
-/// Inter-frame space.
-const T_IFS_MICROS: u32 = 150;
-/// LE 1M air time of `SCAN_REQ`.
-const SCAN_REQ_AIR_MICROS: u32 = (1 + 4 + 2 + 12 + 3) * 8;
 /// The vendor's response-capable scheduler tail after `ADV_IND`.
 const RESPONSE_CAPABLE_TAIL_MICROS: u32 = 4;
-
-/// The length of a legacy advertising-channel PDU, header included: from
-/// the two header bytes alone up to the 37 payload bytes of a legacy PDU.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LegacyPduLength(u8);
-
-impl LegacyPduLength {
-    /// The shortest legacy PDU: its header only.
-    pub const MIN: Self = Self(2);
-    /// The longest legacy PDU: its header and 37 payload bytes.
-    pub const MAX: Self = Self(39);
-
-    /// `length` bytes, or `None` outside `2..=39`.
-    pub const fn new(length: usize) -> Option<Self> {
-        if length >= Self::MIN.0 as usize && length <= Self::MAX.0 as usize {
-            Some(Self(length as u8))
-        } else {
-            None
-        }
-    }
-
-    /// The length in bytes.
-    pub const fn get(self) -> usize {
-        self.0 as usize
-    }
-}
 
 /// What one legacy advertising channel awaits after its PDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -282,10 +256,10 @@ pub enum AdvertisingResponse {
 /// Returns [`EpochExhausted`] if the calculation cannot be represented.
 pub fn legacy_air_micros(length: LegacyPduLength) -> Result<NonZeroU32, EpochExhausted> {
     // Preamble, access address and CRC surround the bounded PDU.
-    const OVERHEAD_BYTES: u32 = 1 + 4 + 3;
-    u32::from(length.0)
-        .checked_add(OVERHEAD_BYTES)
-        .and_then(|bytes| bytes.checked_mul(8))
+    u32::try_from(length.get())
+        .ok()
+        .and_then(|bytes| bytes.checked_add(LE_1M_PACKET_OVERHEAD_OCTETS))
+        .and_then(|bytes| bytes.checked_mul(LE_1M_MICROS_PER_OCTET))
         .and_then(NonZeroU32::new)
         .ok_or(advertising_error(C::ChannelAir))
 }
@@ -302,7 +276,7 @@ pub fn advertising_channel_air(
     const RESPONSE_LEAD_MICROS: u32 = RESPONSE_CAPABLE_TAIL_MICROS + T_IFS_MICROS;
     const DIRECTED_RESPONSE_MICROS: u32 =
         RESPONSE_LEAD_MICROS + LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS;
-    const SCAN_REQUEST_MICROS: u32 = SCAN_REQ_AIR_MICROS + T_IFS_MICROS;
+    const SCAN_REQUEST_MICROS: u32 = LEGACY_SCAN_REQ_LE_1M_AIRTIME_MICROS + T_IFS_MICROS;
     let outside = advertising_error(C::ChannelAir);
     let air = legacy_air_micros(pdu_length)?;
     let responses = match response {
@@ -553,13 +527,7 @@ mod advertising_tests {
     }
 
     #[test]
-    fn a_legacy_pdu_length_holds_its_header_and_at_most_37_payload_bytes() {
-        assert_eq!(LegacyPduLength::new(0), None);
-        assert_eq!(LegacyPduLength::new(1), None);
-        assert_eq!(LegacyPduLength::new(2), Some(LegacyPduLength::MIN));
-        assert_eq!(LegacyPduLength::new(39), Some(LegacyPduLength::MAX));
-        assert_eq!(LegacyPduLength::new(40), None);
-        assert_eq!(LegacyPduLength::new(usize::MAX), None);
+    fn the_shortest_legacy_pdu_takes_its_header_and_packet_overhead() {
         assert_eq!(
             legacy_air_micros(LegacyPduLength::MIN).unwrap().get(),
             (1 + 4 + 2 + 3) * 8
@@ -590,7 +558,7 @@ mod advertising_tests {
         .unwrap();
         assert_eq!(
             scannable.get().as_micros(),
-            376 + 4 + 150 + u64::from(SCAN_REQ_AIR_MICROS) + 150 + 376
+            376 + 4 + 150 + u64::from(LEGACY_SCAN_REQ_LE_1M_AIRTIME_MICROS) + 150 + 376
         );
         let directed = advertising_channel_air(length(14), AdvertisingResponse::Directed).unwrap();
         assert_eq!(
@@ -643,8 +611,9 @@ mod advertising_tests {
             );
             for response_bytes in 2..=39 {
                 for connectable in [false, true] {
-                    let scan =
-                        u64::from(SCAN_REQ_AIR_MICROS) + 150 + (response_bytes as u64 + 8) * 8;
+                    let scan = u64::from(LEGACY_SCAN_REQ_LE_1M_AIRTIME_MICROS)
+                        + 150
+                        + (response_bytes as u64 + 8) * 8;
                     let exchange = if connectable {
                         scan.max(u64::from(LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS))
                     } else {

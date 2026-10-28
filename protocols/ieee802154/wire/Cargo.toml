@@ -8,6 +8,7 @@ repository.workspace = true
 description = "IEEE 802.15.4 frame and information-element codecs"
 
 [dependencies]
+oer-radio-regulatory = { path = "../../radio/regulatory" }
 oer-wire = { path = "../../../portable/wire" }
 
 [lints]

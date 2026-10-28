@@ -1,23 +1,20 @@
 use bt_hci::{
     cmd::{
         Cmd, Opcode, OpcodeGroup,
-        controller_baseband::{Reset, SetEventMask},
         le::{
             LeLongTermKeyRequestNegativeReply, LeLongTermKeyRequestReply, LeReadRemoteFeatures,
             LeSetAdvData, LeSetAdvEnable, LeSetAdvParams, LeSetRandomAddr, LeSetScanResponseData,
         },
         link_control::{Disconnect, ReadRemoteVersionInformation},
     },
-    param::{BdAddr, Error as HciError, EventMask, Status},
+    param::{BdAddr, Error as HciError},
 };
 
 use super::{LeControllerCommandClassification, classify_le_controller_command};
 use crate::{
-    BluetoothPublicDeviceAddress, BootstrapCommand, BootstrapPhase, HciCommandPacket,
-    LE_RECEIVER_TEST_V1_OPCODE, LE_RECEIVER_TEST_V2_OPCODE, LE_TEST_END_OPCODE,
-    LE_TRANSMITTER_TEST_V1_OPCODE, LE_TRANSMITTER_TEST_V2_OPCODE, LeControllerBootstrap,
-    LeControllerBootstrapConfig, LeDisconnectCommand, LeDtmCommand,
-    LeLegacyAdvertisingConfigurationCommand, OwnedBootstrapCommand,
+    HciCommandPacket, LE_RECEIVER_TEST_V1_OPCODE, LE_RECEIVER_TEST_V2_OPCODE, LE_TEST_END_OPCODE,
+    LE_TRANSMITTER_TEST_V1_OPCODE, LE_TRANSMITTER_TEST_V2_OPCODE, LeDisconnectCommand,
+    LeDtmCommand, LeLegacyAdvertisingConfigurationCommand, OwnedBootstrapCommand,
 };
 
 #[test]
@@ -130,23 +127,6 @@ fn long_term_key_replies_are_owned_before_the_closed_bootstrap_table() {
 }
 
 #[test]
-fn bootstrap_command_is_owned_without_advancing_software_state() {
-    let mut bootstrap = bootstrap();
-    let classified = classify_le_controller_command(HciCommandPacket::new(Reset::OPCODE, &[]));
-
-    let LeControllerCommandClassification::Bootstrap(command) = classified else {
-        panic!("Reset did not become an owned bootstrap command");
-    };
-    assert_eq!(command.kind(), BootstrapCommand::Reset);
-    assert!(command.is_reset());
-    assert_eq!(bootstrap.phase(), BootstrapPhase::AwaitingReset);
-
-    let response = bootstrap.dispatch(command, false).unwrap();
-    assert_eq!(response.status(), Status::SUCCESS);
-    assert_eq!(bootstrap.phase(), BootstrapPhase::Configuring);
-}
-
-#[test]
 fn bootstrap_payload_is_typed_and_independent_of_receive_storage() {
     let mut parameters = [6, 5, 4, 3, 2, 0xc1];
     let command = match classify_le_controller_command(HciCommandPacket::new(
@@ -162,77 +142,6 @@ fn bootstrap_payload_is_typed_and_independent_of_receive_storage() {
         panic!("random address lost its semantic bootstrap variant");
     };
     assert_eq!(address, BdAddr::new([6, 5, 4, 3, 2, 0xc1]));
-}
-
-#[test]
-fn active_reset_can_be_held_until_the_session_policy_dispatches_it() {
-    let mut bootstrap = bootstrap();
-    assert_eq!(
-        bootstrap
-            .dispatch(OwnedBootstrapCommand::Reset, false)
-            .unwrap()
-            .status(),
-        Status::SUCCESS
-    );
-    let requested_mask = EventMask::new().enable_hardware_error(true);
-    assert_eq!(
-        bootstrap
-            .dispatch(OwnedBootstrapCommand::SetEventMask(requested_mask), false)
-            .unwrap()
-            .status(),
-        Status::SUCCESS
-    );
-
-    let classified = classify_le_controller_command(HciCommandPacket::new(Reset::OPCODE, &[]));
-    assert_eq!(bootstrap.event_mask(), requested_mask);
-    let LeControllerCommandClassification::Bootstrap(reset) = classified else {
-        panic!("active Reset did not remain an owned policy input");
-    };
-    assert!(reset.is_reset());
-    assert_eq!(bootstrap.event_mask(), requested_mask);
-
-    assert_eq!(
-        bootstrap.dispatch(reset, false).unwrap().status(),
-        Status::SUCCESS
-    );
-    assert_eq!(
-        bootstrap.event_mask(),
-        crate::controller::bootstrap::state::default_event_mask().unwrap()
-    );
-}
-
-#[test]
-fn malformed_known_bootstrap_is_owned_without_touching_an_epoch() {
-    let mut bootstrap = bootstrap();
-    let requested_mask = EventMask::new().enable_hardware_error(true);
-    assert_eq!(
-        bootstrap
-            .dispatch(OwnedBootstrapCommand::Reset, false)
-            .unwrap()
-            .status(),
-        Status::SUCCESS
-    );
-    assert_eq!(
-        bootstrap
-            .dispatch(OwnedBootstrapCommand::SetEventMask(requested_mask), false)
-            .unwrap()
-            .status(),
-        Status::SUCCESS
-    );
-
-    let classified =
-        classify_le_controller_command(HciCommandPacket::new(SetEventMask::OPCODE, &[0; 7]));
-
-    let LeControllerCommandClassification::MalformedBootstrap(response) = classified else {
-        panic!("malformed bootstrap command escaped its command family");
-    };
-    assert_eq!(response.opcode(), SetEventMask::OPCODE);
-    assert_eq!(
-        response.status(),
-        HciError::INVALID_HCI_PARAMETERS.to_status()
-    );
-    assert_eq!(bootstrap.phase(), BootstrapPhase::Configuring);
-    assert_eq!(bootstrap.event_mask(), requested_mask);
 }
 
 #[test]
@@ -373,16 +282,4 @@ fn unrelated_opcode_group_produces_an_exact_unknown_command_completion() {
     assert_eq!(response.opcode(), opcode);
     assert_eq!(response.status(), HciError::UNKNOWN_CMD.to_status());
     assert_eq!(response.as_bytes().len(), 6);
-}
-
-fn bootstrap() -> LeControllerBootstrap {
-    LeControllerBootstrap::new(
-        LeControllerBootstrapConfig::new(
-            BluetoothPublicDeviceAddress::from_canonical_bytes([2, 3, 5, 7, 11, 13]),
-            27,
-            1,
-        )
-        .expect("nonzero test profile"),
-    )
-    .unwrap()
 }

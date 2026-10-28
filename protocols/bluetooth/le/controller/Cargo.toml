@@ -5,17 +5,15 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Portable Bluetooth LE Controller: HCI DTM service, event geometry and authenticated PDU receive"
+description = "Portable Bluetooth LE Controller: HCI bootstrap state and DTM service"
 
 [dependencies]
 oer-bluetooth-le-wire = { path = "../wire" }
 oer-bluetooth-hci = { path = "../../hci" }
 oer-bluetooth-le-port = { path = "../port" }
 oer-radio-port = { path = "../../../radio/port" }
-oer-bluetooth-le-ll = { path = "../ll" }
 
 [dev-dependencies]
-oer-bluetooth-le-cipher = { path = "../cipher" }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-bluetooth-le-model = { path = "../model", features = ["test-support"] }
 oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }

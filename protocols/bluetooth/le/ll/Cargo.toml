@@ -5,11 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Allocation-free Bluetooth LE Link Layer protocol and role state"
+description = "Allocation-free Bluetooth LE Link Layer protocol, role state, event geometry and receive authentication"
 
 [dependencies]
 oer-bluetooth-le-wire = { path = "../wire" }
 oer-bluetooth-le-cipher = { path = "../cipher" }
+oer-bluetooth-le-port = { path = "../port" }
 
 [lints]
 workspace = true

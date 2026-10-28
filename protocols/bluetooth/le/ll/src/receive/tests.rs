@@ -2,11 +2,11 @@
 
 use std::{vec, vec::Vec};
 
-use oer_bluetooth_le_cipher::LeLongTermKey;
-use oer_bluetooth_le_ll::security::{
+use crate::security::{
     LePeripheralEncryptionProcedure as Procedure, LePeripheralEncryptionRandom,
     LePeripheralEncryptionReceiveMode as Mode, LePeripheralEncryptionTermination as Termination,
 };
+use oer_bluetooth_le_cipher::LeLongTermKey;
 
 use super::{PDU_CAPACITY, decode};
 
@@ -210,8 +210,12 @@ fn truncated_and_oversized_inputs_return_the_typed_length_error() {
     for input in [vec![], vec![2], vec![2, 0, 1], vec![2; PDU_CAPACITY + 1]] {
         let mut procedure = Procedure::new();
         let mut decoded = [0xa5; PDU_CAPACITY];
-        assert_eq!(super::decode_inner(&mut procedure, &input, &mut decoded, random),
-            Err(oer_bluetooth_le_ll::security::LePeripheralEncryptionProcedureError::UnexpectedPhysicalChannelPdu));
+        assert_eq!(
+            super::decode_inner(&mut procedure, &input, &mut decoded, random),
+            Err(
+                crate::security::LePeripheralEncryptionProcedureError::UnexpectedPhysicalChannelPdu
+            )
+        );
         assert_eq!(decode(&mut procedure, &input, &mut decoded, random), None);
         assert_eq!(procedure.termination(), Some(Termination::Exit));
         assert!(decoded.iter().all(|byte| *byte == 0));

@@ -625,13 +625,15 @@ its model and conformance case.
   normal dependency closure contains neither engine nor driver. Chip knowledge
   supplies hardware-free power facts; the driver composes the engine's typed
   level set. The port boundary follows the
-  OpenThread radio platform: the backend executes acknowledgement, CSMA-CA
-  and the cipher as advertised capabilities; retries, the pending-table
-  policy, keys and counters stay in the core. The port owns shared pending
-  tables, pending-bit selection, CSMA helpers and enhanced-ACK probing tables:
-  the core configures their data and the backend executes the advertised
-  offloads. CSL phase and network-time calculations stay in the core; wire
-  codecs write ready IE values. Configuration is admitted in any radio state.
+  OpenThread radio platform: the backend executes acknowledgement, a single
+  clear-channel assessment per transmission and the cipher as advertised
+  capabilities; the CSMA-CA backoff between assessments, retries, the
+  pending-table policy, keys and counters stay in the core. The port owns
+  shared pending tables, pending-bit selection and enhanced-ACK probing
+  tables: the core configures their data and the backend executes the
+  advertised offloads. Validated channels are wire values. CSL phase and
+  network-time calculations stay in the core; wire codecs write ready IE
+  values. Configuration is admitted in any radio state.
 
 ## Instrumentation and probes
 
