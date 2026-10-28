@@ -30,19 +30,19 @@ RF delivery or interoperability; BR/EDR remains source inventory.
 | `resources` | Task and inactive interrupt owners split from the clocked client |
 | `runtime_resources` | Interrupt-shared event cells reused by every epoch, and the task and timer workers of one powered epoch; the HAL owns physical list publications and receive-chain graphs |
 | `shutdown` | Retirement of a drained epoch and Controller output, followed by the actor-ordered Controller reset that returns the clocked client and the complete arena |
-| `roles` | Detached value builders for DTM, advertising, scanning and connection events, and role-to-list selection |
+| `roles` | Detached hardware value builders for DTM, connectable advertising and connection events, primary-channel scheduler images and role-to-list selection |
 | `connection_policy` | Connection-event timing allowances (`ble_28.o`) and the vendor Direct Test Mode notes |
 
 The driver enables the HAL's `bluetooth-engine` feature. Its
-`*_event_image` modules select DTM role/PHY/phase, advertising channel order
-and windows, and scanner filter, active/passive and start policy. They pass
-detached values through closed HAL operations. A builder never borrows a
-controller layout; HAL checks binding anchors before committing a value.
-The detached `AdvertisingImageBuilder` receives encoded bytes directly from
-its caller. The port runner currently executes DTM only. Advertising address
-and header decoding belongs to `le/wire`; the builder selects the supported
-`ADV_NONCONN_IND` hardware profile from the decoded type, flags and address
-before HAL admits the packet extent.
+`*_event_image` modules lower caller-selected DTM role/PHY/phase and
+advertising channels and execution windows into detached hardware values
+through closed HAL operations. A builder never borrows a controller layout;
+HAL checks binding anchors before committing a value.
+The port runner currently executes DTM only. The driver does not parse air
+PDUs or infer an address or role from their bytes. PDU codecs belong to
+`le/wire`; LL decisions and role policy belong above the backend port.
+Addresses needed by the backend cross the port as `LeDeviceAddress` values,
+separately from encoded packets.
 Affine pool and epoch scopes prevent foreign and stale leases, and release
 consumes its lease. Hardware heads resolve to logical identities inside HAL.
 

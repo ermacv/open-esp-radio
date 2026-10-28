@@ -1,11 +1,7 @@
-//! Pure channel planning, timing and PDU address policy for advertising.
-use oer_bluetooth_le_wire::{
-    LeDeviceAddressKind,
-    advertising_header::{AdvertisingPduType, LegacyAdvertisingPduPrefix},
-};
+//! Primary-channel scheduler images and execution timing for advertising.
 use oer_esp32s31_hal::bluetooth::engine::{
-    AdvertisingEventImage, AdvertisingItemImage, LegacyAdvertisingOwnAddress,
-    LegacyAdvertisingPduError, LegacyAdvertisingPrimaryChannel, SchedulerEventPriority,
+    AdvertisingEventImage, AdvertisingItemImage, LegacyAdvertisingPrimaryChannel,
+    SchedulerEventPriority,
 };
 
 /// Canonical non-empty primary-channel plan for one hardware event.
@@ -54,25 +50,6 @@ impl LegacyAdvertisingPrimaryChannelPlan {
         } else {
             None
         }
-    }
-}
-
-/// Select the hardware address source from an already decoded advertisement.
-pub(super) fn own_address_for_advertisement(
-    advertisement: LegacyAdvertisingPduPrefix,
-) -> Result<LegacyAdvertisingOwnAddress, LegacyAdvertisingPduError> {
-    let header = advertisement.header;
-    if !matches!(header.pdu_type(), AdvertisingPduType::AdvNonconnInd) {
-        return Err(LegacyAdvertisingPduError::UnsupportedPduType);
-    }
-    if header.reserved() || header.channel_selection_two() || header.rx_add_random() {
-        return Err(LegacyAdvertisingPduError::UnsupportedHeaderFlags);
-    }
-    match advertisement.advertiser.kind() {
-        LeDeviceAddressKind::Random => Ok(LegacyAdvertisingOwnAddress::Random(
-            advertisement.advertiser.wire_bytes(),
-        )),
-        LeDeviceAddressKind::Public => Ok(LegacyAdvertisingOwnAddress::Public),
     }
 }
 

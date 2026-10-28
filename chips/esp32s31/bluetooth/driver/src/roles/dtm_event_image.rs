@@ -1,4 +1,4 @@
-//! DTM role, PHY and event-phase policy. Physical words remain in HAL.
+//! DTM scheduler configuration and receiver execution waits. SRAM codecs remain in HAL.
 use oer_esp32s31_hal::bluetooth::engine::{
     DtmItemConfiguration, DtmReceiveWait, SchedulerEventPriority,
 };
