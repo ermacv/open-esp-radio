@@ -47,11 +47,12 @@ pub mod radio;
 pub mod security;
 /// Time IE request configuration.
 pub mod time_sync;
+mod work;
 
 pub use coexistence::RadioOperation;
 pub use config::{
-    CancelError, ClockError, ClockInfo, CslCapability, CslReceiver, EnhancedAckGeneration,
-    EventsLost, FrameCounterUpdate, Ieee802154Capabilities, Poisoned, PortResult,
+    ClockError, ClockInfo, CslCapability, CslReceiver, EnhancedAckGeneration, EventsLost,
+    FrameCounterUpdate, Ieee802154Capabilities, Poisoned, PortResult,
 };
 pub use link_metrics::{EnhAckProbing, LinkMetrics, ProbingError, ProbingInitiator, link_margin};
 pub use pending::{AckPending, AutoPendingMode, PendingTable, PendingTableFull, ack_pending};
@@ -69,3 +70,4 @@ pub use radio::power::{
 pub use radio::{Ieee802154Instant, Ieee802154Radio, RequestId};
 pub use security::TransmitSecurity;
 pub use time_sync::TimeSync;
+pub use work::{CancelError, RadioPortClient, RadioWork, Work};

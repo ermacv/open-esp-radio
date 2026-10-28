@@ -11,7 +11,7 @@
 //! values within one frame, at once while listening with no frame in progress. The port itself
 //! is the owner shape of [`crate::owner`].
 
-pub use oer_radio_port::{CancelError, ClockError};
+pub use oer_radio_port::ClockError;
 pub use oer_radio_port::{ClockInfo, EventsLost, Poisoned, PortResult};
 
 use crate::radio::{

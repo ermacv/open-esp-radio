@@ -52,10 +52,11 @@ use core::{
     task::{Poll, Waker},
 };
 
+use oer_ieee802154_port::{CancelError, RadioPortClient, RadioWork, Work};
 use oer_radio_port::{
-    BodyLoan, Call, CancelError, ClockError, EnableResult, InstallParts, ModelSlotOwner,
-    PhaseParts, PortBackend, PortPhase, RadioPortClient, RadioWork, SlotBodyOwner, SlotIdentity,
-    SlotOwner, SlotRetire, SlotStopped, SlotWakes, Work,
+    BodyLoan, Call, ClockError, EnableResult, InstallParts, ModelSlotOwner, PhaseParts,
+    PortBackend, PortPhase, SlotBodyOwner, SlotIdentity, SlotOwner, SlotRetire, SlotStopped,
+    SlotWakes,
 };
 use oer_radio_port::{Child, EventsLost, Mint, Poisoned, PortResult, Root, Seat, Slot};
 
