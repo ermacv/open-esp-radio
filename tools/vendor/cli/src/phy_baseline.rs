@@ -101,16 +101,14 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
                     Some(path) => read_reference(&path),
                     None => signature.read_reference(&ctx.root),
                 }?;
-                let (identity, production) =
-                    baseline::runs::production(&run, &board, reference.channel)?;
-                Ok(reference.check(
-                    &signature,
-                    &baseline::model(&ctx.root)?,
+                let model = baseline::model(&ctx.root)?;
+                let (identity, production) = baseline::runs::production(
+                    &run,
                     &board,
-                    revision,
-                    &identity,
-                    &production,
-                ))
+                    reference.channel,
+                    &model.images.registers,
+                )?;
+                Ok(reference.check(&signature, &model, &board, revision, &identity, &production))
             })()
             .unwrap_or_else(Check::incomplete);
             if let Some(output) = output {
