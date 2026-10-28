@@ -11,7 +11,8 @@
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::disallowed_macros
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 #![cfg_attr(
     test,
@@ -27,6 +28,7 @@
         clippy::todo,
         clippy::unimplemented,
         clippy::disallowed_macros,
+        clippy::disallowed_methods,
     )
 )]
 
