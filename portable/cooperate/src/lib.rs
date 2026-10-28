@@ -8,7 +8,9 @@
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! Cooperative admission supplied by the executor binding, alongside time.
