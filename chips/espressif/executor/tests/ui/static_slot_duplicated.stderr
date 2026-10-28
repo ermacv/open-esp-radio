@@ -1,11 +1,19 @@
+warning: unused imports: `Abandon` and `Quarantine`
+ --> tests/ui/static_slot_duplicated.rs:4:5
+  |
+4 |     Abandon, Quarantine, SlotIdentity, SlotOwner, SlotRetire, SlotStopped,
+  |     ^^^^^^^  ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
 error[E0382]: borrow of moved value: `first`
-  --> tests/ui/static_slot_duplicated.rs:38:13
+  --> tests/ui/static_slot_duplicated.rs:36:13
    |
-33 |     let first = first::take_static().expect("one take");
+31 |     let first = first::take_static().expect("one take");
    |         ----- move occurs because `first` has type `&mut PortSlot<StaticId<first::Declaration>, Owner>`, which does not implement the `Copy` trait
-34 |     #[cfg(all())]
-35 |     let second = first;
+32 |     #[cfg(all())]
+33 |     let second = first;
    |                  ----- value moved here
 ...
-38 |     let _ = first.register(Owner); // ui-error: E0382
+36 |     let _ = first.register(Owner); // ui-error: E0382
    |             ^^^^^ value borrowed here after move

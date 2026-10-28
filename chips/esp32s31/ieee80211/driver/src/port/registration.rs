@@ -107,6 +107,7 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Registration<
     }
 
     fn cleanup(&mut self, cause: Option<LifecycleError>) {
+        let observed = self.raw.observation();
         let Some(authority) = self.raw.begin_failure() else {
             return;
         };
@@ -130,18 +131,30 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Registration<
                 })();
                 (outcome, cause)
             }
-            Err(cause) => (radio::Abandon::Unconfirmed(authority), cause),
+            Err(_) => (
+                radio::Abandon::Unconfirmed(authority),
+                match cause {
+                    LifecycleError::InvalidState(_) => cause,
+                    _ => LifecycleError::InvalidState(observed),
+                },
+            ),
         };
         self.raw.publish_failure(cause, outcome);
     }
 
     /// Drive under the owner guard, including cancellation before first poll.
-    pub async fn run(mut self) -> Result<SlotCompletion<'s, Id>, LifecycleError> {
-        let result = self.raw.drive().await;
-        if let Err(cause) = result {
-            self.cleanup(Some(cause));
-        }
-        result
+    pub fn run(
+        mut self,
+    ) -> oer_radio_port::DriverFuture<
+        impl Future<Output = Result<SlotCompletion<'s, Id>, LifecycleError>>,
+    > {
+        oer_radio_port::DriverFuture::new(async move {
+            let result = self.raw.drive().await;
+            if let Err(cause) = result {
+                self.cleanup(Some(cause));
+            }
+            result
+        })
     }
 }
 impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Drop

@@ -29,6 +29,7 @@ impl<'s, Id: SlotIdentity + 's, S: MockCleanup<Id> + 's> MockRegistration<'s, Id
         self.cleanup_cause(None)
     }
     fn cleanup_cause(&mut self, cause: Option<LifecycleError>) -> bool {
+        let observed = self.raw.observation();
         let Some(authority) = self.raw.begin_failure() else {
             return false;
         };
@@ -41,18 +42,29 @@ impl<'s, Id: SlotIdentity + 's, S: MockCleanup<Id> + 's> MockRegistration<'s, Id
         };
         let (outcome, cause) = match self.raw.owner_parts(&authority) {
             Ok((owner, invocation)) => (owner.abandon(invocation, authority), cause),
-            Err(cause) => (Abandon::Unconfirmed(authority), cause),
+            Err(_) => (
+                Abandon::Unconfirmed(authority),
+                match cause {
+                    LifecycleError::InvalidState(_) => cause,
+                    _ => LifecycleError::InvalidState(observed),
+                },
+            ),
         };
         self.raw.publish_failure(cause, outcome);
         true
     }
     /// Drive with the guard retained through cancellation, even before first poll.
-    pub async fn run(mut self) -> Result<SlotCompletion<'s, Id>, LifecycleError> {
-        let result = self.raw.drive().await;
-        if let Err(cause) = result {
-            self.cleanup_cause(Some(cause));
-        }
-        result
+    pub fn run(
+        mut self,
+    ) -> crate::DriverFuture<impl Future<Output = Result<SlotCompletion<'s, Id>, LifecycleError>>>
+    {
+        crate::DriverFuture::new(async move {
+            let result = self.raw.drive().await;
+            if let Err(cause) = result {
+                self.cleanup_cause(Some(cause));
+            }
+            result
+        })
     }
 }
 impl<Id: SlotIdentity, S: MockCleanup<Id>> Drop for MockRegistration<'_, Id, S> {

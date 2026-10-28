@@ -55,8 +55,8 @@ pub use execution::LocalExecution;
 pub use identity::{LocalId, SlotIdentity, StaticId};
 pub use lifecycle::*;
 pub use slot::{
-    Joined, LifecycleError, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner, SlotClaim,
-    SlotCompletion, SlotFrontend, SlotInitError, SlotJoin, SlotObservation, SlotOwner,
+    DriverFuture, Joined, LifecycleError, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner,
+    SlotClaim, SlotCompletion, SlotFrontend, SlotInitError, SlotJoin, SlotObservation, SlotOwner,
     SlotQuarantined, SlotRegisterError, SlotRegistration, SlotRetire, SlotStopped,
     SlotStorageState, SlotWakes, VacantPortSlot, with_local_slot,
 };

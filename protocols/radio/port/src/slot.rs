@@ -820,7 +820,6 @@ pub struct SlotQuarantined<Id: SlotIdentity> {
 }
 
 impl<Id: SlotIdentity> SlotQuarantined<Id> {
-    /// What the timely P2 response proved; expiry is always unconfirmed.
     /// Portable failure observed before the owner's response or deadline.
     pub fn cause(&self) -> LifecycleError {
         self.cause
@@ -960,6 +959,39 @@ impl<Id: SlotIdentity> Drop for SlotJoin<'_, Id> {
     }
 }
 
+pin_project_lite::pin_project! {
+    /// A driver future whose completed child is destroyed in place.
+    /// Subsequent polls return Pending without polling an ended async body.
+    pub struct DriverFuture<F> {
+        #[pin]
+        future: Option<F>,
+    }
+}
+impl<F> DriverFuture<F> {
+    /// Retain the driver and its owner guard before the first poll.
+    pub fn new(future: F) -> Self {
+        Self {
+            future: Some(future),
+        }
+    }
+}
+impl<F: Future> Future for DriverFuture<F> {
+    type Output = F::Output;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        let Some(future) = this.future.as_mut().as_pin_mut() else {
+            return Poll::Pending;
+        };
+        match future.poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(output) => {
+                this.future.set(None);
+                Poll::Ready(output)
+            }
+        }
+    }
+}
+
 /// Portable P2 registration, retained inside the hardware owner's cleanup guard.
 ///
 /// Frontend and raw-registration drops report cancellation only. The backend's
@@ -983,9 +1015,18 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
         }
     }
 
-    /// The first portable failure reported by this installation.
+    /// The portable failure retained for this installation.
     pub fn failure(&self) -> Option<LifecycleError> {
         self.signals.failure()
+    }
+
+    /// Snapshot the portable source state before an owner begins cleanup.
+    pub fn observation(&self) -> SlotObservation {
+        SlotObservation {
+            phase: self.signals.state.load(Ordering::Acquire),
+            storage: storage_state(self.owner),
+            invocation_present: self.invocation.is_some(),
+        }
     }
 
     /// Whether an owner guard still owes its cancellation policy.
@@ -1026,66 +1067,71 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
 
     /// Drive the borrowed P2 state, returning typed failure to its owner guard.
     /// The guard outlives this loan, including cancellation before first poll.
-    pub async fn drive(&mut self) -> Result<SlotCompletion<'s, Id>, LifecycleError> {
-        if !self.armed {
-            return Err(self
+    pub fn drive(
+        &mut self,
+    ) -> DriverFuture<impl Future<Output = Result<SlotCompletion<'s, Id>, LifecycleError>> + '_>
+    {
+        DriverFuture::new(async move {
+            if !self.armed {
+                return Err(self
+                    .signals
+                    .invalid(storage_state(self.owner), self.invocation.is_some()));
+            }
+            if let Some(cause) = self.failure() {
+                return Err(cause);
+            }
+            let observed = self
                 .signals
-                .invalid(storage_state(self.owner), self.invocation.is_some()));
-        }
-        if let Some(cause) = self.failure() {
-            return Err(cause);
-        }
-        let observed = self
-            .signals
-            .invalid(storage_state(self.owner), self.invocation.is_some());
-        let invocation = self.invocation.as_mut().ok_or(observed)?;
-        let owner =
-            registered_owner(self.owner).map_err(|storage| self.signals.invalid(storage, true))?;
-        let stopped = {
-            let signals = self.signals;
-            let mut stopping = pin!(owner.run(
-                invocation,
-                SlotRetire {
-                    signals,
-                    owner: PhantomData,
-                    identity: PhantomData,
-                }
-            ));
-            poll_fn(|cx| {
-                signals.p2.register(cx.waker());
-                if let Some(cause) = signals.failure() {
-                    return Poll::Ready(Err(cause));
-                }
-                let result = stopping.as_mut().poll(cx);
-                if let Some(cause) = signals.failure() {
-                    Poll::Ready(Err(cause))
-                } else {
-                    result.map(Ok)
-                }
+                .invalid(storage_state(self.owner), self.invocation.is_some());
+            let invocation = self.invocation.as_mut().ok_or(observed)?;
+            let owner = registered_owner(self.owner)
+                .map_err(|storage| self.signals.invalid(storage, true))?;
+            let stopped = {
+                let signals = self.signals;
+                let mut stopping = pin!(owner.run(
+                    invocation,
+                    SlotRetire {
+                        signals,
+                        owner: PhantomData,
+                        identity: PhantomData,
+                    }
+                ));
+                poll_fn(|cx| {
+                    signals.p2.register(cx.waker());
+                    if let Some(cause) = signals.failure() {
+                        return Poll::Ready(Err(cause));
+                    }
+                    let result = stopping.as_mut().poll(cx);
+                    if let Some(cause) = signals.failure() {
+                        Poll::Ready(Err(cause))
+                    } else {
+                        result.map(Ok)
+                    }
+                })
+                .await?
+            };
+            if self
+                .signals
+                .state
+                .compare_exchange(RETIRING, FINISHING, Ordering::AcqRel, Ordering::Acquire)
+                .is_err()
+            {
+                return Err(self
+                    .signals
+                    .invalid(storage_state(self.owner), self.invocation.is_some()));
+            }
+            let SlotStopped {
+                identity: _,
+                owner: _,
+            } = stopped;
+            finish_owner(self.owner, &mut self.invocation)
+                .map_err(|storage| self.signals.invalid(storage, self.invocation.is_some()))?;
+            self.armed = false;
+            Ok(SlotCompletion {
+                signals: self.signals,
+                armed: true,
+                identity: PhantomData,
             })
-            .await?
-        };
-        if self
-            .signals
-            .state
-            .compare_exchange(RETIRING, FINISHING, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return Err(self
-                .signals
-                .invalid(storage_state(self.owner), self.invocation.is_some()));
-        }
-        let SlotStopped {
-            identity: _,
-            owner: _,
-        } = stopped;
-        finish_owner(self.owner, &mut self.invocation)
-            .map_err(|storage| self.signals.invalid(storage, self.invocation.is_some()))?;
-        self.armed = false;
-        Ok(SlotCompletion {
-            signals: self.signals,
-            armed: true,
-            identity: PhantomData,
         })
     }
 }

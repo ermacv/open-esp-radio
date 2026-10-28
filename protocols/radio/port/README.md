@@ -73,8 +73,9 @@ cleanup. `SlotFrontend` contains queue endpoints and lifecycle signals only.
 
 Each hardware backend owns a concrete P2 `Registration` guard. Its
 `guard_result` wraps both successful registration and an initialization error
-before a frontend is published. The guard retains the raw registration through
-every driver loan. Its Drop performs the backend's mandatory cancellation
+before a frontend is published. Completed driver futures return `Pending` on
+subsequent polls without repeating cleanup. The guard retains the raw
+registration through every driver loan. Its Drop performs the backend's mandatory cancellation
 cleanup exactly once, including before the first driver poll, and leaves
 hardware-reachable backing retained. Wi-Fi stops admission and erases secrets;
 BLE quarantines its device. P1 only reports cancellation. Forgetting a guard

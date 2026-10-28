@@ -198,3 +198,28 @@ fn lifecycle_failure_transport_preserves_all_source_observations() {
     signals.request_failure(LifecycleError::Cancelled);
     assert_eq!(signals.failure(), Some(LifecycleError::FailStopRequested));
 }
+
+#[test]
+fn missing_registered_owner_keeps_the_original_driver_fault_through_owner_notification() {
+    let model = model(false);
+    finish(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (frontend, mut raw) = slot.register(Owner(model.clone())).unwrap();
+        let retained = raw.owner.take();
+        let expected = LifecycleError::InvalidState(SlotObservation {
+            phase: RUNNING,
+            storage: SlotStorageState::Empty,
+            invocation_present: true,
+        });
+        let result = MockRegistration::new(raw).run().await;
+        assert!(matches!(result, Err(cause) if cause == expected));
+        drop(result);
+        assert_eq!(model.abandons.get(), 0, "an absent owner is never replaced");
+        let outcome = frontend.abandon().wait().await.err().unwrap();
+        assert_eq!(outcome.cause(), expected);
+        assert!(matches!(outcome.outcome(), Abandon::Unconfirmed(_)));
+        *slot.owner = retained;
+        slot.end_model_world();
+        assert_eq!(model.drops.get(), 1);
+    }));
+}

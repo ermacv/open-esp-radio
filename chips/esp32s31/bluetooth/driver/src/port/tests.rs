@@ -445,3 +445,35 @@ fn cancelled_registration_is_cleaned_by_the_device_owner_guard_before_first_poll
         assert!(scope.as_mut().poll(&mut cx).is_ready());
     }
 }
+
+#[test]
+fn an_ended_owner_driver_cannot_repeat_cleanup_when_polled_again() {
+    let calls = Rc::new(Calls::default());
+    let device = TestDevice {
+        timer: TestTimer(Rc::new(VirtualClock::new())),
+        calls: calls.clone(),
+        mode: Mode::Ordinary,
+        running: false,
+    };
+    let mut scope = pin!(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (frontend, raw) = slot
+            .register(Backend::<_, _, Tracked>::new(device))
+            .unwrap();
+        drop(frontend);
+        {
+            let mut driver = pin!(Registration::new(raw).run());
+            let mut cx = Context::from_waker(Waker::noop());
+            assert!(matches!(
+                driver.as_mut().poll(&mut cx),
+                Poll::Ready(Err(LifecycleError::Cancelled))
+            ));
+            assert_eq!(calls.quarantine_calls.get(), 1);
+            assert!(driver.as_mut().poll(&mut cx).is_pending());
+            assert_eq!(calls.quarantine_calls.get(), 1);
+        }
+        slot.end_model_world();
+    }));
+    let mut cx = Context::from_waker(Waker::noop());
+    assert!(scope.as_mut().poll(&mut cx).is_ready());
+}
