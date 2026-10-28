@@ -14,9 +14,6 @@ use oer_esp32s31_hal::types::{
 };
 use oer_ieee80211_port::{MacRxMetadata, RxEvidence};
 use oer_ieee80211_wire::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, HeMuSigBUser};
-use oer_ieee80211_wire::trigger::{
-    parse_trigger_common_info, parse_trigger_frame, parse_trigger_user_spatial_stream,
-};
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 use {
     oer_esp32s31_hal::{
@@ -48,20 +45,18 @@ use {
             RxHe20MuSigBUsersError, RxIngressConfig, RxPhyInfo, RxReloadObservation, RxRingError,
             RxRingLive, RxRingStopped, RxSegment, decode_normalized_rx_metadata,
             decode_rx_he_mu_sig_b, decode_rx_local_timestamp, decode_rx_phy_info,
-            extract_ccmp_data, extract_control, extract_data, extract_management,
-            first_segment_layout, view_normalized_rx_frame,
+            extract_ccmp_data, extract_control, first_segment_layout, view_normalized_rx_frame,
         },
         tx::{
             AmpduTxConfig, HeAmpduTxConfig, HeBccDcmMcs, HeEdcaTxopLimit, HeFecCoding,
-            HeLdpcDcmMcs, HeMcs, HeRate, HeResourceUnit, HeTriggerScheduledRate,
-            HeTriggerScheduledRateError, HtAmpduDensity, HtAmpduTxConfig, HtChannelWidth,
-            HtDuplicateCertificationRequest, HtDuplicateRate, HtDuplicateTxEvidenceGaps,
-            HtDuplicateTxLinkCapabilities, HtDuplicateTxOracleField, HtDuplicateTxOracleGaps,
-            HtDuplicateTxQualificationField, HtDuplicateTxQualificationGaps,
-            HtDuplicateTxRejection, HtDuplicateTxSelection, HtDuplicateTxUnavailable,
-            HtGuardInterval, HtMcs, HtPeerAmpduParameters, HtProtectionSpacing, HtRate, LegacyRate,
-            LegacyTxConfig, LegacyTxQueue, TxCompletion, TxDmaState, TxError, TxHardware,
-            TxPhyRate, TxSlot, select_esp32s31_ht_duplicate_tx,
+            HeLdpcDcmMcs, HeMcs, HeRate, HeResourceUnit, HtAmpduDensity, HtAmpduTxConfig,
+            HtChannelWidth, HtDuplicateCertificationRequest, HtDuplicateRate,
+            HtDuplicateTxEvidenceGaps, HtDuplicateTxLinkCapabilities, HtDuplicateTxOracleField,
+            HtDuplicateTxOracleGaps, HtDuplicateTxQualificationField,
+            HtDuplicateTxQualificationGaps, HtDuplicateTxRejection, HtDuplicateTxSelection,
+            HtDuplicateTxUnavailable, HtGuardInterval, HtMcs, HtPeerAmpduParameters,
+            HtProtectionSpacing, HtRate, LegacyRate, LegacyTxConfig, LegacyTxQueue, TxCompletion,
+            TxDmaState, TxError, TxHardware, TxPhyRate, TxSlot, select_esp32s31_ht_duplicate_tx,
         },
     },
 };

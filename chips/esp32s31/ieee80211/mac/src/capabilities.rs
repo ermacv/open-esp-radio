@@ -24,11 +24,13 @@ use crate::{
 /// Evidence for the split ownership is kept beside the implementation:
 ///
 /// - TX encoders exclude the hardware FCS; normal RX policy enables auto-ACK;
-/// - `tx_runtime` owns retry limits, rate ladders and contention updates;
-/// - portable station state owns sequence spaces, while the typed CCMP slot
+/// - portable `upper-mac` owns retry limits and rate ladders; the driver
+///   executes attempts and `tx::runtime` updates hardware EDCA contention;
+/// - portable role state owns sequence spaces, while the typed CCMP slot
 ///   owns PN publication and selects a hardware key;
 /// - hardware BA tables/completion registers match sequence spaces and capture
-///   bitmaps, while `rx_ampdu` and `tx_runtime` own reorder/retention policy.
+///   bitmaps; portable `upper-mac` owns receive reordering and retry selection,
+///   while the chip MAC retains DMA buffers until completion.
 ///
 /// The station exposes one group-key slot until additional receive-side key
 /// lookup is established. One slot cannot receive both old and new GTK IDs
@@ -36,8 +38,9 @@ use crate::{
 /// [`crate::crypto::replace_sta_group_ccmp_with_rollback`] restores the old
 /// entry if a replacement write fails; it does not own replay state. The
 /// portable phase's replacement terminal defines that state transition.
-/// These capabilities describe hardware capacity, not an S31 backend of
-/// that phase contract, which does not exist yet.
+/// The S31 lower-MAC port implements the phase lifecycle and key operations.
+/// Its `AMPDU` capability is `None`: it implements no `AmpduPhase`, so these
+/// hardware BA limits do not advertise aggregate service through that port.
 pub const ESP32S31_MAC_SERVICE_CAPABILITIES: MacServiceCapabilities = MacServiceCapabilities {
     interfaces: MacInterfaceCapabilities {
         // These are implemented owner graphs, not merely address-match slots

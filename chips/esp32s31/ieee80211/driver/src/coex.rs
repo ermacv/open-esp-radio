@@ -109,25 +109,6 @@ pub const fn connected_beacon_interval_micros(beacon_interval_tu: u16) -> u32 {
     tu * TU_MICROS
 }
 
-/// Dwell of one scan channel while another radio is active under
-/// coexistence, in milliseconds.
-///
-/// The vendor replaces the requested dwell with ten milliseconds per period
-/// of the current scheme, scaled by the requested dwell over 120 ms when the
-/// request is longer than that.
-///
-/// SOURCE: complete pinned `libnet80211.a[ieee80211_scan.o]::
-/// scan_next_channel` (`0x21c..0x23e`).
-pub const fn shared_scan_dwell_millis(requested_millis: u32, current_period: u8) -> u32 {
-    const REFERENCE_DWELL_MILLIS: u32 = 120;
-    let per_period = current_period as u32 * 10;
-    if requested_millis > REFERENCE_DWELL_MILLIS {
-        requested_millis * per_period / REFERENCE_DWELL_MILLIS
-    } else {
-        per_period
-    }
-}
-
 /// The Wi-Fi channel as the vendor records it for coexistence: the primary
 /// channel number and its secondary channel offset.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

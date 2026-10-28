@@ -1,116 +1,94 @@
 # IEEE 802.11 protocol boundaries
 
-These packages contain portable MAC mechanisms, role policy, service contracts
-and security. Hardware representation and radio execution live below and above
-them respectively; they are not dependencies of the portable protocol policy.
+These packages contain portable wire formats, MAC mechanisms, role policy,
+service contracts and security. Chip drivers implement the lower-MAC port;
+the portable runtime drives role services over that port.
 
-Within the MAC package, formats and retained state are separated inside the
-protocol that owns them:
-
-| Module under `mac/src/` | Responsibility |
+| Module relative to this directory | Responsibility |
 | --- | --- |
-| `block_ack/frame` | Stateless Block Ack Action parsing and wire identifiers |
-| `block_ack/session` | One TX agreement, its negotiation generation and alarm handling |
-| `block_ack/originator` | One peer's TX agreements, at most `TIDS`: a Dialog Token sequence they share, and each TID's queued negotiation with its attempts and the retry interval (`TxBlockAckRetry`) after a request that did not leave or a response that did not come; the station and the access point use it |
-| `block_ack/reorder` | One receive agreement's bounded reorder window and a complete slot release for each input |
-| `fragmentation` | Validated fragment identities and the shared fragment contract |
-| `fragmentation/parsing` | Header/body validation without reassembly ownership |
-| `fragmentation/reassembly` | Complete bounded reassembler, slots and admission tokens |
-| `ap/profile` | Explicit advertisement values; the chip AP profile selects rates, capabilities and WMM parameters |
-| `station/association` | Association capability types, validation and encoding |
-| `station/management` | Probe/authentication management codecs |
-| `ap` | AP management/data codecs; plaintext and pairwise-protected management headers and request bodies, without authenticating RX |
-| `security` | Link protection, station and access point security policies, and the negotiated `AssociationSecurity` both roles meet at |
-| `security/rsn` | RSN element wire syntax and the `Akm` suite vocabulary shared by station selection and the RSN crate |
-| `station/security` | Station RSN candidate policy and the selected association element |
-| `station/data` | Data codecs, with A-MSDU framing in `data/amsdu` |
-| `sequence` | `SequenceNumber`: the twelve-bit value and its modulo-4096 window arithmetic |
-| `station/sequence` | Separate management/non-QoS and per-TID TX sequence owners |
-| `data/duplicate` | Association/peer-scoped receive retry history |
-| `qos` | Typed traffic intent, UP/AC and DSCP classification helpers |
-| `channel` | `Channel` (2.4 GHz and 5 GHz, 20/40 MHz geometry of the global operating classes) and the 2.4 GHz `WifiChannel` the role owners configure |
-| `channel_switch` | `ChannelSwitch`: the Channel Switch and Extended Channel Switch Announcements in beacons and action frames, their target `Channel`, and their encoding; the switch's timing belongs to the caller |
-| `phy` | `PhyRate`: validated non-HT, HT and HE SU rates |
-| `extensions/wmm` | WMM AC parameters and vendor IE parsing |
-| `extensions/espressif/esp_now` | ESP-NOW v1/v2 framing and protected-envelope validation |
-| `extensions/espressif/esp_now/v2/reassembly` | Caller-owned storage for a validated v2 datagram |
+| `wire/src/block_ack/frame.rs` | Stateless Block Ack Action parsing and response encoding |
+| `upper-mac/src/block_ack/session.rs` | One TX agreement, negotiation generation and alarms |
+| `upper-mac/src/block_ack/originator.rs` | Per-peer/TID TX agreements, shared Dialog Token sequence and negotiation retries |
+| `upper-mac/src/block_ack/reorder.rs` | One receive agreement's bounded reorder window and slot release |
+| `wire/src/fragmentation/parsing.rs` | Fragment header/body validation |
+| `upper-mac/src/fragmentation/reassembly.rs` | Bounded reassembly, slots and admission tokens |
+| `wire/src/ap/profile.rs` | Explicit AP advertisement values |
+| `wire/src/station/association.rs` | Association capability types, validation and encoding |
+| `wire/src/station/management.rs` | Probe/authentication management codecs |
+| `wire/src/ap.rs` | AP management/data codecs and protected management envelopes |
+| `wire/src/security.rs` | Link protection and negotiated association security vocabulary |
+| `wire/src/security/rsn.rs` | RSN element syntax and AKM suite vocabulary |
+| `wire/src/station/security.rs` | Station RSN candidate policy and association element |
+| `wire/src/station/data.rs` | Data codecs, with A-MSDU framing in `station/data/amsdu.rs` |
+| `wire/src/sequence.rs` | Twelve-bit sequence numbers and modulo-4096 arithmetic |
+| `sta/src/sequence.rs` | Separate management/non-QoS and per-TID TX sequence owners |
+| `upper-mac/src/duplicate.rs` | Peer-scoped receive retry history |
+| `wire/src/qos.rs` | Traffic intent, UP/AC and DSCP classification helpers |
+| `wire/src/channel.rs` | Validated 2.4/5 GHz channels and 20/40 MHz geometry |
+| `wire/src/channel_switch.rs` | Channel Switch Announcement parsing and encoding |
+| `wire/src/phy.rs` | Validated non-HT, HT and HE SU rates |
+| `wire/src/extensions/wmm.rs` | WMM AC parameters and vendor IE parsing |
+| `wire/src/extensions/espressif/esp_now.rs` | ESP-NOW framing and protected-envelope validation |
+| `softmac/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
 
-The public Block Ack, fragmentation, station and data namespaces expose their
-protocol contracts. Every frame builder, sequence owner and reorder window
-takes `sequence::SequenceNumber`, so twelve-bit range validation happens once
-at construction and raw register fields convert at the chip boundary.
-Consumers use `qos` for traffic intent, `extensions::wmm` for WMM elements and
-`extensions::espressif::esp_now` for vendor MAC framing.
+Frame builders, sequence owners and reorder windows use
+`wire::sequence::SequenceNumber`, validating the twelve-bit range at
+construction. Raw register fields convert at the chip boundary.
 
-A receive reorder window always waits at a vacant head between inputs. At
-most N-1 frames are retained, so a release of N positions holds them and the
-one received frame. Each old frame transfers to its own result position;
-the vacant head reserves a result position for that input. No fallible
-append follows the state change. Physical positions are relative to the
-window head: `sequence % capacity` would alias distinct sequences around
-4095→0 when the capacity does not divide 4096. Immediate delivery performs
-the same slot-ownership check as the buffered path.
+A receive reorder window waits at a vacant head between inputs. At most N-1
+frames are retained, so a release of N positions holds them and the received
+frame. Each old frame transfers to its own result position; the vacant head
+reserves a result position for the input. No fallible append follows the
+state change. Physical positions are relative to the window head:
+`sequence % capacity` would alias distinct sequences around 4095→0 when the
+capacity does not divide 4096. Immediate delivery checks the same slot
+ownership as the buffered path.
 
-QoS classification includes the DSCP mapping and downgrade helpers. The
-admission/downgrade loop belongs to the chip MAC TX runtime; parsing an
-advertised WMM Parameter Set neither acquires admission nor selects a
-hardware queue. AP encoders take an explicit `Advertisement` and a
-`Channel` of either band: a 5 GHz beacon or Association Response carries
-no DSSS Parameter Set and no ERP element, and a beacon refuses a 5 GHz
-advertisement with a DSSS rate. The portable codec carries no implicit
-ESP32-S31 profile; a chip AP selects its own advertisement.
+QoS codecs provide DSCP classification and downgrade helpers. The caller
+supplies traffic intent to the port; the backend lowers its checked access
+category to a hardware queue. Parsing a WMM Parameter Set acquires no
+admission. AP encoders take an explicit advertisement and channel: a 5 GHz
+beacon or Association Response carries neither a DSSS Parameter Set nor ERP,
+and a beacon refuses a 5 GHz advertisement containing a DSSS rate. Chip AP
+profiles supply their own advertisement values.
 
-`arbiter/src/coordinator.rs` decides the channel of a port a station and an
-access point share (`ChannelCoordinator`): the station's BSS decides it, and
-the access point follows within its `ApFollowPolicy` (2.4 GHz alone by
-default, never a channel that needs radar detection; `ApUnservable` says
-whether the access point stops or the station leaves where it may not
-follow). It turns the upstream's announced switch into the access point's own
-announcement, counted in the beacons that fit before the upstream's instant,
-with one retune of the port at the access point's switch, and searches for an
-upstream lost without an announcement in short absences after the access
-point's TBTTs, densely and then sparsely (`ApSearchPolicy`). It takes facts
-and returns `CoordinatorAction`s; the port's owner carries them out.
+[`arbiter`](arbiter/src/coordinator.rs) decides the channel of a port shared
+by a station and an access point. The upstream BSS chooses it; the AP follows
+within `ApFollowPolicy`, or `ApUnservable` selects which role stops. The
+coordinator turns upstream channel switches into AP announcements and one
+port retune. Its search policy schedules upstream searches between AP TBTTs.
+It takes facts and returns actions for the port owner to execute.
 
-[`port`](port/README.md) declares the radio port every Wi-Fi backend
-implements; one submission is one hardware transmission attempt. Optional
-features are its extension traits. An attempt carries no backoff: a backend
-draws its queue's EDCA contention below the port, with
-`softmac/src/edca.rs`. [`upper-mac`](upper-mac/README.md) decides
-everything else above the port for a transmission: the retry ladder and
-Retry bit, A-MPDU retry selection, protection, and the planner that turns an
-exchange into attempts; `mac/src/block_ack/reorder.rs` reorders received
-Block Ack sessions and `mac/src/ccmp.rs` checks receive replay; its transmit
-packet-number allocator serves the backend, which numbers protected MPDUs
-below the port. Vendor limits, ladders and estimates for these
-algorithms are parameters; the Espressif ones live in
+[`port`](port/README.md) owns lifecycle, VIF configuration, monitor contracts,
+operation ownership, capabilities, resource limits and normalized statuses.
+One submission is one hardware attempt. The backend draws EDCA contention
+below the port using `port/src/edca.rs`; an attempt carries no backoff.
+[`upper-mac`](upper-mac/README.md) owns retry ladders, Retry bits, aggregate
+retry selection, protection and the attempt planner. Its
+`block_ack/reorder.rs` owns receive reordering and `ccmp/replay.rs` checks
+receive replay; its packet-number allocator serves the backend, which
+numbers protected MPDUs below the port. Espressif policy parameters live in
 [`oer-espressif-ieee80211-policy`](../../chips/espressif/ieee80211-policy/README.md).
 
-`softmac/src/contract` describes operation ownership, service capabilities,
-resource limits and normalized statuses. Configuration, VIF and monitor
-contracts remain explicit sibling modules. ESP-NOW peer/protocol owners live
-in `softmac/src/extensions/espressif/esp_now/protocol`; secrets, peer generations
-and replay state live in its `security` sibling. They use lower MAC codecs.
-The MAC package must not depend back on SoftMAC peer or security policy.
+`softmac/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
+protocol state. Its `security.rs` sibling owns secrets, generations and replay
+state. Both use the wire codecs.
 
-The [RSN crate](rsn/README.md) separates secret ownership and
-derivation (`crypto`), packet views and MIC handling (`eapol`), wire formats
-(`frames/{security_ies,key_data,transmit}`) and the complete handshake owners
-(`state/{supplicant,authenticator}`).
+The [RSN crate](rsn/README.md) separates secret ownership and derivation
+(`crypto`), packet views and MIC handling (`eapol`), wire formats (`frames`)
+and handshake owners (`state/supplicant.rs` and `state/authenticator.rs`).
 
-Portable AP `service` retains one peer storage owner and separates `peer`,
-`security`, `block_ack` and `power_save` operations into child modules.
-Chip AP `engine` retains the hardware/service/key/beacon owner and separates
-`management`, `tx`, `rx` and `power_save` operations without duplicating state.
+Portable AP `service` retains one peer storage owner and separates peer,
+security, Block Ack, management, transmit and power-save operations into
+child modules. Station association parsing and link policy live in `sta`;
+chip representation stays below the port.
 
-Module namespaces do not create independent owners. Tests live in child files
-beside their owner or at the shared protocol boundary. See the
-[architecture](../../docs/architecture.md#layers) for the complete layering
-contract.
+Module namespaces do not create independent owners. Tests live beside their
+owner or at the shared protocol boundary. See the
+[architecture](../../docs/architecture.md#layers) for the layering contract.
 
 ## Known defects
 
-- **RSSI "unknown" is a value** (AP selection by RSSI depends on it):
-  `mac/src/scan.rs` `ScanRecord` stores RSSI as `i8` with `i8::MIN` as the
-  "unknown" marker (`sta/src/receive.rs` `observe_scan` writes it for a frame
-  without a signal level), not as `Option<i8>`.
+- **RSSI "unknown" is a value:** `wire/src/scan.rs` `ScanRecord` stores RSSI
+  as `i8` with `i8::MIN` as the unknown marker. `sta/src/receive.rs`
+  `observe_scan` writes it when a frame lacks a signal level.

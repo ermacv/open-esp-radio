@@ -1,4 +1,5 @@
 use super::*;
+use oer_ieee80211_wire::data::DataInterfaceRole;
 
 #[test]
 fn queue_class_and_descriptor_byte_match_every_priority() {
@@ -101,21 +102,5 @@ fn invalid_user_priorities_never_reach_s31_metadata_encoding() {
         assert_eq!(queue_class(priority), None);
         assert_eq!(descriptor_priority_byte(priority), None);
         assert!(WmmUserPriority::new(priority).is_none());
-    }
-}
-
-#[test]
-fn completion_routing_keeps_station_eapol_separate_from_ap_power_save() {
-    // Callback identities are S31 TX metadata, not PAC register fields.
-    for (role, ether_type, expected_callbacks) in [
-        (DataInterfaceRole::Station, 0x0800, 0),
-        (DataInterfaceRole::Station, 0x888e, 8),
-        (DataInterfaceRole::AccessPoint, 0x0800, 4096),
-        (DataInterfaceRole::AccessPoint, 0x888e, 4096),
-    ] {
-        assert_eq!(
-            completion_callback_mask(role, ether_type),
-            expected_callbacks
-        );
     }
 }

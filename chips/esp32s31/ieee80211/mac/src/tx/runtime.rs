@@ -1,64 +1,12 @@
-//! Hardware EDCA, WMM and negotiated HT/HE publication parameters.
+//! Hardware EDCA and negotiated HT/HE publication parameters.
 
 use oer_ieee80211_port::{EdcaParameterSet, VifRole};
-use oer_ieee80211_wire::qos::{
-    WmmAccessCategory, WmmTrafficClass, WmmUserPriority, classify_ethernet_wmm,
-};
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 use crate::{
     edca::{EdcaAccessPolicy, EdcaContentionParameters, EdcaParametersError, EdcaQueues},
     tx::{HeEdcaTxopLimit, HtPeerAmpduParameters, LegacyTxQueue},
 };
-
-/// Result of applying the peer's negotiated ACM policy to one classification.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WmmAdmissionDisposition {
-    /// The selected AC does not require an admission.
-    AdmissionNotRequired,
-    Downgraded {
-        requested: WmmAccessCategory,
-    },
-    /// A non-QoS association owns only the legacy best-effort sequence space.
-    NonQosBestEffort,
-}
-
-/// Complete station-side queue/TID policy selected for one network frame.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WifiTxTraffic {
-    pub requested: WmmTrafficClass,
-    pub user_priority: WmmUserPriority,
-    pub access_category: WmmAccessCategory,
-    pub admission: WmmAdmissionDisposition,
-    txop_limit_units_32_us: u16,
-}
-
-impl WifiTxTraffic {
-    pub const fn queue(self) -> LegacyTxQueue {
-        LegacyTxQueue::from_access_category(self.access_category)
-    }
-
-    pub const fn tid(self) -> u8 {
-        self.user_priority.value()
-    }
-
-    pub const fn txop_limit_units_32_us(self) -> u16 {
-        self.txop_limit_units_32_us
-    }
-
-    /// Resolve the peer's negotiated HE duration budget and an optional
-    /// integration ceiling without widening either value.
-    pub const fn he_txop_limit(
-        self,
-        configured_ceiling: HeEdcaTxopLimit,
-    ) -> Result<HeEdcaTxopLimit, WmmTxopUnsupported> {
-        he_txop_limit(self.txop_limit_units_32_us, configured_ceiling)
-    }
-
-    /// HT aggregation has no reviewed negotiated-TXOP duration calculator.
-    pub const fn require_ht_txop_support(self) -> Result<(), WmmTxopUnsupported> {
-        require_ht_txop_support(self.txop_limit_units_32_us)
-    }
-}
 
 /// The HE duration budget of an access category whose advertised TXOP
 /// limit is `units_32_us`, under an optional integration ceiling, widening
@@ -90,13 +38,6 @@ pub const fn require_ht_txop_support(units_32_us: u16) -> Result<(), WmmTxopUnsu
     } else {
         Err(WmmTxopUnsupported::HtAggregateDurationBudget { units_32_us })
     }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WifiTxTrafficError {
-    /// Every possible AC at or below the requested priority requires an
-    /// admission, while no TSPEC/ADDTS owner exists in this driver.
-    AdmissionControlRequired { requested: WmmAccessCategory },
 }
 
 /// Unreviewed boundary which must not be inferred from WMM parsing alone.
@@ -209,62 +150,6 @@ impl WifiTxRuntimePolicy {
         {
             Ok(policy) => policy,
             Err(_) => panic!("installed EDCA was validated"),
-        }
-    }
-
-    /// Classify and admit one network frame under the active peer WMM policy.
-    ///
-    /// With no QoS peer, all markings collapse to legacy BE. With QoS, an ACM
-    /// bit is never treated as an admission: the request walks to a lower AC
-    /// and rewrites its TID to that AC's canonical value. If even BK requires
-    /// admission, the request fails closed.
-    pub fn select_network_traffic(
-        &self,
-        role: VifRole,
-        ethernet: &[u8],
-        peer_qos: bool,
-    ) -> Result<WifiTxTraffic, WifiTxTrafficError> {
-        let requested = classify_ethernet_wmm(ethernet);
-        if !peer_qos {
-            let selected = self.access_policy(role, LegacyTxQueue::BestEffort);
-            return Ok(WifiTxTraffic {
-                requested,
-                user_priority: WmmUserPriority::UP0,
-                access_category: WmmAccessCategory::BestEffort,
-                admission: WmmAdmissionDisposition::NonQosBestEffort,
-                txop_limit_units_32_us: selected.txop_limit_units_32_us(),
-            });
-        }
-
-        let mut category = requested.access_category;
-        loop {
-            let selected = self.access_policy(role, LegacyTxQueue::from_access_category(category));
-            if !selected.admission_control_mandatory() {
-                let downgraded = category != requested.access_category;
-                return Ok(WifiTxTraffic {
-                    requested,
-                    user_priority: if downgraded {
-                        category.canonical_user_priority()
-                    } else {
-                        requested.user_priority
-                    },
-                    access_category: category,
-                    admission: if downgraded {
-                        WmmAdmissionDisposition::Downgraded {
-                            requested: requested.access_category,
-                        }
-                    } else {
-                        WmmAdmissionDisposition::AdmissionNotRequired
-                    },
-                    txop_limit_units_32_us: selected.txop_limit_units_32_us(),
-                });
-            }
-            let Some(lower) = category.downgrade() else {
-                return Err(WifiTxTrafficError::AdmissionControlRequired {
-                    requested: requested.access_category,
-                });
-            };
-            category = lower;
         }
     }
 

@@ -6,7 +6,6 @@
 //! a station publication.
 
 use oer_esp32s31_hal::types::MacInterface;
-use oer_esp32s31_ieee80211_mac::tx::ampdu::TX_BLOCK_ACK_MAX_WINDOW;
 use oer_esp32s31_ieee80211_mac::tx::{
     HtAmpduTxConfig, HtProtectionSpacing, HtRate, TxControlFrame,
 };
@@ -15,80 +14,6 @@ use oer_esp32s31_ieee80211_mac::tx::{
 pub struct AmpduTxRoleAdapter {
     pub interface: MacInterface,
     pub hardware_key_selector: u8,
-}
-
-/// Complete role-owned HT policy for one fresh aggregate.
-///
-/// Peer lookup and frame encoding remain in AP/STA code. Once admitted, the
-/// interface, key, PHY rate and bounded BlockAck window move together so the
-/// scheduler cannot independently recompute one of them for standby
-/// publication.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct HtAmpduTxRolePolicy {
-    role: AmpduTxRoleAdapter,
-    rate: HtRate,
-    frame_limit: u8,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HtAmpduTxRolePolicyError {
-    EmptyBlockAckWindow,
-    BlockAckWindowTooWide(u16),
-    EmptyConfiguredLimit,
-    ConfiguredLimitTooWide(u8),
-    InvalidArenaCapacity(usize),
-}
-
-impl HtAmpduTxRolePolicy {
-    pub fn new(
-        role: AmpduTxRoleAdapter,
-        rate: HtRate,
-        negotiated_window: u16,
-        configured_limit: u8,
-        arena_capacity: usize,
-    ) -> Result<Self, HtAmpduTxRolePolicyError> {
-        if negotiated_window == 0 {
-            return Err(HtAmpduTxRolePolicyError::EmptyBlockAckWindow);
-        }
-        if negotiated_window > TX_BLOCK_ACK_MAX_WINDOW {
-            return Err(HtAmpduTxRolePolicyError::BlockAckWindowTooWide(
-                negotiated_window,
-            ));
-        }
-        if configured_limit == 0 {
-            return Err(HtAmpduTxRolePolicyError::EmptyConfiguredLimit);
-        }
-        if arena_capacity == 0 || arena_capacity > usize::from(TX_BLOCK_ACK_MAX_WINDOW) {
-            return Err(HtAmpduTxRolePolicyError::InvalidArenaCapacity(
-                arena_capacity,
-            ));
-        }
-        if u16::from(configured_limit) > TX_BLOCK_ACK_MAX_WINDOW {
-            return Err(HtAmpduTxRolePolicyError::ConfiguredLimitTooWide(
-                configured_limit,
-            ));
-        }
-        let frame_limit = usize::from(configured_limit)
-            .min(usize::from(negotiated_window))
-            .min(arena_capacity) as u8;
-        Ok(Self {
-            role,
-            rate,
-            frame_limit,
-        })
-    }
-
-    pub const fn role(self) -> AmpduTxRoleAdapter {
-        self.role
-    }
-
-    pub const fn rate(self) -> HtRate {
-        self.rate
-    }
-
-    pub const fn frame_limit(self) -> u8 {
-        self.frame_limit
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -83,15 +83,6 @@ fn only_a_connected_station_leaves_the_restart_to_its_beacon() {
 }
 
 #[test]
-fn a_shared_scan_dwells_ten_milliseconds_per_period() {
-    assert_eq!(shared_scan_dwell_millis(20, 6), 60);
-    assert_eq!(shared_scan_dwell_millis(120, 6), 60);
-    // Longer requests scale with the requested dwell over 120 ms.
-    assert_eq!(shared_scan_dwell_millis(240, 6), 120);
-    assert_eq!(shared_scan_dwell_millis(360, 1), 30);
-}
-
-#[test]
 fn a_phy_request_maps_to_the_vendor_primary_and_secondary_offset() {
     assert_eq!(
         WifiCoexChannel::from_phy_request(6, 0),

@@ -1,18 +1,14 @@
-//! ESP32-S31 TX metadata derived from portable traffic and completion intent.
+//! ESP32-S31 TX metadata derived from portable encapsulation intent.
 //!
-//! Queue numbers, descriptor priority bytes, packet types and callback bits
+//! Queue numbers, descriptor priority bytes and packet types
 //! belong to the chip representation. IEEE 802.11 framing retains typed WMM
 //! categories without depending on this encoding.
 
 use oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixPriority;
 use oer_ieee80211_wire::{
-    data::{DataEncapPlan, DataInterfaceRole, IEEE80211_QOS_DATA_HEADER_LEN},
+    data::{DataEncapPlan, IEEE80211_QOS_DATA_HEADER_LEN},
     qos::{WmmAccessCategory, WmmUserPriority},
 };
-
-const ETHER_TYPE_EAPOL: u16 = 0x888e;
-const CALLBACK_STA_EAPOL: u32 = 1 << 3;
-const CALLBACK_AP_POWER_SAVE: u32 = 1 << 12;
 
 /// Metadata accompanying one encoded ordinary STA/AP data MPDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -68,14 +64,6 @@ pub const fn descriptor_priority_byte(priority: u8) -> Option<u8> {
             }
         }
         None => None,
-    }
-}
-
-pub const fn completion_callback_mask(role: DataInterfaceRole, ether_type: u16) -> u32 {
-    match role {
-        DataInterfaceRole::Station if ether_type == ETHER_TYPE_EAPOL => CALLBACK_STA_EAPOL,
-        DataInterfaceRole::Station => 0,
-        DataInterfaceRole::AccessPoint => CALLBACK_AP_POWER_SAVE,
     }
 }
 
