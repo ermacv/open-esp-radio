@@ -23,7 +23,7 @@ fn begin(now: Instant) -> Result<StaAssociationRuntime, StaAssociationFailure> {
 fn transmit(
     runtime: StaAssociationRuntime,
     now: Instant,
-    sequence: &mut StaSequenceCounter,
+    sequence: &mut SequenceCounter,
 ) -> (StaAssociationRuntime, StaAssociationAttempt) {
     let StaAssociationPoll::Transmit { runtime, attempt } = runtime.poll(now, sequence) else {
         panic!("the request is due");
@@ -65,7 +65,7 @@ fn association_retry_schedule_is_finite_inside_vendor_deadline() {
 #[test]
 fn association_runtime_owns_epoch_schedule_sequence_and_timeout() {
     let mut runtime = begin(at(0)).unwrap();
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(0x0ffc).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(0x0ffc).unwrap());
     let mut attempts = std::vec::Vec::new();
     let mut timed_out_at = None;
 
@@ -109,7 +109,7 @@ fn association_runtime_owns_epoch_schedule_sequence_and_timeout() {
 #[test]
 fn the_next_deadline_is_the_next_request_or_the_epoch_deadline() {
     let runtime = begin(at(5)).unwrap();
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(0).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(0).unwrap());
     assert_eq!(runtime.next_deadline(), at(5));
     let (runtime, _) = transmit(runtime, at(5), &mut sequence);
     assert_eq!(runtime.next_deadline(), at(165));
@@ -125,7 +125,7 @@ fn the_next_deadline_is_the_next_request_or_the_epoch_deadline() {
 #[test]
 fn association_runtime_accepts_only_selected_peer_response() {
     let runtime = begin(at(0)).unwrap();
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(7).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(7).unwrap());
     let (mut runtime, first) = transmit(runtime, at(0), &mut sequence);
     assert_eq!(first.ordinal, 1);
     runtime.observe_received_frame();
@@ -159,7 +159,7 @@ fn association_runtime_accepts_only_selected_peer_response() {
 
 #[test]
 fn association_runtime_reports_peer_disconnect_and_rejection() {
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(0).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(0).unwrap());
     let (mut disconnected, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     disconnected.observe_received_frame();
     failed(
@@ -187,7 +187,7 @@ fn refused_temporarily(comeback_tu: u32) -> std::vec::Vec<u8> {
 
 #[test]
 fn a_temporary_refusal_comes_back_once_after_its_comeback_time() {
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(0).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(0).unwrap());
     let (runtime, first) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     assert_eq!(first.ordinal, 1);
     let mut runtime =
@@ -214,7 +214,7 @@ fn a_temporary_refusal_comes_back_once_after_its_comeback_time() {
 
 #[test]
 fn a_long_or_unnamed_temporary_refusal_ends_the_association() {
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(0).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(0).unwrap());
     let (long, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     failed(
         long.observe_management_frame(&refused_temporarily(5_001), at(0)),

@@ -15,10 +15,9 @@
 //! `components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c`.
 
 use oer_ieee80211_rsn::Pmk;
-use oer_ieee80211_rsn::sae::{
-    SAE_COMMIT_LEN, SaeCommit, SaeCommitValues, SaeError, SaeKeys, anti_clogging_token,
-};
+use oer_ieee80211_rsn::sae::{SaeCommit, SaeError, SaeKeys};
 use oer_ieee80211_wire::address::{Bssid, OwnAddress};
+use oer_ieee80211_wire::sae::{SAE_COMMIT_LEN, SaeCommitValues, anti_clogging_token};
 use oer_ieee80211_wire::security::SaePwe;
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::station::{
@@ -174,7 +173,7 @@ impl StaSaeAuthentication {
             let token = match anti_clogging_token(body, h2e) {
                 Ok(token) if token.len() <= STA_SAE_TOKEN_CAPACITY => token,
                 Ok(_) => return StaSaeEvent::Failed(StaSaeFailure::TokenTooLong),
-                Err(error) => return StaSaeEvent::Failed(StaSaeFailure::Protocol(error)),
+                Err(error) => return StaSaeEvent::Failed(StaSaeFailure::Protocol(error.into())),
             };
             return match encode_commit(commit, *pwe, Some(token)) {
                 Ok(transmission) => StaSaeEvent::Transmit {
@@ -200,7 +199,7 @@ impl StaSaeAuthentication {
         }
         let peer = match SaeCommitValues::parse(body, h2e) {
             Ok(peer) => peer,
-            Err(error) => return StaSaeEvent::Failed(StaSaeFailure::Protocol(error)),
+            Err(error) => return StaSaeEvent::Failed(StaSaeFailure::Protocol(error.into())),
         };
         let keys = match commit.process(peer) {
             Ok(keys) => keys,
@@ -267,7 +266,7 @@ fn encode_commit(
     let length = commit
         .values()
         .encode(token, matches!(pwe, SaePwe::HashToElement), &mut bytes)
-        .map_err(StaSaeFailure::Protocol)?;
+        .map_err(|error| StaSaeFailure::Protocol(error.into()))?;
     let body = heapless::Vec::from_slice(
         bytes
             .split_at_checked(length)

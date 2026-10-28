@@ -3360,10 +3360,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                         tickets.push(ticket);
                     }
                 }
-                let mut qos = [StaSequenceCounter::new(SequenceNumber::ZERO); 8];
+                let mut qos = [SequenceCounter::new(SequenceNumber::ZERO); 8];
                 fn encode<'id>(
                     station: &mut Station<'id, Tokens<'id>, Caps, Callbacks>,
-                    qos: &mut [StaSequenceCounter; 8],
+                    qos: &mut [SequenceCounter; 8],
                     encoding: u8,
                 ) -> Option<StaTransmit<'id, Tokens<'id>, Caps>> {
                     match encoding {

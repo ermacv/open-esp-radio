@@ -46,8 +46,6 @@ extern crate std;
 
 pub mod beacon;
 pub mod limits;
-pub mod pmksa;
-pub mod sae;
 pub mod security_policy;
 pub mod service;
 pub mod tbtt;

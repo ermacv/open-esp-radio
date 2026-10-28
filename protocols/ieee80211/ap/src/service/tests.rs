@@ -646,7 +646,7 @@ fn association_owns_a_bounded_wpa2_state() {
         ApMlmeAction::BeginWpa2 { peer: PEER }
     );
     assert!(matches!(
-        service.wpa2_mut(PEER).unwrap().message1(false).unwrap(),
+        service.wpa2(PEER).unwrap().message1(false).unwrap(),
         RsnApAction::Transmit(_)
     ));
     let _ticket_type_is_owned: Option<RsnTicket> = None;
@@ -861,7 +861,7 @@ fn message2_must_echo_the_exact_association_rsn() {
             .unwrap(),
         ApWpa2Progress::DeauthenticatePeer
     ));
-    assert_eq!(service.wpa2_mut(PEER).unwrap().phase(), RsnApPhase::Failed);
+    assert_eq!(service.wpa2(PEER).unwrap().phase(), RsnApPhase::Failed);
     assert!(service.pending_ptk(PEER).is_err());
 }
 
@@ -919,7 +919,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         ApWpa2Progress::None
     ));
     assert_eq!(
-        service.wpa2_mut(PEER).unwrap().phase(),
+        service.wpa2(PEER).unwrap().phase(),
         RsnApPhase::AwaitingMessage2
     );
     assert!(service.pending_ptk(PEER).is_err());
@@ -935,7 +935,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         ApWpa2Progress::Transmit(_)
     ));
     assert_eq!(
-        service.wpa2_mut(PEER).unwrap().phase(),
+        service.wpa2(PEER).unwrap().phase(),
         RsnApPhase::AwaitingMessage4
     );
 
@@ -976,7 +976,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         ApWpa2Progress::None
     ));
     assert_eq!(
-        service.wpa2_mut(PEER).unwrap().phase(),
+        service.wpa2(PEER).unwrap().phase(),
         RsnApPhase::AwaitingMessage4
     );
     assert!(matches!(
@@ -1232,14 +1232,15 @@ fn bounded_peer_table_has_an_explicit_memory_ceiling() {
     // Each peer's TX Block Ack originator keeps, beside its session, its
     // negotiation's deadline, the next attempt's due time, its attempts,
     // retry interval and Dialog Token policy: the per-peer price of offers
-    // that are retried. Management protection adds one eight-byte activation
-    // and replay word plus six Message-3 IPN snapshot bytes per slot.
-    // The arrays add 216 bytes including host alignment padding.
+    // that are retried. Management protection adds one optional sixteen-byte
+    // replay frontier plus six Message-3 IPN snapshot bytes per slot. The
+    // handshake state, its association IE binding and its pending PTK are
+    // one `oer-ieee80211-rsn` authenticator per peer, with its own padding.
     // Each TX BlockAck session also retains two eight-byte originator-window
     // masks, for acknowledged and expired MPDUs. These add 16 bytes per
     // session; table alignment determines the final storage size.
     assert!(
-        core::mem::size_of::<AccessPointPeerStorage>() <= 7_848,
+        core::mem::size_of::<AccessPointPeerStorage>() <= 8_088,
         "peer storage size {}",
         core::mem::size_of::<AccessPointPeerStorage>()
     );

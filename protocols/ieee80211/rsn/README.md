@@ -8,8 +8,8 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 | Module | Responsibility |
 | --- | --- |
 | `akm` | Key descriptor version, PTK expansion and EAPOL-Key MIC of each `oer_ieee80211_wire::security::rsn::Akm` |
-| `sae` | SAE commit/confirm, hunting-and-pecking and hash-to-element password elements, anti-clogging tokens |
-| `bip`, `management_ccmp` | Management IPN allocation and replay owners over the stateless transforms in `oer-ieee80211-cipher`; their receive errors add `Replay` to the transform's refusals |
+| `sae` | SAE commit/confirm cryptography, hunting-and-pecking and hash-to-element password elements, the validity of a peer's scalar and element, anti-clogging tokens; the Commit and Confirm body codecs are `oer_ieee80211_wire::sae` |
+| `bip`, `management_ccmp` | BIP IPN allocation and replay, and the management CCMP receiver over the stateless transforms in `oer-ieee80211-cipher`; the management receiver's PN frontier is `oer_ieee80211_upper_mac::ccmp::CcmpReplayFrontier`; their receive errors add `Replay` to the transform's refusals |
 | `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
 | `nonce` | Boot-seeded ChaCha20 owner for fresh supplicant nonces |
@@ -17,10 +17,15 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 | `frames` | EAPOL-Key/Ethernet construction, GTK key data and owned security elements; the Key Information field, KDEs, SAE element IDs and status codes are `oer-ieee80211-wire`'s |
 | `state` | Station and authenticator four-way-handshake transitions |
 | `supplicant` | Station orchestration: typed key-data unwrap and key-install requests and their completions, response deadlines |
+| `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification, the binding of the station's security IEs and the Message 3 wrap and MIC over key data the access point supplies; `authenticator::sae` is the access point's SAE responder |
+| `pmksa` | The PMKSA cache of both roles: per peer and, for a station, per SSID |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
 
 `oer-ieee80211-cipher` owns software CCMP, BIP-CMAC-128 and bounded RFC 3394
 AES key wrap/unwrap. It has no handshake state, replay frontier or clock.
+
+The crate is Apache-2.0: `authenticator/sae.rs` ports the ESP-IDF access
+point's SAE handling (`NOTICE`).
 
 `PmkDerivation::new` validates and owns the password/SSID; `step` evaluates
 one HMAC-SHA1 and yields the PMK exactly once after 8192 steps (two blocks,
@@ -132,5 +137,9 @@ regressions; production owners have no such mutator.
 - **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.
+- **The SAE responder can be exhausted with spoofed MACs.**
+  `authenticator/sae.rs::receive_commit` allocates a session before checking
+  status, token or commit; sessions have no expiry or retransmission timer.
+  No access point uses the responder yet.
 - **Non-constant-time comparison** of IGTK material in
   `bip.rs::BipReceiver::rekey`.

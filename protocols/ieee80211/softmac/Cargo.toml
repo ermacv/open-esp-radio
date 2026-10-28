@@ -8,7 +8,6 @@ repository.workspace = true
 description = "Portable ESP-NOW and Espressif long-range protocol owners"
 
 [dependencies]
-oer-ieee80211-sta = { path = "../sta" }
 oer-ieee80211-port = { path = "../port" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-ieee80211-wire = { path = "../wire" }

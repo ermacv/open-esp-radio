@@ -4,15 +4,16 @@
 
 use super::*;
 use oer_ieee80211_cipher::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_ieee80211_upper_mac::ccmp::CcmpReplayFrontier;
 use oer_ieee80211_wire::management::ManagementHeader;
 use oer_ieee80211_wire::{
     ap::ApManagementSubtype, ccmp::CcmpPacketNumber, management_protection::SaQuery,
 };
 
-/// Absence means no installed PMF key. A present value stores the highest
-/// accepted management PN plus one, so PN zero is representable. The niche
-/// keeps activation and replay in one word in the bounded peer storage.
-pub(super) struct ApManagementReplay(Option<core::num::NonZeroU64>);
+/// The management replay frontier of one peer; absence means no installed
+/// PMF key. Individually addressed management frames have one frontier
+/// apart from every data TID.
+pub(super) struct ApManagementReplay(Option<CcmpReplayFrontier>);
 
 impl ApManagementReplay {
     pub const fn inactive() -> Self {
@@ -21,7 +22,7 @@ impl ApManagementReplay {
 
     pub fn activate(&mut self) {
         if self.0.is_none() {
-            self.0 = core::num::NonZeroU64::new(1);
+            self.0 = Some(CcmpReplayFrontier::default());
         }
     }
 
@@ -30,21 +31,9 @@ impl ApManagementReplay {
     }
 
     fn accept(&mut self, packet_number: CcmpPacketNumber) -> bool {
-        let Some(highest) = self.0 else {
-            return false;
-        };
-        let Some(next) = packet_number
-            .value()
-            .checked_add(1)
-            .and_then(core::num::NonZeroU64::new)
-        else {
-            return false;
-        };
-        if next <= highest {
-            return false;
-        }
-        self.0 = Some(next);
-        true
+        self.0
+            .as_mut()
+            .is_some_and(|frontier| frontier.commit_immediate(packet_number).is_ok())
     }
 }
 

@@ -56,11 +56,7 @@ impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
     /// packet number, or `None` once its packet numbers are exhausted. A
     /// retransmission keeps the number of its first transmission.
     pub fn number(&self) -> Option<NumberedKey<&K::PairwiseKey>> {
-        let packet_number = self.key.packet_numbers().allocate().ok()?;
-        Some(NumberedKey {
-            key: self.key.key(),
-            packet_number,
-        })
+        self.key.number()
     }
 
     /// The association owner and the port key, for the key's removal.

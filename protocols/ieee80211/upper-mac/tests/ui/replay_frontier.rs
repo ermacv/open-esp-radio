@@ -1,19 +1,17 @@
 #![no_std]
-use {oer_ieee80211_wire::ccmp::CcmpPacketNumber, oer_ieee80211_upper_mac::ccmp::{CcmpReplayLane, CcmpRxReplayCandidate, CcmpRxReplayState}};
+use {oer_ieee80211_wire::ccmp::CcmpPacketNumber, oer_ieee80211_upper_mac::ccmp::{CcmpReplayCandidate, CcmpRxReplayState}};
 
 pub fn check(
     state: &mut CcmpRxReplayState,
     foreign: &mut CcmpPacketNumber,
     packet_number: CcmpPacketNumber,
 ) {
-    let lane = CcmpReplayLane::NonQos;
     #[cfg(ui_reject)]
-    let candidate = CcmpRxReplayCandidate {
+    let candidate = CcmpReplayCandidate {
         frontier: foreign, // ui-error: E0451
-        lane,
         packet_number,
     };
     #[cfg(not(ui_reject))]
-    let candidate = state.prepare(lane, packet_number).unwrap();
+    let candidate = state.prepare(oer_ieee80211_upper_mac::ccmp::CcmpReplayLane::NonQos, packet_number).unwrap();
     candidate.commit();
 }

@@ -33,6 +33,7 @@ extern crate std;
 mod fuzz;
 
 pub mod akm;
+pub mod authenticator;
 pub mod bip;
 pub mod element;
 pub mod frames;
@@ -41,6 +42,7 @@ pub mod keys;
 mod mac;
 pub mod management_ccmp;
 pub mod nonce;
+pub mod pmksa;
 pub mod retry;
 pub mod sae;
 pub mod state;

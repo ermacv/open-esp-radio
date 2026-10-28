@@ -157,7 +157,8 @@ Module map:
 - `sa_query`: the SA Query procedure of an association under management
   frame protection;
 - `link_monitor`: beacon-loss decisions;
-- `pmksa`: the private SAE PMKSA cache owned by the station across connections;
+- the station's SAE PMKSA cache, `oer_ieee80211_rsn::pmksa::PmksaCache` keyed
+  by BSSID and SSID, owned by the station across connections;
 - `ftm`, `twt`: bounded requester state and deadlines; their presence does not
   establish a chip timestamp or wake-schedule implementation. FTM local
   exchange timing carries a `NonZeroU8` dialog token from validation through
@@ -551,7 +552,7 @@ configuration replies.
 **Behaviour**
 
 - **PMKSA never forgotten.** `machine.rs::Station::begin_authentication`
-  only resumes and inserts; nothing calls `pmksa.rs::StaPmksaCache::remove`.
+  only resumes and inserts; nothing calls `PmksaCache::remove`.
   After an AP restart or cache expiry, status 53 repeats on every Connect
   instead of falling back to full SAE.
 - **No link-loss detection.** `link_monitor.rs::StaLinkMonitor` exists but

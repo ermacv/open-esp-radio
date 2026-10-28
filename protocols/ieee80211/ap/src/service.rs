@@ -1,7 +1,8 @@
 //! Bounded multi-peer AP MLME and security ownership.
 
 use core::fmt;
-use oer_ieee80211_cipher::aes::{SoftwareAesKeyWrapError, software_aes128_key_wrap};
+use oer_ieee80211_cipher::aes::SoftwareAesKeyWrapError;
+use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::security::spp::SppScope;
 use oer_ieee80211_wire::sequence::SequenceNumber;
@@ -27,19 +28,18 @@ pub use crate::limits::{
 
 use oer_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObservation};
 
-use crate::pmksa::{ApPmksa, ApPmksaCache};
 use crate::security_policy::ApSecurityPolicy;
+use oer_ieee80211_rsn::pmksa::{Pmksa, PmksaCache};
 use oer_ieee80211_rsn::{
-    AssociationSecurityBinding, OwnedEapolFrame, Pmk, Ptk, PtkContext,
+    OwnedEapolFrame, Pmk, Ptk, PtkContext,
+    authenticator::{RsnAuthenticator, RsnAuthenticatorError, RsnAuthenticatorStep},
     element::{ValidatedRsnElement, validate_rsn_element},
     frames::{
         OwnedAssociationSecurityIes, RSN_PLAIN_KEY_DATA_CAPACITY, RsnFrameError, RsnGtk, RsnIgtk,
-        RsnPlainKeyData, RsnTxFrame, build_ap_action_frame,
+        RsnPlainKeyData, RsnTxFrame,
     },
     retry::{RsnRetry, RsnRetryAction, RsnRetryAlarm, RsnRetryConfig, RsnRetryError},
-    state::{
-        PtkContext as Wpa2StatePtkContext, RsnApAction, RsnApPhase, RsnApState, RsnStateError,
-    },
+    state::{RsnApPhase, RsnApState, RsnStateError},
 };
 use oer_ieee80211_wire::beacon::{TimAssociationId, TimBitmapError, TimVirtualBitmap};
 use oer_ieee80211_wire::ht::HtPeerCapabilities;
@@ -403,6 +403,20 @@ impl From<SoftwareAesKeyWrapError> for ApWpa2Error {
     }
 }
 
+impl From<RsnAuthenticatorError> for ApWpa2Error {
+    fn from(error: RsnAuthenticatorError) -> Self {
+        match error {
+            RsnAuthenticatorError::Rejected(error) | RsnAuthenticatorError::State(error) => {
+                error.into()
+            }
+            RsnAuthenticatorError::Frame(error) => Self::Frame(error),
+            RsnAuthenticatorError::KeyWrap(error) => Self::KeyWrap(error),
+            RsnAuthenticatorError::MissingPairwiseKey => Self::MissingPairwiseKey,
+            RsnAuthenticatorError::UnexpectedAction => Self::UnexpectedAction,
+        }
+    }
+}
+
 pub enum ApWpa2Progress<const N: usize> {
     None,
     Transmit(ApEapolTransmit<N>),
@@ -427,14 +441,13 @@ struct ApPeer {
     association_id: u16,
     association_epoch: u32,
     phase: ApPeerPhase,
-    wpa2: Option<RsnApState>,
+    /// The four-way handshake of an RSN association.
+    authenticator: Option<RsnAuthenticator>,
     /// The PMK of a WPA3 station: from its accepted SAE exchange, or the
     /// cached one its association resumed.
     pmk: Option<Pmk>,
     /// The PMKID of `pmk`.
     pmkid: Option<[u8; RSN_PMKID_LEN]>,
-    association_security_binding: Option<AssociationSecurityBinding>,
-    pending_ptk: Option<Ptk>,
     wpa2_retry: RsnRetry,
     wpa2_retry_alarm: Option<RsnRetryAlarm>,
     maximum_legacy_rate_500kbps: u8,
@@ -445,7 +458,7 @@ struct ApPeer {
     /// and receiver reorder state are peer+TID agreements; sharing these
     /// counters across AP clients creates artificial holes whenever the
     /// scheduler switches peers.
-    next_qos_sequences: [SequenceNumber; 8],
+    qos_sequences: [SequenceCounter; 8],
     tx_block_ack: TxBlockAckOriginator<1>,
     power_state: ApPeerPowerState,
     buffered_unicast_frames: u16,
@@ -469,7 +482,7 @@ pub struct AccessPointPeerStorage {
     message3_management_ipns: [[u8; 6]; AP_MAX_CLIENTS],
     generation: u32,
     /// The security associations a WPA3 epoch's stations may resume.
-    pmksa: ApPmksaCache,
+    pmksa: PmksaCache<[u8; 6]>,
 }
 
 impl AccessPointPeerStorage {
@@ -480,7 +493,7 @@ impl AccessPointPeerStorage {
                 AP_MAX_CLIENTS],
             message3_management_ipns: [[0; 6]; AP_MAX_CLIENTS],
             generation: 0,
-            pmksa: ApPmksaCache::new(),
+            pmksa: PmksaCache::new(),
         }
     }
 
@@ -516,7 +529,7 @@ impl AccessPointPeerStorage {
         self.management_replay
             .iter_mut()
             .for_each(|replay| *replay = management::ApManagementReplay::inactive());
-        self.pmksa = ApPmksaCache::new();
+        self.pmksa = PmksaCache::new();
     }
 }
 
@@ -588,11 +601,9 @@ impl ApPeer {
             association_id,
             association_epoch,
             phase: ApPeerPhase::Authenticated,
-            wpa2: None,
+            authenticator: None,
             pmk: None,
             pmkid: None,
-            association_security_binding: None,
-            pending_ptk: None,
             wpa2_retry: new_ap_wpa2_retry(),
             wpa2_retry_alarm: None,
             // Authentication precedes rate negotiation. Keep the universally
@@ -601,7 +612,7 @@ impl ApPeer {
             short_preamble: false,
             ht: None,
             qos_supported: false,
-            next_qos_sequences: [SequenceNumber::ZERO; 8],
+            qos_sequences: [SequenceCounter::new(SequenceNumber::ZERO); 8],
             tx_block_ack: new_ap_tx_block_ack()?,
             power_state: ApPeerPowerState::Active,
             buffered_unicast_frames: 0,
@@ -737,8 +748,8 @@ pub struct AccessPointService<'peers, S: SppScope> {
     peer_storage: AccessPointPeers<'peers>,
     client_limit: AccessPointClientLimit,
     inactive_timeout: AccessPointInactiveTimeout,
-    next_management_sequence: SequenceNumber,
-    next_data_sequence: SequenceNumber,
+    management_sequence: SequenceCounter,
+    data_sequence: SequenceCounter,
     status_revision: u32,
     associated_count: u8,
     authorized_count: u8,
@@ -839,8 +850,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             peer_storage,
             client_limit,
             inactive_timeout,
-            next_management_sequence: SequenceNumber::ZERO,
-            next_data_sequence: SequenceNumber::ZERO,
+            management_sequence: SequenceCounter::new(SequenceNumber::ZERO),
+            data_sequence: SequenceCounter::new(SequenceNumber::ZERO),
             status_revision: 0,
             associated_count: 0,
             authorized_count: 0,

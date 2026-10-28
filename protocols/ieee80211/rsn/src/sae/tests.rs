@@ -5,6 +5,7 @@
     clippy::unreachable
 )]
 use super::*;
+use oer_ieee80211_wire::sae::SAE_COMMIT_LEN;
 
 // IEEE Std 802.11-2020 Annex J.10, as hostap's `sae_tests` carries it.
 const ADDR1: [u8; 6] = [0x4d, 0x3f, 0x2f, 0xff, 0xe3, 0x87];
@@ -138,137 +139,28 @@ fn invalid_commits_are_refused() {
         commit.process(off_curve).err(),
         Some(SaeError::InvalidElement)
     );
-    let mut body = [0; SAE_COMMIT_LEN];
-    commit.values().encode(None, false, &mut body).unwrap();
-    body[0] = 20;
+    // A body the wire format refuses keeps its kind as an SAE error.
     assert_eq!(
-        SaeCommitValues::parse(&body, false),
-        Err(SaeError::UnsupportedGroup(20))
+        SaeError::from(SaeBodyError::UnsupportedGroup(20)),
+        SaeError::UnsupportedGroup(20)
     );
-    body[0] = 19;
-    assert_eq!(
-        SaeCommitValues::parse(&body[..10], false),
-        Err(SaeError::Malformed)
-    );
+    assert_eq!(SaeError::from(SaeBodyError::Malformed), SaeError::Malformed);
 }
 
 #[test]
-fn tokens_sit_where_the_vendor_writes_them() {
-    let commit = SaeCommit::new(
-        &SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
-        [0x11; 32],
-        [0x22; 32],
-    )
-    .unwrap();
-    let token = [0xab; 5];
-    let mut hunting = [0; 128];
-    let length = commit
-        .values()
-        .encode(Some(&token), false, &mut hunting)
-        .unwrap();
-    assert_eq!(length, SAE_COMMIT_LEN + 5);
-    assert_eq!(&hunting[2..7], &token);
-    assert_eq!(&hunting[7..39], &commit.values().scalar);
-
-    let mut h2e = [0; 128];
-    let length = commit
-        .values()
-        .encode(Some(&token), true, &mut h2e)
-        .unwrap();
-    assert_eq!(length, SAE_COMMIT_LEN + 3 + 5);
-    assert_eq!(&h2e[2..34], &commit.values().scalar);
-    assert_eq!(&h2e[SAE_COMMIT_LEN..SAE_COMMIT_LEN + 3], &[255, 6, 93]);
-
-    // A status-76 refusal carries the token after the group.
-    assert_eq!(
-        anti_clogging_token(&[19, 0, 1, 2, 3], false),
-        Ok(&[1, 2, 3][..])
-    );
-    assert_eq!(
-        anti_clogging_token(&[19, 0, 255, 4, 93, 1, 2, 3], true),
-        Ok(&[1, 2, 3][..])
-    );
-    assert!(anti_clogging_token(&[19, 0, 1, 2, 3], true).is_err());
-}
-
-#[test]
-fn an_h2e_commit_admits_only_a_rejected_groups_element_without_19() {
-    let commit = SaeCommit::new(
-        &SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
-        [0x11; 32],
-        [0x22; 32],
-    )
-    .unwrap();
-    let mut body = [0; SAE_COMMIT_LEN + 5];
-    commit.values().encode(None, true, &mut body).unwrap();
-    body[SAE_COMMIT_LEN..].copy_from_slice(&[255, 3, 92, 20, 0]);
-    assert_eq!(SaeCommitValues::parse(&body, true), Ok(commit.values()));
-    assert_eq!(
-        SaeCommitValues::parse(&body, false),
-        Err(SaeError::Malformed)
-    );
-    body[SAE_COMMIT_LEN + 3] = 19;
-    assert_eq!(
-        SaeCommitValues::parse(&body, true),
-        Err(SaeError::Malformed)
-    );
-}
-
-#[test]
-fn an_access_point_parses_the_commit_a_station_writes() {
-    let token = [0x5a; SAE_ANTI_CLOGGING_TOKEN_LEN];
+fn an_access_point_refuses_commit_values_off_the_scalar_range_or_curve() {
     let peer = SaeCommitValues::parse(&hex::<SAE_COMMIT_LEN>(PEER_COMMIT), false).unwrap();
-    let mut body = [0; SAE_COMMIT_LEN + SAE_ANTI_CLOGGING_TOKEN_LEN + 3];
-
-    let len = peer.encode(None, false, &mut body).unwrap();
-    let received = SaeReceivedCommit::parse(&body[..len], false).unwrap();
-    assert_eq!(received.values, peer);
-    assert_eq!(received.token, None);
-
-    let len = peer.encode(Some(&token), false, &mut body).unwrap();
-    let received = SaeReceivedCommit::parse(&body[..len], false).unwrap();
-    assert_eq!(received.values, peer);
-    assert_eq!(received.token, Some(&token[..]));
-
-    let len = peer.encode(Some(&token), true, &mut body).unwrap();
-    let received = SaeReceivedCommit::parse(&body[..len], true).unwrap();
-    assert_eq!(received.values, peer);
-    assert_eq!(received.token, Some(&token[..]));
-    assert!(!received.rejects_offered_group());
-}
-
-#[test]
-fn an_access_point_reads_rejected_groups_and_refuses_bad_commits() {
-    let peer = hex::<SAE_COMMIT_LEN>(PEER_COMMIT);
-    let mut body = [0; SAE_COMMIT_LEN + 7];
-    body[..SAE_COMMIT_LEN].copy_from_slice(&peer);
-    body[SAE_COMMIT_LEN..].copy_from_slice(&[255, 5, 92, 20, 0, 19, 0]);
-    let received = SaeReceivedCommit::parse(&body, true).unwrap();
-    assert_eq!(received.rejected_groups, Some(&[20, 0, 19, 0][..]));
-    assert!(received.rejects_offered_group());
-
-    let mut other_group = peer;
-    other_group[0] = 20;
-    assert_eq!(
-        SaeReceivedCommit::parse(&other_group, false),
-        Err(SaeCommitRefusal::UnsupportedGroup)
-    );
+    assert!(valid_peer_commit(&peer));
     let mut zero_scalar = peer;
-    zero_scalar[2..34].fill(0);
-    assert_eq!(
-        SaeReceivedCommit::parse(&zero_scalar, false),
-        Err(SaeCommitRefusal::Unspecified)
-    );
+    zero_scalar.scalar.fill(0);
+    assert!(!valid_peer_commit(&zero_scalar));
+    let mut one_scalar = peer;
+    one_scalar.scalar = [0; 32];
+    one_scalar.scalar[31] = 1;
+    assert!(!valid_peer_commit(&one_scalar));
     let mut off_curve = peer;
-    off_curve[SAE_COMMIT_LEN - 1] ^= 1;
-    assert_eq!(
-        SaeReceivedCommit::parse(&off_curve, false),
-        Err(SaeCommitRefusal::Unspecified)
-    );
-    assert_eq!(
-        SaeReceivedCommit::parse(&peer[..SAE_COMMIT_LEN - 1], false),
-        Err(SaeCommitRefusal::Unspecified)
-    );
+    off_curve.element[63] ^= 1;
+    assert!(!valid_peer_commit(&off_curve));
 }
 
 #[test]
@@ -391,14 +283,14 @@ fn failed_h2e_maps_return_crypto_errors_after_evaluating_both_elements() {
 fn invalid_curve_coordinates_keep_their_validity_bit() {
     let invalid = point(&FieldElement::ZERO, &FieldElement::ZERO);
     assert!(bool::from(invalid.is_none()));
-    assert!(peer_element(&[0; 2 * SAE_PRIME_LEN]).is_none());
+    assert!(peer_element(&[0; SAE_ELEMENT_LEN]).is_none());
     let pwe = SaePasswordToken::derive(b"ssid", PASSWORD, None)
         .unwrap()
         .password_element(ADDR1, ADDR2);
     let encoded = element_bytes(&pwe.0.to_affine()).unwrap();
     assert!(peer_element(&encoded).is_some());
     let mut changed = encoded;
-    changed[2 * SAE_PRIME_LEN - 1] ^= 2;
+    changed[SAE_ELEMENT_LEN - 1] ^= 2;
     assert!(peer_element(&changed).is_none());
     for value in [
         FieldElement::ZERO,

@@ -40,7 +40,7 @@ modification notice:
   components/openthread/src/port/esp_openthread_radio.c
 - chips/espressif/modem-clock (Apache-2.0):
   components/esp_hw_support/modem/modem_clock.c
-- protocols/ieee80211/ap/src/sae.rs (crate Apache-2.0):
+- protocols/ieee80211/rsn/src/authenticator/sae.rs (crate Apache-2.0):
   components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c
 
 Additional IEEE 802.15.4 parsing/security/ACK-break changes in

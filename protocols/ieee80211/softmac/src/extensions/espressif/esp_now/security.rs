@@ -3,8 +3,9 @@
 //! This module stops before the first interoperability contract not present
 //! in the reviewed repository evidence: the ESP-NOW Action-frame CCMP AAD and
 //! the chip key-selector/construct/decrypt callback ABI. It therefore owns
-//! secrets, peer generations, packet numbers and replay state, but never
-//! claims to produce or authenticate encrypted on-air bytes.
+//! secrets and peer generations, but never claims to produce or authenticate
+//! encrypted on-air bytes. Each peer's transmit packet numbers and receive
+//! replay frontier are the CCMP owners of `oer-ieee80211-upper-mac`.
 
 use crate::extensions::espressif::phy::EspNowPhyMode;
 use core::{array, fmt};
@@ -12,8 +13,15 @@ use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use {
-    oer_ieee80211_sta::sequence::StaSequenceCounter,
+    oer_ieee80211_upper_mac::{
+        ccmp::{
+            CcmpPacketNumberStep, CcmpReplayCandidate, CcmpReplayFrontier, CcmpReplayed,
+            InstalledCcmpTxKey, SoftwareCcmpKey,
+        },
+        sequence::SequenceCounter,
+    },
     oer_ieee80211_wire::{
+        ccmp::CcmpPacketNumber,
         channel::WifiChannel,
         extensions::espressif::esp_now::{
             ESP_NOW_V1_MIN_PROTECTED_MPDU_LEN, EspNowCcmpPacketNumber, EspNowDestination,
@@ -30,11 +38,9 @@ use crate::interface::BoundVirtualInterface;
 use oer_ieee80211_port::ChannelContextId;
 
 pub const ESP_NOW_KEY_LEN: usize = 16;
-pub const ESP_NOW_RX_REPLAY_WINDOW_BITS: u32 = 64;
 /// Portable encrypted-peer storage default. This is not a hardware-key-slot
 /// claim; each backend advertises only its proven encrypted-slot capacity.
 pub const ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY: usize = ESP_NOW_DEFAULT_PEER_CAPACITY;
-const ESP_NOW_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;
 
 /// ESP-NOW primary master key. Formatting never exposes key material and the
 /// owned bytes are zeroized on drop.
@@ -301,6 +307,10 @@ impl EspNowEncryptedPeerConfig {
     }
 }
 
+/// The table owns a peer's LMK by value: installing a configuration pairs it
+/// with a new CCMP packet-number allocator.
+impl SoftwareCcmpKey for EspNowEncryptedPeerConfig {}
+
 impl fmt::Debug for EspNowEncryptedPeerConfig {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -339,17 +349,24 @@ pub struct EspNowEncryptedPeerView {
     pub highest_authenticated_rx_packet_number: Option<u64>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct EspNowReplayWindow {
-    highest: Option<EspNowCcmpPacketNumber>,
-    bitmap: u64,
-    revision: u32,
+/// One peer's key, its transmit packet numbers and its receive replay
+/// frontier, all from `oer-ieee80211-upper-mac::ccmp`.
+struct EspNowEncryptedPeerState {
+    key: InstalledCcmpTxKey<EspNowEncryptedPeerConfig>,
+    replay: CcmpReplayFrontier,
 }
 
-struct EspNowEncryptedPeerState {
-    config: EspNowEncryptedPeerConfig,
-    last_tx_packet_number: u64,
-    replay: EspNowReplayWindow,
+impl EspNowEncryptedPeerState {
+    const fn config(&self) -> &EspNowEncryptedPeerConfig {
+        self.key.key()
+    }
+}
+
+/// The highest authenticated receive packet number of a frontier, `None`
+/// before the first: a frontier starts at zero, which no frame carries.
+fn highest_authenticated(replay: &CcmpReplayFrontier) -> Option<u64> {
+    let highest = replay.highest();
+    (highest != CcmpPacketNumber::ZERO).then_some(highest.value())
 }
 
 struct EspNowEncryptedPeerSlot {
@@ -379,9 +396,7 @@ pub struct EspNowEncryptedPeerDiagnostics {
     pub tx_packet_number_exhaustions: u32,
     pub replay_candidates: u32,
     pub authenticated_replay_commits: u32,
-    pub replay_duplicates: u32,
-    pub replay_too_old: u32,
-    pub stale_replay_candidates: u32,
+    pub replays: u32,
 }
 
 /// Fixed-capacity owner of encrypted individual peers and their PN spaces.
@@ -439,7 +454,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         if self.slots.iter().any(|slot| {
             slot.state
                 .as_ref()
-                .is_some_and(|peer| peer.config.destination == config.destination)
+                .is_some_and(|peer| peer.config().destination == config.destination)
         }) {
             return Err(self.mutation_failure(
                 EspNowEncryptedPeerError::Duplicate(config.destination),
@@ -475,9 +490,8 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         };
         slot.generation = generation;
         slot.state = Some(EspNowEncryptedPeerState {
-            config,
-            last_tx_packet_number: 0,
-            replay: EspNowReplayWindow::default(),
+            key: InstalledCcmpTxKey::install(config, CcmpPacketNumberStep::ONE),
+            replay: CcmpReplayFrontier::default(),
         });
         self.length = length;
         self.diagnostics.installs = self.diagnostics.installs.saturating_add(1);
@@ -509,7 +523,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                 replacement,
             ));
         }
-        let installed_destination = installed.config.destination;
+        let installed_destination = installed.config().destination;
         if replacement.destination != installed_destination {
             return Err(self.mutation_failure(
                 EspNowEncryptedPeerError::ReplacementDestinationMismatch {
@@ -528,7 +542,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         // Preserve both packet-number spaces across replacement. This is
         // conservative for a fresh LMK and prevents nonce reuse if a caller
         // supplies the same LMK bytes again.
-        let replaced = core::mem::replace(&mut installed.config, replacement);
+        let replaced = installed.key.replace_key(replacement);
         slot.generation = generation;
         self.diagnostics.replacements = self.diagnostics.replacements.saturating_add(1);
         Ok(EspNowEncryptedPeerReplacement {
@@ -563,9 +577,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         Ok(EspNowRemovedEncryptedPeer {
             index: peer.index,
             generation: peer.generation,
-            config: state.config,
-            last_tx_packet_number: state.last_tx_packet_number,
-            replay: state.replay,
+            state,
         })
     }
 
@@ -601,10 +613,10 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                 removed,
             });
         };
-        if removed.config.channel != self.home_channel {
+        if removed.config().channel != self.home_channel {
             return Err(EspNowEncryptedPeerRestoreFailure {
                 error: EspNowEncryptedPeerError::ChannelMismatch {
-                    peer: removed.config.channel,
+                    peer: removed.config().channel,
                     home: self.home_channel,
                 },
                 removed,
@@ -613,10 +625,10 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         if self.slots.iter().any(|slot| {
             slot.state
                 .as_ref()
-                .is_some_and(|state| state.config.destination == removed.config.destination)
+                .is_some_and(|state| state.config().destination == removed.config().destination)
         }) {
             return Err(EspNowEncryptedPeerRestoreFailure {
-                error: EspNowEncryptedPeerError::Duplicate(removed.config.destination),
+                error: EspNowEncryptedPeerError::Duplicate(removed.config().destination),
                 removed,
             });
         }
@@ -639,17 +651,11 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         let EspNowRemovedEncryptedPeer {
             index,
             generation: _,
-            config,
-            last_tx_packet_number,
-            replay,
+            state,
         } = removed;
         *slot = EspNowEncryptedPeerSlot {
             generation,
-            state: Some(EspNowEncryptedPeerState {
-                config,
-                last_tx_packet_number,
-                replay,
-            }),
+            state: Some(state),
         };
         self.length = length;
         self.diagnostics.remove_rollbacks = self.diagnostics.remove_rollbacks.saturating_add(1);
@@ -679,7 +685,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .find(|(_, slot)| {
                 slot.state
                     .as_ref()
-                    .is_some_and(|state| state.config.destination == destination)
+                    .is_some_and(|state| state.config().destination == destination)
             })
             .map(|(index, slot)| EspNowEncryptedPeerId {
                 index,
@@ -692,17 +698,18 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         peer: EspNowEncryptedPeerId,
     ) -> Result<EspNowEncryptedPeerView, EspNowEncryptedPeerError> {
         let state = self.state(peer)?;
+        let config = state.config();
         Ok(EspNowEncryptedPeerView {
-            destination: state.config.destination,
-            channel: state.config.channel,
-            phy_mode: state.config.phy_mode,
-            last_tx_packet_number: state.last_tx_packet_number,
-            highest_authenticated_rx_packet_number: state.replay.highest.map(|pn| pn.value()),
+            destination: config.destination,
+            channel: config.channel,
+            phy_mode: config.phy_mode,
+            last_tx_packet_number: state.key.packet_numbers().last().value(),
+            highest_authenticated_rx_packet_number: highest_authenticated(&state.replay),
         })
     }
 
     pub fn lmk(&self, peer: EspNowEncryptedPeerId) -> Result<&EspNowLmk, EspNowEncryptedPeerError> {
-        Ok(&self.state(peer)?.config.lmk)
+        Ok(&self.state(peer)?.config().lmk)
     }
 
     /// Burn and return the next per-peer TX PN. A caller must never roll this
@@ -712,12 +719,15 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &mut self,
         peer: EspNowEncryptedPeerId,
     ) -> Result<EspNowCcmpPacketNumber, EspNowEncryptedPeerError> {
-        let state = self.state_mut(peer)?;
-        let packet_number = state
-            .last_tx_packet_number
-            .checked_add(1)
-            .filter(|next| *next <= ESP_NOW_PACKET_NUMBER_MAX)
-            .and_then(|next| EspNowCcmpPacketNumber::new(next).ok());
+        // The allocator starts after zero, so every number it hands out is
+        // an ESP-NOW packet number.
+        let packet_number = self
+            .state(peer)?
+            .key
+            .packet_numbers()
+            .allocate()
+            .ok()
+            .and_then(|next| EspNowCcmpPacketNumber::new(next.value()).ok());
         let Some(packet_number) = packet_number else {
             self.diagnostics.tx_packet_number_exhaustions = self
                 .diagnostics
@@ -725,7 +735,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                 .saturating_add(1);
             return Err(EspNowEncryptedPeerError::TxPacketNumberExhausted(peer));
         };
-        state.last_tx_packet_number = packet_number.value();
         self.diagnostics.tx_packet_numbers_allocated = self
             .diagnostics
             .tx_packet_numbers_allocated
@@ -733,90 +742,43 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         Ok(packet_number)
     }
 
-    /// Check one unauthenticated on-air PN without mutating replay state.
-    /// Only a later successful MIC verification may commit the returned token.
+    /// Check one unauthenticated on-air PN against the peer's replay
+    /// frontier and lend that frontier to the returned candidate. Only a
+    /// later successful MIC verification may commit it; dropping it cancels
+    /// the check. The borrow keeps the peer from being replaced or removed
+    /// in between.
     pub fn prepare_rx_replay(
         &mut self,
         peer: EspNowEncryptedPeerId,
         packet_number: EspNowCcmpPacketNumber,
-    ) -> Result<EspNowRxReplayCandidate, EspNowEncryptedPeerError> {
-        let state = self.state(peer)?;
-        let expected_revision = state.replay.revision;
-        let (highest, bitmap) = match state.replay.highest {
-            None => (packet_number, 1),
-            Some(highest) if packet_number > highest => {
-                let shift = packet_number.value().abs_diff(highest.value());
-                let bitmap = if shift >= u64::from(ESP_NOW_RX_REPLAY_WINDOW_BITS) {
-                    1
-                } else {
-                    // The replay bitmap intentionally discards bits beyond
-                    // its window; the guard bounds this shift below 64.
-                    state.replay.bitmap.wrapping_shl(shift as u32) | 1
-                };
-                (packet_number, bitmap)
+    ) -> Result<EspNowRxReplayCandidate<'_>, EspNowEncryptedPeerError> {
+        let Self {
+            slots, diagnostics, ..
+        } = self;
+        let state = slots
+            .get_mut(peer.index)
+            .filter(|slot| slot.generation == peer.generation)
+            .and_then(|slot| slot.state.as_mut())
+            .ok_or(EspNowEncryptedPeerError::Stale(peer))?;
+        match state.replay.prepare(CcmpPacketNumber::from(packet_number)) {
+            Ok(replay) => {
+                diagnostics.replay_candidates = diagnostics.replay_candidates.saturating_add(1);
+                Ok(EspNowRxReplayCandidate {
+                    peer,
+                    packet_number,
+                    replay,
+                    commits: &mut diagnostics.authenticated_replay_commits,
+                })
             }
-            Some(highest) => {
-                let distance = highest.value().abs_diff(packet_number.value());
-                if distance >= u64::from(ESP_NOW_RX_REPLAY_WINDOW_BITS) {
-                    self.diagnostics.replay_too_old =
-                        self.diagnostics.replay_too_old.saturating_add(1);
-                    return Err(EspNowEncryptedPeerError::ReplayTooOld {
-                        peer,
-                        packet_number,
-                        highest,
-                    });
-                }
-                let bit = 1_u64.wrapping_shl(distance as u32);
-                if state.replay.bitmap & bit != 0 {
-                    self.diagnostics.replay_duplicates =
-                        self.diagnostics.replay_duplicates.saturating_add(1);
-                    return Err(EspNowEncryptedPeerError::ReplayDuplicate {
-                        peer,
-                        packet_number,
-                    });
-                }
-                (highest, state.replay.bitmap | bit)
+            Err(CcmpReplayed { highest, .. }) => {
+                diagnostics.replays = diagnostics.replays.saturating_add(1);
+                Err(EspNowEncryptedPeerError::Replay {
+                    peer,
+                    packet_number,
+                    highest,
+                })
             }
-        };
-        self.diagnostics.replay_candidates = self.diagnostics.replay_candidates.saturating_add(1);
-        Ok(EspNowRxReplayCandidate {
-            peer,
-            packet_number,
-            expected_revision,
-            highest,
-            bitmap,
-        })
-    }
-
-    /// Commit a replay candidate only after a cryptographic owner has
-    /// authenticated the MIC for the exact frame which produced the token.
-    pub fn commit_authenticated_rx(
-        &mut self,
-        candidate: EspNowRxReplayCandidate,
-    ) -> Result<(), EspNowEncryptedPeerError> {
-        let state = self.state_mut(candidate.peer)?;
-        if state.replay.revision != candidate.expected_revision {
-            self.diagnostics.stale_replay_candidates =
-                self.diagnostics.stale_replay_candidates.saturating_add(1);
-            return Err(EspNowEncryptedPeerError::StaleReplayCandidate(
-                candidate.peer,
-            ));
         }
-        let Some(revision) = state.replay.revision.checked_add(1) else {
-            return Err(EspNowEncryptedPeerError::ReplayRevisionExhausted(
-                candidate.peer,
-            ));
-        };
-        state.replay = EspNowReplayWindow {
-            highest: Some(candidate.highest),
-            bitmap: candidate.bitmap,
-            revision,
-        };
-        self.diagnostics.authenticated_replay_commits = self
-            .diagnostics
-            .authenticated_replay_commits
-            .saturating_add(1);
-        Ok(())
     }
 
     fn state(
@@ -831,16 +793,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         }
         slot.state
             .as_ref()
-            .ok_or(EspNowEncryptedPeerError::Stale(peer))
-    }
-
-    fn state_mut(
-        &mut self,
-        peer: EspNowEncryptedPeerId,
-    ) -> Result<&mut EspNowEncryptedPeerState, EspNowEncryptedPeerError> {
-        let slot = self.slot_mut(peer)?;
-        slot.state
-            .as_mut()
             .ok_or(EspNowEncryptedPeerError::Stale(peer))
     }
 
@@ -900,9 +852,7 @@ impl fmt::Debug for EspNowEncryptedPeerReplacement {
 pub struct EspNowRemovedEncryptedPeer {
     index: usize,
     generation: u32,
-    config: EspNowEncryptedPeerConfig,
-    last_tx_packet_number: u64,
-    replay: EspNowReplayWindow,
+    state: EspNowEncryptedPeerState,
 }
 
 impl EspNowRemovedEncryptedPeer {
@@ -914,12 +864,12 @@ impl EspNowRemovedEncryptedPeer {
     }
 
     pub const fn config(&self) -> &EspNowEncryptedPeerConfig {
-        &self.config
+        self.state.config()
     }
 
     /// Finish a successful external removal and return the key-owning config.
     pub fn into_config(self) -> EspNowEncryptedPeerConfig {
-        self.config
+        self.state.key.into_key()
     }
 }
 
@@ -928,14 +878,14 @@ impl fmt::Debug for EspNowRemovedEncryptedPeer {
         formatter
             .debug_struct("EspNowRemovedEncryptedPeer")
             .field("previous_id", &self.previous_id())
-            .field("config", &self.config)
-            .field("last_tx_packet_number", &self.last_tx_packet_number)
+            .field("config", self.config())
+            .field(
+                "last_tx_packet_number",
+                &self.state.key.packet_numbers().last().value(),
+            )
             .field(
                 "highest_authenticated_rx_packet_number",
-                &self
-                    .replay
-                    .highest
-                    .map(|packet_number| packet_number.value()),
+                &highest_authenticated(&self.state.replay),
             )
             .finish()
     }
@@ -1012,17 +962,12 @@ pub enum EspNowEncryptedPeerError {
     GenerationExhausted,
     Stale(EspNowEncryptedPeerId),
     TxPacketNumberExhausted(EspNowEncryptedPeerId),
-    ReplayDuplicate {
+    /// The PN does not exceed the highest authenticated one of the peer.
+    Replay {
         peer: EspNowEncryptedPeerId,
         packet_number: EspNowCcmpPacketNumber,
+        highest: CcmpPacketNumber,
     },
-    ReplayTooOld {
-        peer: EspNowEncryptedPeerId,
-        packet_number: EspNowCcmpPacketNumber,
-        highest: EspNowCcmpPacketNumber,
-    },
-    StaleReplayCandidate(EspNowEncryptedPeerId),
-    ReplayRevisionExhausted(EspNowEncryptedPeerId),
 }
 
 impl fmt::Display for EspNowEncryptedPeerError {
@@ -1060,31 +1005,15 @@ impl fmt::Display for EspNowEncryptedPeerError {
                     "encrypted ESP-NOW peer {peer:?} exhausted its TX PN"
                 )
             }
-            Self::ReplayDuplicate {
-                peer,
-                packet_number,
-            } => write!(
-                formatter,
-                "encrypted ESP-NOW peer {peer:?} repeated PN {}",
-                packet_number.value()
-            ),
-            Self::ReplayTooOld {
+            Self::Replay {
                 peer,
                 packet_number,
                 highest,
             } => write!(
                 formatter,
-                "encrypted ESP-NOW peer {peer:?} PN {} is outside the replay window below {}",
+                "encrypted ESP-NOW peer {peer:?} PN {} does not exceed {}",
                 packet_number.value(),
                 highest.value()
-            ),
-            Self::StaleReplayCandidate(peer) => write!(
-                formatter,
-                "encrypted ESP-NOW peer {peer:?} replay candidate lost its state race"
-            ),
-            Self::ReplayRevisionExhausted(peer) => write!(
-                formatter,
-                "encrypted ESP-NOW peer {peer:?} replay revision is exhausted"
             ),
         }
     }
@@ -1092,23 +1021,31 @@ impl fmt::Display for EspNowEncryptedPeerError {
 
 impl core::error::Error for EspNowEncryptedPeerError {}
 
-/// Unauthenticated, non-mutating replay-window proposal.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EspNowRxReplayCandidate {
+/// An unauthenticated PN admitted by its peer's replay frontier, holding
+/// that frontier exclusively. Committing advances it; dropping cancels.
+#[derive(Debug)]
+#[must_use = "commit after authentication, or drop to cancel admission"]
+pub struct EspNowRxReplayCandidate<'a> {
     peer: EspNowEncryptedPeerId,
     packet_number: EspNowCcmpPacketNumber,
-    expected_revision: u32,
-    highest: EspNowCcmpPacketNumber,
-    bitmap: u64,
+    replay: CcmpReplayCandidate<'a>,
+    commits: &'a mut u32,
 }
 
-impl EspNowRxReplayCandidate {
-    pub const fn peer(self) -> EspNowEncryptedPeerId {
+impl EspNowRxReplayCandidate<'_> {
+    pub const fn peer(&self) -> EspNowEncryptedPeerId {
         self.peer
     }
 
-    pub const fn packet_number(self) -> EspNowCcmpPacketNumber {
+    pub const fn packet_number(&self) -> EspNowCcmpPacketNumber {
         self.packet_number
+    }
+
+    /// Commit only after a cryptographic owner has authenticated the MIC of
+    /// the exact frame which produced this candidate.
+    pub fn commit_authenticated(self) {
+        self.replay.commit();
+        *self.commits = self.commits.saturating_add(1);
     }
 }
 
@@ -1182,7 +1119,7 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
     pub fn prepare_v1_tx<'payload>(
         &mut self,
         peer: EspNowEncryptedPeerId,
-        sequence: &mut StaSequenceCounter,
+        sequence: &mut SequenceCounter,
         random_value: EspNowRandomValue,
         payload: &'payload [u8],
     ) -> Result<EspNowPreparedEncryptedV1Tx<'payload>, EspNowEncryptedSendError> {
@@ -1219,7 +1156,7 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
         active_station: BoundVirtualInterface,
         active_channel: WifiChannel,
         bytes: &'frame [u8],
-    ) -> Result<EspNowEncryptedRxCandidate<'frame>, EspNowEncryptedReceiveError> {
+    ) -> Result<EspNowEncryptedRxCandidate<'_, 'frame>, EspNowEncryptedReceiveError> {
         if active_station != self.config.station() {
             return Err(EspNowEncryptedReceiveError::StationBindingMismatch {
                 configured: self.config.station(),
@@ -1347,25 +1284,25 @@ impl<'payload> EspNowPreparedEncryptedV1Tx<'payload> {
 }
 
 /// Structurally admitted protected frame and its uncommitted replay token.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EspNowEncryptedRxCandidate<'frame> {
+#[derive(Debug)]
+pub struct EspNowEncryptedRxCandidate<'a, 'frame> {
     peer: EspNowEncryptedPeerId,
     envelope: EspNowProtectedV1Envelope<'frame>,
-    replay: EspNowRxReplayCandidate,
+    replay: EspNowRxReplayCandidate<'a>,
 }
 
-impl<'frame> EspNowEncryptedRxCandidate<'frame> {
-    pub const fn peer(self) -> EspNowEncryptedPeerId {
+impl<'a, 'frame> EspNowEncryptedRxCandidate<'a, 'frame> {
+    pub const fn peer(&self) -> EspNowEncryptedPeerId {
         self.peer
     }
 
-    pub const fn envelope(self) -> EspNowProtectedV1Envelope<'frame> {
+    pub const fn envelope(&self) -> EspNowProtectedV1Envelope<'frame> {
         self.envelope
     }
 
     /// Consume the structural candidate into the token which a future exact
     /// decrypt/MIC backend must commit only after successful authentication.
-    pub const fn into_replay_candidate(self) -> EspNowRxReplayCandidate {
+    pub fn into_replay_candidate(self) -> EspNowRxReplayCandidate<'a> {
         self.replay
     }
 }

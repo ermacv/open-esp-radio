@@ -8,8 +8,7 @@ Runtime panic lints and the complete sans-IO catalogue are denied at the
 crate root. Service construction, authentication and removal report
 `ApServiceError::GenerationExhausted` before reusing an identity generation;
 failed authentication or removal retains the live peer and its security
-state. SAE invariant failures return `ApSaeResult::Fault` with session
-observations, while reply bodies have fixed protocol-defined lengths.
+state.
 Initialized beacon lengths are validated, and advertisement access returns
 its typed length error if the stored invariant is broken.
 
@@ -19,7 +18,11 @@ element and RSNXE it advertises, which `oer-ieee80211-wire` encodes into
 beacons and responses as `BssSecurityElements`. The TBTT schedule
 (`tbtt.rs::next_tbtt`) and the beacon's channel-switch announcements, edited
 in the template through the wire's beacon element edits, are its own too.
-Status codes and SAE body fields are the wire's.
+Status codes and SAE body fields are the wire's. The four-way handshake of
+each peer is an `oer_ieee80211_rsn::authenticator::RsnAuthenticator`, which
+this crate drives with the association's PMK and Message 3's key data; the SAE
+responder and the PMKSA cache are `oer-ieee80211-rsn`'s too. Transmit sequence
+spaces and the management replay frontier are `oer-ieee80211-upper-mac`'s.
 
 An access point uses 40 MHz in 2.4 GHz only under the 20/40 coexistence rules;
 a station reports 20/40 OBSS as the standard requires.
@@ -29,12 +32,13 @@ a station reports 20/40 OBSS as the standard requires.
 **Security**
 
 - **M1/M3 retries reuse the replay counter.**
-  `service/security.rs::build_pending_transmit` rebuilds the same frame
-  from `rsn`'s `RsnApState`, and `service/tests.rs` asserts identical retry
-  bytes. A lost M4 ends the handshake with wpa_supplicant.
-- **The M3 Key RSC is all zero** (`service/security.rs` `complete_message2`
-  and `build_pending_transmit`); it must carry the GTK's current TX PN, as
-  the IGTK IPN already does. A station may accept replayed group frames.
+  `service/security.rs::message3_transmit` rebuilds the same frame through
+  `rsn`'s `RsnAuthenticator::message3`, and `service/tests.rs` asserts
+  identical retry bytes. A lost M4 ends the handshake with wpa_supplicant.
+- **The M3 Key RSC is all zero** (`rsn`'s `authenticator.rs`
+  `complete_message3` and `message3`); it must carry the GTK's current TX
+  PN, as the IGTK IPN already does. A station may accept replayed group
+  frames.
 - **BIP does not guard +HTC** (`service/management.rs::protect_group_management`).
 
 **Timing and protocol**
@@ -52,9 +56,6 @@ a station reports 20/40 OBSS as the standard requires.
   Disassociation reaches `remove_peer`; no AP-initiated SA Query, no status
   30 with a Timeout Interval; `service/management.rs` `receive_management`
   and `management_tx_protection` have no caller.
-- **The SAE responder can be exhausted with spoofed MACs.**
-  `sae.rs::receive_commit` allocates a session before checking status,
-  token or commit; sessions have no expiry or retransmission timer.
 - **Untyped DTIM grant:** `service/power_save.rs::begin_buffered_group_release`
   returns `Option` over a bare `u16` count; `beacon/publication.rs::ApDtimRelease`
   is not consumed per frame.

@@ -13,7 +13,7 @@ fn runtime() -> StaAuthenticationRuntime {
 #[test]
 fn authentication_retries_own_the_sequence_and_stop_at_the_attempt_limit() {
     let mut ready = runtime();
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(0x0ffe).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(0x0ffe).unwrap());
     for ordinal in 1..=STA_AUTHENTICATION_ATTEMPT_LIMIT {
         let (mut active, attempt) = ready.begin_attempt(&mut sequence);
         assert_eq!(attempt.ordinal, ordinal);
@@ -57,7 +57,7 @@ fn authentication_retries_own_the_sequence_and_stop_at_the_attempt_limit() {
 
 #[test]
 fn irrelevant_management_returns_the_same_active_exchange() {
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(7).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(7).unwrap());
     let (mut active, attempt) = runtime().begin_attempt(&mut sequence);
     active.observe_received_frame();
     let StaAuthenticationEvent::Irrelevant(mut active) = active.observe_management_frame(&[0; 30])
@@ -80,7 +80,7 @@ fn irrelevant_management_returns_the_same_active_exchange() {
 
 #[test]
 fn peer_disconnect_returns_a_retry_owner_but_rejection_consumes_the_epoch() {
-    let mut sequence = StaSequenceCounter::new(SequenceNumber::new(0).unwrap());
+    let mut sequence = SequenceCounter::new(SequenceNumber::new(0).unwrap());
     let (mut active, _) = runtime().begin_attempt(&mut sequence);
     active.observe_received_frame();
     let StaAuthenticationEvent::Retry {

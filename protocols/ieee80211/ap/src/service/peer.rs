@@ -8,44 +8,37 @@ use oer_ieee80211_wire::status::status_code;
 
 impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn next_management_sequence(&mut self) -> SequenceNumber {
-        let sequence = self.next_management_sequence;
-        self.next_management_sequence = sequence.next();
-        sequence
+        self.management_sequence.take()
     }
 
     /// Consume the non-QoS data sequence space used by the initial EAPOL and
     /// legacy data path. Per-TID sequence spaces are introduced with QoS.
     pub fn next_data_sequence(&mut self) -> SequenceNumber {
-        let sequence = self.next_data_sequence;
-        self.next_data_sequence = sequence.next();
-        sequence
+        self.data_sequence.take()
     }
 
     pub const fn current_data_sequence(&self) -> SequenceNumber {
-        self.next_data_sequence
+        self.data_sequence.peek()
     }
 
     /// Consume one per-peer/per-TID sequence for protected data or the
     /// bounded Open QoS A-MSDU path. Security mode does not partition the
     /// receiver's IEEE sequence space.
     pub fn next_qos_sequence(&mut self, peer: [u8; 6], tid: u8) -> Option<SequenceNumber> {
-        let sequence = self
-            .checked_peer_mut(peer)
+        self.checked_peer_mut(peer)
             .ok()?
-            .next_qos_sequences
-            .get_mut(usize::from(tid))?;
-        let current = *sequence;
-        *sequence = current.next();
-        Some(current)
+            .qos_sequences
+            .get_mut(usize::from(tid))
+            .map(SequenceCounter::take)
     }
 
     /// Inspect a peer/TID sequence without consuming it during preflight.
     pub fn current_qos_sequence(&self, peer: [u8; 6], tid: u8) -> Option<SequenceNumber> {
         self.checked_peer(peer)
             .ok()?
-            .next_qos_sequences
+            .qos_sequences
             .get(usize::from(tid))
-            .copied()
+            .map(SequenceCounter::peek)
     }
 
     pub fn authenticate_open(
@@ -73,7 +66,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         let status = self.authenticate(peer, now)?;
         self.storage_mut()
             .pmksa
-            .insert(ApPmksa::new(peer, pmk.duplicate(), pmkid));
+            .insert(Pmksa::new(peer, (), pmk.duplicate(), pmkid));
         if status == status_code::SUCCESS {
             let existing = self.checked_peer_mut(peer)?;
             existing.pmk = Some(pmk);
@@ -182,14 +175,14 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         } else {
             None
         };
-        let association_security_binding = Some(match &resumed {
+        let association_security_binding = match &resumed {
             Some((pmk, _)) => {
                 pmk.bind_association_security_ies(association_security.ies.as_bytes())
             }
             None => self
                 .peer_pmk(peer)?
                 .bind_association_security_ies(association_security.ies.as_bytes()),
-        });
+        };
         let access_point = self.address;
         let inactive_timeout = self.inactive_timeout.duration();
         let existing = self.checked_peer_mut(peer)?;
@@ -208,12 +201,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             initial_replay_counter,
         )?;
         existing.phase = ApPeerPhase::Securing;
-        existing.wpa2 = Some(wpa2);
+        existing.authenticator = Some(RsnAuthenticator::new(wpa2, association_security_binding));
         if let Some((pmk, pmkid)) = resumed {
             existing.pmk = Some(pmk);
             existing.pmkid = Some(pmkid);
         }
-        existing.association_security_binding = association_security_binding;
         existing.maximum_legacy_rate_500kbps = capabilities.maximum_legacy_rate_500kbps;
         existing.short_preamble = capabilities.short_preamble;
         existing.ht = capabilities.ht;
@@ -299,9 +291,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             });
         }
         existing.phase = ApPeerPhase::Authorized;
-        existing.wpa2 = None;
-        existing.association_security_binding = None;
-        existing.pending_ptk = None;
+        existing.authenticator = None;
         existing.maximum_legacy_rate_500kbps = capabilities.maximum_legacy_rate_500kbps;
         existing.short_preamble = capabilities.short_preamble;
         existing.ht = capabilities.ht;

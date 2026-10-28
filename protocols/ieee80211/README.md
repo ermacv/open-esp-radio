@@ -22,7 +22,7 @@ the portable runtime drives role services over that port.
 | `wire/src/security/rsn.rs` | RSN element and RSNXE syntax, encoders and AKM suite vocabulary |
 | `wire/src/station/security.rs` | The RSN element and RSNXE of a station's association request |
 | `wire/src/eapol.rs` | EAPOL-Key Key Information field and Key Data Encapsulations |
-| `wire/src/sae.rs` | SAE Authentication body fields and SAE extension element IDs |
+| `wire/src/sae.rs` | SAE Commit and Confirm body codecs (byte values of scalar, element and confirm) and SAE extension element IDs |
 | `wire/src/status.rs` | Status and reason codes |
 | `wire/src/ethertype.rs` | EtherType values |
 | `wire/src/tsf.rs` | The Timestamp field and the time unit |
@@ -30,7 +30,10 @@ the portable runtime drives role services over that port.
 | `ap/src/security_policy.rs` | Access point security policy and its advertised elements |
 | `wire/src/station/data.rs` | Data codecs, with A-MSDU framing in `station/data/amsdu.rs` |
 | `wire/src/sequence.rs` | Twelve-bit sequence numbers and modulo-4096 arithmetic |
-| `sta/src/sequence.rs` | Separate management/non-QoS and per-TID TX sequence owners |
+| `upper-mac/src/sequence.rs` | Separate management/non-QoS and per-TID TX sequence owners of the station, the access point and ESP-NOW |
+| `upper-mac/src/ccmp.rs` | CCMP transmit packet numbers and the receive replay frontier of every CCMP user |
+| `rsn/src/pmksa.rs` | The PMKSA cache of the station and of the access point |
+| `rsn/src/authenticator.rs` | The access point's four-way handshake, with its SAE responder in `authenticator/sae.rs` |
 | `upper-mac/src/duplicate.rs` | Peer-scoped receive retry history |
 | `wire/src/qos.rs` | User priorities, access categories and the network header fields carrying traffic intent |
 | `upper-mac/src/qos.rs` | Ethernet traffic classification, DSCP mapping and admission downgrade |
@@ -88,16 +91,20 @@ no core. [`upper-mac`](upper-mac/README.md) owns retry ladders, Retry bits,
 aggregate retry selection, the reading of a BlockAck, protection and the BSS
 basic rates, management budgets, the association PHY mode and the attempt
 planner. Its
-`block_ack/banks.rs` owns an association's receive agreements and reordering
-and `ccmp/replay.rs` checks receive replay. Its packet-number allocator is
-held by the station's pairwise key (`sta/src/port.rs`), which numbers each
-fresh protected MPDU before the port takes it; the backend encrypts with the
-supplied number. Espressif policy parameters live in
+`block_ack/banks.rs` owns an association's receive agreements and reordering.
+Its `ccmp.rs` is the one owner of CCMP numbering: the receive replay frontier
+(`CcmpReplayFrontier`; `ccmp/replay.rs` checks an association's keys) of the
+station, the access point's protected management frames, the RSN management
+receiver and ESP-NOW peers, and the transmit packet-number allocator, which
+numbers each fresh protected MPDU before the port takes it (the station's
+pairwise key in `sta/src/port.rs` holds it); the backend encrypts with the
+supplied number. Its `sequence.rs` owns the transmit sequence spaces of every
+role. Espressif policy parameters live in
 [`oer-espressif-ieee80211-policy`](../../chips/espressif/ieee80211-policy/README.md).
 
 `softmac/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
-protocol state. Its `security.rs` sibling owns secrets, generations and replay
-state. Both use the wire codecs, the interface identities of
+protocol state. Its `security.rs` sibling owns secrets and generations; each
+peer's packet numbers and replay frontier are `upper-mac`'s CCMP owners. Both use the wire codecs, the interface identities of
 `softmac/src/interface.rs` and the PHY requests of
 `softmac/src/extensions/espressif/phy.rs`.
 
@@ -109,8 +116,10 @@ and neither parses nor builds frames; it depends on neither `wire` nor
 and that `cipher`, `port` and `model` take only the layers below them.
 
 The [RSN crate](rsn/README.md) separates secret ownership and derivation
-(`crypto`), packet views and MIC handling (`eapol`), wire formats (`frames`)
-and handshake owners (`state/supplicant.rs` and `state/authenticator.rs`).
+(`crypto`), packet views and MIC handling (`eapol`), wire formats (`frames`),
+handshake transitions (`state/supplicant.rs` and `state/authenticator.rs`)
+and their orchestration on both sides (`supplicant` and `authenticator`),
+and the PMKSA cache of both roles (`pmksa`).
 
 Portable AP `service` retains one peer storage owner and separates peer,
 security, Block Ack, management, transmit and power-save operations into

@@ -51,9 +51,9 @@ pub enum CcmpTxPacketNumberError {
     Exhausted,
 }
 
-/// A backend pairwise key and its unique transmit PN owner. Construction
-/// performs the actual port installation; an existing key cannot be paired
-/// with a fresh counter. Removal consumes this wrapper.
+/// A transmit key and its unique PN owner. Construction installs the key,
+/// through the lower-MAC port or into its software owner; an existing key
+/// cannot be paired with a fresh counter. Removal consumes this wrapper.
 pub struct InstalledCcmpTxKey<K> {
     key: K,
     packet_numbers: CcmpTxPacketNumber,
@@ -68,6 +68,40 @@ impl<K> InstalledCcmpTxKey<K> {
     }
     pub fn into_key(self) -> K {
         self.key
+    }
+
+    /// Number one protected MPDU: the key and its next CCMP packet number,
+    /// or `None` once its packet numbers are exhausted. A retransmission
+    /// keeps the number of its first transmission and does not call this.
+    pub fn number(&self) -> Option<oer_ieee80211_port::NumberedKey<&K>> {
+        let packet_number = self.packet_numbers.allocate().ok()?;
+        Some(oer_ieee80211_port::NumberedKey {
+            key: &self.key,
+            packet_number,
+        })
+    }
+}
+
+/// Key material whose only owner is software: installing it means moving it
+/// into that owner, as the ESP-NOW peer table owns its peers' local master
+/// keys. A lower-MAC port key is not one; it pairs with its packet numbers
+/// only through [`install_ccmp_pairwise_key`].
+pub trait SoftwareCcmpKey {}
+
+impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
+    /// Move new key material into its software owner together with a new
+    /// PN allocator.
+    pub const fn install(key: K, step: CcmpPacketNumberStep) -> Self {
+        Self {
+            key,
+            packet_numbers: CcmpTxPacketNumber::new(step),
+        }
+    }
+
+    /// Replace the key material and keep numbering after the last PN handed
+    /// out, so the same key bytes supplied again never repeat a nonce.
+    pub fn replace_key(&mut self, key: K) -> K {
+        core::mem::replace(&mut self.key, key)
     }
 }
 
@@ -213,23 +247,89 @@ impl CcmpReplayLane {
     }
 }
 
+/// One strictly increasing receive packet-number frontier: a lane of a
+/// pairwise or group key, the management frames of one association, or an
+/// ESP-NOW peer's key.
+///
+/// A packet number is admitted only above the highest one already accepted
+/// (IEEE Std 802.11-2020 12.5.3.4.4, PN and replay detection); a repeated or
+/// earlier number is refused without changing the frontier. A new key starts
+/// a new frontier from its receive sequence, so a frontier never moves back.
+#[derive(Debug, Eq, PartialEq)]
+pub struct CcmpReplayFrontier {
+    highest: CcmpPacketNumber,
+}
+
+impl CcmpReplayFrontier {
+    /// A frontier whose highest accepted packet number is `initial`.
+    pub const fn new(initial: CcmpPacketNumber) -> Self {
+        Self { highest: initial }
+    }
+
+    /// Check `packet_number` and lend this frontier until commit or
+    /// cancellation. The borrow prevents replacement, removal and a second
+    /// concurrent admission; no unbound candidate or revision counter is
+    /// needed.
+    pub fn prepare(
+        &mut self,
+        packet_number: CcmpPacketNumber,
+    ) -> Result<CcmpReplayCandidate<'_>, CcmpReplayed> {
+        let highest = self.highest;
+        if packet_number <= highest {
+            return Err(CcmpReplayed {
+                packet_number,
+                highest,
+            });
+        }
+        Ok(CcmpReplayCandidate {
+            frontier: &mut self.highest,
+            packet_number,
+        })
+    }
+
+    /// Check and advance at once, for a frame published as soon as it is
+    /// authenticated.
+    pub fn commit_immediate(
+        &mut self,
+        packet_number: CcmpPacketNumber,
+    ) -> Result<(), CcmpReplayed> {
+        self.prepare(packet_number)?.commit();
+        Ok(())
+    }
+
+    /// The highest accepted packet number.
+    pub const fn highest(&self) -> CcmpPacketNumber {
+        self.highest
+    }
+}
+
+impl Default for CcmpReplayFrontier {
+    fn default() -> Self {
+        Self::new(CcmpPacketNumber::ZERO)
+    }
+}
+
+/// A packet number that does not exceed its frontier.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CcmpReplayed {
+    /// The refused packet number.
+    pub packet_number: CcmpPacketNumber,
+    /// The highest packet number the frontier had accepted.
+    pub highest: CcmpPacketNumber,
+}
+
 /// A checked packet number holding its exact replay frontier exclusively.
 /// It cannot be copied, transferred to another key/association, or retained
 /// across replacement of the borrowed key state. Dropping it cancels the
 /// check without advancing the frontier.
 #[derive(Debug)]
 #[must_use = "commit before publication, or drop to cancel admission"]
-pub struct CcmpRxReplayCandidate<'a> {
+pub struct CcmpReplayCandidate<'a> {
     frontier: &'a mut CcmpPacketNumber,
-    lane: CcmpReplayLane,
     packet_number: CcmpPacketNumber,
 }
 
-impl CcmpRxReplayCandidate<'_> {
-    /// The admitted non-QoS or TID lane.
-    pub const fn lane(&self) -> CcmpReplayLane {
-        self.lane
-    }
+impl CcmpReplayCandidate<'_> {
     /// The already checked packet number.
     pub const fn packet_number(&self) -> CcmpPacketNumber {
         self.packet_number
@@ -241,6 +341,29 @@ impl CcmpRxReplayCandidate<'_> {
     }
 }
 
+/// A [`CcmpReplayCandidate`] of one lane of a key's receive frontiers.
+#[derive(Debug)]
+#[must_use = "commit before publication, or drop to cancel admission"]
+pub struct CcmpRxReplayCandidate<'a> {
+    candidate: CcmpReplayCandidate<'a>,
+    lane: CcmpReplayLane,
+}
+
+impl CcmpRxReplayCandidate<'_> {
+    /// The admitted non-QoS or TID lane.
+    pub const fn lane(&self) -> CcmpReplayLane {
+        self.lane
+    }
+    /// The already checked packet number.
+    pub const fn packet_number(&self) -> CcmpPacketNumber {
+        self.candidate.packet_number()
+    }
+    /// Publish once, advancing only the originally borrowed lane.
+    pub fn commit(self) {
+        self.candidate.commit();
+    }
+}
+
 /// Per-key CCMP receive frontiers for non-QoS and TID 0 through 15.
 ///
 /// This is deliberately not a sliding arrival-order window. The 802.11
@@ -249,14 +372,25 @@ impl CcmpRxReplayCandidate<'_> {
 /// unrelated access categories from rejecting each other's valid PNs.
 #[derive(Debug, Eq, PartialEq)]
 pub struct CcmpRxReplayState {
-    highest: [CcmpPacketNumber; CCMP_REPLAY_LANE_COUNT],
+    lanes: [CcmpReplayFrontier; CCMP_REPLAY_LANE_COUNT],
 }
 
 impl CcmpRxReplayState {
     pub const fn new(initial: CcmpPacketNumber) -> Self {
         Self {
-            highest: [initial; CCMP_REPLAY_LANE_COUNT],
+            lanes: [const { CcmpReplayFrontier::new(CcmpPacketNumber::ZERO) };
+                CCMP_REPLAY_LANE_COUNT],
         }
+        .starting_at(initial)
+    }
+
+    const fn starting_at(mut self, initial: CcmpPacketNumber) -> Self {
+        let mut remaining: &mut [CcmpReplayFrontier] = &mut self.lanes;
+        while let [lane, rest @ ..] = remaining {
+            *lane = CcmpReplayFrontier::new(initial);
+            remaining = rest;
+        }
+        self
     }
 
     pub const fn from_receive_sequence(
@@ -269,28 +403,16 @@ impl CcmpRxReplayState {
     }
 
     /// Check one lane and lend its frontier until commit or cancellation.
-    /// The borrow prevents replacement, removal and a second concurrent
-    /// admission; no unbound candidate or lane-revision counter is needed.
     pub fn prepare(
         &mut self,
         lane: CcmpReplayLane,
         packet_number: CcmpPacketNumber,
     ) -> Result<CcmpRxReplayCandidate<'_>, CcmpReplayError> {
-        let frontier = lane
-            .select_mut(&mut self.highest)
-            .ok_or(CcmpReplayError::InvalidTid)?;
-        let highest = *frontier;
-        if packet_number <= highest {
-            return Err(CcmpReplayError::Replayed {
-                packet_number,
-                highest,
-            });
-        }
-        Ok(CcmpRxReplayCandidate {
-            frontier,
-            lane,
-            packet_number,
-        })
+        let candidate = lane
+            .select_mut(&mut self.lanes)
+            .ok_or(CcmpReplayError::InvalidTid)?
+            .prepare(packet_number)?;
+        Ok(CcmpRxReplayCandidate { candidate, lane })
     }
 
     /// Check and advance the authenticated packet number under the same
@@ -306,8 +428,8 @@ impl CcmpRxReplayState {
     }
 
     pub const fn highest(&self, lane: CcmpReplayLane) -> Option<CcmpPacketNumber> {
-        match lane.select(&self.highest) {
-            Some(highest) => Some(*highest),
+        match lane.select(&self.lanes) {
+            Some(frontier) => Some(frontier.highest()),
             None => None,
         }
     }
@@ -326,6 +448,20 @@ pub enum CcmpReplayError {
         packet_number: CcmpPacketNumber,
         highest: CcmpPacketNumber,
     },
+}
+
+impl From<CcmpReplayed> for CcmpReplayError {
+    fn from(
+        CcmpReplayed {
+            packet_number,
+            highest,
+        }: CcmpReplayed,
+    ) -> Self {
+        Self::Replayed {
+            packet_number,
+            highest,
+        }
+    }
 }
 
 #[cfg(test)]

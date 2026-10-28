@@ -12,7 +12,7 @@
 use crate::ccm::MIC_LEN;
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
 use oer_ieee80211_wire::{
-    ccmp::{CCMP_HEADER_LEN, Ccmp128Key, CcmpHeader, CcmpHeaderError, CcmpKeyId},
+    ccmp::{CCMP_HEADER_LEN, Ccmp128Key, CcmpHeader, CcmpHeaderError, CcmpKeyId, CcmpPacketNumber},
     frame::DecodedHeader,
     security::Spp,
 };
@@ -44,7 +44,7 @@ pub enum ManagementCcmpError {
 /// One validated management MPDU; the caller owns its replay decision.
 pub struct ManagementCcmpFrame<'a> {
     frame: &'a mut [u8],
-    packet_number: u64,
+    packet_number: CcmpPacketNumber,
 }
 
 impl<'a> ManagementCcmpFrame<'a> {
@@ -76,14 +76,14 @@ impl<'a> ManagementCcmpFrame<'a> {
         if ccmp.key_id() != CcmpKeyId::PAIRWISE {
             return Err(ManagementCcmpError::UnexpectedKeyId);
         }
-        let packet_number = ccmp.packet_number().value();
+        let packet_number = ccmp.packet_number();
         Ok(Self {
             frame,
             packet_number,
         })
     }
 
-    pub const fn packet_number(&self) -> u64 {
+    pub const fn packet_number(&self) -> CcmpPacketNumber {
         self.packet_number
     }
 

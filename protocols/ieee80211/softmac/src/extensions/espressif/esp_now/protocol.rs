@@ -9,7 +9,7 @@ use core::fmt;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use {
-    oer_ieee80211_sta::sequence::StaSequenceCounter,
+    oer_ieee80211_upper_mac::sequence::SequenceCounter,
     oer_ieee80211_wire::{
         channel::WifiChannel,
         extensions::espressif::esp_now::{
@@ -652,7 +652,7 @@ impl<const N: usize> EspNowProtocol<N> {
     pub fn prepare_v1_tx<'payload>(
         &self,
         peer: EspNowPeerId,
-        sequence: &mut StaSequenceCounter,
+        sequence: &mut SequenceCounter,
         random_value: EspNowRandomValue,
         payload: &'payload [u8],
     ) -> Result<EspNowPreparedV1Tx<'payload>, EspNowSendError> {
@@ -685,7 +685,7 @@ impl<const N: usize> EspNowProtocol<N> {
     pub fn prepare_v2_tx<'payload>(
         &self,
         peer: EspNowPeerId,
-        sequence: &mut StaSequenceCounter,
+        sequence: &mut SequenceCounter,
         random_value: EspNowRandomValue,
         payload: &'payload [u8],
     ) -> Result<EspNowPreparedV2Tx<'payload>, EspNowV2SendError> {
