@@ -158,32 +158,17 @@ impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
     }
 
     /// The record of fragment `number`.
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "a fragment number is the four-bit field of Sequence Control, below 16"
-    )]
-    fn fragment(&self, number: u8) -> &RetainedFragment {
-        &self.fragments[usize::from(number)]
-    }
-
-    /// The mutable record of fragment `number`.
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "a fragment number is the four-bit field of Sequence Control, below 16"
-    )]
-    fn fragment_mut(&mut self, number: u8) -> &mut RetainedFragment {
-        &mut self.fragments[usize::from(number)]
+    fn fragment(&self, number: u8) -> Result<&RetainedFragment, OpenDataFragmentError> {
+        self.fragments
+            .get(usize::from(number))
+            .ok_or(OpenDataFragmentError::TooManyFragments)
     }
 
     /// The retained bytes of every fragment so far.
-    #[expect(
-        clippy::expect_used,
-        reason = "append_fragment stores a length only after retaining that many bytes"
-    )]
-    fn retained(&self) -> &[u8] {
+    fn retained(&self) -> Result<&[u8], OpenDataFragmentError> {
         self.bytes
             .get(..self.length)
-            .expect("the retained length is within the slot")
+            .ok_or(OpenDataFragmentError::ReassembledTooLarge { capacity: CAPACITY })
     }
 
     fn is_active(&self) -> bool {
@@ -206,7 +191,7 @@ impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
         if fragment.more_fragments() != expected_more {
             return Err(OpenDataFragmentError::MoreFragmentsMismatch);
         }
-        let retained = self.fragment(fragment.fragment_number());
+        let retained = self.fragment(fragment.fragment_number())?;
         match (retained.packet_number, fragment.packet_number()) {
             (Some(expected), Some(observed)) if expected != observed => {
                 return Err(OpenDataFragmentError::RetryPacketNumberMismatch {
@@ -565,7 +550,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
             }
 
             let msdu = slot
-                .retained()
+                .retained()?
                 .split_first_chunk::<LLC_SNAP_HEADER_LEN>()
                 .and_then(|(llc, payload)| Some((rfc1042_ether_type(*llc)?, payload)));
             let Some((ether_type, payload)) = msdu else {
@@ -626,7 +611,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 slot.clear();
             }
         }
-        let slot = self.slot_mut(index);
+        let slot = self.slot_mut(index)?;
         let evicted = if reports_eviction {
             slot.identity
         } else {
@@ -645,12 +630,13 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
     }
 
     /// The slot at `index`.
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "every caller passes a position it found in `slots`"
-    )]
-    fn slot_mut(&mut self, index: usize) -> &mut ReassemblySlot<CAPACITY> {
-        &mut self.slots[index]
+    fn slot_mut(
+        &mut self,
+        index: usize,
+    ) -> Result<&mut ReassemblySlot<CAPACITY>, OpenDataFragmentError> {
+        self.slots
+            .get_mut(index)
+            .ok_or(OpenDataFragmentError::NoReassemblyContexts)
     }
 
     fn expire(&mut self, now: Instant) -> u8 {
@@ -671,7 +657,7 @@ fn append_fragment<const CAPACITY: usize>(
 ) -> Result<(), OpenDataFragmentError> {
     if let Some(previous_number) = fragment.fragment_number().checked_sub(1)
         && let (Some(previous), Some(observed)) = (
-            slot.fragment(previous_number).packet_number,
+            slot.fragment(previous_number)?.packet_number,
             fragment.packet_number(),
         )
         && previous.value().checked_add(1) != Some(observed.value())
@@ -686,8 +672,16 @@ fn append_fragment<const CAPACITY: usize>(
     let Some(destination) = slot.bytes.get_mut(start..end) else {
         return Err(OpenDataFragmentError::ReassembledTooLarge { capacity: CAPACITY });
     };
-    destination.copy_from_slice(payload);
-    *slot.fragment_mut(fragment.fragment_number()) = RetainedFragment {
+    // The checked range length is exactly payload.len(); resolve the fragment
+    // record before copying so a refusal changes neither bytes nor metadata.
+    let retained = slot
+        .fragments
+        .get_mut(usize::from(fragment.fragment_number()))
+        .ok_or(OpenDataFragmentError::TooManyFragments)?;
+    for (to, from) in destination.iter_mut().zip(payload) {
+        *to = *from;
+    }
+    *retained = RetainedFragment {
         start,
         end,
         packet_number: fragment.packet_number(),
@@ -706,3 +700,50 @@ const fn timestamp_expired(now: Instant, then: Instant, timeout: Duration) -> bo
 
 #[cfg(test)]
 mod fuzz_tests;
+
+#[cfg(test)]
+mod bounds_tests {
+    use super::*;
+
+    #[test]
+    fn an_invalid_fragment_number_returns_the_typed_refusal() {
+        let slot = ReassemblySlot::<8>::new();
+        for number in [16, u8::MAX] {
+            assert!(matches!(
+                slot.fragment(number),
+                Err(OpenDataFragmentError::TooManyFragments)
+            ));
+        }
+        assert!(slot.fragment(15).is_ok());
+    }
+
+    #[test]
+    fn an_invalid_retained_length_is_refused_without_truncation() {
+        let mut slot = ReassemblySlot::<8>::new();
+        slot.bytes = [42; 8];
+        for length in [9, usize::MAX] {
+            slot.length = length;
+            assert_eq!(
+                slot.retained(),
+                Err(OpenDataFragmentError::ReassembledTooLarge { capacity: 8 })
+            );
+            assert_eq!(slot.bytes, [42; 8]);
+            assert_eq!(slot.length, length);
+        }
+        slot.length = 8;
+        assert_eq!(slot.retained(), Ok([42; 8].as_slice()));
+    }
+
+    #[test]
+    fn an_invalid_slot_position_returns_the_typed_refusal() {
+        let mut owner = OpenDataDefragmenter::<1, 8>::new(Duration::ZERO);
+        for index in [1, usize::MAX] {
+            assert!(matches!(
+                owner.slot_mut(index),
+                Err(OpenDataFragmentError::NoReassemblyContexts)
+            ));
+        }
+        assert!(owner.slot_mut(0).is_ok());
+        assert_eq!(owner.active_contexts(), 0);
+    }
+}

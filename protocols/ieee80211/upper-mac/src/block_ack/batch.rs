@@ -49,6 +49,11 @@ pub enum TxAmpduBatchError {
     DuplicateSlot(u8),
     DuplicateSequence(SequenceNumber),
     Full,
+    /// A completing owner has no MPDU at its next submitted position.
+    MissingCompletion {
+        index: u8,
+        count: u8,
+    },
 }
 
 /// A batch with no outstanding frame ownership.
@@ -136,14 +141,20 @@ impl TxAmpduBatch<BatchBuilding> {
         if self.count >= self.window {
             return Err(TxAmpduBatchError::Full);
         }
-        for entry in &self.entries[..usize::from(self.count)] {
+        for entry in self.entries.iter().take(usize::from(self.count)) {
             if entry.is_some_and(|entry| entry.sequence == sequence) {
                 return Err(TxAmpduBatchError::DuplicateSequence(sequence));
             }
         }
         let mpdu = TxAmpduMpdu { slot, sequence };
-        self.entries[usize::from(self.count)] = Some(mpdu);
-        self.count += 1;
+        let entry = self
+            .entries
+            .get_mut(usize::from(self.count))
+            .ok_or(TxAmpduBatchError::Full)?;
+        // The entry proves count < 32, so the increment cannot wrap.
+        let count = self.count.wrapping_add(1);
+        *entry = Some(mpdu);
+        self.count = count;
         self.slot_mask |= slot_bit;
         Ok(mpdu)
     }
@@ -188,12 +199,19 @@ pub enum TxAmpduBatchStep {
 }
 
 impl TxAmpduBatch<BatchCompleting> {
-    pub fn next_completion(mut self) -> TxAmpduBatchStep {
-        let index = usize::from(self.completion_index);
-        let mpdu = self.entries[index]
-            .take()
-            .expect("completing batch retains every submitted MPDU");
-        self.completion_index += 1;
+    /// Refuse a missing completion without releasing this batch's authority.
+    pub fn next_completion(mut self) -> Result<TxAmpduBatchStep, (Self, TxAmpduBatchError)> {
+        let index = self.completion_index;
+        let Some(entry) = self.entries.get_mut(usize::from(index)) else {
+            let count = self.count;
+            return Err((self, TxAmpduBatchError::MissingCompletion { index, count }));
+        };
+        let Some(mpdu) = entry.take() else {
+            let count = self.count;
+            return Err((self, TxAmpduBatchError::MissingCompletion { index, count }));
+        };
+        // The array access proved index < 32, so advancing cannot wrap.
+        self.completion_index = index.wrapping_add(1);
         self.slot_mask &= !(1_u32 << mpdu.slot.index());
         let disposition = if self
             .phase
@@ -209,15 +227,15 @@ impl TxAmpduBatch<BatchCompleting> {
             self.window = 0;
             self.count = 0;
             self.completion_index = 0;
-            TxAmpduBatchStep::Last {
+            Ok(TxAmpduBatchStep::Last {
                 completion,
                 batch: self.with_phase(BatchIdle),
-            }
+            })
         } else {
-            TxAmpduBatchStep::More {
+            Ok(TxAmpduBatchStep::More {
                 completion,
                 batch: self,
-            }
+            })
         }
     }
 }
@@ -259,7 +277,7 @@ mod tests {
         let mut remaining = batch;
         let mut expected = expected.into_iter();
         loop {
-            match remaining.next_completion() {
+            match remaining.next_completion().unwrap() {
                 TxAmpduBatchStep::More { completion, batch } => {
                     assert_eq!(Some(completion), expected.next());
                     assert!(expected.len() > 0);
@@ -373,5 +391,54 @@ mod tests {
         assert_eq!(error, TxAmpduBatchError::Empty);
         batch.push(0).unwrap();
         assert_eq!(batch.push(1), Err(TxAmpduBatchError::Full));
+    }
+
+    #[test]
+    fn missing_completion_returns_the_owner_and_all_remaining_frames() {
+        let mut building = TxAmpduBatch::new().begin(SequenceNumber::ZERO, 2).unwrap();
+        let first = building.push(3).unwrap();
+        let second = building.push(7).unwrap();
+        let original = building.complete_without_block_ack().unwrap();
+        for index in [2, 32, u8::MAX] {
+            let mut batch = TxAmpduBatch {
+                entries: original.entries,
+                phase: BatchCompleting(original.phase.0),
+                starting_sequence: original.starting_sequence,
+                window: original.window,
+                count: original.count,
+                completion_index: index,
+                slot_mask: original.slot_mask,
+            };
+            let entries = batch.entries;
+            let (returned, error) = batch.next_completion().unwrap_err();
+            assert_eq!(
+                error,
+                TxAmpduBatchError::MissingCompletion { index, count: 2 }
+            );
+            assert_eq!(returned.entries, entries);
+            assert_eq!(returned.completion_index, index);
+            assert_eq!(returned.slot_mask, (1 << 3) | (1 << 7));
+            batch = returned;
+            batch.completion_index = 0;
+            assert_batch_completions(
+                batch,
+                [first, second].map(|mpdu| TxAmpduCompletion {
+                    mpdu,
+                    disposition: TxAmpduDisposition::Retry,
+                }),
+            );
+        }
+    }
+
+    #[test]
+    fn an_out_of_storage_builder_count_is_refused_before_mutation() {
+        let mut batch = TxAmpduBatch::new().begin(SequenceNumber::ZERO, 32).unwrap();
+        batch.count = 32;
+        batch.window = u8::MAX;
+        let entries = batch.entries;
+        assert_eq!(batch.push(0), Err(TxAmpduBatchError::Full));
+        assert_eq!(batch.entries, entries);
+        assert_eq!(batch.count, 32);
+        assert_eq!(batch.slot_mask, 0);
     }
 }

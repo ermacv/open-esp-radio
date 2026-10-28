@@ -83,8 +83,8 @@ impl CcmpRxReplayEpoch {
         let mut epoch = Self::pairwise(pairwise_receive_sequence)?;
         let group = CcmpRxReplayState::from_receive_sequence(group_receive_sequence)
             .map_err(|_| CcmpRxReplayError::InvalidGroupReceiveSequence)?;
-        let previous = epoch.exchange_group(group_key_id, group);
-        debug_assert!(previous.is_none());
+        // `pairwise` creates an empty group table; initialize its selected lane.
+        *group_key_id.select_mut(&mut epoch.groups) = Some(group);
         Ok(epoch)
     }
 

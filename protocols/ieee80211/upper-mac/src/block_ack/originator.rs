@@ -121,8 +121,9 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             return Err(TxBlockAckOriginatorError::TooManyTids);
         }
         let mut agreements = [const { None }; TIDS];
-        for (index, &tid) in policy.tids.iter().enumerate() {
-            if usize::from(tid) >= TX_BLOCK_ACK_MAX_TIDS || policy.tids[..index].contains(&tid) {
+        let mut seen = 0_u8;
+        for (place, &tid) in agreements.iter_mut().zip(policy.tids) {
+            if usize::from(tid) >= TX_BLOCK_ACK_MAX_TIDS || seen & (1_u8 << tid) != 0 {
                 return Err(TxBlockAckOriginatorError::UnsupportedTid(tid));
             }
             let session = TxBlockAckSession::new(TxBlockAckConfig {
@@ -133,7 +134,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
                 amsdu: config.amsdu_tids & (1 << tid) != 0,
             })
             .map_err(|error| TxBlockAckOriginatorError::Session { tid, error })?;
-            agreements[index] = Some(Agreement {
+            seen |= 1_u8 << tid;
+            *place = Some(Agreement {
                 tid,
                 session,
                 alarm: None,

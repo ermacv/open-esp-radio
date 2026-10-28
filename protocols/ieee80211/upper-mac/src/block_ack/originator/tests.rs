@@ -410,3 +410,29 @@ fn inactive_or_other_tid_progress_never_emits_a_bar() {
         Some(bar(1))
     );
 }
+
+#[test]
+fn policy_tid_validation_rejects_duplicates_and_out_of_range_values() {
+    let config = TxBlockAckOriginatorConfig {
+        window: 8,
+        negotiation_timeout: Duration::from_micros(1),
+        amsdu_tids: u8::MAX,
+    };
+    let cases: [(&'static [u8], u8); 3] = [
+        (&[7, 0, 7], 7),
+        (&[0, 7, 8], 8),
+        (&[0, 7, u8::MAX], u8::MAX),
+    ];
+    for (tids, invalid) in cases {
+        let policy = TxBlockAckOriginatorPolicy { tids, ..POLICY };
+        assert!(
+            matches!(TxBlockAckOriginator::<3>::new(policy, config), Err(TxBlockAckOriginatorError::UnsupportedTid(observed)) if observed == invalid)
+        );
+    }
+    let policy = TxBlockAckOriginatorPolicy {
+        tids: &[7, 0, 5],
+        ..POLICY
+    };
+    let originator = TxBlockAckOriginator::<3>::new(policy, config).unwrap();
+    assert!(originator.tids().eq([7, 0, 5]));
+}
