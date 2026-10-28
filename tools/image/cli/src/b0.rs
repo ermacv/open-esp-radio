@@ -126,17 +126,28 @@ fn completion(frame: &[u8], opcode: u16) -> Result<Vec<u8>> {
         );
     }
     let [low, high] = opcode.to_le_bytes();
-    if event.len() < 6
-        || event.first() != Some(&0x0e)
-        || usize::from(event[1]) + 2 != event.len()
-        || event[2..5] != [1, low, high]
+    let wrong = || "HCI completion has a wrong kind, extent, credit or opcode";
+    let [
+        0x0e,
+        length,
+        1,
+        returned_low,
+        returned_high,
+        status,
+        parameters @ ..,
+    ] = event
+    else {
+        return Err(wrong().into());
+    };
+    if usize::from(*length).checked_add(2) != Some(event.len())
+        || [*returned_low, *returned_high] != [low, high]
     {
-        return Err("HCI completion has a wrong kind, extent, credit or opcode".into());
+        return Err(wrong().into());
     }
-    if event[5] != 0 {
-        return Err(format!("HCI {opcode:#06x} status={:#04x}", event[5]).into());
+    if *status != 0 {
+        return Err(format!("HCI {opcode:#06x} status={status:#04x}").into());
     }
-    Ok(event[6..].to_vec())
+    Ok(parameters.to_vec())
 }
 fn peer_end<L: oer_hil_link::peer::PeerLink>(peer: &mut PeerConsole<L>) -> Result<u64> {
     let reports = peer.command("END", "END", TIMEOUT, &["END"])?;

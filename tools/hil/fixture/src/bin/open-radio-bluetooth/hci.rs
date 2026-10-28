@@ -97,18 +97,14 @@ impl Socket {
     }
 
     pub(super) fn send_command<C: bt_hci::cmd::Cmd>(&self, command: &C) -> Result<()> {
-        let mut bytes = vec![0; 1 + bt_hci::WriteHci::size(command)];
-        bytes[0] = h4::indicator(bt_hci::PacketKind::Cmd);
-        bt_hci::WriteHci::write_hci(command, &mut bytes[1..])
-            .map_err(|error| format!("HCI encode: {error:?}"))?;
+        let bytes = h4_frame(bt_hci::PacketKind::Cmd, command)
+            .map_err(|error| format!("HCI encode: {error}"))?;
         self.send(&bytes)
     }
 
     pub(super) fn send_acl(&self, packet: &bt_hci::data::AclPacket<'_>) -> Result<()> {
-        let mut bytes = vec![0; 1 + bt_hci::WriteHci::size(packet)];
-        bytes[0] = h4::indicator(bt_hci::PacketKind::AclData);
-        bt_hci::WriteHci::write_hci(packet, &mut bytes[1..])
-            .map_err(|error| format!("HCI ACL encode: {error:?}"))?;
+        let bytes = h4_frame(bt_hci::PacketKind::AclData, packet)
+            .map_err(|error| format!("HCI ACL encode: {error}"))?;
         self.send(&bytes)
     }
 
@@ -159,6 +155,15 @@ impl Socket {
 /// Retain only the last event's identity, never its payload: this socket also
 /// carries pairing keys and ACL data. Unrelated traffic cannot grow diagnostic
 /// storage or extend the original command deadline.
+/// The H4 frame of an encodable packet: the indicator of `kind` and the packet.
+fn h4_frame(kind: bt_hci::PacketKind, packet: &impl bt_hci::WriteHci) -> Result<Vec<u8>> {
+    let mut bytes = vec![0; 1 + bt_hci::WriteHci::size(packet)];
+    let (indicator, body) = bytes.split_first_mut().ok_or("empty H4 frame")?;
+    *indicator = h4::indicator(kind);
+    bt_hci::WriteHci::write_hci(packet, body).map_err(|error| format!("{error:?}"))?;
+    Ok(bytes)
+}
+
 /// The HCI event after the H4 event indicator; `None` for any other frame.
 pub(super) fn event_body(packet: &[u8]) -> Option<&[u8]> {
     match h4::split(packet) {
