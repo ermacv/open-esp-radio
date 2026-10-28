@@ -11,6 +11,7 @@ mod audit;
 mod locations;
 mod provenance;
 mod references;
+mod wakers;
 pub use audit::{
     AddressUseAudit, FunctionPointerAudit, PcRelativeUse, StorageEvidence, TypedStore, UnknownUse,
     audit_function_addresses,
@@ -20,6 +21,10 @@ pub use provenance::{CallbackLoadField, typed_function_pointer_resolutions};
 /// One type's name and layout.
 #[derive(Debug)]
 struct Type {
+    waker: Option<WakerType>,
+    has_variants: bool,
+    discriminant: Option<(usize, Option<(u64, usize)>)>,
+    variants: Vec<Variant>,
     tag: gimli::DwTag,
     name: Option<String>,
     size: Option<u64>,
@@ -28,6 +33,21 @@ struct Type {
     named_members: BTreeMap<String, u64>,
     /// The type a typedef, qualifier or pointer refers to.
     target: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WakerType {
+    Waker,
+    Raw,
+    Vtable,
+    Option,
+}
+
+#[derive(Debug)]
+struct Variant {
+    supported: bool,
+    value: Option<u64>,
+    members: Vec<(u64, usize)>,
 }
 
 /// A subroutine type's parameter types and result type.
@@ -106,6 +126,7 @@ pub struct TypeFacts {
 struct UnitTypes {
     /// The type, subprogram or subroutine type each depth belongs to.
     owners: Vec<(isize, usize, gimli::DwTag)>,
+    variants: Vec<(isize, usize, usize)>,
 }
 
 /// Types collected by the common DWARF walk. No symbol or declaration index
@@ -137,6 +158,7 @@ impl TypeWalk {
         let facts = &mut self.facts;
         let state = &mut self.unit;
         state.owners.retain(|(at, ..)| *at < depth);
+        state.variants.retain(|(at, ..)| *at < depth);
         let name = entry
             .attr_value(gimli::DW_AT_name)
             .and_then(|value| text(dwarf, unit, value));
@@ -171,6 +193,10 @@ impl TypeWalk {
                     &mut facts.types,
                     offset,
                     Type {
+                        waker: None,
+                        has_variants: false,
+                        discriminant: None,
+                        variants: Vec::new(),
                         tag,
                         name,
                         size,
@@ -200,7 +226,7 @@ impl TypeWalk {
                 };
                 // The innermost aggregate owning this member: a variant's
                 // members belong to its enum.
-                if let (Some(&(_, owner, _)), Some(location), Some(member)) = (
+                if let (Some(&(_, owner_id, _)), Some(location), Some(member)) = (
                     state.owners.iter().rev().find(|(_, _, tag)| {
                         matches!(
                             *tag,
@@ -209,13 +235,57 @@ impl TypeWalk {
                     }),
                     location,
                     type_of,
-                ) && let Some(owner) = facts.types.get_mut(&owner)
+                ) && let Some(owner) = facts.types.get_mut(&owner_id)
                 {
                     keep.push(&mut owner.members, (location, member), control)?;
+                    if let Some((id, place)) = &mut owner.discriminant
+                        && *id == offset
+                    {
+                        *place = Some((location, member));
+                    }
+                    if let Some(&(_, variant_owner, index)) = state.variants.last()
+                        && variant_owner == owner_id
+                        && let Some(variant) = owner.variants.get_mut(index)
+                    {
+                        keep.push(&mut variant.members, (location, member), control)?;
+                    }
                     if let Some(name) = name {
                         let name = keep.string(&name, control)?;
                         keep.insert(&mut owner.named_members, name, location, control)?;
                     }
+                }
+            }
+            gimli::DW_TAG_variant_part => {
+                if let Some(&(_, owner, _)) = state.owners.last()
+                    && let Some(owner) = facts.types.get_mut(&owner)
+                {
+                    owner.has_variants = true;
+                    owner.discriminant = entry
+                        .attr_value(gimli::DW_AT_discr)
+                        .and_then(|value| reference(unit, value))
+                        .map(|id| (id, None));
+                }
+            }
+            gimli::DW_TAG_variant => {
+                if let Some(&(_, owner, _)) = state.owners.last()
+                    && let Some(record) = facts.types.get_mut(&owner)
+                {
+                    let index = record.variants.len();
+                    keep.push(
+                        &mut record.variants,
+                        Variant {
+                            supported: entry.attr_value(gimli::DW_AT_discr_list).is_none()
+                                && entry
+                                    .attr_value(gimli::DW_AT_discr_value)
+                                    .is_none_or(|value| value.udata_value().is_some()),
+                            value: entry
+                                .attr_value(gimli::DW_AT_discr_value)
+                                .and_then(|value| value.udata_value()),
+                            members: Vec::new(),
+                        },
+                        control,
+                    )?;
+                    scratch.push(&mut state.variants, (depth, owner, index), control)?;
                 }
             }
             gimli::DW_TAG_variable => {
@@ -578,6 +648,10 @@ mod tests {
         facts.types.insert(
             1,
             Type {
+                waker: None,
+                has_variants: false,
+                discriminant: None,
+                variants: Vec::new(),
                 tag: gimli::DW_TAG_base_type,
                 name: Some("u32".into()),
                 size: Some(4),

@@ -168,6 +168,7 @@ fn a_waker_scope_ending_before_jalr_is_proved_by_its_exclusive_load() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -199,6 +200,7 @@ fn a_branch_bypassing_the_load_cannot_borrow_its_waker_scope() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -222,6 +224,7 @@ fn a_different_vtable_slot_is_not_the_waker_method_the_scope_names() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -236,6 +239,7 @@ fn an_adjusted_function_pointer_does_not_inherit_the_producers_scope() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -274,11 +278,15 @@ fn a_merged_tail_uses_both_slots_of_the_vtable_without_exposing_ordinary_loads()
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([4, 8])
     );
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, Some(&first), &mut ledger(), &mut || {
-            Ok(())
-        })
-        .unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        &TypeFacts::default(),
+        Some(&first),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     let resolved = resolutions.get(site).unwrap();
     assert_eq!(resolved.facts, BTreeSet::from([Fact::WakerVtables]));
     assert_eq!(resolved.targets, BTreeSet::from([first[1], first[2]]));
@@ -317,6 +325,7 @@ fn another_unresolved_jump_blocks_the_merged_tail_loads() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -347,6 +356,7 @@ fn an_unresolved_call_still_requires_a_closed_graph() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -372,6 +382,7 @@ fn a_compressed_tail_uses_the_same_target_load_proof() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -391,11 +402,15 @@ fn any_selected_slot_inside_the_function_blocks_the_tail() {
         for local in [TEXT, TEXT + 4, end - 2] {
             let mut table = targets;
             table[slot] = local;
-            let resolutions =
-                waker_resolutions(&analysis, &dwarf, Some(&table), &mut ledger(), &mut || {
-                    Ok(())
-                })
-                .unwrap();
+            let resolutions = waker_resolutions(
+                &analysis,
+                &dwarf,
+                &TypeFacts::default(),
+                Some(&table),
+                &mut ledger(),
+                &mut || Ok(()),
+            )
+            .unwrap();
             assert!(resolutions.get(TEXT + 16).is_none(), "{table:?}");
         }
     }
@@ -404,6 +419,7 @@ fn any_selected_slot_inside_the_function_blocks_the_tail() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&boundary),
         &mut ledger(),
         &mut || Ok(()),
@@ -433,6 +449,7 @@ fn an_unknown_incoming_producer_keeps_a_tail_unresolved() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -578,6 +595,7 @@ fn a_noreturn_panic_branch_preserves_the_waker_proof_and_the_callees_stack() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -624,6 +642,7 @@ fn missing_false_or_ambiguous_noreturn_facts_keep_the_continuation() {
         let resolutions = waker_resolutions(
             &analysis,
             &dwarf,
+            &TypeFacts::default(),
             Some(&targets),
             &mut ledger(),
             &mut || Ok(()),
@@ -652,6 +671,7 @@ fn unimp_reachable_around_a_noreturn_call_still_blocks_the_waker_proof() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -684,6 +704,7 @@ fn merging_wake_and_wake_by_ref_preserves_both_targets() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -724,11 +745,15 @@ fn merged_waker_loads_outside_the_call_scope_use_both_slots_of_the_vtable() {
         BTreeSet::from([4, 8])
     );
     // Clone (slot 0) and drop (slot 3) are never selected.
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, Some(&first), &mut ledger(), &mut || {
-            Ok(())
-        })
-        .unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        &TypeFacts::default(),
+        Some(&first),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     let resolution = resolutions.get(site).unwrap();
     assert_eq!(resolution.facts, BTreeSet::from([Fact::WakerVtables]));
     assert_eq!(resolution.targets, BTreeSet::from([first[1], first[2]]));
@@ -757,6 +782,7 @@ fn an_unknown_producer_at_a_waker_merge_keeps_the_call_unresolved() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -783,6 +809,7 @@ fn a_proven_auipc_jalr_target_uses_its_noreturn_fact() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -823,6 +850,7 @@ fn a_path_bypassing_auipc_does_not_prove_the_jalr_target_noreturn() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&targets),
         &mut ledger(),
         &mut || Ok(()),
@@ -872,6 +900,7 @@ fn a_jump_table_edge_to_unimp_survives_noreturn_pruning() {
     let resolutions = waker_resolutions(
         &analysis,
         &dwarf,
+        &TypeFacts::default(),
         Some(&[TEXT; 4]),
         &mut ledger(),
         &mut || Ok(()),
@@ -1002,10 +1031,14 @@ fn terminal_table_trap_allows_merged_waker_slots_one_and_two() {
                 &mut || Ok(()),
             )?;
             let site = TEXT + 20;
-            let resolutions =
-                waker_resolutions(&analysis, &dwarf, Some(&table), &mut ledger(), &mut || {
-                    Ok(())
-                })?;
+            let resolutions = waker_resolutions(
+                &analysis,
+                &dwarf,
+                &TypeFacts::default(),
+                Some(&table),
+                &mut ledger(),
+                &mut || Ok(()),
+            )?;
             if traps == TrapSemantics::Terminal {
                 assert_eq!(
                     analysis.functions[&TEXT].target_loads[&site]

@@ -213,6 +213,10 @@ pub fn read(
     }
     copies.resolve_origins(control)?;
     let mut types = types.finish();
+    for &id in &returns.types {
+        control.checkpoint(1)?;
+        types.identify_waker(id, &returns.qualified(id));
+    }
     types.locations = locations;
     types.source = Some(elf.clone());
     let symbolizer = Symbolizer::shared(elf.clone()).map_err(|error| invalid(error.to_string()))?;
