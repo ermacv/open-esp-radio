@@ -74,6 +74,10 @@ service TX and AP reply boundaries; the flood is also counted independently
 by identifier. A mismatch refuses the accounting instead of assigning losses.
 The AP-to-bridge residual includes service queue-full and any earlier loss;
 the aggregate service queue-full count also includes non-ICMP traffic.
+The station service keeps no counters: the `w3.rx` row (service queue-full,
+rejected frames, their reasons and lost port events) counts the service's
+observation events in the image's collector, so W3 declares the `trace`
+instrumentation class and does not build without it.
 The preflash load gate requires a complete P1 bound <=42,192 bytes and zero
 unresolved sites; memory growth is reported. The source extraction is removed
 before releasing the lease. Loss measurements use AP evidence and make no

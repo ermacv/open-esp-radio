@@ -318,6 +318,29 @@ pub type PortStation<'id, B, C, const GROUPS: usize = 2, O = Noop> = Station<
     O,
 >;
 
+/// The terminal bank of the service's station on the port `B`.
+pub type PortRetiredStation<'id, B, C, const GROUPS: usize = 2, O = Noop> =
+    oer_ieee80211_sta::machine::RetiredStation<
+        'id,
+        PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
+        <B as StationPort>::Caps,
+        C,
+        O,
+    >;
+
+/// A stopped service's restart: the running service, or the bank it could
+/// not restart.
+type Restart<'p, 'id, B, C, S, const GROUPS: usize, O> = Result<
+    RestartedService<'p, 'id, B, C, S, GROUPS, O>,
+    RestartFailed<'p, 'id, B, C, S, GROUPS, O>,
+>;
+
+/// An uninstalled port's end and the service's retired bank.
+type Uninstalled<'id, B, C, S, const GROUPS: usize, O, Out> = (
+    Ended<<B as StationPort>::SlotId, <B as StationPort>::Backend, Out>,
+    RetiredService<'id, B, C, S, GROUPS, O>,
+);
+
 /// The data machine of the service on the port `B`.
 pub type PortData<'id, B, O = Noop> = StaData<
     'id,
@@ -797,10 +820,7 @@ impl<
     pub fn restart(
         self,
         channel: oer_ieee80211_port::SupportedChannel<B::Caps>,
-    ) -> Result<
-        RestartedService<'p, 'id, B, C, S, GROUPS, O>,
-        RestartFailed<'p, 'id, B, C, S, GROUPS, O>,
-    > {
+    ) -> Restart<'p, 'id, B, C, S, GROUPS, O> {
         let Self {
             mut owner,
             mut retired,
@@ -880,10 +900,7 @@ impl<
         self,
         control: <B::Backend as PortBackend<B::SlotId>>::Uninstall,
         output: Out,
-    ) -> (
-        Ended<B::SlotId, B::Backend, Out>,
-        RetiredService<'id, B, C, S, GROUPS, O>,
-    ) {
+    ) -> Uninstalled<'id, B, C, S, GROUPS, O, Out> {
         (Ended::uninstall(self.owner, control, output), self.retired)
     }
 }
@@ -898,13 +915,7 @@ pub struct RetiredService<
     const GROUPS: usize = 2,
     O: Observer = Noop,
 > {
-    pub station: oer_ieee80211_sta::machine::RetiredStation<
-        'id,
-        PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>,
-        B::Caps,
-        C,
-        O,
-    >,
+    pub station: PortRetiredStation<'id, B, C, GROUPS, O>,
     pub data: oer_ieee80211_sta::data::RetiredData<
         'id,
         PortDataTokens<'id, B::Types<'id>, B::Large>,

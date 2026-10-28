@@ -116,7 +116,7 @@ fn the_next_deadline_is_the_next_request_or_the_epoch_deadline() {
 fn association_runtime_accepts_only_selected_peer_response() {
     let runtime = begin(at(0)).unwrap();
     let mut sequence = SequenceCounter::new(SequenceNumber::new(7).unwrap());
-    let (mut runtime, first) = transmit(runtime, at(0), &mut sequence);
+    let (runtime, first) = transmit(runtime, at(0), &mut sequence);
     assert_eq!(first.ordinal, 1);
     let mut other_peer = association_response(0);
     other_peer[10] ^= 1;
@@ -144,7 +144,7 @@ fn association_runtime_accepts_only_selected_peer_response() {
 #[test]
 fn association_runtime_reports_peer_disconnect_and_rejection() {
     let mut sequence = SequenceCounter::new(SequenceNumber::new(0).unwrap());
-    let (mut disconnected, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
+    let (disconnected, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     failed(
         disconnected.observe_management_frame(&deauthentication(7), at(0)),
         StaAssociationFailure::PeerDisconnect(StaDisconnect {
@@ -219,7 +219,7 @@ fn association_and_comeback_require_the_complete_response_deadline() {
     // One case cannot fit the comeback itself; another fits the comeback,
     // but cannot fit its new response epoch. Both end explicitly.
     for now in [last_start, Instant::from_micros(u64::MAX - 6_000_000)] {
-        let mut runtime = begin(now).unwrap();
+        let runtime = begin(now).unwrap();
         failed(
             runtime.observe_management_frame(&refused_temporarily(5_000), now),
             StaAssociationFailure::DeadlineOverflow,
@@ -229,9 +229,8 @@ fn association_and_comeback_require_the_complete_response_deadline() {
 
 #[test]
 fn disconnect_during_comeback_consumes_the_owner_and_keeps_accounting() {
-    let mut runtime = begin(at(0)).unwrap();
-    let mut runtime =
-        continuing(runtime.observe_management_frame(&refused_temporarily(100), at(1)));
+    let runtime = begin(at(0)).unwrap();
+    let runtime = continuing(runtime.observe_management_frame(&refused_temporarily(100), at(1)));
     failed(
         runtime.observe_management_frame(&deauthentication(8), at(2)),
         StaAssociationFailure::PeerDisconnect(StaDisconnect {

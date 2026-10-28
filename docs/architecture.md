@@ -681,7 +681,12 @@ caller-owned record slices and the observer contract
 `observe!`. The observer receives a `Copy + 'static` event value and returns
 `()`: it holds no owner, register block or lease and cannot steer the owner.
 Without `cfg(oer_trace)` an observation point evaluates no argument and
-leaves no code. Instrumentation is never a Cargo feature of a library under
+leaves no code. Owners keep no counters of observations: a count is the
+number of events of a kind, which the collector of an image declaring the
+`trace` class keeps. A protocol family's events are a host-safe vocabulary
+crate without cores, runtime or driver
+([IEEE 802.11](../protocols/ieee80211/instrumentation/README.md)).
+Instrumentation is never a Cargo feature of a library under
 `chips/`, `protocols/` or `portable/`; `oer-test-layers` rejects feature
 names carrying an instrumentation word, and its list of remaining ones only
 shrinks. `oer-espressif-staged-runtime::trace` owns the

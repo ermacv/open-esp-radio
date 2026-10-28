@@ -59,6 +59,10 @@ The W4 host controls 100-echo and ten-echo windows through `ProbeStation` and
 ends the run with `StopStation`. The image reuses W3's checked ICMP codec and
 distinct-pair observer. Typed observations expose hardware GTK installation
 KeyIDs, decoded broadcast ARPs, timeouts/collisions and final deauthentication;
+the station service reports the GTK installations, ARPs and receive drops as
+observation events, which the class's observer turns into these messages, so
+the package declares the `trace` instrumentation class (every class builds
+with it);
 the host computes acceptance. Only a clean service stop emits `StationStopped`;
 a service that ends otherwise emits one `StationServiceEnded` with its typed
 fault, and the console then refuses `StopStation` and `ProbeStation` with

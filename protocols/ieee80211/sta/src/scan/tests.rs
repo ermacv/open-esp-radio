@@ -513,7 +513,7 @@ fn observe_management_never_panics(count: usize) {
         {
             observed += 1;
         }
-        if observed % 64 == 0 {
+        if observed.is_multiple_of(64) {
             table.clear();
         }
     });

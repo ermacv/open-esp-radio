@@ -1048,6 +1048,13 @@ pub struct RetiredStation<
     key_unwrap: KeyUnwrapLane,
 }
 
+/// A placed station's terminal bank and the places it returns to the arbiter.
+#[cfg(feature = "placement")]
+type PlacedFinish<'b, 'id, T, K, C, O> = (
+    oer_memory::Placed<'b, RetiredStation<'id, T, K, C, O>>,
+    StationPlaceReturns<'id, <T as StaTokens>::GatePath>,
+);
+
 /// Terminal-only output; finalization never requests a port operation.
 pub enum StaFinalOutput<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     CommandCompleted(StaCommandTerminal<'id, Path>),
@@ -2742,10 +2749,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observer>
         mut machine: oer_memory::Placed<'a, Self>,
         destination: &'b mut core::mem::MaybeUninit<RetiredStation<'id, T, K, C, O>>,
         reason: StaDisconnectReason,
-    ) -> (
-        oer_memory::Placed<'b, RetiredStation<'id, T, K, C, O>>,
-        StationPlaceReturns<'id, T::GatePath>,
-    ) {
+    ) -> PlacedFinish<'b, 'id, T, K, C, O> {
         let notice = machine.finish_commands(reason);
         let (
             config,
