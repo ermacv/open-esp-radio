@@ -210,17 +210,22 @@ where
     deadline.poll(wait, || (!registers.busy(Access::new())).then_some(()))?;
     registers.configure_read(Access::new(), flash.commands.get(mode));
     let mut chunk_address = address;
-    for chunk in destination.chunks_mut(CHUNK_WORDS) {
-        // A chunk holds at most CHUNK_WORDS words: its bytes fit.
-        let chunk_bytes = (chunk.len() * 4) as u32;
+    let mut words = destination.iter_mut();
+    while words.len() != 0 {
+        let chunk_bytes = u32::try_from(words.len().min(CHUNK_WORDS))
+            .ok()
+            .and_then(|words| words.checked_mul(4))
+            .ok_or(FlashFailure::OutsideFlash)?;
         registers.set_transfer(Access::new(), chunk_address, chunk_bytes);
         deadline.poll(wait, || registers.start(Access::new()).ok())?;
         deadline.poll(wait, || (!registers.busy(Access::new())).then_some(()))?;
         let data = registers.data(Access::new());
-        for (word, &read) in chunk.iter_mut().zip(&data) {
+        for (word, &read) in words.by_ref().take(CHUNK_WORDS).zip(&data) {
             *word = read;
         }
-        chunk_address += chunk_bytes;
+        chunk_address = chunk_address
+            .checked_add(chunk_bytes)
+            .ok_or(FlashFailure::OutsideFlash)?;
     }
     Ok(())
 }
@@ -317,8 +322,13 @@ pub const fn page_count(region: TuningRegion, capacity: u32, candidates: usize) 
     if pages > TUNING_MAX_PAGES {
         pages = TUNING_MAX_PAGES;
     }
-    let bytes = pages as u32 * TUNING_PAGE_BYTES;
-    if pages < candidates + 3 {
+    let Some(bytes) = (pages as u32).checked_mul(TUNING_PAGE_BYTES) else {
+        return None;
+    };
+    let Some(minimum_pages) = candidates.checked_add(3) else {
+        return None;
+    };
+    if pages < minimum_pages {
         return None;
     }
     match region.physical_start.checked_add(bytes) {
@@ -339,14 +349,17 @@ pub const fn select_window(mask: u16, candidates: usize) -> Option<usize> {
     let mut longest_start = 0;
     let mut longest_len = 0;
     let mut current_start = 0;
-    let mut current_len = 0;
+    let mut current_len = 0_usize;
     let mut candidate = 0;
     while candidate < candidates && candidate < u16::BITS as usize {
         if mask & (1 << candidate) != 0 {
             if current_len == 0 {
                 current_start = candidate;
             }
-            current_len += 1;
+            let Some(len) = current_len.checked_add(1) else {
+                return None;
+            };
+            current_len = len;
             if current_len > longest_len {
                 longest_start = current_start;
                 longest_len = current_len;
@@ -354,10 +367,13 @@ pub const fn select_window(mask: u16, candidates: usize) -> Option<usize> {
         } else {
             current_len = 0;
         }
-        candidate += 1;
+        let Some(next) = candidate.checked_add(1) else {
+            return None;
+        };
+        candidate = next;
     }
     if longest_len >= 3 {
-        Some(longest_start + longest_len / 2)
+        longest_start.checked_add(longest_len / 2)
     } else {
         None
     }
@@ -406,14 +422,28 @@ where
         return Err(FlashFailure::TuningRegion.into());
     }
     let pages = page_count(region, flash.capacity, candidates).ok_or(FlashFailure::TuningRegion)?;
-    let Some(scratch) = scratch.get_mut(..pages * TUNING_PAGE_WORDS) else {
+    let reference_words = pages
+        .checked_mul(TUNING_PAGE_WORDS)
+        .ok_or(FlashFailure::TuningRegion)?;
+    let verification_pages = pages
+        .checked_sub(candidates)
+        .ok_or(FlashFailure::TuningRegion)?;
+    let Some(scratch) = scratch.get_mut(..reference_words) else {
         return Err(FlashFailure::ScratchTooSmall.into());
     };
     let mut prefix = [0_u32; PREFIX_WORDS];
     read(port, flash, 0, &mut prefix, waits.command, deadline)?;
-    for (page, words) in scratch.chunks_mut(TUNING_PAGE_WORDS).enumerate() {
-        let address = region.physical_start + page as u32 * TUNING_PAGE_BYTES;
+    let mut remaining = &mut *scratch;
+    let mut address = region.physical_start;
+    for _ in 0..pages {
+        let (words, rest) = remaining
+            .split_first_chunk_mut::<TUNING_PAGE_WORDS>()
+            .ok_or(FlashFailure::ScratchTooSmall)?;
         read(port, flash, address, words, waits.command, deadline)?;
+        address = address
+            .checked_add(TUNING_PAGE_BYTES)
+            .ok_or(FlashFailure::TuningRegion)?;
+        remaining = rest;
     }
 
     let saved_clock = clock.save_clock(Access::new());
@@ -430,7 +460,7 @@ where
         timings,
         &prefix,
         scratch,
-        pages,
+        verification_pages,
         &mut suspended,
         waits,
         deadline,
@@ -465,7 +495,7 @@ where
         resume_fetch(cache, suspended);
     }
     // The pages no candidate read, through the cache at the chosen timing.
-    for page in 0..pages - candidates {
+    for page in 0..verification_pages {
         let failure = match page_matches(xip, scratch, page) {
             Ok(true) => continue,
             Ok(false) => FlashFailure::CacheMismatch.into(),
@@ -491,7 +521,7 @@ fn sweep<F, S, X, C>(
     timings: &[F::Timing],
     prefix: &[u32; PREFIX_WORDS],
     scratch: &[u32],
-    pages: usize,
+    verification_pages: usize,
     suspended: &mut Option<crate::cache::SuspendedFetch>,
     waits: TuningWaits,
     deadline: &BootDeadline<'_, C>,
@@ -503,27 +533,35 @@ where
     C: Clock + ?Sized,
 {
     let mut direct_mask = 0_u16;
-    for (candidate, &timing) in timings.iter().enumerate() {
+    let candidates = timings
+        .iter()
+        .zip(core::iter::successors(Some(1_u16), |bit| {
+            bit.checked_mul(2)
+        }));
+    for (&timing, bit) in candidates.clone() {
         port.apply_timing(Access::new(), timing, false);
         let mut received = [0_u32; PREFIX_WORDS];
         read(port, flash, 0, &mut received, waits.command, deadline)?;
         if received == *prefix {
-            direct_mask |= 1 << candidate;
+            direct_mask |= bit;
         }
     }
     // Each candidate reads its own untouched page, so no cache hit passes
     // it falsely.
     let mut cache_mask = 0_u16;
-    for (candidate, &timing) in timings.iter().enumerate() {
-        if direct_mask & (1 << candidate) == 0 {
+    for (candidate, (&timing, bit)) in candidates.enumerate() {
+        if direct_mask & bit == 0 {
             continue;
         }
         port.apply_timing(Access::new(), timing, true);
         if let Some(held) = suspended.take() {
             resume_fetch(cache, held);
         }
-        if page_matches(xip, scratch, pages - timings.len() + candidate)? {
-            cache_mask |= 1 << candidate;
+        let page = verification_pages
+            .checked_add(candidate)
+            .ok_or(FlashFailure::TuningRegion)?;
+        if page_matches(xip, scratch, page)? {
+            cache_mask |= bit;
         }
         *suspended = Some(suspend_fetch(cache, waits.suspend, deadline)?);
     }

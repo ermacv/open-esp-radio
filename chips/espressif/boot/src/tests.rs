@@ -2,6 +2,12 @@
 //! virtual time: each test checks which operations run in which order and
 //! how a wait ends, never a word's address.
 
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+
 use oer_time::{Clock, Duration, Instant};
 use oer_time_virtual::VirtualClock;
 

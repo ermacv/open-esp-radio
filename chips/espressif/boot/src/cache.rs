@@ -118,7 +118,9 @@ impl LineRange {
         if !line_bytes.is_power_of_two() {
             return Err(CacheFailure::LineSize);
         }
-        let mask = line_bytes - 1;
+        let Some(mask) = line_bytes.checked_sub(1) else {
+            return Err(CacheFailure::LineSize);
+        };
         let Some(end) = start.checked_add(len) else {
             return Err(CacheFailure::RangeOverflow);
         };
@@ -126,7 +128,9 @@ impl LineRange {
             return Err(CacheFailure::RangeOverflow);
         };
         let start = start & !mask;
-        let size = (end & !mask) - start;
+        let Some(size) = (end & !mask).checked_sub(start) else {
+            return Err(CacheFailure::RangeOverflow);
+        };
         if size > max_bytes {
             return Err(CacheFailure::RangeTooLarge);
         }

@@ -5,7 +5,10 @@
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 //! Espressif bootstrap sequences over a chip's typed register traits.
 //!
@@ -93,7 +96,7 @@ pub struct Busy;
 /// back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BootFailure {
-    /// A named boot wait passed its bound or the boot deadline.
+    /// A named boot wait was refused or passed its bound or the boot deadline.
     Wait(WaitFailure),
     /// The CPU clock did not reach its profile.
     Clock(ClockFailure),

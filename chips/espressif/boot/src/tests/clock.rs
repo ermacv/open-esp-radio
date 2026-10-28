@@ -33,9 +33,24 @@ enum Op {
 }
 
 const WAITS: ClockWaits = ClockWaits {
-    calibration: BootWait::new("pll-calibration", Duration::from_micros(100)),
-    calibration_settle: BootWait::new("pll-settle", Duration::from_micros(10)),
-    update: BootWait::new("clock-update", Duration::from_micros(100)),
+    calibration: const {
+        match BootWait::new("pll-calibration", Duration::from_micros(100)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    calibration_settle: const {
+        match BootWait::new("pll-settle", Duration::from_micros(10)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    update: const {
+        match BootWait::new("clock-update", Duration::from_micros(100)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 const RATES: ClockRates = ClockRates {

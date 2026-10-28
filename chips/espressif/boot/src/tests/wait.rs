@@ -6,7 +6,12 @@ use oer_time_virtual::VirtualClock;
 use super::Ticking;
 use crate::wait::{BootBudget, BootDeadline, BootWait, WaitFailure};
 
-const WAIT: BootWait = BootWait::new("test-wait", Duration::from_micros(50));
+const WAIT: BootWait = const {
+    match BootWait::new("test-wait", Duration::from_micros(50)) {
+        Ok(wait) => wait,
+        Err(_) => panic!("a boot wait has a nonzero bound"),
+    }
+};
 
 fn budget(micros: u64) -> BootBudget {
     BootBudget::below(Duration::from_micros(micros), Duration::from_secs(9))
@@ -20,13 +25,16 @@ fn a_budget_lies_strictly_below_the_armed_watchdog() {
     assert!(BootBudget::below(Duration::from_micros(0), watchdog).is_none());
     let budget = BootBudget::below(Duration::from_secs(2), watchdog).expect("below");
     assert!(budget.admits(WAIT));
-    assert!(!budget.admits(BootWait::new("long", Duration::from_secs(3))));
+    assert!(!budget.admits(BootWait::new("long", Duration::from_secs(3)).expect("nonzero")));
 }
 
 #[test]
-#[should_panic(expected = "a boot wait has a nonzero bound")]
 fn a_wait_without_a_bound_is_refused() {
-    let _ = BootWait::new("zero", Duration::from_micros(0));
+    let failure = BootWait::new("zero", Duration::from_micros(0)).expect_err("zero bound");
+    assert_eq!(failure, WaitFailure::ZeroBound("zero"));
+    let failure = crate::BootFailure::from(failure);
+    assert_eq!(failure.reason(), "boot-wait-zero-bound");
+    assert_eq!(failure.wait(), Some("zero"));
 }
 
 #[test]
@@ -114,4 +122,26 @@ fn a_failure_names_its_reason_and_wait() {
     assert_eq!(failure.wait(), Some("cpll-calibration"));
     let deadline = crate::BootFailure::from(WaitFailure::DeadlineExceeded("x"));
     assert_eq!(deadline.reason(), "boot-deadline");
+}
+
+#[test]
+fn a_hold_that_overflows_time_is_refused_without_shortening_it() {
+    let clock: VirtualClock = VirtualClock::starting_at(oer_time::Instant::from_micros(u64::MAX));
+    let deadline = BootDeadline::start(&clock, budget(1_000));
+    assert_eq!(
+        deadline.hold(WAIT),
+        Err(WaitFailure::DeadlineExceeded("test-wait"))
+    );
+    assert_eq!(clock.now().as_micros(), u64::MAX);
+}
+
+#[test]
+fn an_exhausted_time_domain_still_runs_the_final_poll_attempt() {
+    let clock: VirtualClock = VirtualClock::starting_at(oer_time::Instant::from_micros(u64::MAX));
+    let deadline = BootDeadline::start(&clock, budget(1_000));
+    assert_eq!(deadline.poll(WAIT, || Some(7)), Ok(7));
+    assert_eq!(
+        deadline.poll(WAIT, || None::<()>),
+        Err(WaitFailure::DeadlineExceeded("test-wait"))
+    );
 }

@@ -22,10 +22,12 @@ pub struct BootWait {
 
 impl BootWait {
     /// A wait named `name` (the `wait=` word of a failure line) bounded by
-    /// `bound`, which must not be zero.
-    pub const fn new(name: &'static str, bound: Duration) -> Self {
-        assert!(bound.as_micros() > 0, "a boot wait has a nonzero bound");
-        Self { name, bound }
+    /// `bound`. A zero bound is refused with the wait's name.
+    pub const fn new(name: &'static str, bound: Duration) -> Result<Self, WaitFailure> {
+        if bound.as_micros() == 0 {
+            return Err(WaitFailure::ZeroBound(name));
+        }
+        Ok(Self { name, bound })
     }
 
     /// The wait's name.
@@ -69,6 +71,8 @@ impl BootBudget {
 /// Why a boot wait ended without its value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WaitFailure {
+    /// The supplied wait bound is zero.
+    ZeroBound(&'static str),
     /// The wait passed its own bound.
     TimedOut(&'static str),
     /// The boot deadline passed during the wait, or would pass during a
@@ -80,6 +84,7 @@ impl WaitFailure {
     /// The `reason=` word of the failure line.
     pub const fn reason(self) -> &'static str {
         match self {
+            Self::ZeroBound(_) => "boot-wait-zero-bound",
             Self::TimedOut(_) => "boot-wait-timeout",
             Self::DeadlineExceeded(_) => "boot-deadline",
         }
@@ -88,7 +93,7 @@ impl WaitFailure {
     /// The name of the wait that failed.
     pub const fn wait(self) -> &'static str {
         match self {
-            Self::TimedOut(name) | Self::DeadlineExceeded(name) => name,
+            Self::ZeroBound(name) | Self::TimedOut(name) | Self::DeadlineExceeded(name) => name,
         }
     }
 }
@@ -150,7 +155,9 @@ impl<'clock, C: Clock + ?Sized> BootDeadline<'clock, C> {
     /// once, without waiting, when the hold would end past the deadline.
     pub fn hold(&self, wait: BootWait) -> Result<(), WaitFailure> {
         let start = self.clock.now();
-        let end = start.saturating_add(wait.bound);
+        let end = start
+            .checked_add(wait.bound)
+            .ok_or(WaitFailure::DeadlineExceeded(wait.name))?;
         if end > self.end {
             return Err(WaitFailure::DeadlineExceeded(wait.name));
         }
