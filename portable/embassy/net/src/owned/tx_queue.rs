@@ -5,8 +5,8 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
+use crate::datapath::{DestinationTxHead, TxQueues};
 use embassy_sync::blocking_mutex::{Mutex, raw::RawMutex};
-use oer_ieee80211_datapath::{DestinationTxHead, TxQueues};
 use oer_network::TransportFlow;
 
 use super::{

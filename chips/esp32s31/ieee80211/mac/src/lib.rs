@@ -19,6 +19,7 @@ pub use oer_esp32s31_hal::types::{
     MacInterface, MacPti, MacRoleReceivePolicy, MacStaApReceivePlan, MacStaPolicyMode,
 };
 
+pub mod airtime;
 pub mod ap_policy;
 pub mod ap_tsf;
 pub mod capabilities;

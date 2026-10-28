@@ -6,7 +6,7 @@ holds no Bluetooth runtime.
 
 | Location | Responsibility |
 | --- | --- |
-| `net/` | Owned-packet boundary between the Embassy/Xarxa network stack and the radio |
+| `net/` | Owned-packet boundary between the Embassy/Xarxa network stack and the radio: the software/physical TX ownership contracts and `TxQueues` (`datapath`) |
 | `time/` | `EmbassyClock`, the `oer_time` clock over Embassy time |
 
 An adapter can retain state required by its external contract.

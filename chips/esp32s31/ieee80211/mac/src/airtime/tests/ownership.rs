@@ -1,6 +1,6 @@
 use super::*;
+use crate::tx_work::MacTxWork;
 use core::cell::Cell;
-use oer_esp32s31_ieee80211_mac::tx_work::MacTxWork;
 
 #[test]
 fn identical_reservations_from_independent_ledgers_cannot_cross_cancel_or_settle() {

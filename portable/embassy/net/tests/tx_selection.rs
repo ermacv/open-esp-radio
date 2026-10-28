@@ -1,7 +1,7 @@
 #![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 
+use oer_embassy_net::datapath::DestinationTxQueues;
 use oer_embassy_net::{NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources};
-use oer_ieee80211_datapath::DestinationTxQueues;
 use std::{
     sync::{
         Arc,

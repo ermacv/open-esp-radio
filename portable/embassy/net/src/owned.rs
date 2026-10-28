@@ -18,7 +18,7 @@ use xarxa_driver::{
     NotSupported, PacketBuf, PacketBufAllocator, PacketPoolWaiter,
 };
 
-use oer_ieee80211_datapath::{DestinationTxHead, DestinationTxQueues};
+use crate::datapath::{DestinationTxHead, DestinationTxQueues};
 
 mod tx_budget;
 mod tx_queue;
