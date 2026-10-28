@@ -55,3 +55,18 @@ fn locally_administered_matches_esp_idf_for_every_first_octet() {
         assert_eq!(local[1..], universal[1..]);
     }
 }
+
+#[test]
+fn factory_fields_cover_every_octet_at_their_full_width() {
+    for byte in 0..=u8::MAX {
+        let low = u32::from_be_bytes([byte; 4]);
+        let high = u16::from_be_bytes([byte; 2]);
+        let factory = FactoryMac {
+            mac_0: low,
+            mac_1: high,
+            mac_ext: high,
+        };
+        assert_eq!(factory.base_mac(), [byte; 6]);
+        assert_eq!(factory.mac_extension(), high);
+    }
+}

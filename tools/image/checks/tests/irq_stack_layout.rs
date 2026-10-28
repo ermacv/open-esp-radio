@@ -193,7 +193,7 @@ fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_st
         let bytes = link(
             contract.harts.len() as u32,
             &sizes,
-            profile.facts.memory.as_ref().unwrap().sram.origin,
+            profile.facts.memory.as_ref().unwrap().sram.origin(),
         )
         .unwrap();
         let elf = oer_analysis_elf::Elf::parse(&bytes).unwrap();

@@ -445,7 +445,7 @@ mod tests {
             assert_eq!(contract.irq_stack_guard_bytes, guards);
             for (hart, guard) in guards {
                 assert_eq!(
-                    contract.irq_stack_usable_bytes(hart),
+                    contract.irq_stack_usable_bytes(hart).unwrap(),
                     contract.irq_stack_bytes - guard
                 );
             }

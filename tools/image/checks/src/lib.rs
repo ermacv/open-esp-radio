@@ -260,10 +260,10 @@ fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_espressif_facts::R
     elf.sections()
         .filter(|section| section.allocated && section.executable && section.size > 0)
         .map(|section| {
-            Ok(oer_espressif_facts::Region {
-                origin: u32::try_from(section.address)?,
-                length: u32::try_from(section.size)?,
-            })
+            Ok(oer_espressif_facts::Region::new(
+                u32::try_from(section.address)?,
+                u32::try_from(section.size)?,
+            )?)
         })
         .collect()
 }

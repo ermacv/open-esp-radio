@@ -1227,7 +1227,7 @@ mod tests {
 
     /// The `TIMER` slot's handler: in the contract's SRAM.
     fn timer() -> u32 {
-        contract().memory.sram.origin + 0x1000
+        contract().memory.sram.origin() + 0x1000
     }
 
     pub(super) fn ledger() -> Ledger<'static> {
@@ -1339,7 +1339,7 @@ mod tests {
         stacks.allocations.insert(
             0,
             LinkedStack {
-                bottom: u64::from(stacks.contract.memory.sram.origin),
+                bottom: u64::from(stacks.contract.memory.sram.origin()),
                 bytes: product.bytes,
                 from_bound: true,
             },
@@ -1358,7 +1358,7 @@ mod tests {
     #[test]
     fn a_handler_called_from_outside_sram_fails_the_gate() {
         let sram = timer();
-        let cached = contract().memory.flash_xip.origin;
+        let cached = contract().memory.flash_xip.origin();
         // A slot whose handler was inlined into it calls nothing itself.
         assert!(
             stacks(vec![(sram, Vec::new())])
@@ -1386,8 +1386,8 @@ mod tests {
             FrameSource, Function, FunctionFacts, Transfer, TransferKind,
         };
         let memory = contract().memory;
-        let sram = memory.sram.origin + 0x1000;
-        let cached = memory.psram.unwrap().origin + 0x1000;
+        let sram = memory.sram.origin() + 0x1000;
+        let cached = memory.psram.unwrap().origin() + 0x1000;
         let facts = |address, name: &str, callee: Option<u32>| FunctionFacts {
             function: Function {
                 address,
@@ -1495,7 +1495,7 @@ mod tests {
     fn an_sram_hook_cannot_copy_a_compiler_constant_from_cached_memory() {
         let mut report = stacks(Vec::new());
         let hook = timer();
-        let constant = u64::from(report.contract.memory.psram.unwrap().origin) + 0x1000;
+        let constant = u64::from(report.contract.memory.psram.unwrap().origin()) + 0x1000;
         report
             .names
             .insert(hook, "oer_platform_panic_hook".to_owned());
@@ -1523,7 +1523,7 @@ mod tests {
             "{warnings:?}"
         );
         // The proven part alone must fit the usable stack with the margin.
-        let over = u64::from(contract().irq_stack_usable_bytes(0));
+        let over = u64::from(contract().irq_stack_usable_bytes(0).unwrap());
         assert!(partial(over).check(Required::Diagnostic).is_err());
     }
 

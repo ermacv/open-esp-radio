@@ -39,7 +39,7 @@ pub fn bootstrap(sram: Region, flash: Region, path: &Path) -> Result<String> {
             .ok_or("bootstrap section range overflow")?;
         let in_sram = sram.contains_range(section.address, end);
         let overlaps_flash =
-            section.address < u64::from(flash.end()) && end > u64::from(flash.origin);
+            section.address < u64::from(flash.end()) && end > u64::from(flash.origin());
         // Exact output-section names owned by the shared bootstrap script.
         // Neither a new name nor a prefix of an allowed name grants access.
         // The S31 loader needs two mapped image records, not flash code:
@@ -133,7 +133,7 @@ pub fn audit(contract: &Contract<'_>, elf: &Path, binary: Option<&Path>) -> Resu
             .ok_or("the placement contract names a flattened image the build left none of")?;
         let start = symbol(&image.start)?;
         let end = symbol(&image.end)?;
-        let origin = u64::from(region(&image.origin)?.origin);
+        let origin = u64::from(region(&image.origin)?.origin());
         let binary_bytes = fs::metadata(binary)?.len();
         if start != origin || end <= start || end - start != binary_bytes {
             violations.push(format!(

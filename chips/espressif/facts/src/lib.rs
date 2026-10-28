@@ -4,7 +4,19 @@
     clippy::panic,
     clippy::unreachable,
     clippy::todo,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects
+    )
 )]
 //! The facts of the Espressif chips, in one layered model.
 //!
@@ -332,7 +344,7 @@ impl Facts {
                         origin
                             .checked_add(length)
                             .ok_or("the module's PSRAM ends past the address space")?;
-                        Some(Region { origin, length })
+                        Some(Region::new(origin, length)?)
                     }
                     (None, None) => None,
                     (Some(_), None) => {
@@ -349,18 +361,23 @@ impl Facts {
                 let runtime_psram = match (psram, &stated.staged) {
                     (Some(psram), Some(staged)) => {
                         let probe = staged.bootstrap_psram_bytes;
-                        if probe >= psram.length {
+                        if probe >= psram.length() {
                             return Err(format!(
                                 "the bootstrap's {probe:#x}-byte PSRAM probe page leaves no \
                                  room in {:#x} bytes of PSRAM",
-                                psram.length
+                                psram.length()
                             )
                             .into());
                         }
-                        Some(Region {
-                            origin: psram.origin + probe,
-                            length: psram.length - probe,
-                        })
+                        let origin = psram
+                            .origin()
+                            .checked_add(probe)
+                            .ok_or("runtime PSRAM origin overflows u32")?;
+                        let length = psram
+                            .length()
+                            .checked_sub(probe)
+                            .ok_or("bootstrap probe exceeds PSRAM")?;
+                        Some(Region::new(origin, length)?)
                     }
                     _ => None,
                 };
@@ -368,19 +385,20 @@ impl Facts {
                 let sram = match &stated.boot_chain {
                     Some(chain) => {
                         let end = chain.application_sram_end;
-                        if end <= internal.origin || end > internal.end() {
+                        if end <= internal.origin() || end > internal.end() {
                             return Err(format!(
                                 "`[boot-chain] application-sram-end` {end:#010x} must lie in the \
                                  internal SRAM {:#010x}..{:#010x}",
-                                internal.origin,
+                                internal.origin(),
                                 internal.end()
                             )
                             .into());
                         }
-                        Region {
-                            origin: internal.origin,
-                            length: end - internal.origin,
-                        }
+                        Region::new(
+                            internal.origin(),
+                            end.checked_sub(internal.origin())
+                                .ok_or("application SRAM end precedes its origin")?,
+                        )?
                     }
                     None => internal,
                 };
@@ -518,11 +536,15 @@ fn expand_rules(table: &mut Table) -> Result<()> {
                         )
                         .into());
                     }
-                    let last = lines.filter(|&lines| lines > 1).ok_or_else(|| {
-                        Error::from(format!(
-                            "a per-line `[placement] {kind}` rule needs `[interrupts] lines`"
-                        ))
-                    })? - 1;
+                    let last = lines
+                        .filter(|&lines| lines > 1)
+                        .ok_or_else(|| {
+                            Error::from(format!(
+                                "a per-line `[placement] {kind}` rule needs `[interrupts] lines`"
+                            ))
+                        })?
+                        .checked_sub(1)
+                        .ok_or("interrupt line count has no vector-entry line")?;
                     fields.insert(
                         "numbers".to_string(),
                         Value::Array(alloc::vec![Value::Integer(1), Value::Integer(last)]),
@@ -675,16 +697,13 @@ pub(crate) mod tests {
     fn the_application_sram_is_the_internal_sram_below_the_reserves() {
         for (id, sram, data) in [(
             "esp32s31",
-            Region {
-                origin: 0x2f00_0000,
-                length: 0x0007_afc0,
-            },
+            Region::new(0x2f00_0000, 0x0007_afc0).expect("valid region"),
             0x2f07_e600,
         )] {
             let facts = tracked(id);
             let memory = facts.memory.as_ref().expect("memory");
             assert_eq!(memory.sram, sram, "{id}");
-            assert_eq!(memory.internal_sram.origin, sram.origin, "{id}");
+            assert_eq!(memory.internal_sram.origin(), sram.origin(), "{id}");
             let rom = facts.rom.as_ref().expect("rom");
             let running: Vec<_> = rom
                 .sram
@@ -764,10 +783,7 @@ pub(crate) mod tests {
         let reserved = facts(&chain(0x1c00)).expect("a reserve in the internal SRAM");
         assert_eq!(
             reserved.memory.expect("memory").sram,
-            Region {
-                origin: 0x1000,
-                length: 0xc00
-            }
+            Region::new(0x1000, 0xc00).expect("valid region")
         );
         for end in [0x1000, 0x2004] {
             let error = facts(&chain(end)).expect_err("a reserve outside the internal SRAM");
@@ -779,10 +795,7 @@ pub(crate) mod tests {
         let whole = facts(&base).expect("no boot chain");
         assert_eq!(
             whole.memory.expect("memory").sram,
-            Region {
-                origin: 0x1000,
-                length: 0x1000
-            }
+            Region::new(0x1000, 0x1000).expect("valid region")
         );
         let unattributed = base.replace("flash-xip = { executable", "flash = { executable");
         let error = facts(&unattributed).expect_err("an unmapped region's attributes");
@@ -811,13 +824,13 @@ pub(crate) mod tests {
         assert_eq!(cached, ["flash-xip", "runtime-psram", "psram"]);
         let sram = memory.sram;
         let at = memory
-            .region_of(u64::from(sram.origin), u64::from(sram.origin) + 4)
+            .region_of(u64::from(sram.origin()), u64::from(sram.origin()) + 4)
             .expect("in SRAM");
         assert_eq!(at.name, "sram");
         assert!(at.attributes.dma && !at.attributes.cached);
         let runtime = memory.runtime_psram.expect("runtime PSRAM");
         let at = memory
-            .region_of(u64::from(runtime.origin), u64::from(runtime.origin) + 4)
+            .region_of(u64::from(runtime.origin()), u64::from(runtime.origin()) + 4)
             .expect("in PSRAM");
         assert_eq!(at.name, "runtime-psram");
         assert!(at.attributes.cached && at.attributes.writable);
@@ -836,17 +849,11 @@ pub(crate) mod tests {
         let memory = s31.memory.as_ref().expect("memory");
         assert_eq!(
             memory.psram,
-            Some(Region {
-                origin: 0x5000_0000,
-                length: 16 << 20
-            })
+            Some(Region::new(0x5000_0000, 16 << 20).expect("valid region"))
         );
         assert_eq!(
             memory.runtime_psram,
-            Some(Region {
-                origin: 0x5001_0000,
-                length: (16 << 20) - 0x1_0000
-            })
+            Some(Region::new(0x5001_0000, (16 << 20) - 0x1_0000).expect("valid region"))
         );
         assert_eq!(
             s31.flash
@@ -957,10 +964,7 @@ pub(crate) mod tests {
         let memory = s31.memory.clone().expect("memory");
         assert!(memory.validate(s31.boot_chain.as_ref(), None).is_ok());
         let mut narrow = memory.clone();
-        narrow.cache_window = Some(Region {
-            origin: 0x4200_0000,
-            length: 0x0100_0000,
-        });
+        narrow.cache_window = Some(Region::new(0x4200_0000, 0x0100_0000).expect("valid region"));
         assert!(
             narrow.validate(None, None).is_err(),
             "PSRAM outside the window"

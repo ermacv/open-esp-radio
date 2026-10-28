@@ -74,7 +74,7 @@ fn hardware_code_neither_polls_tasks_nor_calls_wakers_and_its_data_is_reported()
     // breach, wherever the code lies.
     let (mut stacks, shared, _) = fixture(Location::Sram, Location::Sram, 3, Class::Hardware);
     let memory = &stacks.contract.memory;
-    let root = memory.sram.origin + 0x1000;
+    let root = memory.sram.origin() + 0x1000;
     let dequeue = root + 0x40;
     let context = &stacks.code_placement.contexts[0];
     assert_eq!(context.to_string(), "hart 0 P3 (hardware)");

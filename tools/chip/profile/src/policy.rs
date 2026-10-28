@@ -552,7 +552,7 @@ impl StackPolicy {
             .ok_or("task stacks require a memory map")?;
         if bytes == 0
             || bytes % 16 != 0
-            || bytes >= memory.psram.ok_or("task stacks require PSRAM")?.length
+            || bytes >= memory.psram.ok_or("task stacks require PSRAM")?.length()
         {
             return Err("task stack allocation does not fit aligned PSRAM storage".into());
         }
@@ -668,7 +668,7 @@ impl StackPolicy {
                     .as_ref()
                     .ok_or("stacks require memory")?
                     .sram
-                    .length,
+                    .length(),
             )
         {
             return Err("interrupt allocations do not fit SRAM".into());

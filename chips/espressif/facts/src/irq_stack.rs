@@ -7,8 +7,12 @@ use crate::{InterruptContract, Result};
 impl InterruptContract {
     /// Bound plus the contract margin, rounding fractional bytes upwards.
     pub fn irq_stack_with_margin(&self, bound: u64) -> Result<u64> {
-        let bytes =
-            (u128::from(bound) * (100 + u128::from(self.irq_stack_margin_percent))).div_ceil(100);
+        let bytes = u128::from(self.irq_stack_margin_percent)
+            .checked_add(100)
+            .and_then(|factor| u128::from(bound).checked_mul(factor))
+            .and_then(|bytes| bytes.checked_add(99))
+            .ok_or("IRQ stack margin calculation overflows u128")?
+            / 100;
         Ok(u64::try_from(bytes).map_err(|_| "IRQ stack bound with margin overflows u64")?)
     }
 
@@ -16,30 +20,30 @@ impl InterruptContract {
     /// leave the following hart's bottom aligned to that hart's NAPOT guard.
     /// `None` deliberately keeps the maximum; partial bounds are not proofs.
     pub fn irq_stack_size(&self, hart: u32, bound: Option<u64>) -> Result<u32> {
-        let index = self
-            .harts
-            .iter()
-            .position(|&core| core == hart)
+        let mut harts = self.harts.iter().skip_while(|&&core| core != hart);
+        harts
+            .next()
             .ok_or_else(|| format!("no interrupt stack for hart {hart}"))?;
         let Some(bound) = bound else {
             return Ok(self.irq_stack_bytes);
         };
-        let guard = u64::from(self.irq_stack_guard_bytes[&hart]);
+        let guard = u64::from(self.irq_stack_guard(hart)?);
         let usable = self.irq_stack_with_margin(bound)?;
         let bytes = usable
-            .checked_add(15)
-            .map(|bytes| bytes / 16 * 16)
+            .checked_next_multiple_of(16)
             .and_then(|bytes| bytes.checked_add(guard))
             .ok_or("IRQ stack allocation overflows u64")?;
-        let alignment = self
-            .harts
-            .get(index + 1)
-            .map_or(16, |next| self.irq_stack_guard_bytes[next]);
-        let alignment = u64::from(alignment);
+        let alignment = match harts.next() {
+            Some(&next) => self.irq_stack_guard(next)?,
+            None => 16,
+        };
         let bytes = bytes
-            .checked_add(alignment - 1)
-            .map(|bytes| bytes / alignment * alignment)
-            .ok_or("IRQ stack alignment overflows u64")?;
+            .checked_next_multiple_of(u64::from(alignment))
+            .ok_or_else(|| {
+                format!(
+                    "IRQ stack alignment {alignment} is zero or overflows u64 for {bytes} bytes"
+                )
+            })?;
         if bytes > u64::from(self.irq_stack_bytes) {
             return Err(format!("hart {hart}'s IRQ stack: bound {bound} + {}% margin requires {usable} usable bytes, guard {guard}, aligned allocation {bytes}, contract maximum {} bytes", self.irq_stack_margin_percent, self.irq_stack_bytes).into());
         }
@@ -85,5 +89,79 @@ mod tests {
         assert!(contract.irq_stack_with_margin(u64::MAX).is_err());
         assert!(contract.irq_stack_size(0, Some(u64::MAX)).is_err());
         assert!(contract.irq_stack_size(7, None).is_err());
+    }
+
+    #[test]
+    fn missing_current_or_following_guard_returns_an_error() {
+        let mut missing = contract("esp32s31");
+        missing.irq_stack_guard_bytes.remove(&0);
+        assert!(
+            missing
+                .irq_stack_size(0, Some(1))
+                .unwrap_err()
+                .to_string()
+                .contains("hart 0")
+        );
+        assert!(
+            missing
+                .irq_stack_usable_bytes(0)
+                .unwrap_err()
+                .to_string()
+                .contains("hart 0")
+        );
+        let mut missing = contract("esp32s31");
+        missing.irq_stack_guard_bytes.remove(&1);
+        assert!(
+            missing
+                .irq_stack_size(0, Some(1))
+                .unwrap_err()
+                .to_string()
+                .contains("hart 1")
+        );
+    }
+
+    #[test]
+    fn zero_alignment_and_guard_larger_than_stack_return_errors() {
+        let mut invalid = contract("esp32s31");
+        invalid.irq_stack_guard_bytes.insert(1, 0);
+        assert!(
+            invalid
+                .irq_stack_size(0, Some(1))
+                .unwrap_err()
+                .to_string()
+                .contains("alignment 0")
+        );
+        invalid.irq_stack_guard_bytes.insert(0, u32::MAX);
+        assert!(
+            invalid
+                .irq_stack_usable_bytes(0)
+                .unwrap_err()
+                .to_string()
+                .contains("exceeds its stack")
+        );
+    }
+
+    #[test]
+    fn allocation_and_alignment_overflow_return_errors_without_saturation() {
+        let mut contract = contract("esp32s31");
+        contract.irq_stack_margin_percent = 0;
+        assert_eq!(contract.irq_stack_with_margin(u64::MAX).unwrap(), u64::MAX);
+        for bound in [u64::MAX, u64::MAX - 15] {
+            assert!(
+                contract
+                    .irq_stack_size(0, Some(bound))
+                    .unwrap_err()
+                    .to_string()
+                    .contains("allocation overflows")
+            );
+        }
+        contract.irq_stack_guard_bytes.insert(0, 16);
+        assert!(
+            contract
+                .irq_stack_size(0, Some(u64::MAX - 31))
+                .unwrap_err()
+                .to_string()
+                .contains("alignment 1024")
+        );
     }
 }

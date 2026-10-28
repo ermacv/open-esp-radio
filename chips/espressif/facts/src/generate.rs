@@ -63,7 +63,8 @@ pub fn default_task_stack_bytes(policy: &str, harts: u32) -> Result<Vec<u32>> {
 fn region(region: Region) -> String {
     format!(
         "const {{ oer_espressif_staged_layout::Region::new({:#010x}, {:#010x}).expect(\"region end fits u32\") }}",
-        region.origin, region.length
+        region.origin(),
+        region.length()
     )
 }
 
@@ -121,7 +122,7 @@ pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
          \x20   rom_script: {script:?},\n\
          }};\n\n\
          const _: () = LAYOUT.check();\n\
-         const _: () = assert!(LAYOUT.boot_hart as usize == oer_espressif_staged_layout::boot::BOOT_HART);\n",
+         const _: () = if LAYOUT.boot_hart as usize != oer_espressif_staged_layout::boot::BOOT_HART {{ panic!(\"layout boot hart disagrees with the boot contract\"); }};\n",
         id = facts.id,
         board = facts
             .board
@@ -260,7 +261,11 @@ impl Vectors {
     /// representation with a zero niche, preserving the hardware table words.
     /// One placement attribute covers the entire table, independent of hart
     /// cardinality; trap assembly exports its address through a sym operand.
-    pub fn vector_tables(&self) -> String {
+    pub fn vector_tables(&self) -> Result<String> {
+        let alignment = self
+            .slots
+            .checked_mul(4)
+            .ok_or("vector table byte alignment overflows u32")?;
         let mut text = format!(
             "// Generated from the chip interrupt geometry.\n\
              #[repr(C)]\n\
@@ -268,9 +273,9 @@ impl Vectors {
              #[repr(C, align({alignment}))]\n\
              struct VectorTable([Option<&'static VectorEntry>; VECTOR_TABLE_WORDS]);\n\
              const _: () = {{\n\
-             assert!(core::mem::size_of::<VectorEntry>() == 0);\n\
-             assert!(core::mem::size_of::<Option<&VectorEntry>>() == 4);\n\
-             assert!(core::mem::size_of::<VectorTable>() == VECTOR_TABLE_WORDS * 4);\n\
+             if core::mem::size_of::<VectorEntry>() != 0 {{ panic!(\"vector entry must be zero sized\"); }}\n\
+             if core::mem::size_of::<Option<&VectorEntry>>() != 4 {{ panic!(\"vector reference must occupy one word\"); }}\n\
+             if core::mem::size_of::<VectorTable>() != VECTOR_TABLE_WORDS * 4 {{ panic!(\"vector table size disagrees with its geometry\"); }}\n\
              }};\n\
              #[used]\n\
              #[allow(unsafe_code, reason = \"the runtime owns MTVT placement\")]\n\
@@ -279,7 +284,7 @@ impl Vectors {
              // before installing its vector CSRs or admitting runtime dispatch.\n\
              #[unsafe(link_section = \".trap.mtvt\")]\n\
              static MTVT: [VectorTable; HARTS] = [\n",
-            alignment = self.slots * 4,
+            alignment = alignment,
         );
         for hart in 0..self.harts {
             text.push_str("VectorTable([None,\n");
@@ -293,7 +298,7 @@ impl Vectors {
             text.push_str("]),\n");
         }
         text.push_str("];\n");
-        text
+        Ok(text)
     }
 
     /// The runtime linker script's defaults: every line's handler is the
@@ -347,11 +352,17 @@ impl Vectors {
             control_bits = self.control_bits,
             level_bits = self.level_bits,
             first = byte(self.first_source_line, "first line")?,
-            last = self.lines - 1,
+            last = self
+                .lines
+                .checked_sub(1)
+                .ok_or("vector line count is zero")?,
             lines = byte(self.lines, "lines")?,
             levels = byte(self.levels, "levels")?,
             harts = byte(self.harts, "harts")?,
-            last_hart = self.harts.saturating_sub(1),
+            last_hart = self
+                .harts
+                .checked_sub(1)
+                .ok_or("vector hart count is zero")?,
             slots = self.slots,
         );
         let _ = writeln!(rust, "pub const HARTS: usize = {};", self.harts);
@@ -383,7 +394,7 @@ pub fn hart_geometry(harts: u32, boot_hart: u32) -> Result<String> {
 /// A fixed index admitted at monomorphization, even in runtime code.
 pub const fn constant<const ID: usize>() -> Self {
     const {
-        assert!(ID < HARTS, "the hart lies inside the chip geometry");
+        if ID >= HARTS { panic!("the hart lies inside the chip geometry"); }
         match Self::new(ID as u32) { Ok(hart) => hart, Err(_) => panic!("invalid fixed hart") }
     }
 }
@@ -518,7 +529,7 @@ mod tests {
             assert!(entries.contains(&format!("{hart}, {}", s31.lines - 1).as_str()));
             assert!(!entries.contains(&format!("{hart}, 0").as_str()));
         }
-        let tables = s31.vector_tables();
+        let tables = s31.vector_tables().expect("vector tables");
         let markers = s31.vector_markers();
         syn::parse_file(&tables).expect("typed Rust table");
         syn::parse_file(&markers).expect("address declarations macro");
@@ -562,7 +573,7 @@ mod tests {
             let coverage = vectors.stack_coverage().unwrap();
             let symbols = vectors.stack_symbols();
             let linker = vectors.stack_linker();
-            let tables = vectors.vector_tables();
+            let tables = vectors.vector_tables().expect("vector tables");
             let markers = vectors.vector_markers();
             let assembly = vectors.assembly();
             syn::parse_file(&tables).expect("synthetic Rust table");
@@ -727,7 +738,8 @@ mod tests {
         let stderr = String::from_utf8_lossy(&refused.stderr);
         assert!(!refused.status.success(), "{stderr}");
         assert!(
-            stderr.contains("E0080") && stderr.contains("LAYOUT.boot_hart"),
+            stderr.contains("E0080")
+                && stderr.contains("layout boot hart disagrees with the boot contract"),
             "{stderr}"
         );
     }
@@ -741,5 +753,39 @@ mod tests {
         let mut facts = tracked("esp32s31");
         facts.interrupts.as_mut().expect("interrupts").harts = alloc::vec![1];
         assert!(Vectors::of(&facts).is_err());
+    }
+    #[test]
+    fn vector_alignment_overflow_is_a_typed_error_before_rendering() {
+        let mut vectors = Vectors::of(&tracked("esp32s31")).unwrap();
+        vectors.slots = 1 << 30;
+        assert!(
+            vectors
+                .vector_tables()
+                .unwrap_err()
+                .to_string()
+                .contains("overflows u32")
+        );
+    }
+
+    #[test]
+    fn empty_vector_line_or_hart_geometry_is_refused_without_saturation() {
+        let mut vectors = Vectors::of(&tracked("esp32s31")).unwrap();
+        vectors.lines = 0;
+        assert!(
+            vectors
+                .rust()
+                .unwrap_err()
+                .to_string()
+                .contains("line count is zero")
+        );
+        vectors.lines = 2;
+        vectors.harts = 0;
+        assert!(
+            vectors
+                .rust()
+                .unwrap_err()
+                .to_string()
+                .contains("hart count is zero")
+        );
     }
 }

@@ -105,7 +105,7 @@ impl Sram {
                 .filter(|section| section.allocated && section.size > 0)
                 .filter_map(|section| {
                     let end = section.address.checked_add(section.size)?;
-                    (section.address < u64::from(region.end()) && end > u64::from(region.origin))
+                    (section.address < u64::from(region.end()) && end > u64::from(region.origin()))
                         .then(|| SramRange {
                             name: section.name.to_owned(),
                             start: section.address,
@@ -126,7 +126,7 @@ impl Sram {
     }
 
     fn free(&self) -> u64 {
-        u64::from(self.region.length) - self.placed
+        u64::from(self.region.length()) - self.placed
     }
 }
 
@@ -136,13 +136,13 @@ fn union_bytes(region: Region, ranges: &[SramRange]) -> u64 {
     let mut ranges: Vec<_> = ranges
         .iter()
         .filter_map(|range| {
-            let start = range.start.max(u64::from(region.origin));
+            let start = range.start.max(u64::from(region.origin()));
             let end = range.end.min(u64::from(region.end()));
             (start < end).then_some((start, end))
         })
         .collect();
     ranges.sort_unstable();
-    let mut end = u64::from(region.origin);
+    let mut end = u64::from(region.origin());
     let mut total = 0;
     for (start, next_end) in ranges {
         total += next_end.saturating_sub(start.max(end));
@@ -212,7 +212,7 @@ impl InterruptPlacement {
             self.references.len(),
             self.objects.len(),
             self.data_bytes(),
-            self.sram.region.length,
+            self.sram.region.length(),
             self.sram.placed,
             self.sram.free(),
         )
@@ -299,7 +299,7 @@ impl InterruptPlacement {
         let _ = writeln!(
             out,
             "usable range: {:#010x}..{:#010x}\nboundary source: {}\nPlaced bytes are the union of placement ranges and allocated SRAM sections, including NOLOAD IRQ stacks and DMA; overlaps count once.\nname\tstart\tend",
-            self.sram.region.origin,
+            self.sram.region.origin(),
             self.sram.region.end(),
             self.sram.source
         );
