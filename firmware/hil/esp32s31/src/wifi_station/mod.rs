@@ -113,10 +113,17 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         base_mac_address: factory.base_mac(),
         mac_extension: factory.mac_extension(),
     };
-    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(
-        ConcurrentPhy::new(),
-        oer_espressif_staged_runtime::phy_fault::identity(),
-    );
+    let (domain, partitions) = runtime
+        .radio
+        .split::<ChipClocks, _>(
+            ConcurrentPhy::new(),
+            oer_espressif_staged_runtime::phy_fault::identity(),
+        )
+        .unwrap_or_else(|failure| {
+            let fault = failure.fault();
+            let _owners = failure;
+            oer_espressif_staged_runtime::phy_fault::reset(fault)
+        });
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         park()
     };

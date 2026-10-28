@@ -40,7 +40,7 @@ oer_probe_macros::probe! {
     /// Wi-Fi up through its public client path. Zero, or why the session
     /// did not start; nothing of it is compared.
     pub fn open_probe_session_init() -> u32 {
-        session::init(phy_identity)
+        session::init(phy_identity, |fault| report_phy_fault(fault))
     }
 }
 

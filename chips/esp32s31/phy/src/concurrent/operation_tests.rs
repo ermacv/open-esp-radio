@@ -159,7 +159,8 @@ fn production_lifecycle_futures_record_the_operation_before_poll_and_while_waiti
         for polled in [false, true] {
             let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
             let (mut radio, _) = RadioHardware::for_host_test()
-                .split::<TestClockBackend, _>(ConcurrentPhy::new(), seat.claim().unwrap());
+                .split::<TestClockBackend, _>(ConcurrentPhy::new(), seat.claim().unwrap())
+                .expect("identity capacity");
             let epoch = radio.begin_registration_for_host_test().epoch();
             let handle = radio.fault_handle();
             let timer = VirtualClock::new();
@@ -192,7 +193,8 @@ fn production_lifecycle_futures_reunite_after_virtual_time_without_a_cancellatio
     ] {
         let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
         let (radio, _) = RadioHardware::for_host_test()
-            .split::<TestClockBackend, _>(ConcurrentPhy::new(), seat.claim().unwrap());
+            .split::<TestClockBackend, _>(ConcurrentPhy::new(), seat.claim().unwrap())
+            .expect("identity capacity");
         let handle = radio.fault_handle();
         let timer = VirtualClock::new();
         let mut platform = ();

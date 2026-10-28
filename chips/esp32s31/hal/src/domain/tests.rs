@@ -9,6 +9,7 @@ fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
         PhyRouteState::new(PhyRegistration::new()),
         (),
         crate::domain::transaction::PhyIdentity::for_host_test(),
+        crate::power::clock::ModemClockPlannerIdentity::new().expect("identity capacity"),
     )
 }
 

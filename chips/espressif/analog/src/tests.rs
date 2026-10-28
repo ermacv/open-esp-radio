@@ -102,7 +102,10 @@ fn a_field_read_extracts_after_the_completed_read() {
     model.registers[2] = 0b0110_0000;
     let clock = model.busy.clone();
     let mut read = FieldRead::new(&mut model, AnalogField::new(2_u8, 6, 5).expect("field"));
-    assert_eq!(run(&clock, || read.poll()), 0b11);
+    assert_eq!(
+        run(&clock, || read.poll().expect("matching completion")),
+        0b11
+    );
     assert_eq!(model.operations, [Operation::StartRead(2)]);
 }
 
@@ -117,7 +120,7 @@ fn a_field_write_reads_modifies_and_writes_once() {
         0b0101,
     )
     .expect("fits");
-    run(&clock, || write.poll());
+    run(&clock, || write.poll().expect("matching completion"));
     assert_eq!(
         model.operations,
         [
@@ -134,7 +137,7 @@ fn a_busy_host_delays_the_start_without_losing_the_command() {
     let clock = model.busy.clone();
     let mut write =
         FieldWrite::new(&mut model, AnalogField::new(0_u8, 0, 0).expect("field"), 1).expect("fits");
-    run(&clock, || write.poll());
+    run(&clock, || write.poll().expect("matching completion"));
     assert_eq!(
         model.operations,
         [Operation::StartRead(0), Operation::StartWrite(0, 1)]
@@ -200,7 +203,7 @@ fn parallel_pairs_start_after_both_hosts_are_idle_between_the_host_maps() {
     let mut writes = ParallelWrites::new(&mut model, |index| (index < 3).then_some(index as u8));
     let mut polls = 0;
     loop {
-        let step = writes.poll();
+        let step = writes.poll().expect("matching completion");
         clock.set(clock.get().map(|busy| busy.saturating_sub(1)));
         polls += 1;
         if step == Step::Ready(()) {
@@ -228,7 +231,7 @@ fn an_empty_parallel_sequence_still_selects_and_restores_the_map() {
         latency: [0; 2],
     };
     let mut writes = ParallelWrites::new(&mut model, |_| None);
-    while writes.poll() == Step::Pending {}
+    while writes.poll().expect("matching completion") == Step::Pending {}
     assert_eq!(
         model.operations,
         [ParallelOperation::Select, ParallelOperation::Restore]
@@ -268,7 +271,12 @@ fn a_configuration_rejects_a_value_wider_than_its_field_before_the_bus() {
             .then(|| ConfigurationCommand::Modify(AnalogField::new(0_u8, 0, 0).expect("field"), 2))
     };
     let mut configuration = Configuration::new(&mut model, commands);
-    assert_eq!(configuration.poll(), Err(InvalidCommand { index: 0 }));
+    assert_eq!(
+        configuration.poll(),
+        Err(ConfigurationError::InvalidCommand(InvalidCommand {
+            index: 0
+        }))
+    );
     assert!(model.operations.is_empty());
 }
 
@@ -344,4 +352,109 @@ fn an_invalid_configuration_command_completes_without_a_bus_action() {
         configuration.action(),
         Action::Complete(Err(InvalidCommand { index: 1 }))
     );
+}
+
+#[test]
+fn a_refused_driver_completion_is_retained_without_repeating_bus_actions() {
+    struct Refusing(TransitionError);
+    impl ByteTransition for Refusing {
+        type Address = u8;
+        type Output = ();
+        fn action(&self) -> Action<u8, ()> {
+            Action::Read { address: 0 }
+        }
+        fn advance(&mut self, _: Completion<u8>) -> Result<(), TransitionError> {
+            Err(self.0)
+        }
+    }
+    for error in [
+        TransitionError::WrongCompletion,
+        TransitionError::AlreadyComplete,
+    ] {
+        let mut bus = Model::new(0);
+        let mut driver = Driver::new(&mut bus, Refusing(error));
+        assert_eq!(driver.poll(), Ok(Step::Pending));
+        assert_eq!(driver.poll(), Err(error));
+        assert_eq!(driver.poll(), Err(error));
+        assert_eq!(driver.poll(), Err(error));
+        assert_eq!(bus.operations, [Operation::StartRead(0)]);
+    }
+}
+
+#[test]
+fn configuration_index_exhaustion_returns_the_exact_index_without_wrapping() {
+    let field = AnalogField::new(0_u8, 3, 0).unwrap();
+    for command in [
+        ConfigurationCommand::Read(0),
+        ConfigurationCommand::Write(0, 1),
+        ConfigurationCommand::Modify(field, 1),
+    ] {
+        let commands = |_: usize| Some(command);
+        let mut transition = ConfigurationTransition::new(commands);
+        transition.step = transition.enter(usize::MAX);
+        let completion = match command {
+            ConfigurationCommand::Read(_) => Completion::Read {
+                address: 0,
+                value: 0,
+            },
+            ConfigurationCommand::Write(..) => Completion::Written { address: 0 },
+            ConfigurationCommand::Modify(..) => {
+                transition
+                    .advance(Completion::Read {
+                        address: 0,
+                        value: 0xf0,
+                    })
+                    .unwrap();
+                assert_eq!(
+                    transition.action(),
+                    Action::Write {
+                        address: 0,
+                        value: 0xf1
+                    }
+                );
+                Completion::Written { address: 0 }
+            }
+        };
+        let before = transition.action();
+        assert_eq!(
+            transition.advance(completion),
+            Err(TransitionError::IndexExhausted { index: usize::MAX })
+        );
+        assert_eq!(transition.action(), before);
+        let mut bus = Model::new(0);
+        let mut driver = Driver::new(&mut bus, transition);
+        assert_eq!(driver.poll(), Ok(Step::Pending));
+        assert_eq!(
+            driver.poll(),
+            Err(TransitionError::IndexExhausted { index: usize::MAX })
+        );
+        assert_eq!(
+            driver.poll(),
+            Err(TransitionError::IndexExhausted { index: usize::MAX })
+        );
+        assert_eq!(bus.operations.len(), 1);
+    }
+}
+
+#[test]
+fn parallel_index_exhaustion_is_latched_without_restarting_a_pair_or_restoring() {
+    let pairs = |_: usize| Some(7_u8);
+    let mut transition = ParallelTransition::new(pairs);
+    transition.phase = ParallelPhase::Await(usize::MAX, ParallelHost::Second);
+    let error = TransitionError::IndexExhausted { index: usize::MAX };
+    assert_eq!(transition.advance(), Err(error));
+    assert_eq!(transition.pair_index(), Some(usize::MAX));
+    let mut bus = ParallelModel {
+        operations: Vec::new(),
+        busy: Rc::new(Cell::new([0; 2])),
+        latency: [0; 2],
+    };
+    let mut writes = ParallelWrites {
+        bus: &mut bus,
+        transition,
+        error: None,
+    };
+    assert_eq!(writes.poll(), Err(error));
+    assert_eq!(writes.poll(), Err(error));
+    assert!(bus.operations.is_empty());
 }

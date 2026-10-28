@@ -34,6 +34,7 @@ use oer_mmio::Placement;
 /// initialization through both PHY-I²C hosts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyI2cInitializationStageTwoError {
+    Transition(oer_espressif_analog::TransitionError),
     BusyAtStart { host: Host },
     CompletionTimeout { host: Host, pair: u8 },
 }
@@ -93,7 +94,10 @@ async fn configure_initialization_stage_two_with(
             }
             ParallelAction::RestoreMap | ParallelAction::Complete => break,
         }
-        transition.advance();
+        if let Err(error) = transition.advance() {
+            result = Err(PhyI2cInitializationStageTwoError::Transition(error));
+            break;
+        }
     }
 
     // The vendor leaf restores the normal 0x3fa0 host field after the

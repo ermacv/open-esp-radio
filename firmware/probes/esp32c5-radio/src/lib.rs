@@ -141,8 +141,12 @@ oer_probe_macros::probe! {
         };
         with_bus(|bus| {
             let mut read = FieldRead::new(bus, field);
-            let result = drive(|| read.poll());
-            result.map_or(EXHAUSTED, u32::from)
+            let result = drive(|| match read.poll() {
+                Ok(Step::Pending) => Step::Pending,
+                Ok(Step::Ready(value)) => Step::Ready(Ok(value)),
+                Err(error) => Step::Ready(Err(error)),
+            });
+            result.map_or(EXHAUSTED, |result| result.map_or(INVALID_ARGUMENT, u32::from))
         })
     }
 }
@@ -162,8 +166,12 @@ oer_probe_macros::probe! {
             let Ok(mut write) = FieldWrite::new(bus, field, data) else {
                 return INVALID_ARGUMENT;
             };
-            let result = drive(|| write.poll());
-            result.map_or(EXHAUSTED, |()| 0)
+            let result = drive(|| match write.poll() {
+                Ok(Step::Pending) => Step::Pending,
+                Ok(Step::Ready(value)) => Step::Ready(Ok(value)),
+                Err(error) => Step::Ready(Err(error)),
+            });
+            result.map_or(EXHAUSTED, |result| result.map_or(INVALID_ARGUMENT, |()| 0))
         })
     }
 }
@@ -231,8 +239,10 @@ oer_probe_macros::probe! {
         with_bus(|bus| {
             let mut sequence = oer_esp32c5_hal::analog::initialization(bus, inputs);
             for _ in 0..MAXIMUM_PARALLEL_ACTIONS {
-                if sequence.poll() == Step::Ready(()) {
-                    return 0;
+                match sequence.poll() {
+                    Ok(Step::Ready(())) => return 0,
+                    Ok(Step::Pending) => {},
+                    Err(_) => return INVALID_ARGUMENT,
                 }
             }
             EXHAUSTED

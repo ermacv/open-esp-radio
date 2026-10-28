@@ -1,9 +1,14 @@
 #![deny(
-    clippy::unwrap_used,
     clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
     clippy::unreachable,
     clippy::todo,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 //! Chip-neutral shared modem clock reference-count planner.
 //!
@@ -61,6 +66,43 @@ const MAX_REFCOUNT: u16 = i16::MAX as u16;
 /// Internal allocation-free capacity, not a vendor hardware or ABI limit.
 const MAX_ACTIVE_LEASES: usize = 16;
 
+/// A bit position within the planner's fixed dependency capacity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DependencyIndex(u8);
+
+impl DependencyIndex {
+    pub const fn new(index: u8) -> Option<Self> {
+        if (index as usize) < DEPENDENCY_CAPACITY {
+            Some(Self(index))
+        } else {
+            None
+        }
+    }
+
+    /// A fixed position checked when this constructor is monomorphized.
+    ///
+    /// ```compile_fail
+    /// use oer_espressif_modem_clock::DependencyIndex;
+    /// let _ = DependencyIndex::constant::<32>();
+    /// ```
+    pub const fn constant<const INDEX: u8>() -> Self {
+        const {
+            if (INDEX as usize) >= DEPENDENCY_CAPACITY {
+                panic!("dependency index exceeds capacity")
+            }
+        }
+        Self(INDEX)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0 as usize
+    }
+
+    const fn bit(self) -> u32 {
+        1 << self.0
+    }
+}
+
 /// One chip's modem clock dependencies, in the vendor device order.
 pub trait ModemClockDependency: Copy + Eq + fmt::Debug + 'static {
     /// Every dependency, lowest vendor device first; at most
@@ -68,7 +110,7 @@ pub trait ModemClockDependency: Copy + Eq + fmt::Debug + 'static {
     const LOW_BIT_FIRST: &'static [Self];
 
     /// Position of `self` in [`Self::LOW_BIT_FIRST`].
-    fn index(self) -> usize;
+    fn index(self) -> DependencyIndex;
 
     /// Whether this planner keeps the dependency's refcount. Otherwise the
     /// vendor keeps it in another owner and every request emits its edge.
@@ -85,7 +127,7 @@ pub fn table_is_consistent<D: ModemClockDependency>() -> bool {
         && D::LOW_BIT_FIRST
             .iter()
             .enumerate()
-            .all(|(position, dependency)| dependency.index() == position)
+            .all(|(position, dependency)| dependency.index().get() == position)
 }
 
 /// One module's dependency membership. No raw mask crosses the crate
@@ -144,7 +186,7 @@ impl<D: ModemClockDependency> DependencySet<D> {
 }
 
 fn bit<D: ModemClockDependency>(dependency: D) -> u32 {
-    1 << dependency.index()
+    dependency.index().bit()
 }
 
 /// Unique accounting identity transferred by value into one planner epoch.
@@ -161,25 +203,27 @@ pub struct ModemClockPlannerIdentity {
     key: u32,
 }
 
-impl ModemClockPlannerIdentity {
-    pub fn new() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(1);
-        #[expect(
-            clippy::expect_used,
-            reason = "exhaustion must stop rather than reuse an identity retained by a forgotten lease"
-        )]
-        let key = NEXT
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |key| {
-                key.checked_add(1)
-            })
-            .expect("the modem clock identity space is exhausted");
-        Self { key }
-    }
-}
+/// All monotonic accounting identities have been consumed; none are reused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IdentityExhausted;
 
-impl Default for ModemClockPlannerIdentity {
-    fn default() -> Self {
-        Self::new()
+impl ModemClockPlannerIdentity {
+    /// Claim a fresh accounting identity.
+    ///
+    /// # Errors
+    ///
+    /// The finite identity space has been exhausted.
+    pub fn new() -> Result<Self, IdentityExhausted> {
+        static NEXT: AtomicU32 = AtomicU32::new(1);
+        Self::claim_from(&NEXT)
+    }
+
+    fn claim_from(next: &AtomicU32) -> Result<Self, IdentityExhausted> {
+        next.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |key| {
+            key.checked_add(1)
+        })
+        .map(|key| Self { key })
+        .map_err(|_| IdentityExhausted)
     }
 }
 
@@ -277,30 +321,44 @@ impl<D: ModemClockDependency> ModemClockPlanner<D> {
             });
         }
 
-        for &dependency in D::LOW_BIT_FIRST {
+        if !table_is_consistent::<D>() {
+            return Err(ModemClockAcquirePreparationFailure {
+                planner: self,
+                error: ModemClockAcquirePreparationError::InvalidDependencyTable,
+            });
+        }
+        if dependencies.mask & !DependencySet::of(D::LOW_BIT_FIRST).mask != 0 {
+            return Err(ModemClockAcquirePreparationFailure {
+                planner: self,
+                error: ModemClockAcquirePreparationError::UnlistedDependencies,
+            });
+        }
+        let mut counts = self.counts;
+        let mut edges = DependencySet::EMPTY;
+        for (&dependency, count) in D::LOW_BIT_FIRST.iter().zip(&mut counts) {
             if dependencies.contains(dependency) {
-                let Some(next_count) = self.counts[dependency.index()].checked_add(1) else {
+                if !dependency.refcounted() || *count == 0 {
+                    edges.mask |= bit(dependency);
+                }
+                let Some(next_count) = count.checked_add(1).filter(|next| *next <= MAX_REFCOUNT)
+                else {
                     return Err(ModemClockAcquirePreparationFailure {
                         planner: self,
                         error: ModemClockAcquirePreparationError::RefcountOverflow(dependency),
                     });
                 };
-                if next_count > MAX_REFCOUNT {
-                    return Err(ModemClockAcquirePreparationFailure {
-                        planner: self,
-                        error: ModemClockAcquirePreparationError::RefcountOverflow(dependency),
-                    });
-                }
+                *count = next_count;
             }
         }
 
-        let Some(slot) = self.slots.iter().position(|slot| !slot.active) else {
+        let Some((slot, record)) = self.slots.iter().enumerate().find(|(_, slot)| !slot.active)
+        else {
             return Err(ModemClockAcquirePreparationFailure {
                 planner: self,
                 error: ModemClockAcquirePreparationError::LeaseCapacityReached,
             });
         };
-        let Some(generation) = self.slots[slot].generation.checked_add(1) else {
+        let Some(generation) = record.generation.checked_add(1) else {
             return Err(ModemClockAcquirePreparationFailure {
                 planner: self,
                 error: ModemClockAcquirePreparationError::LeaseGenerationExhausted,
@@ -312,8 +370,10 @@ impl<D: ModemClockDependency> ModemClockPlanner<D> {
             dependencies,
             slot: slot as u8,
             generation,
-            next_dependency: 0,
-            completed_edges: 0,
+            counts,
+            edges,
+            remaining: D::LOW_BIT_FIRST.iter(),
+            completed: DependencySet::EMPTY,
         })
     }
 
@@ -329,31 +389,46 @@ impl<D: ModemClockDependency> ModemClockPlanner<D> {
         self,
         lease: ModemClockLease<D>,
     ) -> Result<PreparedModemClockRelease<D>, ModemClockReleasePreparationFailure<D>> {
+        let mut counts = self.counts;
+        let mut edges = DependencySet::EMPTY;
         let error = if self.baseline != Baseline::Managed {
             Some(ModemClockReleasePreparationError::UnknownBaseline)
         } else if self.identity.key != lease.identity {
             Some(ModemClockReleasePreparationError::CrossManagerLease)
-        } else if usize::from(lease.slot) >= MAX_ACTIVE_LEASES {
-            Some(ModemClockReleasePreparationError::InvalidLeaseSlot)
-        } else {
-            let slot = self.slots[usize::from(lease.slot)];
+        } else if let Some(slot) = self.slots.get(usize::from(lease.slot)) {
             if slot.generation != lease.generation {
                 Some(ModemClockReleasePreparationError::StaleLease)
             } else if !slot.active {
                 Some(ModemClockReleasePreparationError::DuplicateRelease)
             } else if slot.dependencies != lease.dependencies {
                 Some(ModemClockReleasePreparationError::LeaseRecordMismatch)
+            } else if !table_is_consistent::<D>() {
+                Some(ModemClockReleasePreparationError::InvalidDependencyTable)
+            } else if lease.dependencies.mask & !DependencySet::of(D::LOW_BIT_FIRST).mask != 0 {
+                Some(ModemClockReleasePreparationError::UnlistedDependencies)
             } else {
-                D::LOW_BIT_FIRST
-                    .iter()
-                    .find(|dependency| {
-                        lease.dependencies.contains(**dependency)
-                            && self.counts[dependency.index()] == 0
-                    })
-                    .map(|dependency| {
-                        ModemClockReleasePreparationError::RefcountUnderflow(*dependency)
-                    })
+                let mut error = None;
+                for (&dependency, count) in D::LOW_BIT_FIRST.iter().zip(&mut counts) {
+                    if lease.dependencies.contains(dependency) {
+                        let last = !dependency.refcounted() || *count == 1;
+                        let retained =
+                            self.wifi_initialized && dependency.retained_while_wifi_initialized();
+                        if last && !retained {
+                            edges.mask |= bit(dependency);
+                        }
+                        let Some(next_count) = count.checked_sub(1) else {
+                            error = Some(ModemClockReleasePreparationError::RefcountUnderflow(
+                                dependency,
+                            ));
+                            break;
+                        };
+                        *count = next_count;
+                    }
+                }
+                error
             }
+        } else {
+            Some(ModemClockReleasePreparationError::InvalidLeaseSlot)
         };
 
         if let Some(error) = error {
@@ -367,8 +442,10 @@ impl<D: ModemClockDependency> ModemClockPlanner<D> {
         Ok(PreparedModemClockRelease {
             planner: self,
             lease,
-            next_dependency: 0,
-            completed_edges: 0,
+            counts,
+            edges,
+            remaining: D::LOW_BIT_FIRST.iter(),
+            completed: DependencySet::EMPTY,
         })
     }
 }
@@ -377,6 +454,8 @@ impl<D: ModemClockDependency> ModemClockPlanner<D> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModemClockAcquirePreparationError<D> {
     UnknownBaseline,
+    InvalidDependencyTable,
+    UnlistedDependencies,
     RefcountOverflow(D),
     LeaseCapacityReached,
     LeaseGenerationExhausted,
@@ -413,17 +492,21 @@ impl<D: ModemClockDependency> ModemClockAcquirePreparationFailure<D> {
 ///
 /// No count or slot is modified while this owner exists.
 #[must_use = "an acquire transaction must be executed or remain abandoned"]
-pub struct PreparedModemClockAcquire<D> {
+pub struct PreparedModemClockAcquire<D: 'static> {
     planner: ModemClockPlanner<D>,
     dependencies: DependencySet<D>,
     slot: u8,
     generation: u64,
-    next_dependency: u8,
-    completed_edges: u8,
+    /// Fully checked logical result, published only at commit.
+    counts: [u16; DEPENDENCY_CAPACITY],
+    /// Validated physical edges, traversed in the chip's declared order.
+    edges: DependencySet<D>,
+    remaining: core::slice::Iter<'static, D>,
+    completed: DependencySet<D>,
 }
 
 /// Next ownership state of an acquire transaction.
-enum ModemClockAcquireStep<D> {
+enum ModemClockAcquireStep<D: 'static> {
     Physical(PendingModemClockAcquireEdge<D>),
     CommitReady(ModemClockAcquireCommitReady<D>),
 }
@@ -431,17 +514,15 @@ enum ModemClockAcquireStep<D> {
 impl<D: ModemClockDependency> PreparedModemClockAcquire<D> {
     /// Move to the next boundary edge or the explicit commit state.
     fn advance(mut self) -> ModemClockAcquireStep<D> {
-        while usize::from(self.next_dependency) < D::LOW_BIT_FIRST.len() {
-            let dependency = D::LOW_BIT_FIRST[usize::from(self.next_dependency)];
-            self.next_dependency += 1;
-            if self.dependencies.contains(dependency)
-                && (!dependency.refcounted() || self.planner.counts[dependency.index()] == 0)
-            {
-                return ModemClockAcquireStep::Physical(PendingModemClockAcquireEdge {
-                    transaction: self,
-                    dependency,
-                });
-            }
+        if let Some(&dependency) = self
+            .remaining
+            .by_ref()
+            .find(|dependency| self.edges.contains(**dependency))
+        {
+            return ModemClockAcquireStep::Physical(PendingModemClockAcquireEdge {
+                transaction: self,
+                dependency,
+            });
         }
 
         ModemClockAcquireStep::CommitReady(ModemClockAcquireCommitReady { transaction: self })
@@ -452,7 +533,7 @@ impl<D: ModemClockDependency> PreparedModemClockAcquire<D> {
 ///
 /// Failure becomes an opaque poisoned owner, so partial physical execution
 /// cannot be represented as a clean rollback.
-struct PendingModemClockAcquireEdge<D> {
+struct PendingModemClockAcquireEdge<D: 'static> {
     transaction: PreparedModemClockAcquire<D>,
     dependency: D,
 }
@@ -460,7 +541,7 @@ struct PendingModemClockAcquireEdge<D> {
 impl<D: ModemClockDependency> PendingModemClockAcquireEdge<D> {
     /// Record the edge performed and continue the same transaction.
     fn complete(mut self) -> PreparedModemClockAcquire<D> {
-        self.transaction.completed_edges += 1;
+        self.transaction.completed.mask |= bit(self.dependency);
         self.transaction
     }
 
@@ -472,7 +553,7 @@ impl<D: ModemClockDependency> PendingModemClockAcquireEdge<D> {
 
 /// Opaque owner after a physical acquire edge did not complete cleanly.
 #[must_use = "a poisoned acquire still owns its planner and pending lease"]
-pub struct PoisonedModemClockAcquire<D> {
+pub struct PoisonedModemClockAcquire<D: 'static> {
     pending: PendingModemClockAcquireEdge<D>,
 }
 
@@ -493,12 +574,12 @@ impl<D: ModemClockDependency> PoisonedModemClockAcquire<D> {
     }
 
     pub const fn completed_edges(&self) -> u8 {
-        self.pending.transaction.completed_edges
+        self.pending.transaction.completed.mask.count_ones() as u8
     }
 }
 
 #[cfg(test)]
-impl<D> PoisonedModemClockAcquire<D> {
+impl<D: 'static> PoisonedModemClockAcquire<D> {
     /// Re-expose the same pure-model edge to unit tests. This is not a
     /// hardware retry contract.
     fn reexpose_for_test(self) -> PendingModemClockAcquireEdge<D> {
@@ -507,23 +588,22 @@ impl<D> PoisonedModemClockAcquire<D> {
 }
 
 /// Acquire transaction whose required physical edge sequence is complete.
-struct ModemClockAcquireCommitReady<D> {
+struct ModemClockAcquireCommitReady<D: 'static> {
     transaction: PreparedModemClockAcquire<D>,
 }
 
 impl<D: ModemClockDependency> ModemClockAcquireCommitReady<D> {
     /// Atomically publish logical counts and the new opaque lease.
     fn commit(mut self) -> (ModemClockPlanner<D>, ModemClockLease<D>) {
-        for &dependency in D::LOW_BIT_FIRST {
-            if self.transaction.dependencies.contains(dependency) {
-                self.transaction.planner.counts[dependency.index()] += 1;
+        self.transaction.planner.counts = self.transaction.counts;
+        // The slot came from this exact fixed array's vacant-slot iterator.
+        for (index, slot) in self.transaction.planner.slots.iter_mut().enumerate() {
+            if index == usize::from(self.transaction.slot) {
+                slot.generation = self.transaction.generation;
+                slot.active = true;
+                slot.dependencies = self.transaction.dependencies;
             }
         }
-
-        let slot = &mut self.transaction.planner.slots[usize::from(self.transaction.slot)];
-        slot.generation = self.transaction.generation;
-        slot.active = true;
-        slot.dependencies = self.transaction.dependencies;
 
         let lease = ModemClockLease {
             identity: self.transaction.planner.identity.key,
@@ -551,6 +631,8 @@ pub struct ModemClockLease<D> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModemClockReleasePreparationError<D> {
     UnknownBaseline,
+    InvalidDependencyTable,
+    UnlistedDependencies,
     CrossManagerLease,
     InvalidLeaseSlot,
     StaleLease,
@@ -592,15 +674,19 @@ impl<D: ModemClockDependency> ModemClockReleasePreparationFailure<D> {
 /// The lease remains active and counts remain unchanged until the
 /// transaction commits.
 #[must_use = "a release transaction must be executed or remain abandoned"]
-pub struct PreparedModemClockRelease<D> {
+pub struct PreparedModemClockRelease<D: 'static> {
     planner: ModemClockPlanner<D>,
     lease: ModemClockLease<D>,
-    next_dependency: u8,
-    completed_edges: u8,
+    /// Fully checked logical result, published only at commit.
+    counts: [u16; DEPENDENCY_CAPACITY],
+    /// Validated physical edges, traversed in the chip's declared order.
+    edges: DependencySet<D>,
+    remaining: core::slice::Iter<'static, D>,
+    completed: DependencySet<D>,
 }
 
 /// Next ownership state of a release transaction.
-enum ModemClockReleaseStep<D> {
+enum ModemClockReleaseStep<D: 'static> {
     Physical(PendingModemClockReleaseEdge<D>),
     CommitReady(ModemClockReleaseCommitReady<D>),
 }
@@ -608,18 +694,15 @@ enum ModemClockReleaseStep<D> {
 impl<D: ModemClockDependency> PreparedModemClockRelease<D> {
     /// Move to the next one-to-zero edge or the explicit commit state.
     fn advance(mut self) -> ModemClockReleaseStep<D> {
-        while usize::from(self.next_dependency) < D::LOW_BIT_FIRST.len() {
-            let dependency = D::LOW_BIT_FIRST[usize::from(self.next_dependency)];
-            self.next_dependency += 1;
-            let last = !dependency.refcounted() || self.planner.counts[dependency.index()] == 1;
-            let retained =
-                self.planner.wifi_initialized && dependency.retained_while_wifi_initialized();
-            if self.lease.dependencies.contains(dependency) && last && !retained {
-                return ModemClockReleaseStep::Physical(PendingModemClockReleaseEdge {
-                    transaction: self,
-                    dependency,
-                });
-            }
+        if let Some(&dependency) = self
+            .remaining
+            .by_ref()
+            .find(|dependency| self.edges.contains(**dependency))
+        {
+            return ModemClockReleaseStep::Physical(PendingModemClockReleaseEdge {
+                transaction: self,
+                dependency,
+            });
         }
 
         ModemClockReleaseStep::CommitReady(ModemClockReleaseCommitReady { transaction: self })
@@ -627,7 +710,7 @@ impl<D: ModemClockDependency> PreparedModemClockRelease<D> {
 }
 
 /// Release transaction owner while one physical edge is outstanding.
-struct PendingModemClockReleaseEdge<D> {
+struct PendingModemClockReleaseEdge<D: 'static> {
     transaction: PreparedModemClockRelease<D>,
     dependency: D,
 }
@@ -635,7 +718,7 @@ struct PendingModemClockReleaseEdge<D> {
 impl<D: ModemClockDependency> PendingModemClockReleaseEdge<D> {
     /// Record the edge performed and continue the same transaction.
     fn complete(mut self) -> PreparedModemClockRelease<D> {
-        self.transaction.completed_edges += 1;
+        self.transaction.completed.mask |= bit(self.dependency);
         self.transaction
     }
 
@@ -647,7 +730,7 @@ impl<D: ModemClockDependency> PendingModemClockReleaseEdge<D> {
 
 /// Opaque owner after a physical release edge did not complete cleanly.
 #[must_use = "a poisoned release still owns its planner and exact lease"]
-pub struct PoisonedModemClockRelease<D> {
+pub struct PoisonedModemClockRelease<D: 'static> {
     pending: PendingModemClockReleaseEdge<D>,
 }
 
@@ -668,12 +751,12 @@ impl<D: ModemClockDependency> PoisonedModemClockRelease<D> {
     }
 
     pub const fn completed_edges(&self) -> u8 {
-        self.pending.transaction.completed_edges
+        self.pending.transaction.completed.mask.count_ones() as u8
     }
 }
 
 #[cfg(test)]
-impl<D> PoisonedModemClockRelease<D> {
+impl<D: 'static> PoisonedModemClockRelease<D> {
     /// Re-expose the same pure-model edge to unit tests. This is not a
     /// hardware retry contract.
     fn reexpose_for_test(self) -> PendingModemClockReleaseEdge<D> {
@@ -682,22 +765,21 @@ impl<D> PoisonedModemClockRelease<D> {
 }
 
 /// Release transaction whose required physical edge sequence is complete.
-struct ModemClockReleaseCommitReady<D> {
+struct ModemClockReleaseCommitReady<D: 'static> {
     transaction: PreparedModemClockRelease<D>,
 }
 
 impl<D: ModemClockDependency> ModemClockReleaseCommitReady<D> {
     /// Atomically decrement counts and retire the exact lease slot.
     fn commit(mut self) -> ModemClockPlanner<D> {
-        for &dependency in D::LOW_BIT_FIRST {
-            if self.transaction.lease.dependencies.contains(dependency) {
-                self.transaction.planner.counts[dependency.index()] -= 1;
+        self.transaction.planner.counts = self.transaction.counts;
+        // Preparation admitted this opaque slot against this exact planner.
+        for (index, slot) in self.transaction.planner.slots.iter_mut().enumerate() {
+            if index == usize::from(self.transaction.lease.slot) {
+                slot.active = false;
+                slot.dependencies = DependencySet::EMPTY;
             }
         }
-
-        let slot = &mut self.transaction.planner.slots[usize::from(self.transaction.lease.slot)];
-        slot.active = false;
-        slot.dependencies = DependencySet::EMPTY;
         self.transaction.planner
     }
 }
@@ -762,4 +844,5 @@ pub fn execute_release<D: ModemClockDependency, E>(
 }
 
 #[cfg(test)]
+#[allow(clippy::arithmetic_side_effects, clippy::disallowed_macros)]
 mod tests;

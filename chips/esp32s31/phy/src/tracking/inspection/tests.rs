@@ -40,9 +40,10 @@ fn due_evaluation_does_not_imply_due_calibration_or_commit_references() {
     let state = state(0);
     let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        (),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let grant = radio.begin_registration_for_host_test();
     let registered = RegisteredPhyState::from_wrapper_test_model(state, grant);
     let clients = clients(&[RadioClient::Wifi]);

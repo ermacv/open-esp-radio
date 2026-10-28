@@ -20,9 +20,10 @@ fn registered() -> (
 ) {
     let (mut radio, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        ConcurrentPhy::new(),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            ConcurrentPhy::new(),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     {
         let domain = &mut radio;
         let grant = domain.begin_registration_for_host_test();
@@ -70,9 +71,10 @@ fn wifi_joins_and_leaves_the_shared_domain_as_its_last_client() {
 fn an_unregistered_domain_admits_no_wifi_client() {
     let (mut radio, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        ConcurrentPhy::new(),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            ConcurrentPhy::new(),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let clocked = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
     let domain = &mut radio;
     let _ = clocked;

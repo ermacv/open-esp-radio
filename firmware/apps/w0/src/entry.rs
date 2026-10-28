@@ -140,10 +140,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let station = factory.address(Interface::Station);
     let access_point = factory.address(Interface::AccessPoint);
 
-    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(
-        ConcurrentPhy::new(),
-        oer_espressif_staged_runtime::phy_fault::identity(),
-    );
+    let (domain, partitions) = runtime
+        .radio
+        .split::<ChipClocks, _>(
+            ConcurrentPhy::new(),
+            oer_espressif_staged_runtime::phy_fault::identity(),
+        )
+        .unwrap_or_else(|failure| {
+            let fault = failure.fault();
+            let _owners = failure;
+            oer_espressif_staged_runtime::phy_fault::reset(fault)
+        });
     usb::early(&Note::w0_identity(
         identity.rf_cal_version,
         &identity.base_mac_address,

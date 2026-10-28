@@ -13,6 +13,7 @@ fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
         PhyRouteState::new(PhyRegistration::new()),
         (),
         crate::domain::transaction::PhyIdentity::for_host_test(),
+        crate::power::clock::ModemClockPlannerIdentity::new().expect("identity capacity"),
     )
 }
 
@@ -20,9 +21,10 @@ fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
 fn the_cold_client_returns_its_partition_to_the_concurrent_split() {
     let (shared, mut partitions) = RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let cold = Ieee802154Cold::from_partition(partitions.ieee802154);
     partitions.ieee802154 = cold.into_partition();
     let _hardware = RadioHardware::reunite(shared, partitions)
@@ -35,9 +37,10 @@ fn a_rejected_power_entry_returns_the_unchanged_cold_client() {
     radio.hold_common_power_for_test(RadioClient::Ieee802154);
     let (_shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let domain = &mut radio;
 
     let failure = match Ieee802154Cold::from_partition(partitions.ieee802154).power_up(
@@ -56,9 +59,10 @@ fn the_btbb_steps_require_the_ieee802154_reference() {
     let mut radio = radio_domain();
     let (_shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let domain = &mut radio;
 
@@ -79,9 +83,10 @@ fn releasing_clocks_the_planner_never_granted_keeps_the_clocked_owner() {
     let mut radio = radio_domain();
     let (_shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let domain = &mut radio;
 

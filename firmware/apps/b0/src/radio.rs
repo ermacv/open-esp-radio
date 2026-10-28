@@ -180,10 +180,17 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         base_mac_address: base,
         mac_extension: factory.mac_extension(),
     };
-    let (domain, parts) = runtime.radio.split::<ChipClocks, _>(
-        ConcurrentPhy::new(),
-        oer_espressif_staged_runtime::phy_fault::identity(),
-    );
+    let (domain, parts) = runtime
+        .radio
+        .split::<ChipClocks, _>(
+            ConcurrentPhy::new(),
+            oer_espressif_staged_runtime::phy_fault::identity(),
+        )
+        .unwrap_or_else(|failure| {
+            let fault = failure.fault();
+            let _owners = failure;
+            oer_espressif_staged_runtime::phy_fault::reset(fault)
+        });
     let cold = ColdOwner::from_partition(parts.bluetooth);
     let (Some((end, _)), Some((inbox, cell)), Some(lp)) = (
         oer_esp32s31_radio_client::claim(),

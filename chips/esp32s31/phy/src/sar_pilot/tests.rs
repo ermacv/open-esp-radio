@@ -188,7 +188,8 @@ fn transaction() -> (Returned, PhyTransaction, FaultHandle, PhyRegistrationEpoch
         .split::<crate::test_clocks::TestClockBackend, _>(
             crate::concurrent::ConcurrentPhy::new(),
             seat.claim().unwrap(),
-        );
+        )
+        .expect("identity capacity");
     let epoch = radio.begin_registration_for_host_test().epoch();
     let diagnostic = radio.fault_handle();
     let (returned, phy) = radio.detach(Operation::Maintain).split();

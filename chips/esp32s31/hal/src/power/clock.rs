@@ -79,8 +79,26 @@ impl ModemClockDependency for Dependency {
         Self::Ieee802154ApbAndMac,
     ];
 
-    fn index(self) -> usize {
-        self as usize
+    fn index(self) -> oer_espressif_modem_clock::DependencyIndex {
+        use oer_espressif_modem_clock::DependencyIndex;
+        match self {
+            Self::ModemAdcCommonFe => DependencyIndex::constant::<0>(),
+            Self::ModemPrivateFe => DependencyIndex::constant::<1>(),
+            Self::Pll160AndModemSource => DependencyIndex::constant::<2>(),
+            Self::Coexistence => DependencyIndex::constant::<3>(),
+            Self::AnalogI2cMaster => DependencyIndex::constant::<4>(),
+            Self::WifiApb => DependencyIndex::constant::<5>(),
+            Self::WifiBb44m => DependencyIndex::constant::<6>(),
+            Self::WifiMac => DependencyIndex::constant::<7>(),
+            Self::WifiBb => DependencyIndex::constant::<8>(),
+            Self::WifiBb80x1 => DependencyIndex::constant::<9>(),
+            Self::Etm => DependencyIndex::constant::<10>(),
+            Self::BtMac => DependencyIndex::constant::<11>(),
+            Self::BtPeripheral => DependencyIndex::constant::<12>(),
+            Self::BtApbAndSecurity => DependencyIndex::constant::<13>(),
+            Self::BtIeee802154CommonBaseband => DependencyIndex::constant::<14>(),
+            Self::Ieee802154ApbAndMac => DependencyIndex::constant::<15>(),
+        }
     }
 
     /// The vendor keeps this refcount in the platform analog-I2C owner.

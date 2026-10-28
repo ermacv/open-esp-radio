@@ -68,7 +68,8 @@ mod tests {
         let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
         let drops = Rc::new(Cell::new(0));
         let (radio, _) = RadioHardware::for_host_test()
-            .split::<TestClockBackend, _>(Payload(drops.clone()), seat.claim().unwrap());
+            .split::<TestClockBackend, _>(Payload(drops.clone()), seat.claim().unwrap())
+            .expect("identity capacity");
         let initial = radio.detach(Operation::Register);
         let begun = Cell::new(None);
         let mut destination = None;
@@ -111,7 +112,8 @@ mod tests {
         let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
         let drops = Rc::new(Cell::new(0));
         let (radio, _) = RadioHardware::for_host_test()
-            .split::<TestClockBackend, _>(Payload(drops.clone()), seat.claim().unwrap());
+            .split::<TestClockBackend, _>(Payload(drops.clone()), seat.claim().unwrap())
+            .expect("identity capacity");
         let transaction = radio.detach(Operation::Register);
         let mut destination = None;
         {

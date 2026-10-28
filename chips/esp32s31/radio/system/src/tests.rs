@@ -265,7 +265,8 @@ fn cold() -> WifiCold {
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
             oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-        );
+        )
+        .expect("identity capacity");
     WifiCold::from_partition(partitions.wifi)
 }
 

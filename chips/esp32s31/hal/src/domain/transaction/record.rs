@@ -23,6 +23,7 @@ impl FaultRecord {
             FaultReason::Cancelled(Operation::Channel) => 5,
             FaultReason::Cancelled(Operation::Retune) => 6,
             FaultReason::IdentityClaimed => 7,
+            FaultReason::ModemClockIdentityExhausted => 19,
             FaultReason::OwnerUnavailable => 8,
             FaultReason::SarTransfer { operation, fault } => {
                 let kind = match fault {
@@ -61,6 +62,7 @@ impl FaultRecord {
             5 => ("Cancelled", "channel"),
             6 => ("Cancelled", "retune"),
             7 => ("IdentityClaimed", "none"),
+            19 => ("ModemClockIdentityExhausted", "none"),
             8 => ("OwnerUnavailable", "none"),
             9 => ("SarRequestOccupied", "maintain"),
             10 => ("SarProgramUnavailable", "maintain"),
@@ -132,6 +134,25 @@ const _: () = assert!(core::mem::size_of::<FaultRecord>() == 16);
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exhausted_clock_identity_survives_refused_output() {
+        let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
+        record.record(Fault {
+            reason: FaultReason::ModemClockIdentityExhausted,
+            registration: None,
+        });
+        assert!(record.report(|_| false).is_err());
+        let mut bytes = std::vec::Vec::new();
+        record
+            .report(|chunk| {
+                bytes.extend_from_slice(chunk);
+                true
+            })
+            .unwrap();
+        assert_eq!(bytes, b"previous PHY transaction fault reason=ModemClockIdentityExhausted operation=none registration=0\n");
+        assert!(record.report(|_| panic!("reported once")).is_ok());
+    }
+
     #[test]
     fn record_is_four_words() {
         assert_eq!(core::mem::size_of::<FaultRecord>(), 16);

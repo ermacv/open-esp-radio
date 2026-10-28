@@ -10,9 +10,10 @@ use crate::{
 fn moving_the_radio_owner_preserves_its_runtime_state_through_handoff() {
     let (_domain, partitions) = RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let clocked = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
     let (mut owner, clocks) = clocked.into_running();
     assert!(!owner.initialized);

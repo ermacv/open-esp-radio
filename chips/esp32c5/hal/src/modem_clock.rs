@@ -74,8 +74,24 @@ impl oer_espressif_modem_clock::ModemClockDependency for ModemClockDependency {
         Self::Ieee802154Mac,
     ];
 
-    fn index(self) -> usize {
-        self as usize
+    fn index(self) -> oer_espressif_modem_clock::DependencyIndex {
+        use oer_espressif_modem_clock::DependencyIndex;
+        match self {
+            Self::ModemAdcCommonFe => DependencyIndex::constant::<0>(),
+            Self::ModemPrivateFe => DependencyIndex::constant::<1>(),
+            Self::Coexistence => DependencyIndex::constant::<2>(),
+            Self::AnalogI2cMaster => DependencyIndex::constant::<3>(),
+            Self::WifiApb => DependencyIndex::constant::<4>(),
+            Self::WifiBb44m => DependencyIndex::constant::<5>(),
+            Self::WifiMac => DependencyIndex::constant::<6>(),
+            Self::WifiBb => DependencyIndex::constant::<7>(),
+            Self::Etm => DependencyIndex::constant::<8>(),
+            Self::BtMac => DependencyIndex::constant::<9>(),
+            Self::BtPeripheral => DependencyIndex::constant::<10>(),
+            Self::BtApb => DependencyIndex::constant::<11>(),
+            Self::BtIeee802154CommonBaseband => DependencyIndex::constant::<12>(),
+            Self::Ieee802154Mac => DependencyIndex::constant::<13>(),
+        }
     }
 
     fn refcounted(self) -> bool {

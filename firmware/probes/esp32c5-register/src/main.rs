@@ -246,7 +246,11 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
             .expect("validated request");
         let field = AnalogField::new(address, 7, 0).expect("whole byte");
         let mut read = FieldRead::new(bus, field);
-        let Some(ours) = drive(|| read.poll()) else {
+        let Some(Ok(ours)) = drive(|| match read.poll() {
+            Ok(Step::Pending) => Step::Pending,
+            Ok(Step::Ready(value)) => Step::Ready(Ok(value)),
+            Err(error) => Step::Ready(Err(error)),
+        }) else {
             incomplete = true;
             break;
         };
@@ -272,7 +276,14 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
         let field = AnalogField::new(address, 7, 0).expect("whole byte");
         let before = rom_read(address);
         let mut write = FieldWrite::new(bus, field, before).expect("byte fits");
-        if drive(|| write.poll()).is_none() {
+        if !matches!(
+            drive(|| match write.poll() {
+                Ok(Step::Pending) => Step::Pending,
+                Ok(Step::Ready(value)) => Step::Ready(Ok(value)),
+                Err(error) => Step::Ready(Err(error)),
+            }),
+            Some(Ok(()))
+        ) {
             unchanged = false;
             break;
         }

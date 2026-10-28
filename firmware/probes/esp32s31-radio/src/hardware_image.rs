@@ -145,6 +145,7 @@ async fn sheets(boot: Boot) {
                 boot.identity,
                 &timer,
                 oer_espressif_staged_runtime::phy_fault::identity(),
+                |fault| oer_espressif_staged_runtime::phy_fault::reset(fault),
             )
         })
         .await;
