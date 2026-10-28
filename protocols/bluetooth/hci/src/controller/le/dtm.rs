@@ -6,6 +6,7 @@
 //! build Command Complete only records a status supplied by the controller
 //! owner after its own state transition has finished.
 
+use crate::encoding::Length;
 use bt_hci::{
     PacketKind,
     cmd::{Opcode, OpcodeGroup},
@@ -180,7 +181,7 @@ impl LeDtmCommand {
     /// closed opcode and exact-length policy as [`Self::decode`].
     pub fn decode_body(opcode: Opcode, parameters: &[u8]) -> Result<Self, LeDtmCommandDecodeError> {
         if opcode == LE_RECEIVER_TEST_V1_OPCODE {
-            require_parameter_length(LeDtmCommandKind::ReceiverTestV1, parameters, 1)?;
+            let parameters = parameter_array::<1>(LeDtmCommandKind::ReceiverTestV1, parameters)?;
             let channel = LeDtmChannel::from_hci_parameter(parameters[0]).ok_or(
                 LeDtmCommandDecodeError::ChannelOutsideTestDomain {
                     command: LeDtmCommandKind::ReceiverTestV1,
@@ -194,7 +195,7 @@ impl LeDtmCommand {
                 modulation_index: LeDtmModulationIndex::Standard,
             }))
         } else if opcode == LE_TRANSMITTER_TEST_V1_OPCODE {
-            require_parameter_length(LeDtmCommandKind::TransmitterTestV1, parameters, 3)?;
+            let parameters = parameter_array::<3>(LeDtmCommandKind::TransmitterTestV1, parameters)?;
             let channel = LeDtmChannel::from_hci_parameter(parameters[0]).ok_or(
                 LeDtmCommandDecodeError::ChannelOutsideTestDomain {
                     command: LeDtmCommandKind::TransmitterTestV1,
@@ -215,7 +216,7 @@ impl LeDtmCommand {
                 phy: LeDtmPhy::Le1M,
             }))
         } else if opcode == LE_RECEIVER_TEST_V2_OPCODE {
-            require_parameter_length(LeDtmCommandKind::ReceiverTestV2, parameters, 3)?;
+            let parameters = parameter_array::<3>(LeDtmCommandKind::ReceiverTestV2, parameters)?;
             let channel = LeDtmChannel::from_hci_parameter(parameters[0]).ok_or(
                 LeDtmCommandDecodeError::ChannelOutsideTestDomain {
                     command: LeDtmCommandKind::ReceiverTestV2,
@@ -241,7 +242,7 @@ impl LeDtmCommand {
                 modulation_index,
             }))
         } else if opcode == LE_TRANSMITTER_TEST_V2_OPCODE {
-            require_parameter_length(LeDtmCommandKind::TransmitterTestV2, parameters, 4)?;
+            let parameters = parameter_array::<4>(LeDtmCommandKind::TransmitterTestV2, parameters)?;
             let channel = LeDtmChannel::from_hci_parameter(parameters[0]).ok_or(
                 LeDtmCommandDecodeError::ChannelOutsideTestDomain {
                     command: LeDtmCommandKind::TransmitterTestV2,
@@ -592,7 +593,7 @@ impl LeTestEndCommand {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeDtmCommandCompleteEvent {
     bytes: [u8; LE_DTM_COMMAND_COMPLETE_EVENT_CAPACITY],
-    length: usize,
+    length: Length<usize, LE_DTM_COMMAND_COMPLETE_EVENT_CAPACITY>,
     opcode: Opcode,
     status: Status,
     packet_count: Option<u16>,
@@ -602,29 +603,30 @@ impl LeDtmCommandCompleteEvent {
     /// Command Complete carrying only `status`, as a test start or a refused
     /// command returns.
     pub fn without_return_parameters(opcode: Opcode, status: Status) -> Self {
-        let mut event = Self::header(opcode, status, 0);
-        event.length = 6;
-        event
+        Self::header::<0>(opcode, status)
     }
 
     fn with_packet_count(opcode: Opcode, status: Status, packet_count: u16) -> Self {
-        let mut event = Self::header(opcode, status, 2);
-        event.bytes[6..8].copy_from_slice(&packet_count.to_le_bytes());
-        event.length = 8;
+        let mut event = Self::header::<2>(opcode, status);
+        let [low, high] = packet_count.to_le_bytes();
+        event.bytes[6] = low;
+        event.bytes[7] = high;
         event.packet_count = Some(packet_count);
         event
     }
 
-    fn header(opcode: Opcode, status: Status, return_parameter_length: u8) -> Self {
+    fn header<const N: usize>(opcode: Opcode, status: Status) -> Self {
         let mut bytes = [0; LE_DTM_COMMAND_COMPLETE_EVENT_CAPACITY];
         bytes[0] = 0x0e;
-        bytes[1] = 4 + return_parameter_length;
+        bytes[1] = const { (4 + N) as u8 };
         bytes[2] = 1;
-        bytes[3..5].copy_from_slice(&opcode.to_raw().to_le_bytes());
+        let [low, high] = opcode.to_raw().to_le_bytes();
+        bytes[3] = low;
+        bytes[4] = high;
         bytes[5] = status.into_inner();
         Self {
             bytes,
-            length: 0,
+            length: Length::<usize, LE_DTM_COMMAND_COMPLETE_EVENT_CAPACITY>::with_header::<6, N>(),
             opcode,
             status,
             packet_count: None,
@@ -633,7 +635,7 @@ impl LeDtmCommandCompleteEvent {
 
     /// Complete HCI Event body without an H4 packet indicator.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..self.length]
+        self.length.borrow(&self.bytes)
     }
 
     /// Opcode copied from the consumed typed command token.
@@ -660,6 +662,19 @@ impl HciControllerResponse for LeDtmCommandCompleteEvent {
     fn as_bytes(&self) -> &[u8] {
         self.as_bytes()
     }
+}
+
+fn parameter_array<const N: usize>(
+    command: LeDtmCommandKind,
+    parameters: &[u8],
+) -> Result<&[u8; N], LeDtmCommandDecodeError> {
+    parameters
+        .try_into()
+        .map_err(|_| LeDtmCommandDecodeError::InvalidParameterLength {
+            command,
+            expected: N,
+            actual: parameters.len(),
+        })
 }
 
 fn require_parameter_length(

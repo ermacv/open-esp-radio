@@ -141,7 +141,7 @@ fn bootstrap_command_is_owned_without_advancing_software_state() {
     assert!(command.is_reset());
     assert_eq!(bootstrap.phase(), BootstrapPhase::AwaitingReset);
 
-    let response = bootstrap.dispatch(command, false);
+    let response = bootstrap.dispatch(command, false).unwrap();
     assert_eq!(response.status(), Status::SUCCESS);
     assert_eq!(bootstrap.phase(), BootstrapPhase::Configuring);
 }
@@ -170,6 +170,7 @@ fn active_reset_can_be_held_until_the_session_policy_dispatches_it() {
     assert_eq!(
         bootstrap
             .dispatch(OwnedBootstrapCommand::Reset, false)
+            .unwrap()
             .status(),
         Status::SUCCESS
     );
@@ -177,6 +178,7 @@ fn active_reset_can_be_held_until_the_session_policy_dispatches_it() {
     assert_eq!(
         bootstrap
             .dispatch(OwnedBootstrapCommand::SetEventMask(requested_mask), false)
+            .unwrap()
             .status(),
         Status::SUCCESS
     );
@@ -189,10 +191,13 @@ fn active_reset_can_be_held_until_the_session_policy_dispatches_it() {
     assert!(reset.is_reset());
     assert_eq!(bootstrap.event_mask(), requested_mask);
 
-    assert_eq!(bootstrap.dispatch(reset, false).status(), Status::SUCCESS);
+    assert_eq!(
+        bootstrap.dispatch(reset, false).unwrap().status(),
+        Status::SUCCESS
+    );
     assert_eq!(
         bootstrap.event_mask(),
-        crate::controller::bootstrap::state::default_event_mask()
+        crate::controller::bootstrap::state::default_event_mask().unwrap()
     );
 }
 
@@ -203,12 +208,14 @@ fn malformed_known_bootstrap_is_owned_without_touching_an_epoch() {
     assert_eq!(
         bootstrap
             .dispatch(OwnedBootstrapCommand::Reset, false)
+            .unwrap()
             .status(),
         Status::SUCCESS
     );
     assert_eq!(
         bootstrap
             .dispatch(OwnedBootstrapCommand::SetEventMask(requested_mask), false)
+            .unwrap()
             .status(),
         Status::SUCCESS
     );
@@ -377,4 +384,5 @@ fn bootstrap() -> LeControllerBootstrap {
         )
         .expect("nonzero test profile"),
     )
+    .unwrap()
 }

@@ -77,10 +77,9 @@ impl LeLongTermKeyRequestReplyCommand {
         if handle > 0x0eff {
             return Err(LeLongTermKeyCommandDecodeError::Malformed);
         }
-        let mut long_term_key = [0; 16];
-        long_term_key.copy_from_slice(&parameters[2..]);
+        let [_, _, long_term_key @ ..] = *parameters;
         Ok(Self {
-            handle: ConnHandle::new(handle),
+            handle: ConnHandle(handle),
             long_term_key,
         })
     }
@@ -137,7 +136,7 @@ impl LeLongTermKeyRequestNegativeReplyCommand {
             return Err(LeLongTermKeyCommandDecodeError::Malformed);
         }
         Ok(Self {
-            handle: ConnHandle::new(handle),
+            handle: ConnHandle(handle),
         })
     }
 
@@ -207,7 +206,7 @@ impl LeLongTermKeyCommandCompleteEvent {
         Self::new(
             opcode,
             bt_hci::param::Error::INVALID_HCI_PARAMETERS.to_status(),
-            ConnHandle::new(0),
+            ConnHandle(0),
         )
     }
 
@@ -251,15 +250,26 @@ pub struct LeLongTermKeyRequestEvent {
 
 impl LeLongTermKeyRequestEvent {
     pub fn new(handle: ConnHandle, random_number: [u8; 8], encrypted_diversifier: u16) -> Self {
-        let handle = handle.raw().to_le_bytes();
-        let encrypted_diversifier = encrypted_diversifier.to_le_bytes();
-        let mut bytes = [0; LE_LONG_TERM_KEY_REQUEST_EVENT_CAPACITY];
-        bytes[0] = EventKind::Le.0;
-        bytes[1] = (LE_LONG_TERM_KEY_REQUEST_EVENT_CAPACITY - 2) as u8;
-        bytes[2] = LeEventKind::LeLongTermKeyRequest.0;
-        bytes[3..5].copy_from_slice(&handle);
-        bytes[5..13].copy_from_slice(&random_number);
-        bytes[13..15].copy_from_slice(&encrypted_diversifier);
+        let [low, high] = handle.raw().to_le_bytes();
+        let [ediv_low, ediv_high] = encrypted_diversifier.to_le_bytes();
+        let [a, b, c, d, e, f, g, h] = random_number;
+        let bytes = [
+            EventKind::Le.0,
+            (LE_LONG_TERM_KEY_REQUEST_EVENT_CAPACITY - 2) as u8,
+            LeEventKind::LeLongTermKeyRequest.0,
+            low,
+            high,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            h,
+            ediv_low,
+            ediv_high,
+        ];
         Self { bytes }
     }
 
@@ -386,7 +396,7 @@ impl LeReadRemoteVersionInformationCommand {
             return Err(LeReadRemoteVersionInformationDecodeError::Malformed);
         }
         Ok(Self {
-            handle: ConnHandle::new(handle),
+            handle: ConnHandle(handle),
         })
     }
 
@@ -535,7 +545,7 @@ impl LeReadRemoteFeaturesCommand {
             return Err(LeReadRemoteFeaturesDecodeError::Malformed);
         }
         Ok(Self {
-            handle: ConnHandle::new(handle),
+            handle: ConnHandle(handle),
         })
     }
 
@@ -628,14 +638,24 @@ impl LeReadRemoteFeaturesCompleteEvent {
     /// Build a completion for the sole connection handle.
     pub fn new(status: Status, handle: ConnHandle, features: [u8; 8]) -> Self {
         let handle = handle.raw().to_le_bytes();
-        let mut bytes = [0; LE_READ_REMOTE_FEATURES_COMPLETE_EVENT_CAPACITY];
-        bytes[0] = EventKind::Le.0;
-        bytes[1] = (LE_READ_REMOTE_FEATURES_COMPLETE_EVENT_CAPACITY - 2) as u8;
-        bytes[2] = 0x04;
-        bytes[3] = status.into_inner();
-        bytes[4] = handle[0];
-        bytes[5] = handle[1];
-        bytes[6..].copy_from_slice(&features);
+        let [handle_low, handle_high] = handle;
+        let [a, b, c, d, e, f, g, h] = features;
+        let bytes = [
+            EventKind::Le.0,
+            (LE_READ_REMOTE_FEATURES_COMPLETE_EVENT_CAPACITY - 2) as u8,
+            0x04,
+            status.into_inner(),
+            handle_low,
+            handle_high,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            h,
+        ];
         Self { bytes }
     }
 
@@ -672,7 +692,7 @@ impl LeDisconnectCommand {
             return Err(LeDisconnectDecodeError::Malformed);
         }
         Ok(Self {
-            handle: ConnHandle::new(handle),
+            handle: ConnHandle(handle),
             reason: *reason,
         })
     }
@@ -849,19 +869,34 @@ impl LePeripheralConnectionCompleteEvent {
         let interval = connection_interval.as_u16().to_le_bytes();
         let latency = peripheral_latency.to_le_bytes();
         let timeout = supervision_timeout.as_u16().to_le_bytes();
-        let mut bytes = [0; LE_PERIPHERAL_CONNECTION_COMPLETE_EVENT_CAPACITY];
-        bytes[0] = EventKind::Le.0;
-        bytes[1] = (LE_PERIPHERAL_CONNECTION_COMPLETE_EVENT_CAPACITY - 2) as u8;
-        bytes[2] = LeConnectionComplete::SUBEVENT_CODE;
-        bytes[3] = status.into_inner();
-        bytes[4..6].copy_from_slice(&handle);
-        bytes[6] = LeConnRole::Peripheral as u8;
-        bytes[7] = peer_address_kind.as_raw();
-        bytes[8..14].copy_from_slice(peer_address.raw());
-        bytes[14..16].copy_from_slice(&interval);
-        bytes[16..18].copy_from_slice(&latency);
-        bytes[18..20].copy_from_slice(&timeout);
-        bytes[20] = central_clock_accuracy as u8;
+        let [handle_low, handle_high] = handle;
+        let [a, b, c, d, e, f] = peer_address.into_inner();
+        let [interval_low, interval_high] = interval;
+        let [latency_low, latency_high] = latency;
+        let [timeout_low, timeout_high] = timeout;
+        let bytes = [
+            EventKind::Le.0,
+            (LE_PERIPHERAL_CONNECTION_COMPLETE_EVENT_CAPACITY - 2) as u8,
+            LeConnectionComplete::SUBEVENT_CODE,
+            status.into_inner(),
+            handle_low,
+            handle_high,
+            LeConnRole::Peripheral as u8,
+            peer_address_kind.as_raw(),
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            interval_low,
+            interval_high,
+            latency_low,
+            latency_high,
+            timeout_low,
+            timeout_high,
+            central_clock_accuracy as u8,
+        ];
         Self { bytes }
     }
 
@@ -898,15 +933,24 @@ impl LeConnectionUpdateCompleteEvent {
         let interval = connection_interval.as_u16().to_le_bytes();
         let latency = peripheral_latency.to_le_bytes();
         let timeout = supervision_timeout.as_u16().to_le_bytes();
-        let mut bytes = [0; LE_CONNECTION_UPDATE_COMPLETE_EVENT_CAPACITY];
-        bytes[0] = EventKind::Le.0;
-        bytes[1] = (LE_CONNECTION_UPDATE_COMPLETE_EVENT_CAPACITY - 2) as u8;
-        bytes[2] = LeConnectionUpdateComplete::SUBEVENT_CODE;
-        bytes[3] = Status::SUCCESS.into_inner();
-        bytes[4..6].copy_from_slice(&handle);
-        bytes[6..8].copy_from_slice(&interval);
-        bytes[8..10].copy_from_slice(&latency);
-        bytes[10..12].copy_from_slice(&timeout);
+        let [handle_low, handle_high] = handle;
+        let [interval_low, interval_high] = interval;
+        let [latency_low, latency_high] = latency;
+        let [timeout_low, timeout_high] = timeout;
+        let bytes = [
+            EventKind::Le.0,
+            (LE_CONNECTION_UPDATE_COMPLETE_EVENT_CAPACITY - 2) as u8,
+            LeConnectionUpdateComplete::SUBEVENT_CODE,
+            Status::SUCCESS.into_inner(),
+            handle_low,
+            handle_high,
+            interval_low,
+            interval_high,
+            latency_low,
+            latency_high,
+            timeout_low,
+            timeout_high,
+        ];
         Self { bytes }
     }
 

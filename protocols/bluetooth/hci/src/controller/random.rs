@@ -43,11 +43,24 @@ impl LeRandCommandCompleteEvent {
     }
 
     fn new(status: Status, random: [u8; 8]) -> Self {
-        let mut bytes = [0; 14];
-        bytes[..3].copy_from_slice(&[0x0e, 12, 1]);
-        bytes[3..5].copy_from_slice(&LeRandCommand::OPCODE.to_raw().to_le_bytes());
-        bytes[5] = status.into_inner();
-        bytes[6..].copy_from_slice(&random);
+        let [low, high] = LeRandCommand::OPCODE.to_raw().to_le_bytes();
+        let [a, b, c, d, e, f, g, h] = random;
+        let bytes = [
+            0x0e,
+            12,
+            1,
+            low,
+            high,
+            status.into_inner(),
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            h,
+        ];
         Self { bytes }
     }
 

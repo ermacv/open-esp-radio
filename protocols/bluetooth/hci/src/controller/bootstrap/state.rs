@@ -1,6 +1,7 @@
 //! Reset-scoped Host configuration and bootstrap command admission.
 
 use super::*;
+use crate::HciBuildError;
 
 /// HCI bootstrap lifecycle relative to the mandatory Reset command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -37,16 +38,16 @@ pub struct LeControllerBootstrap {
 
 impl LeControllerBootstrap {
     /// Construct cold bootstrap state which accepts only a valid Reset first.
-    pub fn new(config: LeControllerBootstrapConfig) -> Self {
-        Self {
+    pub fn new(config: LeControllerBootstrapConfig) -> Result<Self, HciBuildError> {
+        Ok(Self {
             config,
             phase: BootstrapPhase::AwaitingReset,
-            event_mask: default_event_mask(),
-            le_event_mask: default_le_event_mask(),
+            event_mask: default_event_mask()?,
+            le_event_mask: default_le_event_mask()?,
             requested_random_address: None,
             host_buffers: None,
             controller_to_host_flow_control: ControllerToHostFlowControl::Off,
-        }
+        })
     }
 
     /// Immutable values reported to the Host.
@@ -103,15 +104,15 @@ impl LeControllerBootstrap {
         &mut self,
         command: OwnedBootstrapCommand,
         has_random_source: bool,
-    ) -> BootstrapCommandCompleteEvent {
+    ) -> Result<BootstrapCommandCompleteEvent, HciBuildError> {
         let opcode = command.opcode();
         if !command.is_reset() && self.phase == BootstrapPhase::AwaitingReset {
-            return command_error(opcode, HciError::CMD_DISALLOWED);
+            return Ok(command_error(opcode, HciError::CMD_DISALLOWED));
         }
 
-        match command {
+        Ok(match command {
             OwnedBootstrapCommand::Reset => {
-                self.reset_epoch();
+                self.reset_epoch()?;
                 command_success(opcode, &[])
             }
             OwnedBootstrapCommand::SetEventMask(mask) => {
@@ -123,7 +124,7 @@ impl LeControllerBootstrap {
                     mode,
                     ControllerToHostFlowControl::Off | ControllerToHostFlowControl::AclOnSyncOff
                 ) {
-                    return command_error(opcode, HciError::UNSUPPORTED);
+                    return Ok(command_error(opcode, HciError::UNSUPPORTED));
                 }
                 self.controller_to_host_flow_control = mode;
                 command_success(opcode, &[])
@@ -138,9 +139,10 @@ impl LeControllerBootstrap {
                 });
                 command_success(opcode, &[])
             }
-            OwnedBootstrapCommand::ReadBdAddr => {
-                command_success(opcode, self.config.public_address.hci_wire_address().raw())
-            }
+            OwnedBootstrapCommand::ReadBdAddr => command_success(
+                opcode,
+                &self.config.public_address.hci_wire_address().into_inner(),
+            ),
             OwnedBootstrapCommand::ReadLocalSupportedCommands => {
                 let mut commands = super::le_controller_supported_commands();
                 if has_random_source {
@@ -159,9 +161,8 @@ impl LeControllerBootstrap {
                 command_success(opcode, &[])
             }
             OwnedBootstrapCommand::LeReadBufferSize => {
-                let mut response = [0; 3];
-                response[..2].copy_from_slice(&self.config.le_acl_data_packet_length.to_le_bytes());
-                response[2] = self.config.total_num_le_acl_data_packets;
+                let [low, high] = self.config.le_acl_data_packet_length.to_le_bytes();
+                let response = [low, high, self.config.total_num_le_acl_data_packets];
                 command_success(opcode, &response)
             }
             OwnedBootstrapCommand::LeReadLocalSupportedFeatures => {
@@ -189,32 +190,65 @@ impl LeControllerBootstrap {
             OwnedBootstrapCommand::LeReadFilterAcceptListSize => {
                 command_success(opcode, &[self.config.filter_accept_list_size()])
             }
-        }
+        })
     }
 
-    fn reset_epoch(&mut self) {
+    fn reset_epoch(&mut self) -> Result<(), HciBuildError> {
+        // Validate both defaults before changing any reset-scoped state.
+        let event_mask = default_event_mask()?;
+        let le_event_mask = default_le_event_mask()?;
         self.phase = BootstrapPhase::Configuring;
-        self.event_mask = default_event_mask();
-        self.le_event_mask = default_le_event_mask();
+        self.event_mask = event_mask;
+        self.le_event_mask = le_event_mask;
         self.requested_random_address = None;
         self.host_buffers = None;
         self.controller_to_host_flow_control = ControllerToHostFlowControl::Off;
+        Ok(())
     }
 }
 
 /// The event mask after Reset, `0x0000_1FFF_FFFF_FFFF` (Core Vol 4 Part E
 /// 7.3.1): every event up to bit 44, without LE Meta.
-pub(crate) fn default_event_mask() -> EventMask {
-    EventMask::from_hci_bytes(&0x0000_1fff_ffff_ffff_u64.to_le_bytes())
-        .expect("eight octets")
-        .0
+pub(crate) fn default_event_mask() -> Result<EventMask, HciBuildError> {
+    decode_reset_mask(&0x0000_1fff_ffff_ffff_u64.to_le_bytes())
 }
 
 /// The LE event mask after Reset, `0x1F` (Core Vol 4 Part E 7.8.1):
 /// connection complete, advertising report, connection update complete,
 /// remote features complete and LTK request.
-pub(crate) fn default_le_event_mask() -> LeEventMask {
-    LeEventMask::from_hci_bytes(&0x1f_u64.to_le_bytes())
-        .expect("eight octets")
-        .0
+pub(crate) fn default_le_event_mask() -> Result<LeEventMask, HciBuildError> {
+    decode_reset_mask(&0x1f_u64.to_le_bytes())
+}
+
+fn decode_reset_mask<T: for<'a> FromHciBytes<'a>>(bytes: &[u8]) -> Result<T, HciBuildError> {
+    T::from_hci_bytes_complete(bytes).map_err(HciBuildError::InvalidResetEventMask)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reset_mask_decode_reports_invalid_encoding_and_preserves_every_default_bit() {
+        assert_eq!(
+            decode_reset_mask::<EventMask>(&[0; 7]),
+            Err(HciBuildError::InvalidResetEventMask(
+                bt_hci::FromHciBytesError::InvalidSize
+            ))
+        );
+        assert_eq!(
+            decode_reset_mask::<LeEventMask>(&[0; 9]),
+            Err(HciBuildError::InvalidResetEventMask(
+                bt_hci::FromHciBytesError::InvalidSize
+            ))
+        );
+        assert_eq!(
+            default_event_mask().unwrap().into_inner(),
+            0x0000_1fff_ffff_ffff_u64.to_le_bytes()
+        );
+        assert_eq!(
+            default_le_event_mask().unwrap().into_inner(),
+            0x1f_u64.to_le_bytes()
+        );
+    }
 }

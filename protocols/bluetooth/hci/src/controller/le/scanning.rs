@@ -4,6 +4,7 @@
 //! This module does not retain configuration, start a Link Layer window,
 //! publish advertising reports, or claim radio progress.
 
+use crate::encoding::Length;
 use bt_hci::{
     FromHciBytes, PacketKind,
     cmd::{
@@ -403,7 +404,7 @@ pub enum LeLegacyAdvertisingReportEventError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeLegacyAdvertisingReportEvent {
     bytes: [u8; LE_LEGACY_ADVERTISING_REPORT_EVENT_CAPACITY],
-    length: u8,
+    length: Length<u8, LE_LEGACY_ADVERTISING_REPORT_EVENT_CAPACITY>,
 }
 
 impl LeLegacyAdvertisingReportEvent {
@@ -424,28 +425,37 @@ impl LeLegacyAdvertisingReportEvent {
             ));
         }
 
-        let length = 14 + data.len();
-        let parameter_length = length - 2;
+        let invalid = || LeLegacyAdvertisingReportEventError::DataTooLong { length: data.len() };
+        let length = 14_u8
+            .checked_add(u8::try_from(data.len()).map_err(|_| invalid())?)
+            .and_then(Length::<u8, LE_LEGACY_ADVERTISING_REPORT_EVENT_CAPACITY>::new)
+            .ok_or_else(invalid)?;
+        let parameter_length = length.get().checked_sub(2).ok_or_else(invalid)?;
         let mut bytes = [0; LE_LEGACY_ADVERTISING_REPORT_EVENT_CAPACITY];
         bytes[0] = EventKind::Le.0;
-        bytes[1] = parameter_length as u8;
+        bytes[1] = parameter_length;
         bytes[2] = LeAdvertisingReport::SUBEVENT_CODE;
         bytes[3] = 1;
         bytes[4] = event_kind as u8;
         bytes[5] = address_kind.as_raw();
-        bytes[6..12].copy_from_slice(address.raw());
+        for (destination, source) in bytes.iter_mut().skip(6).zip(address.raw()) {
+            *destination = *source;
+        }
         bytes[12] = data.len() as u8;
-        bytes[13..13 + data.len()].copy_from_slice(data);
-        bytes[13 + data.len()] = rssi_dbm.to_le_bytes()[0];
-        Ok(Self {
-            bytes,
-            length: length as u8,
-        })
+        // The data admission reserves the final octet for RSSI.
+        for (destination, source) in bytes
+            .iter_mut()
+            .skip(13)
+            .zip(data.iter().copied().chain(rssi_dbm.to_le_bytes()))
+        {
+            *destination = source;
+        }
+        Ok(Self { bytes, length })
     }
 
     /// Complete HCI Event body without an H4 packet indicator.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.length)]
+        self.length.borrow(&self.bytes)
     }
 }
 
@@ -456,6 +466,22 @@ impl HciControllerResponse for LeLegacyAdvertisingReportEvent {
 
     fn as_bytes(&self) -> &[u8] {
         self.as_bytes()
+    }
+}
+
+impl LeLegacyScanningCommand {
+    pub(crate) fn into_classification(self) -> crate::LeControllerCommandClassification {
+        use crate::LeControllerCommandClassification as Classification;
+        match self {
+            LeLegacyScanningCommand::SetParameters(parameters) => {
+                Classification::LegacyScanningConfiguration(LeLegacyScanningConfigurationCommand {
+                    parameters,
+                })
+            }
+            LeLegacyScanningCommand::SetEnable(command) => {
+                Classification::LegacyScanningEnable(command)
+            }
+        }
     }
 }
 
