@@ -8,7 +8,10 @@
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects
 )]
-//! Espressif watchdog sequences over a chip's typed watchdog registers.
+//! Espressif platform watchdog owners over a chip's typed watchdog registers.
+//!
+//! This platform crate owns hardware reset configuration and finite reset
+//! leases; portable time supplies only the value-based deadline policy.
 //!
 //! The ESP32-S31 and the ESP32-C5 share the watchdog IP: a main watchdog
 //! (MWDT) in each timer group, the RTC watchdog (RWDT) and the super

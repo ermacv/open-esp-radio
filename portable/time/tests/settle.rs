@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
+
 //! The named settle on a stepping clock and on virtual time.
 
 use core::cell::Cell;

@@ -408,6 +408,7 @@ pub enum WindowError {
 pub struct RadioWindow<D> {
     start: RadioInstant<D>,
     duration: RadioDuration<D>,
+    end: RadioInstant<D>,
 }
 
 impl<D> RadioWindow<D> {
@@ -422,10 +423,15 @@ impl<D> RadioWindow<D> {
         if duration.micros == 0 {
             return Err(WindowError::Empty);
         }
-        if start.checked_add(duration).is_none() {
-            return Err(WindowError::Overflow);
-        }
-        Ok(Self { start, duration })
+        let end = match start.checked_add(duration) {
+            Some(end) => end,
+            None => return Err(WindowError::Overflow),
+        };
+        Ok(Self {
+            start,
+            duration,
+            end,
+        })
     }
 
     /// Reserve a non-zero `duration` from `start`, or `None` when the
@@ -448,10 +454,14 @@ impl<D> RadioWindow<D> {
         match self.start.checked_sub(lead) {
             // `start + duration` is representable, so `lead + duration`,
             // which ends at the same instant from an earlier start, is too.
-            Some(start) => Some(Self {
-                start,
-                duration: RadioDuration::from_micros(self.duration.micros + lead.micros),
-            }),
+            Some(start) => match self.duration.checked_add(lead) {
+                Some(duration) => Some(Self {
+                    start,
+                    duration,
+                    end: self.end,
+                }),
+                None => None,
+            },
             None => None,
         }
     }
@@ -468,8 +478,7 @@ impl<D> RadioWindow<D> {
 
     /// First instant after the window.
     pub const fn end(self) -> RadioInstant<D> {
-        // `new` proved this endpoint representable; the fields are private.
-        RadioInstant::from_micros(self.start.micros + self.duration.micros)
+        self.end
     }
 
     /// Whether the two windows share an instant. Touching windows do not.

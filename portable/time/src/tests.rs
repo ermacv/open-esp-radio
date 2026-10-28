@@ -72,6 +72,10 @@ fn durations_convert_every_unit_to_microseconds() {
         u64::from(u32::MAX) * 1_000
     );
     assert_eq!(
+        Duration::from_secs(u32::MAX).as_micros(),
+        u64::from(u32::MAX) * 1_000_000
+    );
+    assert_eq!(
         Duration::from_micros(u64::MAX).checked_add(Duration::from_micros(1)),
         None
     );

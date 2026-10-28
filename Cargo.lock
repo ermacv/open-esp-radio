@@ -3487,8 +3487,8 @@ name = "oer-time-virtual"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "embassy-sync",
  "oer-time",
+ "tempfile",
 ]
 
 [[package]]

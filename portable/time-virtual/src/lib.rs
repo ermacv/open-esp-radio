@@ -8,7 +8,17 @@
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects
+    )
 )]
 
 //! Deterministic virtual time for tests and simulations.
@@ -27,12 +37,11 @@
 //! executor. Creating or dropping an unpolled wait leaves time unchanged.
 
 use core::{
-    cell::{Cell, RefCell},
+    cell::Cell,
     future::{Future, poll_fn},
-    task::Poll,
+    task::{Poll, Waker},
 };
 
-use embassy_sync::waitqueue::MultiWakerRegistration;
 use oer_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer};
 
 /// Where [`VirtualClock::new`] and [`SkipClock::new`] start:
@@ -46,13 +55,15 @@ pub const DEFAULT_WAITERS: usize = 8;
 
 /// Virtual monotonic time, advanced explicitly by its owner.
 ///
+/// `WAITERS` must be nonzero; every constructor checks this at compile time.
+///
 /// A read returns the time the owner last set, starting at the instant the
 /// clock was made with: [`START`] by default. Waits end when an advance
 /// reaches their deadline, or at once for a deadline already reached.
 pub struct VirtualClock<const WAITERS: usize = DEFAULT_WAITERS> {
     now: Cell<Instant>,
     earliest: Cell<Option<Instant>>,
-    waiters: RefCell<MultiWakerRegistration<WAITERS>>,
+    waiters: [Cell<Option<Waker>>; WAITERS],
 }
 
 impl<const WAITERS: usize> Default for VirtualClock<WAITERS> {
@@ -69,10 +80,15 @@ impl<const WAITERS: usize> VirtualClock<WAITERS> {
 
     /// A clock at `start`, for a test that places time itself.
     pub const fn starting_at(start: Instant) -> Self {
+        const {
+            if WAITERS == 0 {
+                panic!("a virtual clock needs at least one waker slot");
+            }
+        }
         Self {
             now: Cell::new(start),
             earliest: Cell::new(None),
-            waiters: RefCell::new(MultiWakerRegistration::new()),
+            waiters: [const { Cell::new(None) }; WAITERS],
         }
     }
 
@@ -111,7 +127,47 @@ impl<const WAITERS: usize> VirtualClock<WAITERS> {
     fn set(&self, at: Instant) {
         self.now.set(at);
         self.earliest.set(None);
-        self.waiters.borrow_mut().wake();
+        Self::wake(self.take_waiters());
+    }
+
+    fn take_waiters(&self) -> [Option<Waker>; WAITERS] {
+        self.waiters.each_ref().map(Cell::take)
+    }
+
+    fn wake(waiters: [Option<Waker>; WAITERS]) {
+        // All slots are available before any user callback can reenter.
+        for waker in waiters.into_iter().flatten() {
+            waker.wake();
+        }
+    }
+
+    fn register(&self, waker: Waker) {
+        for slot in &self.waiters {
+            let registered = slot.take();
+            let duplicate = registered
+                .as_ref()
+                .is_some_and(|saved| saved.will_wake(&waker));
+            slot.set(registered);
+            if duplicate {
+                return;
+            }
+        }
+        for slot in &self.waiters {
+            match slot.take() {
+                None => {
+                    slot.set(Some(waker));
+                    return;
+                }
+                registered => slot.set(registered),
+            }
+        }
+        let waiting = self.take_waiters();
+        // Construction const-checks WAITERS > 0. Install the new waker
+        // before callbacks: a reentrant advance must wake it as well.
+        if let Some(first) = self.waiters.first() {
+            first.set(Some(waker));
+        }
+        Self::wake(waiting);
     }
 }
 
@@ -127,12 +183,18 @@ impl<const WAITERS: usize> Timer for VirtualClock<WAITERS> {
             if self.now.get() >= deadline {
                 return Poll::Ready(());
             }
+            // Cloning may run a user callback too. Recheck time before
+            // publishing the deadline and its registration.
+            let waker = context.waker().clone();
+            if self.now.get() >= deadline {
+                return Poll::Ready(());
+            }
             self.earliest.set(Some(
                 self.earliest
                     .get()
                     .map_or(deadline, |earliest| earliest.min(deadline)),
             ));
-            self.waiters.borrow_mut().register(context.waker());
+            self.register(waker);
             Poll::Pending
         })
     }

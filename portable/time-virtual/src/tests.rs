@@ -206,3 +206,104 @@ fn the_default_clocks_start_at_the_epoch_offset() {
     // The low word has bit 31 set from the first read.
     assert_eq!(SkipClock::new().now().as_micros() as u32, 1 << 31);
 }
+
+#[test]
+fn repolling_one_task_does_not_fill_the_waiter_capacity() {
+    let clock = VirtualClock::<1>::new();
+    let wakes = Arc::new(Wakes::default());
+    let waker = Waker::from(wakes.clone());
+    let mut wait = pin!(clock.wait_until(at(1)));
+    for _ in 0..3 {
+        assert_eq!(poll(wait.as_mut(), &waker), Poll::Pending);
+    }
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
+    clock.advance_to(at(1));
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
+    assert_eq!(poll(wait.as_mut(), &waker), Poll::Ready(()));
+}
+
+#[test]
+fn waking_can_reenter_the_clock_without_borrowing_or_losing_a_new_wait() {
+    // Each test thread owns its fixture; no clock or callback is shared
+    // between tests. Wake requires Send + Sync, so it reaches that thread's
+    // local clock rather than carrying a non-Sync clock in its Arc.
+    std::thread_local! {
+        static CLOCK: VirtualClock<1> = const { VirtualClock::new() };
+    }
+    struct Reenter(Arc<Wakes>);
+    impl Wake for Reenter {
+        fn wake(self: Arc<Self>) {
+            CLOCK.with(|clock| {
+                clock.advance_to(clock.now());
+                let mut wait = pin!(clock.wait_until(at(2)));
+                let waker = Waker::from(self.0.clone());
+                assert_eq!(poll(wait.as_mut(), &waker), Poll::Pending);
+            });
+        }
+    }
+    CLOCK.with(|clock| {
+        let wakes = Arc::new(Wakes::default());
+        let waker = Waker::from(Arc::new(Reenter(wakes.clone())));
+        let mut wait = pin!(clock.wait_until(at(1)));
+        assert_eq!(poll(wait.as_mut(), &waker), Poll::Pending);
+        clock.advance_to(at(1));
+        assert_eq!(poll(wait.as_mut(), &waker), Poll::Ready(()));
+        assert_eq!(clock.next_deadline(), Some(at(2)));
+        clock.advance_to(at(2));
+        assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
+    });
+}
+
+#[test]
+fn capacity_wake_can_reenter_and_wake_the_newly_registered_task() {
+    std::thread_local! {
+        static CLOCK: VirtualClock<1> = const { VirtualClock::new() };
+    }
+    struct Advance;
+    impl Wake for Advance {
+        fn wake(self: Arc<Self>) {
+            CLOCK.with(|clock| clock.advance_to(at(2)));
+        }
+    }
+    CLOCK.with(|clock| {
+        let first = Waker::from(Arc::new(Advance));
+        let wakes = Arc::new(Wakes::default());
+        let second = Waker::from(wakes.clone());
+        let mut a = pin!(clock.wait_until(at(1)));
+        let mut b = pin!(clock.wait_until(at(2)));
+        assert_eq!(poll(a.as_mut(), &first), Poll::Pending);
+        assert_eq!(poll(b.as_mut(), &second), Poll::Pending);
+        assert_eq!(clock.now(), at(2));
+        assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
+        assert_eq!(poll(a.as_mut(), &first), Poll::Ready(()));
+        assert_eq!(poll(b.as_mut(), &second), Poll::Ready(()));
+    });
+}
+
+#[test]
+fn dropping_the_last_registered_waker_can_reenter_the_clock() {
+    std::thread_local! {
+        static CLOCK: VirtualClock<1> = const { VirtualClock::new() };
+    }
+    struct OnDrop;
+    impl Drop for OnDrop {
+        fn drop(&mut self) {
+            CLOCK.with(|clock| clock.advance_to(at(1)));
+        }
+    }
+    #[expect(
+        clippy::manual_noop_waker,
+        reason = "only Drop exercises the callback in this regression"
+    )]
+    impl Wake for OnDrop {
+        fn wake(self: Arc<Self>) {}
+    }
+    CLOCK.with(|clock| {
+        let waker = Waker::from(Arc::new(OnDrop));
+        let mut wait = pin!(clock.wait_until(at(1)));
+        assert_eq!(poll(wait.as_mut(), &waker), Poll::Pending);
+        drop(waker);
+        clock.advance_to(at(1));
+        assert_eq!(clock.now(), at(1));
+    });
+}
