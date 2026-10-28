@@ -357,3 +357,11 @@ fn every_minted_block_ack_slot_carries_an_applied_agreement() {
     let (backend, air) = backend();
     let _port_end = block_on(run_model(backend, Body(EverySlotApplied(&air))));
 }
+
+#[test]
+fn positional_acknowledgement_bits_refuse_unrepresentable_indices() {
+    assert_eq!(subframe_bit(0), Ok(1));
+    assert_eq!(subframe_bit(63), Ok(1_u64 << 63));
+    assert_eq!(subframe_bit(64), Err(ModelFault));
+    assert_eq!(subframe_bit(usize::MAX), Err(ModelFault));
+}

@@ -98,7 +98,7 @@ fn snapshot<Id: SlotIdentity>(
 ) -> HeldSnapshot {
     HeldSnapshot {
         publications: phase.held.air.sent().len(),
-        events: phase.held.events.items.borrow().len(),
+        events: phase.held.events.items.len(),
     }
 }
 fn frame<'p, 'id: 'p, Id: SlotIdentity + 'id>(

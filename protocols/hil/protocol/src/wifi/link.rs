@@ -129,6 +129,8 @@ pub enum StationPreparationError {
     RetransmissionKind,
     AggregateFull,
     BlockAckWindow,
+    /// The backend source lacks its body resource loan.
+    MissingBodyLoan,
 }
 
 /// Why a frame's portable placement failed.

@@ -52,19 +52,6 @@ impl<B: ModelComposition, C: ModelClass> ModelSent<'static, B, C> {
     }
 }
 impl<'p, B: ModelComposition> ModelAnyBuffer<'p, B> {
-    pub(super) fn loan(&self) -> BodyLoan<'p, B::Identity, B> {
-        let loan = match self {
-            Self::Small(buffer) => buffer.loan,
-            Self::Large(buffer) => buffer.loan,
-            Self::SmallSent(sent) => sent.buffer.loan,
-            Self::LargeSent(sent) => sent.buffer.loan,
-        };
-        #[expect(
-            clippy::expect_used,
-            reason = "only body resources can enter public preparation"
-        )]
-        loan.expect("only body resources can be prepared by a frontend")
-    }
     fn into_owned(self, loan: &BodyLoan<'p, B::Identity, B>) -> ModelAnyBuffer<'static, B> {
         match self {
             Self::Small(buffer) => ModelAnyBuffer::Small(buffer.into_owned(loan)),

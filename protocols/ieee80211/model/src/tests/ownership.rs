@@ -783,8 +783,8 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
                 last + if self.aggregate { 2 } else { 1 },
                 "PN is reserved by the core before backend submission"
             );
-            let quarantined = phase.held.quarantined.items.borrow();
-            let commands = phase.held.commands.items.borrow();
+            let quarantined = phase.held.quarantined.items.inspect();
+            let commands = phase.held.commands.items.inspect();
             assert!(quarantined.is_empty());
             let (single, aggregate) = match commands.back().unwrap() {
                 super::super::Command::Submit(operation) => (Some(operation), None),

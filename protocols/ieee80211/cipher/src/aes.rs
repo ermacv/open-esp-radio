@@ -16,6 +16,7 @@ use ::aes::{
     Aes128,
     cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray},
 };
+use oer_wire::PrefixLength;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub const RSN_KEY_DATA_CAPACITY: usize = 512;
@@ -38,21 +39,14 @@ pub enum SoftwareAesKeyWrapError {
 
 /// Fixed, secret-bearing RFC 3394 ciphertext produced for an AP EAPOL-Key
 /// frame. The complete buffer is cleared on drop.
-#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct RsnWrappedKeyData {
-    len: usize,
+    len: PrefixLength<RSN_KEY_DATA_CAPACITY>,
     bytes: [u8; RSN_KEY_DATA_CAPACITY],
 }
 
 impl RsnWrappedKeyData {
     pub fn as_bytes(&self) -> &[u8] {
-        #[expect(
-            clippy::expect_used,
-            reason = "the copy checks `len <= N` when it copies; a longer length is a bug here"
-        )]
-        self.bytes
-            .get(..self.len)
-            .expect("the copied length fits the buffer")
+        self.len.borrow(&self.bytes)
     }
 }
 
@@ -60,9 +54,8 @@ impl RsnWrappedKeyData {
 pub struct RsnUnwrappedKeyDataCapacityError;
 
 /// Fixed owned plaintext returned by an async key-unwrap backend.
-#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct RsnUnwrappedKeyData {
-    len: usize,
+    len: PrefixLength<RSN_UNWRAPPED_KEY_DATA_CAPACITY>,
     bytes: [u8; RSN_UNWRAPPED_KEY_DATA_CAPACITY],
 }
 
@@ -74,25 +67,20 @@ impl RsnUnwrappedKeyData {
     /// still prevents an invalid length from being fabricated.
     pub fn try_copy(bytes: &[u8]) -> Result<Self, RsnUnwrappedKeyDataCapacityError> {
         let mut owned = Self {
-            len: bytes.len(),
+            len: PrefixLength::new(bytes.len()).ok_or(RsnUnwrappedKeyDataCapacityError)?,
             bytes: [0; RSN_UNWRAPPED_KEY_DATA_CAPACITY],
         };
         owned
-            .bytes
-            .get_mut(..bytes.len())
-            .ok_or(RsnUnwrappedKeyDataCapacityError)?
-            .copy_from_slice(bytes);
+            .len
+            .borrow_mut(&mut owned.bytes)
+            .iter_mut()
+            .zip(bytes)
+            .for_each(|(out, byte)| *out = *byte);
         Ok(owned)
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        #[expect(
-            clippy::expect_used,
-            reason = "the copy checks `len <= N` when it copies; a longer length is a bug here"
-        )]
-        self.bytes
-            .get(..self.len)
-            .expect("the copied length fits the buffer")
+        self.len.borrow(&self.bytes)
     }
 }
 
@@ -165,7 +153,7 @@ pub fn software_aes128_key_wrap(
 
     let cipher = Aes128::new(&GenericArray::from(*kek));
     let mut output = RsnWrappedKeyData {
-        len,
+        len: PrefixLength::new(len).ok_or(SoftwareAesKeyWrapError::CapacityExceeded)?,
         bytes: [0; RSN_KEY_DATA_CAPACITY],
     };
     let (accumulator, data) = output
@@ -174,21 +162,39 @@ pub fn software_aes128_key_wrap(
         .and_then(|bytes| bytes.split_first_chunk_mut::<8>())
         .ok_or(SoftwareAesKeyWrapError::CapacityExceeded)?;
     *accumulator = RFC3394_IV;
-    data.copy_from_slice(plaintext);
+    for (out, byte) in data.iter_mut().zip(plaintext) {
+        *out = *byte;
+    }
     let blocks = data.len() as u64 / 8;
     let mut block = [0; 16];
     for round in 0..=5_u64 {
-        for (index, chunk) in (1_u64..).zip(data.chunks_exact_mut(8)) {
-            let (high, low) = block.split_at_mut(8);
-            high.copy_from_slice(accumulator);
-            low.copy_from_slice(chunk);
-            encrypt(&cipher, &mut block);
-            let counter = round.wrapping_mul(blocks).wrapping_add(index).to_be_bytes();
-            let (high, low) = block.split_at(8);
-            for ((out, value), count) in accumulator.iter_mut().zip(high).zip(counter) {
-                *out = value ^ count;
+        let mut remaining = &mut *data;
+        let mut index = 0_u64;
+        while let Some((chunk, rest)) = remaining.split_first_chunk_mut::<8>() {
+            remaining = rest;
+            index = index
+                .checked_add(1)
+                .ok_or(SoftwareAesKeyWrapError::CapacityExceeded)?;
+            let [high @ .., l0, l1, l2, l3, l4, l5, l6, l7] = &mut block;
+            let low = [l0, l1, l2, l3, l4, l5, l6, l7];
+            for (out, byte) in high.iter_mut().zip(accumulator.iter()) {
+                *out = *byte;
             }
-            chunk.copy_from_slice(low);
+            for (out, byte) in low.into_iter().zip(chunk.iter()) {
+                *out = *byte;
+            }
+            encrypt(&cipher, &mut block);
+            let counter = round
+                .checked_mul(blocks)
+                .and_then(|base| base.checked_add(index))
+                .ok_or(SoftwareAesKeyWrapError::CapacityExceeded)?
+                .to_be_bytes();
+            let [h0, h1, h2, h3, h4, h5, h6, h7, low @ ..] = &block;
+            let high = [h0, h1, h2, h3, h4, h5, h6, h7];
+            for ((out, value), count) in accumulator.iter_mut().zip(high).zip(counter) {
+                *out = *value ^ count;
+            }
+            *chunk = *low;
         }
     }
     block.zeroize();
@@ -223,29 +229,43 @@ pub fn software_aes128_key_unwrap(
     let cipher = Aes128::new(&GenericArray::from(*kek));
     let mut accumulator = first;
     let mut output = RsnUnwrappedKeyData {
-        len,
+        len: PrefixLength::new(len).ok_or(SoftwareAesKeyUnwrapError::CapacityExceeded)?,
         bytes: [0; RSN_UNWRAPPED_KEY_DATA_CAPACITY],
     };
-    let data = output
-        .bytes
-        .get_mut(..len)
-        .ok_or(SoftwareAesKeyUnwrapError::CapacityExceeded)?;
-    data.copy_from_slice(wrapped);
+    let data = output.len.borrow_mut(&mut output.bytes);
+    for (out, byte) in data.iter_mut().zip(wrapped) {
+        *out = *byte;
+    }
     let blocks = len as u64 / 8;
     let mut block = [0; 16];
     for round in (0..=5_u64).rev() {
-        for (index, chunk) in data.chunks_exact_mut(8).enumerate().rev() {
-            let index = (index as u64).wrapping_add(1);
-            let counter = round.wrapping_mul(blocks).wrapping_add(index).to_be_bytes();
-            let (high, low) = block.split_at_mut(8);
+        let mut remaining = &mut *data;
+        let mut index = blocks;
+        while let Some((rest, chunk)) = remaining.split_last_chunk_mut::<8>() {
+            remaining = rest;
+            let counter = round
+                .checked_mul(blocks)
+                .and_then(|base| base.checked_add(index))
+                .ok_or(SoftwareAesKeyUnwrapError::CapacityExceeded)?
+                .to_be_bytes();
+            let [high @ .., l0, l1, l2, l3, l4, l5, l6, l7] = &mut block;
+            let low = [l0, l1, l2, l3, l4, l5, l6, l7];
             for ((out, value), count) in high.iter_mut().zip(accumulator).zip(counter) {
                 *out = value ^ count;
             }
-            low.copy_from_slice(chunk);
+            for (out, byte) in low.into_iter().zip(chunk.iter()) {
+                *out = *byte;
+            }
             decrypt(&cipher, &mut block);
-            let (high, low) = block.split_at(8);
-            accumulator.copy_from_slice(high);
-            chunk.copy_from_slice(low);
+            let [h0, h1, h2, h3, h4, h5, h6, h7, low @ ..] = &block;
+            let high = [h0, h1, h2, h3, h4, h5, h6, h7];
+            for (out, byte) in accumulator.iter_mut().zip(high) {
+                *out = *byte;
+            }
+            *chunk = *low;
+            index = index
+                .checked_sub(1)
+                .ok_or(SoftwareAesKeyUnwrapError::InvalidLength)?;
         }
     }
     block.zeroize();
@@ -262,3 +282,29 @@ pub fn software_aes128_key_unwrap(
 
 #[cfg(test)]
 mod tests;
+
+impl Zeroize for RsnWrappedKeyData {
+    fn zeroize(&mut self) {
+        self.len = PrefixLength::ZERO;
+        self.bytes.zeroize();
+    }
+}
+impl Drop for RsnWrappedKeyData {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+impl ZeroizeOnDrop for RsnWrappedKeyData {}
+
+impl Zeroize for RsnUnwrappedKeyData {
+    fn zeroize(&mut self) {
+        self.len = PrefixLength::ZERO;
+        self.bytes.zeroize();
+    }
+}
+impl Drop for RsnUnwrappedKeyData {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+impl ZeroizeOnDrop for RsnUnwrappedKeyData {}

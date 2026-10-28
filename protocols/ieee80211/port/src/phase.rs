@@ -1196,6 +1196,8 @@ pub struct PreparationRefused<A> {
 /// Dynamic preparation failures, distinct from the outcome of accepted TX.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PreparationError {
+    /// The backend source has no authority for this body resource loan.
+    MissingBodyLoan,
     /// A retry names a different key installation, even in the same slot.
     RetransmissionKey,
     /// The new rate plan requires a different response kind.

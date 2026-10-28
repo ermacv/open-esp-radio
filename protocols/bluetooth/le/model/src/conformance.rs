@@ -162,17 +162,13 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, Tag>> for Body {
     async fn run<'a, 'p>(
         self,
         owner: Owner<'a, 'p, Id, Backend<Id, Tag>, Disabled>,
-        resources: Result<Resources<'p, Id>, Fault>,
+        resources: Resources<'p, Id>,
     ) -> Ended<Id, Backend<Id, Tag>, Self::Output>
     where
         Backend<Id, Tag>: 'p,
         Id: 'p,
         'p: 'a,
     {
-        let resources = match resources {
-            Ok(resources) => resources,
-            Err(_) => return Ended::fail_stop(owner.fail_stop(), Err(Violation::Lifecycle)),
-        };
         let mut owner = match owner.enable().await {
             Ok(o) => o,
             Err(f) => return Ended::fail_stop(f.fail_stop(), Err(Violation::Lifecycle)),
@@ -448,17 +444,13 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, Tag>> for AirBody {
     async fn run<'a, 'p>(
         self,
         owner: Owner<'a, 'p, Id, Backend<Id, Tag>, Disabled>,
-        resources: Result<Resources<'p, Id>, Fault>,
+        resources: Resources<'p, Id>,
     ) -> Ended<Id, Backend<Id, Tag>, Self::Output>
     where
         Backend<Id, Tag>: 'p,
         Id: 'p,
         'p: 'a,
     {
-        let resources = match resources {
-            Ok(resources) => resources,
-            Err(_) => return Ended::fail_stop(owner.fail_stop(), Err(Violation::Lifecycle)),
-        };
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(f) => return Ended::fail_stop(f.fail_stop(), Err(Violation::Lifecycle)),

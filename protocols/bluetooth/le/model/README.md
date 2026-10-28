@@ -29,10 +29,11 @@ unsupported by this profile. Injected publication-boundary stimuli are distinct
 from propagation loss and carry no claim of hardware execution.
 
 The queue backing has an explicit vacant state before its capacity mint.
-Initial installation resources are `Result<Resources, Fault>`: unprepared
-backing reports `UnpreparedQueues`, and a repeated resource loan reports
-`ResourcesExhausted`. A refused loan retains its owners. The common port
-traits are unchanged. Model bodies handle this result before using resources.
+The common slot's `split` and `lend` return `SlotInitError`: unprepared
+backing reports `QueuesUnprepared`, and an absent initial resource set reports
+`MissingResource("BLE initial resources")`. A refused loan retains its owners.
+Model bodies receive complete `Resources` only after successful construction;
+the lifecycle quarantines a refused construction without invoking the body.
 
 Radio handles own their modeled state through `Rc`; FIFO waiters store seat
 identities in arrival order rather than using them as array offsets. Local

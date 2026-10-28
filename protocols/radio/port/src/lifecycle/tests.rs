@@ -70,19 +70,22 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Backend<Id> {
             model: self.model.clone(),
         });
     }
-    fn split<'s>(queues: &'s mut Self::Queues, _: SlotWakes<'s, Id>) -> (Raw<'s, Id>, ())
+    fn split<'s>(
+        queues: &'s mut Self::Queues,
+        _: SlotWakes<'s, Id>,
+    ) -> Result<(Raw<'s, Id>, ()), crate::SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
         let queues = queues.as_mut().expect("prepared model queues");
-        (
+        Ok((
             Raw {
                 token: &mut queues.token,
                 model: queues.model.clone(),
             },
             (),
-        )
+        ))
     }
     async fn run<'s>(
         &mut self,
@@ -145,20 +148,20 @@ impl<Id: SlotIdentity> SlotBodyOwner<Id> for Backend<Id> {
     fn lend<'p, 's>(
         raw: &'p mut Raw<'s, Id>,
         loan: BodyLoan<'p, Id, Self>,
-    ) -> InstallParts<'p, Id, Self>
+    ) -> Result<InstallParts<'p, Id, Self>, crate::SlotInitError>
     where
         Self: 's,
         Id: 's,
         's: 'p,
     {
         assert_eq!(raw.model.context.get(), 1);
-        InstallParts {
+        Ok(InstallParts {
             view: View {
                 model: raw.model.clone(),
                 _loan: loan,
             },
             resources: loan.lend_slot(raw.token.take().expect("one capacity")),
-        }
+        })
     }
 }
 impl<Id: SlotIdentity> PortBackend<Id> for Backend<Id> {
@@ -419,7 +422,7 @@ fn frontend_supervisor_owns_no_p2_state_and_returns_join_or_typed_stop_outcome()
                         stopped && !late
                     );
                 }
-                PortEnd::Abandoned { outcome } => {
+                PortEnd::Abandoned { outcome, .. } => {
                     assert!(dropped);
                     assert!(matches!(outcome.outcome(), Abandon::Stopped(_)));
                 }

@@ -166,22 +166,22 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
         let (access_point_association, access_point_bank) = access_point_vacant.into_parts();
         let (access_point_pairwise, access_point_group) = access_point_bank.into_parts();
         self.air.stream.set(ModelStream::Running);
-        self.air.receive_agreements.borrow_mut().clear();
-        *self.air.associations.borrow_mut() = InterfaceAssociations::default();
-        *self.air.observation.borrow_mut() = DriverObservation::default();
+        self.air.receive_agreements.take().clear();
+        self.air.associations.set(InterfaceAssociations::default());
+        self.air.observation.set(DriverObservation::default());
         let held = ModelHeld {
             air: self.air.clone(),
             commands: Bounded::new(MODEL_COMMANDS, "command"),
             recycled: Bounded::new(MODEL_RX_EVENTS, "recycle"),
-            settings: RefCell::default(),
+            settings: Cell::default(),
             events: Bounded::new(MODEL_EVENTS, "event"),
             quarantined: Bounded::new(1, "answer shape rejection"),
             failed_group: Bounded::new(2, "failed GTK command"),
             failed_group_terminal: Bounded::new(2, "uncertain GTK terminal"),
             rx_out: Cell::new(0),
             lost: Cell::new(false),
-            body: RefCell::default(),
-            gate_issuer: RefCell::new(gate_issuer),
+            body: Cell::default(),
+            gate_issuer,
             draining: Cell::new(false),
             returned: Cell::new(true),
         };
@@ -234,17 +234,13 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
     fn split<'s>(
         queues: &'s mut Self::Queues,
         _: SlotWakes<'s, Id>,
-    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
-        #[expect(
-            clippy::expect_used,
-            reason = "PortSlot prepares queues before splitting a registration"
-        )]
-        let queues = queues.as_mut().expect("prepared model queues");
-        (
+        let queues = ModelQueues::prepared(queues)?;
+        Ok((
             ModelRawFrontend {
                 held: &queues.held,
                 resources: &mut queues.resources,
@@ -255,7 +251,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
                 held: &queues.held,
                 channel: &queues.channel,
             },
-        )
+        ))
     }
 
     async fn run<'s>(
@@ -279,7 +275,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
                 }
                 self.driver_state.serve(held);
                 let driver = &self.driver_state;
-                *held.air.observation.borrow_mut() = driver.observation();
+                held.air.observation.set(driver.observation());
                 let returned = driver
                     .queues
                     .iter()
@@ -293,7 +289,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             if held.air.failed() {
                 held.wake_body();
             }
-            *held.air.driver.borrow_mut() = Some(cx.waker().clone());
+            held.air.driver.set(Some(cx.waker().clone()));
             let wait = retire.wait();
             let mut wait = core::pin::pin!(wait);
             wait.as_mut().poll(cx)
@@ -314,8 +310,8 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             core::future::pending::<()>().await;
         }
         self.channel = invocation.channel.get();
-        self.air.driver.borrow_mut().take();
-        held.body.borrow_mut().take();
+        self.air.driver.take();
+        held.body.take();
         retire.requested().await
     }
 
@@ -330,9 +326,9 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
     {
         self.air.poison();
         self.air.end_installation();
-        self.air.driver.borrow_mut().take();
+        self.air.driver.take();
         if let Some(invocation) = invocation {
-            invocation.held.body.borrow_mut().take();
+            invocation.held.body.take();
         }
         Abandon::Stopped(authority.stopped())
     }
@@ -363,21 +359,14 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotBodyOwner<
     fn lend<'p, 's>(
         frontend: &'p mut Self::Frontend<'s>,
         loan: BodyLoan<'p, Id, Self>,
-    ) -> Self::Body<'p>
+    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
         's: 'p,
     {
-        #[expect(
-            clippy::expect_used,
-            reason = "the core issues the registration's sole body loan once"
-        )]
-        let resources = frontend
-            .resources
-            .take()
-            .expect("one resource loan per registration");
-        InstallParts {
+        let resources = ModelResources::take_from(frontend.resources)?;
+        Ok(InstallParts {
             view: ModelFrontend {
                 air: frontend.held.air.clone(),
                 held: frontend.held,
@@ -386,7 +375,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotBodyOwner<
                 loan,
             },
             resources: resources.lend(&loan),
-        }
+        })
     }
 }
 
@@ -480,7 +469,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
                 return Poll::Ready(Err(Poisoned { cause: ModelFault }));
             }
             if held.draining.get() || !held.commands.is_empty() || !held.recycled.is_empty() {
-                *held.body.borrow_mut() = Some(cx.waker().clone());
+                held.body.set(Some(cx.waker().clone()));
                 held.air.wake_driver();
                 return Poll::Pending;
             }
@@ -489,11 +478,9 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
                     OwnedLowerMacEvent::Terminal(terminal) => {
                         if let core::ops::ControlFlow::Break(terminal) = sink(terminal.lend(&loan))
                         {
-                            held.events.items.borrow_mut().push_front(
-                                OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::retain(
-                                    terminal, &loan,
-                                )),
-                            );
+                            held.events.items.push_front(OwnedLowerMacEvent::Terminal(
+                                OwnedLowerMacTerminal::retain(terminal, &loan),
+                            ));
                             held.poison();
                             return Poll::Ready(Err(Poisoned { cause: ModelFault }));
                         }
@@ -505,8 +492,8 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
                     }
                 }
             }
-            if !held.air.group_rx.borrow().is_empty() {
-                held.air.group_rx.borrow_mut().clear();
+            if !held.air.group_rx.is_empty() {
+                held.air.group_rx.clear();
                 held.lost.set(true);
             }
             Poll::Ready(Ok(()))
@@ -582,13 +569,56 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> ModelSlotOwner
 {
     fn end_world(&mut self, queues: Option<&mut Self::Queues>) {
         self.air.end_installation();
-        self.air.driver.borrow_mut().take();
+        self.air.driver.take();
         if let Some(Some(queues)) = queues {
-            queues.held.body.borrow_mut().take();
+            queues.held.body.take();
         }
     }
     fn end_vacant_world(vacant: &mut Self::Vacant) {
         vacant.air.end_installation();
-        vacant.air.driver.borrow_mut().take();
+        vacant.air.driver.take();
+    }
+}
+
+impl<B: ModelComposition> ModelQueues<B> {
+    fn prepared(backing: &mut Option<Self>) -> Result<&mut Self, oer_radio_port::SlotInitError> {
+        backing
+            .as_mut()
+            .ok_or(oer_radio_port::SlotInitError::QueuesUnprepared)
+    }
+}
+impl<B: ModelComposition> ModelResources<'static, B> {
+    fn take_from(backing: &mut Option<Self>) -> Result<Self, oer_radio_port::SlotInitError> {
+        backing
+            .take()
+            .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                "model resources",
+            ))
+    }
+}
+#[cfg(test)]
+mod construction_tests {
+    use super::*;
+    enum Declaration {}
+    type Backend = ModelBackend<oer_radio_port::StaticId<Declaration>>;
+    #[test]
+    fn unprepared_backing_returns_a_typed_error_without_minting_endpoints() {
+        let mut backing: Option<ModelQueues<Backend>> = None;
+        assert!(matches!(
+            ModelQueues::prepared(&mut backing),
+            Err(oer_radio_port::SlotInitError::QueuesUnprepared)
+        ));
+        assert!(backing.is_none());
+    }
+    #[test]
+    fn absent_body_resources_return_a_typed_error_without_minting_capacity() {
+        let mut backing: Option<ModelResources<'static, Backend>> = None;
+        assert!(matches!(
+            ModelResources::take_from(&mut backing),
+            Err(oer_radio_port::SlotInitError::MissingResource(
+                "model resources"
+            ))
+        ));
+        assert!(backing.is_none());
     }
 }

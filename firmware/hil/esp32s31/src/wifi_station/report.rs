@@ -61,6 +61,7 @@ fn transmit(refusal: TxRefusal) -> StationTransmitRefusal {
         TxRefusal::LinkChanged => StationTransmitRefusal::LinkChanged,
         TxRefusal::NoRate => StationTransmitRefusal::NoRate,
         TxRefusal::Preparation(error) => StationTransmitRefusal::Preparation(match error {
+            PreparationError::MissingBodyLoan => StationPreparationError::MissingBodyLoan,
             PreparationError::RetransmissionKey => StationPreparationError::RetransmissionKey,
             PreparationError::RetransmissionKind => StationPreparationError::RetransmissionKind,
             PreparationError::AggregateFull => StationPreparationError::AggregateFull,

@@ -1955,3 +1955,35 @@ impl TestPacketNumbers {
 mod edca;
 
 mod msdu_age;
+
+struct Inspection<'a, T: Default> {
+    cell: &'a Cell<T>,
+    value: Option<T>,
+}
+impl<T: Default> core::ops::Deref for Inspection<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.value.as_ref().unwrap()
+    }
+}
+impl<T: Default> Drop for Inspection<'_, T> {
+    fn drop(&mut self) {
+        self.cell.set(self.value.take().unwrap());
+    }
+}
+trait Inspect<T: Default> {
+    fn inspect(&self) -> Inspection<'_, T>;
+}
+impl<T: Default> Inspect<T> for Cell<T> {
+    fn inspect(&self) -> Inspection<'_, T> {
+        Inspection {
+            cell: self,
+            value: Some(self.take()),
+        }
+    }
+}
+impl<T> Inspect<VecDeque<T>> for OwnedQueue<T> {
+    fn inspect(&self) -> Inspection<'_, VecDeque<T>> {
+        self.0.inspect()
+    }
+}

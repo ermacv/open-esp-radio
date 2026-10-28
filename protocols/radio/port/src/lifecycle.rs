@@ -249,6 +249,8 @@ pub enum PortEnd<Id: SlotIdentity, Out> {
     },
     /// The owner's drop cancelled a body that had no ended result.
     Abandoned {
+        /// Construction or cancellation error that ended the body loan.
+        cause: crate::SlotInitError,
         /// Quarantine notification; grants neither extraction nor reuse.
         outcome: SlotQuarantined<Id>,
     },
@@ -291,8 +293,8 @@ pub fn run_port<'s, Id: SlotIdentity + 's, B: PortBackend<Id> + 's, P: PortBody<
         // End the body's future and its temporary Ended before retaining
         // the one output across the supervisor's single bounded wait.
         let (end, output) = match frontend.run_body(BodyAdapter { signals, body }).await {
-            Some(Ended { end, output, .. }) => (end, Some(output)),
-            None => (BodyEnd::FailStopRequested, None),
+            Ok(Ended { end, output, .. }) => (end, Ok(output)),
+            Err(cause) => (BodyEnd::FailStopRequested, Err(cause)),
         };
         let join = match end {
             BodyEnd::Uninstall(control) => {
@@ -310,8 +312,8 @@ pub fn run_port<'s, Id: SlotIdentity + 's, B: PortBackend<Id> + 's, P: PortBody<
                 output: output.expect("ordinary join follows a returned body output"),
             },
             Err(outcome) => match output {
-                Some(output) => PortEnd::FailStopped { outcome, output },
-                None => PortEnd::Abandoned { outcome },
+                Ok(output) => PortEnd::FailStopped { outcome, output },
+                Err(cause) => PortEnd::Abandoned { outcome, cause },
             },
         }
     }

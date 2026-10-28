@@ -158,10 +158,15 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
     let backend = Backend::new(parts)
         .ok()
         .expect("validated station port parts");
-    let (frontend, registration) = slot
-        .register(backend)
-        .ok()
-        .expect("one station registration");
+    let (frontend, registration) = match slot.register(backend) {
+        Ok(registered) => registered,
+        Err(error) => {
+            response.answer(Err("station registration failed"));
+            // The rejected owner or initialization guard stays on this P2 frame.
+            drop(error);
+            return;
+        }
+    };
     response.answer(Ok(frontend));
     if let Some(completion) = registration.run().await {
         completion.unregistered();

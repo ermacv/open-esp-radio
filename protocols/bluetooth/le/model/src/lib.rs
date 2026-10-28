@@ -81,8 +81,6 @@ pub enum Fault {
     EpochExhausted,
     /// Queue backing has not received an installation's capacity mint.
     UnpreparedQueues,
-    /// The installation's initial resources have already been issued.
-    ResourcesExhausted,
 }
 
 #[cfg(test)]

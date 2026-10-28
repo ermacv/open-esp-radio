@@ -1,7 +1,9 @@
 //! Nominal, irreversible static placement of port backing.
 
 use core::{marker::PhantomData, ptr::NonNull};
-use oer_radio_port::{Joined, PortSlot, SlotFrontend, SlotIdentity, SlotOwner, SlotRegistration};
+use oer_radio_port::{
+    Joined, PortSlot, SlotFrontend, SlotIdentity, SlotOwner, SlotRegisterError, SlotRegistration,
+};
 use oer_radio_port::{SlotClaim, StaticId};
 
 #[doc(hidden)]
@@ -39,10 +41,10 @@ impl<Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static> StaticPortSlot<Id, 
             SlotFrontend<'static, Id, S>,
             SlotRegistration<'static, Id, S>,
         ),
-        S,
+        SlotRegisterError<'static, Id, S>,
     > {
         if self.installed {
-            return Err(owner);
+            return Err(SlotRegisterError::Occupied(owner));
         }
         self.installed = true;
         #[allow(
@@ -65,7 +67,7 @@ impl<Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static> StaticPortSlot<Id, 
             SlotFrontend<'static, Id, S>,
             SlotRegistration<'static, Id, S>,
         ),
-        Resume,
+        SlotRegisterError<'static, Id, S, Resume>,
     > {
         #[allow(
             unsafe_code,

@@ -254,7 +254,7 @@ impl Boundary<'_> {
         };
         events.push(Event::Terminal(numbers.snapshot(&key)));
         let completed_at = oer_time::Instant::from_micros(self.air.monotonic_now().as_micros());
-        let continuous_rx_at_terminal = self.air.rx_stream.borrow().is_some();
+        let continuous_rx_at_terminal = self.air.rx_stream.inspect().is_some();
         self.air.stop_continuous_receive();
         let inactive = if self.case == contract::Case::SelectCurrent {
             [3; 16]
@@ -443,20 +443,20 @@ fn held_slots<Id: SlotIdentity>(
 ) -> Vec<u8> {
     let held = phase.held;
     let mut slots = Vec::new();
-    for command in held.commands.items.borrow().iter() {
+    for command in held.commands.items.inspect().iter() {
         if let Command::Group { change, .. } = command {
             slots.push(change_slot(change));
         }
     }
-    slots.extend(held.failed_group.items.borrow().iter().map(change_slot));
+    slots.extend(held.failed_group.items.inspect().iter().map(change_slot));
     slots.extend(
         held.failed_group_terminal
             .items
-            .borrow()
+            .inspect()
             .iter()
             .filter_map(terminal_slot),
     );
-    slots.extend(held.events.items.borrow().iter().filter_map(terminal_slot));
+    slots.extend(held.events.items.inspect().iter().filter_map(terminal_slot));
     for removal in held.air.driver_observation().group_removals {
         if removal.role == VifRole::Station {
             assert_eq!(removal.permission, 0);
@@ -587,7 +587,7 @@ fn fault_and_disable_keep_each_gtk_mutations_owner_and_permission() {
                 ));
                 assert!(
                     air.key_installations
-                        .borrow()
+                        .inspect()
                         .iter()
                         .all(|entry| entry.identity.upgrade().is_none())
                 );
@@ -853,11 +853,11 @@ fn teardown_ends_delayed_group_ingress_and_material_despite_external_identities(
             assert!(!identity.0.active.get());
             assert!(!identity.0.rx_active.get());
             assert!(
-                air.key_installations.borrow().is_empty(),
+                air.key_installations.inspect().is_empty(),
                 "no secret survives in identity clones"
             );
             assert!(
-                air.group_rx.borrow().is_empty(),
+                air.group_rx.inspect().is_empty(),
                 "no captured ingress survives teardown"
             );
             assert!(!air.receive_group(
@@ -911,7 +911,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReenableGroup<'_> {
             .await
             .ok()
             .unwrap();
-        assert_eq!(self.0.key_installations.borrow().len(), 1);
+        assert_eq!(self.0.key_installations.inspect().len(), 1);
         let mut owner = disabled.enable().await.ok().unwrap();
         assert_eq!(numbers.snapshot(&key), before);
         {
@@ -931,7 +931,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReenableGroup<'_> {
             phase.recycle(frame);
             phase.station().remove_group_key(permission, key);
             let _permission = removed(&mut phase).await;
-            assert!(self.0.key_installations.borrow().is_empty());
+            assert!(self.0.key_installations.inspect().is_empty());
         }
         Ended::uninstall(
             owner
@@ -977,7 +977,7 @@ impl Work for Admission<'_> {
             yield_now().await;
         }
         {
-            let queued = phase.held.commands.items.borrow();
+            let queued = phase.held.commands.items.inspect();
             let Some(Command::Group {
                 change: GroupChange::Install(GroupInstallationCommand::Station(pending)),
                 ..
@@ -992,7 +992,7 @@ impl Work for Admission<'_> {
         }
         assert_eq!(phase.held.air.driver_observation().installed_keys, 0);
         assert!(phase.held.events.is_empty());
-        assert!(self.0.key_installations.borrow().is_empty());
+        assert!(self.0.key_installations.inspect().is_empty());
         assert_eq!(self.0.group_writes(), 0);
         assert!(!self.0.receive_group(
             &[1],
@@ -1006,7 +1006,7 @@ impl Work for Admission<'_> {
         let (key, permission) = installed(phase).await;
         assert_eq!(key.slot.index(), slot_id);
         assert_eq!(self.0.group_writes(), 1);
-        assert_eq!(self.0.key_installations.borrow().len(), 1);
+        assert_eq!(self.0.key_installations.inspect().len(), 1);
         phase.station().remove_group_key(permission, key);
         let _permission = removed(phase).await;
     }

@@ -289,6 +289,32 @@ fn cancelling_the_entire_model_scope_removes_async_reachability_before_releasing
     drop(running);
     assert_eq!(air.disable_calls(), 0);
     assert_eq!(drops.get(), 2);
-    assert!(air.driver.borrow().is_none());
+    assert!(air.driver.inspect().is_none());
     assert_eq!(Rc::strong_count(&air), 1);
+}
+
+#[test]
+fn a_driver_wake_can_reregister_and_inject_rx_synchronously() {
+    std::thread_local! { static AIR: RefCell<Option<Rc<ModelAir>>> = const { RefCell::new(None) }; }
+    struct Reenter;
+    impl std::task::Wake for Reenter {
+        fn wake(self: std::sync::Arc<Self>) {
+            AIR.with(|slot| {
+                let air = slot.borrow().as_ref().unwrap().clone();
+                air.driver.set(Some(Waker::noop().clone()));
+                air.receive(
+                    &[0x5a],
+                    ModelRxMeta::new(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(), -40, -90),
+                );
+            });
+        }
+    }
+    let (_, air) = backend();
+    AIR.with(|slot| *slot.borrow_mut() = Some(air.clone()));
+    air.driver
+        .set(Some(Waker::from(std::sync::Arc::new(Reenter))));
+    air.wake_driver();
+    assert_eq!(air.pending_rx(), 1);
+    assert!(air.driver.take().is_none());
+    AIR.with(|slot| slot.borrow_mut().take());
 }

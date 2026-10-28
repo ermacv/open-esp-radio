@@ -13,7 +13,9 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     type Frontend<'s> = () where Self: 's, Id: 's;
     type Invocation<'s> = () where Self: 's, Id: 's;
     fn prepare_queues(&mut self, _: &mut Self::Queues, mint: oer_radio_port::Mint<'static, (), Id>) { mint.into_pools(); }
-    fn split<'s>(_: &'s mut (), _: oer_radio_port::SlotWakes<'s, Id>) -> ((), ()) where Self: 's, Id: 's { ((), ()) }
+    fn split<'s>(_: &'s mut (), _: oer_radio_port::SlotWakes<'s, Id>) -> Result<((), ()), oer_radio_port::SlotInitError>
+    where Self: 's, Id: 's { Ok(((), ()))
+    }
 
     async fn run<'s>(&mut self, _: &mut Self::Invocation<'s>, request: SlotRetire<'_, Id, Self>) -> SlotStopped<Id, Self> where Self: 's, Id: 's {
         request.requested().await

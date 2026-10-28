@@ -180,8 +180,9 @@ pub async fn supervisor() {
                 };
                 match slot.register(Backend::new(device)) {
                     Ok(registered) => registered,
-                    Err(owner) => {
-                        oer_firmware_apps_b0::handoff::park_failure(owner, || {
+                    Err(error) => {
+                        // Retain the rejected owner or P2 initialization guard.
+                        oer_firmware_apps_b0::handoff::park_failure(error, || {
                             response.answer(Err(Fault::Accounting))
                         })
                         .await
@@ -199,8 +200,9 @@ pub async fn supervisor() {
                 Backend::new(device)
             }) {
                 Ok(registered) => registered,
-                Err(resume) => {
-                    oer_firmware_apps_b0::handoff::park_failure(resume, || {
+                Err(error) => {
+                    // Initialization faults retain P2 cleanup and their source cause.
+                    oer_firmware_apps_b0::handoff::park_failure(error, || {
                         response.answer(Err(Fault::Accounting))
                     })
                     .await

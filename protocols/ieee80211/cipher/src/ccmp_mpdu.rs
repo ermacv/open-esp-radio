@@ -58,11 +58,17 @@ impl CcmpAssociation {
     /// encoded the CCMP header, and reserved eight trailing bytes for the MIC.
     pub fn seal(&self, key: &Ccmp128Key, frame: &mut [u8]) -> Result<(), CcmpMpduError> {
         let blocks = self.blocks(frame)?;
-        let (_, body_and_mic) = frame.split_at_mut(blocks.body_start);
-        let (body, mic) = body_and_mic.split_at_mut(blocks.body_len);
+        let (_, body_and_mic) = frame
+            .split_at_mut_checked(blocks.body_start)
+            .ok_or(CcmpMpduError::Truncated)?;
+        let (body, mic) = body_and_mic
+            .split_at_mut_checked(blocks.body_len)
+            .ok_or(CcmpMpduError::Truncated)?;
         let tag = ccm::seal(key.as_bytes(), &blocks.nonce, &blocks.aad, body)
             .map_err(|_| CcmpMpduError::TooLong)?;
-        mic.copy_from_slice(&tag);
+        for (out, byte) in mic.iter_mut().zip(tag) {
+            *out = byte;
+        }
         Ok(())
     }
 
@@ -74,8 +80,12 @@ impl CcmpAssociation {
         frame: &'a mut [u8],
     ) -> Result<&'a [u8], CcmpMpduError> {
         let blocks = self.blocks(frame)?;
-        let (_, body_and_mic) = frame.split_at_mut(blocks.body_start);
-        let (body, mic) = body_and_mic.split_at_mut(blocks.body_len);
+        let (_, body_and_mic) = frame
+            .split_at_mut_checked(blocks.body_start)
+            .ok_or(CcmpMpduError::Truncated)?;
+        let (body, mic) = body_and_mic
+            .split_at_mut_checked(blocks.body_len)
+            .ok_or(CcmpMpduError::Truncated)?;
         let mic = mic
             .first_chunk::<MIC_LEN>()
             .ok_or(CcmpMpduError::Truncated)?;
@@ -103,10 +113,9 @@ impl CcmpAssociation {
             .ok_or(CcmpMpduError::Truncated)?;
         u16::try_from(body_len).map_err(|_| CcmpMpduError::TooLong)?;
         let (aad, flags) = Aad::from_header(&header, self.spp);
-        let mut nonce = [0; NONCE_LEN];
-        nonce[0] = flags;
-        nonce[1..7].copy_from_slice(&header.transmitter());
-        nonce[7..].copy_from_slice(&ccmp.packet_number().value().to_be_bytes()[2..]);
+        let [a0, a1, a2, a3, a4, a5] = header.transmitter();
+        let [_, _, p0, p1, p2, p3, p4, p5] = ccmp.packet_number().value().to_be_bytes();
+        let nonce = [flags, a0, a1, a2, a3, a4, a5, p0, p1, p2, p3, p4, p5];
         Ok(Blocks {
             aad,
             nonce,
@@ -133,18 +142,41 @@ enum AadBytes {
 impl Aad {
     fn from_header(header: &DecodedHeader<'_>, spp: Spp) -> (Self, u8) {
         let control = header.control();
-        let mut base = [0; 22];
+
         // Mutable subtype bits are masked only for data, never management.
         let masked = if control.is_data() { 0x3870 } else { 0x3800 };
         let mut fc = control.get() & !masked;
         if control.is_qos_data() {
             fc &= !0x8000;
         }
-        base[..2].copy_from_slice(&fc.to_le_bytes());
-        base[2..8].copy_from_slice(&header.receiver());
-        base[8..14].copy_from_slice(&header.transmitter());
-        base[14..20].copy_from_slice(&header.address3());
-        base[20] = (header.sequence_control() & 15) as u8;
+        let [f0, f1] = fc.to_le_bytes();
+        let [r0, r1, r2, r3, r4, r5] = header.receiver();
+        let [t0, t1, t2, t3, t4, t5] = header.transmitter();
+        let [a0, a1, a2, a3, a4, a5] = header.address3();
+        let base = [
+            f0,
+            f1,
+            r0,
+            r1,
+            r2,
+            r3,
+            r4,
+            r5,
+            t0,
+            t1,
+            t2,
+            t3,
+            t4,
+            t5,
+            a0,
+            a1,
+            a2,
+            a3,
+            a4,
+            a5,
+            (header.sequence_control() & 15) as u8,
+            0,
+        ];
         let qos = header.qos().map(|qos| {
             (qos as u8)
                 & match spp {
@@ -157,21 +189,26 @@ impl Aad {
             (None, None) => AadBytes::ThreeAddress(base),
             (None, Some(qos)) => {
                 let mut bytes = [0; 24];
-                bytes[..22].copy_from_slice(&base);
-                bytes[22] = qos;
+                for (out, byte) in bytes.iter_mut().zip(base.into_iter().chain([qos, 0])) {
+                    *out = byte;
+                }
                 AadBytes::ThreeAddressQos(bytes)
             }
             (Some(address), None) => {
                 let mut bytes = [0; 28];
-                bytes[..22].copy_from_slice(&base);
-                bytes[22..].copy_from_slice(&address);
+                for (out, byte) in bytes.iter_mut().zip(base.into_iter().chain(address)) {
+                    *out = byte;
+                }
                 AadBytes::FourAddress(bytes)
             }
             (Some(address), Some(qos)) => {
                 let mut bytes = [0; 30];
-                bytes[..22].copy_from_slice(&base);
-                bytes[22..28].copy_from_slice(&address);
-                bytes[28] = qos;
+                for (out, byte) in bytes
+                    .iter_mut()
+                    .zip(base.into_iter().chain(address).chain([qos, 0]))
+                {
+                    *out = byte;
+                }
                 AadBytes::FourAddressQos(bytes)
             }
         };

@@ -228,7 +228,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
     fn split<'s>(
         queues: &'s mut Self::Queues,
         _: SlotWakes<'s, Id>,
-    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -238,7 +238,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         let (driver_events, events) = queues.held.events.split();
         let (recycled, driver_recycled) = queues.held.recycled.split();
         let (driver_clock_replies, clock_replies) = queues.held.clock_replies.split();
-        (
+        Ok((
             RawFrontend {
                 resources: &mut queues.resources,
                 storage: &storage.shared,
@@ -252,7 +252,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                 timer: storage.device.borrow().timer().clone(),
                 clock_replies,
                 clock_use: &mut queues.held.clock_use,
-                addresses: queues.addresses.expect("prepared slot addresses"),
+                addresses: queues.addresses.ok_or(
+                    oer_radio_port::SlotInitError::MissingResource("Wi-Fi addresses"),
+                )?,
             },
             Invocation {
                 held: Held {
@@ -267,7 +269,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                 },
                 driver: &mut queues.driver,
             },
-        )
+        ))
     }
     async fn run<'s>(
         &mut self,
@@ -426,17 +428,20 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotBodyOwner<Id>
     fn lend<'p, 's>(
         frontend: &'p mut Self::Frontend<'s>,
         loan: BodyLoan<'p, Id, Self>,
-    ) -> Self::Body<'p>
+    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
         's: 'p,
     {
-        let resources = frontend
-            .resources
-            .take()
-            .expect("one body receives its resource loan");
-        BodyViews {
+        let resources =
+            frontend
+                .resources
+                .take()
+                .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                    "Wi-Fi resources",
+                ))?;
+        Ok(BodyViews {
             view: Frontend {
                 held: FrontHeld {
                     storage: frontend.storage,
@@ -470,7 +475,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotBodyOwner<Id>
                 gate: resources.gate.lend(&loan),
                 arbiter_authority: resources.arbiter_authority.lend(&loan),
             },
-        }
+        })
     }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> PortBackend<Id> for Esp32s31Backend<Id, D, B> {

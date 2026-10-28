@@ -23,9 +23,9 @@ impl SlotOwner<Id> for Owner {
         let [token] = mint.into_pools();
         *queues = Some(token);
     }
-    fn split<'s>(queues: &'s mut Self::Queues, _: SlotWakes<'s, Id>) -> (Self::Frontend<'s>, ())
+    fn split<'s>(queues: &'s mut Self::Queues, _: SlotWakes<'s, Id>) -> Result<(Self::Frontend<'s>, ()), oer_radio_port::SlotInitError>
     where Self: 's, Id: 's {
-        (queues, ())
+        Ok((queues, ()))
     }
     async fn run<'s>(&mut self, _: &mut (), retire: SlotRetire<'_, Id, Self>) -> SlotStopped<Id, Self>
     where Self: 's, Id: 's {
@@ -42,8 +42,9 @@ impl SlotBodyOwner<Id> for Owner {
     type Body<'p> = Token<'p>;
     fn lend<'p, 's>(
         frontend: &'p mut Self::Frontend<'s>, loan: BodyLoan<'p, Id, Self>,
-    ) -> Self::Body<'p> where Self: 's, Id: 's, 's: 'p {
-        loan.lend_slot(frontend.take().expect("one body resource"))
+    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
+    where Self: 's, Id: 's, 's: 'p {
+        Ok(loan.lend_slot(frontend.take().expect("one body resource")))
     }
 }
 
@@ -59,6 +60,6 @@ impl SlotBody<Id, Owner> for Body {
     }
 }
 
-pub async fn body(frontend: &mut SlotFrontend<'_, Id, Owner>) -> Option<Box<dyn Any>> {
+pub async fn body(frontend: &mut SlotFrontend<'_, Id, Owner>) -> Result<Box<dyn Any>, oer_radio_port::SlotInitError> {
     frontend.run_body(Body).await
 }

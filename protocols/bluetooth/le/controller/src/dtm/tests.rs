@@ -192,7 +192,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
     async fn run<'a, 'p>(
         self,
         owner: Owner<'a, 'p, Id, Backend<Id>, Disabled>,
-        resources: Result<Resources<'p, Id>, oer_bluetooth_le_model::Fault>,
+        resources: Resources<'p, Id>,
     ) -> Ended<Id, Backend<Id>, ()>
     where
         Backend<Id>: 'p,
@@ -206,7 +206,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
         let Resources {
             seats: [seat, mut first, mut second],
             session,
-        } = resources.expect("prepared initial model resources");
+        } = resources;
         let mut service = Service::<_, ModelCaps>::new(
             session,
             seat,
@@ -631,7 +631,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for ResetFlow<Id> {
     async fn run<'a, 'p>(
         self,
         owner: Owner<'a, 'p, Id, Backend<Id>, Disabled>,
-        resources: Result<Resources<'p, Id>, oer_bluetooth_le_model::Fault>,
+        resources: Resources<'p, Id>,
     ) -> Ended<Id, Backend<Id>, Self::Output>
     where
         Backend<Id>: 'p,
@@ -641,7 +641,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for ResetFlow<Id> {
         let Resources {
             seats: [seat, ..],
             session,
-        } = resources.expect("prepared initial model resources");
+        } = resources;
         match self {
             Self::Reinstalled(reset) => {
                 let response = reset

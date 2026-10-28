@@ -139,7 +139,7 @@ impl Work for Boundaries {
             let ticket_index = ticket.index();
             let body = ModelBody(alloc::vec![0x5a; body_len]);
             let body_pointer = body.0.as_ptr();
-            let before = phase.held.commands.items.borrow().len();
+            let before = phase.held.commands.items.inspect().len();
             let pn_before = key.last();
             let frame = frame(phase, len, protected_bit);
             let result = try_source(
@@ -166,7 +166,7 @@ impl Work for Boundaries {
                     pn_before + u64::from(keyed),
                     "layout refusal never allocates beyond the core-supplied PN"
                 );
-                assert_eq!(phase.held.commands.items.borrow().len(), before);
+                assert_eq!(phase.held.commands.items.inspect().len(), before);
                 assert!(phase.held.events.is_empty(), "no synthetic terminal");
                 ticket = returned_ticket;
                 let ModelAnyBuffer::Small(returned) = returned else {
@@ -833,4 +833,96 @@ impl Work for RetryRole {
 fn a_sent_mpdu_cannot_change_its_interface_role_during_retransmission() {
     let (backend, _) = backend();
     let _port_end = block_on(run_model(backend, Body(RetryRole)));
+}
+
+struct MissingLoan;
+impl Work for MissingLoan {
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+        self,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        mut resources: ModelResources<'id, ModelBackend<Id>>,
+    ) {
+        let ticket = resources.tickets.remove(0);
+        let mut buffer = resources.small.remove(0);
+        let original_loan = buffer.loan.take();
+        let slot = buffer.slot.index();
+        buffer.memory.fill(0x5a);
+        let pointer = buffer.memory.as_ptr();
+        let body = ModelBody(alloc::vec![0x71; 16]);
+        let body_pointer = body.0.as_ptr();
+        let result = try_source(
+            phase,
+            ticket,
+            TxSource::Fresh {
+                buffer,
+                frame: frame(phase, 40, false),
+                body: Some(body),
+                protection: TxProtection::Open,
+            },
+        );
+        let Err((reason, ticket, returned, body)) = result else {
+            panic!("missing body loan is refused before admission")
+        };
+        assert_eq!(
+            reason,
+            TxRefusal::Preparation(PreparationError::MissingBodyLoan)
+        );
+        let ModelAnyBuffer::Small(mut buffer) = returned else {
+            panic!("original class")
+        };
+        assert_eq!(buffer.slot.index(), slot);
+        assert_eq!(buffer.memory.as_ptr(), pointer);
+        assert!(buffer.memory[40..].iter().all(|byte| *byte == 0x5a));
+        assert_eq!(body.as_ref().unwrap().0.as_ptr(), body_pointer);
+        assert!(phase.held.commands.is_empty());
+        assert!(phase.held.events.is_empty());
+        buffer.loan = original_loan;
+        try_source(
+            phase,
+            ticket,
+            TxSource::Fresh {
+                buffer,
+                frame: frame(phase, 40, false),
+                body,
+                protection: TxProtection::Open,
+            },
+        )
+        .ok()
+        .unwrap();
+        let (_, returned) = completion(phase, &mut resources.terminal_access).await;
+        let ModelAnyBuffer::SmallSent(mut mpdu) = returned else {
+            panic!("published sent MPDU")
+        };
+        let original_loan = mpdu.buffer.loan.take();
+        let plan = match data_frame(phase, false) {
+            TxFrame::Individual { plan, .. } => RetransmissionPlan::Individual(plan),
+            _ => panic!("individual frame"),
+        };
+        let checked = TxSource::Retransmission { mpdu, plan }
+            .check()
+            .ok()
+            .unwrap();
+        let Err(refused) = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+            Station,
+            ModelCaps,
+        >(checked) else {
+            panic!("missing retry loan is refused")
+        };
+        assert_eq!(refused.reason, PreparationError::MissingBodyLoan);
+        let TxSource::Retransmission { mut mpdu, .. } = refused.operation else {
+            panic!("same sent owner")
+        };
+        assert_eq!(mpdu.buffer.memory.as_ptr(), pointer);
+        assert_eq!(mpdu.buffer.slot.index(), slot);
+        mpdu.buffer.loan = original_loan;
+        assert!(phase.held.commands.is_empty());
+        assert!(phase.held.events.is_empty());
+    }
+}
+#[test]
+fn missing_body_loans_refuse_fresh_and_retry_with_all_owners_unchanged() {
+    let (world, air) = backend();
+    let _report = block_on(run_model(world, Body(MissingLoan)));
+    assert!(air.sent().len() == 1);
+    assert!(!air.failed());
 }

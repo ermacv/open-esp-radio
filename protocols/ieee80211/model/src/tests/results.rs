@@ -400,11 +400,11 @@ fn an_answer_incompatible_with_the_checked_response_policy_is_refused_and_consum
     ] {
         air.answer(wrong);
         assert!(air.single_result(form).is_err());
-        assert!(air.answers.borrow().is_empty());
+        assert!(air.answers.inspect().is_empty());
     }
     air.answer(AirAnswer::Ack);
     assert!(air.aggregate_result().is_err());
-    assert!(air.answers.borrow().is_empty());
+    assert!(air.answers.inspect().is_empty());
 }
 
 #[test]
@@ -478,7 +478,7 @@ impl Work for WrongAnswer {
         submit(phase, ticket, small.remove(0), None);
         assert!(phase.next_event().await.is_err());
         assert!(phase.held.air.sent().is_empty());
-        let held = phase.held.quarantined.items.borrow();
+        let held = phase.held.quarantined.items.inspect();
         let Some(super::super::Work::Single(operation)) = held.front() else {
             panic!("the rejected operation stays owned")
         };
