@@ -23,10 +23,7 @@
 extern crate std;
 
 pub mod capabilities;
-pub mod channel;
 pub mod coex;
 pub mod engine;
 pub mod ll;
 pub mod pib;
-pub mod tx_power;
-pub mod types;

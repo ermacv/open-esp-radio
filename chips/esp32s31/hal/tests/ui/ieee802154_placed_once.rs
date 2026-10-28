@@ -3,8 +3,8 @@ use oer_esp32s31_hal::{dma_static::Placed, ieee802154::{engine::Ieee802154Engine
 use oer_espressif_ieee802154_engine::{
     engine::Ieee802154EngineBuffers,
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
-    tx_power::Ieee802154TxPowerLevels,
 };
+use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
 
 pub fn bind<Mac: Ieee802154LowLevel<Address = DmaWindowAddress>>(mac: Mac,
     buffers: Placed<Ieee802154EngineBuffers>, levels: Ieee802154TxPowerLevels<'static>,

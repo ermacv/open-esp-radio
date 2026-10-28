@@ -17,7 +17,6 @@ pub(crate) mod role;
 pub use mac::Ieee802154PowerSequence;
 
 pub use lifecycle::{
-    IEEE802154_MAX_CHANNEL, IEEE802154_MIN_CHANNEL, Ieee802154Channel, Ieee802154ChannelError,
     Ieee802154FoundationCheckpoint, Ieee802154ReadbackError, Ieee802154ResetCheckpoint,
     Ieee802154ResetReadback,
 };

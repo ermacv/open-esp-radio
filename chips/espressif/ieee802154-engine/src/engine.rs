@@ -24,20 +24,16 @@
 //! or publishing the scene priorities where the vendor's
 //! `IEEE802154_SET_TXRX_PTI` does.
 
-use crate::channel::Ieee802154Channel;
 use crate::coex::{Ieee802154Coexistence, RadioOperation};
-use crate::ll::{
-    self, Ieee802154EtmRoute, Ieee802154LlCommand, Ieee802154LowLevel, Ieee802154RxStatus,
-    Ieee802154Timer,
-};
+use crate::ll::{self, Ieee802154LowLevel};
 use crate::pib::{Ieee802154Permit, Ieee802154Pib, Ieee802154PibDefaults};
-use crate::tx_power::Ieee802154TxPowerLevels;
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154Event, Ieee802154EventMask, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154Channel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154MacCommand, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
     Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
-    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
+    Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation, Ieee802154TxPowerLevels,
 };
-
 use oer_ieee802154_mac::{
     FrameAddress, FrameType, FrameVersion, PendingTable, PhrFrame, ack_pending,
 };
@@ -67,16 +63,22 @@ pub const RECEIVE_SENSITIVITY_DBM: i8 = -104;
 
 /// ESP32-S31 `IEEE802154_RSSI_COMPENSATION_VALUE`.
 const RSSI_COMPENSATION: i8 = 0;
+
 /// `CCA_DETECTION_TIME` in 16-microsecond symbols.
 const CCA_DETECTION_TIME: u16 = 8;
+
 /// ACK receive timeout started after an ACK-requesting transmission.
 const ACK_TIMEOUT_MICROSECONDS: u32 = 200_000;
+
 /// `IEEE802154_ED_TRIG_TX_RAMPUP_TIME_US`.
 const ED_TRIG_TX_RAMPUP_MICROSECONDS: u32 = 256;
+
 /// `IEEE802154_TX_RAMPUP_TIME_US`.
 const TX_RAMPUP_MICROSECONDS: u32 = 98;
+
 /// `IEEE802154_RX_RAMPUP_TIME_US`.
 const RX_RAMPUP_MICROSECONDS: u32 = 146;
+
 /// `IEEE802154_FRAME_MIN_LEN`.
 const FRAME_MIN_LEN: u8 = 3;
 
@@ -753,7 +755,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     pub fn set_ack_timeout<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
-        timeout: crate::types::AckTimeout,
+        timeout: oer_espressif_ieee802154_mac_values::AckTimeout,
     ) {
         let units = timeout.units();
         self.settings.ack_timeout = Some(units);
@@ -985,10 +987,11 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Tx);
         if cca {
             cx.ll.set_ed_duration(CCA_DETECTION_TIME);
-            cx.ll.set_command(Ieee802154LlCommand::CcaTxStart);
+            cx.ll
+                .set_command(Ieee802154MacCommand::ClearChannelThenTransmit);
             self.set_state(Ieee802154State::TxCca);
         } else {
-            cx.ll.set_command(Ieee802154LlCommand::TxStart);
+            cx.ll.set_command(Ieee802154MacCommand::Transmit);
             self.set_state(Ieee802154State::Tx);
         }
         Ok(())
@@ -1565,7 +1568,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.pib.update_rx(cx.ll);
         self.set_next_rx_buffer(cx);
         ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Rx);
-        cx.ll.set_command(Ieee802154LlCommand::RxStart);
+        cx.ll.set_command(Ieee802154MacCommand::Receive);
         self.set_state(Ieee802154State::Rx);
     }
 
@@ -1576,7 +1579,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     {
         cx.ll.enable_event(Ieee802154Event::EdDone);
         cx.ll.set_ed_duration(duration);
-        cx.ll.set_command(Ieee802154LlCommand::EdStart);
+        cx.ll.set_command(Ieee802154MacCommand::EnergyDetection);
     }
 
     fn enter_sleep<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
@@ -1622,7 +1625,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.event_end_process(cx);
         match self.state {
             Ieee802154State::Disable | Ieee802154State::Sleep => {}
-            Ieee802154State::Idle => cx.ll.set_command(Ieee802154LlCommand::Stop),
+            Ieee802154State::Idle => cx.ll.set_command(Ieee802154MacCommand::Stop),
             Ieee802154State::Rx => self.stop_rx(cx),
             Ieee802154State::TxAck => self.stop_tx_ack(cx),
             Ieee802154State::TxCca => {
@@ -1630,7 +1633,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 cx.ll.clear_events(Ieee802154Event::TxAbort.mask());
             }
             Ieee802154State::Cca | Ieee802154State::Ed => {
-                cx.ll.set_command(Ieee802154LlCommand::Stop);
+                cx.ll.set_command(Ieee802154MacCommand::Stop);
                 cx.ll.clear_events(event_mask(&[
                     Ieee802154Event::EdDone,
                     Ieee802154Event::RxAbort,
@@ -1654,7 +1657,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        cx.ll.set_command(Ieee802154LlCommand::Stop);
+        cx.ll.set_command(Ieee802154MacCommand::Stop);
         if cx.ll.events().contains(Ieee802154Event::RxDone) {
             self.receive_done(cx);
         }
@@ -1670,7 +1673,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        cx.ll.set_command(Ieee802154LlCommand::Stop);
+        cx.ll.set_command(Ieee802154MacCommand::Stop);
         ll::sec_clear(cx.ll);
         self.receive_done(cx);
         cx.ll.clear_events(event_mask(&[
@@ -1685,7 +1688,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        cx.ll.set_command(Ieee802154LlCommand::Stop);
+        cx.ll.set_command(Ieee802154MacCommand::Stop);
         ll::sec_clear(cx.ll);
         let events = cx.ll.events();
         if self.state == Ieee802154State::TxEnhAck {
@@ -1710,7 +1713,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        cx.ll.set_command(Ieee802154LlCommand::Stop);
+        cx.ll.set_command(Ieee802154MacCommand::Stop);
         self.timer_stop(cx, Ieee802154Timer::Timer0);
         let events = cx.ll.events();
         cx.ll.clear_events(event_mask(&[
@@ -1739,7 +1742,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         let frame = self.tx_frame().read();
         let frame = PhrFrame::new(&frame);
         if !frame.frame_type().is_supported() {
-            cx.ll.set_command(Ieee802154LlCommand::Stop);
+            cx.ll.set_command(Ieee802154MacCommand::Stop);
             self.transmit_done(cx, false);
             self.needs_next_operation = true;
             return;
@@ -1778,7 +1781,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         let image = self.current_rx().read();
         let frame = PhrFrame::new(&image);
         if !frame.frame_type().is_supported() {
-            cx.ll.set_command(Ieee802154LlCommand::Stop);
+            cx.ll.set_command(Ieee802154MacCommand::Stop);
             self.receive_done(cx);
             self.needs_next_operation = true;
             return;
@@ -1825,7 +1828,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 self.needs_next_operation = false;
             } else {
                 // SOURCE: ESP-IDF 4d80c1b2 esp_ieee802154_dev.c:593-597.
-                cx.ll.set_command(Ieee802154LlCommand::Stop);
+                cx.ll.set_command(Ieee802154MacCommand::Stop);
                 if let Err(error) = generated {
                     cx.env.enhanced_ack_security_failed(error);
                 }

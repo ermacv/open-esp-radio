@@ -3,7 +3,7 @@ name = "oer-espressif-staged-runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 publish = false
 description = "Stage-two entry, relocation, traps, per-hart interrupt stacks, critical-section, panic record and fatal paths of the Espressif staged boot"
 

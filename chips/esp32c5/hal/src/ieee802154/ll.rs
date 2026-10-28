@@ -25,21 +25,17 @@ use oer_esp32c5_pac::{
     Ieee802154TxPowerCode as PacTxPowerCode,
 };
 pub use oer_espressif_ieee802154_engine::ll::{
-    Ieee802154LlCommand, Ieee802154LowLevel, Ieee802154Timer, event_end_process,
-    mac_init_registers, sec_clear, set_txrx_pti, timer_fire_at,
+    Ieee802154LowLevel, event_end_process, mac_init_registers, sec_clear, set_txrx_pti,
+    timer_fire_at,
 };
-use oer_espressif_ieee802154_engine::{
-    channel::Ieee802154Channel,
-    coex::CoexPti,
-    ll::COEX_DISABLED_PTI,
-    tx_power::Ieee802154ResolvedTxPower,
-    types::{Ieee802154DebugCounter, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154RxStatus},
-};
+use oer_espressif_ieee802154_engine::{coex::CoexPti, ll::COEX_DISABLED_PTI};
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
-    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
-    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
-    Ieee802154RxStateCode, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
+    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154ResolvedTxPower, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
+    Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
     Ieee802154TxAbortReasonObservation,
 };
 use oer_espressif_interrupt_table::Silent;
@@ -97,13 +93,13 @@ const EVENTS: [(Ieee802154Event, PacEvent); 12] = [
     (Ieee802154Event::RxSfdDone, PacEvent::RxSfdDone),
 ];
 
-const fn command_into_pac(command: Ieee802154LlCommand) -> PacMacCommand {
+const fn command_into_pac(command: Ieee802154MacCommand) -> PacMacCommand {
     match command {
-        Ieee802154LlCommand::TxStart => PacMacCommand::Transmit,
-        Ieee802154LlCommand::RxStart => PacMacCommand::Receive,
-        Ieee802154LlCommand::CcaTxStart => PacMacCommand::ClearChannelThenTransmit,
-        Ieee802154LlCommand::EdStart => PacMacCommand::EnergyDetection,
-        Ieee802154LlCommand::Stop => PacMacCommand::Stop,
+        Ieee802154MacCommand::Transmit => PacMacCommand::Transmit,
+        Ieee802154MacCommand::Receive => PacMacCommand::Receive,
+        Ieee802154MacCommand::ClearChannelThenTransmit => PacMacCommand::ClearChannelThenTransmit,
+        Ieee802154MacCommand::EnergyDetection => PacMacCommand::EnergyDetection,
+        Ieee802154MacCommand::Stop => PacMacCommand::Stop,
     }
 }
 
@@ -372,7 +368,7 @@ impl Ieee802154MacOwners {
 
 impl Ieee802154LowLevel for Ieee802154MacOwners {
     type Address = crate::layouts::DmaWindowAddress;
-    fn set_command(&mut self, command: Ieee802154LlCommand) {
+    fn set_command(&mut self, command: Ieee802154MacCommand) {
         self.task
             .lease()
             .request_mac_command(command_into_pac(command));

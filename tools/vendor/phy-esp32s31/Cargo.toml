@@ -3,7 +3,7 @@ name = "oer-vendor-phy-esp32s31"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 publish = false
 description = "The vendor-versus-production ESP32-S31 PHY calibration comparison on data: register images, vendor console protocol and the reviewed relation over the projection the firmware reports; the HIL phy family captures it"
 

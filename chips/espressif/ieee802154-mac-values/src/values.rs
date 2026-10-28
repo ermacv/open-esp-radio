@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Configuration values, commands and identities of the IEEE 802.15.4 MAC.
 
 /// One of the four source-confirmed MAC PAN contexts.

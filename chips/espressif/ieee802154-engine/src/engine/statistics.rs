@@ -10,8 +10,9 @@
 //!
 
 use crate::ll::Ieee802154LowLevel;
-use crate::types::Ieee802154DebugCounter;
-use oer_espressif_ieee802154_mac_values::{Ieee802154Event, Ieee802154EventMask};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154DebugCounter, Ieee802154Event, Ieee802154EventMask,
+};
 
 /// Transmissions that ended in an abort, by reason.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]

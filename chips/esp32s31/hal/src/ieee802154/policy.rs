@@ -12,13 +12,12 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
-};
-
 use crate::ieee802154::{
-    lifecycle::{COEX_DISABLED_PTI, Ieee802154Channel, Ieee802154ReadbackError},
+    lifecycle::{COEX_DISABLED_PTI, Ieee802154ReadbackError},
     mac::Ieee802154FoundationSnapshot,
+};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
 };
 
 /// Hardware quantum used by the source-confirmed vendor ACK-timeout conversion.

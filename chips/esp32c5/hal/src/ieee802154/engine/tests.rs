@@ -1,13 +1,12 @@
 use super::*;
 use oer_espressif_ieee802154_engine::{
-    channel::Ieee802154Channel,
     engine::{
         FRAME_SIZE, Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo,
         Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154TxError,
     },
     ll::model::Ieee802154LlModel,
-    types::Ieee802154RxStatus,
 };
+use oer_espressif_ieee802154_mac_values::{Ieee802154Channel, Ieee802154RxStatus};
 use std::boxed::Box;
 
 static LEVELS: [i8; 1] = [0];

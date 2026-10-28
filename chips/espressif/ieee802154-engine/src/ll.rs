@@ -20,47 +20,19 @@
 //! accessor sequence the vendor driver issues and a recording backend can
 //! compare it with the compiled vendor driver.
 
-use crate::channel::Ieee802154Channel;
 use crate::coex::{CoexPti, Ieee802154Coexistence, RadioOperation};
-use crate::tx_power::Ieee802154ResolvedTxPower;
-pub use crate::types::{
-    Ieee802154DebugCounter, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154RxStatus,
-};
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
-    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
-    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation, Ieee802154TxAbortEnableSet,
-    Ieee802154TxAbortReasonObservation,
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
+    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154ResolvedTxPower, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
+    Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
 
 /// PTI value the public common LL writes to both PTI fields when coexistence
 /// is disabled (`ieee802154_ll_disable_coex`).
 pub const COEX_DISABLED_PTI: u8 = 3;
-
-/// One of the two MAC timers.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum Ieee802154Timer {
-    /// TIMER0: ACK watchdog and timed transmit.
-    Timer0,
-    /// TIMER1: timed receive.
-    Timer1,
-}
-
-/// Operation commands of `ieee802154_ll_set_cmd`; timer commands are
-/// [`Ieee802154LowLevel::start_timer`] and [`Ieee802154LowLevel::stop_timer`].
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum Ieee802154LlCommand {
-    /// `IEEE802154_CMD_TX_START`.
-    TxStart,
-    /// `IEEE802154_CMD_RX_START`.
-    RxStart,
-    /// `IEEE802154_CMD_CCA_TX_START`.
-    CcaTxStart,
-    /// `IEEE802154_CMD_ED_START`.
-    EdStart,
-    /// `IEEE802154_CMD_STOP`.
-    Stop,
-}
 
 /// The `ieee802154_ll_*` accessors, the modem ETM register steps and the
 /// timer commands used by the driver's hardware helpers.
@@ -71,7 +43,7 @@ pub trait Ieee802154LowLevel {
     /// A placed frame-buffer address, opaque to the shared engine.
     type Address: Copy + Eq;
     /// `ieee802154_ll_set_cmd` of an operation command.
-    fn set_command(&mut self, command: Ieee802154LlCommand);
+    fn set_command(&mut self, command: Ieee802154MacCommand);
     /// `ieee802154_ll_get_events`.
     fn events(&mut self) -> Ieee802154EventObservation;
     /// Sample and acknowledge the asserted events of `mask` once.

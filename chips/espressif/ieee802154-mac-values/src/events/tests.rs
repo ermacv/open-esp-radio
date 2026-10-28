@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use super::{
     Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
     Ieee802154EventObservationError, Ieee802154ObservedEventState,

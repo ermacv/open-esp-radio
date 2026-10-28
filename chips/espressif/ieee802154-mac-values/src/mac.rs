@@ -1,11 +1,12 @@
-//! Engine-specific timeout, receive status, diagnostic counters and ETM routes.
+// SPDX-License-Identifier: Apache-2.0
+//! Checked ACK timeout, receive status, diagnostic counters and ETM routes.
 //!
-//! Shared semantic MAC values are defined in
-//! `oer_espressif_ieee802154_mac_values`.
+//! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
+//! `components/ieee802154/driver` and its public MAC low-level vocabulary
+//! (Copyright Espressif Systems (Shanghai) Co Ltd, Apache-2.0)
+//! and modified by Vladislav Ermachenkov; see the root `NOTICE`.
 
-use oer_espressif_ieee802154_mac_values::{
-    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
-};
+use crate::{Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode};
 
 /// An ACK timeout rounded up to sixteen-microsecond units and checked
 /// against the hardware's sixteen-bit field.
@@ -186,4 +187,13 @@ impl Ieee802154EtmRoute {
             Self::Timer1ToRxStart => Ieee802154EtmChannel::Channel1,
         }
     }
+}
+
+/// One of the two MAC timers.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Ieee802154Timer {
+    /// TIMER0: ACK watchdog and timed transmit.
+    Timer0,
+    /// TIMER1: timed receive.
+    Timer1,
 }

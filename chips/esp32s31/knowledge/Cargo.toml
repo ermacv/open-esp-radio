@@ -3,12 +3,15 @@ name = "oer-esp32s31-knowledge"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 repository.workspace = true
 publish = false
 description = "ESP32-S31 chip knowledge: hardware-free calibration records, PHY relations and transmit-power levels"
 
 [dependencies]
+oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
+
+[dev-dependencies]
 oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
 
 [lints]

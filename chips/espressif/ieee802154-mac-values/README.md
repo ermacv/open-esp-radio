@@ -1,30 +1,33 @@
 # Shared IEEE 802.15.4 MAC values and transactions
 
-`oer-espressif-ieee802154-mac-values` holds the parts of the typed IEEE 802.15.4 MAC surface
-that the ESP32-S31 and ESP32-C5 share: configuration values and commands, the
-event vocabulary with its enable and observation states, receive and transmit
-abort reasons, state observations, the public LL enable sets, and the ordered
-interrupt activation and teardown transactions. It contains no address and no
-register access.
+`oer-espressif-ieee802154-mac-values` is the semantic vocabulary shared by the
+MAC engine, chip HALs, knowledge and host tools. It contains configuration
+values and commands, events and abort reasons, RX/TX observations, Multi-PAN
+identities, ACK timeouts, diagnostic counters, ETM routes and timer identities.
+It also validates 2.4 GHz channels and provider-relative transmit-power level
+sets, retaining the channel and level-storage lifetime in each resolved power.
 
-Each chip PAC keeps its generated register blocks and the raw register access
-over them, because the chips differ in register geometry: the frequency-code,
-coexistence-PTI and transmit-power field widths, the width of the event field,
-the interrupt route (two-core source 132 on the ESP32-S31, one-core source 12
-on the ESP32-C5), the modem ETM trigger words and the MAC-initialization
-delays. The engine and HAL import the shared semantic vocabulary directly
-from this crate. The C5 PAC also exposes it through its typed leases.
+The event observation keeps unnamed lanes 7 and 13 in separate named fields.
+It gives them no invented meaning and grants no acknowledgement authority.
+Any asserted unnamed lane makes classification fail without losing either
+observation. A chip without a lane supplies `false` for it.
 
-The C5 register leases stay in its PAC: they forward to the chip's raw
-access with type conversions, so a mistake there is a type error rather than
-a behavior, and sharing them would need a public generic API over chip
-associated types. They move here only when a third chip with this MAC
-appears or when lease ownership or ordering logic must change in both chips.
+The crate owns no registers, DMA storage, engine or protocol policy. Chip PACs
+own register geometry and raw access. HALs translate the shared semantic values
+into their PAC's field values and perform the transactions. Interrupt arming
+and deactivation execute through the narrow transition port. The driver's LL
+trait and hardware helpers remain in `oer-espressif-ieee802154-engine`.
 
-The engine's `Ieee802154LowLevel` in `oer-espressif-ieee802154-engine` remains the
-driver boundary: each chip HAL implements it over its chip PAC. This crate sits
-below the chip PACs and is not a driver interface. Its independently
-implemented event observation retains unnamed lanes 7 and 13 separately,
-without assigning them a meaning or granting acknowledgement authority.
-Engine-specific receive status, diagnostic counters, ETM routes and ACK
-timeout remain in the engine.
+The engine adapts validated chip power levels into portable MAC capability
+types; this crate has no dependency on the MAC protocol or the engine.
+DMA frame storage, slot/address bookkeeping, FSM, PIB, coexistence policy and
+retained fault reporting are owned above the dictionary.
+
+## License
+
+Apache-2.0. The MAC vocabulary and transmit-power resolution include modified
+ESP-IDF code from revision `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`,
+`components/ieee802154/driver` and its public low-level vocabulary, ported and
+modified by Vladislav Ermachenkov. Derived source files retain the revision,
+copyright, license and modification notice; see the root [NOTICE](../../../NOTICE).
+Dependent packages declare their effective Apache-2.0 license in Cargo metadata.

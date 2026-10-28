@@ -12,12 +12,11 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154StateSnapshot,
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154EdSampleMode, Ieee802154StateSnapshot,
 };
 use oer_mmio::Placement;
 
 use crate::ieee802154::{
-    lifecycle::Ieee802154Channel,
     mac::{
         EtmPlacement, Ieee802154FoundationSnapshot, Ieee802154InterruptSetupOwner, Ieee802154Pti,
         Ieee802154TaskOwner, MacPlacement, RxInfoPlacement,

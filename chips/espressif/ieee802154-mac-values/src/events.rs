@@ -1,4 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Events, abort reasons and their enable and observation vocabularies.
+//!
+//! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
+//! `components/ieee802154/driver` and its public MAC low-level vocabulary
+//! (Copyright Espressif Systems (Shanghai) Co Ltd, Apache-2.0)
+//! and modified by Vladislav Ermachenkov; see the root `NOTICE`.
 
 /// One source-confirmed IEEE 802.15.4 MAC event.
 ///
@@ -685,9 +691,9 @@ pub struct Ieee802154EventObservation {
     events: Ieee802154EventMask,
     // SOURCE: chips/esp32s31/registers/types/ieee802154.toml, EVENT_STATUS;
     // chips/esp32c5/pac/src/ieee802154/ownership.rs, Ieee802154EventReadback.
-    // The entries retain lane 7 and lane 13, in that order, without assigning
-    // either lane a hardware meaning.
-    unclassified_lanes: [bool; 2],
+    // Neither lane is assigned a hardware meaning.
+    events_7: bool,
+    events_13: bool,
 }
 
 impl Ieee802154EventObservation {
@@ -697,7 +703,8 @@ impl Ieee802154EventObservation {
     pub const fn from_parts(events: Ieee802154EventMask, lane_7: bool, lane_13: bool) -> Self {
         Self {
             events,
-            unclassified_lanes: [lane_7, lane_13],
+            events_7: lane_7,
+            events_13: lane_13,
         }
     }
 
@@ -717,12 +724,12 @@ impl Ieee802154EventObservation {
 
     /// Observed presence of unnamed lane 7.
     pub const fn events_7(self) -> bool {
-        self.unclassified_lanes[0]
+        self.events_7
     }
 
     /// Observed presence of unnamed lane 13.
     pub const fn events_13(self) -> bool {
-        self.unclassified_lanes[1]
+        self.events_13
     }
 
     /// Return whether every named event in `required` was observed.
@@ -738,9 +745,10 @@ impl Ieee802154EventObservation {
     pub const fn classification(
         self,
     ) -> Result<Ieee802154EventMask, Ieee802154EventObservationError> {
-        match self.unclassified_lanes {
-            [false, false] => Ok(self.events),
-            _ => Err(Ieee802154EventObservationError),
+        if self.events_7 || self.events_13 {
+            Err(Ieee802154EventObservationError)
+        } else {
+            Ok(self.events)
         }
     }
 

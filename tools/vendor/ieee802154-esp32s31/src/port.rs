@@ -8,6 +8,15 @@
 //! [`LlModel`], so both sides see the same inputs. Modem ETM accesses are
 //! rendered as the vendor's direct register reads and writes.
 
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
+    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154ResolvedTxPower, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
+    Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation,
+};
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[cfg(feature = "sw-coex")]
@@ -21,20 +30,7 @@ use oer_espressif_ieee802154_engine::engine::{
     Ieee802154SecurityFrameError, Ieee802154TxError,
 };
 use oer_espressif_ieee802154_engine::pib::{AutoPendingMode, Ieee802154PibDefaults};
-use oer_espressif_ieee802154_engine::{
-    channel::Ieee802154Channel,
-    coex::CoexPti,
-    ll::{Ieee802154LlCommand, Ieee802154LowLevel, Ieee802154Timer},
-    tx_power::Ieee802154ResolvedTxPower,
-    types::{Ieee802154DebugCounter, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154RxStatus},
-};
-use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
-    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
-    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
-    Ieee802154RxStateCode, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
-    Ieee802154TxAbortReasonObservation,
-};
+use oer_espressif_ieee802154_engine::{coex::CoexPti, ll::Ieee802154LowLevel};
 use oer_ieee802154_mac::FrameAddress;
 
 use crate::{
@@ -57,6 +53,7 @@ const EVENT_BITS: [(Ieee802154Event, u16); 12] = [
     (Ieee802154Event::TxSfdDone, 1 << 11),
     (Ieee802154Event::RxSfdDone, 1 << 12),
 ];
+
 /// `IEEE802154_EVENT_MASK`.
 const ALL_EVENTS: u64 = 0x3fff;
 
@@ -138,13 +135,13 @@ const fn tx_abort_mask(set: Ieee802154TxAbortEnableSet) -> u64 {
     }
 }
 
-const fn command_code(command: Ieee802154LlCommand) -> u64 {
+const fn command_code(command: Ieee802154MacCommand) -> u64 {
     match command {
-        Ieee802154LlCommand::TxStart => 0x41,
-        Ieee802154LlCommand::RxStart => 0x42,
-        Ieee802154LlCommand::CcaTxStart => 0x43,
-        Ieee802154LlCommand::EdStart => 0x44,
-        Ieee802154LlCommand::Stop => 0x45,
+        Ieee802154MacCommand::Transmit => 0x41,
+        Ieee802154MacCommand::Receive => 0x42,
+        Ieee802154MacCommand::ClearChannelThenTransmit => 0x43,
+        Ieee802154MacCommand::EnergyDetection => 0x44,
+        Ieee802154MacCommand::Stop => 0x45,
     }
 }
 
@@ -333,7 +330,7 @@ struct PortDmaAddress(u32);
 
 impl Ieee802154LowLevel for PortLl {
     type Address = PortDmaAddress;
-    fn set_command(&mut self, command: Ieee802154LlCommand) {
+    fn set_command(&mut self, command: Ieee802154MacCommand) {
         self.value("ieee802154_ll_set_cmd", command_code(command));
     }
     fn events(&mut self) -> Ieee802154EventObservation {
@@ -812,7 +809,7 @@ fn level_table() -> CoexPtiTable {
 /// country, and the ceiling is the open domain's EIRP.
 fn permit(
     number: u8,
-    levels: oer_espressif_ieee802154_engine::tx_power::Ieee802154TxPowerLevels<'_>,
+    levels: oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels<'_>,
 ) -> Option<oer_espressif_ieee802154_engine::pib::Ieee802154Permit> {
     let channel = Ieee802154Channel::new(number).ok()?;
     let permitted = oer_radio_regulatory::TEST_DOMAIN.permit(channel).ok()?;
@@ -934,7 +931,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             }
             Step::SetAckTimeout(timeout) => engine.set_ack_timeout(
                 &mut ll,
-                oer_espressif_ieee802154_engine::types::AckTimeout::new(timeout)
+                oer_espressif_ieee802154_mac_values::AckTimeout::new(timeout)
                     .map_err(|_| "ACK timeout exceeds the hardware field")?,
             ),
             Step::GetIdentity => {

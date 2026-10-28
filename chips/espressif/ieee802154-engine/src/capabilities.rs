@@ -6,7 +6,14 @@
 //! those of an IEEE 802.15.4 radio role. The operation set is that role's
 //! without `CSMA_CA` and `TRANSMIT_RETRIES`, which belong above the port. No
 //! port backend in this repository publishes them.
+//!
+//! The validated-level adapter is from ESP-IDF
+//! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`,
+//! `components/ieee802154/driver/esp_ieee802154_pib.c` (Copyright Espressif
+//! Systems (Shanghai) Co Ltd, Apache-2.0), ported and modified by Vladislav
+//! Ermachenkov; see the root `NOTICE`.
 
+use oer_espressif_ieee802154_mac_values::Ieee802154MultipanIndex;
 use oer_ieee802154_mac::{
     CcaThresholdCapability, CslCapability, Ieee802154Capabilities, RadioCapabilities,
     TransmitPowerCapability, TransmitPowerLevels,
@@ -15,7 +22,16 @@ use oer_ieee802154_mac::{
 use crate::engine::RECEIVE_SENSITIVITY_DBM;
 use crate::pib::CCA_THRESHOLD_RANGE_DBM;
 
-use oer_espressif_ieee802154_mac_values::Ieee802154MultipanIndex;
+/// Convert a validated chip level set into the portable port's vocabulary.
+pub const fn portable_tx_power_levels(
+    levels: oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels<'static>,
+) -> TransmitPowerLevels {
+    // Both validations accept a non-empty, non-decreasing sequence.
+    match TransmitPowerLevels::new(levels.levels_dbm()) {
+        Ok(levels) => levels,
+        Err(_) => unreachable!(),
+    }
+}
 
 /// The portable operations a radio over this engine implements.
 ///
@@ -66,7 +82,7 @@ pub const ENH_ACK_PROBING_CAPACITY: usize = 10;
 pub const CCA_RESET_DBM: i8 = -75;
 
 /// The capabilities of a radio over this engine whose transmit power radiates
-/// `levels` (a chip's level set, `Ieee802154TxPowerLevels::portable`): every
+/// `levels` (a chip's level set, [`portable_tx_power_levels`]): every
 /// channel starts at the highest level, the CCA threshold at
 /// [`CCA_RESET_DBM`] within [`CCA_THRESHOLD_RANGE_DBM`]. A multi-PAN engine
 /// addresses [`Ieee802154MultipanIndex::COUNT`] interfaces, any other one.

@@ -40,4 +40,6 @@ Host `espflash` encodes and flashes images; no esp-* platform crate is linked.
 ## License
 
 MIT OR Apache-2.0, except the crates holding ESP-IDF ports, which are
-Apache-2.0 only; see [NOTICE](NOTICE) for third-party material.
+Apache-2.0 only. The shared IEEE 802.15.4 MAC vocabulary is one such port
+crate; packages depending on it declare Apache-2.0 as their effective license
+in Cargo metadata; see [NOTICE](NOTICE) for attribution and third-party material.

@@ -4,15 +4,14 @@
 //! event image, abort reasons and measurement results the MAC would latch.
 //! The model knows nothing else about the hardware.
 
-use super::{
-    COEX_DISABLED_PTI, Ieee802154LlCommand, Ieee802154LowLevel, Ieee802154RecentRssi,
-    Ieee802154Timer,
-};
-use crate::{channel::*, coex::*, tx_power::*, types::*};
+use super::{COEX_DISABLED_PTI, Ieee802154LowLevel, Ieee802154RecentRssi};
+use crate::coex::*;
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
-    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
-    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
+    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154ResolvedTxPower, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154RxStatus, Ieee802154Timer,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
 
@@ -35,7 +34,7 @@ pub struct Ieee802154LlModel<Address = ModelAddress> {
     /// CCA result.
     pub cca_busy: bool,
     /// The last operation command.
-    pub command: Option<Ieee802154LlCommand>,
+    pub command: Option<Ieee802154MacCommand>,
     /// The last published receive buffer.
     pub rx_address: Option<Address>,
     /// The last published transmit buffer.
@@ -175,7 +174,7 @@ const fn etm_index(channel: Ieee802154EtmChannel) -> usize {
 
 impl<Address: Copy + Eq> Ieee802154LowLevel for Ieee802154LlModel<Address> {
     type Address = Address;
-    fn set_command(&mut self, command: Ieee802154LlCommand) {
+    fn set_command(&mut self, command: Ieee802154MacCommand) {
         self.command = Some(command);
     }
     fn events(&mut self) -> Ieee802154EventObservation {

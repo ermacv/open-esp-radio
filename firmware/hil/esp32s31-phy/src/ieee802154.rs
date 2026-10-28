@@ -23,7 +23,6 @@ use oer_esp32s31_phy::{
     *,
 };
 use oer_espressif_ieee802154_engine::{
-    channel::Ieee802154Channel,
     coex::{Ieee802154CoexPriorities, Ieee802154Coexistence},
     engine::{
         FRAME_SIZE, Ieee802154EngineBuffers, Ieee802154EnhancedAck, Ieee802154Environment,
@@ -31,10 +30,10 @@ use oer_espressif_ieee802154_engine::{
         Ieee802154State, Ieee802154TxError, RX_BUFFER_COUNT,
     },
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
-    types::Ieee802154RxStatus,
 };
-use oer_hil_protocol::base::RejectReason;
+use oer_espressif_ieee802154_mac_values::{Ieee802154Channel, Ieee802154RxStatus};
 use oer_espressif_interrupt_table::Silent;
+use oer_hil_protocol::base::RejectReason;
 use oer_memory::HandlerCell;
 use oer_radio_regulatory::{
     Country, FrequencySpan, PowerLimits, RegulatoryDomain, Rule, RuleFlags,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! IEEE 802.15.4 transmit-power resolution.
 //!
 //! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
@@ -86,6 +87,11 @@ impl<'levels> Ieee802154TxPowerLevels<'levels> {
         Ok(Self { levels_dbm })
     }
 
+    /// Borrow the validated provider levels without changing their lifetime.
+    pub const fn levels_dbm(self) -> &'levels [i8] {
+        self.levels_dbm
+    }
+
     /// Return the validated external level count.
     pub const fn len(self) -> usize {
         self.levels_dbm.len()
@@ -142,17 +148,6 @@ impl<'levels> Ieee802154TxPowerLevels<'levels> {
     }
 }
 
-impl Ieee802154TxPowerLevels<'static> {
-    /// The levels as the port publishes them.
-    pub const fn portable(self) -> oer_ieee802154_mac::TransmitPowerLevels {
-        // Both validations accept a non-empty, non-decreasing sequence.
-        match oer_ieee802154_mac::TransmitPowerLevels::new(self.levels_dbm) {
-            Ok(levels) => levels,
-            Err(_) => unreachable!(),
-        }
-    }
-}
-
 /// Internal field code selected from one validated provider level set.
 ///
 /// The type is public so a chip HAL can write the code; its constructor is
@@ -178,8 +173,8 @@ impl Ieee802154TxPowerCode {
 /// the retained field code.
 ///
 /// ```compile_fail
-/// use oer_espressif_ieee802154_engine::{
-///     channel::Ieee802154Channel, tx_power::Ieee802154ResolvedTxPower,
+/// use oer_espressif_ieee802154_mac_values::{
+///     Ieee802154Channel, Ieee802154ResolvedTxPower,
 /// };
 ///
 /// let channel = Ieee802154Channel::new(20).unwrap();
@@ -187,8 +182,8 @@ impl Ieee802154TxPowerCode {
 /// ```
 ///
 /// ```compile_fail
-/// use oer_espressif_ieee802154_engine::{
-///     channel::Ieee802154Channel, tx_power::Ieee802154TxPowerLevels,
+/// use oer_espressif_ieee802154_mac_values::{
+///     Ieee802154Channel, Ieee802154TxPowerLevels,
 /// };
 ///
 /// let escaped = {

@@ -1,6 +1,7 @@
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanEnableState,
+};
 use std::vec::Vec;
-
-use oer_espressif_ieee802154_mac_values::{Ieee802154CcaMode, Ieee802154MultipanEnableState};
 
 use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
@@ -11,7 +12,7 @@ use super::{
     Ieee802154MacPolicyWrites, Ieee802154PanIdentity, configure_ieee802154_mac_policy,
     verify_ieee802154_mac_policy,
 };
-use crate::ieee802154::lifecycle::{Ieee802154Channel, Ieee802154ReadbackError};
+use crate::ieee802154::lifecycle::Ieee802154ReadbackError;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {

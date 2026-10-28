@@ -8,21 +8,18 @@
 //! merges or reorders register transactions.
 
 use oer_esp32s31_pac::ieee802154::command::Opcode;
+use oer_espressif_ieee802154_engine::coex::CoexPti;
 pub use oer_espressif_ieee802154_engine::ll::{
-    Ieee802154LlCommand, Ieee802154LowLevel, Ieee802154RecentRssi, Ieee802154Timer,
-    event_end_process, mac_init_registers, sec_clear, set_txrx_pti, timer_fire_at,
-};
-use oer_espressif_ieee802154_engine::{
-    channel::Ieee802154Channel,
-    coex::CoexPti,
-    tx_power::Ieee802154ResolvedTxPower,
-    types::{Ieee802154DebugCounter, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154RxStatus},
+    Ieee802154LowLevel, Ieee802154RecentRssi, event_end_process, mac_init_registers, sec_clear,
+    set_txrx_pti, timer_fire_at,
 };
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154EventMask,
-    Ieee802154EventObservation, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
-    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation, Ieee802154TxAbortEnableSet,
-    Ieee802154TxAbortReasonObservation,
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
+    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154ResolvedTxPower, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
+    Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
 use oer_espressif_interrupt_table::Silent;
 use oer_mmio::Placement;
@@ -33,13 +30,13 @@ use crate::ieee802154::mac::{
 };
 
 /// The command image of an operation command.
-const fn opcode(command: Ieee802154LlCommand) -> Opcode {
+const fn opcode(command: Ieee802154MacCommand) -> Opcode {
     match command {
-        Ieee802154LlCommand::TxStart => Opcode::TxStart,
-        Ieee802154LlCommand::RxStart => Opcode::RxStart,
-        Ieee802154LlCommand::CcaTxStart => Opcode::CcaTxStart,
-        Ieee802154LlCommand::EdStart => Opcode::EdStart,
-        Ieee802154LlCommand::Stop => Opcode::Stop,
+        Ieee802154MacCommand::Transmit => Opcode::TxStart,
+        Ieee802154MacCommand::Receive => Opcode::RxStart,
+        Ieee802154MacCommand::ClearChannelThenTransmit => Opcode::CcaTxStart,
+        Ieee802154MacCommand::EnergyDetection => Opcode::EdStart,
+        Ieee802154MacCommand::Stop => Opcode::Stop,
     }
 }
 
@@ -162,7 +159,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154RecentRssi
 impl<P: Placement, E: Placement, B: Placement> Ieee802154LowLevel for Ieee802154MacOwners<P, E, B> {
     type Address = crate::layouts::DmaWindowAddress;
 
-    fn set_command(&mut self, command: Ieee802154LlCommand) {
+    fn set_command(&mut self, command: Ieee802154MacCommand) {
         self.task.issue(opcode(command));
     }
 

@@ -2010,6 +2010,7 @@ name = "oer-esp32s31-knowledge"
 version = "0.1.0"
 dependencies = [
  "oer-espressif-ieee802154-engine",
+ "oer-espressif-ieee802154-mac-values",
 ]
 
 [[package]]
@@ -2175,6 +2176,9 @@ dependencies = [
 [[package]]
 name = "oer-espressif-ieee802154-mac-values"
 version = "0.1.0"
+dependencies = [
+ "oer-radio-regulatory",
+]
 
 [[package]]
 name = "oer-espressif-interrupt-table"
@@ -2555,6 +2559,7 @@ dependencies = [
  "oer-esp32s31-phy",
  "oer-espressif-executor",
  "oer-espressif-ieee802154-engine",
+ "oer-espressif-ieee802154-mac-values",
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",

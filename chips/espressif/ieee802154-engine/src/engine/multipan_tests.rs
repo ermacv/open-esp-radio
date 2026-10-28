@@ -4,9 +4,9 @@
 
 use crate::ll::model::Ieee802154LlModel;
 use crate::ll::model::ModelAddress;
-use crate::{tx_power::*, types::*};
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154CcaMode, Ieee802154Event, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    AckTimeout, Ieee802154CcaMode, Ieee802154Event, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154RxStatus, Ieee802154TxPowerLevels,
 };
 use std::{boxed::Box, vec, vec::Vec};
 
@@ -276,10 +276,7 @@ fn settings_survive_disable_enable_and_complete_register_loss() {
     engine.set_multipan_extended_address(hw, IF0, [1; 8]);
     engine.set_multipan_extended_address(hw, IF1, [2; 8]);
     engine.set_multipan_enable(hw, Ieee802154MultipanEnableState::NONE.with(IF1));
-    engine.set_ack_timeout(
-        hw,
-        crate::types::AckTimeout::new(200).expect("bounded timeout"),
-    );
+    engine.set_ack_timeout(hw, AckTimeout::new(200).expect("bounded timeout"));
     let priorities = crate::engine::tests::vendor_priorities();
     engine.set_coexistence(crate::coex::Ieee802154Coexistence::Software(priorities));
     let permit = crate::pib::test_permit(20, engine.levels);

@@ -1,22 +1,24 @@
 //! The low-level interface over host memory: each accessor reaches the
 //! register its public LL counterpart names, and reads back what it wrote.
 
+use super::*;
+use crate::ieee802154::mac::host::{HostMemory, changed, silent};
+use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154Event, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
 };
 
-use super::*;
-use crate::ieee802154::mac::host::{HostMemory, changed, silent};
-use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
-
 #[test]
 fn each_command_names_its_one_image() {
     let commands = [
-        (Ieee802154LlCommand::TxStart, Opcode::TxStart),
-        (Ieee802154LlCommand::RxStart, Opcode::RxStart),
-        (Ieee802154LlCommand::CcaTxStart, Opcode::CcaTxStart),
-        (Ieee802154LlCommand::EdStart, Opcode::EdStart),
-        (Ieee802154LlCommand::Stop, Opcode::Stop),
+        (Ieee802154MacCommand::Transmit, Opcode::TxStart),
+        (Ieee802154MacCommand::Receive, Opcode::RxStart),
+        (
+            Ieee802154MacCommand::ClearChannelThenTransmit,
+            Opcode::CcaTxStart,
+        ),
+        (Ieee802154MacCommand::EnergyDetection, Opcode::EdStart),
+        (Ieee802154MacCommand::Stop, Opcode::Stop),
     ];
     for (command, image) in commands {
         assert_eq!(opcode(command), image);

@@ -319,7 +319,7 @@ pub struct Ieee802154FoundationConfigured {
 }
 
 impl Ieee802154MacPolicyWrites for Ieee802154FoundationConfigured {
-    fn set_channel(&mut self, channel: crate::ieee802154::Ieee802154Channel) {
+    fn set_channel(&mut self, channel: oer_espressif_ieee802154_mac_values::Ieee802154Channel) {
         self.inner.backend_mut().mac_hal().set_channel(channel);
     }
 
