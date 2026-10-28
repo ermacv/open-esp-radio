@@ -36,7 +36,7 @@ impl<const H: u8> Hart<H> {
 /// ```
 /// ```compile_fail
 /// use oer_espressif_staged_runtime::Handoff;
-/// fn cannot_keep_authority(mut handoff: Handoff) {
+/// fn cannot_keep_authority<P>(mut handoff: Handoff<P>) {
 ///     let admission = handoff.pre_admission();
 ///     drop(handoff);
 ///     let _ = admission.hart();
