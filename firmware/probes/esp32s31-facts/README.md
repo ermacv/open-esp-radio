@@ -58,8 +58,7 @@ exception, panic, unknown selection or result-buffer exhaustion. Completion
 means the leaf finished, not that its hardware claim passed. SRAM output after
 system reset is not assumed retained.
 The reset leaf publishes twelve LP words, including the pre-trigger UART/hold
-observations and the reason tag. The tag identifies the leaf and sample; the
-research report records actual values and the stand run ID. The handler stops after eight unexpected entries;
+observations and the reason tag. The tag identifies the leaf and sample. The handler stops after eight unexpected entries;
 ordinary observation windows are 4096 cycles. Completion idles in WFI until
 the bounded debugger capture halts the target.
 
@@ -175,11 +174,8 @@ neither producer is acknowledged before the post-admission state0x1967.
 The thread revokes the loan after clearing MIE. The arbitration module takes
 an ordinary mutable borrow from the generic handler and forbids unsafe code.
 
-SOURCE: `HW23_S31_*_20261027`, run `hw23-20261027-timg-arbitration-01`,
-lease #908, [research report](/home/ermacv/dev/oer-notes/research/hw-timg0-arbitration.md).
-The measured probe source is commit `e4016ef7`. The current shared admission
-and handler path reuses the generic CLIC loan; it was not rerun on hardware.
-The recorded cycle observations belong to the measured revision.
+SOURCE: `HW23_S31_*_20261027` in the register model. The shared admission
+and handler path reuses the generic CLIC loan.
 
 ## BLE interrupt facts
 
@@ -463,9 +459,8 @@ are reconstructed from typed getters and generated field geometry.
 BB groups `d0,d3,d6,d9,dc,df,e2` contain status/control/enables,
 MAC RAW/ST/matrix bank3, then MAC disable/ordinary peer marker/zero. `+4c`
 has unknown access semantics and no PAC accessor; the current leaf never
-reads it and emits no group-plus-`100` post-read observation. Archived HW11
-captures used the earlier status/handler/control layout and included those
-post-read records; they do not prove a side-effect-free read or read-to-ack.
+reads it and emits no group-plus-`100` post-read observation, so it does not
+prove a side-effect-free read or read-to-ack.
 `e5` records the candidate's observed status. All tags are hexadecimal. A zero
 producer result does not authorize a reset-scope claim, read-to-ack semantics,
 clear effectiveness or a universal source123 silence claim.
@@ -519,8 +514,7 @@ stays held. The SRAM loader and debugger capture must run inside an s31-c
 stand lease; only command/result SRAM is accessed by the debugger.
 
 CONTROL_1 is a write trigger. All callers use its generated fresh-read
-trigger; diagnostic mode encoding omits that write-only lane. Archived
-pre-correction captures explicitly include its observed zero readback.
+trigger; diagnostic mode encoding omits that write-only lane.
 
 Sleep17/+68 observations use advancing completed BTLC captures, live digital
 and ETM clocks, ETM channels6/7 enabled and the ETM bit11 command issued.
@@ -625,7 +619,7 @@ voltage/power from these records. SOURCE: `oer-notes/research/opaque-blobray-phy
 
 ### Preparation scope and remaining differences
 
-The finite production prefix now follows `hal/src/power.rs::execute_owned`
+The finite production prefix follows `hal/src/power.rs::execute_owned`
 and `phy/src/analog/i2c.rs::PhyRfInitPrefixTransition` through TSENS:
 common modem power/readbacks; whole-word PLL images `0x15`, `0x1d` (XTAL
 disabled); calibration clock; FE/BB clocks; BBPLL mode; bias writes;
@@ -639,15 +633,15 @@ PAC owners. Every analog byte resolves both host and command alias through
 byte/PBus command refuses the experiment; no fallback preparation is used.
 
 The following differences are material; these observations do **not**
-establish a production lifetime contract or qualify PR #707 on their own.
-The same ledger is SOURCE `HW17_S31_SAR_PREPARATION_20261027` in the model.
+establish a production lifetime contract on their own. The same ledger is
+SOURCE `HW17_S31_SAR_PREPARATION_20261027` in the model.
 
 | ID | Difference from production | Reason / consequence |
 |---|---|---|
 | D1 | ROM RAM-loader state, SRAM stacks and adopted integer-MHz CPU rate; no staged bootstrap/PSRAM, MPLL reference, platform reference counts or Wi-Fi client cold baseline/LP-clock selection/combined BB+MAC reset entry | No Wi-Fi client epoch is opened; a standalone MAC pulse would not reproduce that parent lifecycle. PAC-only image has exclusive words, not the production platform lifecycle. Parent PLL/bootstrap state is inherited and recorded where observable. No production clock/load equivalence is claimed. |
 | D2 | SDM checks the same `0x5b` predicate with a 100 µs `mcycle` deadline instead of 9999 MAC-local counter ticks; byte/PBus operations have 20 µs experimental bounds; SAR has a 100 µs bound | Required short stand scope. The ordinary production timer/40 µs policy and vendor unbounded wait are not copied. Named settles preserve ≥100/10/1/2 µs; no executor timing equivalence. |
 | D3 | The production background-enable bit after TSENS is deliberately kept 0 before manual reference/tone selection | Prevent autonomous triggers during HOLD/EDGE; retention with background tracking remains untested. |
-| D4 | RC settings/calibration, filter DCAP and parameter reads, analog init1, RFPLL charge-pump search, command RAM publication, later conditional SAR2 initial-code write, FE update, crystal-duty and channel initialization are omitted | They belong to the full RF calibration suffix and depend on retained/calibrated parameters. No synthetic substitutes are used. In particular `0x578` is no longer moved before the test conversions. |
+| D4 | RC settings/calibration, filter DCAP and parameter reads, analog init1, RFPLL charge-pump search, command RAM publication, later conditional SAR2 initial-code write, FE update, crystal-duty and channel initialization are omitted | They belong to the full RF calibration suffix and depend on retained/calibrated parameters. No synthetic substitutes are used. In particular `0x578` is not moved before the test conversions. |
 | D5 | Full BB/RX/TX DC/IQ calibration and the reference-code root's 15 calibrated PBus setup operations / forced TX clock are omitted | No calibrated RF epoch is available without the prohibited full bring-up. Only the finite existing internal reference/tone leaf is exercised; electrical quality and production transfer remain unproven. |
 | D6 | Sole-owner tone stop / DAC restore / TSENS release and calibration-clock clear, then host stand download reset; no shared route restore or background-tracking handback | There are no other PHY clients in the image. Full-cleanup retention is not measured. |
 | D7 | Isolated P2 handler with cycle boundaries, not the production P2 executor/timer service; some nominal +0/+1 points are late | Actual read windows are logged. No completion IRQ, sub-µs timing, continuous ready retention or loaded-executor behavior is inferred. |
@@ -710,9 +704,9 @@ even with an ordinary completion marker:
 | Reason | Meaning | Detail / observation |
 |---:|---|---|
 | 1 | Unsupported/fractional/invalid adopted clock | 0 / 0; consult `1400/1401` |
-| 2 | Analog field's read failed | block / byte index (0/0 in the former SAR2-specific image) |
-| 3 | Value does not fit the generated analog field | old byte / requested value (former SAR2 path used observation 0) |
-| 4 | Analog initialization failed | stage 1=bias, 2=BBPLL, 3=ADC-rate / 0 (former image: SAR2 initialization) |
+| 2 | Analog field's read failed | block / byte index |
+| 3 | Value does not fit the generated analog field | old byte / requested value |
+| 4 | Analog initialization failed | stage 1=bias, 2=BBPLL, 3=ADC-rate / 0 |
 | 5 | HOLD refused: no admitted nonzero preflight | 0 / 0 |
 | 6 | EDGE refused: no distinguishable nonzero references | 0 / 0 |
 | 7 | Invalid SAR registry selection | requested selection / 0 |
@@ -721,56 +715,15 @@ even with an ordinary completion marker:
 | a | SDM did not return `0x5b` within the short bound, or transport failed | last byte (`u32::MAX` if unavailable) / elapsed cycles |
 | b | PBus-clear command was busy at start or timed out | selector / path |
 
-### Evidence identity
+### Observed limits
 
-Run `hw17-20261027-sar-review-04` (s31-a, lease #898) loaded the ELF built
-by `cargo fw probe` from commit
-`17e5ad48e577d8fd80071f7adb0305147e94174c`, published as source tag
-[`evidence/hw17-sar-review-04`](https://github.com/ermacv/open-esp-radio/tree/evidence/hw17-sar-review-04).
-The measured ELF, exact probe sources, raw JSON/binary dumps and capture
-logs for R3/R4 are retained in the single archive
-[`hw17-sar-evidence-20261027.tar.gz`](/home/ermacv/.local/share/open-esp-radio/evidence/hw17/hw17-sar-evidence-20261027.tar.gz) in the
-[durable evidence directory](/home/ermacv/.local/share/open-esp-radio/evidence/hw17/)
-(`<XDG data>/open-esp-radio/evidence/hw17/`). Archive SHA-256:
-`671a39bdb8f985fe9cc1b01197b3dcbb3d5e7cf7f9db50887ca4ed8c1e952fa2`.
-The archive preserves each run under its run-ID directory and supporting
-logs/audits under `support/`. Its contents were compared byte-for-byte with
-the captured files before those ELF/JSON/binary scratch captures were moved.
-The measured ELF is **not** the final rebased image.
-The differences after capture are explicit:
-
-- Rebase onto `a29a0eb3cf55e95b13ef107e15ade12e565a0cab` incorporates
-  upstream BLE/local/generic/opaque probes (#683/#686/#689/#691/#692/#697/#699/#701/#702/#703/#682),
-  PAC ownership/model/generator updates and watchdog/LP-lane/RX-chain support. These add linked
-  code, registry entries, root storage and a generic-IRQ dispatch check;
-  the in-progress completion marker and retained LP-reset boot dispatch also
-  differ. Image layout and timing are not assumed identical to the capture.
-- Shared PHY, chip-clock and boot PAC groups remain owned once in `Session.sar`.
-  BLE/local/opaque probe helpers borrow those existing owners rather than claiming
-  duplicate handles. All registrations use the same `Action` registry.
-  `sar_prepare.rs` remains byte-identical to capture. In `sar.rs`, the
-  removed broad host-map setter is replaced by the production named-lane
-  setters from #703. Model-based comparison preserves the same `0x3fa0`
-  field image and preservation mask; no other SAR operation changes.
-- This README, SAR evidence/field descriptions and generated PAC documentation
-  annotate the capture. No measurement is relabelled as a final-head run.
-
-SOURCE `HW17_S31_SAR_REVIEW_20261027` records the same distinction. The report
-retains the measured/final revisions and exact changed-file inventory. The
-rebased image is compile/link/host checked; its added non-SAR probes are not
-run by this task.
-
-The corrected-prefix run contains ten conversions (two preflight, four HOLD,
-four EDGE), on one board in one short run. HOLD retained data/ready through
-the observed 100 µs window. Partial ready codes were nonmonotone. Preflight
-reference samples 1969/1963 were unequal, so the gate admitted EDGE, but EDGE
-final reference outputs differed by only 1–2 codes, comparable with nearby
+The corrected-prefix capture contains ten conversions (two preflight, four
+HOLD, four EDGE) on one board. HOLD retained data/ready through the observed
+100 µs window. Partial ready codes were nonmonotone. Preflight reference
+samples 1969/1963 were unequal, so the gate admitted EDGE, but EDGE final
+reference outputs differed by only 1–2 codes, comparable with nearby
 conversion variation. This does not establish a robust reference-specific
-stimulus or causally attribute the final result difference. The stronger
-reference separation in the older incomplete-preparation capture is not
-transferred to the corrected prefix or production. No statistical series or
-full calibration is added to resolve that limitation.
-
+stimulus or causally attribute the final result difference.
 
 ## LP conditional acknowledgement and rearm
 
@@ -895,14 +848,13 @@ RX abort reason and MAC state. Generic USB/SYSTIMER records retain the existing
 encodings. Selection229 records the seeded and later full counter values and
 a separate observed-boundary flag; an early RAW is not a fresh post-wrap expiry.
 
-Run `hw26-20261027-generic-04` (s31-c, lease #917) observes positive local
-timer2/3 with their own counter snapshots; run02/#915 observes local TBTT0.
-All three retain RAW under mask and clear from a retained positive sample
-while masked. Run01/#913 separately establishes RX_ABORT reason26
+The leaves observe positive local timer2/3 with their own counter snapshots
+and local TBTT0; all three retain RAW under mask and clear from a retained
+positive sample while masked. They separately establish RX_ABORT reason26
 (ED_COEX_REJECT), positive USB OUT and fresh IN events, and the three ordered
 SYSTIMER cases. ED_DONE/ED_STOP, other event lanes and exact coincident
-set/clear priority remain unqualified. See the
-[research report](/home/ermacv/dev/oer-notes/research/hw-irq-generic-2.md).
+set/clear priority remain unqualified.
+SOURCE: `oer-notes/research/hw-irq-generic-2.md`.
 
 
 ## Inherited BLE enables and primary arrival windows
@@ -944,7 +896,7 @@ differences from a pristine POR read and the production platform/RF lifecycle.
 No complete production-admission result is established. Selection 211 is
 excluded from the callable registry because its standalone parent prerequisites
 are unqualified. The external report records the admission boundary and
-observations; the measured source tag retains the exact trial implementation.
+observations.
 
 214–217 emit `21a0` initial state, `21a8` initial CC0 crossing when applicable,
 `21b0` saved pair plus cycle stamp, `21b8` fresh crossing, `21c0` observed
@@ -1037,9 +989,6 @@ that CONTROL25 observation. Completion requires the same positive advance.
 
 ## Local TBTT and interrupt observers
 
-Archived HW30 captures use selectors240–253 with their matching archived ELFs.
-The current registry uses selectors260–273.
-
 Selections 260–273 are explicit short PAC-only leaves with RF/DMA closed,
 CPU admission masked and hart1 contained. Each new leaf first validates both
 CLIC positive-edge observers with FROM_CPU2 while IE remains zero. Radio
@@ -1082,9 +1031,6 @@ PWRBANK timer0/1 harness control; ED6 and radio traffic are outside these leaves
 
 Observation waits use the initialized SAR owner's ticks-per-microsecond conversion.
 HW31 uses selections280–299; HW29 retains240–248 and HW30 retains260–273.
-Archived HW31 cold/register selections240–244 map to280–284; archived
-injection selections250–264 map to285–299 in the same order. Capture labels
-and measured source hashes retain their original values.
 
 Selections 280–283 require a separate power-on/download loader entry for each
 arm: no opaque-one publication, bit23 alone, bit9 alone and the ordered
@@ -1133,10 +1079,7 @@ requested low4 image15 reads0, while the full enable readback preserves lanes
 outside the sourced mask. FE/CONTROL0 results qualify only address-high and
 byte-channel composition and disabled CONTROL0 readback described above.
 SOURCE: `HW31_S31_*_20261027` in `registers/evidence/hw-analog-pmu.toml`;
-runs `hw31-20261027-pb1e-02-registers` (lease#933),
-`hw31-20261027-pb1e-03-cold-240..243` (lease#938) and
-`hw31-20261027-pb1e-03-inject-250..264` (lease#940),
-[research report](/home/ermacv/dev/oer-notes/research/hw31-tsens-feest-pmuck.md).
+`oer-notes/research/hw31-tsens-feest-pmuck.md`.
 
 ## BT_MAC hidden pending and diagnostic reads
 
@@ -1173,12 +1116,11 @@ command-state readback establish absence of wake or event activity. A quiet
 +4bc word does not qualify its own ungenerated task indications or all read
 effects. CPU-delivery masking alone is not a peripheral-output fence.
 
-Run `hw32-20261027-ble-masked-01` (s31-a, lease#944) positively observed
-all three bank1 indications: masked arrival becomes visible on enable;
+The leaves positively observe all three bank1 indications: masked arrival becomes visible on enable;
 fixed W1C clears while enabled or hidden; matrix124 and modem wake vector0x10
 rise even at MAP0. The separate IE0 observer latches124. All eighteen +4bc
 words were zero, the tested pending survives their reads and BTLC advances.
 The wider read-safety, bank0/NRT and PMU/ETM-event questions remain unqualified.
 SOURCE: `HW32_S31_*_20261027` in
-`chips/esp32s31/registers/evidence/hw32-ble-masked-pending.toml` and the
-[research report](/home/ermacv/dev/oer-notes/research/hw32-ble-masked-pending.md).
+`chips/esp32s31/registers/evidence/hw32-ble-masked-pending.toml` and
+`oer-notes/research/hw32-ble-masked-pending.md`.

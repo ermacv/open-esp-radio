@@ -15,15 +15,9 @@ its one reader; every producer and consumer of a run goes through it.
 | `experiment`, `lab` | The A/B experiment and the laboratory cell a run records |
 
 Every document of a bundle carries a schema version (`RUN_SCHEMA`, `LAB_PROVENANCE_SCHEMA`,
-`OBSERVATIONS_SCHEMA`). `tests/schema/run-schema-<RUN_SCHEMA>/` holds one
-document of each kind with its optional parts present, the fixture records of
-`run::fixtures` included (`helper.json` wraps a family's own type and is the
-family's to keep readable), and
-`tests/schema.rs` reads each back unchanged: a change a stored bundle
-would not survive (a new required field, a renamed, removed or retyped one)
-fails there and needs a schema bump, with those documents moved to the new
-schema's directory and brought to the new shape. A new optional field that
-defaults when absent needs none.
+`OBSERVATIONS_SCHEMA`). A change a stored bundle would not survive (a new
+required field, a renamed, removed or retyped one) needs a schema bump. A new
+optional field that defaults when absent needs none.
 
 The JUnit and HTML views a run writes are rendered by `oer-hil-analysis`,
 which the runner hands `RunSession::finish`. The bundle depends on no

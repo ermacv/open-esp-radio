@@ -85,8 +85,7 @@ is unchanged. `writes::function_writes` describes argument/field-snapshot-to-sto
 events over a canonical `FunctionIndex`; `writes::call_writes` substitutes the
 call's actual integer ABI inputs and unions its callee effects. These summaries
 retain conditional writes and unknown effects; they do not forward mutable
-memory contents or establish subsequent reads. See the
-[real w1 evidence and limits](../riscv-stack/validation/argument-writes/README.md).
+memory contents or establish subsequent reads.
 
 `function_writes` also accepts already available callee summaries for one level
 of transparent tail composition. Canonical facts must prove exactly one
@@ -98,9 +97,7 @@ explicitly unknown. Composition uses the same argument/stack substitution as
 `call_writes`: entry sp is equal, but stack coordinates change owner. Original
 store/load PCs, expression owners, widths, occurrence and every target barrier
 are retained with the tail proof in `WriteOrigin`. Only this jump's transfer and
-synthetic `OpaqueCall` barriers are removed. The pinned ROM
-[validation](../riscv-stack/validation/call-spills/README.md) checks all twelve
-`memcpy` stores through its trampoline.
+synthetic `OpaqueCall` barriers are removed.
 
 The common value pass additionally proves a bounded byte-store footprint for a
 straight unit-stride alignment loop. It uses the already prepared semantics,
@@ -112,12 +109,8 @@ the original memory observation. `StoreAddressRange` retains the initial value,
 wrapping displacement, bound and structural proof; `function_writes` expands it
 into ordinary `May` effects with `WriteProof::AlignmentLoop`. An open graph
 discards those addresses. Store contents remain independent and unknown.
-The [alignment validation](../riscv-stack/validation/alignment-writes/README.md)
-proves three possible bytes for one real ROM store and transports them through
-the existing trampoline/argument substitution; the other eleven store sites
-retain their unknown-address barriers.
 
-That same induction witness now supplies the pointer's value on its exit edge:
+That same induction witness supplies the pointer's value on its exit edge:
 `(initial.wrapping_add(mask)) & !mask`, aligned with a forward modular
 displacement in `0..=mask`, including zero iterations. A supplementary equality
 component traverses the existing instruction CFG and intersects all incoming
@@ -129,10 +122,7 @@ used. `AlignedValue` records explicitly name an edge or instruction entry,
 their function owner, original initial value, ordinary Add/And DAG expression
 and the shared `AlignmentLoopProof`. They are conditional control-point facts,
 not architectural `Value` writes or assertions that the point is reachable.
-The scalar and memory observations retain their conservative contracts. The
-[exit-value validation](../riscv-stack/validation/alignment-exit/README.md)
-checks both real ROM paths and the merged pointer value while retaining every
-existing store effect and call barrier.
+The scalar and memory observations retain their conservative contracts.
 
 `ResearchOptions::stack_calls` optionally retains an existing stack word when
 `writes::stack_calls` prepared a complete disjoint call footprint from the
@@ -144,5 +134,4 @@ internal calls and other barriers kill knowledge. Unknown stored contents have
 an explicit `UnknownValue` barrier and do not prevent exclusion of a known
 range. The bounded stack model, original load PCs, register clobbering and
 return/behavior ports keep their existing contracts. No ROM memory contract is
-selected automatically. The [fresh w1 validation](../riscv-stack/validation/call-spills/README.md)
-records the selected ROM call's remaining loop-footprint barriers.
+selected automatically.
