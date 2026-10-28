@@ -4702,3 +4702,109 @@ fn confirming_returns_a_refused_absence_place_without_opening_the_link() {
         assert!(world.station.is_connected());
     });
 }
+
+#[test]
+fn a_missing_handshake_supplicant_returns_the_rsn_error() {
+    installed(|mint| {
+        let (mut world, _) = wpa2_associated::<2>(mint);
+        let State::Handshake(handshake) = &mut world.station.state else {
+            panic!("expected handshake");
+        };
+        handshake.supplicant = None;
+        assert!(matches!(
+            handshake.supplicant(),
+            Err(RsnStaSupplicantError::UnexpectedAction)
+        ));
+        world.receive(at(40), &beacon());
+        assert!(!matches!(world.station.state, State::Handshake(_)));
+    });
+}
+
+#[test]
+fn bank_assembly_capacity_refusal_retains_every_non_clone_slot() {
+    for pairwise_overflow in [true, false] {
+        let pairwise = if pairwise_overflow {
+            core::array::from_fn(|i| Some(Slot(i as u8 + 1)))
+        } else {
+            [const { None }; KEY_BANK_CAPACITY]
+        };
+        let group = if pairwise_overflow {
+            [const { [const { None }; KEY_BANK_CAPACITY] }; 2]
+        } else {
+            [
+                core::array::from_fn(|i| Some(Slot(i as u8))),
+                core::array::from_fn(|i| (i == 0).then_some(Slot(8))),
+            ]
+        };
+        let Err(error) = assemble_key_bank(Slot(0), pairwise, group) else {
+            panic!("bank must overflow");
+        };
+        let KeyBankReunionError::Capacity {
+            _parts: parts,
+            _pairwise: pairwise,
+            _group: group,
+        } = error
+        else {
+            panic!("capacity error");
+        };
+        let pairwise: Vec<_> = parts
+            .pairwise
+            .into_iter()
+            .chain(pairwise.into_iter().flatten())
+            .map(|slot| slot.0)
+            .collect();
+        let group: Vec<_> = parts
+            .group
+            .into_iter()
+            .chain(group.into_iter().flatten().flatten())
+            .map(|slot| slot.0)
+            .collect();
+        assert_eq!(
+            pairwise,
+            if pairwise_overflow {
+                (0..9).collect::<Vec<_>>()
+            } else {
+                std::vec![0]
+            }
+        );
+        assert_eq!(
+            group,
+            if pairwise_overflow {
+                Vec::new()
+            } else {
+                (0..9).collect()
+            }
+        );
+    }
+}
+
+#[test]
+fn an_overfull_returned_bank_reports_its_fault_and_keeps_owners_quarantined() {
+    installed(|mint| {
+        let mut world = World::new(mint, 0);
+        world.station.keys.spare_pairwise =
+            heapless::Vec::from_array(core::array::from_fn::<_, KEY_BANK_CAPACITY, _>(|i| {
+                Slot(i as u8 + 1)
+            }));
+        world.station.input(
+            at(0),
+            StaInput::PairwiseKeyRemoved {
+                slot: Slot(0),
+                association: oer_ieee80211_wire::security::Spp::NotNegotiated,
+            },
+        );
+        for _ in 0..2 {
+            assert!(matches!(
+                world.station.poll_action(at(0)),
+                Some(StaAction::ContractViolation(
+                    StaKeyContractViolation::IncompleteBank
+                ))
+            ));
+        }
+        assert!(matches!(
+            world.station.keys.pairwise,
+            KeyCell::UnreturnedBank { .. }
+        ));
+        assert!(!world.station.keys.clear());
+    });
+}

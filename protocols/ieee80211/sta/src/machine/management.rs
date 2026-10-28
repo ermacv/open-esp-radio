@@ -83,7 +83,9 @@ impl ManagementProtection {
             frame.get(24..frame.len().checked_sub(MANAGEMENT_MIC_ELEMENT_LEN)?)?
         } else {
             let copied = copied.get_mut(..frame.len())?;
-            copied.copy_from_slice(frame);
+            for (destination, source) in copied.iter_mut().zip(frame) {
+                *destination = *source;
+            }
             self.individual.open(copied).ok()?
         };
         match subtype {

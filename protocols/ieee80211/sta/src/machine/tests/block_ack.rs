@@ -48,10 +48,11 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
     installed(|mint| {
         let mut world = connected_world(mint);
         let mut buffers = world.station.buffers.take_all();
-        for buffer in &mut buffers {
+        for buffer in buffers.iter_mut().flatten() {
             buffer.1 = 24;
         }
-        world.station.buffers = crate::pool::Pool::from_collection(buffers);
+        world.station.buffers =
+            crate::pool::Pool::from_collection(buffers.into_iter().flatten().collect());
         let reply = RxBlockAckReply::for_association(
             world.station.epoch.unwrap(),
             Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
@@ -72,10 +73,11 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
         assert_eq!(world.station.tickets.len(), 2);
         assert_eq!(world.station.buffers.len(), 2);
         let mut buffers = world.station.buffers.take_all();
-        for buffer in &mut buffers {
+        for buffer in buffers.iter_mut().flatten() {
             buffer.1 = 512;
         }
-        world.station.buffers = crate::pool::Pool::from_collection(buffers);
+        world.station.buffers =
+            crate::pool::Pool::from_collection(buffers.into_iter().flatten().collect());
         let Ok(StaAction::Transmit(transmit)) = world.station.try_block_ack_reply(reply) else {
             panic!("the same reply fits the restored control buffer");
         };
