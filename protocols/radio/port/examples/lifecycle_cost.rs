@@ -60,6 +60,7 @@ macro_rules! port {
     ($module:ident, $port:ident) => {
         mod $module {
             use super::*;
+            use oer_radio_port::conformance::registration::{MockCleanup, guarded};
             use $port::*;
             struct Backend<'a>(&'a Probe);
             struct View<'p, 'a, Id: SlotIdentity> {
@@ -129,6 +130,16 @@ macro_rules! port {
                     probe.step(8);
                     proof
                 }
+
+                fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
+                where
+                    Self: 's,
+                    Id: 's,
+                {
+                    self.0.step(16);
+                }
+            }
+            impl<'r, Id: SlotIdentity> MockCleanup<Id> for Backend<'r> {
                 fn abandon<'s>(
                     &mut self,
                     _: Option<&mut Self::Invocation<'s>>,
@@ -141,14 +152,8 @@ macro_rules! port {
                     self.0.step(32);
                     Abandon::Stopped(request.stopped())
                 }
-                fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
-                where
-                    Self: 's,
-                    Id: 's,
-                {
-                    self.0.step(16);
-                }
             }
+
             impl<'r, Id: SlotIdentity> SlotBodyOwner<Id> for Backend<'r> {
                 type Body<'p>
                     = View<'p, 'r, Id>
@@ -344,7 +349,7 @@ macro_rules! port {
                         }
                     };
                     let end = LocalExecution
-                        .scope(registered, |frontend| run_port(frontend, Body))
+                        .scope(guarded(registered), |frontend| run_port(frontend, Body))
                         .await;
                     core::hint::black_box(end);
                 });

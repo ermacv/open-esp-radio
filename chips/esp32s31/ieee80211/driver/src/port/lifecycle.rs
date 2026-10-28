@@ -303,7 +303,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
             let done = poll_fn(|cx| {
                 storage.shared.driver.register(cx.waker());
                 if storage.shared.poisoned.is_requested() {
-                    retire.request_quarantine();
+                    retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
                     return Poll::Pending;
                 }
                 if held.publishing.get() {
@@ -323,7 +323,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                         Poll::Ready(Ok(())) => return Poll::Ready(true),
                         Poll::Ready(Err(cause)) => {
                             storage.poison(cause);
-                            retire.request_quarantine();
+                            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
                             return Poll::Pending;
                         }
                         Poll::Pending => {
@@ -337,7 +337,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                 let mut device = storage.device.borrow_mut();
                 if let Err(cause) = state.poll(cx, held, &mut *device) {
                     storage.poison(cause);
-                    retire.request_quarantine();
+                    retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
                     return Poll::Pending;
                 }
                 drop(device);
@@ -365,7 +365,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
             || held.rx_out.get() != 0
             || !storage.shared.returned.all_returned()
         {
-            retire.request_quarantine();
+            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
         self.channel = held.channel.get();
@@ -375,23 +375,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         storage.device.borrow_mut().detach();
         retire.requested().await
     }
-    fn abandon<'s>(
-        &mut self,
-        _: Option<&mut Self::Invocation<'s>>,
-        call: radio::Quarantine,
-    ) -> radio::Abandon
-    where
-        Self: 's,
-        Id: 's,
-    {
-        self.storage.poison(Fault::Abandoned);
-        // The P2 runner ended its poll loan before invoking this guard. P1
-        // has no device reference, so cleanup has exclusive hardware access.
-        if self.storage.device.borrow_mut().abandon() {
-            return radio::Abandon::Stopped(call.stopped());
-        }
-        radio::Abandon::Unconfirmed(call)
-    }
+
     fn finish<'s>(&mut self, invocation: &mut Self::Invocation<'s>) -> Self::Vacant
     where
         Self: 's,

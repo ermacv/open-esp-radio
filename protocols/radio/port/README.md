@@ -64,39 +64,45 @@ nested and parallel model scopes remain independent. The executor's
 irreversible `take_static()`. Neither reset nor quarantine reissues that Id.
 Unclaimed `VacantPortSlot` backing cannot register an owner.
 
-`PortSlot::register` stores the P2 owner and arms its cleanup guard before
-calling `prepare_queues`, splitting endpoints or constructing the body.
-Queues have const vacant backing and are prepared through `&mut`; they do
-not travel inside the body future. Registration returns a small pair of
-`SlotFrontend` and `SlotRegistration`. The frontend contains only queue
-endpoints and lifecycle signals. Its Drop atomically requests quarantine
-and wakes P2; it does not call hardware or destroy the P2 owner.
+`PortSlot::register` stores the P2 owner before queue construction. Queues
+have const vacant backing and are prepared through `&mut`; they do not travel
+inside the body future. Raw `SlotRegistration` contains only portable state
+and loans. Its `drive(&mut self)` returns a completion or `LifecycleError`;
+its Drop records cancellation and wakes the owner, without calling hardware
+cleanup. `SlotFrontend` contains queue endpoints and lifecycle signals only.
 
-`LocalExecution::scope(registered, body)` accepts that checked pair, constructs
-the body once and polls P1 beside P2 without requiring Send. Its pinned fields
-retain one body future; when the body returns, its storage holds the output
-while registration ends. Dropping even a never-polled runner ends P1 before
-the P2 cleanup guard. S31 conformance runs the portable body on P1 and retains
-the static slot and driver registration in its permanent P2 task. A typed
-request channel transfers only the frontend; the P2 future ends before its
-completion publishes Joined. Its frontend cannot reach the device. Exact
-radio-clock calls use a separate bounded P2 latch; concurrent calls refuse
-Unavailable without waiting for the other caller.
+Each hardware backend owns a concrete P2 `Registration` guard. Its
+`guard_result` wraps both successful registration and an initialization error
+before a frontend is published. The guard retains the raw registration through
+every driver loan. Its Drop performs the backend's mandatory cancellation
+cleanup exactly once, including before the first driver poll, and leaves
+hardware-reachable backing retained. Wi-Fi stops admission and erases secrets;
+BLE quarantines its device. P1 only reports cancellation. Forgetting a guard
+cannot release the permanent backing or create an ordinary join.
 
-`SlotRegistration::run` prioritizes quarantine before each device poll.
+`LocalExecution::scope((frontend, guarded_driver_future), body)` polls P1 beside
+the owner's P2 future without requiring Send. The body field ends before the
+guarded driver field on cancellation. The pinned body storage is reused for
+its output; a completed local runner returns Pending on another poll.
+Reference fixtures select `conformance::registration::MockRegistration` under
+`test-support`, with the same owner-side cleanup and destruction order.
+
 Normal retirement consumes the registration's `SlotStopped` proof, finishes
 and destroys the owner at its permanent address, and ends its invocation.
 The completed P2 future is destroyed and unregistered before `Joined` is
 published. Only that affine authority permits `PortSlot::reinstall`; stopped
 hardware stays in the slot until P2 consumes it for the next installation.
-No frontend result contains the backend or its hardware owners.
+An inconsistent reinstall returns its source observations, reconstruction
+operation and supplied join proof without moving an active owner.
 
-Quarantine is absorbing, including after a late P2 proof. P2 executes cleanup
-exactly once and retains every reachable owner in durable backing.
-`Abandon::Stopped` requires its actual hardware stopping proof;
-`Abandon::Unconfirmed` requires chip reset. Neither authorizes reuse of the
-quarantined allocation. `PortEnd` reports the timely result through
-`SlotQuarantined`; dropping that receipt destroys no hardware owner.
+`LifecycleError` distinguishes cancellation, fail-stop, construction, repeated
+body issuance, deadline and unconfirmed stopping. Invalid states retain the
+observed phase, storage kind and invocation presence in `SlotObservation`.
+Failure closes the portable lifecycle; the hardware owner's guard chooses
+cleanup and publishes its actual `Abandon` observation. `Abandon::Stopped`
+requires the backend's stopping proof; `Abandon::Unconfirmed` supplies no
+stopping or reuse authority. `SlotQuarantined` carries the failure and the
+owner's observation, without containing or destroying hardware owners.
 
 `SlotBodyOwner::lend` introduces a separate invariant body loan `'p`, even
 for StaticId. `BodyLoan` privately converts complete owned Id payloads to
@@ -160,7 +166,7 @@ operation.
 The core allocates no heap memory and contains no unsafe source code. Slot
 identities and component paths occupy no storage. Initial capacity is issued
 once per registration; const queue backing remains in its caller's slot.
-P2 owns the cleanup guard. The body's fail-stop request is zero sized, and
+The hardware backend owns the P2 cleanup guard. The body's fail-stop request is zero sized, and
 only the supervisor stores the bounded response wait.
 
 Pin projection keeps the body at one address and reuses its storage for the
@@ -168,7 +174,7 @@ returned output. Separate poll boundaries keep body and registration frames
 independent. Linked image analysis measures their actual compiler frames,
 future backing and all allocated sections, including one-time initialization.
 The host [cost probe](examples/lifecycle_cost.rs) exercises two concrete backends
-and reports their future sizes with `cargo run -p oer-radio-port --example lifecycle_cost`.
+and reports their future sizes with `cargo run -p oer-radio-port --features test-support --example lifecycle_cost`.
 
 UI cases and their positive twins cover closed identities, affine placement,
 foreign paths and resources, body-loan escape, quarantine and Joined. They

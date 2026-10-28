@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Deterministic Bluetooth LE DTM reference model"
 
 [features]
-test-support = ["oer-bluetooth-le-port/test-support"]
+test-support = ["oer-radio-port/test-support", "oer-bluetooth-le-port/test-support"]
 
 [dependencies]
 oer-bluetooth-le-radio = { path = "../radio" }

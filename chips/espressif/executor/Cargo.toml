@@ -48,6 +48,7 @@ tempfile = "=3.27.0"
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [dev-dependencies]
+oer-radio-port = { path = "../../../protocols/radio/port", features = ["test-support"] }
 oer-esp32s31-hal = { path = "../../esp32s31/hal" }
 oer-espressif-staged-runtime = { path = "../staged-runtime" }
 oer-espressif-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }

@@ -79,7 +79,9 @@ where
         )]
         let end = oer_radio_port::LocalExecution
             .scope(
-                (slot).register(backend).ok().expect("fresh fixture slot"),
+                oer_radio_port::conformance::registration::guarded(
+                    (slot).register(backend).ok().expect("fresh fixture slot"),
+                ),
                 async |frontend| oer_radio_port::run_port(frontend, body).await,
             )
             .await;

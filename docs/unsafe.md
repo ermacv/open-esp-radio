@@ -1035,6 +1035,11 @@ reset hardware, panic as a release mechanism or claim successful shutdown.
 Because safe Rust permits `mem::forget`, forgetting an owner must remain a
 harmless leak rather than release memory still accessible by hardware.
 
+Radio port cancellation cleanup belongs to the backend's P2 registration
+guard. The guard survives portable driver loans and performs its mandatory
+cleanup on Drop, including before first poll. Sans-IO lifecycle and slot code
+only report typed failures; they do not invoke the hardware cleanup policy.
+
 Task boundaries, cancellation and rendezvous do not weaken the same ownership
 or quiescence obligations. The wider execution and
 memory-placement contracts are in the

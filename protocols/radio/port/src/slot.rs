@@ -5,7 +5,7 @@ use core::{
     marker::PhantomData,
     mem::ManuallyDrop,
     pin::{Pin, pin},
-    sync::atomic::{AtomicU8, Ordering},
+    sync::atomic::{AtomicU8, AtomicU32, Ordering},
     task::{Context, Poll},
 };
 
@@ -64,18 +64,6 @@ pub trait SlotOwner<Id: SlotIdentity>: Sized {
         invocation: &mut Self::Invocation<'s>,
         retire: SlotRetire<'_, Id, Self>,
     ) -> impl Future<Output = SlotStopped<Id, Self>>
-    where
-        Self: 's,
-        Id: 's;
-
-    /// Quarantine without releasing any hardware-reachable owner. Invocation
-    /// retains its endpoints through cancellation, so cleanup can also erase
-    /// secrets in queued payloads. It is absent only during initialization.
-    fn abandon<'s>(
-        &mut self,
-        invocation: Option<&mut Self::Invocation<'s>>,
-        authority: Quarantine,
-    ) -> Abandon
     where
         Self: 's,
         Id: 's;
@@ -144,10 +132,10 @@ pub struct SlotRetire<'s, Id: SlotIdentity, S: SlotOwner<Id>> {
 
 impl<Id: SlotIdentity, S: SlotOwner<Id>> SlotRetire<'_, Id, S> {
     /// Report a P2 invariant failure without issuing an ordinary stop proof.
-    /// Yield after this request; the registration ends the driver loan and
-    /// invokes its own quarantine guard before publishing the answer.
-    pub fn request_quarantine(&self) {
-        self.signals.quarantine();
+    /// Yield after this report; the portable driver returns the failure.
+    /// The hardware owner's guard ends the loan and chooses cleanup.
+    pub fn request_failure(&self, cause: LifecycleError) {
+        self.signals.request_failure(cause);
     }
 
     /// Whether the frontend has closed and requested retirement.
@@ -195,8 +183,91 @@ pub enum SlotInitError {
     MissingResource(&'static str),
     /// A registration already issued its single body resource set.
     BodyAlreadyIssued,
-    /// The registration entered absorbing quarantine before construction.
-    Quarantined,
+    /// Lifecycle failure prevented construction; resources remain in backing.
+    Lifecycle(LifecycleError),
+}
+
+/// Storage observed when an operation cannot proceed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotStorageState {
+    /// No installed or vacant owner.
+    Empty,
+    /// An installed P2 owner.
+    Registered,
+    /// Returned stopped hardware.
+    Vacant,
+    /// The observer has only lifecycle signals, not an owner loan.
+    Unavailable,
+}
+
+/// Source state of a refused lifecycle invariant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SlotObservation {
+    /// Exact lifecycle phase byte observed by the operation.
+    pub phase: u8,
+    /// Owner storage observed without moving or dropping its contents.
+    pub storage: SlotStorageState,
+    /// Whether the P2 invocation was present.
+    pub invocation_present: bool,
+}
+
+/// Portable lifecycle failure; hardware policy belongs to the P2 owner's guard.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LifecycleError {
+    /// A frontend, join or P2 driver future was cancelled.
+    Cancelled,
+    /// The body explicitly requested fail-stop.
+    FailStopRequested,
+    /// Endpoint or body construction failed; the construction result retains its cause.
+    Construction,
+    /// The body tried to issue its initial resources twice.
+    BodyAlreadyIssued,
+    /// No timely stop or join proof was observed.
+    Deadline,
+    /// The backend could not confirm ordinary stopping.
+    StopUnconfirmed,
+    /// An invariant was refused with its source observations intact.
+    InvalidState(SlotObservation),
+}
+
+impl LifecycleError {
+    fn encode(self) -> u32 {
+        match self {
+            Self::Cancelled => 1,
+            Self::FailStopRequested => 2,
+            Self::Construction => 3,
+            Self::BodyAlreadyIssued => 4,
+            Self::Deadline => 5,
+            Self::StopUnconfirmed => 6,
+            Self::InvalidState(observed) => {
+                128 | (u32::from(observed.phase) << 8)
+                    | ((observed.storage as u32) << 16)
+                    | (u32::from(observed.invocation_present) << 18)
+            }
+        }
+    }
+
+    fn decode(raw: u32) -> Option<Self> {
+        Some(match raw {
+            0 => return None,
+            1 => Self::Cancelled,
+            2 => Self::FailStopRequested,
+            3 => Self::Construction,
+            4 => Self::BodyAlreadyIssued,
+            5 => Self::Deadline,
+            6 => Self::StopUnconfirmed,
+            _ => Self::InvalidState(SlotObservation {
+                phase: (raw >> 8) as u8,
+                storage: match (raw >> 16) & 3 {
+                    0 => SlotStorageState::Empty,
+                    1 => SlotStorageState::Registered,
+                    2 => SlotStorageState::Vacant,
+                    _ => SlotStorageState::Unavailable,
+                },
+                invocation_present: raw & (1 << 18) != 0,
+            }),
+        })
+    }
 }
 
 /// Registration refusal, retaining rejected input or P2's cleanup authority.
@@ -204,11 +275,20 @@ pub enum SlotInitError {
 pub enum SlotRegisterError<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's, Rejected = S> {
     /// The slot cannot accept this input; the input is returned unchanged.
     Occupied(Rejected),
+    /// Reinstall refused an inconsistent state, preserving its input and proof.
+    InvalidState {
+        /// Exact source observations.
+        cause: LifecycleError,
+        /// Unconsumed reconstruction operation.
+        rejected: Rejected,
+        /// The supplied affine join authority.
+        joined: Joined<Id>,
+    },
     /// The owner stays in its permanent backing; cleanup remains on P2.
     Initialization {
         /// Why endpoint construction failed.
         cause: SlotInitError,
-        /// Cleanup authority; dropping it quarantines without ordinary release.
+        /// Raw retained registration; the caller's P2 owner guard owns cleanup.
         registration: SlotRegistration<'s, Id, S>,
     },
 }
@@ -216,6 +296,7 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>, R> core::fmt::Debug for SlotRegisterErr
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Occupied(_) => f.write_str("Occupied"),
+            Self::InvalidState { cause, .. } => f.debug_tuple("InvalidState").field(cause).finish(),
             Self::Initialization { cause, .. } => {
                 f.debug_tuple("Initialization").field(cause).finish()
             }
@@ -307,7 +388,7 @@ const RUNNING: u8 = 1;
 const RETIRING: u8 = 2;
 const FINISHING: u8 = 3;
 const JOINED: u8 = 4;
-const QUARANTINED: u8 = 5;
+const FAILED: u8 = 5;
 const NO_ANSWER: u8 = 0;
 const STOPPED_ANSWER: u8 = 1;
 const UNCONFIRMED_ANSWER: u8 = 2;
@@ -316,6 +397,7 @@ const TAKEN_ANSWER: u8 = 3;
 pub(crate) struct Signals {
     state: AtomicU8,
     answer: AtomicU8,
+    error: AtomicU32,
     p2: PriorityWaker,
     join: AtomicWaker,
 }
@@ -325,6 +407,7 @@ impl Signals {
         Self {
             state: AtomicU8::new(INITIAL),
             answer: AtomicU8::new(NO_ANSWER),
+            error: AtomicU32::new(0),
             p2: PriorityWaker::new(),
             join: AtomicWaker::new(),
         }
@@ -333,12 +416,34 @@ impl Signals {
     // Keep the typed Waker scopes outside the backend's generated poll frame
     // so stack analysis can resolve both quarantine notifications.
     #[inline(never)]
-    pub(crate) fn quarantine(&self) {
+    pub(crate) fn request_failure(&self, cause: LifecycleError) {
+        let _ = self
+            .error
+            .compare_exchange(0, cause.encode(), Ordering::AcqRel, Ordering::Acquire);
         // No transition out of quarantine exists, including after a late
         // hardware stop or a concurrent normal teardown.
-        self.state.store(QUARANTINED, Ordering::Release);
+        self.state.store(FAILED, Ordering::Release);
         self.p2.wake();
         self.join.wake();
+    }
+
+    pub(crate) fn failure(&self) -> Option<LifecycleError> {
+        LifecycleError::decode(self.error.load(Ordering::Acquire))
+    }
+
+    fn invalid(&self, storage: SlotStorageState, invocation_present: bool) -> LifecycleError {
+        LifecycleError::InvalidState(SlotObservation {
+            phase: self.state.load(Ordering::Acquire),
+            storage,
+            invocation_present,
+        })
+    }
+
+    fn observed_failure(&self) -> LifecycleError {
+        match self.failure() {
+            Some(cause) => cause,
+            None => self.invalid(SlotStorageState::Unavailable, false),
+        }
     }
 
     fn publish_answer(&self, outcome: Abandon) {
@@ -408,15 +513,26 @@ pub struct PortSlot<Id: SlotIdentity, S: SlotOwner<Id>> {
 
 enum Stored<Id: SlotIdentity, S: SlotOwner<Id>> {
     Registered(S),
-    Vacant(Option<<S as SlotOwner<Id>>::Vacant>),
+    Vacant(<S as SlotOwner<Id>>::Vacant),
+}
+
+fn storage_state<Id: SlotIdentity, S: SlotOwner<Id>>(
+    storage: &Option<Stored<Id, S>>,
+) -> SlotStorageState {
+    match storage {
+        None => SlotStorageState::Empty,
+        Some(Stored::Registered(_)) => SlotStorageState::Registered,
+        Some(Stored::Vacant(_)) => SlotStorageState::Vacant,
+    }
 }
 
 fn registered_owner<Id: SlotIdentity, S: SlotOwner<Id>>(
     storage: &mut Option<Stored<Id, S>>,
-) -> &mut S {
-    match storage.as_mut().expect("registration retains its P2 owner") {
-        Stored::Registered(owner) => owner,
-        Stored::Vacant(_) => unreachable!("a registration owns active state"),
+) -> Result<&mut S, SlotStorageState> {
+    match storage {
+        Some(Stored::Registered(owner)) => Ok(owner),
+        Some(Stored::Vacant(_)) => Err(SlotStorageState::Vacant),
+        None => Err(SlotStorageState::Empty),
     }
 }
 
@@ -450,14 +566,35 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
         S: 's,
         Id: 's,
     {
-        let Joined { identity: _ } = joined;
+        let cause = self.signals.invalid(storage_state(&self.owner), false);
         if self.signals.state.load(Ordering::Acquire) != JOINED {
-            return Err(SlotRegisterError::Occupied(resume));
+            return Err(SlotRegisterError::InvalidState {
+                cause,
+                rejected: resume,
+                joined,
+            });
         }
-        let Some(Stored::Vacant(vacant)) = self.owner.as_mut() else {
-            unreachable!("ordinary join retains vacant state");
+        // Refuse before taking storage: an active owner must never move,
+        // including on a deliberately inconsistent lifecycle observation.
+        if !matches!(self.owner.as_ref(), Some(Stored::Vacant(_))) {
+            return Err(SlotRegisterError::InvalidState {
+                cause,
+                rejected: resume,
+                joined,
+            });
+        }
+        let vacant = match self.owner.take() {
+            Some(Stored::Vacant(vacant)) => vacant,
+            retained => {
+                *self.owner = retained;
+                return Err(SlotRegisterError::InvalidState {
+                    cause,
+                    rejected: resume,
+                    joined,
+                });
+            }
         };
-        let vacant = vacant.take().expect("join retains its stopped hardware");
+        let Joined { identity: _ } = joined;
         // Queue storage stays at its permanent address. The backend prepares
         // that empty backing in place after all old endpoint loans ended.
         let owner = resume(vacant);
@@ -477,8 +614,10 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
     {
         self.owner = ManuallyDrop::new(Some(Stored::Registered(owner)));
         self.signals.answer.store(NO_ANSWER, Ordering::Relaxed);
+        self.signals.error.store(0, Ordering::Relaxed);
         self.signals.state.store(RUNNING, Ordering::Release);
-        // Arm before invoking backend initialization or splitting its queues.
+        // Retain the portable registration through backend construction.
+        // Its caller wraps success and initialization failure in the P2 owner guard.
         let mut registration = SlotRegistration {
             owner: &mut self.owner,
             invocation: None,
@@ -486,10 +625,20 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
             armed: true,
             identity: PhantomData,
         };
-        registered_owner(registration.owner).prepare_queues(
-            &mut self.queues,
-            crate::Mint::<'static, S::Pools, Id>::new(),
-        );
+        match registered_owner(registration.owner) {
+            Ok(owner) => owner.prepare_queues(
+                &mut self.queues,
+                crate::Mint::<'static, S::Pools, Id>::new(),
+            ),
+            Err(storage) => {
+                let cause = SlotInitError::Lifecycle(self.signals.invalid(storage, false));
+                self.signals.request_failure(LifecycleError::Construction);
+                return Err(SlotRegisterError::Initialization {
+                    cause,
+                    registration,
+                });
+            }
+        }
         let endpoints = S::split(
             &mut self.queues,
             SlotWakes {
@@ -500,7 +649,7 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
         let (ports, invocation) = match endpoints {
             Ok(endpoints) => endpoints,
             Err(cause) => {
-                self.signals.quarantine();
+                self.signals.request_failure(LifecycleError::Construction);
                 return Err(SlotRegisterError::Initialization {
                     cause,
                     registration,
@@ -510,9 +659,12 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
         registration.invocation = Some(invocation);
         Ok((
             SlotFrontend {
-                ports: Some(ports),
+                ports,
                 signals: &self.signals,
-                armed: true,
+                sentry: FrontendSentry {
+                    signals: &self.signals,
+                    armed: true,
+                },
                 body_issued: false,
                 identity: PhantomData,
             },
@@ -531,8 +683,7 @@ impl<'scope, S: ModelSlotOwner<LocalId<'scope>>> PortSlot<LocalId<'scope>, S> {
         if let Some(owner) = ManuallyDrop::into_inner(self.owner) {
             match owner {
                 Stored::Registered(mut owner) => owner.end_world(Some(&mut queues)),
-                Stored::Vacant(Some(mut vacant)) => S::end_vacant_world(&mut vacant),
-                Stored::Vacant(None) => unreachable!("vacant hardware retained until reinstall"),
+                Stored::Vacant(mut vacant) => S::end_vacant_world(&mut vacant),
             }
         }
         drop(queues);
@@ -542,9 +693,9 @@ impl<'scope, S: ModelSlotOwner<LocalId<'scope>>> PortSlot<LocalId<'scope>, S> {
 /// P1's lifecycle endpoints. This value has no reference to the P2 owner.
 #[must_use = "finish the frontend or request its abandonment"]
 pub struct SlotFrontend<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> {
-    ports: Option<S::Frontend<'s>>,
+    sentry: FrontendSentry<'s>,
+    ports: S::Frontend<'s>,
     signals: &'s Signals,
-    armed: bool,
     body_issued: bool,
     identity: PhantomData<fn(Id) -> Id>,
 }
@@ -556,9 +707,7 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotFrontend<'s, Id, S> {
 
     /// Borrow only the affine queue endpoints, never the backend or held state.
     pub fn ports(&mut self) -> &mut S::Frontend<'s> {
-        self.ports
-            .as_mut()
-            .expect("the live frontend retains its endpoints")
+        &mut self.ports
     }
 
     /// Run public body views under a fresh invariant loan. Only the backend's
@@ -567,7 +716,7 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotFrontend<'s, Id, S> {
     /// one awaiting an unrelated future. A body returning in the poll that
     /// published its request still forwards its typed result to the supervisor.
     /// Each registration lends its one initial resource set at most once;
-    /// another attempt quarantines without calling the backend constructor.
+    /// another attempt returns a typed failure without calling the backend constructor.
     pub async fn run_body<P: SlotBody<Id, S>>(
         &mut self,
         body: P,
@@ -576,31 +725,31 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotFrontend<'s, Id, S> {
         S: SlotBodyOwner<Id>,
     {
         let signals = self.signals;
-        if signals.state.load(Ordering::Acquire) == QUARANTINED {
-            return Err(SlotInitError::Quarantined);
+        if signals.state.load(Ordering::Acquire) == FAILED {
+            return Err(SlotInitError::Lifecycle(signals.observed_failure()));
         }
         if self.body_issued {
-            signals.quarantine();
+            signals.request_failure(LifecycleError::BodyAlreadyIssued);
             return Err(SlotInitError::BodyAlreadyIssued);
         }
         self.body_issued = true;
         let views = match S::lend(self.ports(), crate::BodyLoan::new()) {
             Ok(views) => views,
             Err(error) => {
-                signals.quarantine();
+                signals.request_failure(LifecycleError::Construction);
                 return Err(error);
             }
         };
         let mut body = pin!(body.run(views));
         poll_fn(|cx| {
             signals.join.register(cx.waker());
-            if signals.state.load(Ordering::Acquire) == QUARANTINED {
-                return Poll::Ready(Err(SlotInitError::Quarantined));
+            if signals.state.load(Ordering::Acquire) == FAILED {
+                return Poll::Ready(Err(SlotInitError::Lifecycle(signals.observed_failure())));
             }
             match poll_body(body.as_mut(), cx) {
                 Poll::Ready(output) => Poll::Ready(Ok(output)),
-                Poll::Pending if signals.state.load(Ordering::Acquire) == QUARANTINED => {
-                    Poll::Ready(Err(SlotInitError::Quarantined))
+                Poll::Pending if signals.state.load(Ordering::Acquire) == FAILED => {
+                    Poll::Ready(Err(SlotInitError::Lifecycle(signals.observed_failure())))
                 }
                 Poll::Pending => Poll::Pending,
             }
@@ -608,41 +757,57 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotFrontend<'s, Id, S> {
         .await
     }
 
-    /// Publish abandonment immediately, without invoking any P2 operation.
-    pub fn abandon(mut self) -> SlotJoin<'s, Id> {
-        self.signals.quarantine();
-        self.armed = false;
+    /// Publish a typed cancellation request without invoking P2 hardware.
+    pub fn abandon(self) -> SlotJoin<'s, Id> {
+        let Self {
+            ports,
+            signals,
+            mut sentry,
+            ..
+        } = self;
+        signals.request_failure(LifecycleError::Cancelled);
+        drop(ports);
+        sentry.armed = false;
         SlotJoin {
-            signals: self.signals,
+            signals,
             armed: true,
+            ordinary: false,
             identity: PhantomData,
         }
     }
 
     /// Close the frontend and wait for proved P2 destruction/unregistration.
-    pub fn finish(mut self) -> SlotJoin<'s, Id> {
-        // End every frontend endpoint before Release publishes retirement.
-        drop(self.ports.take());
-        let _ = self.signals.state.compare_exchange(
-            RUNNING,
-            RETIRING,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
-        self.signals.p2.wake();
-        self.armed = false;
+    pub fn finish(self) -> SlotJoin<'s, Id> {
+        let Self {
+            ports,
+            signals,
+            mut sentry,
+            ..
+        } = self;
+        drop(ports);
+        let _ =
+            signals
+                .state
+                .compare_exchange(RUNNING, RETIRING, Ordering::AcqRel, Ordering::Acquire);
+        signals.p2.wake();
+        sentry.armed = false;
         SlotJoin {
-            signals: self.signals,
+            signals,
             armed: true,
+            ordinary: true,
             identity: PhantomData,
         }
     }
 }
 
-impl<Id: SlotIdentity, S: SlotOwner<Id>> Drop for SlotFrontend<'_, Id, S> {
+struct FrontendSentry<'s> {
+    signals: &'s Signals,
+    armed: bool,
+}
+impl Drop for FrontendSentry<'_> {
     fn drop(&mut self) {
         if self.armed {
-            self.signals.quarantine();
+            self.signals.request_failure(LifecycleError::Cancelled);
         }
     }
 }
@@ -650,11 +815,18 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> Drop for SlotFrontend<'_, Id, S> {
 /// A notification of absorbing quarantine; it contains no reuse authority.
 pub struct SlotQuarantined<Id: SlotIdentity> {
     outcome: Abandon,
+    cause: LifecycleError,
     identity: PhantomData<fn(Id) -> Id>,
 }
 
 impl<Id: SlotIdentity> SlotQuarantined<Id> {
     /// What the timely P2 response proved; expiry is always unconfirmed.
+    /// Portable failure observed before the owner's response or deadline.
+    pub fn cause(&self) -> LifecycleError {
+        self.cause
+    }
+
+    /// What the timely hardware owner response proved.
     pub fn outcome(&self) -> &Abandon {
         &self.outcome
     }
@@ -679,6 +851,7 @@ pub struct Joined<Id: SlotIdentity> {
 pub struct SlotJoin<'s, Id: SlotIdentity> {
     signals: &'s Signals,
     armed: bool,
+    ordinary: bool,
     identity: PhantomData<fn(Id) -> Id>,
 }
 
@@ -686,18 +859,62 @@ impl<Id: SlotIdentity> SlotJoin<'_, Id> {
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<Joined<Id>, SlotQuarantined<Id>>> {
         self.signals.join.register(cx.waker());
         match self.signals.state.load(Ordering::Acquire) {
-            JOINED => Poll::Ready(Ok(Joined {
+            JOINED if self.ordinary => Poll::Ready(Ok(Joined {
                 identity: PhantomData,
             })),
-            QUARANTINED => match self.signals.take_answer() {
+            JOINED => Poll::Ready(Err(SlotQuarantined {
+                cause: self.signals.invalid(SlotStorageState::Unavailable, false),
+                outcome: Abandon::Unconfirmed(Quarantine::new()),
+                identity: PhantomData,
+            })),
+            FAILED => match self.signals.take_answer() {
                 Some(outcome) => Poll::Ready(Err(SlotQuarantined {
                     outcome,
+                    cause: self.signals.observed_failure(),
                     identity: PhantomData,
                 })),
                 None => Poll::Pending,
             },
             _ => Poll::Pending,
         }
+    }
+
+    pub(crate) async fn wait_failure_within(
+        mut self,
+        bound: impl Future<Output = ()>,
+    ) -> SlotQuarantined<Id> {
+        let mut bound = pin!(bound);
+        let result = poll_fn(|cx| {
+            self.signals.join.register(cx.waker());
+            let expired = bound.as_mut().poll(cx).is_ready();
+            if self.signals.state.load(Ordering::Acquire) == JOINED {
+                return Poll::Ready(SlotQuarantined {
+                    cause: self.signals.invalid(SlotStorageState::Unavailable, false),
+                    outcome: Abandon::Unconfirmed(Quarantine::new()),
+                    identity: PhantomData,
+                });
+            }
+            let answer = self.signals.take_answer();
+            if expired || bound.as_mut().poll(cx).is_ready() {
+                self.signals.request_failure(LifecycleError::Deadline);
+                return Poll::Ready(SlotQuarantined {
+                    outcome: Abandon::Unconfirmed(Quarantine::new()),
+                    cause: LifecycleError::Deadline,
+                    identity: PhantomData,
+                });
+            }
+            match answer {
+                Some(outcome) => Poll::Ready(SlotQuarantined {
+                    outcome,
+                    cause: self.signals.observed_failure(),
+                    identity: PhantomData,
+                }),
+                None => Poll::Pending,
+            }
+        })
+        .await;
+        self.armed = false;
+        result
     }
 
     /// Wait for ordinary P2 unregistration or its actual quarantine answer.
@@ -720,9 +937,10 @@ impl<Id: SlotIdentity> SlotJoin<'_, Id> {
             let expired = bound.as_mut().poll(cx).is_ready();
             let answer = self.poll(cx);
             if expired || bound.as_mut().poll(cx).is_ready() {
-                self.signals.quarantine();
+                self.signals.request_failure(LifecycleError::Deadline);
                 return Poll::Ready(Err(SlotQuarantined {
                     outcome: Abandon::Unconfirmed(Quarantine::new()),
+                    cause: LifecycleError::Deadline,
                     identity: PhantomData,
                 }));
             }
@@ -737,15 +955,15 @@ impl<Id: SlotIdentity> SlotJoin<'_, Id> {
 impl<Id: SlotIdentity> Drop for SlotJoin<'_, Id> {
     fn drop(&mut self) {
         if self.armed {
-            self.signals.quarantine();
+            self.signals.request_failure(LifecycleError::Cancelled);
         }
     }
 }
 
-/// P2's registered cleanup guard, separate from the frontend and its future.
+/// Portable P2 registration, retained inside the hardware owner's cleanup guard.
 ///
-/// The execution adapter owns and destroys this value on P2. Frontend drop
-/// only wakes it. Its Drop executes quarantine once even without another poll.
+/// Frontend and raw-registration drops report cancellation only. The backend's
+/// guard owns mandatory hardware cleanup, independently of this driver's loan.
 #[must_use = "retain on P2 until normal finish or quarantine cleanup"]
 pub struct SlotRegistration<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> {
     invocation: Option<S::Invocation<'s>>,
@@ -765,61 +983,87 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
         }
     }
 
-    /// Whether this poll must take quarantine before any device work.
-    pub fn is_quarantined(&self) -> bool {
-        self.signals.state.load(Ordering::Acquire) == QUARANTINED
+    /// The first portable failure reported by this installation.
+    pub fn failure(&self) -> Option<LifecycleError> {
+        self.signals.failure()
     }
 
-    /// Execute quarantine exactly once on P2, retaining the owner in place.
-    pub fn quarantine(&mut self) -> bool {
-        self.signals.quarantine();
+    /// Whether an owner guard still owes its cancellation policy.
+    pub fn needs_cleanup(&self) -> bool {
+        self.armed
+    }
+
+    /// Claim this registration's one failure notification on P2.
+    /// This does not access hardware, destroy owners or decide quarantine.
+    pub fn begin_failure(&mut self) -> Option<Quarantine> {
         if !self.armed {
-            return false;
-        }
-        self.armed = false;
-        let outcome =
-            registered_owner(self.owner).abandon(self.invocation.as_mut(), Quarantine::new());
-        self.signals.publish_answer(outcome);
-        true
-    }
-
-    /// Drive on P2, prioritizing abandonment before every driver poll.
-    /// Stop, detach and destroy the owner before publishing ordinary join.
-    /// Cancellation wins over a late proof and keeps quarantine absorbing.
-    pub async fn run(mut self) -> Option<SlotCompletion<'s, Id>> {
-        if self.is_quarantined() {
             return None;
         }
-        let invocation = self
-            .invocation
-            .as_mut()
-            .expect("registration has one P2 invocation");
+        self.armed = false;
+        self.signals.request_failure(LifecycleError::Cancelled);
+        Some(Quarantine::new())
+    }
+
+    /// Borrow the retained P2 owner and invocation for the owner's own guard.
+    /// No owner is moved out of permanent storage.
+    pub fn owner_parts(
+        &mut self,
+        _: &Quarantine,
+    ) -> Result<(&mut S, Option<&mut S::Invocation<'s>>), LifecycleError> {
+        let present = self.invocation.is_some();
+        match registered_owner(self.owner) {
+            Ok(owner) => Ok((owner, self.invocation.as_mut())),
+            Err(storage) => Err(self.signals.invalid(storage, present)),
+        }
+    }
+
+    /// Publish the hardware owner's actual cleanup observation.
+    pub fn publish_failure(&mut self, cause: LifecycleError, outcome: Abandon) {
+        self.signals.error.store(cause.encode(), Ordering::Release);
+        self.signals.request_failure(cause);
+        self.signals.publish_answer(outcome);
+    }
+
+    /// Drive the borrowed P2 state, returning typed failure to its owner guard.
+    /// The guard outlives this loan, including cancellation before first poll.
+    pub async fn drive(&mut self) -> Result<SlotCompletion<'s, Id>, LifecycleError> {
+        if !self.armed {
+            return Err(self
+                .signals
+                .invalid(storage_state(self.owner), self.invocation.is_some()));
+        }
+        if let Some(cause) = self.failure() {
+            return Err(cause);
+        }
+        let observed = self
+            .signals
+            .invalid(storage_state(self.owner), self.invocation.is_some());
+        let invocation = self.invocation.as_mut().ok_or(observed)?;
+        let owner =
+            registered_owner(self.owner).map_err(|storage| self.signals.invalid(storage, true))?;
         let stopped = {
             let signals = self.signals;
-            let mut stopping = pin!(registered_owner(self.owner).run(
+            let mut stopping = pin!(owner.run(
                 invocation,
                 SlotRetire {
                     signals,
                     owner: PhantomData,
-                    identity: PhantomData
+                    identity: PhantomData,
                 }
             ));
             poll_fn(|cx| {
                 signals.p2.register(cx.waker());
-                if signals.state.load(Ordering::Acquire) == QUARANTINED {
-                    return Poll::Ready(None);
+                if let Some(cause) = signals.failure() {
+                    return Poll::Ready(Err(cause));
                 }
                 let result = stopping.as_mut().poll(cx);
-                if signals.state.load(Ordering::Acquire) == QUARANTINED {
-                    Poll::Ready(None)
+                if let Some(cause) = signals.failure() {
+                    Poll::Ready(Err(cause))
                 } else {
-                    result.map(Some)
+                    result.map(Ok)
                 }
             })
-            .await
-        };
-        let Some(stopped) = stopped else {
-            return None;
+            .await?
         };
         if self
             .signals
@@ -827,41 +1071,38 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
             .compare_exchange(RETIRING, FINISHING, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
-            return None;
+            return Err(self
+                .signals
+                .invalid(storage_state(self.owner), self.invocation.is_some()));
         }
-        // The core consumes the proof. Giving it back to the backend would
-        // let a same-Id reinstall retain an earlier registration's authority.
         let SlotStopped {
             identity: _,
             owner: _,
         } = stopped;
+        finish_owner(self.owner, &mut self.invocation)
+            .map_err(|storage| self.signals.invalid(storage, self.invocation.is_some()))?;
         self.armed = false;
-        let completion = SlotCompletion {
+        Ok(SlotCompletion {
             signals: self.signals,
             armed: true,
             identity: PhantomData,
-        };
-        finish_owner(self.owner, &mut self.invocation);
-        Some(completion)
+        })
     }
 }
 
-// Keep destruction outside the runner's poll frame. Assignment through the
-// Option drops the registered state at its permanent address; only the small
-// stopped hardware owner is returned by the backend.
+// Assignment destroys the registered state at its permanent address only
+// after the backend's finish returned its stopped hardware by value.
 #[inline(never)]
 fn finish_owner<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's>(
     owner: &mut Option<Stored<Id, S>>,
     invocation: &mut Option<S::Invocation<'s>>,
-) {
-    let vacant = registered_owner(owner).finish(
-        invocation
-            .as_mut()
-            .expect("ordinary completion retains its P2 invocation"),
-    );
+) -> Result<(), SlotStorageState> {
+    let state = storage_state(owner);
+    let invocation_ref = invocation.as_mut().ok_or(state)?;
+    let vacant = registered_owner(owner)?.finish(invocation_ref);
     drop(invocation.take());
-    *owner = None;
-    *owner = Some(Stored::Vacant(Some(vacant)));
+    *owner = Some(Stored::Vacant(vacant));
+    Ok(())
 }
 
 // Separate stack frames for P1 and P2 while keeping both futures in their
@@ -879,7 +1120,7 @@ fn poll_registration<F: Future>(future: Pin<&mut F>, cx: &mut Context<'_>) -> Po
 impl<Id: SlotIdentity, S: SlotOwner<Id>> Drop for SlotRegistration<'_, Id, S> {
     fn drop(&mut self) {
         if self.armed {
-            self.quarantine();
+            self.signals.request_failure(LifecycleError::Cancelled);
         }
     }
 }
@@ -913,7 +1154,7 @@ impl<Id: SlotIdentity> SlotCompletion<'_, Id> {
 impl<Id: SlotIdentity> Drop for SlotCompletion<'_, Id> {
     fn drop(&mut self) {
         if self.armed {
-            self.signals.quarantine();
+            self.signals.request_failure(LifecycleError::Cancelled);
             self.signals
                 .publish_answer(Abandon::Unconfirmed(Quarantine::new()));
         }
@@ -955,7 +1196,7 @@ fn poll_local_body<Body: Future>(mut body: Pin<&mut LocalBody<Body>>, cx: &mut C
 
 impl<'s, Id: SlotIdentity, Body: Future, P2> Future for LocalRun<'s, Id, Body, P2>
 where
-    P2: Future<Output = Option<SlotCompletion<'s, Id>>>,
+    P2: Future<Output = Result<SlotCompletion<'s, Id>, LifecycleError>>,
 {
     type Output = Body::Output;
 
@@ -966,12 +1207,12 @@ where
             && this.signals.state.load(Ordering::Acquire) == RUNNING
         {
             // Returning after forgetting the frontend cannot leave P2 live.
-            this.signals.quarantine();
+            this.signals.request_failure(LifecycleError::Cancelled);
         }
         if let Some(p2) = this.p2.as_mut().as_pin_mut() {
             if let Poll::Ready(completion) = poll_registration(p2, cx) {
                 this.p2.set(None);
-                if let Some(completion) = completion {
+                if let Ok(completion) = completion {
                     completion.unregistered();
                 }
                 *this.registered = false;
@@ -980,7 +1221,11 @@ where
         }
         if !*this.registered {
             if let LocalBodyProject::Returned { output } = this.body.project() {
-                return Poll::Ready(output.take().expect("local runner returns once"));
+                // Polling after completion is fused: no output is fabricated.
+                return match output.take() {
+                    Some(output) => Poll::Ready(output),
+                    None => Poll::Pending,
+                };
             }
         }
         Poll::Pending
@@ -989,7 +1234,7 @@ where
 
 pub(crate) fn run_registered<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's, R>(
     frontend: SlotFrontend<'s, Id, S>,
-    registration: SlotRegistration<'s, Id, S>,
+    driver: impl Future<Output = Result<SlotCompletion<'s, Id>, LifecycleError>>,
     body: impl AsyncFnOnce(SlotFrontend<'s, Id, S>) -> R,
 ) -> impl Future<Output = R> {
     let signals = frontend.signals;
@@ -997,7 +1242,7 @@ pub(crate) fn run_registered<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's, R
         body: LocalBody::Running {
             future: body(frontend),
         },
-        p2: Some(registration.run()),
+        p2: Some(driver),
         signals,
         registered: true,
         identity: PhantomData,

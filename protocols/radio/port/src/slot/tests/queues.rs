@@ -159,7 +159,10 @@ impl<'m, Id: SlotIdentity> SlotBody<Id, QueueOwner<'m, Id>> for RequestBody {
         Id: 'p,
     {
         let _payload = views.initial(self.context);
-        views.wakes.signals.quarantine();
+        views
+            .wakes
+            .signals
+            .request_failure(LifecycleError::Cancelled);
         if !self.returns {
             pending::<()>().await;
         }
@@ -217,10 +220,12 @@ fn fresh_body_loan_returns_owned_payloads_without_leaving_a_body_reference_in_p2
             returned: None,
         };
         let outer = crate::LocalExecution.scope(
-            (&mut slot)
-                .register(owner)
-                .ok()
-                .expect("fresh registration"),
+            guarded(
+                (&mut slot)
+                    .register(owner)
+                    .ok()
+                    .expect("fresh registration"),
+            ),
             async |mut frontend| {
                 let result = frontend.run_body(EchoBody(context.clone())).await;
                 assert!(frontend.finish().wait().await.is_ok());
@@ -247,10 +252,12 @@ fn cancelling_a_borrowed_body_resource_only_queues_its_whole_owned_return_on_p1(
             returned: None,
         };
         let outer = crate::LocalExecution.scope(
-            (&mut slot)
-                .register(owner)
-                .ok()
-                .expect("synchronous registration"),
+            guarded(
+                (&mut slot)
+                    .register(owner)
+                    .ok()
+                    .expect("synchronous registration"),
+            ),
             async |mut frontend| {
                 model.executor.set(Executor::P1);
                 let mut body = Box::pin(frontend.run_body(HoldingBody(context.clone())));
@@ -284,10 +291,12 @@ fn supervisor_cancels_an_unrelated_body_wait_but_keeps_a_returned_request() {
                 returned: None,
             };
             let outer = crate::LocalExecution.scope(
-                (&mut slot)
-                    .register(owner)
-                    .ok()
-                    .expect("registered P2 before body"),
+                guarded(
+                    (&mut slot)
+                        .register(owner)
+                        .ok()
+                        .expect("registered P2 before body"),
+                ),
                 async |mut frontend| {
                     model.executor.set(Executor::P1);
                     let result = frontend
@@ -306,7 +315,7 @@ fn supervisor_cancels_an_unrelated_body_wait_but_keeps_a_returned_request() {
             let expected = if returns {
                 Ok("requested")
             } else {
-                Err(SlotInitError::Quarantined)
+                Err(SlotInitError::Lifecycle(LifecycleError::Cancelled))
             };
             assert_eq!(finish(outer), expected);
             assert_eq!(
@@ -408,6 +417,24 @@ impl<Id: SlotIdentity> SlotOwner<Id> for QueueOwner<'_, Id> {
         retire.requested().await
     }
 
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
+    where
+        Self: 's,
+        Id: 's,
+    {
+        assert_eq!(self.model.executor.get(), Executor::P2);
+        assert_eq!(
+            self.returned
+                .as_ref()
+                .expect("returned whole owner")
+                .token
+                .index(),
+            0
+        );
+        self.model.finishes.set(self.model.finishes.get() + 1);
+    }
+}
+impl<Id: SlotIdentity> MockCleanup<Id> for QueueOwner<'_, Id> {
     fn abandon<'s>(
         &mut self,
         invocation: Option<&mut Self::Invocation<'s>>,
@@ -428,23 +455,6 @@ impl<Id: SlotIdentity> SlotOwner<Id> for QueueOwner<'_, Id> {
             }
         }
         Abandon::Unconfirmed(authority)
-    }
-
-    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
-    where
-        Self: 's,
-        Id: 's,
-    {
-        assert_eq!(self.model.executor.get(), Executor::P2);
-        assert_eq!(
-            self.returned
-                .as_ref()
-                .expect("returned whole owner")
-                .token
-                .index(),
-            0
-        );
-        self.model.finishes.set(self.model.finishes.get() + 1);
     }
 }
 
@@ -488,7 +498,7 @@ fn separate_queue_backing_transfers_whole_owned_tokens_and_non_send_contexts() {
             returned: None,
         };
         let outer = crate::LocalExecution.scope(
-            (&mut slot).register(owner).ok().expect("fresh slot"),
+            guarded((&mut slot).register(owner).ok().expect("fresh slot")),
             async |mut frontend| {
                 model.executor.set(Executor::P1);
                 {
@@ -549,10 +559,12 @@ fn cancellation_before_first_driver_poll_preserves_queue_endpoints_for_p2_cleanu
             returned: None,
         };
         let outer = crate::LocalExecution.scope(
-            (&mut slot)
-                .register(owner)
-                .ok()
-                .expect("registered before frontend construction"),
+            guarded(
+                (&mut slot)
+                    .register(owner)
+                    .ok()
+                    .expect("registered before frontend construction"),
+            ),
             async |mut frontend| {
                 model.executor.set(Executor::P1);
                 let ports = frontend.ports();
@@ -609,10 +621,12 @@ fn a_registration_never_lends_its_initial_body_resources_twice() {
             returned: None,
         };
         let outer = crate::LocalExecution.scope(
-            (&mut slot)
-                .register(owner)
-                .ok()
-                .expect("fresh registration"),
+            guarded(
+                (&mut slot)
+                    .register(owner)
+                    .ok()
+                    .expect("fresh registration"),
+            ),
             async |mut frontend| {
                 assert_eq!(frontend.run_body(EmptyBody).await, Ok(()));
                 assert_eq!(

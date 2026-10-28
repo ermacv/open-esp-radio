@@ -1,8 +1,16 @@
+warning: unused imports: `Abandon` and `Quarantine`
+ --> tests/ui/slot_body_static_any_escape.rs:6:5
+  |
+6 |     Abandon, BodyLoan, Mint, Quarantine, Root, Slot, SlotBody, SlotBodyOwner,
+  |     ^^^^^^^                  ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
 error: lifetime may not live long enough
-  --> tests/ui/slot_body_static_any_escape.rs:57:16
+  --> tests/ui/slot_body_static_any_escape.rs:54:16
    |
-54 |     async fn run<'p>(self, resource: Token<'p>) -> Self::Output
+51 |     async fn run<'p>(self, resource: Token<'p>) -> Self::Output
    |                  -- lifetime `'p` defined here
 ...
-57 |         return Box::new(resource); // ui-error: lifetime may not live long enough
+54 |         return Box::new(resource); // ui-error: lifetime may not live long enough
    |                ^^^^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`

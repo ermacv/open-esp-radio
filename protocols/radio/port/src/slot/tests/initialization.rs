@@ -47,13 +47,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Initializing {
         self.owner.0.starts.set(self.owner.0.starts.get() + 1);
         retire.requested().await
     }
-    fn abandon<'s>(&mut self, invocation: Option<&mut ()>, q: Quarantine) -> Abandon
-    where
-        Self: 's,
-        Id: 's,
-    {
-        <Owner as SlotOwner<Id>>::abandon(&mut self.owner, invocation, q)
-    }
+
     fn finish<'s>(&mut self, invocation: &mut ())
     where
         Self: 's,
@@ -62,6 +56,16 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Initializing {
         <Owner as SlotOwner<Id>>::finish(&mut self.owner, invocation)
     }
 }
+impl<Id: SlotIdentity> MockCleanup<Id> for Initializing {
+    fn abandon<'s>(&mut self, invocation: Option<&mut ()>, q: Quarantine) -> Abandon
+    where
+        Self: 's,
+        Id: 's,
+    {
+        <Owner as MockCleanup<Id>>::abandon(&mut self.owner, invocation, q)
+    }
+}
+
 impl<Id: SlotIdentity> SlotBodyOwner<Id> for Initializing {
     type Body<'p>
         = ()
@@ -118,10 +122,10 @@ fn split_failure_returns_its_cause_and_retains_p2_cleanup_without_publishing_end
                 panic!("initialization error")
             };
             assert_eq!(cause, SlotInitError::QueuesUnprepared);
-            assert!(registration.is_quarantined());
+            assert!(registration.failure().is_some());
             assert_eq!(observed.abandons.get(), 0, "caller still holds P2's guard");
             assert_eq!(observed.drops.get(), 0);
-            assert!(registration.run().await.is_none());
+            assert!(MockRegistration::new(registration).run().await.is_err());
             assert_eq!(observed.starts.get(), 0);
             assert_eq!(observed.abandons.get(), 1);
             assert_eq!(observed.finishes.get(), 0);
@@ -145,7 +149,7 @@ fn lend_failure_returns_its_cause_and_quarantines_before_calling_the_body_or_dri
             })
             .unwrap();
         let result = crate::LocalExecution
-            .scope(registered, async |mut frontend| {
+            .scope(guarded(registered), async |mut frontend| {
                 observed.executor.set(Executor::P1);
                 let result = frontend.run_body(UnreachableBody).await;
                 let join = frontend.abandon();

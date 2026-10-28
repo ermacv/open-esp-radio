@@ -20,9 +20,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     async fn run<'s>(&mut self, _: &mut Self::Invocation<'s>, request: SlotRetire<'_, Id, Self>) -> SlotStopped<Id, Self> where Self: 's, Id: 's {
         request.requested().await
     }
-    fn abandon<'s>(&mut self, _: Option<&mut Self::Invocation<'s>>, request: Quarantine) -> Abandon where Self: 's, Id: 's {
-        Abandon::Unconfirmed(request)
-    }
+
     fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)  where Self: 's, Id: 's {}
 }
 

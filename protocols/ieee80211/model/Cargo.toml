@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Allocating host reference backend for the IEEE 802.11 lower-MAC port"
 
 [features]
-test-support = ["oer-ieee80211-port/test-support"]
+test-support = ["oer-radio-port/test-support", "oer-ieee80211-port/test-support"]
 
 [dependencies]
 heapless = "0.9.3"

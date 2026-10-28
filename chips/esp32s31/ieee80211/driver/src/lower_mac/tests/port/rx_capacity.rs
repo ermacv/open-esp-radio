@@ -109,7 +109,7 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
             .register(Backend::new(parts).ok().expect("model backend"))
             .ok()
             .expect("one installation");
-        let mut p2 = Some(Box::pin(registration.run()));
+        let mut p2 = Some(Box::pin(crate::port::Registration::new(registration).run()));
         let mut p1 = Box::pin(radio::run_port(
             front,
             ContinuousReceive {

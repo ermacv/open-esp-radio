@@ -27,3 +27,7 @@ oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true
+
+[[example]]
+name = "lifecycle_cost"
+required-features = ["test-support"]

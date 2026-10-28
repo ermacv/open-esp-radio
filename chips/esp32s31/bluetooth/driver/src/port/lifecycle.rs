@@ -109,7 +109,7 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
                 // A fault closes publication immediately, but does not cancel
                 // its body before that terminal or the stream end is observed.
                 retire.wait().await;
-                retire.request_quarantine();
+                retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
                 core::future::pending::<()>().await;
             }
             if q.shared.enabled.load(Ordering::Acquire) && !q.shared.ready.load(Ordering::Acquire) {
@@ -200,25 +200,7 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
             }
         }
     }
-    fn abandon<'s>(
-        &mut self,
-        q: Option<&mut Self::Invocation<'s>>,
-        authority: Quarantine,
-    ) -> Abandon
-    where
-        Self: 's,
-        Id: 's,
-    {
-        if let Some(q) = q {
-            q.shared.poison(Fault::Abandoned);
-            q.wakes.wake_frontend();
-        }
-        if let Some(d) = self.device.as_mut() {
-            d.quarantine();
-        }
-        // P1 cancellation never supplies synchronous DMA/ISR exclusion proof.
-        Abandon::Unconfirmed(authority)
-    }
+
     fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Self::Vacant
     where
         Self: 's,

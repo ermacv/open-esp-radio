@@ -6,7 +6,7 @@ warning: unused variable: `request`
   |
   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
-error[E0451]: field `identity` of struct `FailStopRequested` is private
+error[E0451]: field `identity` of struct `oer_radio_port::FailStopRequested` is private
  --> tests/ui/fail_stop_request_closed.rs:6:39
   |
 6 |     let request = FailStopRequested { identity: core::marker::PhantomData }; // ui-error: E0451

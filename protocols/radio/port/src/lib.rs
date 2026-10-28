@@ -1,12 +1,26 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
-#![cfg_attr(test, allow(clippy::disallowed_methods, clippy::disallowed_macros))]
 #![deny(
+    clippy::panic,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
     clippy::unwrap_used,
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::arithmetic_side_effects,
+        clippy::unreachable
+    )
 )]
 
 //! Shared radio capacity, lifecycle and operation contracts.
@@ -41,9 +55,10 @@ pub use execution::LocalExecution;
 pub use identity::{LocalId, SlotIdentity, StaticId};
 pub use lifecycle::*;
 pub use slot::{
-    Joined, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner, SlotClaim, SlotCompletion,
-    SlotFrontend, SlotInitError, SlotJoin, SlotOwner, SlotQuarantined, SlotRegisterError,
-    SlotRegistration, SlotRetire, SlotStopped, SlotWakes, VacantPortSlot, with_local_slot,
+    Joined, LifecycleError, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner, SlotClaim,
+    SlotCompletion, SlotFrontend, SlotInitError, SlotJoin, SlotObservation, SlotOwner,
+    SlotQuarantined, SlotRegisterError, SlotRegistration, SlotRetire, SlotStopped,
+    SlotStorageState, SlotWakes, VacantPortSlot, with_local_slot,
 };
 pub use work::*;
 

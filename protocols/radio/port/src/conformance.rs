@@ -128,3 +128,6 @@ mod alloc_free {
         }
     }
 }
+
+/// Model-owned lifecycle cleanup fixtures.
+pub mod registration;

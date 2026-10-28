@@ -439,7 +439,9 @@ where
         let backend = Backend::new(parts).ok().expect("valid construction");
         let registered = slot.register(backend).ok().expect("fresh local slot");
         match radio::LocalExecution
-            .scope(registered, |frontend| radio::run_port(frontend, body))
+            .scope(crate::port::Registration::guarded(registered), |frontend| {
+                radio::run_port(frontend, body)
+            })
             .await
         {
             radio::PortEnd::Uninstalled { joined, output } => {
@@ -1349,7 +1351,9 @@ where
         let backend = Backend::new(parts).ok().expect("valid construction");
         let registered = slot.register(backend).ok().expect("fresh local slot");
         let first = radio::LocalExecution
-            .scope(registered, |frontend| radio::run_port(frontend, first))
+            .scope(crate::port::Registration::guarded(registered), |frontend| {
+                radio::run_port(frontend, first)
+            })
             .await;
         let radio::PortEnd::Uninstalled {
             joined,
@@ -1368,7 +1372,9 @@ where
             .ok()
             .expect("one matching Joined authorizes reinstall");
         let second = radio::LocalExecution
-            .scope(registered, |frontend| radio::run_port(frontend, second))
+            .scope(crate::port::Registration::guarded(registered), |frontend| {
+                radio::run_port(frontend, second)
+            })
             .await;
         let radio::PortEnd::Uninstalled {
             joined,

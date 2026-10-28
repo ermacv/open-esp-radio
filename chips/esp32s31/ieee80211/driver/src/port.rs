@@ -42,6 +42,8 @@ pub mod device;
 mod driver;
 mod keys;
 mod lifecycle;
+mod registration;
+pub use registration::{Registration, RegistrationError};
 mod phase;
 mod placement;
 #[cfg(any(target_arch = "riscv32", test))]

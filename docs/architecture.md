@@ -496,10 +496,13 @@ protocol ports are not frozen; they grow with the protocols, each change with
 its model and conformance case.
 
 - Queue splitting and initial body lending return typed construction errors.
-  Failed splitting retains the registered owner and its P2 cleanup guard in
-  the registration error; it publishes no frontend or ordinary join.
-  Failed lending quarantines the registration and returns its source cause.
-  No missing resource is replaced with an empty or newly minted owner.
+  The hardware backend's P2 registration guard wraps admitted state and failed
+  construction before publishing a frontend. Mandatory cancellation cleanup
+  runs in that owner guard, even before its first poll. Portable lifecycle and
+  slot code return typed failure observations and never invoke hardware cleanup.
+  Failed construction retains its registered owner and source cause; it
+  publishes no frontend or ordinary join. No missing resource is replaced with
+  an empty or newly minted owner.
 - Every port has a reference model in its own host crate,
   `protocols/<protocol>/model`; the hardware backend runs the same
   conformance cases. Frame protection is the `cipher` layer that backends

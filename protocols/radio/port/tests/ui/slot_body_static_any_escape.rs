@@ -31,10 +31,7 @@ impl SlotOwner<Id> for Owner {
     where Self: 's, Id: 's {
         retire.requested().await
     }
-    fn abandon<'s>(&mut self, _: Option<&mut ()>, authority: Quarantine) -> Abandon
-    where Self: 's, Id: 's {
-        Abandon::Unconfirmed(authority)
-    }
+
     fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)  where Self: 's, Id: 's {}
 }
 

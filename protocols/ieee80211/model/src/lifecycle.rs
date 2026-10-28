@@ -306,7 +306,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             || !held.failed_group_terminal.is_empty()
             || held.rx_out.get() != 0
         {
-            retire.request_quarantine();
+            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
         self.channel = invocation.channel.get();
@@ -315,6 +315,24 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
         retire.requested().await
     }
 
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Self::Vacant
+    where
+        Self: 's,
+        Id: 's,
+    {
+        self.air.end_installation();
+        ModelVacant {
+            air: self.air.clone(),
+            channel: self.channel,
+            addresses: self.addresses,
+            identity: PhantomData,
+        }
+    }
+}
+#[cfg(any(test, feature = "test-support"))]
+impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext>
+    oer_radio_port::conformance::registration::MockCleanup<Id> for ModelBackend<Id, C, X>
+{
     fn abandon<'s>(
         &mut self,
         invocation: Option<&mut Self::Invocation<'s>>,
@@ -331,20 +349,6 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             invocation.held.body.take();
         }
         Abandon::Stopped(authority.stopped())
-    }
-
-    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Self::Vacant
-    where
-        Self: 's,
-        Id: 's,
-    {
-        self.air.end_installation();
-        ModelVacant {
-            air: self.air.clone(),
-            channel: self.channel,
-            addresses: self.addresses,
-            identity: PhantomData,
-        }
     }
 }
 

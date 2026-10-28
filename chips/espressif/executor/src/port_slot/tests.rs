@@ -1,3 +1,4 @@
+use oer_radio_port::conformance::registration::{MockCleanup, MockRegistration};
 extern crate std;
 
 use oer_radio_port::{Abandon, Quarantine, SlotIdentity, SlotOwner, SlotRetire, SlotStopped};
@@ -48,18 +49,21 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     {
         request.requested().await
     }
+
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
+    where
+        Self: 's,
+        Id: 's,
+    {
+    }
+}
+impl<Id: SlotIdentity> MockCleanup<Id> for Owner {
     fn abandon<'s>(&mut self, _: Option<&mut Self::Invocation<'s>>, request: Quarantine) -> Abandon
     where
         Self: 's,
         Id: 's,
     {
         Abandon::Unconfirmed(request)
-    }
-    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
-    where
-        Self: 's,
-        Id: 's,
-    {
     }
 }
 
@@ -82,15 +86,15 @@ fn each_nominal_static_declaration_can_be_taken_exactly_once() {
     assert!(declarations::second::take_static().is_none());
     let (frontend, registration) = first.register(Owner).ok().expect("fresh backing");
     drop(frontend);
-    drop(registration);
+    drop(MockRegistration::new(registration));
     assert!(declarations::first::take_static().is_none());
     let mut second = super::StaticPortSlot::new(second);
     let (frontend, registration) = second.register(Owner).ok().expect("fresh backing");
     assert!(second.register(Owner).is_err());
     let join = frontend.finish();
-    let mut registration = std::boxed::Box::pin(registration.run());
+    let mut registration = std::boxed::Box::pin(MockRegistration::new(registration).run());
     let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
-    let core::task::Poll::Ready(Some(completion)) =
+    let core::task::Poll::Ready(Ok(completion)) =
         core::future::Future::poll(registration.as_mut(), &mut cx)
     else {
         panic!("ordinary P2 retirement completes");
@@ -109,6 +113,6 @@ fn each_nominal_static_declaration_can_be_taken_exactly_once() {
         .ok()
         .expect("Joined permits reuse of the same backing");
     drop(frontend);
-    drop(registration);
+    drop(MockRegistration::new(registration));
     assert!(declarations::second::take_static().is_none());
 }

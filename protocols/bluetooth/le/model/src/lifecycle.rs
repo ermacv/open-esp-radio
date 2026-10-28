@@ -159,7 +159,7 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
             || !q.poisoned_requests.with(|values| values.is_empty())
             || !self.env.is_off(&self.radio)
         {
-            retire.request_quarantine();
+            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
         self.env.detach(&self.radio);
@@ -167,21 +167,7 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
         q.driver.clear();
         retire.requested().await
     }
-    fn abandon<'s>(
-        &mut self,
-        invocation: Option<&mut Self::Invocation<'s>>,
-        authority: Quarantine,
-    ) -> Abandon
-    where
-        Self: 's,
-        Id: 's,
-    {
-        self.env.detach(&self.radio);
-        if let Some(invocation) = invocation {
-            invocation.shared.poison(Fault::Injected);
-        }
-        Abandon::Stopped(authority.stopped())
-    }
+
     fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Self::Vacant
     where
         Self: 's,
@@ -197,6 +183,27 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
         }
     }
 }
+#[cfg(any(test, feature = "test-support"))]
+impl<Id: SlotIdentity, X> oer_radio_port::conformance::registration::MockCleanup<Id>
+    for Backend<Id, X>
+{
+    fn abandon<'s>(
+        &mut self,
+        invocation: Option<&mut Self::Invocation<'s>>,
+        authority: Quarantine,
+    ) -> Abandon
+    where
+        Self: 's,
+        Id: 's,
+    {
+        self.env.detach(&self.radio);
+        if let Some(invocation) = invocation {
+            invocation.shared.poison(Fault::Injected);
+        }
+        Abandon::Stopped(authority.stopped())
+    }
+}
+
 impl<Id: SlotIdentity, X> SlotBodyOwner<Id> for Backend<Id, X> {
     type Body<'p>
         = InstallParts<'p, Id, Self>
