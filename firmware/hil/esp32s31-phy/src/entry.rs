@@ -1,6 +1,21 @@
 #[cfg(not(feature = "diagnostic-phy"))]
 compile_error!("build the diagnostic-phy image class through cargo hil");
 
+macro_rules! capture_observer {
+    ($radio:expr) => {{
+        #[cfg(feature = "diagnostic-radio-health")]
+        {
+            crate::health::Observer {
+                store: &mut $radio.health,
+            }
+        }
+        #[cfg(not(feature = "diagnostic-radio-health"))]
+        {
+            oer_esp32s31_phy::NoopPhyTargetObserver
+        }
+    }};
+}
+
 mod cache;
 mod cca_checkpoint;
 mod cca_rx;
@@ -400,21 +415,6 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
 
 #[cfg(feature = "diagnostic-radio-health")]
 mod health;
-#[macro_export]
-macro_rules! capture_observer {
-    ($radio:expr) => {{
-        #[cfg(feature = "diagnostic-radio-health")]
-        {
-            crate::health::Observer {
-                store: &mut $radio.health,
-            }
-        }
-        #[cfg(not(feature = "diagnostic-radio-health"))]
-        {
-            oer_esp32s31_phy::NoopPhyTargetObserver
-        }
-    }};
-}
 
 #[cfg(not(feature = "diagnostic-radio-health"))]
 type IntakeRequest = Request;

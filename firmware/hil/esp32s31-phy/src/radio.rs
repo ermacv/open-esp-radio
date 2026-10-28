@@ -448,7 +448,7 @@ impl Radio {
             let mut platform = ();
             let domain = require_radio(self.domain.take(), self.radio_fault);
             let clocks = &self.clocks;
-            let observer = crate::capture_observer!(self);
+            let observer = capture_observer!(self);
             let mut registration =
                 core::pin::pin!(crate::completion::construct(|| register_concurrent_phy::<
                     _,
@@ -787,7 +787,7 @@ impl Radio {
             {
                 let mut platform = ();
                 let domain = require_radio(self.domain.take(), self.radio_fault);
-                let observer = crate::capture_observer!(self);
+                let observer = capture_observer!(self);
 
                 let mut maintain =
                     core::pin::pin!(crate::completion::construct(|| maintain_concurrent_phy::<
@@ -843,7 +843,7 @@ impl Radio {
             u16::from(channel),
             0,
             port,
-            &mut crate::capture_observer!(self),
+            &mut capture_observer!(self),
         )
         .await;
         self.domain = Some(radio);
