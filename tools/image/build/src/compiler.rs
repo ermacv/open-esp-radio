@@ -4,8 +4,8 @@
 //!
 //! `RUSTC_BOOTSTRAP=1` is set here, on the image's Cargo command only, and
 //! exists for the unstable `-Z` flags alone (`emit-stack-sizes`,
-//! `move-size-limit`, `share-generics`) on the exact stable toolchain that
-//! `rust-toolchain.toml` pins.
+//! `move-size-limit`, `share-generics`, `merge-functions`) on the exact
+//! stable toolchain pinned by `rust-toolchain.toml`.
 //!
 //! Every image links through the image linker (`oer-image-linker` of `tools/image/linker`), which
 //! refuses an input section named as zero-initialized that carries bytes and
@@ -16,6 +16,7 @@
 
 use std::{
     env,
+    ffi::OsString,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -146,18 +147,6 @@ pub fn configure(command: &mut Command, compiler: &ImageCompiler<'_>) -> Result<
         compiler.rust_target,
         compiler.max_move_bytes,
     )?;
-    // The pinned stable toolchain supports these flags, but they remain
-    // unstable: RUSTC_BOOTSTRAP enables them for this command alone. The
-    // stack-size ELF section is consumed by a safe host-side parser.
-    command.env("RUSTC_BOOTSTRAP", "1").env(
-        "RUSTFLAGS",
-        rustflags(
-            env::var("RUSTFLAGS").ok(),
-            compiler.max_move_bytes,
-            &linker,
-            &compiler.instrumentation,
-        )?,
-    );
     for (key, _) in env::vars_os() {
         if key.to_str().is_some_and(|key| {
             key.starts_with("OPEN_RADIO_TASK_STACK_HART")
@@ -176,6 +165,16 @@ pub fn configure(command: &mut Command, compiler: &ImageCompiler<'_>) -> Result<
         let flags = with_stack_sizes(env::var(&variable).ok());
         command.env(variable, flags);
     }
+    // The pinned stable toolchain supports these flags, but they remain
+    // unstable: RUSTC_BOOTSTRAP enables them for this command alone. The
+    // stack-size ELF section is consumed by a safe host-side parser.
+    configure_flags(
+        command,
+        compiler.max_move_bytes,
+        &linker,
+        &compiler.instrumentation,
+    )?;
+
     Ok(())
 }
 
@@ -237,50 +236,94 @@ fn with_stack_sizes(existing: Option<String>) -> String {
     }
 }
 
-/// Existing Rust flags with the image flags appended, the cfgs of
-/// `instrumentation` last.
-///
-/// Without shared generics, fat LTO keeps one copy of a generic instance per
-/// crate that instantiates it: the Wi-Fi and Bluetooth compositions both
-/// instantiate the same PHY registration and radio guard, which would
-/// otherwise be emitted twice.
-///
-/// The image linker replaces the target's `rust-lld` and keeps its flavor.
-/// `RUSTFLAGS` separates flags at spaces, so the linker's path must have
-/// none.
-fn rustflags(
-    existing: Option<String>,
+/// Resolve a Cargo command's explicit environment before inherited values.
+fn environment(command: &Command, name: &str) -> Option<OsString> {
+    match command.get_envs().find(|(key, _)| *key == name) {
+        Some((_, value)) => value.map(OsString::from),
+        None => env::var_os(name),
+    }
+}
+
+fn configure_flags(
+    command: &mut Command,
     max_move_bytes: u64,
     linker: &Path,
     instrumentation: &Instrumentation,
-) -> Result<String> {
-    let linker = linker
-        .to_str()
-        .filter(|path| !path.contains(char::is_whitespace))
-        .ok_or_else(|| {
-            format!(
-                "the image linker's path must be UTF-8 without spaces: {}",
-                linker.display()
-            )
-        })?;
-    let mut rustflags = existing.unwrap_or_default();
-    for required in [
-        "-Z emit-stack-sizes".to_owned(),
-        format!("-Z move-size-limit={max_move_bytes}"),
-        "-W large-assignments".to_owned(),
-        "-Z share-generics=y".to_owned(),
-        format!("-C linker={linker}"),
-        "-C linker-flavor=ld.lld".to_owned(),
-    ]
-    .into_iter()
-    .chain(instrumentation.rustflags())
-    {
-        if !rustflags.is_empty() {
-            rustflags.push(' ');
-        }
-        rustflags.push_str(&required);
-    }
-    Ok(rustflags)
+) -> Result<()> {
+    let flags = rustflags(
+        inherited_rustflags(
+            environment(command, "RUSTFLAGS"),
+            environment(command, "CARGO_ENCODED_RUSTFLAGS"),
+        )?,
+        max_move_bytes,
+        linker,
+        instrumentation,
+    )?;
+    command
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env_remove("RUSTFLAGS")
+        .env("CARGO_ENCODED_RUSTFLAGS", flags.join("\x1f"));
+    Ok(())
+}
+
+/// Cargo gives encoded rustflags precedence. Preserve their argument
+/// boundaries, including spaces inside a single LLVM/linker option.
+fn inherited_rustflags(plain: Option<OsString>, encoded: Option<OsString>) -> Result<Vec<String>> {
+    let (flags, separator) = match encoded {
+        Some(flags) => (flags, Some('\x1f')),
+        None => (plain.unwrap_or_default(), None),
+    };
+    let flags = flags
+        .into_string()
+        .map_err(|_| "image rustflags must be UTF-8")?;
+    Ok(match separator {
+        Some(_) if flags.is_empty() => Vec::new(),
+        Some(separator) => flags.split(separator).map(str::to_owned).collect(),
+        None => flags.split_whitespace().map(str::to_owned).collect(),
+    })
+}
+
+/// Existing Rust flags with required image flags appended, checked as a
+/// whole and passed through Cargo's encoded form. The machine outliner is
+/// explicitly disabled regardless of CPU, target features or opt-level.
+///
+/// Shared generics avoid duplicate instances after fat LTO. MergeFunctions
+/// must not conflate functions whose DWARF scopes identify different calls.
+fn rustflags(
+    mut flags: Vec<String>,
+    max_move_bytes: u64,
+    linker: &Path,
+    instrumentation: &Instrumentation,
+) -> Result<Vec<String>> {
+    let linker = linker.to_str().ok_or_else(|| {
+        format!(
+            "the image linker's path must be UTF-8: {}",
+            linker.display()
+        )
+    })?;
+    flags.extend([
+        "-Z".to_owned(),
+        "emit-stack-sizes".to_owned(),
+        "-Z".to_owned(),
+        format!("move-size-limit={max_move_bytes}"),
+        "-W".to_owned(),
+        "large-assignments".to_owned(),
+        "-Z".to_owned(),
+        "share-generics=y".to_owned(),
+        "-Zmerge-functions=disabled".to_owned(),
+        "-Cllvm-args=-enable-machine-outliner=never".to_owned(),
+        "-C".to_owned(),
+        format!("linker={linker}"),
+        "-C".to_owned(),
+        "linker-flavor=ld.lld".to_owned(),
+    ]);
+    flags.extend(instrumentation.rustflags().flat_map(|flag| {
+        flag.split_whitespace()
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    }));
+    oer_image_checks::codegen::rustflags(&flags)?;
+    Ok(flags)
 }
 
 #[cfg(test)]
@@ -311,25 +354,28 @@ mod tests {
     fn images_share_generic_instances_after_the_callers_flags() {
         assert_eq!(
             rustflags(
-                Some("-C debuginfo=1".into()),
+                vec!["-C".into(), "debuginfo=1".into()],
                 4096,
                 Path::new("/repo/target/image-linker/debug/oer-image-linker"),
                 &Instrumentation::default(),
             )
-            .unwrap(),
+            .unwrap()
+            .join(" "),
             "-C debuginfo=1 -Z emit-stack-sizes -Z move-size-limit=4096 \
              -W large-assignments -Z share-generics=y \
+             -Zmerge-functions=disabled -Cllvm-args=-enable-machine-outliner=never \
              -C linker=/repo/target/image-linker/debug/oer-image-linker -C linker-flavor=ld.lld"
         );
-        // A path RUSTFLAGS would split is refused.
+        // Encoded flags preserve a linker path containing spaces.
         assert!(
             rustflags(
-                None,
+                Vec::new(),
                 4096,
                 Path::new("/a b/linker"),
                 &Instrumentation::default()
             )
-            .is_err()
+            .unwrap()
+            .contains(&"linker=/a b/linker".to_owned())
         );
     }
 
@@ -340,7 +386,7 @@ mod tests {
         let rustc = oer_os_toolchain::program(oer_os_toolchain::Tool::Rustc).unwrap();
         for limit in [64, 4096] {
             let flags = rustflags(
-                Some("-A large-assignments".into()),
+                vec!["-A".into(), "large-assignments".into()],
                 limit,
                 Path::new("/unused-image-linker"),
                 &Instrumentation::default(),
@@ -365,7 +411,7 @@ mod tests {
                     .env("RUSTC_BOOTSTRAP", "1")
                     .args(["--edition=2024", "--crate-type=lib", "--emit=obj"])
                     .args(["-C", "opt-level=3"])
-                    .args(flags.split_whitespace())
+                    .args(&flags)
                     .arg(&source)
                     .arg("--out-dir")
                     .arg(directory.path())
@@ -397,9 +443,12 @@ mod tests {
         use crate::instrumentation::Class;
         let instrumentation: Instrumentation = [Class::Profile, Class::Trace].into_iter().collect();
         assert_eq!(
-            rustflags(None, 4096, Path::new("/linker"), &instrumentation).unwrap(),
+            rustflags(Vec::new(), 4096, Path::new("/linker"), &instrumentation)
+                .unwrap()
+                .join(" "),
             "-Z emit-stack-sizes -Z move-size-limit=4096 -W large-assignments \
-             -Z share-generics=y -C linker=/linker -C linker-flavor=ld.lld \
+             -Z share-generics=y -Zmerge-functions=disabled \
+             -Cllvm-args=-enable-machine-outliner=never -C linker=/linker -C linker-flavor=ld.lld \
              --cfg oer_trace --cfg oer_profile"
         );
         let root = Path::new("/checkout");
@@ -411,5 +460,129 @@ mod tests {
             compile_cache(root, &instrumentation),
             root.join("target/fw/cargo-trace-profile")
         );
+    }
+
+    #[test]
+    fn cargo_command_pins_encoded_flags_without_losing_argument_boundaries() {
+        use oer_image_checks::codegen::CodegenPrecondition;
+        let mut command = Command::new("not-executed");
+        command
+            .env("RUSTFLAGS", "-C llvm-args=-pick-merged-source-locations")
+            .env(
+                "CARGO_ENCODED_RUSTFLAGS",
+                "-C\x1fdebuginfo=2\x1f--cfg\x1fvalue=\"two words\"",
+            );
+        configure_flags(
+            &mut command,
+            4096,
+            Path::new("/a b/linker"),
+            &Instrumentation::default(),
+        )
+        .unwrap();
+        let encoded = environment(&command, "CARGO_ENCODED_RUSTFLAGS")
+            .unwrap()
+            .into_string()
+            .unwrap();
+        let arguments: Vec<_> = encoded.split('\x1f').map(str::to_owned).collect();
+        assert!(arguments.contains(&"value=\"two words\"".to_owned()));
+        assert!(arguments.contains(&"linker=/a b/linker".to_owned()));
+        assert!(environment(&command, "RUSTFLAGS").is_none());
+        assert_eq!(environment(&command, "RUSTC_BOOTSTRAP").unwrap(), "1");
+        assert_eq!(oer_image_checks::codegen::rustflags(&arguments), Ok(()));
+        for (variable, value) in [
+            ("RUSTFLAGS", "-C llvm-args=-pick-merged-source-locations"),
+            (
+                "CARGO_ENCODED_RUSTFLAGS",
+                "-C\x1fllvm-args=-enable-machine-outliner=always -pick-merged-source-locations",
+            ),
+            ("CARGO_ENCODED_RUSTFLAGS", "-C\x1flink-args=--icf all"),
+            ("CARGO_ENCODED_RUSTFLAGS", "-Z\x1fmerge-functions=aliases"),
+        ] {
+            let mut command = Command::new("not-executed");
+            command
+                .env_remove("RUSTFLAGS")
+                .env_remove("CARGO_ENCODED_RUSTFLAGS")
+                .env(variable, value);
+            let error = configure_flags(
+                &mut command,
+                4096,
+                Path::new("/linker"),
+                &Instrumentation::default(),
+            )
+            .unwrap_err();
+            assert!(
+                error.downcast_ref::<CodegenPrecondition>().is_some(),
+                "{variable}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn pinned_codegen_keeps_different_callback_origins_in_distinct_functions() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("origins.rs");
+        std::fs::write(
+            &source,
+            r#"
+            #![no_std]
+            pub trait A { fn m(&self) -> u32; }
+            pub trait B { fn n(&self) -> u32; }
+            #[inline(never)] pub fn call_a(x: &dyn A) -> u32 { x.m().wrapping_add(5) }
+            #[inline(never)] pub fn call_b(x: &dyn B) -> u32 { x.n().wrapping_add(5) }
+        "#,
+        )
+        .unwrap();
+        let rustc = oer_os_toolchain::program(Tool::Rustc).unwrap();
+        for merge_disabled in [false, true] {
+            let mut flags = rustflags(
+                Vec::new(),
+                4096,
+                Path::new("/unused-linker"),
+                &Instrumentation::default(),
+            )
+            .unwrap();
+            if !merge_disabled {
+                flags.retain(|flag| flag != "-Zmerge-functions=disabled");
+            }
+            let object = directory.path().join(format!("origins-{merge_disabled}.o"));
+            let output = oer_os_process::command(&rustc)
+                .env("RUSTC_BOOTSTRAP", "1")
+                .args([
+                    "--edition=2024",
+                    "--crate-type=lib",
+                    "--emit=obj",
+                    "--target",
+                    "riscv32imafc-unknown-none-elf",
+                    "-Copt-level=3",
+                    "-Cdebuginfo=2",
+                ])
+                .args(flags)
+                .arg(&source)
+                .arg("-o")
+                .arg(&object)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let bytes = std::fs::read(object).unwrap();
+            let elf = oer_analysis_elf::Elf::parse(&bytes).unwrap();
+            let origins = elf
+                .symbols()
+                .filter(|symbol| {
+                    symbol.defined
+                        && (symbol.demangled().ends_with("::call_a")
+                            || symbol.demangled().ends_with("::call_b"))
+                })
+                .map(|symbol| (symbol.section, symbol.address))
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(
+                origins.len(),
+                if merge_disabled { 2 } else { 1 },
+                "MergeFunctions disabled: {merge_disabled}"
+            );
+        }
     }
 }

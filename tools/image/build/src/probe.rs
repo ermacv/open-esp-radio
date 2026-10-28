@@ -8,7 +8,6 @@
 
 use std::{
     cell::RefCell,
-    ffi::OsString,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -45,31 +44,32 @@ pub fn chip_of<'a>(package: &str, chips: &'a [String]) -> Result<&'a str> {
         .ok_or_else(|| format!("{package} names no supported chip").into())
 }
 
-/// The flags of a probe build: the caller's, then the probe cfg.
-fn rustflags(existing: Option<OsString>) -> OsString {
-    let mut flags = existing.unwrap_or_default();
-    if !flags.is_empty() {
-        flags.push(" ");
-    }
-    flags.push(format!("--cfg {PROBE_CFG}"));
-    flags
-}
-
 /// Make `command`, which carries the chip's image compiler setup, build the
 /// probe `package` for `rust_target` in the checkout `root`: the probe cfg
 /// after the image compiler's flags, in the probe target directory.
+/// Refuses a command without the checked image compiler flags.
 pub fn command(
     mut command: Command,
     root: &Path,
     package: &str,
     rust_target: &str,
     jobs: Option<usize>,
-) -> Command {
+) -> Result<Command> {
     let existing = command
         .get_envs()
-        .find(|(name, _)| *name == "RUSTFLAGS")
-        .map(|(_, value)| value.map(OsString::from))
-        .unwrap_or_else(|| std::env::var_os("RUSTFLAGS"));
+        .find(|(name, _)| *name == "CARGO_ENCODED_RUSTFLAGS")
+        .and_then(|(_, value)| value)
+        .ok_or(oer_image_checks::codegen::CodegenPrecondition::MissingFlag(
+            "the image compiler's encoded rustflags",
+        ))?;
+    let mut flags = existing
+        .to_str()
+        .ok_or("probe rustflags must be UTF-8")?
+        .split('\x1f')
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    flags.extend(["--cfg".to_owned(), PROBE_CFG.to_owned()]);
+    oer_image_checks::codegen::rustflags(&flags)?;
     command
         .current_dir(root)
         .args([
@@ -83,12 +83,12 @@ pub fn command(
             package,
         ])
         .env("CARGO_TARGET_DIR", target_dir(root))
-        .env("RUSTFLAGS", rustflags(existing))
-        .env_remove("CARGO_ENCODED_RUSTFLAGS");
+        .env_remove("RUSTFLAGS")
+        .env("CARGO_ENCODED_RUSTFLAGS", flags.join("\x1f"));
     if let Some(jobs) = jobs {
         command.arg("--jobs").arg(jobs.to_string());
     }
-    command
+    Ok(command)
 }
 
 /// The target directory of probe builds in the checkout `root`.
@@ -146,7 +146,7 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         task_stack_proven: false,
     };
     let specification = strict::configure(&mut cargo, &analysis, &output, true)?;
-    let mut cargo = command(cargo, root, package, target, jobs);
+    let mut cargo = command(cargo, root, package, target, jobs)?;
     let images = RefCell::new(Vec::new());
     let values = RefCell::new(crate::large_values::Report::new(policy.max_move_bytes));
     let log = crate::BuildLog::create(&output.join("build.log"))?;
@@ -281,14 +281,16 @@ mod tests {
     fn a_probe_build_adds_the_cfg_in_its_own_target_directory() {
         let root = Path::new("/checkout");
         let mut compiler = Command::new("cargo");
-        compiler.env("RUSTFLAGS", "-C linker=image-linker");
+        let pinned = "-Zmerge-functions=disabled\x1f-Cllvm-args=-enable-machine-outliner=never\x1f-C\x1flinker=image-linker";
+        compiler.env("CARGO_ENCODED_RUSTFLAGS", pinned);
         let command = command(
             compiler,
             root,
             "oer-firmware-probes-esp32s31-radio",
             "rv",
             None,
-        );
+        )
+        .unwrap();
         let env: Vec<_> = command.get_envs().collect();
         assert!(env.contains(&(
             std::ffi::OsStr::new("CARGO_TARGET_DIR"),
@@ -296,15 +298,13 @@ mod tests {
         )));
         let flags = env
             .iter()
-            .find(|(name, _)| *name == "RUSTFLAGS")
+            .find(|(name, _)| *name == "CARGO_ENCODED_RUSTFLAGS")
             .and_then(|(_, value)| *value)
             .unwrap();
         // The image compiler's flags stay; the probe cfg follows them.
-        assert_eq!(flags, "-C linker=image-linker --cfg oer_probe");
-        assert_eq!(
-            rustflags(Some("-C x".into())),
-            OsString::from("-C x --cfg oer_probe")
-        );
+        assert_eq!(flags, format!("{pinned}\x1f--cfg\x1f{PROBE_CFG}").as_str());
+        assert!(env.contains(&(std::ffi::OsStr::new("RUSTFLAGS"), None)));
+        assert!(super::command(Command::new("cargo"), root, "probe", "rv", None).is_err());
     }
 
     #[test]

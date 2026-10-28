@@ -5,6 +5,25 @@ interrupt analysis to select strict SRAM code and each hart's IRQ allocation.
 Every staged runtime link needs the fingerprinted `image-linker.toml` supplied
 by `cargo fw` or `cargo hil`; ordinary and bootstrap links are unaffected.
 
+## Code-generation preconditions
+
+Every image link checks its actual arguments after recursively expanding
+response files, before invoking LLD. `--icf` is refused in every form,
+including `--icf=none`; LLD's default remains off. LLVM options passed through
+`-mllvm` or `--plugin-opt` cannot enable machine outlining or set
+`pick-merged-source-locations`. An explicit LTO pass pipeline cannot
+re-enable MergeFunctions or machine outlining. Violations return the typed
+`oer_image_checks::codegen::CodegenPrecondition` with the offending option
+and its consequence for the stack proof. Build-script link arguments pass
+through the same checks.
+
+The [compiler setup](../build/README.md#code-generation-preconditions) pins
+MergeFunctions and machine outlining off and validates rustc flags. Together
+these conditions preserve the source identity used by the analyzer's
+[DWARF Waker-slot rule](../../analysis/riscv-stack/README.md#code-generation-preconditions).
+
+## Placement and stacks
+
 Strict code placement starts from every declared handler on each hart and
 level, plus the exception and panic paths. Stack sizing still uses the worst
 path of each level; that single path does not limit the code inventory.

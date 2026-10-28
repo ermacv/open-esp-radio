@@ -16,6 +16,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod codegen;
 pub mod critical_section;
 pub mod interrupts;
 pub mod linker;

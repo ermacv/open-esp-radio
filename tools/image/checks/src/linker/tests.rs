@@ -385,3 +385,47 @@ fn a_runtime_link_gets_each_guard_from_the_chip_contract_before_its_first_pass()
         assert_eq!(status, 17);
     }
 }
+
+#[test]
+fn folding_and_llvm_overrides_in_response_files_fail_before_lld_runs() {
+    use crate::codegen::CodegenPrecondition;
+    let directory = tempdir();
+    let response = directory.path().join("nested.rsp");
+    let outer = directory.path().join("outer.rsp");
+    fs::write(&outer, format!("@{}", response.display())).unwrap();
+    for flag in [
+        "--icf=all",
+        "--icf none",
+        "-mllvm=-enable-machine-outliner=always",
+        "--mllvm -pick-merged-source-locations",
+        "--plugin-opt=-enable-machine-outliner=always",
+    ] {
+        fs::write(&response, flag).unwrap();
+        let mut arguments =
+            expand_response_files(vec![format!("@{}", outer.display()).into()]).unwrap();
+        let error = link(&mut arguments, &[], None, |_| {
+            panic!("rejected link reached LLD")
+        })
+        .unwrap_err();
+        assert!(
+            error.downcast_ref::<CodegenPrecondition>().is_some(),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn ordinary_link_arguments_pass_through_the_codegen_guard() {
+    let mut arguments = vec![
+        OsString::from("--gc-sections"),
+        OsString::from("-oimage.elf"),
+    ];
+    assert_eq!(
+        link(&mut arguments, &[], None, |actual| {
+            assert_eq!(actual, ["--gc-sections", "-oimage.elf"]);
+            0
+        })
+        .unwrap(),
+        0
+    );
+}

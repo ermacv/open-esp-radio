@@ -102,6 +102,7 @@ fn link(
     spec: Option<&std::path::Path>,
     mut run_linker: impl FnMut(&[OsString]) -> i32,
 ) -> crate::Result<i32> {
+    crate::codegen::linker_arguments(arguments)?;
     if !uses_runtime_script(arguments) {
         return Ok(run_linker(arguments));
     }

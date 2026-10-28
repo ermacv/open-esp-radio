@@ -275,7 +275,7 @@ pub fn compile_cache(root: &Path, instrumentation: &instrumentation::Instrumenta
 }
 
 /// The target directory of the image linker of the checkout at `root`;
-/// its path is part of every image's `RUSTFLAGS`.
+/// its path is part of every image's encoded rustflags.
 pub(crate) fn linker_cache(root: &Path) -> PathBuf {
     crate::compiler::linker_target(root)
 }
