@@ -229,11 +229,13 @@ enum ModemClocks {
         planner: ModemClockPlanner,
         leases: [Option<ModemClockLease>; CLOCK_SLOTS],
     },
-    /// A transaction failed at a physical edge; the retained owner prevents
-    /// any further modem clock change.
-    Poisoned {
-        _acquire: Option<PoisonedModemClockAcquire>,
-        _release: Option<PoisonedModemClockRelease>,
+    /// Exactly one transaction failed at a physical edge. Keep its owner
+    /// inline without reserving a second transaction in every radio move.
+    AcquirePoisoned {
+        _owner: PoisonedModemClockAcquire,
+    },
+    ReleasePoisoned {
+        _owner: PoisonedModemClockRelease,
     },
     /// Transient state while one transaction owns the planner.
     InFlight,
@@ -250,7 +252,7 @@ impl ModemClocks {
     fn any_held(&self) -> bool {
         match self {
             Self::Ready { leases, .. } => leases.iter().any(Option::is_some),
-            Self::Poisoned { .. } | Self::InFlight => true,
+            Self::AcquirePoisoned { .. } | Self::ReleasePoisoned { .. } | Self::InFlight => true,
         }
     }
 }
@@ -803,7 +805,9 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 planner.set_wifi_initialized(initialized);
                 Ok(())
             }
-            ModemClocks::Poisoned { .. } | ModemClocks::InFlight => Err(ModemClockError::Poisoned),
+            ModemClocks::AcquirePoisoned { .. }
+            | ModemClocks::ReleasePoisoned { .. }
+            | ModemClocks::InFlight => Err(ModemClockError::Poisoned),
         }
     }
 
@@ -1005,10 +1009,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             }
             Err(poisoned) => {
                 // Remaining leases retire with the poisoned planner epoch.
-                state.clocks = ModemClocks::Poisoned {
-                    _acquire: Some(poisoned),
-                    _release: None,
-                };
+                state.clocks = ModemClocks::AcquirePoisoned { _owner: poisoned };
                 Err(ModemClockError::Poisoned)
             }
         }
@@ -1047,10 +1048,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 Ok(())
             }
             Err(poisoned) => {
-                state.clocks = ModemClocks::Poisoned {
-                    _acquire: None,
-                    _release: Some(poisoned),
-                };
+                state.clocks = ModemClocks::ReleasePoisoned { _owner: poisoned };
                 Err(ModemClockError::Poisoned)
             }
         }
