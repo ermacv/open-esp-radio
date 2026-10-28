@@ -22,15 +22,31 @@ struct Package {
     manifest_path: PathBuf,
 }
 
-fn workspace(root: &Path) -> Result<Vec<Package>> {
+struct Workspace {
+    packages: Vec<Package>,
+    build_directory: PathBuf,
+}
+
+fn workspace(root: &Path, cache: &Path) -> Result<Workspace> {
     #[derive(Deserialize)]
     struct Metadata {
         packages: Vec<Package>,
         workspace_members: BTreeSet<String>,
+        build_directory: PathBuf,
     }
     let output = crate::cargo::command()
         .current_dir(root)
         .args(["metadata", "--format-version=1", "--no-deps", "--locked"])
+        .arg("--config")
+        .arg(format!(
+            "build.target-dir={}",
+            toml::Value::String(
+                cache
+                    .to_str()
+                    .ok_or("non-UTF-8 Cargo target directory")?
+                    .into()
+            )
+        ))
         .output()?;
     if !output.status.success() {
         return Err(format!(
@@ -40,7 +56,7 @@ fn workspace(root: &Path) -> Result<Vec<Package>> {
         .into());
     }
     let metadata: Metadata = serde_json::from_slice(&output.stdout)?;
-    metadata
+    let packages = metadata
         .packages
         .into_iter()
         .filter(|package| metadata.workspace_members.contains(&package.id))
@@ -48,7 +64,11 @@ fn workspace(root: &Path) -> Result<Vec<Package>> {
             package.manifest_path = package.manifest_path.canonicalize()?;
             Ok(package)
         })
-        .collect()
+        .collect::<Result<_>>()?;
+    Ok(Workspace {
+        packages,
+        build_directory: metadata.build_directory,
+    })
 }
 
 /// Install the reporter without changing Cargo's artifact namespace or rustc arguments.
@@ -60,7 +80,8 @@ pub(crate) fn configure(
     limit: u64,
 ) -> Result<()> {
     let binary = crate::compiler::build_host_tool(root, target, BINARY, BINARY)?;
-    let manifests: Vec<_> = workspace(root)?
+    let manifests: Vec<_> = workspace(root, target)?
+        .packages
         .into_iter()
         .map(|package| package.manifest_path)
         .collect();
@@ -210,6 +231,7 @@ fn valid_hash(hash: &str) -> bool {
 struct Collector {
     packages: BTreeMap<String, Package>,
     release: PathBuf,
+    intermediates: PathBuf,
     driver_id: String,
     limit: u64,
 }
@@ -230,12 +252,15 @@ impl Collector {
                     .map(|value| value.to_string_lossy().into_owned())
             })
         };
+        let workspace = workspace(root, cache)?;
         Ok(Self {
-            packages: workspace(root)?
+            packages: workspace
+                .packages
                 .into_iter()
                 .map(|package| (package.id.clone(), package))
                 .collect(),
             release: cache.join(target).join(profile),
+            intermediates: workspace.build_directory.join(target).join(profile),
             driver_id: environment("OER_LARGE_VALUES_DRIVER_ID")
                 .ok_or("no compiler reporter identity")?,
             limit: environment("OER_LARGE_VALUES_LIMIT")
@@ -259,7 +284,7 @@ impl Collector {
     }
 
     fn artifact(&self, artifact: &Artifact) -> Result<PathBuf> {
-        let deps = self.release.join("deps");
+        let deps = self.intermediates.join("deps");
         let selected = if let Some(binary) = &artifact.executable {
             binary
         } else {
@@ -286,6 +311,8 @@ impl Collector {
         } else {
             format!("lib{name}-")
         };
+        let mut copies = Vec::new();
+        let selected_digest = oer_os_durable::sha256_file(selected)?;
         for entry in fs::read_dir(&deps)? {
             let path = entry?.path();
             let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
@@ -300,9 +327,18 @@ impl Collector {
                 {
                     return Ok(path);
                 }
+                if selected_digest == oer_os_durable::sha256_file(&path)? {
+                    copies.push(path);
+                }
             }
         }
-        Err(format!("no hashed Cargo artifact for {}", selected.display()).into())
+        // Cargo copies uplifts across filesystems. Content proves the copied
+        // unit only when it is unique; byte-identical variants stay ambiguous.
+        match copies.as_slice() {
+            [path] => Ok(path.clone()),
+            [] => Err(format!("no hashed Cargo artifact for {}", selected.display()).into()),
+            _ => Err(format!("ambiguous copied Cargo artifact for {}", selected.display()).into()),
+        }
     }
 
     fn facts(&self, artifact: &Artifact, manifest: &Path) -> Result<Value> {
@@ -321,7 +357,14 @@ impl Collector {
         // An ordinary rustc rebuild can overwrite this unit without
         // changing its metadata hash. Its older facts must not survive.
         let written = fs::metadata(&sidecar)?.modified()?;
-        for file in artifact.filenames.iter().chain(std::iter::once(&path)) {
+        // An uplift copy is newer than its facts by construction. Freshness
+        // belongs to compiler outputs in deps, not Cargo's later copies.
+        for file in artifact
+            .filenames
+            .iter()
+            .filter(|file| file.parent() == path.parent())
+            .chain(std::iter::once(&path))
+        {
             if written < fs::metadata(file)?.modified()? {
                 return Err("compiler facts predate the artifact".into());
             }
@@ -364,10 +407,9 @@ impl Collector {
                 .kind
                 .iter()
                 .any(|kind| kind == "custom-build" || kind == "proc-macro")
-                || !artifact
-                    .filenames
-                    .iter()
-                    .any(|path| path.starts_with(&self.release))
+                || !artifact.filenames.iter().any(|path| {
+                    path.starts_with(&self.release) || path.starts_with(&self.intermediates)
+                })
             {
                 coverage.status = "host (ordinary rustc)".into();
             } else if let Some(package) = self.packages.get(&artifact.package_id) {
@@ -413,7 +455,7 @@ impl Collector {
                 package.name
             );
             fs::remove_dir_all(
-                self.release
+                self.intermediates
                     .join(".fingerprint")
                     .join(format!("{}-{hash}", package.name)),
             )?;

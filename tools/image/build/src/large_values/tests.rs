@@ -24,6 +24,7 @@ fn only_the_missing_package_is_invalidated() {
         )]
         .into(),
         release: release.into(),
+        intermediates: release.into(),
         driver_id: "current".into(),
         limit: 4096,
     };
@@ -48,6 +49,7 @@ fn bin_reports_follow_the_elf_when_cargo_uplifts_a_cached_feature_variant() {
     let collector = Collector {
         packages: BTreeMap::new(),
         release: release.clone(),
+        intermediates: release.clone(),
         driver_id: "current".into(),
         limit: 4096,
     };
@@ -95,6 +97,10 @@ fn a_plain_cargo_cache_is_repaired_and_then_produces_identical_reports() {
         crate::compiler::build_host_tool(&source_root, &root.join("driver"), BINARY, BINARY)
             .expect("build the pinned compiler driver in the test's own directory");
     for (path, contents) in [
+        (
+            ".cargo/config.toml",
+            "[build]\nbuild-dir=\"{workspace-root}/intermediates\"\n",
+        ),
         (
             "Cargo.toml",
             "[workspace]\nmembers=['app','helper','macros']\nexclude=['external']\nresolver='3'\n[profile.firmware]\ninherits='release'\npanic='abort'\n",
@@ -155,8 +161,9 @@ fn a_plain_cargo_cache_is_repaired_and_then_produces_identical_reports() {
     let log = BuildLog::create(&root.join("build.log")).expect("fixture log");
     log.run(&mut command, "plain compiler cache")
         .expect("ordinary rustc build");
-    let manifests: Vec<_> = workspace(root)
+    let manifests: Vec<_> = workspace(root, &cache)
         .expect("metadata")
+        .packages
         .into_iter()
         .map(|package| package.manifest_path)
         .collect();
@@ -248,7 +255,10 @@ fn a_plain_cargo_cache_is_repaired_and_then_produces_identical_reports() {
     }
     // The explicit metadata filter excludes the external dependency even
     // though its source is below the same root, and excludes host units.
-    assert_eq!(report_files(&cache), 2);
+    let metadata = workspace(root, &cache).expect("configured metadata");
+    assert_eq!(metadata.build_directory, root.join("intermediates"));
+    assert_eq!(report_files(&cache), 0);
+    assert_eq!(report_files(&metadata.build_directory), 2);
     let messages = fs::read(root.join("runtime-compiler-artifacts.jsonl")).expect("Cargo messages");
     for line in messages
         .split(|byte| *byte == b'\n')
@@ -329,6 +339,7 @@ fn a_primary_rlib_and_staticlib_uplift_needs_no_separate_rmeta() {
     let collector = Collector {
         packages: BTreeMap::new(),
         release: release.into(),
+        intermediates: release.into(),
         driver_id: "current".into(),
         limit: 4096,
     };
@@ -338,4 +349,133 @@ fn a_primary_rlib_and_staticlib_uplift_needs_no_separate_rmeta() {
             .expect("uplifted facts"),
         facts
     );
+}
+
+#[test]
+fn copied_uplifts_in_a_separate_build_directory_require_unique_matching_outputs() {
+    let directory = tempfile::tempdir().expect("temporary fixture");
+    let root = directory.path();
+    let manifest = root.join("Cargo.toml");
+    fs::write(&manifest, "fixture").expect("manifest");
+    let release = root.join("outputs/firmware");
+    let intermediates = root.join("intermediates/firmware");
+    let deps = intermediates.join("deps");
+    fs::create_dir_all(&deps).expect("compiler outputs");
+    fs::create_dir_all(&release).expect("uplift outputs");
+    let collector = Collector {
+        packages: [(
+            "fixture".into(),
+            Package {
+                id: "fixture".into(),
+                name: "fixture".into(),
+                manifest_path: manifest.clone(),
+            },
+        )]
+        .into(),
+        release: release.clone(),
+        intermediates: intermediates.clone(),
+        driver_id: "current".into(),
+        limit: 4096,
+    };
+    for (name, kind, binary) in [
+        ("fixture", "bin", true),
+        ("libfixture.rlib", "rlib", false),
+        ("libfixture.a", "staticlib", false),
+    ] {
+        let hashed_name = if binary {
+            "fixture-0123456789abcdef".into()
+        } else {
+            format!(
+                "libfixture-0123456789abcdef.{}",
+                kind.replace("staticlib", "a")
+            )
+        };
+        let hashed = deps.join(hashed_name);
+        fs::write(&hashed, b"selected unit").expect("compiler output");
+        let sidecar = deps.join("fixture-0123456789abcdef.large-values.json");
+        let facts = serde_json::json!({"schema":2,"driver_id":"current","manifest":manifest,
+            "metadata_hash":"0123456789abcdef","max_move_bytes":4096,"records":[],
+            "binary_sha256":oer_os_durable::sha256_file(&hashed).expect("digest")});
+        fs::write(&sidecar, facts.to_string()).expect("compiler facts");
+        let uplift = release.join(name);
+        fs::copy(&hashed, &uplift).expect("Cargo copy across filesystems");
+        fs::File::options()
+            .write(true)
+            .open(&uplift)
+            .expect("uplift")
+            .set_modified(
+                fs::metadata(&sidecar)
+                    .expect("facts")
+                    .modified()
+                    .expect("mtime")
+                    + std::time::Duration::from_secs(1),
+            )
+            .expect("copy postdates the facts");
+        let message = serde_json::json!({"reason":"compiler-artifact", "package_id":"fixture",
+            "manifest_path":manifest,"target":{"name":"fixture","kind":[kind]},
+            "filenames":[uplift],"executable":binary.then_some(&uplift)});
+        let artifact: Artifact = serde_json::from_value(message.clone()).expect("Cargo artifact");
+        assert_eq!(collector.artifact(&artifact).expect("copied unit"), hashed);
+        let (report, missing) = collector
+            .collect(message.to_string().as_bytes(), "runtime")
+            .expect("collect copied output");
+        assert!(missing.is_empty());
+        assert_eq!(report.crates[0].status, "checked");
+        assert_eq!(report.crates[0].facts.as_ref(), Some(&facts));
+
+        let written = fs::metadata(&sidecar)
+            .expect("facts")
+            .modified()
+            .expect("mtime");
+        let compiler_output = fs::File::options()
+            .write(true)
+            .open(&hashed)
+            .expect("compiler output");
+        compiler_output
+            .set_modified(written + std::time::Duration::from_secs(1))
+            .expect("ordinary rebuild postdates facts");
+        assert!(
+            collector
+                .facts(&artifact, &manifest)
+                .unwrap_err()
+                .to_string()
+                .contains("compiler facts predate the artifact")
+        );
+        compiler_output
+            .set_modified(written)
+            .expect("restore current facts");
+
+        fs::remove_file(&sidecar).expect("missing facts");
+        let (_, missing) = collector
+            .collect(message.to_string().as_bytes(), "runtime")
+            .expect("record the exact missing unit");
+        assert_eq!(
+            missing,
+            [("fixture".into(), "0123456789abcdef".into())].into()
+        );
+        let fingerprint = intermediates.join(".fingerprint/fixture-0123456789abcdef");
+        fs::create_dir_all(&fingerprint).expect("unit fingerprint");
+        collector
+            .invalidate(&missing)
+            .expect("invalidate in build-dir");
+        assert!(!fingerprint.exists());
+
+        let duplicate = deps.join(
+            hashed
+                .file_name()
+                .expect("name")
+                .to_str()
+                .expect("UTF-8")
+                .replace("0123456789abcdef", "1111111111111111"),
+        );
+        fs::copy(&hashed, &duplicate).expect("byte-identical feature variant");
+        assert!(
+            collector
+                .artifact(&artifact)
+                .unwrap_err()
+                .to_string()
+                .contains("ambiguous copied Cargo artifact")
+        );
+        fs::remove_file(duplicate).expect("remove other variant");
+    }
 }
