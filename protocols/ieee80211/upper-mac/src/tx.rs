@@ -151,7 +151,8 @@ impl AmpduRequest {
             length = length.saturating_add(if selected.peek().is_none() {
                 subframe
             } else {
-                subframe.next_multiple_of(4)
+                // A u16 MPDU plus delimiter and three padding bytes fits u32.
+                subframe.wrapping_add(3) & !3
             });
         }
         length

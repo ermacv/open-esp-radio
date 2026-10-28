@@ -561,3 +561,11 @@ fn a_subframe_without_an_admission_instant_ends_the_exchange_incomplete() {
     };
     assert_eq!(status.result, MacAmpduTxResult::Incomplete);
 }
+
+#[test]
+fn maximal_mpdu_lengths_align_without_overflow_and_leave_the_last_unpadded() {
+    let request = AmpduRequest::new(0, SequenceNumber::ZERO, &[u16::MAX; 64], true).unwrap();
+    assert_eq!(request.aggregate_length(u64::MAX), 63 * 65_540 + 65_539);
+    assert_eq!(request.aggregate_length(1 << 63), 65_539);
+    assert_eq!(request.aggregate_length(0), 0);
+}

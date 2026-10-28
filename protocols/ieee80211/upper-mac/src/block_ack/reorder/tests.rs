@@ -477,3 +477,26 @@ fn received_sequences_never_panic() {
 fn received_sequences_never_panic_full() {
     reorder_scripts(oer_ieee80211_wire::fuzz::FULL);
 }
+
+#[test]
+fn an_invalid_result_position_refuses_the_input_and_preserves_buffered_owners() {
+    let mut reorder = Buffer::new(seq(100), 8).unwrap();
+    reorder.ingest(frame(102, 7)).unwrap();
+    for position in [WINDOW, usize::MAX] {
+        reorder.head = position;
+        let frames = reorder.frames;
+        let occupied = reorder.occupied;
+        assert_eq!(
+            reorder.ingest(frame(100, 3)),
+            Err(RxReorderError::InvalidPosition {
+                position,
+                capacity: WINDOW
+            })
+        );
+        assert_eq!(reorder.frames, frames);
+        assert_eq!(reorder.occupied, occupied);
+        assert_eq!(reorder.head, position);
+        assert_eq!(reorder.next_sequence(), seq(100));
+    }
+    assert!(releases(&reorder.stop(), &[frame(102, 7)]));
+}

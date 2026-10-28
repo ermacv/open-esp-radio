@@ -265,3 +265,36 @@ fn replay_check_never_panics() {
 fn replay_check_never_panics_full() {
     run(oer_ieee80211_wire::fuzz::FULL);
 }
+
+#[test]
+fn a_new_epoch_installs_exactly_its_requested_group_frontier() {
+    for key_id in 0..4 {
+        let mut epoch = CcmpRxReplayEpoch::new(
+            [3, 0, 0, 0, 0, 0, 0, 0],
+            group(key_id),
+            [7, 0, 0, 0, 0, 0, 0, 0],
+        )
+        .unwrap();
+        for candidate in 0..4 {
+            assert_eq!(epoch.has_group(group(candidate)), candidate == key_id);
+        }
+        assert!(
+            epoch
+                .check(CcmpRxProtection::Group, None, header(7, key_id))
+                .is_err()
+        );
+        assert_eq!(
+            epoch.check(CcmpRxProtection::Group, None, header(8, key_id)),
+            Ok(())
+        );
+        assert!(
+            epoch
+                .check(CcmpRxProtection::Pairwise, None, header(3, 0))
+                .is_err()
+        );
+        assert_eq!(
+            epoch.check(CcmpRxProtection::Pairwise, None, header(4, 0)),
+            Ok(())
+        );
+    }
+}

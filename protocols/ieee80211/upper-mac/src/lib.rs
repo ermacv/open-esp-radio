@@ -11,7 +11,8 @@
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::disallowed_macros
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 #![cfg_attr(
     test,
@@ -27,6 +28,7 @@
         clippy::todo,
         clippy::unimplemented,
         clippy::disallowed_macros,
+        clippy::disallowed_methods,
     )
 )]
 
@@ -84,79 +86,14 @@ pub use tx::{
     TxPlanner, TxReport, TxRequest, TxStep,
 };
 
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod block_ack;
 
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod ccmp;
 
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod duplicate;
 
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod fragmentation;
 
-#[warn(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros
-)]
 pub mod receive;
 
 /// A literal test sequence number; panics outside twelve bits.

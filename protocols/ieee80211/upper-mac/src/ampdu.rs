@@ -59,18 +59,26 @@ pub fn unacknowledged(sequences: &[SequenceNumber], report: Option<BlockAckRepor
 /// Compaction swaps each selected entry into the next free prefix position,
 /// using at most one entry of temporary storage rather than copying the array.
 pub fn compact<T: Copy, const N: usize>(items: &mut [T; N], mask: u64) -> usize {
-    // This helper moves copyable metadata, never affine MPDU/body owners.
+    let mut remaining = items.as_mut_slice();
+    let mut mask = mask;
     let mut kept = 0_usize;
-    // The mask represents at most MAX_AMPDU_SUBFRAMES entries.
-    for index in 0..N.min(usize::from(MAX_AMPDU_SUBFRAMES)) {
-        if mask & (1_u64 << index) != 0 {
-            // kept counts selected entries before index, hence kept <= index
-            // < N. Both swap indices are in bounds, and the displaced value
-            // is behind the unread suffix. Selected order is preserved.
-            items.swap(kept, index);
-            // The count is bounded by the 64 mask positions.
-            kept = kept.saturating_add(1);
+    while mask != 0 {
+        let Some((destination, tail)) = remaining.split_first_mut() else {
+            break;
+        };
+        let skip = mask.trailing_zeros();
+        if skip != 0 {
+            // An exhausted search means all remaining mask bits lie beyond
+            // the input, which the contract excludes from compaction.
+            let Some(source) = tail.get_mut(skip.wrapping_sub(1) as usize) else {
+                break;
+            };
+            core::mem::swap(destination, source);
         }
+        mask &= !(1_u64 << skip);
+        mask >>= 1;
+        remaining = tail;
+        kept = kept.wrapping_add(1);
     }
     kept
 }
