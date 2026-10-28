@@ -27,3 +27,17 @@ waits, disable, rejection, fault and reinstall. Traces capture actual returned
 session/context identities. 2M remains a Hardware case and is reported as
 unsupported by this profile. Injected publication-boundary stimuli are distinct
 from propagation loss and carry no claim of hardware execution.
+
+The queue backing has an explicit vacant state before its capacity mint.
+Initial installation resources are `Result<Resources, Fault>`: unprepared
+backing reports `UnpreparedQueues`, and a repeated resource loan reports
+`ResourcesExhausted`. A refused loan retains its owners. The common port
+traits are unchanged. Model bodies handle this result before using resources.
+
+Radio handles own their modeled state through `Rc`; FIFO waiters store seat
+identities in arrival order rather than using them as array offsets. Local
+collections transfer ownership only during callback-free operations. Waker
+registrations use reference-counted snapshots, so clone, wake and drop
+callbacks run after storage is available again. Advancing the medium validates
+all transmitter updates before publishing any count or clock change;
+packet-count saturation remains explicit in `PacketCount`.

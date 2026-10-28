@@ -3,10 +3,23 @@
 #![deny(missing_docs)]
 #![deny(
     clippy::unwrap_used,
+    clippy::expect_used,
     clippy::panic,
     clippy::unreachable,
     clippy::todo,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects
+    )
 )]
 
 //! LE DTM reference backend and a separate deterministic radio environment.
@@ -28,6 +41,9 @@
 //! ```
 extern crate alloc;
 
+#[cfg(test)]
+extern crate std;
+
 mod air;
 mod capacity;
 /// Executable reference fixture for the portable suite.
@@ -35,6 +51,7 @@ mod capacity;
 pub mod conformance;
 mod lifecycle;
 mod queues;
+mod storage;
 pub use air::{Environment, Loss, Stimulus};
 pub use lifecycle::{Backend, Frontend, Invocation, Resources, Vacant, View};
 pub use queues::{ModelPhase, Queues};
@@ -62,6 +79,10 @@ pub enum Fault {
     RejectedTerminal,
     /// Installation generation cannot advance.
     EpochExhausted,
+    /// Queue backing has not received an installation's capacity mint.
+    UnpreparedQueues,
+    /// The installation's initial resources have already been issued.
+    ResourcesExhausted,
 }
 
 #[cfg(test)]

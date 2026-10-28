@@ -1,8 +1,8 @@
 //! The common radio slot's lifecycle, with separate P1 and P2 ownership.
 use super::{Environment, Fault, ModelPhase, Queues, queues::*};
-use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
+use alloc::rc::Rc;
 use core::{
-    cell::{Cell, RefCell},
+    cell::Cell,
     future::{Future, poll_fn},
     marker::PhantomData,
     ops::ControlFlow,
@@ -13,12 +13,11 @@ use oer_radio_port::*;
 use oer_time::{Duration, RadioInstant, Timer};
 
 type Composition<Id, X> = PhantomData<fn(Id, X) -> (Id, X)>;
-type Seats<'p, Id> = [Seat<'p, CommandCapacity, Child<Root<Id>, 0>>; SEATS];
 
 /// Permanent modeled P2 owner. Context `X` is selected before any body loan.
 pub struct Backend<Id: SlotIdentity, X = ()> {
     env: Rc<Environment>,
-    pub(crate) radio: usize,
+    pub(crate) radio: Rc<super::air::Radio>,
     epoch: u64,
     identity: Composition<Id, X>,
 }
@@ -41,13 +40,13 @@ impl<Id: SlotIdentity, X> Backend<Id, X> {
     /// additionally requires its affine `Joined` authority.
     pub fn resume(vacant: Vacant<Id, X>) -> Result<Self, Fault> {
         let mut backend = vacant.backend;
-        backend.epoch = backend.env.next_epoch(backend.radio)?;
+        backend.epoch = backend.env.next_epoch(&backend.radio)?;
         Ok(backend)
     }
     /// Queue a publication-boundary stimulus for this radio, independent of
     /// its P1 frontend. Packet propagation loss belongs to the Environment.
     pub fn inject(&self, stimulus: super::Stimulus) {
-        self.env.inject(self.radio, stimulus);
+        self.env.inject(&self.radio, stimulus);
     }
 }
 /// Complete initial P1 capacity: three waiter seats and one idle test session.
@@ -60,8 +59,7 @@ pub struct Resources<'p, Id: SlotIdentity> {
 /// Affine P1 queue endpoints. No reference to the registered backend is present.
 pub struct Frontend<'s, Id: SlotIdentity, X> {
     shared: &'s Shared<Id, X>,
-    seats: &'s mut Option<Seats<'static, Id>>,
-    idle: &'s mut Option<OwnedSession<Root<Id>, Idle>>,
+    initial: &'s mut Option<Initial<Id>>,
 }
 /// Separate P2 queue endpoints, retained while a P1 wait is cancelled.
 pub struct Invocation<'s, Id: SlotIdentity, X> {
@@ -77,8 +75,11 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
         Permits<CommandCapacity, CAPACITY, SEATS>,
         Slots<DtmSessionKind, 1>,
     );
-    type Queues = Option<Queues<Id, X>>;
-    const VACANT_QUEUES: Self::Queues = None;
+    type Queues = Queues<Id, X>;
+    const VACANT_QUEUES: Self::Queues = Queues {
+        shared: Shared::vacant(),
+        initial: None,
+    };
     type Vacant = Vacant<Id, X>;
     type Frontend<'s>
         = Frontend<'s, Id, X>
@@ -92,32 +93,24 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
         Id: 's;
     fn prepare_queues(&mut self, queues: &mut Self::Queues, mint: Mint<'static, Self::Pools, Id>) {
         let (capacity, [session]) = mint.into_pools();
-        *queues = Some(Queues {
+        *queues = Queues {
             shared: Shared {
-                env: self.env.clone(),
-                radio: self.radio,
+                attachment: Some(Attachment {
+                    env: self.env.clone(),
+                    radio: self.radio.clone(),
+                }),
                 epoch: self.epoch,
                 pool: super::capacity::Pool::new(capacity.supply),
-                pending: RefCell::new(VecDeque::new()),
-                events: RefCell::new(VecDeque::new()),
-                quarantine: RefCell::new(Vec::new()),
-                outstanding: RefCell::new(Vec::new()),
-                poisoned_requests: RefCell::new(Vec::new()),
-                enabled: Cell::new(false),
-                draining: Cell::new(false),
                 end: Cell::new(None),
                 fault: Cell::new(None),
-                body: RefCell::new(None),
-                driver: RefCell::new(None),
+                ..Shared::vacant()
             },
-            seats: Some(capacity.seats),
-            idle: Some(OwnedSession::new(session, self.epoch)),
-        });
+            initial: Some(Initial {
+                seats: capacity.seats,
+                idle: OwnedSession::new(session, self.epoch),
+            }),
+        };
     }
-    #[allow(
-        clippy::expect_used,
-        reason = "SlotOwner prepares backing before splitting it"
-    )]
     fn split<'s>(
         queues: &'s mut Self::Queues,
         _: SlotWakes<'s, Id>,
@@ -126,12 +119,11 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
         Self: 's,
         Id: 's,
     {
-        let q = queues.as_mut().expect("queues prepared before split");
+        let q = queues;
         (
             Frontend {
                 shared: &q.shared,
-                seats: &mut q.seats,
-                idle: &mut q.idle,
+                initial: &mut q.initial,
             },
             Invocation { shared: &q.shared },
         )
@@ -150,26 +142,26 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
             if retire.is_requested() {
                 return Poll::Ready(());
             }
-            *q.driver.borrow_mut() = Some(cx.waker().clone());
-            self.env.register(self.radio, cx.waker());
+            q.driver.register(cx.waker());
+            self.env.register(&self.radio, cx.waker());
             q.serve();
             let wait = retire.wait();
             let mut wait = core::pin::pin!(wait);
             wait.as_mut().poll(cx)
         })
         .await;
-        if !q.pending.borrow().is_empty()
-            || !q.events.borrow().is_empty()
-            || !q.quarantine.borrow().is_empty()
-            || !q.poisoned_requests.borrow().is_empty()
-            || !self.env.is_off(self.radio)
+        if !q.pending.with(|values| values.is_empty())
+            || !q.events.with(|values| values.is_empty())
+            || !q.quarantine.with(|values| values.is_empty())
+            || !q.poisoned_requests.with(|values| values.is_empty())
+            || !self.env.is_off(&self.radio)
         {
             retire.request_quarantine();
             core::future::pending::<()>().await;
         }
-        self.env.detach(self.radio);
-        q.body.borrow_mut().take();
-        q.driver.borrow_mut().take();
+        self.env.detach(&self.radio);
+        q.body.clear();
+        q.driver.clear();
         retire.requested().await
     }
     fn abandon<'s>(
@@ -181,7 +173,7 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
         Self: 's,
         Id: 's,
     {
-        self.env.detach(self.radio);
+        self.env.detach(&self.radio);
         if let Some(invocation) = invocation {
             invocation.shared.poison(Fault::Injected);
         }
@@ -195,7 +187,7 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
         Vacant {
             backend: Self {
                 env: self.env.clone(),
-                radio: self.radio,
+                radio: self.radio.clone(),
                 epoch: self.epoch,
                 identity: PhantomData,
             },
@@ -208,28 +200,22 @@ impl<Id: SlotIdentity, X> SlotBodyOwner<Id> for Backend<Id, X> {
     where
         Self: 'p,
         Id: 'p;
-    #[allow(
-        clippy::expect_used,
-        reason = "SlotFrontend issues the initial resources exactly once"
-    )]
     fn lend<'p, 's>(f: &'p mut Self::Frontend<'s>, loan: BodyLoan<'p, Id, Self>) -> Self::Body<'p>
     where
         Self: 's,
         Id: 's,
         's: 'p,
     {
-        let seats = f
-            .seats
-            .take()
-            .expect("body resources issued once")
-            .map(|s| loan.lend_seat(s));
-        let session = f.idle.take().expect("one initial DTM session").lend(&loan);
+        let resources = f.shared.lend_initial(f.initial, &loan);
+        if let Err(fault) = &resources {
+            f.shared.poison(*fault);
+        }
         InstallParts {
             view: View {
                 shared: f.shared,
                 loan,
             },
-            resources: Resources { seats, session },
+            resources,
         }
     }
 }
@@ -253,7 +239,7 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
         Self: 'p,
         Id: 'p;
     type Resources<'p>
-        = Resources<'p, Id>
+        = Result<Resources<'p, Id>, Fault>
     where
         Self: 'p,
         Id: 'p;
@@ -311,13 +297,13 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
         q.wake_driver();
         let _wait = BodyWait(q);
         poll_fn(|cx| {
-            *q.body.borrow_mut() = Some(cx.waker().clone());
+            q.body.register(cx.waker());
             // Only P2 settles admitted requests; this wait never serves them.
             if q.draining.get() {
                 return Poll::Pending;
             }
             loop {
-                let event = q.events.borrow_mut().pop_front();
+                let event = q.events.with(alloc::collections::VecDeque::pop_front);
                 let Some(mut event) = event else {
                     break;
                 };
@@ -326,7 +312,7 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
                 if let ControlFlow::Break(terminal) = sink(event.lend(&f.loan)) {
                     let mut retained = OwnedEvent::retain(terminal, &f.loan);
                     retained.capacity = capacity;
-                    q.events.borrow_mut().push_front(retained);
+                    q.events.with(|events| events.push_front(retained));
                     q.poison(Fault::RejectedTerminal);
                     return Poll::Ready(Err(Poisoned {
                         cause: Fault::RejectedTerminal,
@@ -350,8 +336,9 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
         if let Some(cause) = f.shared.fault.get() {
             Err(Poisoned { cause })
         } else {
+            let attachment = f.shared.attachment().map_err(|cause| Poisoned { cause })?;
             Ok(Ok(RadioInstant::from_micros(
-                f.shared.env.now().as_micros(),
+                attachment.env.now().as_micros(),
             )))
         }
     }
@@ -382,8 +369,15 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
         Self: 's,
         Id: 's,
     {
-        let clock = f.shared.env.clone();
+        let clock = f
+            .shared
+            .attachment
+            .as_ref()
+            .map(|attachment| attachment.env.clone());
         async move {
+            let Some(clock) = clock else {
+                return;
+            };
             // Model profile input, not a promise about S31 hardware latency.
             let Some(deadline) = clock.now().checked_add(Duration::from_micros(1_000)) else {
                 return;
@@ -394,9 +388,72 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
 }
 impl<Id: SlotIdentity, X> ModelSlotOwner<Id> for Backend<Id, X> {
     fn end_world(&mut self, _: Option<&mut Self::Queues>) {
-        self.env.detach(self.radio);
+        self.env.detach(&self.radio);
     }
     fn end_vacant_world(vacant: &mut Self::Vacant) {
-        vacant.backend.env.detach(vacant.backend.radio);
+        vacant.backend.env.detach(&vacant.backend.radio);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    struct InspectInitial;
+    impl<Id: SlotIdentity> SlotBody<Id, Backend<Id>> for InspectInitial {
+        type Output = (Fault, Fault);
+        async fn run<'p>(self, parts: InstallParts<'p, Id, Backend<Id>>) -> Self::Output
+        where
+            Backend<Id>: 'p,
+            Id: 'p,
+        {
+            let InstallParts { view, resources } = parts;
+            let Resources { seats, session } = resources.expect("prepared resources");
+            let mut initial = Some(Initial {
+                seats: seats.map(|seat| view.loan.reclaim_seat(seat)),
+                idle: OwnedSession::retain(session, &view.loan),
+            });
+            let vacant = Shared::<Id, ()>::vacant();
+            let unprepared = vacant
+                .lend_initial(&mut initial, &view.loan)
+                .err()
+                .expect("vacant queues refuse the loan");
+            assert_eq!(unprepared, Fault::UnpreparedQueues);
+            assert!(
+                initial.is_some(),
+                "a refused loan retains every initial owner"
+            );
+            let resources = view
+                .shared
+                .lend_initial(&mut initial, &view.loan)
+                .expect("prepared loan");
+            assert_eq!(resources.seats.map(|seat| seat.index()), [0, 1, 2]);
+            assert_eq!(resources.session.index(), 0);
+            let exhausted = view
+                .shared
+                .lend_initial(&mut initial, &view.loan)
+                .err()
+                .expect("resources issued once");
+            assert_eq!(exhausted, Fault::ResourcesExhausted);
+            assert!(initial.is_none());
+            (unprepared, exhausted)
+        }
+    }
+    #[test]
+    fn unprepared_and_repeated_initial_loans_return_faults_without_losing_owners() {
+        crate::tests::run(with_local_slot(async |claim| {
+            let air = Rc::new(Environment::new(core::num::NonZeroU64::MIN));
+            let mut slot = claim.place();
+            let (mut frontend, registration) = slot
+                .register(Backend::new(air))
+                .ok()
+                .expect("fresh model slot");
+            assert_eq!(
+                frontend.run_body(InspectInitial).await,
+                Some((Fault::UnpreparedQueues, Fault::ResourcesExhausted))
+            );
+            drop(frontend);
+            drop(registration);
+            slot.end_model_world();
+        }));
     }
 }

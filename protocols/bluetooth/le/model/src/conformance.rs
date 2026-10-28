@@ -1,6 +1,10 @@
 //! Executable fixtures for the portable suite, using registered model backends.
 #![allow(
     clippy::expect_used,
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
     reason = "fixture constants and single-use completed futures are internal invariants"
 )]
 use super::*;
@@ -40,7 +44,7 @@ impl Fixture for ModelFixture {
         ));
         with_local_slot(async |claim| {
             let backend = Backend::<_, Tag>::new(env.clone());
-            let radio = backend.radio;
+            let radio = backend.radio.clone();
             let mut slot = claim.place();
             let end = LocalExecution
                 .scope(
@@ -51,7 +55,7 @@ impl Fixture for ModelFixture {
                             Body {
                                 case,
                                 env: env.clone(),
-                                radio,
+                                radio: radio.clone(),
                             },
                         )
                         .await
@@ -79,7 +83,7 @@ impl Fixture for ModelFixture {
                                     Body {
                                         case,
                                         env: env.clone(),
-                                        radio,
+                                        radio: radio.clone(),
                                     },
                                 )
                                 .await
@@ -151,20 +155,24 @@ fn receive() -> Result<Supported<ModelCaps, Receive>, Violation> {
 struct Body {
     case: Case,
     env: Rc<Environment>,
-    radio: usize,
+    radio: Rc<super::air::Radio>,
 }
 impl<Id: SlotIdentity> PortBody<Id, Backend<Id, Tag>> for Body {
     type Output = Result<Trace, Violation>;
     async fn run<'a, 'p>(
         self,
         owner: Owner<'a, 'p, Id, Backend<Id, Tag>, Disabled>,
-        resources: Resources<'p, Id>,
+        resources: Result<Resources<'p, Id>, Fault>,
     ) -> Ended<Id, Backend<Id, Tag>, Self::Output>
     where
         Backend<Id, Tag>: 'p,
         Id: 'p,
         'p: 'a,
     {
+        let resources = match resources {
+            Ok(resources) => resources,
+            Err(_) => return Ended::fail_stop(owner.fail_stop(), Err(Violation::Lifecycle)),
+        };
         let mut owner = match owner.enable().await {
             Ok(o) => o,
             Err(f) => return Ended::fail_stop(f.fail_stop(), Err(Violation::Lifecycle)),
@@ -205,24 +213,31 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, Tag>> for Body {
             })
             .await;
         if rejected {
-            let q = shared.events.borrow();
-            if let Some(event) = q.front() {
-                let (slot, epoch) = match &event.session {
-                    super::queues::SessionOwner::Idle(s) => (s.index(), s.epoch()),
-                    super::queues::SessionOwner::Running(s) => (s.index(), s.epoch()),
-                    _ => {
-                        return match owner {
-                            Ok(o) => Ended::fail_stop(o.fail_stop(), Err(Violation::Owners)),
-                            Err(o) => Ended::fail_stop(o.fail_stop(), Err(Violation::Owners)),
-                        };
-                    }
-                };
-                trace.retained = Some(Identity {
-                    slot,
-                    epoch,
-                    context: event.context.owner,
-                });
-            }
+            let retained = shared.events.with(|q| {
+                if let Some(event) = q.front() {
+                    let (slot, epoch) = match &event.session {
+                        super::queues::SessionOwner::Idle(s) => (s.index(), s.epoch()),
+                        super::queues::SessionOwner::Running(s) => (s.index(), s.epoch()),
+                        _ => return Err(Violation::Owners),
+                    };
+                    Ok(Some(Identity {
+                        slot,
+                        epoch,
+                        context: event.context.owner,
+                    }))
+                } else {
+                    Ok(None)
+                }
+            });
+            trace.retained = match retained {
+                Ok(retained) => retained,
+                Err(v) => {
+                    return match owner {
+                        Ok(o) => Ended::fail_stop(o.fail_stop(), Err(v)),
+                        Err(o) => Ended::fail_stop(o.fail_stop(), Err(v)),
+                    };
+                }
+            };
             trace.end = shared
                 .end
                 .get()
@@ -244,7 +259,7 @@ async fn exchange<'p, Id: SlotIdentity + 'p>(
     resources: Resources<'p, Id>,
     trace: &mut Trace,
     env: &Environment,
-    radio: usize,
+    radio: Rc<super::air::Radio>,
 ) -> Result<(), Violation> {
     let Resources {
         seats: [mut s0, mut s1, mut s2],
@@ -320,7 +335,7 @@ async fn exchange<'p, Id: SlotIdentity + 'p>(
         _ => None,
     };
     if let Some(input) = stimulus {
-        env.inject(radio, input);
+        env.inject(&radio, input);
     }
     let before_admission = env.now();
     trace.submitted[0] = Some(
@@ -343,12 +358,12 @@ async fn exchange<'p, Id: SlotIdentity + 'p>(
                 let mut wait = pin!(phase.next_event());
                 pending(wait.as_mut())?;
             }
-            if phase.view.shared.body.borrow().is_some() {
+            if phase.view.shared.body.is_some() {
                 return Err(Violation::Lifecycle);
             }
         }
         yield_once().await;
-        if phase.view.shared.events.borrow().len() != 1 {
+        if phase.view.shared.events.with(|events| events.len()) != 1 {
             return Err(Violation::Terminal);
         }
         if matches!(case, Case::DisableExecuted | Case::Aborted) {
@@ -365,13 +380,14 @@ async fn exchange<'p, Id: SlotIdentity + 'p>(
     }
     trace.events[0] = Some(Observation::capture(&terminal));
     if case == Case::Indeterminate {
-        let retained = phase.view.shared.quarantine.borrow();
-        let (command, _) = retained.first().ok_or(Violation::Owners)?;
-        trace.retained = Some(Identity {
-            slot: command.index(),
-            epoch: command.epoch(),
-            context: terminal.context.view(),
-        });
+        trace.retained = Some(phase.view.shared.quarantine.with(|retained| {
+            let (command, _) = retained.first().ok_or(Violation::Owners)?;
+            Ok(Identity {
+                slot: command.index(),
+                epoch: command.epoch(),
+                context: terminal.context.view(),
+            })
+        })?);
     }
     if matches!(case, Case::Indeterminate | Case::DrainedFault) {
         let end = phase.next_event().await.err().ok_or(Violation::Lifecycle)?;
@@ -432,13 +448,17 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, Tag>> for AirBody {
     async fn run<'a, 'p>(
         self,
         owner: Owner<'a, 'p, Id, Backend<Id, Tag>, Disabled>,
-        resources: Resources<'p, Id>,
+        resources: Result<Resources<'p, Id>, Fault>,
     ) -> Ended<Id, Backend<Id, Tag>, Self::Output>
     where
         Backend<Id, Tag>: 'p,
         Id: 'p,
         'p: 'a,
     {
+        let resources = match resources {
+            Ok(resources) => resources,
+            Err(_) => return Ended::fail_stop(owner.fail_stop(), Err(Violation::Lifecycle)),
+        };
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(f) => return Ended::fail_stop(f.fail_stop(), Err(Violation::Lifecycle)),

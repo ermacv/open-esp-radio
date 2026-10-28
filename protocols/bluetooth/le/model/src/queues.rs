@@ -1,11 +1,11 @@
 //! Durable queue ownership and P1-only borrowed views.
-use super::{Backend, Environment, Fault, ModelCaps, Stimulus};
-use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
-use core::{
-    cell::{Cell, RefCell},
-    future::poll_fn,
-    task::{Poll, Waker},
+use super::{
+    Backend, Environment, Fault, ModelCaps, Stimulus,
+    air::Radio,
+    storage::{Local, WakerSlot},
 };
+use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
+use core::{cell::Cell, future::poll_fn, task::Poll};
 use oer_bluetooth_le_port::{
     backend::{OwnedCommand, OwnedRequest, OwnedSession},
     *,
@@ -79,33 +79,63 @@ impl<Id: SlotIdentity, X> OwnedEvent<Id, X> {
         }
     }
 }
-pub(crate) struct Shared<Id: SlotIdentity, X> {
+pub(crate) struct Attachment {
     pub env: Rc<Environment>,
-    pub radio: usize,
+    pub radio: Rc<Radio>,
+}
+pub(crate) struct Shared<Id: SlotIdentity, X> {
+    pub attachment: Option<Attachment>,
     pub epoch: u64,
     pub pool: Pool<Id>,
-    pub pending: RefCell<VecDeque<(Work<Id, X>, Instant)>>,
-    pub events: RefCell<VecDeque<OwnedEvent<Id, X>>>,
-    pub quarantine: RefCell<Vec<Retained<Id>>>,
-    pub outstanding: RefCell<Vec<LeOperationId>>,
-    pub poisoned_requests: RefCell<Vec<Work<Id, X>>>,
+    pub pending: Local<VecDeque<(Work<Id, X>, Instant)>>,
+    pub events: Local<VecDeque<OwnedEvent<Id, X>>>,
+    pub quarantine: Local<Vec<Retained<Id>>>,
+    pub outstanding: Local<Vec<LeOperationId>>,
+    pub poisoned_requests: Local<Vec<Work<Id, X>>>,
     pub enabled: Cell<bool>,
     pub draining: Cell<bool>,
     pub end: Cell<Option<EventEnd<Fault>>>,
     pub fault: Cell<Option<Fault>>,
-    pub body: RefCell<Option<Waker>>,
-    pub driver: RefCell<Option<Waker>>,
+    pub body: WakerSlot,
+    pub driver: WakerSlot,
 }
 impl<Id: SlotIdentity, X> Shared<Id, X> {
-    pub fn wake_driver(&self) {
-        if let Some(w) = self.driver.borrow().as_ref() {
-            w.wake_by_ref();
+    pub const fn vacant() -> Self {
+        Self {
+            attachment: None,
+            epoch: 0,
+            pool: Pool::vacant(),
+            pending: Local::new(VecDeque::new()),
+            events: Local::new(VecDeque::new()),
+            quarantine: Local::new(Vec::new()),
+            outstanding: Local::new(Vec::new()),
+            poisoned_requests: Local::new(Vec::new()),
+            enabled: Cell::new(false),
+            draining: Cell::new(false),
+            end: Cell::new(Some(EventEnd::Quarantined {
+                cause: Fault::UnpreparedQueues,
+            })),
+            fault: Cell::new(Some(Fault::UnpreparedQueues)),
+            body: WakerSlot::new(),
+            driver: WakerSlot::new(),
         }
     }
+    pub fn attachment(&self) -> Result<&Attachment, Fault> {
+        self.attachment.as_ref().ok_or(Fault::UnpreparedQueues)
+    }
+    pub fn lend_initial<'p>(
+        &self,
+        initial: &mut Option<Initial<Id>>,
+        loan: &BodyLoan<'p, Id, Backend<Id, X>>,
+    ) -> Result<super::Resources<'p, Id>, Fault> {
+        self.attachment()?;
+        Initial::lend(initial, loan)
+    }
+    pub fn wake_driver(&self) {
+        self.driver.wake();
+    }
     pub fn wake_body(&self) {
-        if let Some(w) = self.body.borrow().as_ref() {
-            w.wake_by_ref();
-        }
+        self.body.wake();
     }
     pub fn poison(&self, fault: Fault) {
         let cause = self.fault.get().unwrap_or(fault);
@@ -114,8 +144,8 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
         // prevent Drained from being exposed, so undelivered owners can still
         // escalate that unobserved end to accounting quarantine.
         if self.end.get().is_none()
-            || !self.events.borrow().is_empty()
-            || !self.pending.borrow().is_empty()
+            || !self.events.with(|events| events.is_empty())
+            || !self.pending.with(|pending| pending.is_empty())
         {
             self.end.set(Some(EventEnd::Quarantined { cause }));
         }
@@ -123,17 +153,20 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
         self.wake_body();
         self.wake_driver();
     }
-    #[allow(
-        clippy::expect_used,
-        reason = "every admitted work carries exactly one capacity bundle"
-    )]
     pub fn serve(&self) {
         if self.fault.get().is_some() && !self.draining.get() {
             return;
         }
-        let Some((work, at)) = self.pending.borrow_mut().pop_front() else {
+        let attachment = match self.attachment() {
+            Ok(attachment) => attachment,
+            Err(fault) => {
+                self.poison(fault);
+                return;
+            }
+        };
+        let Some((work, at)) = self.pending.with(VecDeque::pop_front) else {
             if self.draining.replace(false) {
-                self.env.stop(self.radio);
+                attachment.env.stop(&attachment.radio);
                 self.enabled.set(false);
                 self.end.set(Some(EventEnd::Drained {
                     cause: self.fault.get().unwrap_or(Fault::Disabled),
@@ -145,14 +178,16 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
         let input = if self.draining.get() {
             None
         } else {
-            self.env.stimulus(self.radio)
+            attachment.env.stimulus(&attachment.radio)
         };
-        if input == Some(Stimulus::StaleEpoch) && self.env.next_epoch(self.radio).is_err() {
+        if input == Some(Stimulus::StaleEpoch)
+            && attachment.env.next_epoch(&attachment.radio).is_err()
+        {
             self.poison(Fault::EpochExhausted);
         }
         let cause = if self.fault.get() == Some(Fault::EpochExhausted) {
             Cause::Fault
-        } else if work.command.epoch() != self.env.epoch(self.radio) {
+        } else if work.command.epoch() != attachment.env.epoch(&attachment.radio) {
             Cause::StaleEpoch
         } else if self.draining.get() {
             Cause::Disabled
@@ -187,57 +222,65 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
             epoch: command.epoch(),
         };
         let mut count = None;
-        let mut capacity = Some(capacity);
-        let session = match result {
+        let (session, capacity) = match result {
             EventResult::Indeterminate => {
-                // Keep both the actual submitted lease and capacity, not identities.
                 self.quarantine
-                    .borrow_mut()
-                    .push((command, capacity.take().expect("admitted command capacity")));
+                    .with(|quarantine| quarantine.push((command, capacity)));
                 self.poison(Fault::Injected);
-                SessionOwner::Quarantined
+                (SessionOwner::Quarantined, None)
             }
-            EventResult::Executed { .. } => match command {
-                OwnedCommand::Transmit(s, config) => {
-                    self.env.transmit(self.radio, *config.get());
-                    SessionOwner::Running(s.transition())
-                }
-                OwnedCommand::Receive(s, config) => {
-                    self.env.receive(self.radio, *config.get());
-                    SessionOwner::Running(s.transition())
-                }
-                OwnedCommand::End(s) => {
-                    count = Some(self.env.stop(self.radio));
-                    SessionOwner::Idle(s.transition())
-                }
-            },
+            EventResult::Executed { .. } => {
+                let session = match command {
+                    OwnedCommand::Transmit(s, config) => {
+                        attachment.env.transmit(&attachment.radio, *config.get());
+                        SessionOwner::Running(s.transition())
+                    }
+                    OwnedCommand::Receive(s, config) => {
+                        attachment.env.receive(&attachment.radio, *config.get());
+                        SessionOwner::Running(s.transition())
+                    }
+                    OwnedCommand::End(s) => {
+                        count = Some(attachment.env.stop(&attachment.radio));
+                        SessionOwner::Idle(s.transition())
+                    }
+                };
+                (session, Some(capacity))
+            }
             EventResult::Aborted => {
-                self.env.stop(self.radio);
-                match command {
+                attachment.env.stop(&attachment.radio);
+                let session = match command {
                     OwnedCommand::Transmit(s, _) | OwnedCommand::Receive(s, _) => {
                         SessionOwner::Idle(s)
                     }
                     OwnedCommand::End(s) => SessionOwner::Idle(s.transition()),
-                }
+                };
+                (session, Some(capacity))
             }
-            EventResult::NotExecuted => match command {
-                OwnedCommand::Transmit(s, _) | OwnedCommand::Receive(s, _) => SessionOwner::Idle(s),
-                OwnedCommand::End(s) => SessionOwner::Running(s),
-            },
+            EventResult::NotExecuted => {
+                let session = match command {
+                    OwnedCommand::Transmit(s, _) | OwnedCommand::Receive(s, _) => {
+                        SessionOwner::Idle(s)
+                    }
+                    OwnedCommand::End(s) => SessionOwner::Running(s),
+                };
+                (session, Some(capacity))
+            }
         };
         if input == Some(Stimulus::DrainedFault) {
             self.fault.set(Some(Fault::Injected));
             self.draining.set(true);
         }
-        self.events.borrow_mut().push_back(OwnedEvent {
-            admitted,
-            at,
-            result,
-            cause,
-            count,
-            session,
-            context,
-            capacity,
+        self.events.with(|events| {
+            events.push_back(OwnedEvent {
+                admitted,
+                at,
+                result,
+                cause,
+                count,
+                session,
+                context,
+                capacity,
+            })
         });
         self.wake_body();
         self.wake_driver();
@@ -246,10 +289,11 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
         if let Some(capacity) = capacity {
             self.pool.release(capacity);
         }
-        self.outstanding.borrow_mut().retain(|held| *held != id);
+        self.outstanding
+            .with(|outstanding| outstanding.retain(|held| *held != id));
     }
     pub fn pop(&self) -> Option<OwnedEvent<Id, X>> {
-        let mut event = self.events.borrow_mut().pop_front()?;
+        let mut event = self.events.with(VecDeque::pop_front)?;
         self.delivered(event.admitted.id, event.capacity.take());
         Some(event)
     }
@@ -257,8 +301,23 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
 /// Separate queues and initial resources retained by the slot through quarantine.
 pub struct Queues<Id: SlotIdentity, X> {
     pub(crate) shared: Shared<Id, X>,
-    pub(crate) seats: Option<[Seat<'static, CommandCapacity, Child<Path<Id>, 0>>; SEATS]>,
-    pub(crate) idle: Option<OwnedSession<Path<Id>, Idle>>,
+    pub(crate) initial: Option<Initial<Id>>,
+}
+pub(crate) struct Initial<Id: SlotIdentity> {
+    pub seats: [Seat<'static, CommandCapacity, Child<Path<Id>, 0>>; SEATS],
+    pub idle: OwnedSession<Path<Id>, Idle>,
+}
+impl<Id: SlotIdentity> Initial<Id> {
+    pub fn lend<'p, X>(
+        initial: &mut Option<Self>,
+        loan: &BodyLoan<'p, Id, Backend<Id, X>>,
+    ) -> Result<super::Resources<'p, Id>, Fault> {
+        let initial = initial.take().ok_or(Fault::ResourcesExhausted)?;
+        Ok(super::Resources {
+            seats: initial.seats.map(|seat| loan.lend_seat(seat)),
+            session: initial.idle.lend(loan),
+        })
+    }
 }
 /// One running P1 phase. It borrows queues, never the backend or environment's
 /// driver operations; the loan conversion authority is private.
@@ -292,14 +351,26 @@ impl<'p, Id: SlotIdentity, X> LePhase<'p, Path<Id>, X> for ModelPhase<'_, 'p, Id
         if let Some(fault) = q.fault.get() {
             let owned = request.retain(&self.view.loan);
             // Poison consumes custody into durable backing even before admission.
-            q.poisoned_requests.borrow_mut().push(owned);
+            q.poisoned_requests.with(|requests| requests.push(owned));
             return Err(oer_radio_port::Poisoned { cause: fault });
         }
+        let attachment = match q.attachment() {
+            Ok(attachment) => attachment,
+            Err(fault) => {
+                q.poisoned_requests
+                    .with(|requests| requests.push(request.retain(&self.view.loan)));
+                q.poison(fault);
+                return Err(oer_radio_port::Poisoned { cause: fault });
+            }
+        };
         let refusal = if request.id.is_backend_reserved() {
             Some(Refusal::ReservedId)
-        } else if request.epoch() != q.epoch || q.epoch != q.env.epoch(q.radio) {
+        } else if request.epoch() != q.epoch || q.epoch != attachment.env.epoch(&attachment.radio) {
             Some(Refusal::StaleEpoch)
-        } else if q.outstanding.borrow().contains(&request.id) {
+        } else if q
+            .outstanding
+            .with(|outstanding| outstanding.contains(&request.id))
+        {
             Some(Refusal::DuplicateId)
         } else if !q.enabled.get() {
             Some(Refusal::Unavailable)
@@ -309,15 +380,15 @@ impl<'p, Id: SlotIdentity, X> LePhase<'p, Path<Id>, X> for ModelPhase<'_, 'p, Id
         if let Some(reason) = refusal {
             return Ok(Err(Refused { reason, request }));
         }
-        let at = q.env.now();
+        let at = attachment.env.now();
         let receipt = Admitted {
             id: request.id,
             epoch: request.epoch(),
         };
-        q.outstanding.borrow_mut().push(request.id);
+        q.outstanding
+            .with(|outstanding| outstanding.push(request.id));
         q.pending
-            .borrow_mut()
-            .push_back((request.retain(&self.view.loan), at));
+            .with(|pending| pending.push_back((request.retain(&self.view.loan), at)));
         q.wake_driver();
         Ok(Ok(receipt))
     }
@@ -329,7 +400,7 @@ impl<'p, Id: SlotIdentity, X> PortPhase for ModelPhase<'_, 'p, Id, X> {
         let q = self.view.shared;
         let _wait = BodyWait(q);
         poll_fn(|cx| {
-            *q.body.borrow_mut() = Some(cx.waker().clone());
+            q.body.register(cx.waker());
             if let Some(event) = q.pop() {
                 return Poll::Ready(Ok(Ok(Event::Terminal(event.lend(&self.view.loan)))));
             }
@@ -346,6 +417,6 @@ impl<'p, Id: SlotIdentity, X> PortPhase for ModelPhase<'_, 'p, Id, X> {
 pub(crate) struct BodyWait<'a, Id: SlotIdentity, X>(pub &'a Shared<Id, X>);
 impl<Id: SlotIdentity, X> Drop for BodyWait<'_, Id, X> {
     fn drop(&mut self) {
-        self.0.body.borrow_mut().take();
+        self.0.body.clear();
     }
 }

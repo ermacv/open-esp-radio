@@ -9,7 +9,7 @@ system these rules serve.
 ## Code
 
 - **Ask, never fall back.** When a choice changes a shared crate, drops data,
-  adds a fallback, leaves work unfinished, changes memory use or on-hardware
+  adds a fallback, leaves work unfinished, changes on-hardware
   behavior, or departs from a contract shape already accepted, explain it,
   recommend an option and ask before writing code. Decide small, local,
   reversible details (a name, a variant, a test shape) yourself and state
