@@ -192,7 +192,9 @@ const fn frequency_memory_address(address: u16) -> (Bits<10>, bool) {
 
 /// Select the recovered two-bit baseband mode.
 pub fn set_baseband_mode<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, mode: u8) {
-    let mode = Bits::<2>::new(u32::from(mode)).expect("baseband mode must fit its two-bit field");
+    let mode = Bits::<2>::new(u32::from(mode))
+        .ok()
+        .expect("baseband mode must fit its two-bit field");
     frequency.fe.modify_frequency_parameter_1_status(|w| {
         w.set_bits_0_1_opaque(mode);
     });
@@ -278,7 +280,9 @@ pub fn write_memory<P: PhyPlacement>(
     value: u32,
     mode: u8,
 ) {
-    let data = Bits::<24>::new(value).expect("frequency-memory data must fit 24 bits");
+    let data = Bits::<24>::new(value)
+        .ok()
+        .expect("frequency-memory data must fit 24 bits");
     let (address_low, address_high) = frequency_memory_address(address);
     frequency.fe.modify_frequency_control(|w| {
         w.set_memory_address_low(address_low)
@@ -305,6 +309,7 @@ pub fn read_memory<P: PhyPlacement>(
 ) -> u32 {
     let (address_low, address_high) = frequency_memory_address(address);
     let mode = Bits::<2>::new(u32::from(mode))
+        .ok()
         .expect("frequency-memory read mode must fit its two-bit field");
     frequency.fe.modify_frequency_control(|w| {
         w.set_memory_address_low(address_low)

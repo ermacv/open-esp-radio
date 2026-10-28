@@ -116,9 +116,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     if let Some(record) = previous {
         usb::early_previous_panic(&record);
     }
-    let Some(config) = CONFIG else {
-        fail("unconfigured")
-    };
+    let config = CONFIG;
     let Some(interrupts) = Interrupts::take() else {
         fail("interrupt-table")
     };

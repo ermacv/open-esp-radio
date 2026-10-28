@@ -79,10 +79,9 @@ fn assert_tx_descriptor_head(
     authority_head: DmaRef<WifiTxDmaDescriptor>,
     descriptor_address_low: u32,
 ) {
-    assert_eq!(
-        descriptor_address_low,
-        authority_head.bits() & DESCRIPTOR_ADDRESS_LOW_MASK,
-        "TX control register does not reference the retained DMA chain",
+    assert!(
+        descriptor_address_low == authority_head.bits() & DESCRIPTOR_ADDRESS_LOW_MASK,
+        "TX control register does not reference the retained DMA chain"
     );
 }
 
@@ -929,9 +928,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         queue: u8,
         program: MacLegacyTxProgram,
     ) -> bool {
-        assert_eq!(
-            dma.descriptor_head(),
-            program.descriptor_head,
+        assert!(
+            dma.descriptor_head() == program.descriptor_head,
             "the program is bound to this DMA chain"
         );
         if !self.prepare_legacy_mac_tx(queue, program) {
@@ -952,9 +950,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         queue: u8,
         program: MacHtTxProgram,
     ) -> bool {
-        assert_eq!(
-            dma.descriptor_head(),
-            program.descriptor_head,
+        assert!(
+            dma.descriptor_head() == program.descriptor_head,
             "the program is bound to this DMA chain"
         );
         if !self.prepare_ht_mac_tx(queue, program) {
@@ -975,9 +972,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         queue: u8,
         program: MacHeTxProgram,
     ) -> bool {
-        assert_eq!(
-            dma.descriptor_head(),
-            program.descriptor_head,
+        assert!(
+            dma.descriptor_head() == program.descriptor_head,
             "the program is bound to this DMA chain"
         );
         if !self.prepare_he_mac_tx(queue, program) {

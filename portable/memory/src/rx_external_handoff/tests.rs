@@ -268,3 +268,17 @@ fn return_state_has_the_atomic_layout_and_zero_is_attached() {
     drop(buffer);
     assert_eq!(ret.0.load(Ordering::Acquire), 2);
 }
+
+#[test]
+fn an_invalid_return_keeps_the_state_and_reports_static_bytes() {
+    let ret = ExternalRxReturn::new();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ret.return_once();
+    }))
+    .expect_err("an attached buffer cannot be returned");
+    assert_eq!(ret.state(), ExternalRxReturnState::Attached);
+    assert_eq!(
+        panic.downcast_ref::<&str>().map(|s| s.as_bytes()),
+        Some(b"detached RX DMA buffer must be released exactly once".as_slice())
+    );
+}

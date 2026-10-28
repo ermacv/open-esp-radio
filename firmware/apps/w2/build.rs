@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         variable(COUNTRY),
         variable(CAP),
     ) {
-        (None, None, None, None, None) => "None".to_owned(),
+        (None, None, None, None, None) => String::new(),
         (Some(channel), Some(bssid), Some(ssid), Some(country), Some(cap)) => {
             let channel = parse_channel(&channel)
                 .unwrap_or_else(|| panic!("{CHANNEL} is no 2.4 GHz channel 1 to 13"));
@@ -43,7 +43,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             assert_eq!(cap, 10, "W2 uses the explicit 10 dBm lab profile");
             println!("cargo:rustc-cfg=oer_w2_configured");
             format!(
-                "Some(crate::W2Config {{ channel: {channel}, stand: [{}], ssid: &[{}], country: *b\"{}\", cap_dbm: {cap} }})",
+                "/// The stand this configured image checks.\n\
+                 pub const CONFIG: crate::W2Config = crate::W2Config {{ channel: {channel}, stand: [{}], ssid: &[{}], country: *b\"{}\", cap_dbm: {cap} }};\n",
                 octets(&stand),
                 octets(&ssid),
                 String::from_utf8_lossy(&country)
@@ -52,14 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => panic!("{CHANNEL}, {BSSID}, {SSID}, {COUNTRY} and {CAP} are set together, or none"),
     };
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("cargo sets OUT_DIR"));
-    fs::write(
-        out.join("w2_config.rs"),
-        format!(
-            "/// The stand this image checks; `None` builds the unconfigured image.\n\
-             pub const CONFIG: Option<crate::W2Config> = {config};\n"
-        ),
-    )
-    .expect("OUT_DIR is writable");
+    fs::write(out.join("w2_config.rs"), config).expect("OUT_DIR is writable");
     Ok(())
 }
 

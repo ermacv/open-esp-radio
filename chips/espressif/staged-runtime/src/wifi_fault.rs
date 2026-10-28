@@ -4,8 +4,6 @@
 //! image. This module owns the record, the never-returning reset path and
 //! next-boot reporting. Neither register nor DMA ownership is released here.
 
-use core::fmt::{self, Write};
-
 const MAGIC: u32 = 0x5749_4641;
 
 /// Twelve retained bytes. Magic and checksum validate stored values at boot;
@@ -64,18 +62,20 @@ pub fn report_previous() {
     }
 }
 
-fn report(raw: u32, write: impl FnMut(&[u8])) {
-    struct Output<F>(F);
-    impl<F: FnMut(&[u8])> Write for Output<F> {
-        fn write_str(&mut self, value: &str) -> fmt::Result {
-            (self.0)(value.as_bytes());
-            Ok(())
-        }
+fn report(mut raw: u32, mut write: impl FnMut(&[u8])) {
+    let mut digits = [b'0'; 8];
+    for digit in digits.iter_mut().rev() {
+        let nibble = (raw & 0xf) as u8;
+        *digit = if nibble < 10 {
+            b'0'.wrapping_add(nibble)
+        } else {
+            b'a'.wrapping_add(nibble - 10)
+        };
+        raw >>= 4;
     }
-    let _written = writeln!(
-        Output(write),
-        "previous Wi-Fi MAC fatal assertion RAW={raw:#010x}"
-    );
+    write(b"previous Wi-Fi MAC fatal assertion RAW=0x");
+    write(&digits);
+    write(b"\n");
 }
 
 #[cfg(test)]
@@ -96,6 +96,28 @@ mod tests {
             output,
             b"previous Wi-Fi MAC fatal assertion RAW=0xa5821357\n"
         );
+    }
+
+    #[test]
+    fn raw_output_preserves_hex_width_case_and_newline() {
+        for raw in [
+            0,
+            1,
+            0xf,
+            0x10,
+            0xff,
+            0x100,
+            0x1234_abcd,
+            0x8000_0000,
+            u32::MAX,
+        ] {
+            let mut output = std::vec::Vec::new();
+            report(raw, |bytes| output.extend_from_slice(bytes));
+            assert_eq!(
+                output,
+                std::format!("previous Wi-Fi MAC fatal assertion RAW={raw:#010x}\n").as_bytes()
+            );
+        }
     }
 
     #[test]

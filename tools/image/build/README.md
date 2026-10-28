@@ -387,8 +387,12 @@ Coverage lists the checked workspace units, host units and unchecked
 nonworkspace dependencies for runtime and bootstrap separately. Hashed
 sidecars remain at the compiler artifacts. Each image reads Cargo's actual
 artifact messages, including Fresh units, and checks the tool identity,
-limit and workspace manifest. Sidecars must also postdate every artifact
-output, so an ordinary rebuild after a source edit cannot reuse older facts. Cargo's binary uplifts select the hashed sidecar by file identity, and its
+limit and workspace manifest. Cargo metadata supplies the configured
+`build_directory` for dependency outputs and fingerprints, independently of
+the target directory containing final uplifts. Sidecars must also postdate every compiler
+output, so an ordinary rebuild after a source edit cannot reuse older facts. Cargo's binary uplifts select the hashed sidecar by file identity; copies
+across filesystems require a unique byte-identical hashed output, rejecting
+ambiguous variants. Copy timestamps do not replace compiler-output freshness. The
 full ELF digest verifies the contents. Even byte-identical feature variants
 retain their own facts.
 Missing or stale facts invalidate only the affected workspace packages'

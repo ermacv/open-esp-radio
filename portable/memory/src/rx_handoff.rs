@@ -28,12 +28,12 @@ impl<const FRAME_CAPACITY: usize> RxHandoffSlot<FRAME_CAPACITY> {
         }
     }
 
-    fn claim(&self, from: u8, to: u8, message: &str) {
-        assert_eq!(
+    fn claim(&self, from: u8, to: u8) {
+        assert!(
             self.state
-                .compare_exchange(from, to, Ordering::AcqRel, Ordering::Acquire),
-            Ok(from),
-            "{message}"
+                .compare_exchange(from, to, Ordering::AcqRel, Ordering::Acquire)
+                == Ok(from),
+            "RX handoff slot ownership transition"
         );
     }
 
@@ -43,21 +43,21 @@ impl<const FRAME_CAPACITY: usize> RxHandoffSlot<FRAME_CAPACITY> {
             .is_ok()
     }
 
-    fn publish_ready(&self, owner: u8, offset: usize, length: usize, message: &str) {
+    fn publish_ready(&self, owner: u8, offset: usize, length: usize) {
         self.offset.store(offset, Ordering::Relaxed);
         self.length.store(length, Ordering::Relaxed);
-        assert_eq!(
+        assert!(
             self.state
-                .compare_exchange(owner, SLOT_READY, Ordering::Release, Ordering::Acquire),
-            Ok(owner),
-            "{message}"
+                .compare_exchange(owner, SLOT_READY, Ordering::Release, Ordering::Acquire)
+                == Ok(owner),
+            "RX handoff slot ownership transition"
         );
     }
 
-    fn release(&self, owner: u8, message: &str) {
+    fn release(&self, owner: u8) {
         self.offset.store(0, Ordering::Relaxed);
         self.length.store(0, Ordering::Relaxed);
-        self.claim(owner, SLOT_FREE, message);
+        self.claim(owner, SLOT_FREE);
     }
 
     fn offset(&self) -> usize {
@@ -116,11 +116,7 @@ impl<const FRAME_CAPACITY: usize, const QUEUE_DEPTH: usize>
 
     pub fn claim_radio(&self, index: u8) -> RxRadioLease<'_, FRAME_CAPACITY> {
         let slot = self.slot_of(index);
-        slot.claim(
-            SLOT_FREE,
-            SLOT_RADIO,
-            "free-channel entry did not name a free RX handoff slot",
-        );
+        slot.claim(SLOT_FREE, SLOT_RADIO);
         RxRadioLease {
             slot,
             index,
@@ -158,11 +154,7 @@ impl<const FRAME_CAPACITY: usize, const QUEUE_DEPTH: usize>
 
     pub fn claim_network(&self, index: u8) -> RxNetworkLease<'_, FRAME_CAPACITY> {
         let slot = self.slot_of(index);
-        slot.claim(
-            SLOT_READY,
-            SLOT_NETWORK,
-            "ready-channel entry did not name a ready RX handoff slot",
-        );
+        slot.claim(SLOT_READY, SLOT_NETWORK);
         RxNetworkLease {
             slot,
             index,
@@ -219,12 +211,7 @@ impl<'pool, const FRAME_CAPACITY: usize> RxRadioLease<'pool, FRAME_CAPACITY> {
     pub fn publish<R>(mut self, length: usize, write: impl FnOnce(&mut [u8]) -> R) -> (u8, R) {
         assert!(length <= FRAME_CAPACITY, "RX frame exceeds slot capacity");
         let result = write(self.frame_prefix_mut(length));
-        self.slot.publish_ready(
-            SLOT_RADIO,
-            0,
-            length,
-            "only the radio lease may publish an RX handoff slot",
-        );
+        self.slot.publish_ready(SLOT_RADIO, 0, length);
         self.live = false;
         (self.index, result)
     }
@@ -232,17 +219,8 @@ impl<'pool, const FRAME_CAPACITY: usize> RxRadioLease<'pool, FRAME_CAPACITY> {
     /// Publish already initialized bytes directly to a network lease.
     pub fn into_network(mut self, length: usize) -> RxNetworkLease<'pool, FRAME_CAPACITY> {
         assert!(length <= FRAME_CAPACITY, "RX frame exceeds slot capacity");
-        self.slot.publish_ready(
-            SLOT_RADIO,
-            0,
-            length,
-            "only the radio lease may publish an RX handoff slot",
-        );
-        self.slot.claim(
-            SLOT_READY,
-            SLOT_NETWORK,
-            "only the just-published RX slot may enter network ownership",
-        );
+        self.slot.publish_ready(SLOT_RADIO, 0, length);
+        self.slot.claim(SLOT_READY, SLOT_NETWORK);
         self.live = false;
         RxNetworkLease {
             slot: self.slot,
@@ -252,10 +230,7 @@ impl<'pool, const FRAME_CAPACITY: usize> RxRadioLease<'pool, FRAME_CAPACITY> {
     }
 
     pub fn release(mut self) -> u8 {
-        self.slot.release(
-            SLOT_RADIO,
-            "only an unpublished radio lease may return an RX handoff slot",
-        );
+        self.slot.release(SLOT_RADIO);
         self.live = false;
         self.index
     }
@@ -264,10 +239,7 @@ impl<'pool, const FRAME_CAPACITY: usize> RxRadioLease<'pool, FRAME_CAPACITY> {
 impl<const FRAME_CAPACITY: usize> Drop for RxRadioLease<'_, FRAME_CAPACITY> {
     fn drop(&mut self) {
         if self.live {
-            self.slot.release(
-                SLOT_RADIO,
-                "only the live radio lease may return an RX handoff slot",
-            );
+            self.slot.release(SLOT_RADIO);
         }
     }
 }
@@ -322,21 +294,13 @@ impl<const FRAME_CAPACITY: usize> RxNetworkLease<'_, FRAME_CAPACITY> {
             offset >= current_offset && end <= current_end && end <= FRAME_CAPACITY,
             "republished RX range must stay inside initialized storage"
         );
-        self.slot.publish_ready(
-            SLOT_NETWORK,
-            offset,
-            length,
-            "only the protocol/network lease may republish an RX handoff slot",
-        );
+        self.slot.publish_ready(SLOT_NETWORK, offset, length);
         self.live = false;
         self.index
     }
 
     pub fn release(mut self) -> u8 {
-        self.slot.release(
-            SLOT_NETWORK,
-            "only the network lease may return an RX handoff slot",
-        );
+        self.slot.release(SLOT_NETWORK);
         self.live = false;
         self.index
     }
@@ -345,10 +309,7 @@ impl<const FRAME_CAPACITY: usize> RxNetworkLease<'_, FRAME_CAPACITY> {
 impl<const FRAME_CAPACITY: usize> Drop for RxNetworkLease<'_, FRAME_CAPACITY> {
     fn drop(&mut self) {
         if self.live {
-            self.slot.release(
-                SLOT_NETWORK,
-                "only the live network lease may return an RX handoff slot",
-            );
+            self.slot.release(SLOT_NETWORK);
         }
     }
 }

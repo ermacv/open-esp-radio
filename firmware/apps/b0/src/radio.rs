@@ -169,10 +169,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     if previous.is_some() {
         usb::early_text(b"OER-B0-BRINGUP: previous panic\r\n");
     }
-    let Some(profile) = PROFILE else {
-        usb::early_text(b"OER-B0-BRINGUP: unconfigured\r\n");
-        oer_espressif_staged_runtime::idle();
-    };
+    let profile = PROFILE;
     let Some(tokens) = Interrupts::take() else {
         crate::fail("interrupt-table")
     };

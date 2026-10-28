@@ -121,10 +121,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     if let Some(record) = previous {
         usb::early_previous_panic(&record);
     }
-    let Some(config) = CONFIG else {
-        usb::early_text(b"OER-RESULT: fail w3 unconfigured\r\n");
-        park()
-    };
+    let config = CONFIG;
     let Some(interrupts) = Interrupts::take() else {
         park()
     };

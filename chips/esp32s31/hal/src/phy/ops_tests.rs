@@ -1050,3 +1050,36 @@ golden!(
         ),
     ]
 );
+
+#[test]
+fn frequency_field_refusals_keep_memory_and_static_panic_bytes() {
+    for case in 0..3 {
+        let mut memory = vec![0; 8192];
+        let before = memory.clone();
+        let mut frequency = FrequencyRegisters::host(&mut memory).expect("host block");
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match case {
+            0 => fr::set_baseband_mode(&mut frequency, 4),
+            1 => fr::write_memory(&mut frequency, 0, 1 << 24, 0),
+            _ => {
+                fr::read_memory(&mut frequency, 0, 4);
+            }
+        }))
+        .expect_err("values beyond the field are refused");
+        let message = match case {
+            0 => b"baseband mode must fit its two-bit field".as_slice(),
+            1 => b"frequency-memory data must fit 24 bits".as_slice(),
+            _ => b"frequency-memory read mode must fit its two-bit field".as_slice(),
+        };
+        assert_eq!(
+            panic
+                .downcast_ref::<&str>()
+                .map(|s| s.as_bytes())
+                .or_else(|| panic
+                    .downcast_ref::<std::string::String>()
+                    .map(|s| s.as_bytes())),
+            Some(message)
+        );
+        drop(frequency);
+        assert_eq!(memory, before, "a rejected field changes no register");
+    }
+}

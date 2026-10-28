@@ -301,3 +301,24 @@ fn pti_programs_the_reversed_bank_in_five_lane_edges() {
         1
     );
 }
+
+#[test]
+fn a_foreign_dma_chain_is_refused_before_writes_with_static_panic_bytes() {
+    extern crate std;
+    let dma = dma();
+    let foreign = ModelDma(model_reference(HEAD + 4));
+    let before = HostWords::filled(0);
+    let mut memory = before.clone();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        memory
+            .owners()
+            .registers
+            .prepare_bound_legacy_mac_tx(&foreign, 0, legacy_program(&dma));
+    }))
+    .expect_err("a program belongs to its own DMA chain");
+    assert!(before.changes(&memory).is_empty());
+    assert_eq!(
+        panic.downcast_ref::<&str>().map(|s| s.as_bytes()),
+        Some(b"the program is bound to this DMA chain".as_slice())
+    );
+}

@@ -113,26 +113,6 @@ impl PanicRecord {
     }
 }
 
-impl core::fmt::Display for PanicRecord {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "{}:{}:{} on hart {}",
-            self.file(),
-            self.line,
-            self.column,
-            self.hart
-        )?;
-        if let Some(pc) = self.interrupted_pc {
-            write!(f, " in an interrupt of {pc:#010x}")?;
-        }
-        match self.message() {
-            Some(message) => write!(f, ": {message}"),
-            None => write!(f, " (formatted message not kept)"),
-        }
-    }
-}
-
 /// The retained words: a magic, the record and a checksum over both.
 #[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]

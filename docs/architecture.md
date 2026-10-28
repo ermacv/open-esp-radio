@@ -236,6 +236,14 @@ release a secondary hart.
   above or below the budget produces a report with each site and its roots;
   image panic counts do not gate builds. Zero reachable panics remains the
   code goal: introduce no new runtime panics and remove existing ones.
+- The w0, w1, w2, w3, b0, boot-smoke and radio-root images write diagnostic
+  bytes directly, without `core::fmt` writer or argument dispatch. Host and
+  test renderers may format values.
+  Panic capture keeps static messages through `PanicMessage::as_str()`;
+  parameterized messages are marked without rendering them. Next-boot panic
+  output uses the existing binary diagnostic record.
+  W3 retains `core::fmt::write` only in subtle/sec1 panic metadata on the
+  SAE path; the RSN sans-IO boundary owns their conversion to typed errors.
 - Interrupt handlers and the executor code they run execute from SRAM or ROM.
   P2 tasks may run from PSRAM (the S31 reaches flash and PSRAM through
   separate controllers). Nothing runs from cached flash. The image check
