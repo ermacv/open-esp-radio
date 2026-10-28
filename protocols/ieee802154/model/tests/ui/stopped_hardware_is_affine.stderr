@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `hardware`
+ --> tests/ui/stopped_hardware_is_affine.rs:7:38
+  |
+4 | pub fn resume<Id: SlotIdentity>(hardware: ModelVacant) {
+  |                                 -------- move occurs because `hardware` has type `ModelVacant`, which does not implement the `Copy` trait
+5 |     let backend = OwnedModel::<Id>::resume(hardware);
+  |                                            -------- value moved here
+6 |     #[cfg(all())]
+7 |     let _ = OwnedModel::<Id>::resume(hardware); // ui-error: E0382
+  |                                      ^^^^^^^^ value used here after move

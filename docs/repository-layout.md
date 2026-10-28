@@ -24,7 +24,7 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   ieee80211/    Wi-Fi: MAC formats and state, lower and upper MAC, station,
                 access point, RSN, arbiter, runtime, datapath
   bluetooth/    HCI and LE wire formats, link layer, controller, port and model
-  ieee802154/   IEEE 802.15.4 wire codecs, backend port and MAC core
+  ieee802154/   IEEE 802.15.4 wire codecs, backend port, MAC core and host model
   network/      the network stack boundary
   hil/          the HIL protocol and its trace header
 portable/   generic support no protocol or chip owns (no_std)
@@ -97,8 +97,7 @@ Each radio protocol has these layers in `protocols/<protocol>/`:
 A backend implements the port and depends on `port`, `wire` and `cipher` only,
 never on a core: the chip backend in `chips/<chip>/`, the reference model in
 its own host crate `protocols/<protocol>/model` for host tests and simulation.
-A core never depends on a backend. The IEEE 802.15.4 reference model is
-currently test-only inside `mac`. Structures both sides share belong to `port`
+A core never depends on a backend. Structures both sides share belong to `port`
 or `wire`. Host tools that read frames (monitors, capture analysis, fixtures)
 take `wire`. This is smoltcp's `wire` beside its `iface` and `socket`.
 

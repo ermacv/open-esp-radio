@@ -47,8 +47,8 @@ platform             Espressif staged boot, interrupt table, panic record, linke
 Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
 contract), sans-IO cores and a `runtime`. Bluetooth LE has wire formats, a
 backend port, LL/controller cores and a reference model. IEEE 802.15.4 has
-`wire`, `port` and the `mac` core; its reference model is test-only inside
-`mac`. A backend depends on its protocol's port, wire formats and implemented
+`wire`, `port`, the `mac` core and a separate host reference `model`.
+A backend depends on its protocol's port, wire formats and implemented
 `cipher` only.
 
 Protocol cores are **sans-IO**: frames, completed operations and the current
@@ -515,8 +515,8 @@ its model and conformance case.
   publishes no frontend or ordinary join. No missing resource is replaced with
   an empty or newly minted owner.
 - Reference models are backends and use the port's conformance cases.
-  Wi-Fi and Bluetooth LE models live in `protocols/<protocol>/model`;
-  the IEEE 802.15.4 model is test-only inside `mac`. Frame protection
+  Wi-Fi, Bluetooth LE and IEEE 802.15.4 models live in their protocol's
+  `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists; IEEE 802.15.4
   currently describes hardware offload through its port.
 - One owner holds a lower-MAC core and its phase; every lifecycle transition

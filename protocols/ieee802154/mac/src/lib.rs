@@ -28,8 +28,6 @@
 //! `oer-ieee802154-port` and `oer-ieee802154-wire` crates.
 
 #[cfg(test)]
-extern crate alloc;
-#[cfg(test)]
 extern crate std;
 
 /// MAC policy and state machines.
@@ -43,9 +41,6 @@ pub mod mac {
     /// Network-time computation and Time IE preparation.
     pub mod time_sync;
 }
-
-#[cfg(test)]
-pub mod model;
 
 pub use mac::csl::{CSL_UNIT_MICROS, csl_phase};
 pub use mac::retransmission::{AttemptFailure, FrameRetries, RetryDelayError, RetryStart};

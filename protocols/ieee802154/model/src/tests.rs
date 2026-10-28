@@ -1,3 +1,6 @@
+use core::cell::RefCell;
+use oer_radio_port::PermitPool;
+mod failures;
 use alloc::{sync::Arc, task::Wake};
 use core::{
     future::Future,
@@ -93,22 +96,30 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
             let [mut seat, _] = resources.operation;
             let mut configured = owner.setup().configure(resources.interface0.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
-            let end = oer_radio_port::EventEnd::Quarantined { cause: ModelFault };
+            let end;
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
                 let client = parts.clients.client(&mut configured);
                 let permit = ready(client.operation(&mut seat));
                 let token = client.transmit(permit, transmission(&DATA)).unwrap();
-                self.0
-                    .0
-                    .borrow_mut()
-                    .events
-                    .push_back(ModelEvent::TransmitDone(
+                end = oer_radio_port::EventEnd::Quarantined {
+                    cause: ModelFault::Completion(
+                        oer_ieee802154_port::owner::CompletionError::Mismatch(
+                            oer_ieee802154_port::owner::CompletionMismatch {
+                                received: RequestId::new(u32::MAX),
+                                held: Some((Interface::new(0), token.id())),
+                            },
+                        ),
+                    ),
+                };
+                self.0.0.with(|state| {
+                    state.events.push_back(Ok(ModelEvent::TransmitDone(
                         Interface::new(0),
                         RequestId::new(u32::MAX),
                         TxStatus::Success,
-                    ));
+                    )))
+                });
                 assert!(self.0.complete_transmit(token.id(), TxStatus::Success));
                 for _ in 0..2 {
                     assert!(
@@ -120,7 +131,7 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
                     Ok(Some((Interface::new(0), token.id())))
                 );
                 assert!(poll_once(pin!(client.operation(&mut seat))).is_pending());
-                assert_eq!(self.0.0.borrow().events.len(), 2);
+                assert_eq!(self.0.0.with(|state| state.events.len()), 2);
                 assert!(!self.0.abandoned());
             }
             assert!(matches!(ready(owner.phase().next_event()), Err(actual) if actual == end));
@@ -155,12 +166,12 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
             owners,
             "receipt owns no P2 side"
         );
-        assert_eq!(handle.0.borrow().events.len(), 2);
+        assert_eq!(handle.0.with(|state| state.events.len()), 2);
         slot.end_model_world();
         handle
     }));
     assert_eq!(Rc::strong_count(&handle.0), 1, "world ended on P2");
-    assert_eq!(handle.0.borrow().events.len(), 2);
+    assert_eq!(handle.0.with(|state| state.events.len()), 2);
 }
 
 #[test]
@@ -187,15 +198,13 @@ fn an_undelivered_admitted_permit_cannot_become_joined_hardware() {
                 let permit = ready(client.operation(&mut seat));
                 let scan = SupportedEnergyScan::new(channel(11), 128).expect("supported");
                 let _work = client.energy_scan(permit, scan).expect("admitted");
-                self.0
-                    .0
-                    .borrow_mut()
-                    .events
-                    .push_back(ModelEvent::EnergyScanDone(
+                self.0.0.with(|state| {
+                    state.events.push_back(Ok(ModelEvent::EnergyScanDone(
                         Interface::new(0),
                         RequestId::new(u32::MAX),
                         None,
-                    ));
+                    )));
+                });
             }
             let poisoned = owner
                 .disable(&mut |_| core::ops::ControlFlow::Continue(()))
@@ -222,9 +231,9 @@ fn an_undelivered_admitted_permit_cannot_become_joined_hardware() {
         ));
         assert!(handle.abandoned());
         assert_eq!(
-            handle.0.borrow().events.len(),
-            1,
-            "the real terminal remains retained"
+            handle.0.with(|state| state.events.len()),
+            2,
+            "the mismatched terminal and real terminal remain retained"
         );
         drop(result);
         slot.end_model_world();
@@ -249,10 +258,21 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
             Id: 'p,
             'p: 'a,
         {
-            assert!(!self.handle.interface(Interface::new(0)).configured);
+            assert!(
+                !self
+                    .handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .configured
+            );
             if self.configure {
                 let _interface = owner.setup().configure(resources.interface0.interface);
-                assert!(self.handle.interface(Interface::new(0)).configured);
+                assert!(
+                    self.handle
+                        .interface(Interface::new(0))
+                        .expect("valid interface")
+                        .configured
+                );
             }
             Ended::uninstall(owner, (), ())
         }
@@ -281,7 +301,10 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
             panic!("joined")
         };
         assert!(
-            handle.interface(Interface::new(0)).configured,
+            handle
+                .interface(Interface::new(0))
+                .expect("valid interface")
+                .configured,
             "ended world remains inspectable"
         );
         let second = LocalExecution.scope(
@@ -303,7 +326,10 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
             },
         );
         assert!(
-            !handle.interface(Interface::new(0)).configured,
+            !handle
+                .interface(Interface::new(0))
+                .expect("valid interface")
+                .configured,
             "fresh installation precedes body publication"
         );
         assert!(matches!(
@@ -542,7 +568,11 @@ fn rejected_disable_terminal_and_later_events_remain_in_the_uninstalled_model() 
                 let scan = SupportedEnergyScan::new(channel(11), 128).unwrap();
                 let id = client.energy_scan(permit, scan).unwrap().id();
                 assert!(handle.complete_energy_scan(id, Some(-70)));
-                assert!(handle.receive(channel(11), Interface::new(0), &DATA, -40));
+                assert!(
+                    handle
+                        .receive(channel(11), Interface::new(0), &DATA, -40)
+                        .expect("valid model input")
+                );
             }
             let mut offered = 0;
             let poisoned = owner
@@ -554,19 +584,25 @@ fn rejected_disable_terminal_and_later_events_remain_in_the_uninstalled_model() 
                 .err()
                 .expect("the sink rejected its terminal");
             assert_eq!(offered, 1);
-            assert_eq!(poisoned.cause(), ModelFault);
+            assert!(
+                matches!(poisoned.cause(), ModelFault::RejectedTerminal { interface, .. } if interface == Interface::new(0))
+            );
             Ended::uninstall(poisoned, (), ())
         }
     }
     let model = run(Reject);
-    let state = model.0.borrow();
-    assert_eq!(state.events.len(), 2);
-    assert!(matches!(
-        state.events[0],
-        ModelEvent::EnergyScanDone(_, _, Some(-70))
-    ));
-    assert!(matches!(state.events[1], ModelEvent::Received(..)));
-    assert_eq!(state.poisoned, Some(ModelFault));
+    model.0.with(|state| {
+        assert_eq!(state.events.len(), 2);
+        assert!(matches!(
+            state.events[0],
+            Ok(ModelEvent::EnergyScanDone(_, _, Some(-70)))
+        ));
+        assert!(matches!(state.events[1], Ok(ModelEvent::Received(..))));
+        assert!(matches!(
+            state.poisoned,
+            Some(ModelFault::RejectedTerminal { .. })
+        ));
+    });
 }
 
 #[test]
@@ -662,8 +698,16 @@ fn a_window_is_a_wish_that_owes_no_event() {
                 let mut ended = pin!(client.window_ended());
                 assert!(poll_once(ended.as_mut()).is_pending());
                 // The window ends on its own.
-                assert!(handle.open_window(Interface::new(0)));
-                assert!(handle.end_window(Interface::new(0)));
+                assert!(
+                    handle
+                        .open_window(Interface::new(0))
+                        .expect("valid model input")
+                );
+                assert!(
+                    handle
+                        .end_window(Interface::new(0))
+                        .expect("valid model input")
+                );
                 assert_eq!(poll_once(ended.as_mut()), Poll::Ready(Ok(())));
                 // A new wish ends a window too.
                 client.scheduled_receive(window());
@@ -781,13 +825,21 @@ fn a_radio_fault_ends_admitted_work_first_then_poisons() {
                 ));
                 assert!(matches!(
                     ready(events.next_event()),
-                    Err(oer_radio_port::EventEnd::Drained { cause: ModelFault })
+                    Err(oer_radio_port::EventEnd::Drained {
+                        cause: ModelFault::Injected
+                    })
                 ));
                 // Nothing follows the poison, a reception included.
-                assert!(!parts_handle().receive(channel(15), Interface::new(0), &DATA, -40));
+                assert!(
+                    !parts_handle()
+                        .receive(channel(15), Interface::new(0), &DATA, -40)
+                        .expect("valid model input")
+                );
                 assert!(matches!(
                     ready(events.next_event()),
-                    Err(oer_radio_port::EventEnd::Drained { cause: ModelFault })
+                    Err(oer_radio_port::EventEnd::Drained {
+                        cause: ModelFault::Injected
+                    })
                 ));
                 // The permit came back with the terminal; a submission is
                 // poisoned and gives it back again.
@@ -834,7 +886,11 @@ fn a_reception_overflow_is_reported_once_and_loses_no_terminal() {
                 let handle = parts_handle();
                 ready(client.receive(channel(11))).unwrap_or_else(|_| panic!("not poisoned"));
                 for _ in 0..MODEL_RECEIVED_FRAMES + 2 {
-                    assert!(handle.receive(channel(11), Interface::new(0), &DATA, -40));
+                    assert!(
+                        handle
+                            .receive(channel(11), Interface::new(0), &DATA, -40)
+                            .expect("valid model input")
+                    );
                 }
                 let permit = ready(client.operation(&mut seat0));
                 let id = client
@@ -842,7 +898,11 @@ fn a_reception_overflow_is_reported_once_and_loses_no_terminal() {
                     .unwrap_or_else(|_| panic!("not poisoned"))
                     .id();
                 assert!(handle.complete_transmit(id, TxStatus::NoAcknowledgement));
-                assert!(handle.receive(channel(11), Interface::new(0), &DATA, -50));
+                assert!(
+                    handle
+                        .receive(channel(11), Interface::new(0), &DATA, -50)
+                        .expect("valid model input")
+                );
                 // The queued frames, one loss marker, then the terminal
                 // produced after the loss; the frame after it found the
                 // queue still full and is part of the reported gap.
@@ -864,7 +924,11 @@ fn a_reception_overflow_is_reported_once_and_loses_no_terminal() {
                 }
                 assert_eq!(order, ['r', 'r', 'r', 'r', 'l', 't']);
                 // With room again, the next frame is queued.
-                assert!(handle.receive(channel(11), Interface::new(0), &DATA, -45));
+                assert!(
+                    handle
+                        .receive(channel(11), Interface::new(0), &DATA, -45)
+                        .expect("valid model input")
+                );
                 assert!(matches!(
                     ready(events.next_event()),
                     Ok(Ok(ModelEvent::Received(..)))
@@ -872,7 +936,11 @@ fn a_reception_overflow_is_reported_once_and_loses_no_terminal() {
                 assert_eq!(resources.rssi.recent_rssi(), -45);
                 // Leave frames, a loss and a scan's terminal behind.
                 for _ in 0..MODEL_RECEIVED_FRAMES + 1 {
-                    assert!(handle.receive(channel(11), Interface::new(0), &DATA, -40));
+                    assert!(
+                        handle
+                            .receive(channel(11), Interface::new(0), &DATA, -40)
+                            .expect("valid model input")
+                    );
                 }
                 let permit = ready(client.operation(&mut seat0));
                 let scan = SupportedEnergyScan::new(channel(11), 64)
@@ -940,11 +1008,21 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
             };
             let handle = parts_handle();
             assert_eq!(
-                handle.interface(Interface::new(1)).pending_short[0],
+                handle
+                    .interface(Interface::new(1))
+                    .expect("valid interface")
+                    .pending_short
+                    .get(&0)
+                    .copied(),
                 Some([0x34, 0x12])
             );
             assert_eq!(
-                handle.interface(Interface::new(0)).pending_extended[0],
+                handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .pending_extended
+                    .get(&0)
+                    .copied(),
                 Some([1, 2, 3, 4, 5, 6, 7, 8])
             );
             let mut owner = owner
@@ -963,9 +1041,22 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
                     .client(&mut zero)
                     .remove_pending_extended(extended);
             }
-            assert_eq!(handle.interface(Interface::new(1)).pending_short[0], None);
             assert_eq!(
-                handle.interface(Interface::new(0)).pending_extended[0],
+                handle
+                    .interface(Interface::new(1))
+                    .expect("valid interface")
+                    .pending_short
+                    .get(&0)
+                    .copied(),
+                None
+            );
+            assert_eq!(
+                handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .pending_extended
+                    .get(&0)
+                    .copied(),
                 None
             );
             let owner = owner
@@ -1027,7 +1118,9 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
                 assert_eq!(client.frame_counter(), Some(7));
                 client.set_mac_keys(4, [2; 16], [3; 16], [4; 16], Some(1));
                 assert_eq!(client.frame_counter(), Some(1));
-                let interface = handle.interface(Interface::new(0));
+                let interface = handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface");
                 assert_eq!(interface.key_id, Some(4));
                 assert_eq!(interface.frame_counter, Some(1));
                 client.remove_mac_keys();
@@ -1037,18 +1130,32 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
             // The generator is off; its IEs are kept for when it is on.
             assert_eq!(handle.radio().enhanced_ack, None);
             assert_eq!(handle.radio().header_ies, [1, 2, 3]);
-            assert_eq!(handle.interface(Interface::new(0)).pan_id, Some(0xabcd));
+            assert_eq!(
+                handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .pan_id,
+                Some(0xabcd)
+            );
             let mut owner = owner
                 .disable(&mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             // The backend retains the interface's settings while disabled.
             assert_eq!(
-                handle.interface(Interface::new(0)).short_address,
+                handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .short_address,
                 Some(0x1234)
             );
             let _slot = owner.setup().remove(zero);
-            assert!(!handle.interface(Interface::new(0)).configured);
+            assert!(
+                !handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .configured
+            );
             oer_radio_port::Ended::uninstall(owner, (), ())
         }
     }
@@ -1111,19 +1218,21 @@ fn interface_settings_replace_latest_values_during_work_without_changing_its_sec
                 client.set_pending_mode(Has::from_const(), AutoPendingMode::Enhanced);
                 let short = client.add_pending_short(short, [1, 2]);
                 let extended = client.add_pending_extended(extended, [2; 8]);
-                let current = handle.interface(Interface::new(0));
+                let current = handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface");
                 assert_eq!(current.pan_id, Some(255));
                 assert_eq!(current.short_address, Some(255));
                 assert_eq!(current.extended_address, Some([9; 8]));
                 assert_eq!(current.pending_mode, Some(AutoPendingMode::Enhanced));
-                assert_eq!(current.pending_short[0], Some([1, 2]));
-                assert_eq!(current.pending_extended[0], Some([2; 8]));
-                assert_eq!(handle.0.borrow().tx_security, Some(original));
+                assert_eq!(current.pending_short.get(&0).copied(), Some([1, 2]));
+                assert_eq!(current.pending_extended.get(&0).copied(), Some([2; 8]));
+                assert_eq!(handle.0.with(|state| state.tx_security), Some(original));
                 let _short = client.remove_pending_short(short);
                 let _extended = client.remove_pending_extended(extended);
                 client.remove_mac_keys();
                 assert_eq!(client.frame_counter(), None);
-                assert_eq!(handle.0.borrow().tx_security, Some(original));
+                assert_eq!(handle.0.with(|state| state.tx_security), Some(original));
                 assert!(handle.complete_transmit(work.id(), TxStatus::Success));
             }
             let owner = owner
@@ -1300,10 +1409,22 @@ fn a_change_of_wish_wakes_waiting_receives_and_a_window_preempts() {
                 second.scheduled_receive(window);
                 let handle = parts_handle();
                 assert_eq!(handle.receiving(), Some(channel(20)));
-                assert!(handle.open_window(Interface::new(1)));
+                assert!(
+                    handle
+                        .open_window(Interface::new(1))
+                        .expect("valid model input")
+                );
                 assert_eq!(handle.receiving(), Some(channel(25)));
-                assert!(handle.receive(channel(25), Interface::new(1), &DATA, -60));
-                assert!(handle.end_window(Interface::new(1)));
+                assert!(
+                    handle
+                        .receive(channel(25), Interface::new(1), &DATA, -60)
+                        .expect("valid model input")
+                );
+                assert!(
+                    handle
+                        .end_window(Interface::new(1))
+                        .expect("valid model input")
+                );
                 assert_eq!(handle.receiving(), Some(channel(20)));
             }
             let owner = owner
@@ -1396,10 +1517,20 @@ fn removing_an_interface_keeps_its_pending_entries() {
             let handle = parts_handle();
             // The entry's token still holds its row.
             assert_eq!(
-                handle.interface(Interface::new(0)).pending_short[0],
+                handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .pending_short
+                    .get(&0)
+                    .copied(),
                 Some([7, 7])
             );
-            assert!(!handle.interface(Interface::new(0)).configured);
+            assert!(
+                !handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .configured
+            );
             let mut zero = owner.setup().configure(interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
@@ -1407,7 +1538,15 @@ fn removing_an_interface_keeps_its_pending_entries() {
                 let parts = &mut *phase;
                 let _slot = parts.clients.client(&mut zero).remove_pending_short(entry);
             }
-            assert_eq!(handle.interface(Interface::new(0)).pending_short[0], None);
+            assert_eq!(
+                handle
+                    .interface(Interface::new(0))
+                    .expect("valid interface")
+                    .pending_short
+                    .get(&0)
+                    .copied(),
+                None
+            );
             let owner = owner
                 .disable(&mut |_| core::ops::ControlFlow::Continue(()))
                 .await
@@ -1482,15 +1621,29 @@ fn a_running_phase_configures_sets_and_removes_an_interface() {
                 let parts = &mut *phase;
                 // Interface 1 joins while the radio runs, with its settings.
                 let mut one = parts.control.configure(resources.interface1.interface);
-                assert!(handle.interface(Interface::new(1)).configured);
+                assert!(
+                    handle
+                        .interface(Interface::new(1))
+                        .expect("valid interface")
+                        .configured
+                );
                 {
                     let client = parts.clients.client(&mut one);
                     client.set_pan_id(0x0102);
                     client.set_extended_address([9; 8]);
                 }
-                assert_eq!(handle.interface(Interface::new(1)).pan_id, Some(0x0102));
                 assert_eq!(
-                    handle.interface(Interface::new(1)).extended_address,
+                    handle
+                        .interface(Interface::new(1))
+                        .expect("valid interface")
+                        .pan_id,
+                    Some(0x0102)
+                );
+                assert_eq!(
+                    handle
+                        .interface(Interface::new(1))
+                        .expect("valid interface")
+                        .extended_address,
                     Some([9; 8])
                 );
                 ready(parts.clients.client(&mut one).receive(channel(11)))
@@ -1501,7 +1654,12 @@ fn a_running_phase_configures_sets_and_removes_an_interface() {
                 // Removing the receiving interface ends its wish: the other
                 // channel is free.
                 let slot = parts.control.remove(one);
-                assert!(!handle.interface(Interface::new(1)).configured);
+                assert!(
+                    !handle
+                        .interface(Interface::new(1))
+                        .expect("valid interface")
+                        .configured
+                );
                 assert_eq!(poll_once(other.as_mut()), Poll::Ready(Ok(())));
                 assert_eq!(handle.receiving(), Some(channel(25)));
                 slot
@@ -1514,7 +1672,10 @@ fn a_running_phase_configures_sets_and_removes_an_interface() {
                 .client(&mut one)
                 .set_short_address(0xbeef);
             assert_eq!(
-                handle.interface(Interface::new(1)).short_address,
+                handle
+                    .interface(Interface::new(1))
+                    .expect("valid interface")
+                    .short_address,
                 Some(0xbeef)
             );
             let mut owner = owner

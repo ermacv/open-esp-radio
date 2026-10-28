@@ -1,6 +1,30 @@
+#![no_std]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unreachable,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects,
+        clippy::unreachable
+    )
+)]
+
 //! An in-memory IEEE 802.15.4 backend on the owner shape ([`oer_ieee802154_port::owner`]),
-//! for this crate's own tests of the shape (it compiles only under
-//! `cfg(test)`).
+//! for deterministic host tests and simulation.
 //!
 //! [`OwnedModel::new`] returns the backend, which a test hands to
 //! [`run_port`](oer_radio_port::run_port), and a [`ModelHandle`] that plays
@@ -13,9 +37,16 @@
 //! Its tokens have no value outside it: no caller mints a configured
 //! interface or a pending entry (their fields are private).
 
-use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
+
+use alloc::{
+    collections::{BTreeMap, VecDeque},
+    rc::Rc,
+    vec::Vec,
+};
 use core::{
-    cell::{Cell, RefCell},
     future::{Future, poll_fn, ready},
     marker::PhantomData,
     task::{Poll, Waker},
@@ -26,12 +57,14 @@ use oer_radio_port::{
     PhaseParts, PortBackend, PortPhase, RadioPortClient, RadioWork, SlotBodyOwner, SlotIdentity,
     SlotOwner, SlotRetire, SlotStopped, SlotWakes, Work,
 };
-use oer_radio_port::{
-    Child, EventsLost, Mint, Permit, PermitPool, PermitSupply, Poisoned, PoolPath, PortResult,
-    Root, Seat, Slot,
-};
+use oer_radio_port::{Child, EventsLost, Mint, Poisoned, PortResult, Root, Seat, Slot};
 
-use oer_ieee802154_wire::Frame;
+use oer_ieee802154_wire::{Frame, FrameError};
+
+mod capacity;
+mod storage;
+pub use capacity::ModelPermitPool;
+use storage::Local;
 
 use oer_ieee802154_port::{
     CcaMode, CcaThresholdCapability, Channel, CslCapability, CslReceiver, EnhancedAckGeneration,
@@ -108,7 +141,80 @@ pub struct ModelRefusal;
 
 /// Why the model is poisoned.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ModelFault;
+pub enum ModelFault {
+    /// A fault injected by the external world or abandonment cleanup.
+    Injected,
+    /// No fresh request identity remains; the last one is retained.
+    RequestIdExhausted {
+        /// Last identity issued.
+        last: u32,
+    },
+    /// A terminal could not release its admitted capacity.
+    Completion(oer_ieee802154_port::owner::CompletionError),
+    /// Accounting refused admission; the request was not published.
+    Admission {
+        /// Refused interface.
+        interface: Interface,
+        /// Refused identity.
+        id: RequestId,
+    },
+    /// The disable sink returned this terminal; it remains queued.
+    RejectedTerminal {
+        /// Terminal's interface.
+        interface: Interface,
+        /// Terminal's identity.
+        id: RequestId,
+    },
+}
+
+/// External model input cannot be represented without changing its meaning.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelInputError {
+    /// This radio has no such interface.
+    Interface(Interface),
+    /// Invalid MAC byte count; no frame or RSSI was published.
+    Frame(FrameError),
+}
+
+// Runtime inputs are checked; generic port calls select their interface at
+// monomorphization. No runtime array offset or default interface is used.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ModelInterface {
+    Zero,
+    One,
+}
+impl ModelInterface {
+    fn checked(interface: Interface) -> Result<Self, ModelInputError> {
+        match interface.index() {
+            0 => Ok(Self::Zero),
+            1 => Ok(Self::One),
+            _ => Err(ModelInputError::Interface(interface)),
+        }
+    }
+    const fn of<const I: u8>() -> Self {
+        const {
+            match I {
+                0 => Self::Zero,
+                1 => Self::One,
+                _ => panic!("the model has only interfaces 0 and 1"),
+            }
+        }
+    }
+    fn get(self, interfaces: &[InterfaceState; MODEL_INTERFACES]) -> &InterfaceState {
+        let [zero, one] = interfaces;
+        match self {
+            Self::Zero => zero,
+            Self::One => one,
+        }
+    }
+    fn get_mut(self, interfaces: &mut [InterfaceState; MODEL_INTERFACES]) -> &mut InterfaceState {
+        let [zero, one] = interfaces;
+        match self {
+            Self::Zero => zero,
+            Self::One => one,
+        }
+    }
+}
 
 /// What a terminal of the model ends.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -123,8 +229,6 @@ enum Kind {
 pub enum ModelEvent {
     /// A received frame.
     Received(Frame, RxMetadata),
-    /// Received frames were lost before the next one.
-    Lost,
     /// A transmission ended.
     TransmitDone(Interface, RequestId, TxStatus),
     /// An energy scan ended.
@@ -136,7 +240,7 @@ pub enum ModelEvent {
 impl ModelEvent {
     fn ends(&self) -> Option<(Interface, RequestId)> {
         match *self {
-            Self::Received(..) | Self::Lost => None,
+            Self::Received(..) => None,
             Self::TransmitDone(interface, id, _)
             | Self::EnergyScanDone(interface, id, _)
             | Self::CcaDone(interface, id, _) => Some((interface, id)),
@@ -177,9 +281,9 @@ pub struct InterfaceState {
     /// How its acknowledgements set frame pending.
     pub pending_mode: Option<AutoPendingMode>,
     /// The short addresses with pending data, by slot.
-    pub pending_short: [Option<[u8; 2]>; MODEL_PENDING_SLOTS],
+    pub pending_short: BTreeMap<u8, [u8; 2]>,
     /// The extended addresses with pending data, by slot.
-    pub pending_extended: [Option<[u8; 8]>; MODEL_PENDING_SLOTS],
+    pub pending_extended: BTreeMap<u8, [u8; 8]>,
     /// What it asks of the receive state.
     pub wish: Wish,
 }
@@ -221,46 +325,53 @@ struct State {
     radio: RadioWide,
     operation: Option<(Interface, RequestId, Kind)>,
     tx_security: Option<oer_ieee802154_port::TxSecurity>,
-    events: VecDeque<ModelEvent>,
-    /// Received frames queued now.
-    received: usize,
+    events: VecDeque<Result<ModelEvent, EventsLost>>,
     /// A loss marker is queued and not yet taken.
     lost: bool,
     next_id: u32,
     now_micros: u64,
     rssi_dbm: i8,
     /// The interface whose scheduled window is open now.
-    open_window: Option<usize>,
-    consumer: Option<Waker>,
-    receivers: Vec<Waker>,
+    open_window: Option<ModelInterface>,
+    consumer: Option<Rc<Waker>>,
+    receivers: Vec<Rc<Waker>>,
+    wakes: Vec<Rc<Waker>>,
+    retired: Vec<Rc<Waker>>,
 }
 
 impl State {
     fn wake_consumer(&mut self) {
         if let Some(waker) = self.consumer.take() {
-            waker.wake();
+            self.wakes.push(waker);
         }
     }
 
     fn wake_receivers(&mut self) {
-        for waker in self.receivers.drain(..) {
-            waker.wake();
-        }
+        self.wakes.append(&mut self.receivers);
+    }
+
+    fn clear_wakers(&mut self) {
+        self.retired.extend(self.consumer.take());
+        self.retired.append(&mut self.receivers);
+    }
+
+    fn register_consumer(&mut self, waker: Rc<Waker>) {
+        self.retired.extend(self.consumer.replace(waker));
     }
 
     fn push_terminal(&mut self, event: ModelEvent) {
-        self.events.push_back(event);
+        self.events.push_back(Ok(event));
         self.wake_consumer();
     }
 
     /// End interface `index`'s window, if it has one: it sleeps, and every
     /// waiter is told.
-    fn end_window(&mut self, index: usize) {
-        if let Wish::Window(_) = self.interfaces[index].wish {
+    fn end_window(&mut self, index: ModelInterface) {
+        if let Wish::Window(_) = index.get(&self.interfaces).wish {
             if self.open_window == Some(index) {
                 self.open_window = None;
             }
-            self.interfaces[index].wish = Wish::Sleep;
+            index.get_mut(&mut self.interfaces).wish = Wish::Sleep;
             self.wake_receivers();
         }
     }
@@ -280,7 +391,7 @@ impl State {
     /// preempts, or else the one every receiving interface shares.
     fn receiving(&self) -> Option<Channel> {
         if let Some(index) = self.open_window
-            && let Wish::Window(channel) = self.interfaces[index].wish
+            && let Wish::Window(channel) = index.get(&self.interfaces).wish
         {
             return Some(channel);
         }
@@ -288,191 +399,203 @@ impl State {
     }
 
     /// The channel the interfaces other than `except` ask to receive on.
-    fn receive_channel(&self, except: Option<usize>) -> Option<Channel> {
-        self.interfaces
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| Some(*index) != except)
-            .find_map(|(_, interface)| match interface.wish {
+    fn receive_channel(&self, except: Option<ModelInterface>) -> Option<Channel> {
+        [ModelInterface::Zero, ModelInterface::One]
+            .into_iter()
+            .filter(|index| Some(*index) != except)
+            .find_map(|index| match index.get(&self.interfaces).wish {
                 Wish::Receive(channel) => Some(channel),
                 Wish::Window(..) | Wish::Waiting(_) | Wish::Sleep => None,
             })
     }
 
-    fn mint_id(&mut self) -> RequestId {
-        self.next_id += 1;
-        RequestId::new(self.next_id)
+    fn mint_id(&mut self) -> Result<RequestId, ModelFault> {
+        let next = self
+            .next_id
+            .checked_add(1)
+            .ok_or(ModelFault::RequestIdExhausted { last: self.next_id })?;
+        self.next_id = next;
+        Ok(RequestId::new(next))
     }
 }
 
-type Shared = Rc<RefCell<State>>;
+#[derive(Default)]
+struct ModelState(Local<State>);
+impl ModelState {
+    // All callers are internal operations: only plain values and Rc owners
+    // move while State is out. User Waker code runs after publishing State.
+    fn with<R>(&self, operation: impl FnOnce(&mut State) -> R) -> R {
+        let (result, wakes, retired) = self.0.with(|state| {
+            let result = operation(state);
+            (
+                result,
+                core::mem::take(&mut state.wakes),
+                core::mem::take(&mut state.retired),
+            )
+        });
+        drop(retired);
+        for waker in wakes {
+            waker.wake_by_ref();
+        }
+        result
+    }
+}
+type Shared = Rc<ModelState>;
 
 /// The world's side of an [`OwnedModel`].
 #[derive(Clone)]
 pub struct ModelHandle(Shared);
 
 impl ModelHandle {
-    /// End the transmission `id` with `status`. `false` when it is not in
-    /// flight.
+    /// End the transmission `id`; `false` when it is not in flight.
     pub fn complete_transmit(&self, id: RequestId, status: TxStatus) -> bool {
         self.complete(id, Kind::Transmit, |interface| {
             ModelEvent::TransmitDone(interface, id, status)
         })
     }
-
-    /// End the energy scan `id` with `energy_dbm`, or without a measurement.
+    /// End the energy scan, with or without a measurement.
     pub fn complete_energy_scan(&self, id: RequestId, energy_dbm: Option<i8>) -> bool {
         self.complete(id, Kind::EnergyScan, |interface| {
             ModelEvent::EnergyScanDone(interface, id, energy_dbm)
         })
     }
-
-    /// End the assessment `id` with whether the channel was idle, or
-    /// without a result.
+    /// End the assessment, with or without an idle result.
     pub fn complete_cca(&self, id: RequestId, idle: Option<bool>) -> bool {
         self.complete(id, Kind::Cca, |interface| {
             ModelEvent::CcaDone(interface, id, idle)
         })
     }
-
     fn complete(
         &self,
         id: RequestId,
         kind: Kind,
         terminal: impl FnOnce(Interface) -> ModelEvent,
     ) -> bool {
-        let mut state = self.0.borrow_mut();
-        match state.operation {
+        self.0.with(|state| match state.operation {
             Some((interface, running, running_kind)) if running == id && running_kind == kind => {
                 state.operation = None;
                 state.push_terminal(terminal(interface));
                 true
             }
             _ => false,
-        }
+        })
     }
-
-    /// Open interface `interface`'s scheduled receive window: its time has
-    /// come, and the radio receives on its channel. `false` when it has
-    /// none.
-    pub fn open_window(&self, interface: Interface) -> bool {
-        let mut state = self.0.borrow_mut();
-        let index = usize::from(interface.index());
-        let scheduled = matches!(state.interfaces[index].wish, Wish::Window(..));
-        if scheduled {
-            state.open_window = Some(index);
-        }
-        scheduled
+    /// Open the interface's scheduled window; `false` if it has none.
+    /// An interface outside this model is refused without changing state.
+    pub fn open_window(&self, interface: Interface) -> Result<bool, ModelInputError> {
+        let index = ModelInterface::checked(interface)?;
+        Ok(self.0.with(|state| {
+            let scheduled = matches!(index.get(&state.interfaces).wish, Wish::Window(..));
+            if scheduled {
+                state.open_window = Some(index);
+            }
+            scheduled
+        }))
     }
-
-    /// End interface `interface`'s scheduled receive window. `false` when
-    /// it has none.
-    pub fn end_window(&self, interface: Interface) -> bool {
-        let mut state = self.0.borrow_mut();
-        let index = usize::from(interface.index());
-        let open = matches!(state.interfaces[index].wish, Wish::Window(..));
-        state.end_window(index);
-        open
+    /// End the interface's scheduled window; `false` if it has none.
+    /// An interface outside this model is refused without changing state.
+    pub fn end_window(&self, interface: Interface) -> Result<bool, ModelInputError> {
+        let index = ModelInterface::checked(interface)?;
+        Ok(self.0.with(|state| {
+            let open = matches!(index.get(&state.interfaces).wish, Wish::Window(..));
+            state.end_window(index);
+            open
+        }))
     }
-
-    /// A frame arrives on `channel` for `interface`. Queued when the radio
-    /// is enabled, not poisoned and receives there; `false` otherwise.
+    /// Inject a received MAC frame. Returns `false` if the radio is disabled,
+    /// poisoned or receiving elsewhere. A full RX queue emits one loss marker.
+    /// Invalid interfaces and MAC lengths return a typed error before mutation,
+    /// including when the radio is disabled or its RX queue is full.
     pub fn receive(
         &self,
         channel: Channel,
         interface: Interface,
         bytes: &[u8],
         rssi_dbm: i8,
-    ) -> bool {
-        let mut state = self.0.borrow_mut();
-        if !state.enabled || state.poisoned.is_some() || state.receiving() != Some(channel) {
-            return false;
-        }
-        state.rssi_dbm = rssi_dbm;
-        if state.received == MODEL_RECEIVED_FRAMES {
-            // One marker in place of the first dropped frame; whatever
-            // happens later follows it.
-            if !state.lost {
-                state.lost = true;
-                state.events.push_back(ModelEvent::Lost);
-                state.wake_consumer();
+    ) -> Result<bool, ModelInputError> {
+        ModelInterface::checked(interface)?;
+        let frame = Frame::try_from_bytes(bytes).map_err(ModelInputError::Frame)?;
+        Ok(self.0.with(|state| {
+            if !state.enabled || state.poisoned.is_some() || state.receiving() != Some(channel) {
+                return false;
             }
-            return true;
-        }
-        let frame = Frame::try_from_bytes(bytes).unwrap_or_else(|_| panic!("a MAC frame"));
-        let metadata = RxMetadata {
-            channel,
-            rssi_dbm,
-            link_quality: 255,
-            timestamp: Some(Ieee802154Instant::from_micros(state.now_micros)),
-            fcs: FcsStatus::Valid,
-            security: SecurityStatus::Unprocessed,
-            frame_pending: FramePending::Clear,
-            sent_acknowledgement: SentAcknowledgement::NONE,
-            interface: Some(interface),
-        };
-        state.received += 1;
-        state
-            .events
-            .push_back(ModelEvent::Received(frame, metadata));
-        state.wake_consumer();
-        true
+            state.rssi_dbm = rssi_dbm;
+            let received = state
+                .events
+                .iter()
+                .filter(|event| matches!(event, Ok(ModelEvent::Received(..))))
+                .count();
+            if received == MODEL_RECEIVED_FRAMES {
+                if !state.lost {
+                    state.lost = true;
+                    state.events.push_back(Err(EventsLost));
+                    state.wake_consumer();
+                }
+                return true;
+            }
+            let metadata = RxMetadata {
+                channel,
+                rssi_dbm,
+                link_quality: 255,
+                timestamp: Some(Ieee802154Instant::from_micros(state.now_micros)),
+                fcs: FcsStatus::Valid,
+                security: SecurityStatus::Unprocessed,
+                frame_pending: FramePending::Clear,
+                sent_acknowledgement: SentAcknowledgement::NONE,
+                interface: Some(interface),
+            };
+            state
+                .events
+                .push_back(Ok(ModelEvent::Received(frame, metadata)));
+            state.wake_consumer();
+            true
+        }))
     }
-
-    /// Refuse the next `Enable`, as a radio that is unavailable.
+    /// Refuse enable as an unavailable radio until cleared by the world.
     pub fn refuse_enable(&self, refuse: bool) {
-        self.0.borrow_mut().refuse_enable = refuse;
+        self.0.with(|state| state.refuse_enable = refuse);
     }
-
-    /// A radio fault: the operation in flight and every window end first,
-    /// then the backend is poisoned.
+    /// End in-flight work and windows, then inject a backend fault.
     pub fn poison(&self) {
-        let mut state = self.0.borrow_mut();
-        state.abort_operation();
-        for index in 0..MODEL_INTERFACES {
-            state.end_window(index);
-        }
-        state.poisoned = Some(ModelFault);
-        state.wake_consumer();
-        state.wake_receivers();
+        self.0.with(|state| {
+            state.abort_operation();
+            for index in [ModelInterface::Zero, ModelInterface::One] {
+                state.end_window(index);
+            }
+            state.poisoned.get_or_insert(ModelFault::Injected);
+            state.wake_consumer();
+            state.wake_receivers();
+        });
     }
-
-    /// Advance the radio clock to `micros`.
+    /// Set the externally supplied radio clock observation.
     pub fn set_now(&self, micros: u64) {
-        self.0.borrow_mut().now_micros = micros;
+        self.0.with(|state| state.now_micros = micros);
     }
-
-    /// The operation in flight, by interface, identity.
+    /// The interface and identity of in-flight work.
     pub fn operation(&self) -> Option<(Interface, RequestId)> {
         self.0
-            .borrow()
-            .operation
-            .map(|(interface, id, _)| (interface, id))
+            .with(|state| state.operation.map(|(interface, id, _)| (interface, id)))
     }
-
     /// The channel the radio receives on.
     pub fn receiving(&self) -> Option<Channel> {
-        self.0.borrow().receiving()
+        self.0.with(|state| state.receiving())
     }
-
-    /// Interface `interface`'s state.
-    pub fn interface(&self, interface: Interface) -> InterfaceState {
-        self.0.borrow().interfaces[usize::from(interface.index())].clone()
+    /// A snapshot of a valid interface; an unknown interface is an input error.
+    pub fn interface(&self, interface: Interface) -> Result<InterfaceState, ModelInputError> {
+        let index = ModelInterface::checked(interface)?;
+        Ok(self.0.with(|state| index.get(&state.interfaces).clone()))
     }
-
-    /// The radio-wide settings.
+    /// A snapshot of radio-wide settings.
     pub fn radio(&self) -> RadioWide {
-        self.0.borrow().radio.clone()
+        self.0.with(|state| state.radio.clone())
     }
-
     /// Whether the radio is enabled.
     pub fn enabled(&self) -> bool {
-        self.0.borrow().enabled
+        self.0.with(|state| state.enabled)
     }
-
     /// Whether the owner abandoned the backend.
     pub fn abandoned(&self) -> bool {
-        self.0.borrow().abandoned
+        self.0.with(|state| state.abandoned)
     }
 }
 
@@ -500,129 +623,6 @@ impl<Id: SlotIdentity> OwnedModel<Id> {
             shared: hardware.shared,
             identity: PhantomData,
         }
-    }
-}
-
-/// A first-in, first-out pool of the model's permits, whose line grows on
-/// the heap: a place for every seat that waits.
-pub struct ModelPermitPool<'id, Kind, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
-    free: RefCell<Vec<Permit<'id, Kind, Path>>>,
-    /// The waiting takers, in arrival order: each one's ticket and waker.
-    line: Waiting,
-    next: Cell<u32>,
-}
-
-type Waiting = RefCell<VecDeque<(u32, Waker)>>;
-
-/// Wake the taker at the head of `line`, which a free permit now serves.
-fn wake_head(line: &Waiting) {
-    if let Some((_, waker)) = line.borrow().front() {
-        waker.wake_by_ref();
-    }
-}
-
-impl<'id, Kind, Path: PoolPath> ModelPermitPool<'id, Kind, Path> {
-    /// A pool of `permits`.
-    pub fn new<const N: usize>(supply: PermitSupply<'id, Kind, N, Path>) -> Self {
-        Self {
-            free: RefCell::new(supply.into_permits().into_iter().collect()),
-            line: RefCell::default(),
-            next: Cell::new(0),
-        }
-    }
-}
-
-/// A taker's place in a [`ModelPermitPool`]'s line, given up when its
-/// future drops before it is served; the taker behind it then leads.
-struct Place<'p> {
-    line: &'p Waiting,
-    ticket: Option<u32>,
-}
-
-impl Drop for Place<'_> {
-    fn drop(&mut self) {
-        if let Some(mine) = self.ticket {
-            let mut line = self.line.borrow_mut();
-            let led = line.front().map(|(ticket, _)| *ticket) == Some(mine);
-            line.retain(|(ticket, _)| *ticket != mine);
-            drop(line);
-            if led {
-                wake_head(self.line);
-            }
-        }
-    }
-}
-
-impl<'id, Kind, Path: PoolPath> PermitPool<'id, Kind, Path> for ModelPermitPool<'id, Kind, Path> {
-    fn take<'a>(
-        &'a self,
-        _: &'a mut Seat<'id, Kind, Path>,
-    ) -> impl Future<Output = Permit<'id, Kind, Path>> + 'a {
-        self.taking()
-    }
-
-    fn release(&self, permit: Permit<'id, Kind, Path>) {
-        self.free.borrow_mut().push(permit);
-        wake_head(&self.line);
-    }
-}
-
-impl<'id, Kind, Path: PoolPath> ModelPermitPool<'id, Kind, Path> {
-    fn taking(&self) -> impl Future<Output = Permit<'id, Kind, Path>> + '_ {
-        let mut place = Place {
-            line: &self.line,
-            ticket: None,
-        };
-        poll_fn(move |context| {
-            let place = &mut place;
-            let mine = match place.ticket {
-                Some(mine) => {
-                    if let Some(entry) = self
-                        .line
-                        .borrow_mut()
-                        .iter_mut()
-                        .find(|(ticket, _)| *ticket == mine)
-                    {
-                        entry.1.clone_from(context.waker());
-                    }
-                    mine
-                }
-                None => {
-                    let issued = self.next.get();
-                    self.next.set(issued + 1);
-                    self.line
-                        .borrow_mut()
-                        .push_back((issued, context.waker().clone()));
-                    place.ticket = Some(issued);
-                    issued
-                }
-            };
-            if self.line.borrow().front().map(|(ticket, _)| *ticket) != Some(mine) {
-                return Poll::Pending;
-            }
-            let served = self.free.borrow_mut().pop();
-            match served {
-                Some(permit) => {
-                    self.line.borrow_mut().pop_front();
-                    place.ticket = None;
-                    if !self.free.borrow().is_empty() {
-                        wake_head(&self.line);
-                    }
-                    Poll::Ready(permit)
-                }
-                None => Poll::Pending,
-            }
-        })
-    }
-}
-
-impl<Kind, Path: PoolPath> ModelPermitPool<'static, Kind, Path> {
-    fn take_loaned<'a, 'p: 'a, S: SlotOwner<Path::Identity> + 'a>(
-        &'a self,
-        _: &'a mut Seat<'p, Kind, Path>,
-        loan: BodyLoan<'p, Path::Identity, S>,
-    ) -> impl Future<Output = Permit<'p, Kind, Path>> + 'a {
-        async move { loan.lend_permit(self.taking().await) }
     }
 }
 
@@ -661,7 +661,7 @@ pub struct ModelRssi(Shared);
 
 impl RecentRssi for ModelRssi {
     fn recent_rssi(&self) -> i8 {
-        self.0.borrow().rssi_dbm
+        self.0.with(|state| state.rssi_dbm)
     }
 }
 
@@ -688,7 +688,7 @@ pub struct ModelControl<'a, 'id, Id: SlotIdentity> {
 }
 
 fn settings(shared: &Shared, change: impl FnOnce(&mut RadioWide)) {
-    change(&mut shared.borrow_mut().radio);
+    shared.with(|state| change(&mut state.radio));
 }
 
 macro_rules! radio_settings {
@@ -760,7 +760,7 @@ radio_settings!(ModelSetup<'_, '_, Id>);
 radio_settings!(ModelControl<'_, '_, Id>);
 
 fn change_interface<const I: u8>(shared: &Shared, change: impl FnOnce(&mut InterfaceState)) {
-    change(&mut shared.borrow_mut().interfaces[usize::from(I)]);
+    shared.with(|state| change(ModelInterface::of::<I>().get_mut(&mut state.interfaces)));
 }
 
 macro_rules! interfaces {
@@ -773,7 +773,7 @@ macro_rules! interfaces {
                 &mut self,
                 slot: Slot<'id, InterfaceKind<I>, Child<Child<Root<Id>, I>, 0>>,
             ) -> ModelConfigured<'id, Id, I> {
-                self.shared.borrow_mut().interfaces[usize::from(I)].configured = true;
+                change_interface::<I>(self.shared, |interface| interface.configured = true);
                 ModelConfigured { slot }
             }
 
@@ -781,19 +781,20 @@ macro_rules! interfaces {
                 &mut self,
                 interface: ModelConfigured<'id, Id, I>,
             ) -> Slot<'id, InterfaceKind<I>, Child<Child<Root<Id>, I>, 0>> {
-                let mut state = self.shared.borrow_mut();
-                let index = usize::from(I);
-                // Its window and wish end; an operation it started keeps
-                // its terminal.
-                state.end_window(index);
-                let removed = &mut state.interfaces[index];
-                // The pending entries stay with their tokens.
-                *removed = InterfaceState {
-                    pending_short: removed.pending_short,
-                    pending_extended: removed.pending_extended,
-                    ..InterfaceState::default()
-                };
-                state.wake_receivers();
+                self.shared.with(|state| {
+                    let index = ModelInterface::of::<I>();
+                    state.end_window(index);
+                    let removed = index.get_mut(&mut state.interfaces);
+                    // The pending entries remain installed under their affine tokens.
+                    let pending_short = core::mem::take(&mut removed.pending_short);
+                    let pending_extended = core::mem::take(&mut removed.pending_extended);
+                    *removed = InterfaceState {
+                        pending_short,
+                        pending_extended,
+                        ..InterfaceState::default()
+                    };
+                    state.wake_receivers();
+                });
                 interface.slot
             }
         }
@@ -827,37 +828,44 @@ impl<Id: SlotIdentity> PortPhase for ModelEvents<'_, '_, Id> {
             if let Some(end) = *self.end {
                 return Poll::Ready(Err(end));
             }
-            let mut state = self.shared.borrow_mut();
-            if let Some(event) = state.events.pop_front() {
-                match event {
-                    ModelEvent::Lost => {
+            // Clone user wakers before taking State out. Rc moves/clones inside
+            // the transaction never invoke the RawWaker callbacks.
+            let waker = Rc::new(context.waker().clone());
+            let next = self.shared.with(|state| {
+                if let Some(event) = state.events.pop_front() {
+                    if event.is_err() {
                         state.lost = false;
-                        return Poll::Ready(Ok(Err(EventsLost)));
                     }
-                    ModelEvent::Received(..) => state.received -= 1,
-                    _ => {}
+                    return Poll::Ready(Ok(event));
                 }
-                drop(state);
-                if let Some((_interface, id)) = event.ends() {
-                    // The permit goes back before the terminal is handed out.
-                    if let Err(_mismatch) = self.held.complete(id) {
-                        let mut state = self.shared.borrow_mut();
-                        state.events.push_front(event);
-                        state.poisoned = Some(ModelFault);
-                        let end = oer_radio_port::EventEnd::Quarantined { cause: ModelFault };
+                if let Some(cause) = state.poisoned {
+                    return Poll::Ready(Err(oer_radio_port::EventEnd::Drained { cause }));
+                }
+                state.register_consumer(waker.clone());
+                Poll::Pending
+            });
+            match next {
+                Poll::Ready(Ok(Ok(event))) => {
+                    if let Some((_, id)) = event.ends()
+                        && let Err(error) = self.held.complete(id)
+                    {
+                        let cause = ModelFault::Completion(error);
+                        self.shared.with(|state| {
+                            state.events.push_front(Ok(event));
+                            state.poisoned = Some(cause);
+                        });
+                        let end = oer_radio_port::EventEnd::Quarantined { cause };
                         *self.end = Some(end);
                         return Poll::Ready(Err(end));
                     }
+                    Poll::Ready(Ok(Ok(event)))
                 }
-                return Poll::Ready(Ok(Ok(event)));
+                Poll::Ready(Err(end)) => {
+                    *self.end = Some(end);
+                    Poll::Ready(Err(end))
+                }
+                other => other,
             }
-            if let Some(cause) = state.poisoned {
-                let end = oer_radio_port::EventEnd::Drained { cause };
-                *self.end = Some(end);
-                return Poll::Ready(Err(end));
-            }
-            state.consumer = Some(context.waker().clone());
-            Poll::Pending
         })
     }
 }
@@ -869,7 +877,6 @@ impl<Id: SlotIdentity> Ieee802154Events for ModelEvents<'_, '_, Id> {
                 frame: frame.view(),
                 metadata: *metadata,
             }),
-            ModelEvent::Lost => unreachable!("the consumer reports a loss as `EventsLost`"),
             ModelEvent::TransmitDone(interface, id, status) => PhaseEvent::TransmitDone {
                 interface: *interface,
                 id: *id,
@@ -969,17 +976,17 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> ModelClient<'c, 'id, Id, I> {
     /// Set this interface's wish: end its window, set the wish and wake
     /// every waiting receive, whose condition may now hold.
     fn set_wish(&self, state: &mut State, wish: Wish) {
-        let index = usize::from(I);
+        let index = ModelInterface::of::<I>();
         state.end_window(index);
-        state.interfaces[index].wish = wish;
+        index.get_mut(&mut state.interfaces).wish = wish;
         state.wake_receivers();
     }
 
     fn poisoned(&self) -> Result<(), Poisoned<ModelFault>> {
-        match self.shared.borrow().poisoned {
+        self.shared.with(|state| match state.poisoned {
             Some(cause) => Err(Poisoned { cause }),
             None => Ok(()),
-        }
+        })
     }
 
     fn admit<'o>(
@@ -989,16 +996,26 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> ModelClient<'c, 'id, Id, I> {
     ) -> Result<ModelToken, Poisoned<ModelFault>> {
         self.poisoned()?;
         let interface = Interface::new(I);
-        let id = {
-            let mut state = self.shared.borrow_mut();
-            let id = state.mint_id();
-            state.operation = Some((interface, id, kind));
-            id
-        };
-        if self.held.admit(interface, id, permit).is_err() {
-            self.shared.borrow_mut().poisoned = Some(ModelFault);
-            return Err(Poisoned { cause: ModelFault });
+        let id = self
+            .shared
+            .with(|state| {
+                state.mint_id().inspect_err(|cause| {
+                    state.poisoned = Some(*cause);
+                    state.wake_consumer();
+                    state.wake_receivers();
+                })
+            })
+            .map_err(|cause| Poisoned { cause })?;
+        if let Err(refused) = self.held.admit(interface, id, permit) {
+            let cause = ModelFault::Admission {
+                interface: refused.interface,
+                id: refused.id,
+            };
+            self.shared.with(|state| state.poisoned = Some(cause));
+            return Err(Poisoned { cause });
         }
+        self.shared
+            .with(|state| state.operation = Some((interface, id, kind)));
         Ok(ModelToken { interface, id })
     }
 }
@@ -1011,27 +1028,27 @@ impl<Id: SlotIdentity, const I: u8> RadioPortClient for ModelClient<'_, '_, Id, 
     fn now(
         &self,
     ) -> impl Future<Output = PortResult<Ieee802154Instant, ClockError, ModelFault>> + '_ {
-        ready(match self.poisoned() {
-            Ok(()) => Ok(Ok(Ieee802154Instant::from_micros(
-                self.shared.borrow().now_micros,
-            ))),
-            Err(poisoned) => Err(poisoned),
-        })
+        ready(self.shared.with(|state| match state.poisoned {
+            Some(cause) => Err(Poisoned { cause }),
+            None => Ok(Ok(Ieee802154Instant::from_micros(state.now_micros))),
+        }))
     }
 
     fn end(
         &self,
         token: ModelToken,
     ) -> impl Future<Output = PortResult<(), CancelError, ModelFault>> + '_ {
-        ready(self.poisoned().map(|()| {
-            let mut state = self.shared.borrow_mut();
-            match state.operation {
+        ready(self.shared.with(|state| {
+            if let Some(cause) = state.poisoned {
+                return Err(Poisoned { cause });
+            }
+            Ok(match state.operation {
                 Some((interface, id, _)) if interface == token.interface && id == token.id => {
                     state.abort_operation();
                     Ok(())
                 }
                 _ => Err(CancelError::NotRunning),
-            }
+            })
         }))
     }
 }
@@ -1093,9 +1110,10 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
     }
 
     fn frame_counter(&self) -> Option<u32> {
-        let state = self.shared.borrow();
-        let interface = &state.interfaces[usize::from(I)];
-        interface.key_id.and(interface.frame_counter)
+        self.shared.with(|state| {
+            let interface = ModelInterface::of::<I>().get(&state.interfaces);
+            interface.key_id.and(interface.frame_counter)
+        })
     }
 
     fn set_pending_mode(&self, _: Has<ModelCaps, SourceMatch>, mode: AutoPendingMode) {
@@ -1108,7 +1126,7 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
         address: [u8; 2],
     ) -> ModelShortEntry<'id, Id, I> {
         change_interface::<I>(self.shared, |interface| {
-            interface.pending_short[usize::from(slot.index())] = Some(address);
+            interface.pending_short.insert(slot.index(), address);
         });
         ModelShortEntry { slot }
     }
@@ -1119,7 +1137,7 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
         address: [u8; 8],
     ) -> ModelExtendedEntry<'id, Id, I> {
         change_interface::<I>(self.shared, |interface| {
-            interface.pending_extended[usize::from(slot.index())] = Some(address);
+            interface.pending_extended.insert(slot.index(), address);
         });
         ModelExtendedEntry { slot }
     }
@@ -1129,7 +1147,7 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
         entry: ModelShortEntry<'id, Id, I>,
     ) -> Slot<'id, ShortPending<I>, Child<Child<Root<Id>, I>, 1>> {
         change_interface::<I>(self.shared, |interface| {
-            interface.pending_short[usize::from(entry.slot.index())] = None;
+            interface.pending_short.remove(&entry.slot.index());
         });
         entry.slot
     }
@@ -1139,61 +1157,65 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
         entry: ModelExtendedEntry<'id, Id, I>,
     ) -> Slot<'id, ExtendedPending<I>, Child<Child<Root<Id>, I>, 2>> {
         change_interface::<I>(self.shared, |interface| {
-            interface.pending_extended[usize::from(entry.slot.index())] = None;
+            interface.pending_extended.remove(&entry.slot.index());
         });
         entry.slot
     }
 
     fn receive(&self, channel: Channel) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> {
         poll_fn(move |context| {
-            let mut state = self.shared.borrow_mut();
-            if let Some(cause) = state.poisoned {
-                return Poll::Ready(Err(Poisoned { cause }));
-            }
-            let index = usize::from(I);
-            // A receive on another channel waits; a window and a waiting
-            // interface do not count. The request replaces the previous
-            // wish at once, so two interfaces moving to one channel admit
-            // each other.
-            if state
-                .receive_channel(Some(index))
-                .is_some_and(|on| on != channel)
-            {
-                if state.interfaces[index].wish != Wish::Waiting(channel) {
-                    self.set_wish(&mut state, Wish::Waiting(channel));
+            let waker = Rc::new(context.waker().clone());
+            self.shared.with(|state| {
+                if let Some(cause) = state.poisoned {
+                    return Poll::Ready(Err(Poisoned { cause }));
                 }
-                state.receivers.push(context.waker().clone());
-                return Poll::Pending;
-            }
-            self.set_wish(&mut state, Wish::Receive(channel));
-            Poll::Ready(Ok(()))
+                let index = ModelInterface::of::<I>();
+                if state
+                    .receive_channel(Some(index))
+                    .is_some_and(|on| on != channel)
+                {
+                    if index.get(&state.interfaces).wish != Wish::Waiting(channel) {
+                        self.set_wish(state, Wish::Waiting(channel));
+                    }
+                    state.receivers.push(waker.clone());
+                    return Poll::Pending;
+                }
+                self.set_wish(state, Wish::Receive(channel));
+                Poll::Ready(Ok(()))
+            })
         })
     }
 
     fn sleep(&self) {
-        let mut state = self.shared.borrow_mut();
-        let index = usize::from(I);
-        state.end_window(index);
-        state.interfaces[index].wish = Wish::Sleep;
-        state.wake_receivers();
+        self.shared.with(|state| {
+            let index = ModelInterface::of::<I>();
+            state.end_window(index);
+            index.get_mut(&mut state.interfaces).wish = Wish::Sleep;
+            state.wake_receivers();
+        });
     }
 
     fn scheduled_receive(&self, window: SupportedScheduledReceive<ModelCaps>) {
-        let mut state = self.shared.borrow_mut();
-        self.set_wish(&mut state, Wish::Window(window.get().0));
+        self.shared
+            .with(|state| self.set_wish(state, Wish::Window(window.get().0)));
     }
 
     fn window_ended(&self) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> {
         poll_fn(move |context| {
-            let mut state = self.shared.borrow_mut();
-            if let Some(cause) = state.poisoned {
-                return Poll::Ready(Err(Poisoned { cause }));
-            }
-            if matches!(state.interfaces[usize::from(I)].wish, Wish::Window(_)) {
-                state.receivers.push(context.waker().clone());
-                return Poll::Pending;
-            }
-            Poll::Ready(Ok(()))
+            let waker = Rc::new(context.waker().clone());
+            self.shared.with(|state| {
+                if let Some(cause) = state.poisoned {
+                    return Poll::Ready(Err(Poisoned { cause }));
+                }
+                if matches!(
+                    ModelInterface::of::<I>().get(&state.interfaces).wish,
+                    Wish::Window(_)
+                ) {
+                    state.receivers.push(waker.clone());
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(()))
+            })
         })
     }
 
@@ -1224,7 +1246,8 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
         'id: 'o,
     {
         let token = self.admit(permit, Kind::Transmit)?;
-        self.shared.borrow_mut().tx_security = Some(transmission.get().security);
+        self.shared
+            .with(|state| state.tx_security = Some(transmission.get().security));
         Ok(Work::new(self, token))
     }
 
@@ -1305,14 +1328,12 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
     fn prepare_queues(&mut self, backing: &mut Self::Queues, mint: Mint<'static, Self::Pools, Id>) {
         // Programmed settings belong to the ended installation. Physical
         // world facts (clock, RSSI, injected refusal/fault) remain unchanged.
-        {
-            let mut state = self.shared.borrow_mut();
+        self.shared.with(|state| {
             state.interfaces = core::array::from_fn(|_| InterfaceState::default());
             state.radio = RadioWide::default();
             state.events.clear();
-            state.received = 0;
             state.lost = false;
-        }
+        });
         let (interface0, interface1, work) = mint.into_pools();
         let (permits, operation) =
             OperationPermits::new(work, |supply, _| ModelPermitPool::new(supply));
@@ -1364,13 +1385,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
             retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
-        {
-            let mut state = self.shared.borrow_mut();
-            state.enabled = false;
-            state.operation = None;
-            state.consumer = None;
-            state.receivers.clear();
-        }
+        end_world(&self.shared);
         retire.requested().await
     }
 
@@ -1384,6 +1399,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
         }
     }
 }
+#[cfg(any(test, feature = "test-support"))]
 impl<Id: SlotIdentity> oer_radio_port::conformance::registration::MockCleanup<Id>
     for OwnedModel<Id>
 {
@@ -1396,14 +1412,14 @@ impl<Id: SlotIdentity> oer_radio_port::conformance::registration::MockCleanup<Id
         Self: 's,
         Id: 's,
     {
-        let mut state = self.shared.borrow_mut();
-        state.abandoned = true;
-        state.enabled = false;
-        state.poisoned = Some(ModelFault);
-        state.abort_operation();
-        state.wake_consumer();
-        state.consumer = None;
-        state.receivers.clear();
+        self.shared.with(|state| {
+            state.abandoned = true;
+            state.enabled = false;
+            state.poisoned.get_or_insert(ModelFault::Injected);
+            state.abort_operation();
+            state.wake_consumer();
+            state.clear_wakers();
+        });
         oer_radio_port::Abandon::Stopped(authority.stopped())
     }
 }
@@ -1418,11 +1434,11 @@ impl<Id: SlotIdentity> ModelSlotOwner<Id> for OwnedModel<Id> {
 }
 
 fn end_world(shared: &Shared) {
-    let mut state = shared.borrow_mut();
-    state.enabled = false;
-    state.operation = None;
-    state.consumer = None;
-    state.receivers.clear();
+    shared.with(|state| {
+        state.enabled = false;
+        state.operation = None;
+        state.clear_wakers();
+    });
 }
 
 impl<Id: SlotIdentity> SlotBodyOwner<Id> for OwnedModel<Id> {
@@ -1531,15 +1547,14 @@ impl<Id: SlotIdentity> PortBackend<Id> for OwnedModel<Id> {
         Id: 'p,
         'p: 'a,
     {
-        let mut state = frontend.shared.borrow_mut();
-        ready(match state.poisoned {
+        ready(frontend.shared.with(|state| match state.poisoned {
             Some(cause) => Err(Poisoned { cause }),
             None if state.refuse_enable => Ok(Err(ModelRefusal)),
             None => {
                 state.enabled = true;
                 Ok(Ok(()))
             }
-        })
+        }))
     }
 
     fn disable<'a, 'p, S>(
@@ -1553,44 +1568,46 @@ impl<Id: SlotIdentity> PortBackend<Id> for OwnedModel<Id> {
         'p: 'a,
         S: FnMut(ModelEvent) -> core::ops::ControlFlow<ModelEvent>,
     {
-        let result = {
-            let mut state = frontend.shared.borrow_mut();
+        frontend.shared.with(|state| {
             state.abort_operation();
-            for index in 0..MODEL_INTERFACES {
+            for index in [ModelInterface::Zero, ModelInterface::One] {
                 state.end_window(index);
-                state.interfaces[index].wish = Wish::Sleep;
+                index.get_mut(&mut state.interfaces).wish = Wish::Sleep;
             }
             state.enabled = false;
-            state.received = 0;
             state.lost = false;
-            let poisoned = state.poisoned;
-            drop(state);
-            // Only the work's terminals go to the sink; received frames and
-            // a loss marker are dropped with the phase.
-            for event in core::iter::from_fn(|| frontend.shared.borrow_mut().events.pop_front()) {
-                if let Some((_interface, id)) = event.ends() {
-                    match frontend.held.complete(id) {
-                        Ok(_completed) => {
-                            if let core::ops::ControlFlow::Break(event) = sink(event) {
-                                let mut state = frontend.shared.borrow_mut();
-                                state.events.push_front(event);
-                                state.poisoned = Some(ModelFault);
-                                return ready(Err(Poisoned { cause: ModelFault }));
-                            }
+        });
+        // Only terminals go to the sink. RX and loss markers end with the
+        // disabled phase. No state is held across accounting or sink callbacks.
+        while let Some(event) = frontend.shared.with(|state| state.events.pop_front()) {
+            if let Ok(event) = event
+                && let Some((interface, id)) = event.ends()
+            {
+                let cause = match frontend.held.complete(id) {
+                    Ok(_completed) => match sink(event) {
+                        core::ops::ControlFlow::Continue(()) => continue,
+                        core::ops::ControlFlow::Break(event) => {
+                            frontend
+                                .shared
+                                .with(|state| state.events.push_front(Ok(event)));
+                            ModelFault::RejectedTerminal { interface, id }
                         }
-                        Err(_mismatch) => {
-                            frontend.shared.borrow_mut().poisoned = Some(ModelFault);
-                            return ready(Err(Poisoned { cause: ModelFault }));
-                        }
+                    },
+                    Err(error) => {
+                        frontend
+                            .shared
+                            .with(|state| state.events.push_front(Ok(event)));
+                        ModelFault::Completion(error)
                     }
-                }
+                };
+                frontend.shared.with(|state| state.poisoned = Some(cause));
+                return ready(Err(Poisoned { cause }));
             }
-            match poisoned {
-                Some(cause) => Err(Poisoned { cause }),
-                None => Ok(()),
-            }
-        };
-        ready(result)
+        }
+        ready(frontend.shared.with(|state| match state.poisoned {
+            Some(cause) => Err(Poisoned { cause }),
+            None => Ok(()),
+        }))
     }
 
     fn now<'a, 'p>(
@@ -1602,11 +1619,10 @@ impl<Id: SlotIdentity> PortBackend<Id> for OwnedModel<Id> {
         Id: 'p,
         'p: 'a,
     {
-        let state = frontend.shared.borrow();
-        ready(match state.poisoned {
+        ready(frontend.shared.with(|state| match state.poisoned {
             Some(cause) => Err(Poisoned { cause }),
             None => Ok(Ok(Ieee802154Instant::from_micros(state.now_micros))),
-        })
+        }))
     }
 
     fn setup<'a, 'p>(_: Call, frontend: &'a mut Self::View<'p>) -> Self::Setup<'a, 'p>
