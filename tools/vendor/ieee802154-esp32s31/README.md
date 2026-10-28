@@ -4,7 +4,7 @@ This workspace runs the public ESP-IDF IEEE 802.15.4 driver on the host so the
 production port can be compared with the real vendor behavior. Unlike the PHY,
 Wi-Fi and Bluetooth libraries, this driver is published as source, so the stand
 compiles it directly instead of executing a captured binary. The
-[driver port map](../../../chips/esp32s31/notes/ieee802154-driver-port.md) identifies the pinned
+[MAC engine](../../../chips/espressif/ieee802154-engine/README.md) identifies the pinned
 sources and their production owners.
 
 ## What is compiled and what is recorded

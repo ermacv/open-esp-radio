@@ -42,19 +42,19 @@ pub const BLUETOOTH_DTM_RX_PACKET_BYTES: usize =
 
 type DtmTxPacketAddress = LeTxPacketAddress<BLUETOOTH_DTM_TX_PACKET_BYTES>;
 
-/// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 7a85006f).
+/// SOURCE: BLOB_LIBBLE_MEMORY_LINK_STATE in registers/evidence/ble-memory.toml (bt-lib pin 7a85006f).
 const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
     BleLinkStateSequencePolicy::ZERO.with_bits_9_12_opaque_constant::<0xf>();
-/// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 7a85006f).
+/// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM in registers/evidence/ble-memory.toml (bt-lib pin 7a85006f).
 const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
     BleSchedulerItemHardwareNext::ZERO.with_bits_20_21_opaque_constant::<0x3>();
-/// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 7a85006f).
+/// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM in registers/evidence/ble-memory.toml (bt-lib pin 7a85006f).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
     BleSchedulerItemWord001cOpaque::from_bits(0xffdfffff);
 /// SOURCE: pinned `libble_app.a[dtm_4.o]::sym_dtm_qzyGhbH1fEoUEmtalnva`
 /// (`r_ble_lll_dtm_alloc_memory`) stores `0x8421` in the low twenty bits,
 /// four five-bit coexistence priority lanes of one each.
-/// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 7a85006f).
+/// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM in registers/evidence/ble-memory.toml (bt-lib pin 7a85006f).
 const SCHEDULER_ITEM_POSITIONAL_24_IMAGE: BleSchedulerItemCoexistencePriority =
     BleSchedulerItemCoexistencePriority::ZERO
         .with_lane_0_constant::<0x1>()

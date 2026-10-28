@@ -175,77 +175,13 @@ arguments nor a successful return establish an indefinite or exclusive grant.
 grant acknowledgement. A physical protection proof needs independent hardware
 observations of active exchanges and release.
 
-Beacon suppression or delayed transmission alone is insufficient: maintenance
-admission must also establish what happens to an already active MPDU, immediate
-ACK/BlockAck, RX and DMA. A request interval and the actual RF exclusion interval
-are separate observations. A vendor beacon TX callback is a local terminal
-notification, not acknowledgement from a receiver; even a success status must
-be correlated with independent reception. A missing frame in one monitor
-capture is not proof of omitted transmission: compare frame identities at an
-independent receiver and retain each observer's FCS and capture limitations.
-A correlated unicast ACK establishes completion of that exchange; it does not
-establish RF exclusion throughout an overlapping protection request.
-Suppressed promiscuous RX callbacks likewise do not certify DMA quiescence or
-normal associated RX/ACK behavior. Retain the receive mode, incoming frame
-identities and hardware timestamps when evaluating a narrower admission rule.
-Observation windows must include the
-last submitted frame's terminal event, or explicitly classify it as incomplete.
-The vendor event path has no nested-acquisition count; independently pairing
-requests for the same timer could let one caller's
-release withdraw another caller's protection. Shared ownership must serialize
-that physical request rather than manufacture independent grant leases.
+The physical grant request has no nested-acquisition count. The shared owner
+serializes it; independent callers cannot manufacture separate grant leases.
+MAC, DMA and peer reception require their own completion proofs.
 
-The outer graph has call-order and grant-bracketing tests with explicitly
-modeled children, plus a compiled comparison with actual children. The combined-calibration
-comparison executes actual `phy_cal_param_track`, callback installation and all
-of its archive/ROM measurement and restoration children against the compiled
-production executor. It covers Wi-Fi, BT/154, both clients and an empty direct
-request on channel 13/HT40, including thermal gates and reference reevaluation
-after RX channel restoration. Ordered effects and the committed temperature,
-RX and TX coefficient banks are compared. A failed TX conversion after RX
-restoration must retain all pre-transaction semantic references and banks.
-
-The combined comparison uses a valid installed sensor range, synthetic I2C,
-RX-estimator and SAR measurements, and the archive's default weak grant hooks.
-Its effect projection excludes only established I2C transport polling/setup,
-PBus and estimator readiness-wait cadence, and the three unused SAR result
-reads described below. It does not qualify external COEX overrides, RF
-accuracy, physical exclusion or elapsed timing.
-
-The complete `phy_param_track_tot` comparison uses the same peripherals and
-projection, executing BT power, Wi-Fi I2C/power, combined RXCAL/TXCAL and final
-temperature acquisition. Its baseline profile disables RFPLL to isolate the
-remaining parent; the RFPLL-enabled profile uses registered production policy.
-Calibration is enabled and diagnostics are disabled. Both power thresholds, signed
-temperature range boundaries and nonzero retained Wi-Fi adjustments are covered.
-Final shared power-cache values, per-class gain bases, I2C band, calibration
-references and banks must match. BT runs before Wi-Fi and both share the power
-cache; Wi-Fi can reuse the gain computed by BT. The independent additive
-Wi-Fi adjustment is preserved through this runtime graph. The optional RF-test
-power-selection producer is described below; it is not a calibration child.
-
-A failed TXCAL cannot recover the normal client owner or publish partial
-calibration state. Earlier completed power children remain committed; the outer
-transaction does not claim a rollback of already executed hardware operations.
-The validation-only RFPLL-enabled profile executes the same parent and actual
-children with zero, positive and negative capacitor corrections, thermal
-thresholds, all client selections and combined calibration. It compares the
-RFPLL reference commit and frequency-memory effects alongside the remaining
-parent state. As in the isolated memory profile, its projection removes one
-vendor installed-layout query: production owns that layout explicitly. No
-frequency-memory transaction or control write is removed. RFPLL completion
-remains committed if a later TXCAL fails; normal-owner recovery is still denied.
-This validation profile does not configure runtime policy. Registered production
-policy evaluates RFPLL demand before the remaining children; an evaluated
-thermal skip is distinct from a performed capacitor correction. External
-grant overrides, physical RFPLL qualification and hardware performance remain
-separate gates.
-
-The separate private-input
-`coex_grant` test executes a linked vendor adapter registration, callback-table
-installation, request and ROM release with modeled allocation/logging and bus
-storage. It characterizes the linked software path, not physical arbitration
-or timer progression. Hardware qualification remains separate.
+A failed TXCAL cannot return a normal owner or publish partial calibration
+state. Earlier completed power or RFPLL children remain committed; the outer
+transaction does not roll back already executed hardware operations.
 
 ## Timing observations
 
@@ -406,24 +342,9 @@ Zero at startup is therefore not a lifetime invariant. The comparison exercises
 restored synthetic values through the actual gain callback.
 The production semantic state does not import this vendor calibration image.
 
-A known producer is `librftest.a::set_rate_power_index`, in the optional
-`CONFIG_ESP_PHY_ENABLE_CERT_TEST` composition. The authenticated S31 RF-test
-archive is the `librftest` pin of `chips/esp32s31/vendor/artifacts.toml`.
-The function subtracts signed attenuation from the selected target power,
-narrows to a signed byte, and selects a MAC power index. Above its code ceiling
-of 84 it stores the excess as the additive adjustment and regenerates Wi-Fi gain
-before publishing index 21. Otherwise it stores the attenuation's rounding
-correction modulo four and publishes the arithmetic-shifted power index without
-an immediate gain regeneration. These are vendor numeric codes, not measured RF
-power. A private executable characterization runs the actual RF-test body, ROM
-target selection and current PHY gain publication, including signed wrap cases.
-
-This establishes a power-selection producer, not an additional thermal
-calibration algorithm or the only possible writer. It does not establish an
-ordinary-networking call site, physical units for every profile, or permission
-to run the test API while radio traffic is active. The runtime tracking executor
-preserves this independent configuration; RF-test MAC power policy does not
-belong inside RXCAL/TXCAL.
+The independent signed Wi-Fi gain adjustment survives runtime tracking and
+snapshot replay. It is not a TXCAL result or a lifetime-zero invariant; RF-test
+MAC power selection stays outside the tracking graph.
 
 The TX-DC/PWDET child uses the current archive's Wi-Fi and BT/154 forms through
 one bounded target executor. Its initial TX-on prefix includes the final
@@ -432,13 +353,8 @@ per-row path and baseband-gain settings. The child restores its retained
 power-detector fields before publishing measured DC rows. These measurements
 do not update the independent Wi-Fi additive gain adjustment.
 
-Private comparisons execute the actual current root and ROM children against
-compiled production, covering calculated rows and ordered control effects.
-They exclude only OER's PBus readiness-wait delays and three unused read-only
-SAR result words fetched by the ROM's general result reader. Production reads
-the one result consumed by the tone-average algorithm. These comparisons do
-not establish physical SAR accuracy. The combined comparison above adds the
-enclosing RXCAL/TXCAL software graph without extending the hardware claim.
+Compiled comparisons cover ordered control effects and calculated rows under
+modeled peripheral inputs. They do not qualify physical SAR accuracy.
 
 Each tone-SAR conversion bounds unsuccessful readiness observations using
 `HARDWARE_EDGE_LIMIT`. Exhaustion is `ReadyObservationLimit`, carrying the

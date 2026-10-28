@@ -17,9 +17,8 @@ use core::num::NonZeroU64;
 
 use oer_bluetooth_le_port::{ConnectionAllowances, LeRadio, NonZeroRadioDuration, RadioDuration};
 
-// Source-owned S31 connection-event policy. The provenance of each term is
-// the recurring-event section of
-// docs/vendor/esp32s31/bluetooth-peripheral-connection.md:
+// SOURCE: esp32s31-bt-lib 7a85006f, libble_app.a[ble_3.o] recurring-event
+// r_sym_ble_rsCCyH2B22gdYkN4LOOJ, Controller configuration and private options:
 // the 16-us widening jitter is the Controller configuration's default
 // `ble_ll_jitter_usecs`, the 10-us receive guard is the private-options
 // default, the 2-us receive tail and the 1-us boundary are CPU-time ticks, and

@@ -2,8 +2,9 @@
 
 How time is represented across the stack. The vocabulary is in `oer-time`
 (`portable/time`) and `oer-radio-port` (`protocols/radio/port`); measured
-facts about the Wi-Fi stamp are in
-[rx-stamp](../chips/esp32s31/notes/wifi/rx-stamp.md).
+facts about the Wi-Fi stamp are cataloged as
+`HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03` in
+[hil-open.toml](../chips/esp32s31/registers/evidence/hil-open.toml).
 
 ## Three kinds of time object
 

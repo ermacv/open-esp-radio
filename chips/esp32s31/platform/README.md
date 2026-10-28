@@ -12,7 +12,8 @@
 
 The linker scripts are in `chips/esp32s31/layout/linker` and
 `chips/espressif/staged-layout/linker`; the boot is described in
-[the board's README](../board/README.md).
+[staged bootstrap](../../espressif/staged-bootstrap/README.md) and
+[stage-two runtime](../../espressif/staged-runtime/README.md).
 
 `chip.toml` `[interrupts] harts` is the sole HP-hart cardinality, with
 `boot-hart` naming primary initialization. SOURCE: ESP-IDF 4d80c1b2
@@ -25,8 +26,18 @@ size register, field and instance families. PAC `HARTS`, `Hart::ALL`,
 `Hart::new` refuses unknown raw IDs without truncation; `Hart::constant` checks
 fixed IDs at monomorphization. These are identities, not launch permits.
 
-The bootstrap contains every secondary and clears its boot word. All current
-images execute repository code only on the boot hart. An image check confines
-the hart-local critical section to one declared hart. S31 rev0 ROM leaves MNLBITS at one
-(SOURCE: `hw1-20261026-boot-07`, `research/hw-interrupt-facts.md`); HAL explicitly
-establishes its selected level bits.
+## Secondary-hart containment
+
+The bootstrap contains every secondary and clears its indexed ROM boot word.
+The public HAL exposes no start or release operation. Both staged entries stop
+non-boot harts before Rust memory access. Current images declare secondary
+task and interrupt stacks as zero; their linked-image checks reject secondary
+starters, routes and storage and confine hart-local critical-section entries
+to declared hart roots. The symbol inventory does not identify inlined launch
+code. SOURCE: `hal/src/boot/soc.rs::contain_secondaries`, staged entry code,
+and the image checks' critical-section and unused-stack gates.
+
+The local CLIC is context-relative; indexed matrix/boot-word families do not
+grant another hart's execution authority. HAL explicitly selects MNLBITS.
+SOURCE: `HW1_S31_CLIC_20261026` in `registers/evidence/hw-interrupts.toml`;
+inherited rev0 MNLBITS is one, independently of the header reset value.

@@ -438,7 +438,7 @@ release a secondary hart.
   and list/count mismatches fail during the build. Every current image keeps
   secondary harts contained. The HAL holds secondary harts, and the image gate rejects
   starters, routes or storage for harts declared unused
-  ([secondary boot](../chips/esp32s31/notes/core1-boot.md)).
+  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-containment)).
   An architectural ID outside this list is `InvalidHart { raw }`, never a
   different hart. The fatal path records the full raw ID, quarantines free
   control owners and requests reset; it never takes a lent or held owner.

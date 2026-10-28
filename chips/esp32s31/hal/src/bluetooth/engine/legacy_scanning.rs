@@ -47,13 +47,13 @@ const SCAN_REQUEST_HEADER: u8 = 0x03;
 const SCAN_REQUEST_PAYLOAD_BYTES: usize = 12;
 const SCAN_REQUEST_TX_PACKET_BYTES: usize =
     BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + SCAN_REQUEST_PAYLOAD_BYTES;
-/// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, scheduler allocation (bt-lib pin 7a85006f).
+/// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM in registers/evidence/ble-memory.toml (bt-lib pin 7a85006f).
 const SCHEDULER_ITEM_ALLOCATION_PREFIX: BleSchedulerItemHardwareNext =
     BleSchedulerItemHardwareNext::ZERO.with_bits_20_21_opaque_constant::<0x3>();
-/// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, allocation/reset profile (bt-lib pin 7a85006f).
+/// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM in registers/evidence/ble-memory.toml (bt-lib pin 7a85006f).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
     BleSchedulerItemWord001cOpaque::from_bits(0xfdfffff);
-/// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, allocation/reset profile (bt-lib pin 7a85006f).
+/// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM in registers/evidence/ble-memory.toml (bt-lib pin 7a85006f).
 const SCHEDULER_ITEM_EVENT_CLASS_IMAGE: BleSchedulerItemReceiveWait =
     BleSchedulerItemReceiveWait::ZERO.with_value(0x1);
 

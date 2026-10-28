@@ -40,7 +40,7 @@ and content store, together with the bundle format, writer and reader, live
 in [`runs/`](../runs/README.md). The PHY family is composed by
 `tools/vendor/phy-esp32s31/` over `tools/vendor/phy/` and the chip-neutral
 [capture types](../link/src/capture). Its reviewed relation is in
-[chip knowledge](../../../chips/esp32s31/knowledge/PHY_RELATION.md).
+[chip knowledge](../../../chips/esp32s31/knowledge/README.md).
 Generated runs are stored outside the checkout, with a `target/hil/runs`
 link; they are not tracked. A run never writes tracked files.
 

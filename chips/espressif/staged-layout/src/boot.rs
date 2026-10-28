@@ -1,10 +1,10 @@
 //! Which hart runs the staged boot. ROM releases a core other than hart 0 only
-//! through an explicit boot address ([`chips/esp32s31/notes/core1-boot.md`]);
-//! a stale address left by an earlier image would hand such a hart to the
+//! through an explicit boot address. SOURCE: pinned S31 rev0 ROM
+//! normal_boot @0x2f801790 and main @0x2f804652. A stale address can hand it to the
 //! bootstrap or the runtime, so both stop any hart but this one before it
 //! touches memory.
 //!
-//! [`chips/esp32s31/notes/core1-boot.md`]: https://github.com/ermacv/open-esp-radio/blob/main/chips/esp32s31/notes/core1-boot.md
+//! SOURCE: chips/esp32s31/platform/README.md#secondary-hart-containment.
 
 /// The bootstrap's admitted boot hart. Every facts-generated layout const-checks
 /// this value against its boot-hart fact; a disagreement fails compilation.

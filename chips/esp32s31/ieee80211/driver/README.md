@@ -1,8 +1,7 @@
 # oer-esp32s31-ieee80211-driver
 
 The ESP32-S31 Wi-Fi driver: device composition, the lower-MAC port backend,
-DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
-[FEATURES.md](FEATURES.md). System context: [architecture](../../../../docs/architecture.md).
+DMA rings, keys and the P3/P2 interrupt path. System context: [architecture](../../../../docs/architecture.md).
 
 ## Rules
 
@@ -79,20 +78,9 @@ remain unqualified.
 SOURCE: `VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS` in
 [`vendor-opaque-identities.toml`](../../registers/evidence/vendor-opaque-identities.toml),
 from pinned `esp32-wifi-lib@f856b5db55cb18e2d1826044430f3f4089e47cf9`.
-`hal_mac_tx.o::mac_tx_set_plcp0` sets bit 22. The subsequent
-`mac_tx_set_txop_q` first tests queue-context byte `+0x1d`: initialized or
-released index 3 preserves the bit; reserved slot 0/1/2 sets it only when
-the head software-descriptor flags `[7:6]` equal 2 and clears it for 0/1/3.
-`lmacSetTxFrame` can reserve a slot for unfragmented traffic, so a frame
-class or cipher alone does not determine the final bit.
-
-All inspected vendor unfragmented construction paths retain flags `[7:6]`
-zero: plaintext data, probe/authentication/association management, pre-key
-EAPOL, encrypted and unencrypted ESP-NOW, CCMP/GCMP/TKIP/WEP data and BIP
-group management. Successful software-fragment chains use 2 before the
-last fragment and 3 on the last fragment. Cipher/key selectors occupy the
-separate descriptor word `+0x10`; CCMP does not imply flags class 2.
-These are bounded source observations; they establish no air equivalence.
+The vendor adjusts this lane for reserved TXOP slots; frame class or cipher
+alone does not determine its final value. This driver does not implement that
+adjustment.
 
 ## Radio interrupt part
 
@@ -204,3 +192,27 @@ bounded, until no lease is staged before it stops the walker, and queued
 frames are staged: P1 keeps receiving and dropping frames after it requests
 the stop, until the exit is published; otherwise the epoch ends quarantined
 with `DrainTimeout`.
+
+## Lower-MAC core
+
+The driver core `LowerMacCore` lives in [`src/lower_mac.rs`](src/lower_mac.rs).
+The adapter [`src/port.rs`](src/port.rs) implements its lifecycle, phase,
+station and access-point interfaces over that core. One P2 task polls the
+port; the P3 handlers own only their interrupt epoch and static typed signals.
+The task-side `RadioDevice` retains the cooperative registers, PHY actor
+transaction and RX ring. No ISR accesses its task-only `RefCell` state.
+
+Eight shared TX tickets and pinned MPDU buffers feed four hardware queues.
+Each queue executes its supplied retry plan. Gate, configuration, key and
+disable barriers return the original operation owners through terminals.
+Uninstall returns stopped owners for a fresh installation; uncertainty keeps
+the DMA allocations quarantined. RX buffers require explicit recycling.
+GTK changes freeze ingress and drain preceding RX before returning their
+permission. An erased key cannot authorize a returned MPDU's retransmission.
+
+The port exposes ordinary MPDUs and RX BlockAck agreements. It does not expose
+the optional aggregate, beacon-timing, monitor or air-reservation phases.
+Its publication watchdog is 250 ms, as in W2; command and retirement bounds
+are 400 ms, including the publication and the finite RX stop.
+The operation mapping and portable limits are in
+[the port's README](../../../../protocols/ieee80211/port/README.md#implementers).

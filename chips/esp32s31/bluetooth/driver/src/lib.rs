@@ -18,7 +18,7 @@
 //! client of the shared radio and ends in [`shutdown`], which returns it.
 //! Initialization and scheduler RUN are not RF evidence.
 //!
-//! See the chip `FEATURES.md` for implemented scopes, unsupported operations
+//! SOURCE: the driver README describes implemented scopes, unsupported operations
 //! and the distinction between source coverage and hardware qualification.
 
 #![no_std]

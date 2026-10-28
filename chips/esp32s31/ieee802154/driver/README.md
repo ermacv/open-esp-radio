@@ -21,7 +21,7 @@ while the driver keeps the MAC and placed DMA storage in absorbing `Quarantined`
 custody. Neither dropping quarantine nor reading its fault releases an owner;
 there is no detach, rebind or operational access. Explicit mutable entries keep
 the family service inaccessible through the driver's shared `Deref`.
-The PHY HIL image owns the unchanged 12-byte retained codec, its storage and the
+The PHY HIL image owns the 44-byte retained codec, its storage and the
 safe `fatal::reset_recording` call. The driver does not record or reset.
 
 `tx_power::ESP32S31_TX_POWER_LEVELS` selects from hardware-free chip knowledge.

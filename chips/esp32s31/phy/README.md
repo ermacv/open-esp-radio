@@ -6,8 +6,8 @@ library. Protocol runtimes own their MAC, descriptors, interrupt routes and
 connection state. The radio system owns the shared radio domain and serializes
 PHY lifecycle, retune and tracking calls through exclusive ownership.
 
-The [capability matrix](FEATURES.md) distinguishes implemented primitives from
-composed services. The [tracking contract](src/tracking/README.md) is the
+The [chip overview](../README.md) links protocol and coexistence scopes.
+The [tracking contract](src/tracking/README.md) is the
 canonical reference for demand, admission, cancellation and restoration.
 
 The opt-in `lifecycle-fault-injection` feature exposes destructive one-shot
@@ -375,9 +375,7 @@ the caller's `oer_time::Timer` through `executor::wait::delay` and its
 Direct PBus, analog-I2C and TX-DC/PWDET status observations use a named
 20 µs elapsed-time budget on the caller's clock, including a final observation
 after the limit is seen. This is a readiness policy, not a minimum delay or a
-20 µs bound on a whole transaction. W2 measurements on s31-a exercised thermal
-calibration, RFPLL tracking and retained RF wake; the longest direct edge
-was 2,976 cycles at 160 MHz (18.6 µs). Timeout remains a typed failure.
+20 µs bound on a whole transaction. Timeout remains a typed failure.
 The retained-wake frequency-ready edge already belongs to an asynchronous
 transaction and retries through the timer in 10 µs steps.
 
@@ -405,18 +403,9 @@ allows the retained band to commit. These counted commands keep their original
 pauses are not charged against a direct-path elapsed settle. The diagnostic
 hold reports T3's engine polls as family 3 after the tracking root returns.
 
-The diagnostic hold reports aggregate engine poll count/total/maximum, timer
-resume lateness, and maximum command-to-ready time. Counters are fixed local
-fields; reporting follows root return and performs no UART work inside any
-measured interval. Count
-or duration overflow invalidates the evidence. These observations cover this
-transport path; the remaining tracking families retain their existing execution.
-The initial IEEE 802.15.4 maintenance also retains a bounded local trace of
-command-to-first-check time, each not-ready check, resume lateness and elapsed
-time at failure, plus count/total/maximum of voluntary yields without a timer.
-On a late failure it samples both host busy bits without
-consuming the rejected result. The diagnostic reports this trace after
-maintenance returns; an unobserved ready edge has only a time interval.
+Diagnostics retain bounded timing and command observations and report only
+after the root returns. Overflow or incomplete event pairing invalidates the
+report; observer time and interrupts remain included.
 
 CPU admission is checked only in the [shared transport](src/executor/step.rs)
 and [RX-gain](src/executor/rx.rs) drivers, between complete atoms. The
@@ -495,53 +484,9 @@ disjoint direct phases and clock-free path counts. They do not install callbacks
 inside the minimum-search loop. Search traces and elapsed hardware timing
 remain separate measurement scopes.
 
-## Measured RF hold of a tracking tick
-
-The quiet diagnostic observer measures the production concurrent tracking path
-on ESP32-S31 s31-b. Source `d17da114` is based on main `4a02b652`; the production
-PHY is unchanged. Each forced suite is three fresh boots of five due ticks.
-Debug policy `(3, 0)` and the diagnostic retained-state forcing exercise RFPLL,
-common and transmit branches on every tick. Wi-Fi also exercises both
-retained-temperature-band I2C writes. All 30 ticks commit bitmap 7, restore the
-saved policy and close RF.
-
-Callbacks record coarse edges, root polls/suspensions, aggregate engine timing
-and gain timing in bounded local storage. All diagnostic formatting and UART
-follow the root future's return, including failure reports. Per-command RFPLL
-tracing is disabled to match this quiet measurement method. The same observer
-serves forced and natural policy; production w0–w2 contain none of it.
-
-Values below are observed maxima in milliseconds, including interrupts and
-observer overhead. Each column can reach its maximum on a different tick.
-Baseband max is the longest individual off window; baseband sum is the maximum
-sum of all off windows within one tick.
-
-| Receiving client | Run id | RFPLL | Common | Transmit | Baseband max | Baseband sum | Whole Tracking |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| IEEE 802.15.4 RX, channel 15 | `1792681755048-003edfbd` | 4.838 | 11.214 | 10.425 | 10.275 | 18.160 | 25.443 |
-| Wi-Fi RX, channel 1, unassociated | `1792681802053-003f0230` | 4.823 | 10.111 | 11.866 | 11.716 | 19.433 | 27.219 |
-
-Reproduce these suites with:
-
-```console
-cargo hil --owner phy --board s31-b run --chip esp32s31 --repetitions 3 phy-tracking-hold-ieee802154-idle
-cargo hil --owner phy --board s31-b run --chip esp32s31 --repetitions 3 phy-tracking-hold-wifi-idle
-```
-
-`phy-tracking-hold-wifi-ordinary` selects natural policy and records 20 bounded
-batches of 16 ticks under one RF registration. It leaves debug bytes and
-retained power/I2C state unforced, validates actual committed branch subsets,
-and checks unchanged policy at every batch stop. Run `1792681870641-003f998f`
-completes all 320 ticks and final RF closure with the same quiet observer. All
-320 committed bitmap 0; no calibration branch was triggered in this idle sample.
-
-These are idle observations with no generated associated-station traffic.
-Tracking, grant-protect and baseband-off intervals are nested wall times;
-root poll time includes interrupts, and suspension is the directly measured
-Pending-to-next-poll gap. They are not exclusive CPU times. A grant-protect
-bracket measures how long its request is programmed, not continuous RF exclusion
-or receive blackout. Finite maxima do not establish a worst-case guarantee or
-admit hard BLE windows; traffic and delivery effects require separate evidence.
+Observed idle tracking maxima do not establish RF exclusion, packet delivery
+or a worst-case hold bound. Grant-protect intervals time the request, not an
+independently observed grant.
 
 ## Restoration and failure
 
@@ -561,43 +506,11 @@ distinct outcomes. The existing branch flags establish the first, while
 protocol restoration establishes the second. Neither proves EVM, calibrated
 radiated power, sensitivity or sustained thermal stability.
 
-## Vendor reference scope
+## Source and validation boundary
 
-The runtime parent order and combined RX/TX transaction follow the pinned
-esp-phy-lib `libphy.a` of `chips/esp32s31/vendor/artifacts.toml`.
-RX has its own temperature reference; TX uses one shared reference and retains
-separate Wi-Fi and BT/154 calibration results. Authenticated parent-boundary
-execution checks call order and arguments with explicit child models. Compiled
-comparisons additionally execute actual archive/ROM children for combined
-calibration and the whole parent, including an RFPLL-enabled validation profile.
-They compare semantic state and ordered effects under modeled peripheral inputs
-and documented transport/wait projections; they do not establish RF quality,
-hardware timing or live radio admission. See the
-[tracking contract](src/tracking/README.md).
-
-ESP-IDF's [open orchestration](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_phy/src/phy_common.c)
-calls a binary parameter-tracking function from a periodic task timer and on
-eligible PHY enable. Its result flags describe selected branches, not a
-hardware quiet-window contract. The library's grant-hook names alone are not
-evidence that the final firmware acquired exclusive RF access.
-
-RX gain diagnostics retain coarse DC, table-publication and control/restoration
-regions without per-edge timing. Minimum-search intervals are nested in the DC
-region, including accepted estimator steps and waits. The three region totals
-are disjoint; minimum and fine-step totals must not be added to them. Observer
-clock reads occur at region boundaries, so these remain instrumented durations,
-not pure CPU costs. Early executor errors close active intervals as failed;
-cancellation leaves incomplete evidence and does not release hardware ownership.
-
-Coarse RX diagnostics additionally sample one in sixteen minimum invocations and
-non-minimum DC executor steps, starting with the first. These sampled intervals
-separate prepare/advance from MMIO, minimum settle and readiness execution.
-Readiness time includes its timer and suspension, not just a register read.
-Sampling is deterministic and may correlate with the search sequence; counts and
-scoped maxima accompany totals, which are not whole-calibration costs.
-
-The DC/IQ executor probes readiness immediately after measurement enable, as
-rev0 ROM `phy_iq_est_enable` does, around the required 1-us start and stop
-settles. Only a result that was not ready incurs the 1-us asynchronous
-completion backoff; the observation limit and the timeout disable tail bound
-the wait.
+The pinned `libphy` in [vendor artifacts](../vendor/artifacts.toml) supplies
+the recovered parent order and child algorithms. Host and compiled vendor
+comparisons check semantic state and ordered effects under modeled inputs;
+they do not establish RF quality, physical exclusion or elapsed hardware timing.
+[Tracking](src/tracking/README.md) and [RFPLL](src/tracking/rfpll/README.md)
+describe the production algorithms and their terminal obligations.
