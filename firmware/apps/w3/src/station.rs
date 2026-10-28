@@ -265,21 +265,10 @@ struct Output<'a> {
     link: &'a core::cell::Cell<bool>,
     disconnected: &'a core::cell::Cell<bool>,
     failed: &'a core::cell::Cell<bool>,
-    rx_reasons: &'a core::cell::Cell<u16>,
 }
 impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_> {
     fn emit(&mut self, event: ServiceOutput<'id, Caps, Path>) {
         match event {
-            ServiceOutput::RxFrameDropped(reason) => {
-                let bit = match reason {
-                    machine::StaRxError::Frame(reason) => 1u16 << reason as u16,
-                    machine::StaRxError::Security(_) => 1u16 << 9,
-                };
-                self.rx_reasons.set(self.rx_reasons.get() | bit);
-            }
-            ServiceOutput::RxMsduRefused(_) => {
-                self.rx_reasons.set(self.rx_reasons.get() | (1u16 << 10))
-            }
             ServiceOutput::Notice(machine::StaNotice::Connected { .. }) => self.link.set(true),
             ServiceOutput::Notice(machine::StaNotice::Disconnected(_)) => {
                 self.link.set(false);
@@ -293,9 +282,26 @@ impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_> 
     }
 }
 
-type Service<'id, Id> = StationService<'id, StationComposition<Id>, Callbacks, Rates, 1>;
+/// The station service's observations the report counts (the image's trace
+/// class).
+static SERVICE_TALLY: oer_firmware_apps_w3::collector::ServiceTally =
+    oer_firmware_apps_w3::collector::ServiceTally::new();
+
+/// The observer of the station, its data machine and its service: it counts
+/// into [`SERVICE_TALLY`].
+#[derive(Clone, Copy)]
+struct Observed;
+
+impl oer_trace::Observer for Observed {
+    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        oer_trace::Observer::event(&SERVICE_TALLY, event);
+    }
+}
+
+type Service<'id, Id> =
+    StationService<'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Completed<'p, 'id, Id> =
-    ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1>;
+    ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Io<'c, 'id, Id> = ServiceIo<'c, 'id, Caps, Output<'c>, 2, 8, 2, Child<Root<Id>, 8>>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, Id: SlotIdentity + 'id> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, Id>>>;
@@ -399,7 +405,7 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
         Duration::from_millis(100),
     )
     .view();
-    let service = StationService::<StationComposition<Id>, _, _, 1>::init_in_place(
+    let service = StationService::<StationComposition<Id>, _, _, 1, Observed>::init_in_place(
         service_storage,
         |station_storage| {
             let (station, granted) = Station::init_open(
@@ -420,6 +426,7 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
                     listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
                     phy: PhyMode::Ht20,
                     callbacks: Callbacks,
+                    observer: Observed,
                 },
                 StationResources::<_, 4, 4, 1> {
                     configure: resources.station_commands.configure,
@@ -441,12 +448,14 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
                 [t4, t5, t6, t7],
                 [b4, b5, b6, b7],
                 Backend::<Id>::TX_QUEUE_DEPTH,
+                Observed,
             )
         },
         arbiter,
         Rates(EspressifRateSelection::<Caps>::new()),
         resources.terminal_access,
         receive,
+        Observed,
     );
     let credits = credits.take().expect("station grants command credits");
     (service, credits)
@@ -474,12 +483,10 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let link = core::cell::Cell::new(false);
         let disconnected = core::cell::Cell::new(false);
         let failed = core::cell::Cell::new(false);
-        let rx_reasons = core::cell::Cell::new(0u16);
         let mut output = Output {
             link: &link,
             disconnected: &disconnected,
             failed: &failed,
-            rx_reasons: &rx_reasons,
         };
         let mut io = ServiceIo {
             commands: command_receive,
@@ -515,16 +522,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         ));
         let joined = joined.as_mut().await;
         let mut report = joined.1;
-        report.service_rx_queue_full = joined.0.retired.counters.rx_msdus_queue_full.get();
-        report.service_rx_rejected = joined
-            .0
-            .retired
-            .counters
-            .rx_frames_dropped
-            .get()
-            .saturating_add(joined.0.retired.counters.rx_msdus_too_long.get());
-        report.service_rx_reasons = rx_reasons.get();
-        report.port_events_lost = joined.0.retired.counters.events_lost.get();
+        SERVICE_TALLY.report(&mut report);
         let (end, _retired) =
             oer_memory::unpack_placed!(joined.0, ServiceCompleted { end, retired });
         let ended = oer_memory::match_placed!(end, ServiceEnd {

@@ -38,7 +38,6 @@ fn a_partial_block_ack_keeps_only_the_missing_subframes_in_order() {
     assert_eq!(state.pending_original_indices(), 0b1010);
     assert_eq!(state.original_index(1), 3);
     assert_eq!(state.acknowledged(), 2);
-    assert_eq!(state.aggregate_attempts(), 2);
 
     // The compacted aggregate: position 0 is 101, position 1 is 103.
     assert_eq!(
@@ -56,7 +55,7 @@ fn a_complete_block_ack_finishes_without_a_retry() {
         Ok(AmpduRetryDecision::Finish { retry_mask: 0 })
     );
     assert_eq!(state.acknowledged(), 3);
-    assert_eq!(state.block_ack_mpdu_attempts(), 3);
+    assert_eq!(state.missing_original_indices(), 0);
 }
 
 #[test]
@@ -87,7 +86,8 @@ fn a_failed_protection_republishes_unchanged_then_requests_the_block_ack() {
             starting_sequence: seq(10),
         })
     );
-    assert_eq!(state.block_ack_mpdu_attempts(), 0);
+    // No subframe reached the recipient.
+    assert_eq!(state.missing_original_indices(), 0b111);
     // The request's answer resorts the kept aggregate.
     assert_eq!(
         state.observe_block_ack_request(
@@ -121,7 +121,7 @@ fn an_aggregate_without_any_block_ack_ends_on_the_retry_limit() {
         state.observe(AmpduAttemptResult::NoResponse, 2, at(10), true, FRESH),
         Ok(AmpduRetryDecision::Finish { retry_mask: 0b11 })
     );
-    assert_eq!(state.block_ack_mpdu_attempts(), 6);
+    assert_eq!(state.missing_original_indices(), 0b11);
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn a_trigger_flow_end_and_a_changed_count_are_distinct() {
         state.observe(AmpduAttemptResult::TriggerFlowEnd, 2, at(10), true, FRESH),
         Ok(AmpduRetryDecision::FinishTriggerFlow)
     );
-    assert_eq!(state.trigger_flow_completions(), 1);
+    assert_eq!(state.missing_original_indices(), 0);
     assert_eq!(
         AmpduRetryState::new(seq(0), 0, POLICY),
         Err(AmpduRetryError::EmptyAggregate)

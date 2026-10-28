@@ -50,8 +50,10 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         let mut tickets = tickets.into_iter();
         let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
         let data_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
+        let (config, _) = config(StaSecurity::Open);
+        let observed = config.observer;
         let (station, _credits) = Station::new_open(
-            config(StaSecurity::Open).0,
+            config,
             StationResources::<_, 4, 4, 1> {
                 configure: station_commands.configure,
                 epochs: oer_ieee80211_sta::epoch::LinkEpochSource::new(connection_epoch),
@@ -69,12 +71,13 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 group_permission: station_group_permission,
             },
         );
-        let mut service = StationService::<ServicePort<Id>, _, _, 1>::new(
+        let mut service = StationService::<ServicePort<Id>, _, _, 1, Observed>::new(
             station,
             StaData::new(
                 data_tickets,
                 <[_; 4]>::try_from(large).ok().unwrap(),
                 MODEL_TX_QUEUE_DEPTH,
+                observed,
             ),
             arbiter,
             EspressifRateSelection::<ModelCaps24>::new(),
@@ -87,6 +90,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 block_acks, Duration::from_millis(100)
             )))
             .view(),
+            observed,
         );
         let access_point_association =
             <ModelTypes<ModelBackend<Id, ModelCaps24, ServiceContexts>> as PhaseTypes>::AccessPointKeys::begin_association(
@@ -282,7 +286,35 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 Err(expected)
             );
         }
-        assert_eq!(service.state.station.lost_tokens(), 0);
+        assert_eq!(observed.tokens_lost(), 0);
+        // A `Noop` observer adds nothing to the service's state.
+        #[allow(dead_code)]
+        struct Unobserved<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, C: StaCallbacks, S> {
+            station: PortStation<'id, B, C, 1>,
+            data: PortData<'id, B>,
+            rates: S,
+            terminal_access: oer_ieee80211_port::TerminalAccess<
+                'id,
+                <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
+                <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
+            >,
+            pending: PendingActions<'id, B>,
+        }
+        assert_eq!(
+            core::mem::size_of::<
+                ServiceState<
+                    'id,
+                    ServicePort<Id>,
+                    Callbacks,
+                    EspressifRateSelection<ModelCaps24>,
+                    1,
+                    oer_trace::Noop,
+                >,
+            >(),
+            core::mem::size_of::<
+                Unobserved<'id, ServicePort<Id>, Callbacks, EspressifRateSelection<ModelCaps24>>,
+            >()
+        );
         Ended::uninstall(owner, (), ())
     }
 }

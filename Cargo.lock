@@ -2489,6 +2489,7 @@ dependencies = [
  "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-runtime",
  "oer-ieee80211-sta",
@@ -2499,6 +2500,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-time",
  "oer-time-virtual",
+ "oer-trace",
  "static_cell",
  "tempfile",
  "xarxa-driver",
@@ -2551,6 +2553,7 @@ dependencies = [
  "oer-hil-protocol",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
  "oer-ieee80211-runtime",
@@ -2562,6 +2565,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-riscv",
  "oer-time",
+ "oer-trace",
  "static_cell",
  "xarxa-driver",
 ]
@@ -3058,11 +3062,20 @@ name = "oer-ieee80211-esp-now"
 version = "0.1.0"
 dependencies = [
  "oer-ieee80211-arbiter",
+ "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-time",
+ "oer-trace",
  "zeroize",
+]
+
+[[package]]
+name = "oer-ieee80211-instrumentation"
+version = "0.1.0"
+dependencies = [
+ "oer-trace",
 ]
 
 [[package]]
@@ -3136,6 +3149,7 @@ dependencies = [
  "oer-espressif-ieee80211-policy",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-instrumentation",
  "oer-ieee80211-model",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
@@ -3148,6 +3162,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
+ "oer-trace",
 ]
 
 [[package]]
@@ -3158,6 +3173,7 @@ dependencies = [
  "oer-crypto",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
@@ -3168,6 +3184,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
+ "oer-trace",
 ]
 
 [[package]]

@@ -209,7 +209,6 @@ fn partial_block_ack_compacts_sequences_across_retained_attempts() {
     );
     assert_eq!(state.current_subframes(), 2);
     assert_eq!(state.acknowledged(), 2);
-    assert_eq!(state.block_ack_mpdu_attempts(), 4);
 
     // The retained sequences are 0x0fff and 1. A BlockAck starting at
     // 0x0fff acknowledges both across the 12-bit wrap.
@@ -224,8 +223,6 @@ fn partial_block_ack_compacts_sequences_across_retained_attempts() {
         Ok(AmpduRetryDecision::Finish { retry_mask: 0 })
     );
     assert_eq!(state.acknowledged(), 4);
-    assert_eq!(state.aggregate_attempts(), 2);
-    assert_eq!(state.block_ack_mpdu_attempts(), 6);
 }
 
 #[test]
@@ -244,8 +241,6 @@ fn cts_timeout_republishes_the_unchanged_aggregate_then_requests_its_block_ack()
     }
     assert_eq!(state.current_subframes(), 3);
     assert_eq!(state.acknowledged(), 0);
-    assert_eq!(state.block_ack_mpdu_attempts(), 0);
-    assert_eq!(state.aggregate_attempts(), 1);
     assert_eq!(
         state.observe(cts_timeout, 3, mono(0), true, admitted_at_zero),
         Ok(AmpduRetryDecision::RequestBlockAck {
@@ -357,7 +352,6 @@ fn advanced_block_ack_ssn_completes_preceding_mpdu_without_retry() {
         Ok(AmpduRetryDecision::Finish { retry_mask: 0 })
     );
     assert_eq!(state.acknowledged(), 2);
-    assert_eq!(state.aggregate_attempts(), 1);
 }
 
 #[test]
@@ -424,7 +418,6 @@ fn missing_mpdus_are_retried_until_their_lifetime_leaves_less_than_one_unit() {
         );
         assert!(!state.aged(mono(admitted), mono(now)));
     }
-    assert_eq!(state.aggregate_attempts(), 4);
     assert!(state.aged(mono(admitted), mono(last_live + 1)));
     // Aged under the agreement: discarded behind a BlockAckReq after them.
     assert_eq!(
@@ -519,10 +512,8 @@ fn vendor_trigger_timeout_finishes_without_fabricating_block_ack() {
         state.observe(trigger_timeout, 2, mono(0), true, admitted_at_zero),
         Ok(AmpduRetryDecision::FinishTriggerFlow)
     );
-    assert_eq!(state.trigger_flow_completions(), 1);
     assert_eq!(state.acknowledged(), 0);
-    assert_eq!(state.block_ack_mpdu_attempts(), 0);
-    assert_eq!(state.aggregate_attempts(), 1);
+    assert_eq!(state.missing_original_indices(), 0);
 }
 
 #[test]
@@ -544,8 +535,7 @@ fn trigger_timeout_with_reported_packets_stays_on_retry_path() {
             state.observe(completion, 2, mono(0), true, admitted_at_zero),
             Ok(AmpduRetryDecision::RetainAggregate { retry_mask: 0b11 })
         );
-        assert_eq!(state.trigger_flow_completions(), 0);
-        assert_eq!(state.block_ack_mpdu_attempts(), 2);
+        assert_eq!(state.missing_original_indices(), 0b11);
     }
 }
 
@@ -641,7 +631,6 @@ fn an_ended_agreement_sends_the_live_missing_mpdus_individually() {
             ),
             Ok(AmpduRetryDecision::Unaggregate { retry_mask: 0b101 })
         );
-        assert_eq!(partial.aggregate_attempts(), 1);
 
         // No BlockAck at all: every MPDU leaves the aggregate.
         let mut timeout = AmpduRetryState::<4>::new(

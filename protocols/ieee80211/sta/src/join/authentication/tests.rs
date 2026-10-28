@@ -15,38 +15,28 @@ fn authentication_retries_own_the_sequence_and_stop_at_the_attempt_limit() {
     let mut ready = runtime();
     let mut sequence = SequenceCounter::new(SequenceNumber::new(0x0ffe).unwrap());
     for ordinal in 1..=STA_AUTHENTICATION_ATTEMPT_LIMIT {
-        let (mut active, attempt) = ready.begin_attempt(&mut sequence);
+        let (active, attempt) = ready.begin_attempt(&mut sequence);
         assert_eq!(attempt.ordinal, ordinal);
         assert_eq!(
             attempt.sequence_number,
             SequenceNumber::new(0x0ffd).unwrap().wrapping_add(ordinal)
         );
         assert_eq!(attempt.response_timeout, STA_RESPONSE_TIMEOUT);
-        active.observe_received_frame();
         match active.response_timed_out() {
             StaAuthenticationEvent::Retry {
                 runtime,
                 attempt,
                 failure,
-                received_frames,
-                total_received_frames,
             } => {
                 assert!(ordinal < STA_AUTHENTICATION_ATTEMPT_LIMIT);
                 assert_eq!(attempt, ordinal);
                 assert_eq!(failure, StaAuthenticationFailure::Timeout);
-                assert_eq!(received_frames, 1);
-                assert_eq!(total_received_frames, u32::from(ordinal));
                 ready = runtime;
             }
-            StaAuthenticationEvent::Failed {
-                attempts,
-                failure,
-                total_received_frames,
-            } => {
+            StaAuthenticationEvent::Failed { attempts, failure } => {
                 assert_eq!(ordinal, STA_AUTHENTICATION_ATTEMPT_LIMIT);
                 assert_eq!(attempts, ordinal);
                 assert_eq!(failure, StaAuthenticationFailure::Timeout);
-                assert_eq!(total_received_frames, u32::from(ordinal));
                 return;
             }
             other => panic!("unexpected timeout {other:?}"),
@@ -58,37 +48,27 @@ fn authentication_retries_own_the_sequence_and_stop_at_the_attempt_limit() {
 #[test]
 fn irrelevant_management_returns_the_same_active_exchange() {
     let mut sequence = SequenceCounter::new(SequenceNumber::new(7).unwrap());
-    let (mut active, attempt) = runtime().begin_attempt(&mut sequence);
-    active.observe_received_frame();
-    let StaAuthenticationEvent::Irrelevant(mut active) = active.observe_management_frame(&[0; 30])
+    let (active, attempt) = runtime().begin_attempt(&mut sequence);
+    let StaAuthenticationEvent::Irrelevant(active) = active.observe_management_frame(&[0; 30])
     else {
         panic!("irrelevant frame")
     };
-    assert_eq!(active.active_received_frames(), 1);
-    active.observe_received_frame();
-    assert_eq!(active.total_received_frames(), 2);
-    let StaAuthenticationEvent::Authenticated {
-        attempt: completed,
-        total_received_frames,
-    } = active.observe_management_frame(&authentication_response(0))
+    let StaAuthenticationEvent::Authenticated { attempt: completed } =
+        active.observe_management_frame(&authentication_response(0))
     else {
         panic!("selected peer authenticates")
     };
     assert_eq!(completed, attempt.ordinal);
-    assert_eq!(total_received_frames, 2);
 }
 
 #[test]
 fn peer_disconnect_returns_a_retry_owner_but_rejection_consumes_the_epoch() {
     let mut sequence = SequenceCounter::new(SequenceNumber::new(0).unwrap());
-    let (mut active, _) = runtime().begin_attempt(&mut sequence);
-    active.observe_received_frame();
+    let (active, _) = runtime().begin_attempt(&mut sequence);
     let StaAuthenticationEvent::Retry {
         runtime,
         attempt,
         failure,
-        received_frames,
-        total_received_frames,
     } = active.observe_management_frame(&deauthentication(1))
     else {
         panic!("retry")
@@ -101,17 +81,13 @@ fn peer_disconnect_returns_a_retry_owner_but_rejection_consumes_the_epoch() {
             reason_code: 1
         })
     );
-    assert_eq!(received_frames, 1);
-    assert_eq!(total_received_frames, 1);
-    let (mut active, attempt) = runtime.begin_attempt(&mut sequence);
+    let (active, attempt) = runtime.begin_attempt(&mut sequence);
     assert_eq!(attempt.ordinal, 2);
-    active.observe_received_frame();
     assert!(matches!(
         active.observe_management_frame(&authentication_response(17)),
         StaAuthenticationEvent::Failed {
             attempts: 2,
             failure: StaAuthenticationFailure::Rejected { status_code: 17 },
-            total_received_frames: 2
         }
     ));
 }

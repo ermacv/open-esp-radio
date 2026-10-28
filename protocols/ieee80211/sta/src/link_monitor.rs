@@ -71,7 +71,6 @@ pub struct StaBeaconMonitor {
     config: StaBeaconLossConfig,
     deadline: Option<Instant>,
     last_observation: Option<StaBeaconObservation>,
-    observed: u32,
 }
 
 impl StaBeaconMonitor {
@@ -80,7 +79,6 @@ impl StaBeaconMonitor {
             config,
             deadline: None,
             last_observation: None,
-            observed: 0,
         }
     }
 
@@ -101,10 +99,6 @@ impl StaBeaconMonitor {
             Some(observation) => observation.tim,
             None => None,
         }
-    }
-
-    pub const fn observed(&self) -> u32 {
-        self.observed
     }
 
     /// Arm from the association-complete edge before the first beacon arrives.
@@ -131,7 +125,6 @@ impl StaBeaconMonitor {
                 .ok_or(StaBeaconLossConfigError::DeadlineOverflow)?,
         );
         self.last_observation = Some(observation);
-        self.observed = self.observed.saturating_add(1);
         Ok(())
     }
 

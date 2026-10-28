@@ -147,8 +147,11 @@ fn addba_programs_an_owned_bank_before_response_and_reorders_downlink() {
             world.command(ServiceCommand::Stop).await;
         })
     });
-    assert_eq!(counters.rx_frames_dropped.get(), 0);
-    assert_eq!(counters.rx_msdus_queue_full.get(), 0);
+    assert_eq!(counters.rx_frames_dropped(), 0);
+    assert_eq!(
+        counters.rx_msdus_refused(oer_ieee80211_instrumentation::RxMsduRefusal::QueueFull),
+        0
+    );
 }
 
 #[test]
@@ -436,8 +439,8 @@ fn response_pressure_defers_management_without_overtaking_older_requests() {
             world.command(ServiceCommand::Stop).await;
         })
     });
-    assert_eq!(counters.events_lost.get(), 0);
-    assert_eq!(counters.rx_frames_dropped.get(), 0);
+    assert_eq!(counters.port_events_lost(), 0);
+    assert_eq!(counters.rx_frames_dropped(), 0);
 }
 
 #[test]

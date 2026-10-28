@@ -54,6 +54,7 @@ the portable runtime drives role services over that port.
 | `wire/src/extensions/wmm.rs` | WMM AC parameters and vendor IE parsing |
 | `wire/src/extensions/espressif/esp_now.rs` | ESP-NOW framing and protected-envelope validation |
 | `esp-now/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
+| `instrumentation/src/lib.rs` | The observation events of the cores and runtime, shared by owners, collectors and host decoders |
 
 Frame builders, sequence owners and reorder windows use
 `wire::sequence::SequenceNumber`, validating the twelve-bit range at
@@ -111,6 +112,15 @@ peer's packet numbers and replay frontier are `upper-mac`'s CCMP owners. Both us
 `arbiter/src/interface.rs` and the PHY requests of
 `esp-now/src/extensions/espressif/phy.rs`. ESP-NOW's `configuration` narrows
 the arbiter's checked `WifiPlan` to exclusive standalone ESP-NOW ownership.
+
+The cores and the runtime keep no counters or diagnostics of their own work.
+An owner (the station, its data machine, the station service, the ESP-NOW
+peer table) holds an `O: oer_trace::Observer`, by default `Noop`, and reports
+what it dropped, refused or observed as an event of
+[`instrumentation`](instrumentation/README.md); an image that declares the
+`trace` class collects counts from those events. Counts that decide protocol
+behaviour (packet numbers, replay frontiers, retry and probe budgets, beacon
+deadlines) stay in their owners.
 
 The [`runtime`](runtime/README.md) is the asynchronous glue: it waits on
 port events, deadlines and commands, hands each input to the cores and

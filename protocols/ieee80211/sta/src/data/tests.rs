@@ -2,6 +2,7 @@
 
 use super::*;
 use core::num::NonZeroU16;
+use oer_ieee80211_instrumentation::DataLoss;
 use oer_ieee80211_port::ResponseHeader;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_port::{
@@ -17,6 +18,45 @@ use std::vec::Vec;
 use {oer_ieee80211_upper_mac::ccmp::CcmpRxReplayEpoch, oer_ieee80211_wire::ccmp::GroupKeyId};
 
 struct Caps;
+
+/// Each test's own recorder of the machine's observations.
+type Observed = &'static oer_ieee80211_instrumentation::Recorder<64>;
+
+fn observer() -> Observed {
+    std::boxed::Box::leak(std::boxed::Box::new(
+        oer_ieee80211_instrumentation::Recorder::new(),
+    ))
+}
+
+/// `count` with `cfg(oer_trace)`, and 0 without it: observations exist only
+/// in an instrumented build.
+fn traced(count: u32) -> u32 {
+    if cfg!(oer_trace) { count } else { 0 }
+}
+
+fn losses(observer: Observed, reason: oer_ieee80211_instrumentation::DataLoss) -> u32 {
+    assert!(!observer.overflowed());
+    let lost = oer_ieee80211_instrumentation::Observation::DataMsduLost(
+        oer_ieee80211_instrumentation::DataMsduLost { reason },
+    );
+    observer
+        .observations()
+        .filter(|observation| *observation == lost)
+        .count() as u32
+}
+
+fn tokens_lost(observer: Observed) -> u32 {
+    assert!(!observer.overflowed());
+    observer
+        .observations()
+        .filter(|observation| {
+            matches!(
+                observation,
+                oer_ieee80211_instrumentation::Observation::TokenLost(_)
+            )
+        })
+        .count() as u32
+}
 
 impl Ieee80211Capabilities for Caps {
     type SppScope = oer_ieee80211_wire::security::spp::Association;
@@ -184,11 +224,12 @@ fn open_link(counter: &mut SequenceCounter) -> LinkView<'_, 'static, Station<'st
     }
 }
 
-fn machine() -> StaData<'static, Data<'static>, Caps> {
+fn machine() -> StaData<'static, Data<'static>, Caps, 8, Observed> {
     StaData::new(
         [1, 2],
         [Buffer(std::vec![0; 1600]), Buffer(std::vec![0; 1600])],
         core::num::NonZeroU8::new(8).unwrap(),
+        observer(),
     )
 }
 
@@ -207,7 +248,7 @@ fn epoch() -> CcmpRxReplayEpoch {
 }
 
 fn transmit(
-    data: &mut StaData<'static, Data<'static>, Caps>,
+    data: &mut StaData<'static, Data<'static>, Caps, 8, Observed>,
 ) -> DataTransmit<'static, Data<'static>, Caps> {
     match data.poll_action() {
         Some(transmit) => transmit,
@@ -232,7 +273,7 @@ fn stopped_data_bank_reuses_credits_permissions_and_the_order_frontier() {
     assert_eq!(data.available(WmmAccessCategory::Voice), 1);
     let bank = data.finish();
     assert_eq!(bank.available(WmmAccessCategory::Voice), 1);
-    assert_eq!(bank.counters().left_behind, 1);
+    assert_eq!(losses(bank.observer, DataLoss::LeftBehind), traced(1));
     let mut data = bank.restart();
     assert_eq!(data.next_order, next_order);
     assert_eq!(data.available(WmmAccessCategory::Voice), 1);
@@ -253,7 +294,7 @@ fn stopped_data_bank_reuses_credits_permissions_and_the_order_frontier() {
     .unwrap();
     let transmit = transmit(&mut data);
     assert_eq!(transmit.context.order, next_order);
-    assert_eq!(data.counters().lost_tokens, 0);
+    assert_eq!(tokens_lost(data.observer), 0);
 }
 
 #[test]
@@ -306,7 +347,10 @@ fn a_changed_link_refuses_data_without_reinterpreting_the_encoding_or_losing_res
                 reason,
             });
             assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-            assert_eq!(data.counters().preparation_refused, 1);
+            assert_eq!(
+                losses(data.observer, DataLoss::PreparationRefused),
+                traced(1)
+            );
             assert!(data.poll_action().is_none());
             assert_eq!(core::iter::from_fn(|| data.tickets.take()).count(), 2);
             assert_eq!(core::iter::from_fn(|| data.buffers.take()).count(), 2);
@@ -316,10 +360,11 @@ fn a_changed_link_refuses_data_without_reinterpreting_the_encoding_or_losing_res
 
 #[test]
 fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
-    let mut data = StaData::<Data, Caps>::new(
+    let mut data = StaData::<Data, Caps, 8, Observed>::new(
         [1, 2, 3, 4],
         core::array::from_fn::<_, 4, _>(|_| Buffer(std::vec![0; 1600])),
         core::num::NonZeroU8::new(8).unwrap(),
+        observer(),
     );
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
@@ -373,8 +418,8 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
             completion: ended(End::Delivered, 1),
         });
     }
-    assert_eq!(data.counters().lost_tokens, 0);
-    assert_eq!(data.counters().overflows, 0);
+    assert_eq!(tokens_lost(data.observer), 0);
+    assert_eq!(losses(data.observer, DataLoss::Overflow), traced(0));
     assert!(data.accepts());
 }
 
@@ -457,7 +502,7 @@ fn a_late_old_link_terminal_does_not_take_a_new_links_metadata() {
     assert_eq!(again.ticket, 2);
     assert_eq!(again.context.order, 1);
     assert!(data.poll_action().is_none());
-    assert_eq!(data.counters().left_behind, 1);
+    assert_eq!(losses(data.observer, DataLoss::LeftBehind), traced(1));
     data.returned(DataReturn::TxDone {
         context: again.context,
         ticket: again.ticket,
@@ -471,7 +516,7 @@ fn a_late_old_link_terminal_does_not_take_a_new_links_metadata() {
     assert!(data.buffers.take().is_some());
     assert!(data.buffers.take().is_some());
     assert!(data.buffers.take().is_none());
-    assert_eq!(data.counters().lost_tokens, 0);
+    assert_eq!(tokens_lost(data.observer), 0);
 }
 
 #[test]
@@ -498,7 +543,7 @@ fn a_local_refusal_releases_admission_with_the_operation_resources() {
         assert!(data.accepts());
         assert!(data.poll_action().is_none());
     }
-    assert_eq!(data.counters().lost_tokens, 0);
+    assert_eq!(tokens_lost(data.observer), 0);
 }
 
 #[test]
@@ -524,7 +569,10 @@ fn preparation_refusal_ends_only_its_msdu_without_a_radio_terminal_or_retry() {
     });
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
     assert_eq!(data.available(WmmAccessCategory::Video), capacity - 1);
-    assert_eq!(data.counters().preparation_refused, 1);
+    assert_eq!(
+        losses(data.observer, DataLoss::PreparationRefused),
+        traced(1)
+    );
     assert!(data.poll_action().is_none());
     data.returned(DataReturn::TxDone {
         context: accepted.context,
@@ -534,7 +582,7 @@ fn preparation_refusal_ends_only_its_msdu_without_a_radio_terminal_or_retry() {
     });
     assert_eq!(core::iter::from_fn(|| data.tickets.take()).count(), 2);
     assert_eq!(core::iter::from_fn(|| data.buffers.take()).count(), 2);
-    assert_eq!(data.counters().lost_tokens, 0);
+    assert_eq!(tokens_lost(data.observer), 0);
 }
 
 #[test]
@@ -587,10 +635,11 @@ fn an_open_non_qos_msdu_takes_the_stations_sequence_number_and_no_ccmp_room() {
 
 #[test]
 fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
-    let mut data = StaData::<Data, Caps>::new(
+    let mut data = StaData::<Data, Caps, 8, Observed>::new(
         [1],
         [Buffer(std::vec![0; 200])],
         core::num::NonZeroU8::new(8).unwrap(),
+        observer(),
     );
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
     let long = Msdu {
@@ -620,10 +669,11 @@ fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
 
 #[test]
 fn open_mpdu_fits_exactly_without_a_temporary_ccmp_gap() {
-    let mut data = StaData::<Data, Caps>::new(
+    let mut data = StaData::<Data, Caps, 8, Observed>::new(
         [1],
         [Buffer(std::vec![0; 24 + 8 + 100])],
         core::num::NonZeroU8::new(8).unwrap(),
+        observer(),
     );
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
     data.input(DataInput {
@@ -828,7 +878,7 @@ fn tid_and_sequence(frame: &[u8]) -> (u8, u16) {
 
 #[test]
 fn an_attempt_aborted_before_the_air_goes_again_first_with_its_sequence_number() {
-    let mut data = StaData::<Data, Caps>::new(
+    let mut data = StaData::<Data, Caps, 8, Observed>::new(
         [1, 2, 3],
         [
             Buffer(std::vec![0; 1600]),
@@ -836,6 +886,7 @@ fn an_attempt_aborted_before_the_air_goes_again_first_with_its_sequence_number()
             Buffer(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
+        observer(),
     );
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
@@ -878,7 +929,7 @@ fn an_attempt_aborted_before_the_air_goes_again_first_with_its_sequence_number()
 
 #[test]
 fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again() {
-    let mut data = StaData::<Data, Caps>::new(
+    let mut data = StaData::<Data, Caps, 8, Observed>::new(
         [1, 2, 3],
         [
             Buffer(std::vec![0; 1600]),
@@ -886,6 +937,7 @@ fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again()
             Buffer(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
+        observer(),
     );
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
@@ -910,7 +962,7 @@ fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again()
     // The link ends: the owed ones drain into their tokens, counted.
     data.leave();
     assert!(data.poll_action().is_none());
-    assert_eq!(data.counters().left_behind, 2);
+    assert_eq!(losses(data.observer, DataLoss::LeftBehind), traced(2));
     // The submitted one, aborted before the air, returns its tokens and
     // does not go again: the retry rule holds within one link.
     data.returned(DataReturn::TxDone {
@@ -920,8 +972,8 @@ fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again()
         completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
     });
     assert!(data.poll_action().is_none());
-    assert_eq!(data.counters().left_behind, 3);
-    assert_eq!(data.counters().lost_tokens, 0);
+    assert_eq!(losses(data.observer, DataLoss::LeftBehind), traced(3));
+    assert_eq!(tokens_lost(data.observer), 0);
     // Every token is back: a new link takes three MSDUs again.
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
@@ -937,7 +989,7 @@ fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again()
 
 #[test]
 fn a_category_the_service_does_not_admit_waits_and_the_others_go_in_their_order() {
-    let mut data = StaData::<Data, Caps>::new(
+    let mut data = StaData::<Data, Caps, 8, Observed>::new(
         [1, 2, 3],
         [
             Buffer(std::vec![0; 1600]),
@@ -945,6 +997,7 @@ fn a_category_the_service_does_not_admit_waits_and_the_others_go_in_their_order(
             Buffer(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
+        observer(),
     );
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
@@ -994,10 +1047,11 @@ fn terminal_failures_retire_the_msdu_and_release_admission() {
         (ended(End::ContentionLimit, 0), 0, 1, 0),
         (TxOutcome::Expired { msdus: 1 }, 0, 0, 1),
     ] {
-        let mut data = StaData::<Data, Caps>::new(
+        let mut data = StaData::<Data, Caps, 8, Observed>::new(
             [1],
             [Buffer(std::vec![0; 1600])],
             core::num::NonZeroU8::new(8).unwrap(),
+            observer(),
         );
         let capacity = data.available(WmmAccessCategory::Voice);
         let mut replay = epoch();
@@ -1019,10 +1073,16 @@ fn terminal_failures_retire_the_msdu_and_release_admission() {
             completion: outcome,
         });
         assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-        assert_eq!(data.counters().indeterminate, indeterminate);
-        assert_eq!(data.counters().contention_limited, contention);
-        assert_eq!(data.counters().expired, expired);
-        assert_eq!(data.counters().lost_tokens, 0);
+        assert_eq!(
+            losses(data.observer, DataLoss::Indeterminate),
+            traced(indeterminate)
+        );
+        assert_eq!(
+            losses(data.observer, DataLoss::ContentionLimited),
+            traced(contention)
+        );
+        assert_eq!(losses(data.observer, DataLoss::Expired), traced(expired));
+        assert_eq!(tokens_lost(data.observer), 0);
         assert!(
             data.poll_action().is_none(),
             "final outcomes never retry the MSDU"
@@ -1066,7 +1126,7 @@ fn key_removal_drops_a_published_msdu_and_returns_admission_once() {
         "the removed key's MSDU is not retried"
     );
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-    assert_eq!(data.counters().lost_tokens, 0);
+    assert_eq!(tokens_lost(data.observer), 0);
     for _ in 0..2 {
         assert!(data.tickets.take().is_some());
         assert!(data.buffers.take().is_some());
@@ -1109,4 +1169,88 @@ fn received<'f, T: StaTokens>(
         Ok(parts) => parts.ether_type != EAPOL_ETHER_TYPE,
         Err(_) => true,
     }))
+}
+
+#[test]
+fn data_losses_arrive_in_the_order_they_happen() {
+    let mut data = machine();
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    for _ in 0..2 {
+        data.input(DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        })
+        .unwrap();
+    }
+    let first = transmit(&mut data);
+    let second = transmit(&mut data);
+    for (operation, completion) in [
+        (first, TxOutcome::Expired { msdus: 1 }),
+        (
+            second,
+            TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
+        ),
+    ] {
+        data.returned(DataReturn::TxDone {
+            context: operation.context,
+            ticket: operation.ticket,
+            buffer: operation.buffer,
+            completion,
+        });
+    }
+    data.input(DataInput {
+        msdu: msdu(6),
+        link: &mut link,
+    })
+    .unwrap();
+    data.leave();
+    let observed: Vec<_> = data.observer.observations().collect();
+    let lost = |reason| {
+        oer_ieee80211_instrumentation::Observation::DataMsduLost(
+            oer_ieee80211_instrumentation::DataMsduLost { reason },
+        )
+    };
+    if cfg!(oer_trace) {
+        assert_eq!(
+            observed,
+            [
+                lost(DataLoss::Expired),
+                lost(DataLoss::Indeterminate),
+                lost(DataLoss::LeftBehind),
+            ]
+        );
+    } else {
+        assert!(observed.is_empty());
+    }
+}
+
+#[test]
+fn the_noop_observer_adds_nothing_to_the_machines() {
+    // The machines' fields other than their observer.
+    #[allow(dead_code)]
+    struct Live<'id, D: StaDataTokens, K, const CAP: usize> {
+        tickets: Pool<D::Ticket>,
+        buffers: Pool<D::Buffer>,
+        owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
+        admission: Admissions,
+        next_order: u32,
+        link: Option<LinkEpoch<'id, D::EpochPath>>,
+    }
+    #[allow(dead_code)]
+    struct Retired<'id, D: StaDataTokens, K, const CAP: usize> {
+        tickets: Pool<D::Ticket>,
+        buffers: Pool<D::Buffer>,
+        owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
+        admission: Admissions,
+        next_order: u32,
+    }
+    assert_eq!(
+        core::mem::size_of::<StaData<'static, Data<'static>, Caps, 8, oer_trace::Noop>>(),
+        core::mem::size_of::<Live<'static, Data<'static>, Caps, 8>>()
+    );
+    assert_eq!(
+        core::mem::size_of::<RetiredData<'static, Data<'static>, Caps, 8, oer_trace::Noop>>(),
+        core::mem::size_of::<Retired<'static, Data<'static>, Caps, 8>>()
+    );
 }

@@ -1,7 +1,10 @@
-//! An observation of one ARP MSDU on the protected link, for an
-//! application's diagnostics. ARP bytes remain local to the application sink. The public SN/PN lets an
-//! application correlate an observed ARP with encrypted air traffic without
-//! exporting any traffic key. No IP or EAPOL payload is projected.
+//! ARP correlation of the protected link: the IPv4 addresses of an ARP MSDU
+//! and the public header identity (SN, CCMP PN, key ID) of its MPDU, as the
+//! observation events of `oer_ieee80211_instrumentation`. They let a
+//! collector match an ARP exchange against encrypted air traffic without
+//! any traffic key; no IP or EAPOL payload is projected. Only an observation
+//! point calls these functions.
+use oer_ieee80211_instrumentation::{ArpAddresses, ArpReceived, ArpTransmitted};
 use oer_ieee80211_wire::{
     ccmp::{CCMP_HEADER_LEN, CcmpHeader, CcmpPacketNumber},
     data::{EthernetFrameParts, LLC_SNAP_HEADER_LEN, rfc1042_ether_type},
@@ -10,69 +13,61 @@ use oer_ieee80211_wire::{
 };
 use oer_ieee80211_wire::{ethertype::ETHER_TYPE_ARP, management::BROADCAST_ADDRESS};
 
-#[derive(Clone, Copy)]
-pub struct ArpFrameObservation {
-    pub transmitted: bool,
-    pub group_addressed: bool,
-    pub sequence: u16,
-    pub packet_number: u64,
-    pub key_id: u8,
-    /// RFC 826 Ethernet/IPv4 ARP prefix, for validation by the application.
-    pub payload: [u8; 28],
-}
-impl core::fmt::Debug for ArpFrameObservation {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ArpFrameObservation")
-            .field("transmitted", &self.transmitted)
-            .field("sequence", &self.sequence)
-            .field("packet_number", &self.packet_number)
-            .field("key_id", &self.key_id)
-            .field("payload", &"<redacted>")
-            .finish()
+/// The addresses and identity of the ARP request or reply a prepared
+/// protected MPDU `bytes` carries, numbered `pn`; `None` for another MSDU.
+pub fn transmitted_arp(
+    bytes: &[u8],
+    pn: CcmpPacketNumber,
+) -> Option<(ArpAddresses, ArpTransmitted)> {
+    let header = DecodedHeader::decode(bytes)?;
+    let body = header.body().get(CCMP_HEADER_LEN..)?;
+    let (llc, payload) = body.split_first_chunk::<LLC_SNAP_HEADER_LEN>()?;
+    if rfc1042_ether_type(*llc) != Some(ETHER_TYPE_ARP) {
+        return None;
     }
-}
-impl ArpFrameObservation {
-    #[inline(never)]
-    pub fn transmit(bytes: &[u8], pn: CcmpPacketNumber) -> Option<Self> {
-        let header = DecodedHeader::decode(bytes)?;
-        let body = header.body().get(CCMP_HEADER_LEN..)?;
-        let (llc, payload) = body.split_first_chunk::<LLC_SNAP_HEADER_LEN>()?;
-        if rfc1042_ether_type(*llc) != Some(ETHER_TYPE_ARP) {
-            return None;
-        }
-        Some(Self {
-            transmitted: true,
-            group_addressed: false,
+    let (operation, addresses) = ArpAddresses::parse(payload)?;
+    Some((
+        addresses,
+        ArpTransmitted {
+            operation,
             sequence: SequenceNumber::from_sequence_control(header.sequence_control()).get(),
             packet_number: pn.value(),
-            key_id: 0,
-            payload: payload.get(..28)?.try_into().ok()?,
-        })
+        },
+    ))
+}
+
+/// The addresses and identity of the ARP request or reply in a received
+/// protected MPDU `bytes`, whose MSDU is `parts`; `None` for another MSDU
+/// or an unprotected MPDU.
+pub fn received_arp(
+    bytes: &[u8],
+    parts: &EthernetFrameParts<'_>,
+) -> Option<(ArpAddresses, ArpReceived)> {
+    if parts.ether_type != ETHER_TYPE_ARP {
+        return None;
     }
-    #[inline(never)]
-    pub fn receive(bytes: &[u8], parts: &EthernetFrameParts<'_>) -> Option<Self> {
-        if parts.ether_type != ETHER_TYPE_ARP {
-            return None;
-        }
-        let header = DecodedHeader::decode(bytes)?;
-        if !header.control().protected() {
-            return None;
-        }
-        let ccmp = CcmpHeader::parse(*header.body().first_chunk::<CCMP_HEADER_LEN>()?).ok()?;
-        Some(Self {
-            transmitted: false,
+    let header = DecodedHeader::decode(bytes)?;
+    if !header.control().protected() {
+        return None;
+    }
+    let ccmp = CcmpHeader::parse(*header.body().first_chunk::<CCMP_HEADER_LEN>()?).ok()?;
+    let (operation, addresses) = ArpAddresses::parse(parts.payload)?;
+    Some((
+        addresses,
+        ArpReceived {
+            operation,
             group_addressed: parts.destination == BROADCAST_ADDRESS,
+            key_id: ccmp.key_id().value(),
             sequence: SequenceNumber::from_sequence_control(header.sequence_control()).get(),
             packet_number: ccmp.packet_number().value(),
-            key_id: ccmp.key_id().value(),
-            payload: parts.payload.get(..28)?.try_into().ok()?,
-        })
-    }
+        },
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oer_ieee80211_instrumentation::ArpOperation;
     use oer_ieee80211_wire::{
         address::{Bssid, IndividualAddress, OwnAddress},
         ccmp::CcmpKeyId,
@@ -80,8 +75,16 @@ mod tests {
     };
 
     #[test]
-    fn arp_metadata_uses_public_header_identity_and_redacts_local_payload() {
-        let payload = *b"secret-local-arp-prefix-1234";
+    fn arp_identity_uses_public_header_fields_and_the_rfc_826_addresses() {
+        // An Ethernet/IPv4 ARP request from 10.0.0.2 for 10.0.0.1.
+        let mut payload = [0u8; 28];
+        payload[..8].copy_from_slice(&[0, 1, 8, 0, 6, 4, 0, 1]);
+        payload[14..18].copy_from_slice(&[10, 0, 0, 2]);
+        payload[24..28].copy_from_slice(&[10, 0, 0, 1]);
+        let addresses = ArpAddresses {
+            sender: [10, 0, 0, 2],
+            target: [10, 0, 0, 1],
+        };
         let pn = CcmpPacketNumber::new(0x010203040506).expect("public PN");
         for peer_qos in [false, true] {
             let mut bytes = [0; 128];
@@ -106,24 +109,36 @@ mod tests {
                 ether_type: 0x0806,
                 payload: &payload,
             };
-            let rx = ArpFrameObservation::receive(&bytes[..len], &parts).expect("validated ARP");
-            assert!(!rx.transmitted);
-            assert!(rx.group_addressed);
             assert_eq!(
-                (rx.sequence, rx.packet_number, rx.key_id),
-                (123, pn.value(), 2)
+                received_arp(&bytes[..len], &parts),
+                Some((
+                    addresses,
+                    ArpReceived {
+                        operation: ArpOperation::Request,
+                        group_addressed: true,
+                        key_id: 2,
+                        sequence: 123,
+                        packet_number: pn.value(),
+                    }
+                ))
             );
-            assert_eq!(rx.payload, payload);
-            assert!(!std::format!("{rx:?}").contains("secret-local"));
             let allocated = CcmpPacketNumber::new(99).expect("TX PN");
-            let tx = ArpFrameObservation::transmit(&bytes[..len], allocated).expect("prepared ARP");
-            assert!(tx.transmitted);
-            assert_eq!((tx.sequence, tx.packet_number, tx.key_id), (123, 99, 0));
+            assert_eq!(
+                transmitted_arp(&bytes[..len], allocated),
+                Some((
+                    addresses,
+                    ArpTransmitted {
+                        operation: ArpOperation::Request,
+                        sequence: 123,
+                        packet_number: 99,
+                    }
+                ))
+            );
             for end in 0..len {
-                assert!(ArpFrameObservation::transmit(&bytes[..end], allocated).is_none());
+                assert!(transmitted_arp(&bytes[..end], allocated).is_none());
             }
             assert!(
-                ArpFrameObservation::receive(
+                received_arp(
                     &bytes[..len],
                     &EthernetFrameParts {
                         ether_type: 0x888e,
@@ -138,7 +153,7 @@ mod tests {
             }
             .encode(&mut bytes)
             .expect("EAPOL");
-            assert!(ArpFrameObservation::transmit(&bytes[..len], allocated).is_none());
+            assert!(transmitted_arp(&bytes[..len], allocated).is_none());
         }
     }
 }

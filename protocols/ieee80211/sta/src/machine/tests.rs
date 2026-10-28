@@ -314,9 +314,41 @@ enum Seen {
     Edca(WmmParameterSet),
 }
 
+/// Counts the station's token losses and RSN input drops, each test's own.
+#[derive(Default)]
+struct Losses {
+    tokens: core::cell::Cell<u32>,
+    rsn: core::cell::Cell<u32>,
+    scan: core::cell::Cell<Option<oer_ieee80211_instrumentation::ScanBssObserved>>,
+}
+
+impl oer_trace::Observer for Losses {
+    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        use oer_ieee80211_instrumentation::Observation;
+        let count = match Observation::of(&event) {
+            Some(Observation::TokenLost(_)) => &self.tokens,
+            Some(Observation::RsnInputDropped(_)) => &self.rsn,
+            Some(Observation::ScanBssObserved(observed)) => {
+                self.scan.set(Some(observed));
+                return;
+            }
+            _ => return,
+        };
+        count.set(count.get() + 1);
+    }
+}
+
+type Observed = &'static Losses;
+
+/// `count` with `cfg(oer_trace)`, and 0 without it: observations exist only
+/// in an instrumented build.
+fn traced(count: u32) -> u32 {
+    if cfg!(oer_trace) { count } else { 0 }
+}
+
 /// The loop the thin service runs, with the test as the port.
 struct World<'id, const G: usize = 2> {
-    station: Station<'id, Tokens<'id, G>, Caps, Callbacks>,
+    station: Station<'id, Tokens<'id, G>, Caps, Callbacks, Observed>,
     arbiter: Arbiter<'id, Caps, NoReservation, TestGatePath<'id>>,
     gate_issuer: GateIssuer<'id, TestGatePath<'id>>,
     seen: Vec<Seen>,
@@ -436,10 +468,10 @@ impl<'id> World<'id> {
         skipped_absences: u8,
         group_slots: [Slot; G],
         build: impl FnOnce(
-            StaConfig<Caps, Callbacks>,
+            StaConfig<Caps, Callbacks, Observed>,
             StationResources<'id, Tokens<'id, G>, TX, TX, G>,
         ) -> (
-            Station<'id, Tokens<'id, G>, Caps, Callbacks>,
+            Station<'id, Tokens<'id, G>, Caps, Callbacks, Observed>,
             StaCommandCredits<'id, TestConfigurationPath<'id>>,
         ),
     ) -> World<'id, G> {
@@ -465,6 +497,7 @@ impl<'id> World<'id> {
             listen_interval: StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
             callbacks: Callbacks { nonce_calls: 0 },
+            observer: &*std::boxed::Box::leak(std::boxed::Box::new(Losses::default())),
         };
         let resources = StationResources {
             configure: permissions.configure,
@@ -1101,7 +1134,15 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
             ]
         );
         let now = at(13);
+        assert_eq!(world.station.config.observer.scan.get(), None);
         world.receive(now, &beacon());
+        // The beacon is the scan's first BSS, observed with the trace cfg.
+        assert_eq!(
+            world.station.config.observer.scan.get(),
+            cfg!(oer_trace).then_some(oer_ieee80211_instrumentation::ScanBssObserved {
+                outcome: oer_ieee80211_instrumentation::ScanOutcome::Inserted
+            })
+        );
         // The scan ends; the join leases channel 6 and authenticates.
         world.advance();
         assert_eq!(
@@ -1633,7 +1674,7 @@ fn a_null_encoding_failure_leaves_once_and_returns_the_credit() {
             buffers.push(buffer);
         }
         for buffer in buffers {
-            world.station.buffers.put(buffer);
+            world.station.buffers.put(buffer, &oer_trace::Noop);
         }
         let State::Connected(connected) = &mut world.station.state else {
             panic!()
@@ -1726,7 +1767,7 @@ fn a_terminal_of_the_previous_connection_only_returns_its_resources() {
         assert!(world.station.transition().0.tokens().is_some());
         assert!(world.station.transition().0.tokens().is_some());
         assert!(world.station.transition().0.tokens().is_none());
-        assert_eq!(world.station.lost_tokens(), 0);
+        assert_eq!(world.station.config.observer.tokens.get(), 0);
     });
 }
 
@@ -2154,7 +2195,7 @@ fn m4_refused_before_admission_never_completes_the_handshake() {
             core::iter::from_fn(|| world.station.buffers.take()).count(),
             2
         );
-        assert_eq!(world.station.lost_tokens(), 0);
+        assert_eq!(world.station.config.observer.tokens.get(), 0);
     });
 }
 
@@ -2306,6 +2347,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             [Ticket(10)],
             [Buffer([0; 512], 512)],
             core::num::NonZeroU8::MIN,
+            oer_trace::Noop,
         );
         fn send<'id>(
             data: &mut StaData<'id, Tokens<'id>, Caps>,
@@ -2739,7 +2781,7 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
             }
             assert!(world.station.keys.clear());
             assert!(matches!(world.station.state, State::Idle));
-            assert_eq!(world.station.lost_tokens(), 0);
+            assert_eq!(world.station.config.observer.tokens.get(), 0);
             assert!(
                 !world
                     .seen
@@ -2833,10 +2875,10 @@ fn group_removal_returns_permission_before_another_owner_can_leave() {
     let (permission, entry) = keys.take_group_key(false).unwrap();
     assert!(keys.take_group_key(false).is_none());
     assert!(!keys.clear());
-    keys.group_removed(entry.key.0, permission, entry.place);
+    keys.group_removed(entry.key.0, permission, entry.place, &oer_trace::Noop);
     let (permission, entry) = keys.take_group_key(false).unwrap();
     assert!(!keys.clear());
-    keys.group_removed(entry.key.0, permission, entry.place);
+    keys.group_removed(entry.key.0, permission, entry.place, &oer_trace::Noop);
     assert!(keys.clear());
 }
 
@@ -3125,8 +3167,8 @@ fn irrelevant_management_while_authentication_waits_for_credit_preserves_join() 
             assert!(world.station.poll_action(now).is_none());
             assert_eq!(world.station.sequence, before);
         }
-        world.station.tickets.put(first);
-        world.station.tickets.put(second);
+        world.station.tickets.put(first, &oer_trace::Noop);
+        world.station.tickets.put(second, &oer_trace::Noop);
         let Some(StaAction::Transmit(transmit)) = world.station.poll_action(now) else {
             panic!("returning credits must continue the unsent authentication attempt");
         };
@@ -3172,7 +3214,10 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
         assert!(world.station.poll_action(at(100)).is_none());
         assert_eq!(world.station.sequence, before);
         assert_eq!(world.station.poll_deadline(), Some(at(1100)));
-        world.station.tickets.put(held.pop().unwrap());
+        world
+            .station
+            .tickets
+            .put(held.pop().unwrap(), &oer_trace::Noop);
         let Some(StaAction::Transmit(transmit)) = world.station.poll_action(at(100)) else {
             panic!("returning credit resumes the first association request");
         };
@@ -3202,7 +3247,7 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
             },
         );
         for ticket in held {
-            world.station.tickets.put(ticket);
+            world.station.tickets.put(ticket, &oer_trace::Noop);
         }
         assert_eq!(world.station.tickets.len(), 2);
         assert_eq!(world.station.buffers.len(), 2);
@@ -3420,7 +3465,7 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                 }
                 let mut qos = [SequenceCounter::new(SequenceNumber::ZERO); 8];
                 fn encode<'id>(
-                    station: &mut Station<'id, Tokens<'id>, Caps, Callbacks>,
+                    station: &mut Station<'id, Tokens<'id>, Caps, Callbacks, Observed>,
                     qos: &mut [SequenceCounter; 8],
                     encoding: u8,
                 ) -> Option<StaTransmit<'id, Tokens<'id>, Caps>> {
@@ -3513,10 +3558,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                     );
                 }
                 for ticket in tickets {
-                    world.station.tickets.put(ticket);
+                    world.station.tickets.put(ticket, &oer_trace::Noop);
                 }
                 for buffer in buffers {
-                    world.station.buffers.put(buffer);
+                    world.station.buffers.put(buffer, &oer_trace::Noop);
                 }
                 let transmit = encode(&mut world.station, &mut qos, encoding).unwrap();
                 let mut expected = before;
@@ -3757,7 +3802,7 @@ fn duplicate_m3_waits_for_credit_and_coalesces_across_group_key_installation() {
         world
             .station
             .input(at(52), world.pending_installs.pop().unwrap());
-        world.station.tickets.put(first);
+        world.station.tickets.put(first, &oer_trace::Noop);
         let Some(StaAction::Transmit(transmit)) = world.station.poll_action(at(52)) else {
             panic!()
         };
@@ -3783,7 +3828,7 @@ fn duplicate_m3_waits_for_credit_and_coalesces_across_group_key_installation() {
             TxPurpose::Connected(Sending::GroupResponse)
         );
         world.transmitted(transmit, true);
-        world.station.tickets.put(second);
+        world.station.tickets.put(second, &oer_trace::Noop);
         world.run(at(53));
         assert_eq!(world.frames.len(), before + 2);
         assert!(world.station.is_connected());
@@ -4037,7 +4082,7 @@ fn probe_encoding_failure_returns_credit_and_missing_epoch_reports_link_change()
             buffers.push(buffer);
         }
         for buffer in buffers {
-            world.station.buffers.put(buffer);
+            world.station.buffers.put(buffer, &oer_trace::Noop);
         }
         assert!(matches!(
             world.station.poll_action(at(0)),
@@ -4084,7 +4129,7 @@ fn pending_group_material_is_redacted_and_moves_into_the_installed_record() {
         assert!(keys.groups.same_material(id, material.as_bytes()));
         let (permission, entry) = keys.take_group_key(false).unwrap();
         assert!(!keys.groups.same_material(id, material.as_bytes()));
-        keys.group_removed(entry.key.0, permission, entry.place);
+        keys.group_removed(entry.key.0, permission, entry.place, &oer_trace::Noop);
         assert!(keys.clear());
     });
 }
@@ -4866,4 +4911,27 @@ fn an_overfull_returned_bank_reports_its_fault_and_keeps_owners_quarantined() {
         ));
         assert!(!world.station.keys.clear());
     });
+}
+
+#[test]
+fn the_noop_observer_adds_nothing_to_the_station_configuration() {
+    // The configuration's fields other than its observer.
+    #[allow(dead_code)]
+    struct Unobserved<K, C> {
+        address: oer_ieee80211_wire::address::OwnAddress,
+        ssid: heapless::Vec<u8, { oer_ieee80211_wire::management::MAX_SSID_LEN }>,
+        channels: heapless::Vec<SupportedChannel<K>, CHANNEL_CAPACITY>,
+        dwell: Duration,
+        skipped_absences: u8,
+        access_point_margin_db: u8,
+        supported_rates: [u8; 8],
+        association: &'static oer_ieee80211_wire::station::AssociationCapabilities,
+        listen_interval: StationListenInterval,
+        phy: PhyMode,
+        callbacks: C,
+    }
+    assert_eq!(
+        core::mem::size_of::<StaConfig<Caps, Callbacks, oer_trace::Noop>>(),
+        core::mem::size_of::<Unobserved<Caps, Callbacks>>()
+    );
 }

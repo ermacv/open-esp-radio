@@ -148,7 +148,7 @@ fn deferred_kinds_follow_the_shared_replay_order_without_dropping_either_frame()
 
 fn security_drops(world: &World<'_>) -> u32 {
     match &world.station.state {
-        State::Connected(connected) => connected.rsn.as_ref().unwrap().dropped.get(),
+        State::Connected(_) => world.station.config.observer.rsn.get(),
         _ => panic!("the security exchange must stay alive after a protocol drop"),
     }
 }
@@ -206,13 +206,13 @@ fn invalid_mic_and_non_increasing_counters_never_replace_a_deferred_frame() {
                             reason
                         )))
                     );
-                    assert_eq!(security_drops(&world), 1 + index as u32);
+                    assert_eq!(security_drops(&world), traced(1 + index as u32));
                 }
                 assert_eq!(world.frames.len(), before);
                 world.end_transmissions(at(52));
                 world.run(at(52));
                 assert_eq!(response_counters(&world, before), [5]);
-                assert_eq!(security_drops(&world), 3);
+                assert_eq!(security_drops(&world), traced(3));
             });
         }
     }
@@ -481,7 +481,7 @@ fn a_removal_terminal_preserves_an_encoded_group_response_waiting_for_credit() {
             },
         );
         for buffer in buffers {
-            world.station.buffers.put(buffer);
+            world.station.buffers.put(buffer, &oer_trace::Noop);
         }
         world.run(at(52));
         assert_eq!(world.frames.len(), before + 1);

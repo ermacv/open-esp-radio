@@ -213,10 +213,7 @@ pub struct AmpduRetryState {
     /// Where the BlockAckReq of the last `RequestBlockAck` or `DiscardAged`
     /// starts.
     block_ack_request_start: SequenceNumber,
-    aggregate_attempts: u8,
     acknowledged: u8,
-    block_ack_mpdu_attempts: u16,
-    trigger_flow_completions: u8,
     protection_failures: u8,
     /// Attempts that ended without any BlockAck.
     ack_timeouts: u8,
@@ -252,10 +249,7 @@ impl AmpduRetryState {
             aged_margin: policy.aged_margin,
             discarded_original_indices: 0,
             block_ack_request_start: first_sequence,
-            aggregate_attempts: 1,
             acknowledged: 0,
-            block_ack_mpdu_attempts: 0,
-            trigger_flow_completions: 0,
             protection_failures: 0,
             ack_timeouts: 0,
         })
@@ -288,7 +282,6 @@ impl AmpduRetryState {
         let every = all_subframes(observed_subframes);
         match result {
             AmpduAttemptResult::TriggerFlowEnd => {
-                self.trigger_flow_completions = self.trigger_flow_completions.saturating_add(1);
                 self.missing_original_indices = 0;
                 Ok(AmpduRetryDecision::FinishTriggerFlow)
             }
@@ -313,7 +306,6 @@ impl AmpduRetryState {
                 })
             }
             AmpduAttemptResult::NoResponse => {
-                self.count_mpdu_attempts(observed_subframes);
                 self.ack_timeouts = self.ack_timeouts.saturating_add(1);
                 self.missing_original_indices = self.pending_original_indices;
                 if self.ack_timeouts >= self.retry_limit {
@@ -326,7 +318,6 @@ impl AmpduRetryState {
                 Ok(self.retain_or_unaggregate(every, observed_subframes, block_ack_operational))
             }
             AmpduAttemptResult::Answered(report) => {
-                self.count_mpdu_attempts(observed_subframes);
                 self.resort(report, now, block_ack_operational, &admitted)
             }
         }
@@ -347,12 +338,6 @@ impl AmpduRetryState {
         admitted: impl Fn(u8) -> Option<Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
         self.resort(block_ack, now, block_ack_operational, &admitted)
-    }
-
-    fn count_mpdu_attempts(&mut self, subframes: u8) {
-        self.block_ack_mpdu_attempts = self
-            .block_ack_mpdu_attempts
-            .saturating_add(u16::from(subframes));
     }
 
     /// Keep the subframes `report` does not acknowledge.
@@ -477,7 +462,6 @@ impl AmpduRetryState {
         if !block_ack_operational || (missing == 1 && !self.retain_single_mpdu) {
             return AmpduRetryDecision::Unaggregate { retry_mask };
         }
-        self.aggregate_attempts = self.aggregate_attempts.saturating_add(1);
         AmpduRetryDecision::RetainAggregate { retry_mask }
     }
 
@@ -528,28 +512,14 @@ impl AmpduRetryState {
         self.missing_original_indices
     }
 
-    /// A-MPDU attempts, the first included.
-    pub const fn aggregate_attempts(&self) -> u8 {
-        self.aggregate_attempts
-    }
-
     /// Subframes a BlockAck acknowledged.
     pub const fn acknowledged(&self) -> u8 {
         self.acknowledged
     }
 
-    /// Subframe transmissions a BlockAck or its absence accounted.
-    pub const fn block_ack_mpdu_attempts(&self) -> u16 {
-        self.block_ack_mpdu_attempts
-    }
-
     /// Protection exchanges that failed before the aggregate.
     pub const fn protection_failures(&self) -> u8 {
         self.protection_failures
-    }
-
-    pub const fn trigger_flow_completions(&self) -> u8 {
-        self.trigger_flow_completions
     }
 
     /// The original position of the `compacted_index`th current subframe.

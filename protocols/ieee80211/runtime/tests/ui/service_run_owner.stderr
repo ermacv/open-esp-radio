@@ -10,7 +10,7 @@ error[E0382]: use of moved value: `service`
 18 |     drop(service); // ui-error: E0382
    |          ^^^^^^^ value used here after move
    |
-note: `StationService::<'id, B, C, S, GROUPS>::run` takes ownership of the receiver `self`, which moves `service`
+note: `StationService::<'id, B, C, S, GROUPS, O>::run` takes ownership of the receiver `self`, which moves `service`
   --> src/station_service.rs
    |
    |         self,

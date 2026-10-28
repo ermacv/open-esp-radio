@@ -6,5 +6,5 @@ pub fn terminal<'id, T: StaDataTokens, K: Ieee80211Capabilities>(mut ended: Reti
     #[cfg(ui_reject)]
     drop(ended.poll_action()); // ui-error: E0599
     #[cfg(not(ui_reject))]
-    let _ = ended.counters();
+    drop(ended.restart());
 }

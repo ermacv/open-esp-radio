@@ -11,6 +11,7 @@ use crate::extensions::espressif::phy::EspNowPhyMode;
 use core::{array, fmt};
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
+use oer_trace::{Noop, Observer, observe};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use {
     oer_ieee80211_upper_mac::{
@@ -383,37 +384,28 @@ impl EspNowEncryptedPeerSlot {
     }
 }
 
-/// Diagnostics contain only counters and never key material.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct EspNowEncryptedPeerDiagnostics {
-    pub installs: u32,
-    pub replacements: u32,
-    pub removals: u32,
-    pub remove_rollbacks: u32,
-    pub cleared_on_shutdown: u32,
-    pub mutation_rejections: u32,
-    pub tx_packet_numbers_allocated: u32,
-    pub tx_packet_number_exhaustions: u32,
-    pub replay_candidates: u32,
-    pub authenticated_replay_commits: u32,
-    pub replays: u32,
-}
-
 /// Fixed-capacity owner of encrypted individual peers and their PN spaces.
-pub struct EspNowEncryptedPeerTable<const N: usize = ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY> {
+///
+/// It reports peer-table changes, packet-number allocations and replay
+/// admission to `O` (`oer_ieee80211_instrumentation`'s ESP-NOW events); the
+/// observations never carry key material and keep no count in the table.
+pub struct EspNowEncryptedPeerTable<
+    const N: usize = ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY,
+    O: Observer = Noop,
+> {
     home_channel: WifiChannel,
     slots: [EspNowEncryptedPeerSlot; N],
     length: usize,
-    diagnostics: EspNowEncryptedPeerDiagnostics,
+    observer: O,
 }
 
-impl<const N: usize> EspNowEncryptedPeerTable<N> {
-    pub fn new(home_channel: WifiChannel) -> Self {
+impl<const N: usize, O: Observer> EspNowEncryptedPeerTable<N, O> {
+    pub fn new(home_channel: WifiChannel, observer: O) -> Self {
         Self {
             home_channel,
             slots: array::from_fn(|_| EspNowEncryptedPeerSlot::empty()),
             length: 0,
-            diagnostics: EspNowEncryptedPeerDiagnostics::default(),
+            observer,
         }
     }
 
@@ -431,10 +423,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
 
     pub const fn capacity(&self) -> usize {
         N
-    }
-
-    pub const fn diagnostics(&self) -> EspNowEncryptedPeerDiagnostics {
-        self.diagnostics
     }
 
     pub fn install(
@@ -494,7 +482,12 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             replay: CcmpReplayFrontier::default(),
         });
         self.length = length;
-        self.diagnostics.installs = self.diagnostics.installs.saturating_add(1);
+        observe!(
+            self.observer,
+            oer_ieee80211_instrumentation::EspNowPeerTableChanged {
+                change: oer_ieee80211_instrumentation::PeerChange::Installed
+            }
+        );
         Ok(EspNowEncryptedPeerId { index, generation })
     }
 
@@ -544,7 +537,12 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         // supplies the same LMK bytes again.
         let replaced = installed.key.replace_key(replacement);
         slot.generation = generation;
-        self.diagnostics.replacements = self.diagnostics.replacements.saturating_add(1);
+        observe!(
+            self.observer,
+            oer_ieee80211_instrumentation::EspNowPeerTableChanged {
+                change: oer_ieee80211_instrumentation::PeerChange::Replaced
+            }
+        );
         Ok(EspNowEncryptedPeerReplacement {
             peer: EspNowEncryptedPeerId {
                 index: peer.index,
@@ -573,7 +571,12 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .take()
             .ok_or(EspNowEncryptedPeerError::Stale(peer))?;
         self.length = length;
-        self.diagnostics.removals = self.diagnostics.removals.saturating_add(1);
+        observe!(
+            self.observer,
+            oer_ieee80211_instrumentation::EspNowPeerTableChanged {
+                change: oer_ieee80211_instrumentation::PeerChange::Removed
+            }
+        );
         Ok(EspNowRemovedEncryptedPeer {
             index: peer.index,
             generation: peer.generation,
@@ -658,7 +661,12 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             state: Some(state),
         };
         self.length = length;
-        self.diagnostics.remove_rollbacks = self.diagnostics.remove_rollbacks.saturating_add(1);
+        observe!(
+            self.observer,
+            oer_ieee80211_instrumentation::EspNowPeerTableChanged {
+                change: oer_ieee80211_instrumentation::PeerChange::RemoveRolledBack
+            }
+        );
         Ok(EspNowEncryptedPeerId { index, generation })
     }
 
@@ -671,10 +679,12 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .filter_map(|slot| slot.state.take())
             .count();
         self.length = 0;
-        self.diagnostics.cleared_on_shutdown = self
-            .diagnostics
-            .cleared_on_shutdown
-            .saturating_add(u32::try_from(cleared).unwrap_or(u32::MAX));
+        observe!(
+            self.observer,
+            oer_ieee80211_instrumentation::EspNowPeersCleared {
+                count: u32::try_from(cleared).unwrap_or(u32::MAX)
+            }
+        );
         cleared
     }
 
@@ -729,16 +739,20 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .ok()
             .and_then(|next| EspNowCcmpPacketNumber::new(next.value()).ok());
         let Some(packet_number) = packet_number else {
-            self.diagnostics.tx_packet_number_exhaustions = self
-                .diagnostics
-                .tx_packet_number_exhaustions
-                .saturating_add(1);
+            observe!(
+                self.observer,
+                oer_ieee80211_instrumentation::EspNowTxPacketNumber {
+                    outcome: oer_ieee80211_instrumentation::PacketNumberOutcome::Exhausted
+                }
+            );
             return Err(EspNowEncryptedPeerError::TxPacketNumberExhausted(peer));
         };
-        self.diagnostics.tx_packet_numbers_allocated = self
-            .diagnostics
-            .tx_packet_numbers_allocated
-            .saturating_add(1);
+        observe!(
+            self.observer,
+            oer_ieee80211_instrumentation::EspNowTxPacketNumber {
+                outcome: oer_ieee80211_instrumentation::PacketNumberOutcome::Allocated
+            }
+        );
         Ok(packet_number)
     }
 
@@ -751,10 +765,11 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &mut self,
         peer: EspNowEncryptedPeerId,
         packet_number: EspNowCcmpPacketNumber,
-    ) -> Result<EspNowRxReplayCandidate<'_>, EspNowEncryptedPeerError> {
+    ) -> Result<EspNowRxReplayCandidate<'_, O>, EspNowEncryptedPeerError> {
         let Self {
-            slots, diagnostics, ..
+            slots, observer, ..
         } = self;
+        let observer = &*observer;
         let state = slots
             .get_mut(peer.index)
             .filter(|slot| slot.generation == peer.generation)
@@ -762,16 +777,26 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .ok_or(EspNowEncryptedPeerError::Stale(peer))?;
         match state.replay.prepare(CcmpPacketNumber::from(packet_number)) {
             Ok(replay) => {
-                diagnostics.replay_candidates = diagnostics.replay_candidates.saturating_add(1);
+                observe!(
+                    observer,
+                    oer_ieee80211_instrumentation::EspNowReplay {
+                        outcome: oer_ieee80211_instrumentation::ReplayOutcome::Candidate
+                    }
+                );
                 Ok(EspNowRxReplayCandidate {
                     peer,
                     packet_number,
                     replay,
-                    commits: &mut diagnostics.authenticated_replay_commits,
+                    observer,
                 })
             }
             Err(CcmpReplayed { highest, .. }) => {
-                diagnostics.replays = diagnostics.replays.saturating_add(1);
+                observe!(
+                    observer,
+                    oer_ieee80211_instrumentation::EspNowReplay {
+                        outcome: oer_ieee80211_instrumentation::ReplayOutcome::Replayed
+                    }
+                );
                 Err(EspNowEncryptedPeerError::Replay {
                     peer,
                     packet_number,
@@ -814,13 +839,17 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         error: EspNowEncryptedPeerError,
         config: EspNowEncryptedPeerConfig,
     ) -> EspNowEncryptedPeerMutationFailure {
-        self.diagnostics.mutation_rejections =
-            self.diagnostics.mutation_rejections.saturating_add(1);
+        observe!(
+            self.observer,
+            oer_ieee80211_instrumentation::EspNowPeerTableChanged {
+                change: oer_ieee80211_instrumentation::PeerChange::MutationRejected
+            }
+        );
         EspNowEncryptedPeerMutationFailure { error, config }
     }
 }
 
-impl<const N: usize> Drop for EspNowEncryptedPeerTable<N> {
+impl<const N: usize, O: Observer> Drop for EspNowEncryptedPeerTable<N, O> {
     fn drop(&mut self) {
         // `Option::take` drops each LMK through ZeroizeOnDrop before the table
         // storage itself is released.
@@ -1023,16 +1052,26 @@ impl core::error::Error for EspNowEncryptedPeerError {}
 
 /// An unauthenticated PN admitted by its peer's replay frontier, holding
 /// that frontier exclusively. Committing advances it; dropping cancels.
-#[derive(Debug)]
 #[must_use = "commit after authentication, or drop to cancel admission"]
-pub struct EspNowRxReplayCandidate<'a> {
+pub struct EspNowRxReplayCandidate<'a, O: Observer = Noop> {
     peer: EspNowEncryptedPeerId,
     packet_number: EspNowCcmpPacketNumber,
     replay: CcmpReplayCandidate<'a>,
-    commits: &'a mut u32,
+    observer: &'a O,
 }
 
-impl EspNowRxReplayCandidate<'_> {
+impl<O: Observer> fmt::Debug for EspNowRxReplayCandidate<'_, O> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("EspNowRxReplayCandidate")
+            .field("peer", &self.peer)
+            .field("packet_number", &self.packet_number)
+            .field("replay", &self.replay)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<O: Observer> EspNowRxReplayCandidate<'_, O> {
     pub const fn peer(&self) -> EspNowEncryptedPeerId {
         self.peer
     }
@@ -1045,23 +1084,33 @@ impl EspNowRxReplayCandidate<'_> {
     /// the exact frame which produced this candidate.
     pub fn commit_authenticated(self) {
         self.replay.commit();
-        *self.commits = self.commits.saturating_add(1);
+        observe!(
+            self.observer,
+            oer_ieee80211_instrumentation::EspNowReplay {
+                outcome: oer_ieee80211_instrumentation::ReplayOutcome::Committed
+            }
+        );
     }
 }
 
 /// Portable owner combining one station binding, PMK and encrypted peers.
-pub struct EspNowEncryptedProtocol<const N: usize = ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY> {
+///
+/// Its peer table reports to `O`.
+pub struct EspNowEncryptedProtocol<
+    const N: usize = ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY,
+    O: Observer = Noop,
+> {
     config: EspNowConfig,
     pmk: EspNowPmkOwner,
-    peers: EspNowEncryptedPeerTable<N>,
+    peers: EspNowEncryptedPeerTable<N, O>,
 }
 
-impl<const N: usize> EspNowEncryptedProtocol<N> {
-    pub fn new(config: EspNowConfig, pmk: EspNowPmk) -> Self {
+impl<const N: usize, O: Observer> EspNowEncryptedProtocol<N, O> {
+    pub fn new(config: EspNowConfig, pmk: EspNowPmk, observer: O) -> Self {
         Self {
             config,
             pmk: EspNowPmkOwner::from_key(pmk),
-            peers: EspNowEncryptedPeerTable::new(config.home_channel()),
+            peers: EspNowEncryptedPeerTable::new(config.home_channel(), observer),
         }
     }
 
@@ -1077,11 +1126,11 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
         &mut self.pmk
     }
 
-    pub const fn peers(&self) -> &EspNowEncryptedPeerTable<N> {
+    pub const fn peers(&self) -> &EspNowEncryptedPeerTable<N, O> {
         &self.peers
     }
 
-    pub fn peers_mut(&mut self) -> &mut EspNowEncryptedPeerTable<N> {
+    pub fn peers_mut(&mut self) -> &mut EspNowEncryptedPeerTable<N, O> {
         &mut self.peers
     }
 
@@ -1156,7 +1205,7 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
         active_station: BoundVirtualInterface,
         active_channel: WifiChannel,
         bytes: &'frame [u8],
-    ) -> Result<EspNowEncryptedRxCandidate<'_, 'frame>, EspNowEncryptedReceiveError> {
+    ) -> Result<EspNowEncryptedRxCandidate<'_, 'frame, O>, EspNowEncryptedReceiveError> {
         if active_station != self.config.station() {
             return Err(EspNowEncryptedReceiveError::StationBindingMismatch {
                 configured: self.config.station(),
@@ -1284,14 +1333,24 @@ impl<'payload> EspNowPreparedEncryptedV1Tx<'payload> {
 }
 
 /// Structurally admitted protected frame and its uncommitted replay token.
-#[derive(Debug)]
-pub struct EspNowEncryptedRxCandidate<'a, 'frame> {
+pub struct EspNowEncryptedRxCandidate<'a, 'frame, O: Observer = Noop> {
     peer: EspNowEncryptedPeerId,
     envelope: EspNowProtectedV1Envelope<'frame>,
-    replay: EspNowRxReplayCandidate<'a>,
+    replay: EspNowRxReplayCandidate<'a, O>,
 }
 
-impl<'a, 'frame> EspNowEncryptedRxCandidate<'a, 'frame> {
+impl<O: Observer> fmt::Debug for EspNowEncryptedRxCandidate<'_, '_, O> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("EspNowEncryptedRxCandidate")
+            .field("peer", &self.peer)
+            .field("envelope", &self.envelope)
+            .field("replay", &self.replay)
+            .finish()
+    }
+}
+
+impl<'a, 'frame, O: Observer> EspNowEncryptedRxCandidate<'a, 'frame, O> {
     pub const fn peer(&self) -> EspNowEncryptedPeerId {
         self.peer
     }
@@ -1302,7 +1361,7 @@ impl<'a, 'frame> EspNowEncryptedRxCandidate<'a, 'frame> {
 
     /// Consume the structural candidate into the token which a future exact
     /// decrypt/MIC backend must commit only after successful authentication.
-    pub fn into_replay_candidate(self) -> EspNowRxReplayCandidate<'a> {
+    pub fn into_replay_candidate(self) -> EspNowRxReplayCandidate<'a, O> {
         self.replay
     }
 }

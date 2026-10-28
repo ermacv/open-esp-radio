@@ -5,11 +5,21 @@ use oer_time::Instant;
 
 pub const SCAN_RECORD_CAPACITY: usize = 32;
 
+/// The scan result: its records and whether it holds every BSS heard.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScanSummary {
     pub records: usize,
-    pub observed_frames: u32,
-    pub dropped_unique_bss: u32,
+    pub completeness: ScanCompleteness,
+}
+
+/// Whether a scan table holds every BSS it heard since it was cleared.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanCompleteness {
+    /// Every BSS heard has its record.
+    Complete,
+    /// The table was full when a new BSS was heard: the result misses at
+    /// least that one.
+    Truncated,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -37,8 +47,7 @@ pub struct BssObservation {
 pub struct ScanTable<const N: usize = SCAN_RECORD_CAPACITY> {
     records: [Option<BssObservation>; N],
     length: usize,
-    observed_frames: u32,
-    dropped_unique_bss: u32,
+    completeness: ScanCompleteness,
 }
 
 impl<const N: usize> ScanTable<N> {
@@ -46,16 +55,14 @@ impl<const N: usize> ScanTable<N> {
         Self {
             records: [None; N],
             length: 0,
-            observed_frames: 0,
-            dropped_unique_bss: 0,
+            completeness: ScanCompleteness::Complete,
         }
     }
 
     pub fn clear(&mut self) {
         self.records.fill(None);
         self.length = 0;
-        self.observed_frames = 0;
-        self.dropped_unique_bss = 0;
+        self.completeness = ScanCompleteness::Complete;
     }
 
     /// Present observations in insertion order, excluding vacant cells.
@@ -80,8 +87,7 @@ impl<const N: usize> ScanTable<N> {
     pub fn summary(&self) -> ScanSummary {
         ScanSummary {
             records: self.length,
-            observed_frames: self.observed_frames,
-            dropped_unique_bss: self.dropped_unique_bss,
+            completeness: self.completeness,
         }
     }
 
@@ -97,7 +103,6 @@ impl<const N: usize> ScanTable<N> {
         let Some(mut record) = parse_management(frame, fallback_channel, rssi) else {
             return ScanObservation::Ignored;
         };
-        self.observed_frames = self.observed_frames.saturating_add(1);
 
         for (index, existing) in self.records.iter_mut().take(self.length).enumerate() {
             let Some(BssObservation {
@@ -147,7 +152,7 @@ impl<const N: usize> ScanTable<N> {
         // Every cell below `length` is occupied, so the first vacant one is
         // `length`; there is none when the table holds `N` records.
         let Some(vacant) = self.records.get_mut(index) else {
-            self.dropped_unique_bss = self.dropped_unique_bss.saturating_add(1);
+            self.completeness = ScanCompleteness::Truncated;
             return ScanObservation::Dropped;
         };
         *vacant = Some(BssObservation {
@@ -204,8 +209,7 @@ impl<const N: usize> ScanTable<N> {
         oer_memory::init_in_place!(storage, Self {
             records => |place| oer_memory::init_array(place, |_| None),
             length: 0,
-            observed_frames: 0,
-            dropped_unique_bss: 0,
+            completeness: ScanCompleteness::Complete,
         })
     }
 }

@@ -1,0 +1,20 @@
+[package]
+name = "oer-ieee80211-instrumentation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The observation events of the IEEE 802.11 cores and runtime, shared by owners, collectors and host decoders"
+readme = "README.md"
+
+[features]
+default = []
+# A recording observer for host tests of the owners and collectors.
+test-support = []
+
+[dependencies]
+oer-trace = { path = "../../../portable/trace" }
+
+[lints]
+workspace = true

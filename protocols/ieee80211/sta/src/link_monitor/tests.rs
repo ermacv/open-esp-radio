@@ -31,7 +31,6 @@ fn exact_deadline_is_lost_but_an_observation_refreshes_the_window() {
         monitor.deadline(),
         Some(oer_time::Instant::from_micros(615_400))
     );
-    assert_eq!(monitor.observed(), 1);
     assert_eq!(monitor.last_observation(), Some(BEACON));
     assert!(monitor.expired(oer_time::Instant::from_micros(615_400)));
 }
@@ -66,7 +65,6 @@ fn active_reachability_refresh_does_not_fabricate_a_beacon() {
         monitor.deadline(),
         Some(oer_time::Instant::from_micros(615_400))
     );
-    assert_eq!(monitor.observed(), 0);
     assert_eq!(monitor.last_observation(), None);
 }
 

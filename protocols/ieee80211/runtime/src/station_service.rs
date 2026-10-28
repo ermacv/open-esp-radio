@@ -89,6 +89,9 @@
 //! received payload too long for one is refused, never clipped.
 
 use core::marker::PhantomData;
+use oer_trace::{Noop, Observer};
+// The ARP observation reads a prepared buffer's octets.
+#[cfg(oer_trace)]
 use oer_ieee80211_port::TxBufferMemory as _;
 use oer_ieee80211_sta::machine::TxRefusal;
 
@@ -110,8 +113,8 @@ use oer_ieee80211_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey}
 use oer_ieee80211_sta::{
     data,
     data::{
-        ArpFrameObservation, DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext,
-        EthernetFrame, FrameTooLong, Msdu, StaData, TxMsdu,
+        DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, EthernetFrame,
+        FrameTooLong, Msdu, StaData, TxMsdu,
     },
     machine::{
         KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks,
@@ -285,24 +288,6 @@ where
 /// a continuously ready source can monopolize the executor.
 const MAX_INPUT_STEPS_PER_BATCH: u8 = 8;
 
-/// What the service dropped or could not send, counted.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct ServiceCounters {
-    /// Frames or subframes dropped by checked RX admission.
-    pub rx_frames_dropped: oer_ieee80211_sta::Counter,
-    /// Indications of lost port events; EventsLost carries no frame count.
-    pub events_lost: oer_ieee80211_sta::Counter,
-    /// RX payloads larger than the network's checked Ethernet contract.
-    pub rx_msdus_too_long: oer_ieee80211_sta::Counter,
-    /// Frames not sent: no rate of their plan is on the port's channel, or
-    /// they do not fit their buffer class. Their tokens came back.
-    pub unsent_frames: oer_ieee80211_sta::Counter,
-    /// MSDUs the network stack sent that do not fit a buffer.
-    pub tx_msdus_too_long: oer_ieee80211_sta::Counter,
-    /// Received MSDUs the network stack's full queue could not take.
-    pub rx_msdus_queue_full: oer_ieee80211_sta::Counter,
-}
-
 /// A station frame's transmission on the port `B`.
 type StationTransmit<'id, B, const GROUPS: usize> = StaTransmit<
     'id,
@@ -325,18 +310,44 @@ pub type PortRxMeta<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>
 pub type PortAck<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::AckEvidence;
 
 /// The station of the service on the port `B`.
-pub type PortStation<'id, B, C, const GROUPS: usize = 2> = Station<
+pub type PortStation<'id, B, C, const GROUPS: usize = 2, O = Noop> = Station<
     'id,
     PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
     <B as StationPort>::Caps,
     C,
+    O,
 >;
 
+/// The terminal bank of the service's station on the port `B`.
+pub type PortRetiredStation<'id, B, C, const GROUPS: usize = 2, O = Noop> =
+    oer_ieee80211_sta::machine::RetiredStation<
+        'id,
+        PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
+        <B as StationPort>::Caps,
+        C,
+        O,
+    >;
+
+/// A stopped service's restart: the running service, or the bank it could
+/// not restart.
+type Restart<'p, 'id, B, C, S, const GROUPS: usize, O> = Result<
+    RestartedService<'p, 'id, B, C, S, GROUPS, O>,
+    RestartFailed<'p, 'id, B, C, S, GROUPS, O>,
+>;
+
+/// An uninstalled port's end and the service's retired bank.
+type Uninstalled<'id, B, C, S, const GROUPS: usize, O, Out> = (
+    Ended<<B as StationPort>::SlotId, <B as StationPort>::Backend, Out>,
+    RetiredService<'id, B, C, S, GROUPS, O>,
+);
+
 /// The data machine of the service on the port `B`.
-pub type PortData<'id, B> = StaData<
+pub type PortData<'id, B, O = Noop> = StaData<
     'id,
     PortDataTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Large>,
     <B as StationPort>::Caps,
+    8,
+    O,
 >;
 
 /// The arbiter of the service on the port `B`.
@@ -413,12 +424,8 @@ pub enum ServiceOutput<
     K,
     Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
 > {
-    /// An ordinary protocol RX drop, before network delivery.
-    RxFrameDropped(oer_ieee80211_sta::machine::StaRxError),
     /// The original network operation refused before data admission.
     MsduRefused { packet: TxMsdu, reason: DataRefusal },
-    /// A received MSDU cannot fit the checked Ethernet contract.
-    RxMsduRefused(FrameTooLong),
     /// An operation refused before admission. Its resources return and the
     /// service continues; this is not a TX completion or radio statistic.
     TxRefused {
@@ -429,15 +436,6 @@ pub enum ServiceOutput<
     },
     /// The station's notice.
     Notice(StaNotice),
-    /// A successfully admitted ARP or a protocol-validated received ARP.
-    /// Payload bytes are redacted by Debug and are not a wire record.
-    ArpFrame(ArpFrameObservation),
-    /// A correlated successful hardware group-key installation. This carries
-    /// the public CCMP KeyID only; it contains no key material.
-    GroupKeyChanged {
-        key_id: oer_ieee80211_port::GroupKeyId,
-        replaced: bool,
-    },
     /// A request refused synchronously, with its original correlation.
     CommandRefused(StaCommandRefused<'id, Path>),
     /// The unique terminal of one admitted station request.
@@ -712,9 +710,10 @@ pub struct ServiceCompleted<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
+    O: Observer = Noop,
 > {
     pub end: ServiceEnd<'p, 'id, B>,
-    pub retired: RetiredService<'id, B, C, S, GROUPS>,
+    pub retired: RetiredService<'id, B, C, S, GROUPS, O>,
 }
 
 /// Only a normal Stop grants this continuation on the existing installation.
@@ -725,9 +724,10 @@ pub struct StoppedService<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
+    O: Observer = Noop,
 > {
     owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-    retired: RetiredService<'id, B, C, S, GROUPS>,
+    retired: RetiredService<'id, B, C, S, GROUPS, O>,
 }
 
 /// The same port owner and resources, ready for a new service run. Deferred
@@ -739,9 +739,10 @@ pub struct RestartedService<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
+    O: Observer = Noop,
 > {
     pub owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-    pub service: StationService<'id, B, C, S, GROUPS>,
+    pub service: StationService<'id, B, C, S, GROUPS, O>,
     pub deferred_eapol: oer_ieee80211_sta::machine::DeferredEapol,
     pub notice: Option<oer_ieee80211_sta::machine::StaNotice>,
 }
@@ -763,10 +764,11 @@ pub struct RestartFailed<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
+    O: Observer = Noop,
 > {
     pub reason: RestartFailure,
     pub owner: FailedInstallation<'p, 'id, B>,
-    pub retired: RetiredService<'id, B, C, S, GROUPS>,
+    pub retired: RetiredService<'id, B, C, S, GROUPS, O>,
 }
 
 impl<
@@ -776,14 +778,15 @@ impl<
     C: StaCallbacks,
     S,
     const GROUPS: usize,
-> ServiceCompleted<'p, 'id, B, C, S, GROUPS>
+    O: Observer,
+> ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>
 {
     /// Extract the reusable continuation only from the ordinary Stop outcome.
     #[expect(
         clippy::result_large_err,
         reason = "a failed completion returns all resource banks without allocation"
     )]
-    pub fn into_stopped(self) -> Result<StoppedService<'p, 'id, B, C, S, GROUPS>, Self> {
+    pub fn into_stopped(self) -> Result<StoppedService<'p, 'id, B, C, S, GROUPS, O>, Self> {
         match self.end {
             ServiceEnd::Stopped(owner) => Ok(StoppedService {
                 owner,
@@ -804,7 +807,8 @@ impl<
     C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-> StoppedService<'p, 'id, B, C, S, GROUPS>
+    O: Observer,
+> StoppedService<'p, 'id, B, C, S, GROUPS, O>
 {
     /// Resume on the selected channel without minting pools, epochs, leases,
     /// gate authority or admission permissions. Startup reclaims old keys and
@@ -816,8 +820,7 @@ impl<
     pub fn restart(
         self,
         channel: oer_ieee80211_port::SupportedChannel<B::Caps>,
-    ) -> Result<RestartedService<'p, 'id, B, C, S, GROUPS>, RestartFailed<'p, 'id, B, C, S, GROUPS>>
-    {
+    ) -> Restart<'p, 'id, B, C, S, GROUPS, O> {
         let Self {
             mut owner,
             mut retired,
@@ -864,7 +867,7 @@ impl<
         let (station, deferred_eapol, notice) = retired.station.restart(places).into_parts();
         let RetiredService {
             data,
-            counters,
+            observer,
             rates,
             _pending: pending,
             _terminal_access: terminal_access,
@@ -881,7 +884,7 @@ impl<
                 state: ServiceState {
                     station,
                     data: data.restart(),
-                    counters,
+                    observer,
                     rates,
                     pending,
                     terminal_access,
@@ -897,10 +900,7 @@ impl<
         self,
         control: <B::Backend as PortBackend<B::SlotId>>::Uninstall,
         output: Out,
-    ) -> (
-        Ended<B::SlotId, B::Backend, Out>,
-        RetiredService<'id, B, C, S, GROUPS>,
-    ) {
+    ) -> Uninstalled<'id, B, C, S, GROUPS, O, Out> {
         (Ended::uninstall(self.owner, control, output), self.retired)
     }
 }
@@ -913,20 +913,19 @@ pub struct RetiredService<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
+    O: Observer = Noop,
 > {
-    pub station: oer_ieee80211_sta::machine::RetiredStation<
-        'id,
-        PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>,
-        B::Caps,
-        C,
-    >,
+    pub station: PortRetiredStation<'id, B, C, GROUPS, O>,
     pub data: oer_ieee80211_sta::data::RetiredData<
         'id,
         PortDataTokens<'id, B::Types<'id>, B::Large>,
         B::Caps,
+        8,
+        O,
     >,
-    pub counters: ServiceCounters,
     pub rates: S,
+    /// The service's observer, which a restart carries on.
+    observer: O,
     _places: oer_ieee80211_arbiter::StationPlaceReturns<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::GatePath,
@@ -949,9 +948,10 @@ pub struct StationService<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
+    O: Observer = Noop,
 > {
     arbiter: PortArbiter<'id, B>,
-    state: ServiceState<'id, B, C, S, GROUPS>,
+    state: ServiceState<'id, B, C, S, GROUPS, O>,
 }
 
 struct ServiceState<
@@ -960,15 +960,16 @@ struct ServiceState<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
+    O: Observer = Noop,
 > {
     /// The station.
-    station: PortStation<'id, B, C, GROUPS>,
+    station: PortStation<'id, B, C, GROUPS, O>,
     /// Its data machine.
-    data: PortData<'id, B>,
+    data: PortData<'id, B, O>,
     /// The rates of the station's frames and data.
     rates: S,
-    /// What the service dropped or could not send.
-    counters: ServiceCounters,
+    /// Receives what the service dropped, refused or could not send.
+    observer: O,
     terminal_access: oer_ieee80211_port::TerminalAccess<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
@@ -1028,13 +1029,14 @@ impl<
     C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-> StationService<'id, B, C, S, GROUPS>
+    O: Observer,
+> StationService<'id, B, C, S, GROUPS, O>
 {
     /// The service of the machines the composition built, its frames at
     /// the rates `rates` selects.
     pub fn new(
-        station: PortStation<'id, B, C, GROUPS>,
-        data: PortData<'id, B>,
+        station: PortStation<'id, B, C, GROUPS, O>,
+        data: PortData<'id, B, O>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
         terminal_access: oer_ieee80211_port::TerminalAccess<
@@ -1043,6 +1045,7 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
         >,
         receive: RxBlockAckView<'id, B::Types<'id>>,
+        observer: O,
     ) -> Self {
         // The port's values, checked as the type is built.
         const {
@@ -1060,7 +1063,7 @@ impl<
                 data,
                 rates,
                 terminal_access,
-                counters: ServiceCounters::default(),
+                observer,
                 pending: PendingActions {
                     receive,
                     admissions: Admissions::default(),
@@ -1080,11 +1083,11 @@ impl<
     pub fn init_in_place<'s>(
         storage: &'s mut core::mem::MaybeUninit<Self>,
         station: impl for<'a> FnOnce(
-            &'a mut core::mem::MaybeUninit<PortStation<'id, B, C, GROUPS>>,
-        ) -> &'a mut PortStation<'id, B, C, GROUPS>,
+            &'a mut core::mem::MaybeUninit<PortStation<'id, B, C, GROUPS, O>>,
+        ) -> &'a mut PortStation<'id, B, C, GROUPS, O>,
         data: impl for<'a> FnOnce(
-            &'a mut core::mem::MaybeUninit<PortData<'id, B>>,
-        ) -> &'a mut PortData<'id, B>,
+            &'a mut core::mem::MaybeUninit<PortData<'id, B, O>>,
+        ) -> &'a mut PortData<'id, B, O>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
         terminal_access: oer_ieee80211_port::TerminalAccess<
@@ -1093,6 +1096,7 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
         >,
         receive: RxBlockAckView<'id, B::Types<'id>>,
+        observer: O,
     ) -> oer_memory::Placed<'s, Self> {
         const {
             let _power = DataContext::<'id, B>::POWER;
@@ -1105,12 +1109,12 @@ impl<
         oer_memory::Placed::init(storage, |place| {
             oer_memory::init_in_place!(place, Self {
                 arbiter: arbiter,
-                state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, C, S, GROUPS>>| oer_memory::init_in_place!(place, ServiceState {
+                state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, C, S, GROUPS, O>>| oer_memory::init_in_place!(place, ServiceState {
                     station => station,
                     data => data,
                     rates: rates,
                     terminal_access: terminal_access,
-                    counters: ServiceCounters::default(),
+                    observer: observer,
                     pending: PendingActions { receive, admissions: Admissions::default(), retune: None, group: None, unwrap: None },
                 }),
             })
@@ -1129,7 +1133,7 @@ impl<
         const COMMAND_DEPTH: usize,
     >(
         service: oer_memory::Placed<'s, Self>,
-        output: &'out mut core::mem::MaybeUninit<ServiceCompleted<'p, 'id, B, C, S, GROUPS>>,
+        output: &'out mut core::mem::MaybeUninit<ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>>,
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         io: &mut ServiceIo<
             '_,
@@ -1143,7 +1147,7 @@ impl<
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
-    ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS>> {
+    ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>> {
         let (arbiter, mut state) = oer_memory::unpack_placed!(service, Self { arbiter, state });
         let mut custody_storage = core::mem::MaybeUninit::uninit();
         let mut custody = oer_memory::Placed::init(&mut custody_storage, |place| {
@@ -1159,13 +1163,13 @@ impl<
                 oer_ieee80211_arbiter::LeaveReason::PortFailed,
             ),
         };
-        let (station, data, mut rates, counters, terminal_access, pending) = oer_memory::unpack_placed!(
+        let (station, data, mut rates, observer, terminal_access, pending) = oer_memory::unpack_placed!(
             state,
             ServiceState {
                 station,
                 data,
                 rates,
-                counters,
+                observer,
                 terminal_access,
                 pending
             }
@@ -1173,7 +1177,7 @@ impl<
         oer_memory::Placed::init(output, |place| {
             oer_memory::init_in_place!(place, ServiceCompleted {
                 end => |place| end.init_end(place, custody),
-                retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, C, S, GROUPS>>| {
+                retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, C, S, GROUPS, O>>| {
                     // Destructure the complete finish result before constructing
                     // the retired bank with its station and returned places.
                     let mut station_storage = core::mem::MaybeUninit::uninit();
@@ -1182,7 +1186,7 @@ impl<
                         station => |place| station.move_to(place).into_mut(),
                         data => |place| StaData::finish_placed(data, place).into_mut(),
                         rates: { rates.disconnected(); rates.read() },
-                        counters: counters.read(),
+                        observer: observer.read(),
                         _places: places,
                         _arbiter: arbiter,
                         _pending: pending.read(),
@@ -1230,7 +1234,7 @@ impl<
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
-    ) -> ServiceCompleted<'p, 'id, B, C, S, GROUPS> {
+    ) -> ServiceCompleted<'p, 'id, B, C, S, GROUPS, O> {
         let Self { arbiter, mut state } = self;
         let mut custody = TerminalCustody::Clear;
         let (end, mut arbiter) = state
@@ -1252,7 +1256,7 @@ impl<
             station,
             data,
             mut rates,
-            counters,
+            observer,
             pending,
             terminal_access,
         } = state;
@@ -1283,7 +1287,7 @@ impl<
                 station,
                 data,
                 rates,
-                counters,
+                observer,
                 _arbiter: arbiter,
                 _places: places,
                 _pending: pending,
@@ -1299,7 +1303,8 @@ impl<
     C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-> ServiceState<'id, B, C, S, GROUPS>
+    O: Observer,
+> ServiceState<'id, B, C, S, GROUPS, O>
 {
     async fn run_loop<
         'p,
@@ -1682,7 +1687,10 @@ impl<
                     Ok(None) => {}
                     Err(fault) => return Served::Failed(fault.into()),
                 },
-                Some(Ok(Err(_))) => self.counters.events_lost.increment(),
+                Some(Ok(Err(_))) => oer_trace::observe!(
+                    self.observer,
+                    oer_ieee80211_instrumentation::PortEventsLost
+                ),
                 None => {}
                 Some(Err(end)) => {
                     let cause = match end {
@@ -1772,10 +1780,18 @@ impl<
                     }
                     Ok(Ok(LowerMacEvent::Received { frame, .. })) => {
                         phase.recycle(frame);
-                        self.counters.rx_frames_dropped.increment();
+                        oer_trace::observe!(
+                            self.observer,
+                            oer_ieee80211_instrumentation::RxFrameDropped {
+                                reason: oer_ieee80211_instrumentation::RxDrop::Draining
+                            }
+                        );
                     }
                     Ok(Ok(LowerMacEvent::Tbtt(_))) => {}
-                    Ok(Err(_)) => self.counters.events_lost.increment(),
+                    Ok(Err(_)) => oer_trace::observe!(
+                        self.observer,
+                        oer_ieee80211_instrumentation::PortEventsLost
+                    ),
                     Err(end) => {
                         return Served::StreamEnd { end, fault };
                     }
@@ -1827,7 +1843,10 @@ impl<
             Ok(()) => {}
             Err(reason) => {
                 if reason == DataRefusal::TooLong {
-                    self.counters.tx_msdus_too_long.increment();
+                    oer_trace::observe!(
+                        self.observer,
+                        oer_ieee80211_instrumentation::TxMsduTooLong
+                    );
                 }
                 // The available-pool observation is dynamic and the public
                 // data input can refuse it. Return the original owned packet,
@@ -1967,7 +1986,8 @@ impl<
                         ticket,
                         buffer,
                     } = transmit.into_parts();
-                    let mut arp_observation = None;
+                    #[cfg(oer_trace)]
+                    let mut arp = None;
                     let access_category = context.access_category();
                     let plan = context.protection(&link).and_then(|protection| {
                         self.rates
@@ -1976,19 +1996,22 @@ impl<
                             .ok_or(TxRefusal::NoRate)
                     });
                     let prepared = match (buffer, plan) {
-                        (ReturnedMpdu::Fresh(mut buffer), Ok((protection, plan))) => {
+                        (ReturnedMpdu::Fresh(buffer), Ok((protection, plan))) => {
                             let protection = match protection {
                                 DataProtection::Open => Some(TxProtection::Open),
                                 DataProtection::Ccmp(key) => key.number().map(TxProtection::Ccmp),
                             };
                             match protection {
                                 Some(protection) => {
+                                    #[cfg(oer_trace)]
+                                    let mut buffer = buffer;
+                                    #[cfg(oer_trace)]
                                     if let TxProtection::Ccmp(numbered) = &protection {
-                                        arp_observation = buffer
+                                        arp = buffer
                                             .bytes_mut()
                                             .get(..context.frame().frame().len().get())
                                             .and_then(|bytes| {
-                                                ArpFrameObservation::transmit(
+                                                oer_ieee80211_sta::data::transmitted_arp(
                                                     bytes,
                                                     numbered.packet_number,
                                                 )
@@ -2050,9 +2073,8 @@ impl<
                             );
                             match submitted {
                                 Ok(()) => {
-                                    if let Some(observation) = arp_observation {
-                                        io.output.emit(ServiceOutput::ArpFrame(observation));
-                                    }
+                                    #[cfg(oer_trace)]
+                                    observe_arp(&self.observer, arp);
                                     Ok(Follow::Nothing)
                                 }
                                 Err(poisoned) => Err(ServiceFault::Submission(poisoned.cause)),
@@ -2112,7 +2134,7 @@ impl<
                 buffer,
                 reason,
             } => {
-                self.counters.unsent_frames.increment();
+                oer_trace::observe!(self.observer, oer_ieee80211_instrumentation::TxUnsent);
                 let operation = match &context {
                     TxContext::Station(_) => TxOperation::Station,
                     TxContext::Data(_) => TxOperation::Data,
@@ -2245,26 +2267,7 @@ impl<
             }
             LowerMacEvent::Tbtt(_) => Ok(None),
             LowerMacEvent::Terminal(terminal) => {
-                let group = match &terminal {
-                    LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { .. }) => self
-                        .pending
-                        .group
-                        .as_ref()
-                        .and_then(|pending| pending.key_id)
-                        .map(|id| (id, false)),
-                    LowerMacTerminal::GroupKeyReplaced { .. } => self
-                        .pending
-                        .group
-                        .as_ref()
-                        .and_then(|pending| pending.key_id)
-                        .map(|id| (id, true)),
-                    _ => None,
-                };
                 self.terminal(arbiter, now, terminal)?;
-                if let Some((key_id, replaced)) = group {
-                    io.output
-                        .emit(ServiceOutput::GroupKeyChanged { key_id, replaced });
-                }
                 Ok(None)
             }
         }
@@ -2292,22 +2295,31 @@ impl<
         >,
     ) {
         let bytes = frame.bytes();
-        let counters = &mut self.counters;
+        let observer = &self.observer;
         let result = self.station.receive(now, bytes, meta, |parts| {
-            if let Some(observation) = ArpFrameObservation::receive(bytes, &parts) {
-                io.output.emit(ServiceOutput::ArpFrame(observation));
-            }
-            Self::queue_received(counters, io, EthernetFrame::from_parts(parts));
+            #[cfg(oer_trace)]
+            observe_arp(
+                observer,
+                oer_ieee80211_sta::data::received_arp(bytes, &parts),
+            );
+            Self::queue_received(observer, io, EthernetFrame::from_parts(parts));
         });
-        if let Err(reason) = result {
-            self.counters.rx_frames_dropped.increment();
-            io.output.emit(ServiceOutput::RxFrameDropped(reason));
+        if result.is_err() {
+            oer_trace::observe!(
+                self.observer,
+                oer_ieee80211_instrumentation::RxFrameDropped {
+                    reason: match result {
+                        Err(reason) => rx_drop(reason),
+                        Ok(()) => return,
+                    }
+                }
+            );
         }
     }
 
     #[inline(never)]
     fn queue_received<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
-        counters: &mut ServiceCounters,
+        observer: &O,
         io: &mut ServiceIo<
             '_,
             'id,
@@ -2323,13 +2335,20 @@ impl<
         match frame {
             Ok(frame) => {
                 if io.receive.try_send(frame).is_err() {
-                    counters.rx_msdus_queue_full.increment();
+                    oer_trace::observe!(
+                        observer,
+                        oer_ieee80211_instrumentation::RxMsduRefused {
+                            reason: oer_ieee80211_instrumentation::RxMsduRefusal::QueueFull
+                        }
+                    );
                 }
             }
-            Err(reason) => {
-                counters.rx_msdus_too_long.increment();
-                io.output.emit(ServiceOutput::RxMsduRefused(reason));
-            }
+            Err(_) => oer_trace::observe!(
+                observer,
+                oer_ieee80211_instrumentation::RxMsduRefused {
+                    reason: oer_ieee80211_instrumentation::RxMsduRefusal::TooLong
+                }
+            ),
         }
     }
 
@@ -2482,21 +2501,43 @@ impl<
                 permission,
             },
             (
-                PendingGroupAction::Install(pending),
+                PendingGroupAction::Install(installed),
                 LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { key, permission }),
-            ) => StaInput::GroupKeyInstalled {
-                pending,
-                key,
-                permission,
-            },
+            ) => {
+                if pending.key_id.is_some() {
+                    oer_trace::observe!(
+                        self.observer,
+                        oer_ieee80211_instrumentation::GroupKeyInstalled {
+                            key_id: pending.key_id.map_or(0, |id| id.get()),
+                            replaced: false,
+                        }
+                    );
+                }
+                StaInput::GroupKeyInstalled {
+                    pending: installed,
+                    key,
+                    permission,
+                }
+            }
             (
-                PendingGroupAction::Replace(pending),
+                PendingGroupAction::Replace(replaced),
                 LowerMacTerminal::GroupKeyReplaced { key, permission },
-            ) => StaInput::GroupKeyReplaced {
-                pending,
-                key,
-                permission,
-            },
+            ) => {
+                if pending.key_id.is_some() {
+                    oer_trace::observe!(
+                        self.observer,
+                        oer_ieee80211_instrumentation::GroupKeyInstalled {
+                            key_id: pending.key_id.map_or(0, |id| id.get()),
+                            replaced: true,
+                        }
+                    );
+                }
+                StaInput::GroupKeyReplaced {
+                    pending: replaced,
+                    key,
+                    permission,
+                }
+            }
             (
                 PendingGroupAction::Select(pending),
                 LowerMacTerminal::GroupKeySelected { key, permission },
@@ -3038,5 +3079,48 @@ fn stop_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
             owner,
             fault: ServiceFault::Contract(bank.violation()),
         },
+    }
+}
+
+/// The receive-drop observation of a station refusal.
+#[cfg(oer_trace)]
+fn rx_drop(
+    reason: oer_ieee80211_sta::machine::StaRxError,
+) -> oer_ieee80211_instrumentation::RxDrop {
+    use oer_ieee80211_instrumentation::{FrameDrop, RxDrop, SecurityDrop};
+    use oer_ieee80211_rsn::supplicant::{RsnConnectedProcessError, RsnConnectedSupplicantError};
+    use oer_ieee80211_sta::machine::StaRxError;
+    use oer_ieee80211_upper_mac::receive::RxDropReason;
+    match reason {
+        StaRxError::Frame(reason) => RxDrop::Frame(match reason {
+            RxDropReason::Header => FrameDrop::Header,
+            RxDropReason::FrameKind => FrameDrop::FrameKind,
+            RxDropReason::Address => FrameDrop::Address,
+            RxDropReason::Fragmented => FrameDrop::Fragmented,
+            RxDropReason::Protection => FrameDrop::Protection,
+            RxDropReason::Integrity => FrameDrop::Integrity,
+            RxDropReason::Replay => FrameDrop::Replay,
+            RxDropReason::Payload => FrameDrop::Payload,
+            RxDropReason::NotConnected => FrameDrop::NotConnected,
+        }),
+        StaRxError::Security(RsnConnectedProcessError::Supplicant(
+            RsnConnectedSupplicantError::InvalidMic,
+        )) => RxDrop::Security(SecurityDrop::InvalidMic),
+        StaRxError::Security(RsnConnectedProcessError::Supplicant(
+            RsnConnectedSupplicantError::StaleReplayCounter,
+        )) => RxDrop::Security(SecurityDrop::StaleReplay),
+        StaRxError::Security(_) => RxDrop::Security(SecurityDrop::Other),
+    }
+}
+
+/// Report an ARP MSDU: its addresses, then the identity of its MPDU.
+#[cfg(oer_trace)]
+fn observe_arp<E: oer_trace::Event + Copy + 'static>(
+    observer: &impl Observer,
+    arp: Option<(oer_ieee80211_instrumentation::ArpAddresses, E)>,
+) {
+    if let Some((addresses, identity)) = arp {
+        oer_trace::observe!(observer, addresses);
+        oer_trace::observe!(observer, identity);
     }
 }

@@ -199,27 +199,13 @@ impl<const CAPACITY: usize> BoundedAmpduRetryState<CAPACITY> {
         self.state.missing_original_indices() as u32
     }
 
-    pub const fn aggregate_attempts(&self) -> u8 {
-        self.state.aggregate_attempts()
-    }
-
     pub const fn acknowledged(&self) -> u8 {
         self.state.acknowledged()
-    }
-
-    pub const fn block_ack_mpdu_attempts(&self) -> u16 {
-        self.state.block_ack_mpdu_attempts()
     }
 
     /// Protection exchanges (RTS/CTS) that failed before the data PPDU.
     pub const fn protection_failures(&self) -> u8 {
         self.state.protection_failures()
-    }
-
-    /// Number of terminal completions handled through `lmacProcessTBSuccess`
-    /// semantics rather than an ordinary BlockAck.
-    pub const fn trigger_flow_completions(&self) -> u8 {
-        self.state.trigger_flow_completions()
     }
 }
 

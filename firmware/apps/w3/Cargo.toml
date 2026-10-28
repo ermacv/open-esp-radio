@@ -14,6 +14,8 @@ oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"] }
 oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
+oer-ieee80211-instrumentation = { path = "../../../protocols/ieee80211/instrumentation" }
+oer-trace = { path = "../../../portable/trace" }
 oer-memory = { path = "../../../portable/memory" }
 oer-embassy-net = { path = "../../../portable/embassy/net" }
 embassy-futures = "0.1.2"
@@ -61,6 +63,8 @@ workspace = true
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# The report's service receive row counts the station service's observations.
+instrumentation = ["trace"]
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
 

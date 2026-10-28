@@ -48,9 +48,6 @@
 #[cfg(test)]
 extern crate std;
 
-mod counter;
-pub use counter::Counter;
-
 pub mod ftm;
 pub mod join;
 pub mod link_monitor;
