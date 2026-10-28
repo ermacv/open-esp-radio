@@ -27,6 +27,7 @@
 #[cfg(test)]
 extern crate std;
 
+mod buffers;
 mod channel;
 mod events;
 mod mac;
@@ -35,6 +36,7 @@ mod transition;
 mod tx_power;
 mod values;
 
+pub use buffers::*;
 pub use channel::*;
 pub use events::*;
 pub use mac::*;

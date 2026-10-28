@@ -1,5 +1,14 @@
 use super::*;
-use crate::ll::model::{ModelAddress, addresses};
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct ModelAddress(usize);
+
+fn addresses() -> Ieee802154DmaAddresses<ModelAddress> {
+    Ieee802154DmaAddresses {
+        rx: core::array::from_fn(ModelAddress),
+        tx: ModelAddress(RX_BUFFER_COUNT + 1),
+        enhanced_ack: ModelAddress(RX_BUFFER_COUNT + 2),
+    }
+}
 
 #[test]
 fn each_typed_identity_selects_only_its_frame_and_unknown_input_is_rejected() {
@@ -23,12 +32,12 @@ fn each_typed_identity_selects_only_its_frame_and_unknown_input_is_rejected() {
     }
     assert!(
         addresses
-            .frame_at(&buffers, ModelAddress::Unknown)
+            .frame_at(&buffers, ModelAddress(usize::MAX))
             .is_none()
     );
     assert!(
         addresses
-            .frame_at_mut(&mut buffers, ModelAddress::Unknown)
+            .frame_at_mut(&mut buffers, ModelAddress(usize::MAX))
             .is_none()
     );
 }

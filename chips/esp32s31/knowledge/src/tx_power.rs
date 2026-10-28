@@ -4,8 +4,6 @@
 //! The IEEE 802.15.4 resolution itself is chip-neutral
 //! ([`oer_espressif_ieee802154_mac_values`]).
 
-use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
-
 /// The BTBB provider's transmit-power levels, in dBm.
 ///
 /// Source: pinned `libbtbb.a` sha256
@@ -19,15 +17,3 @@ use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
 pub const TX_POWER_LEVELS_DBM: [i8; 16] = [
     -24, -21, -18, -15, -12, -9, -6, -3, 0, 3, 6, 9, 12, 15, 18, 21,
 ];
-
-/// The ESP32-S31 BTBB provider's level set, [`TX_POWER_LEVELS_DBM`].
-///
-/// The index into this set is the MAC `TXPOWER` field code.
-pub const ESP32S31_TX_POWER_LEVELS: Ieee802154TxPowerLevels<'static> =
-    match Ieee802154TxPowerLevels::new(&TX_POWER_LEVELS_DBM) {
-        Ok(levels) => levels,
-        Err(_) => panic!("the reviewed ESP32-S31 provider levels are valid"),
-    };
-
-#[cfg(test)]
-mod tests;

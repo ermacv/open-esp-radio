@@ -26,13 +26,13 @@ impl DmaFrame {
     }
 
     /// Copy the complete image out.
-    pub(crate) fn read(&self) -> [u8; FRAME_SIZE] {
+    pub fn read(&self) -> [u8; FRAME_SIZE] {
         self.0.read()
     }
 
     /// Copy `image` in, zero-filling the rest; the engine writes an image
     /// only while the DMA does not own it.
-    pub(crate) fn write(&mut self, image: &[u8]) {
+    pub fn write(&mut self, image: &[u8]) {
         self.0.write(image);
     }
 
@@ -40,12 +40,12 @@ impl DmaFrame {
     /// frame the MAC is transmitting, as the vendor's
     /// `esp_ieee802154_transmit_sfd_done` callback edits the frame in place
     /// at its SFD: the MAC reads the frame's later bytes after its SFD.
-    pub(crate) fn patch(&mut self, original: &[u8; FRAME_SIZE], image: &[u8; FRAME_SIZE]) {
+    pub fn patch(&mut self, original: &[u8; FRAME_SIZE], image: &[u8; FRAME_SIZE]) {
         self.0.write_changed(original, image);
     }
 
     /// Clear bit 7 of the PHR byte, as the vendor receive path does.
-    pub(crate) fn mask_length(&mut self) {
+    pub fn mask_length(&mut self) {
         self.0.update_byte(0, |phr| phr & 0x7f);
     }
 }
@@ -84,6 +84,21 @@ impl Ieee802154EngineBuffers {
         &self.rx
     }
 
+    /// Mutably borrow the receive ring and its stub within this storage owner.
+    pub fn rx_frames_mut(&mut self) -> &mut [DmaFrame; RX_BUFFER_COUNT + 1] {
+        &mut self.rx
+    }
+
+    /// Mutably borrow the transmit frame within this storage owner.
+    pub fn tx_frame_mut(&mut self) -> &mut DmaFrame {
+        &mut self.tx
+    }
+
+    /// Mutably borrow the enhanced ACK within this storage owner.
+    pub fn enhanced_ack_frame_mut(&mut self) -> &mut DmaFrame {
+        &mut self.enhanced_ack
+    }
+
     /// The transmit frame, projected without moving storage.
     pub fn tx_frame(&self) -> &DmaFrame {
         &self.tx
@@ -96,6 +111,10 @@ impl Ieee802154EngineBuffers {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    reason = "tests assert frame identity and reject foreign addresses"
+)]
 mod tests;
 
 /// Addresses supplied once by the HAL that owns the placed buffers.
@@ -121,7 +140,8 @@ impl<Address: Copy + Eq> Ieee802154DmaAddresses<Address> {
             .position(|candidate| *candidate == address)
     }
 
-    pub(super) fn frame_at<'a>(
+    /// Select the frame with this supplied opaque address, refusing foreign addresses.
+    pub fn frame_at<'a>(
         &self,
         buffers: &'a Ieee802154EngineBuffers,
         address: Address,
@@ -134,7 +154,8 @@ impl<Address: Copy + Eq> Ieee802154DmaAddresses<Address> {
             .nth(index)
     }
 
-    pub(super) fn frame_at_mut<'a>(
+    /// Mutably select a frame without deriving or manufacturing an address.
+    pub fn frame_at_mut<'a>(
         &self,
         buffers: &'a mut Ieee802154EngineBuffers,
         address: Address,

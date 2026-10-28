@@ -12,7 +12,7 @@ description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 # their code-generation identity.
 bluetooth-engine = []
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
-test-support = ["oer-espressif-ieee802154-engine/test-support"]
+test-support = []
 
 [dependencies]
 oer-esp32s31-knowledge = { path = "../knowledge" }
@@ -30,7 +30,6 @@ oer-memory = { path = "../../../portable/memory" }
 oer-time = { path = "../../../portable/time" }
 oer-esp32s31-pac = { path = "../pac" }
 oer-espressif-coex = { path = "../../espressif/coex" }
-oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
@@ -42,7 +41,6 @@ oer-espressif-facts = { path = "../../espressif/facts" }
 [dev-dependencies]
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", features = ["test-support"] }
-oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine", features = ["test-support"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 oer-mmio = { path = "../../../portable/mmio" }

@@ -1,36 +1,23 @@
 //! The IEEE 802.15.4 MAC and its placed DMA buffers, owned together.
 
-use super::ll::Ieee802154MacOwners;
-use crate::{dma_static::Placed, layouts::DmaWindowAddress};
+use super::ll::S31Mac;
 use core::ops::{Deref, DerefMut};
+use oer_esp32s31_hal::{dma_static::Placed, ieee802154::frames, layouts::DmaWindowAddress};
 use oer_espressif_ieee802154_engine::{
     engine::{
-        Ieee802154DmaAddresses, Ieee802154Engine as SharedEngine, Ieee802154EngineBuffers,
-        Ieee802154Interfaces,
+        Ieee802154Engine as SharedEngine, Ieee802154Interfaces,
         owner::{DetachedIeee802154Engine as DetachedEngine, Ieee802154EngineOwner},
     },
     ll::Ieee802154LowLevel,
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
 };
-use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
-crate::dma_static! {
-    #[allow(unsafe_code, reason = "DMA storage is placed through the HAL macro")]
-    static BUFFERS: Ieee802154EngineBuffers = zeroed in ".dma.bss.ieee802154";
-}
-
-/// Claim the HAL's frame storage once, before constructing its engine.
-pub fn claim_buffers() -> Option<Placed<Ieee802154EngineBuffers>> {
-    BUFFERS.take()
-}
-
+use oer_espressif_ieee802154_mac_values::{Ieee802154EngineBuffers, Ieee802154TxPowerLevels};
 /// The MAC token and placed frame storage of one IEEE 802.15.4 engine.
 ///
 /// Its operations borrow its own MAC; callers see frames and slots, never
 /// DMA addresses or an independently reusable register owner.
 #[must_use = "retain the MAC with its placed storage for the hardware epoch"]
-pub struct Ieee802154Engine<
-    Ll: Ieee802154LowLevel<Address = DmaWindowAddress> = Ieee802154MacOwners,
-> {
+pub struct Ieee802154Engine<Ll: Ieee802154LowLevel<Address = DmaWindowAddress> = S31Mac> {
     inner: Ieee802154EngineOwner<'static, Ll>,
 }
 
@@ -42,7 +29,7 @@ pub struct DetachedIeee802154Engine {
 
 /// Rejected placement returns both unchanged affine owners.
 pub struct PlacementRefusal<Ll> {
-    pub error: crate::dma_address::ProjectionError,
+    pub error: oer_esp32s31_hal::dma_address::ProjectionError,
     pub mac: Ll,
     pub buffers: Placed<Ieee802154EngineBuffers>,
 }
@@ -140,30 +127,13 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         start: Ieee802154Permit,
         interfaces: Option<Ieee802154Interfaces>,
     ) -> Result<Self, PlacementRefusal<Ll>> {
-        let projected = crate::dma_address::PlacementProjection::try_with::<
-            crate::ieee80211::dma::space::NativeDma,
-            _,
-            _,
-        >(buffers, |storage, projection| {
-            let tx = projection.address(storage.tx_frame())?;
-            let enhanced_ack = projection.address(storage.enhanced_ack_frame())?;
-            let mut rx = [tx; oer_espressif_ieee802154_engine::engine::RX_BUFFER_COUNT + 1];
-            for (address, frame) in rx.iter_mut().zip(storage.rx_frames()) {
-                *address = projection.address(frame)?;
-            }
-            Ok(Ieee802154DmaAddresses {
-                rx,
-                tx,
-                enhanced_ack,
-            })
-        });
-        let (buffers, addresses) = match projected {
+        let (buffers, addresses) = match frames::project(buffers) {
             Ok(parts) => parts,
-            Err((error, buffers)) => {
+            Err(refused) => {
                 return Err(PlacementRefusal {
-                    error,
+                    error: refused.error,
                     mac,
-                    buffers,
+                    buffers: refused.buffers,
                 });
             }
         };

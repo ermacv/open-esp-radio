@@ -1,0 +1,30 @@
+[package]
+name = "oer-esp32s31-ieee802154-driver"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "ESP32-S31 IEEE 802.15.4 engine adapter and placed MAC ownership"
+
+[dependencies]
+oer-esp32s31-hal = { path = "../../hal" }
+oer-esp32s31-knowledge = { path = "../../knowledge" }
+oer-espressif-ieee802154-engine = { path = "../../../espressif/ieee802154-engine" }
+oer-espressif-ieee802154-mac-values = { path = "../../../espressif/ieee802154-mac-values" }
+oer-espressif-coex = { path = "../../../espressif/coex" }
+oer-mmio = { path = "../../../../portable/mmio" }
+
+[dev-dependencies]
+oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+tempfile = "=3.27.0"
+oer-espressif-ieee802154-engine = { path = "../../../espressif/ieee802154-engine", features = ["test-support"] }
+oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory", features = ["test-support"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []

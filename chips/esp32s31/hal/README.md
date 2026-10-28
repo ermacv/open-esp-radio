@@ -4,6 +4,13 @@ Register logic over the thin PAC (docs/architecture.md, "Layers"): the
 reset root, sequences, polls, routing, clocks, power, resets and DMA
 engines.
 
+For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
+while exposing finite semantic transactions. `ieee802154::frames` owns the
+permanent DMA static and projects each frame into the typed DMA window.
+`oer-esp32s31-ieee802154-driver` implements the family engine's LL contract
+and owns its service/placement wrapper above HAL. HAL has no normal or test
+engine dependency.
+
 The reset root's `into_bootstrap` and `into_runtime` return `Result` with
 `root::InitError`: a refused console installation, a stuck bootstrap
 monotonic latch, or a refused stage-two core-control installation is a

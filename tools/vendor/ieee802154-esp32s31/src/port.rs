@@ -8,6 +8,7 @@
 //! [`LlModel`], so both sides see the same inputs. Modem ETM accesses are
 //! rendered as the vendor's direct register reads and writes.
 
+use oer_espressif_ieee802154_mac_values::{FRAME_SIZE, Ieee802154EngineBuffers};
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
@@ -15,7 +16,7 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154ResolvedTxPower,
     Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
     Ieee802154RxStateCode, Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet,
-    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
+    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation, Ieee802154TxPowerLevels,
 };
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
@@ -24,9 +25,8 @@ use oer_espressif_coex::{CoexEventId, CoexPtiTable};
 #[cfg(feature = "sw-coex")]
 use oer_espressif_ieee802154_engine::coex::{Ieee802154CoexPriorities, Ieee802154Coexistence};
 use oer_espressif_ieee802154_engine::engine::{
-    FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
-    Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot,
-    Ieee802154SecurityFrameError, Ieee802154TxError,
+    Ieee802154Engine, Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo,
+    Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154TxError,
 };
 use oer_espressif_ieee802154_engine::pib::{AutoPendingMode, Ieee802154PibDefaults};
 use oer_espressif_ieee802154_engine::{coex::CoexPti, ll::Ieee802154LowLevel};
@@ -830,10 +830,16 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
     let buffers = Box::leak(Box::new(Ieee802154EngineBuffers::new()));
     // The recovered ESP32-S31 BTBB level set, which the vendor side reads
     // through `bt_bb_get_tx_pwr_table` (`crate::record`).
-    let levels = oer_esp32s31_knowledge::tx_power::ESP32S31_TX_POWER_LEVELS;
+    const LEVELS: Ieee802154TxPowerLevels<'static> = match Ieee802154TxPowerLevels::new(
+        &oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM,
+    ) {
+        Ok(levels) => levels,
+        Err(_) => panic!("the reviewed ESP32-S31 provider levels are valid"),
+    };
+    let levels = LEVELS;
     let defaults = Ieee802154PibDefaults::default();
     let start = permit(11, levels).expect("channel 11 under the open domain");
-    let addresses = oer_espressif_ieee802154_engine::engine::Ieee802154DmaAddresses {
+    let addresses = oer_espressif_ieee802154_mac_values::Ieee802154DmaAddresses {
         rx: core::array::from_fn(|slot| PortDmaAddress(slot as u32 + 1)),
         tx: PortDmaAddress(100),
         enhanced_ack: PortDmaAddress(101),

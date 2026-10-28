@@ -38,11 +38,10 @@ use oer_ieee802154_mac::{
     FrameAddress, FrameType, FrameVersion, PendingTable, PhrFrame, ack_pending,
 };
 
-mod buffers;
 mod settings;
 mod statistics;
 
-pub use buffers::{
+use oer_espressif_ieee802154_mac_values::{
     DmaFrame, FRAME_SIZE, Ieee802154DmaAddresses, Ieee802154EngineBuffers, RX_BUFFER_COUNT,
 };
 
@@ -803,7 +802,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     /// The image and metadata of a slot the upper layer holds.
     pub fn rx_frame(&self, slot: Ieee802154RxSlot) -> ([u8; FRAME_SIZE], Ieee802154FrameInfo) {
         (
-            self.buffers.rx[slot.index()].read(),
+            self.buffers.rx_frames()[slot.index()].read(),
             self.rx_info[slot.index()],
         )
     }
@@ -926,7 +925,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     }
 
     fn rx_buffer_clear(&mut self) {
-        for frame in &mut self.buffers.rx {
+        for frame in self.buffers.rx_frames_mut() {
             frame.write(&[]);
         }
         self.rx_info = [Ieee802154FrameInfo::default(); RX_BUFFER_COUNT + 1];
@@ -1283,20 +1282,20 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
 
     fn tx_frame(&self) -> &DmaFrame {
         match self.tx {
-            TxSource::Frame => &self.buffers.tx,
-            TxSource::EnhancedAck => &self.buffers.enhanced_ack,
+            TxSource::Frame => self.buffers.tx_frame(),
+            TxSource::EnhancedAck => self.buffers.enhanced_ack_frame(),
         }
     }
 
     fn tx_frame_mut(&mut self) -> &mut DmaFrame {
         match self.tx {
-            TxSource::Frame => &mut self.buffers.tx,
-            TxSource::EnhancedAck => &mut self.buffers.enhanced_ack,
+            TxSource::Frame => self.buffers.tx_frame_mut(),
+            TxSource::EnhancedAck => self.buffers.enhanced_ack_frame_mut(),
         }
     }
 
     fn current_rx(&self) -> &DmaFrame {
-        &self.buffers.rx[usize::from(self.rx_index)]
+        &self.buffers.rx_frames()[usize::from(self.rx_index)]
     }
 
     /// `ieee802154_receive_done` of the current slot: the stub buffer drops
@@ -1310,9 +1309,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             return;
         }
         let index = usize::from(self.rx_index);
-        self.buffers.rx[index].mask_length();
+        self.buffers.rx_frames_mut()[index].mask_length();
         self.rx_info[index].process = true;
-        let frame = self.buffers.rx[index].read();
+        let frame = self.buffers.rx_frames()[index].read();
         cx.env.receive_done(
             Ieee802154RxSlot(self.rx_index),
             &frame,
@@ -1338,7 +1337,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         }
         let index = usize::from(self.rx_index);
         self.rx_info[index].process = true;
-        let ack = self.buffers.rx[index].read();
+        let ack = self.buffers.rx_frames()[index].read();
         cx.env.transmit_done(
             &frame,
             Some(Ieee802154ReceivedAck {
@@ -1365,7 +1364,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         E: Ieee802154Environment + ?Sized,
     {
         let index = usize::from(self.rx_index);
-        let image = self.buffers.rx[index].read();
+        let image = self.buffers.rx_frames()[index].read();
         let length = image[0] & 0x7f;
         let info = &mut self.rx_info[index];
         if length < FRAME_MIN_LEN {
@@ -1542,7 +1541,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         }
         // The vendor points `s_tx_frame` at the new frame before stopping the
         // current operation, so a stopped transmission reports the new frame.
-        self.buffers.tx.write(frame);
+        self.buffers.tx_frame_mut().write(frame);
         self.tx = TxSource::Frame;
         self.stop_current_operation(cx);
         self.pib.update(cx.ll, self.levels);
@@ -1821,7 +1820,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 generated,
                 Ok(Ieee802154EnhancedAck::Generated | Ieee802154EnhancedAck::Secured { .. })
             ) {
-                self.buffers.enhanced_ack.write(&ack);
+                self.buffers.enhanced_ack_frame_mut().write(&ack);
                 cx.ll.set_tx_address(self.addresses.enhanced_ack);
                 self.tx = TxSource::EnhancedAck;
                 cx.ll.notify_enhanced_ack_generated();

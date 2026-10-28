@@ -1,18 +1,13 @@
-//! The ESP32-S31 implementation of the chip-neutral MAC low-level interface.
+//! Finite MAC transactions over the task/IRQ owners of a silent polling epoch.
 //!
-//! [`Ieee802154MacOwners`] implements
-//! [`oer_espressif_ieee802154_engine::ll::Ieee802154LowLevel`] over the MAC
+//! [`Ieee802154MacOwners`] holds the MAC
 //! owners of [`mac`](crate::ieee802154::mac): each method is one accessor of
 //! the pinned public LL, and each owner operation is one register
 //! transaction. The accessor order is the engine's; nothing here adds,
 //! merges or reorders register transactions.
 
 use oer_esp32s31_pac::ieee802154::command::Opcode;
-use oer_espressif_ieee802154_engine::coex::CoexPti;
-pub use oer_espressif_ieee802154_engine::ll::{
-    Ieee802154LowLevel, Ieee802154RecentRssi, event_end_process, mac_init_registers, sec_clear,
-    set_txrx_pti, timer_fire_at,
-};
+use oer_espressif_coex::CoexPti;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
@@ -62,13 +57,13 @@ const fn timer_stop(timer: Ieee802154Timer) -> Opcode {
 /// The engine reads and acknowledges `EVENT_STATUS` from its operation
 /// starts and stops as well as from its event service, as the public driver
 /// does under one critical section over the complete MAC register block, so
-/// this pair is the only implementation of [`Ieee802154LowLevel`] over
-/// hardware. The engine enables the MAC's events and polls them, so the
+/// this pair keeps those transactions on one owner. The engine enables the
+/// MAC's events and polls them, so the
 /// pair holds the router's [`Silent`] proof that no CPU line receives the
 /// MAC's source:
 ///
 /// ```no_run
-/// use oer_esp32s31_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
+/// use oer_esp32s31_hal::ieee802154::{polled::Ieee802154MacOwners, mac::*};
 /// use oer_esp32s31_hal::platform::InterruptController;
 /// use oer_espressif_interrupt_table::Router;
 /// fn poll(
@@ -85,7 +80,7 @@ const fn timer_stop(timer: Ieee802154Timer) -> Opcode {
 /// ```
 ///
 /// ```compile_fail,E0061
-/// # use oer_esp32s31_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
+/// # use oer_esp32s31_hal::ieee802154::{polled::Ieee802154MacOwners, mac::*};
 /// fn poll(mut task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner) {
 ///     let (startup, interrupts) = setup.arm(task);
 ///     // Enabling the events by polling takes the silent route's proof.
@@ -144,271 +139,271 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
     }
 }
 
-impl<P: Placement, E: Placement, B: Placement> Ieee802154RecentRssi
-    for Ieee802154MacOwners<P, E, B>
-{
+impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
     /// The low byte of the shared baseband's current receive information,
     /// read live as the vendor does: it reflects the most recent baseband
     /// reception, which may be Bluetooth's while Bluetooth shares the
     /// baseband. Read side effects are unproven.
-    fn recent_rssi(&mut self) -> i8 {
+    pub fn recent_rssi(&mut self) -> i8 {
         self.task.recent_rssi()
     }
 }
 
-impl<P: Placement, E: Placement, B: Placement> Ieee802154LowLevel for Ieee802154MacOwners<P, E, B> {
-    type Address = crate::layouts::DmaWindowAddress;
-
-    fn set_command(&mut self, command: Ieee802154MacCommand) {
+impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
+    pub fn set_command(&mut self, command: Ieee802154MacCommand) {
         self.task.issue(opcode(command));
     }
 
-    fn events(&mut self) -> Ieee802154EventObservation {
+    pub fn events(&mut self) -> Ieee802154EventObservation {
         self.interrupts.events().observation()
     }
 
-    fn clear_events(&mut self, mask: Ieee802154EventMask) {
+    pub fn clear_events(&mut self, mask: Ieee802154EventMask) {
         let snapshot = self.interrupts.events();
         self.interrupts.clear_events(snapshot, mask);
     }
 
-    fn rx_abort_reason(&mut self) -> Ieee802154RxAbortReasonObservation {
+    pub fn rx_abort_reason(&mut self) -> Ieee802154RxAbortReasonObservation {
         self.interrupts.rx_abort_reason()
     }
 
-    fn tx_abort_reason(&mut self) -> Ieee802154TxAbortReasonObservation {
+    pub fn tx_abort_reason(&mut self) -> Ieee802154TxAbortReasonObservation {
         self.interrupts.tx_abort_reason()
     }
 
-    fn rx_status(&mut self) -> Ieee802154RxStatus {
+    pub fn rx_status(&mut self) -> Ieee802154RxStatus {
         self.task.rx_status()
     }
 
-    fn is_current_rx_frame(&mut self) -> bool {
+    pub fn is_current_rx_frame(&mut self) -> bool {
         self.task.rx_status().frame_in_progress()
     }
 
-    fn set_tx_address(&mut self, address: Self::Address) {
+    pub fn set_tx_address(&mut self, address: crate::layouts::DmaWindowAddress) {
         self.task.set_tx_address(address);
     }
 
-    fn set_rx_address(&mut self, address: Self::Address) {
+    pub fn set_rx_address(&mut self, address: crate::layouts::DmaWindowAddress) {
         self.task.set_rx_address(address);
     }
 
-    fn tx_auto_ack(&mut self) -> bool {
+    pub fn tx_auto_ack(&mut self) -> bool {
         self.task.tx_auto_ack()
     }
 
-    fn rx_auto_ack(&mut self) -> bool {
+    pub fn rx_auto_ack(&mut self) -> bool {
         self.task.rx_auto_ack()
     }
 
-    fn tx_enhanced_ack(&mut self) -> bool {
+    pub fn tx_enhanced_ack(&mut self) -> bool {
         self.task.tx_enhanced_ack()
     }
 
-    fn pending_mode(&mut self) -> bool {
+    pub fn pending_mode(&mut self) -> bool {
         self.task.pending_mode()
     }
 
-    fn set_pending_bit(&mut self, pending: bool) {
+    pub fn set_pending_bit(&mut self, pending: bool) {
         self.task.set_frame_pending(pending);
     }
 
-    fn frequency_code(&mut self) -> u8 {
+    pub fn frequency_code(&mut self) -> u8 {
         self.task.frequency_code()
     }
 
-    fn ed_rss(&mut self) -> i8 {
+    pub fn ed_rss(&mut self) -> i8 {
         self.interrupts.ed_rss()
     }
 
-    fn cca_busy(&mut self) -> bool {
+    pub fn cca_busy(&mut self) -> bool {
         self.interrupts.cca_busy()
     }
 
-    fn debug_counter(&mut self, counter: Ieee802154DebugCounter) -> u16 {
+    pub fn debug_counter(&mut self, counter: Ieee802154DebugCounter) -> u16 {
         self.task.debug_counter(counter)
     }
 
-    fn clear_debug_counter(&mut self, counter: Ieee802154DebugCounter) {
+    pub fn clear_debug_counter(&mut self, counter: Ieee802154DebugCounter) {
         self.task.clear_debug_counter(counter);
     }
 
-    fn set_ed_duration(&mut self, symbols: u16) {
+    pub fn set_ed_duration(&mut self, symbols: u16) {
         self.task.set_ed_duration(symbols);
     }
 
-    fn notify_enhanced_ack_generated(&mut self) {
+    pub fn notify_enhanced_ack_generated(&mut self) {
         self.task.notify_enhanced_ack_generated();
     }
 
-    fn disable_rx_aborts(&mut self, set: Ieee802154RxAbortEnableSet) {
+    pub fn disable_rx_aborts(&mut self, set: Ieee802154RxAbortEnableSet) {
         self.task.set_rx_aborts(set, false);
     }
 
-    fn set_multipan_panid(&mut self, index: Ieee802154MultipanIndex, panid: u16) {
+    pub fn set_multipan_panid(&mut self, index: Ieee802154MultipanIndex, panid: u16) {
         self.task.set_multipan_pan_id(index, panid);
     }
 
-    fn multipan_panid(&mut self, index: Ieee802154MultipanIndex) -> u16 {
+    pub fn multipan_panid(&mut self, index: Ieee802154MultipanIndex) -> u16 {
         self.task.multipan_pan_id(index)
     }
 
-    fn set_multipan_short_address(&mut self, index: Ieee802154MultipanIndex, address: u16) {
+    pub fn set_multipan_short_address(&mut self, index: Ieee802154MultipanIndex, address: u16) {
         self.task.set_multipan_short_address(index, address);
     }
 
-    fn multipan_short_address(&mut self, index: Ieee802154MultipanIndex) -> u16 {
+    pub fn multipan_short_address(&mut self, index: Ieee802154MultipanIndex) -> u16 {
         self.task.multipan_short_address(index)
     }
 
-    fn set_multipan_extended_address(&mut self, index: Ieee802154MultipanIndex, address: [u8; 8]) {
+    pub fn set_multipan_extended_address(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        address: [u8; 8],
+    ) {
         self.task.set_multipan_extended_address(index, address);
     }
 
-    fn multipan_extended_address(&mut self, index: Ieee802154MultipanIndex) -> [u8; 8] {
+    pub fn multipan_extended_address(&mut self, index: Ieee802154MultipanIndex) -> [u8; 8] {
         self.task.multipan_extended_address(index)
     }
 
-    fn set_multipan_enable(&mut self, state: Ieee802154MultipanEnableState) {
+    pub fn set_multipan_enable(&mut self, state: Ieee802154MultipanEnableState) {
         self.task.set_multipan_enable(state);
     }
 
-    fn multipan_enable(&mut self) -> Ieee802154MultipanEnableState {
+    pub fn multipan_enable(&mut self) -> Ieee802154MultipanEnableState {
         self.task.multipan_enable()
     }
 
-    fn set_ack_timeout(&mut self, units: u16) {
+    pub fn set_ack_timeout(&mut self, units: u16) {
         self.task.set_ack_timeout(units);
     }
 
-    fn ack_timeout(&mut self) -> u16 {
+    pub fn ack_timeout(&mut self) -> u16 {
         self.task.ack_timeout()
     }
 
-    fn set_security_address(&mut self, address: &[u8; 8]) {
+    pub fn set_security_address(&mut self, address: &[u8; 8]) {
         self.task.set_security_address(address);
     }
 
-    fn set_security_key(&mut self, key: &[u8; 16]) {
+    pub fn set_security_key(&mut self, key: &[u8; 16]) {
         self.task.set_security_key(key);
     }
 
-    fn set_security_offset(&mut self, offset: u8) {
+    pub fn set_security_offset(&mut self, offset: u8) {
         self.task.set_security_offset(offset);
     }
 
-    fn enable_all_events(&mut self) {
+    pub fn enable_all_events(&mut self) {
         self.task.enable_all_events();
     }
 
-    fn enable_event(&mut self, event: Ieee802154Event) {
+    pub fn enable_event(&mut self, event: Ieee802154Event) {
         self.task.set_event_enabled(event, true);
     }
 
-    fn disable_event(&mut self, event: Ieee802154Event) {
+    pub fn disable_event(&mut self, event: Ieee802154Event) {
         self.task.set_event_enabled(event, false);
     }
 
-    fn enable_tx_aborts(&mut self, set: Ieee802154TxAbortEnableSet) {
+    pub fn enable_tx_aborts(&mut self, set: Ieee802154TxAbortEnableSet) {
         self.task.set_tx_aborts(set, true);
     }
 
-    fn enable_rx_aborts(&mut self, set: Ieee802154RxAbortEnableSet) {
+    pub fn enable_rx_aborts(&mut self, set: Ieee802154RxAbortEnableSet) {
         self.task.set_rx_aborts(set, true);
     }
 
-    fn set_ed_sample_mode(&mut self, mode: Ieee802154EdSampleMode) {
+    pub fn set_ed_sample_mode(&mut self, mode: Ieee802154EdSampleMode) {
         self.task.set_ed_sample_mode(mode);
     }
 
-    fn disable_coex(&mut self) {
+    pub fn disable_coex(&mut self) {
         self.task.set_txrx_pti(Ieee802154Pti::COEX_DISABLED);
         self.task.set_ack_pti(Ieee802154Pti::COEX_DISABLED);
     }
 
-    fn set_txrx_pti(&mut self, pti: CoexPti) {
+    pub fn set_txrx_pti(&mut self, pti: CoexPti) {
         self.task.set_txrx_pti(Ieee802154Pti::from_coex(pti));
     }
 
-    fn set_ack_pti(&mut self, pti: CoexPti) {
+    pub fn set_ack_pti(&mut self, pti: CoexPti) {
         self.task.set_ack_pti(Ieee802154Pti::from_coex(pti));
     }
 
-    fn set_channel(&mut self, channel: Ieee802154Channel) {
+    pub fn set_channel(&mut self, channel: Ieee802154Channel) {
         self.task.set_channel(channel);
     }
 
-    fn set_tx_power(&mut self, power: &Ieee802154ResolvedTxPower<'_>) {
+    pub fn set_tx_power(&mut self, power: &Ieee802154ResolvedTxPower<'_>) {
         self.task.set_tx_power_code(power.field_code().value());
     }
 
-    fn set_cca_mode(&mut self, mode: Ieee802154CcaMode) {
+    pub fn set_cca_mode(&mut self, mode: Ieee802154CcaMode) {
         self.task.set_cca_mode(mode);
     }
 
-    fn set_cca_threshold(&mut self, threshold_dbm: i8) {
+    pub fn set_cca_threshold(&mut self, threshold_dbm: i8) {
         self.task.set_cca_threshold_code(threshold_dbm);
     }
 
-    fn set_tx_auto_ack(&mut self, enable: bool) {
+    pub fn set_tx_auto_ack(&mut self, enable: bool) {
         self.task.set_tx_auto_ack(enable);
     }
 
-    fn set_rx_auto_ack(&mut self, enable: bool) {
+    pub fn set_rx_auto_ack(&mut self, enable: bool) {
         self.task.set_rx_auto_ack(enable);
     }
 
-    fn set_tx_enhanced_ack(&mut self, enable: bool) {
+    pub fn set_tx_enhanced_ack(&mut self, enable: bool) {
         self.task.set_tx_enhanced_ack(enable);
     }
 
-    fn set_coordinator(&mut self, enable: bool) {
+    pub fn set_coordinator(&mut self, enable: bool) {
         self.task.set_coordinator(enable);
     }
 
-    fn set_promiscuous(&mut self, enable: bool) {
+    pub fn set_promiscuous(&mut self, enable: bool) {
         self.task.set_promiscuous(enable);
     }
 
-    fn set_pending_mode(&mut self, enhanced: bool) {
+    pub fn set_pending_mode(&mut self, enhanced: bool) {
         self.task.set_pending_mode(enhanced);
     }
 
-    fn set_transmit_security(&mut self, enable: bool) {
+    pub fn set_transmit_security(&mut self, enable: bool) {
         self.task.set_transmit_security(enable);
     }
 
-    fn set_timer_threshold(&mut self, timer: Ieee802154Timer, microseconds: u32) {
+    pub fn set_timer_threshold(&mut self, timer: Ieee802154Timer, microseconds: u32) {
         match timer {
             Ieee802154Timer::Timer0 => self.task.set_timer0_threshold(microseconds),
             Ieee802154Timer::Timer1 => self.task.set_timer1_threshold(microseconds),
         }
     }
 
-    fn start_timer(&mut self, timer: Ieee802154Timer) {
+    pub fn start_timer(&mut self, timer: Ieee802154Timer) {
         self.task.issue(timer_start(timer));
     }
 
-    fn stop_timer(&mut self, timer: Ieee802154Timer) {
+    pub fn stop_timer(&mut self, timer: Ieee802154Timer) {
         self.task.issue(timer_stop(timer));
     }
 
-    fn etm_channel_enabled(&mut self, channel: Ieee802154EtmChannel) -> bool {
+    pub fn etm_channel_enabled(&mut self, channel: Ieee802154EtmChannel) -> bool {
         self.task.etm_channel_enabled(channel)
     }
 
-    fn disable_etm_channel(&mut self, channel: Ieee802154EtmChannel) {
+    pub fn disable_etm_channel(&mut self, channel: Ieee802154EtmChannel) {
         self.task.disable_etm_channel(channel);
     }
 
-    fn enable_etm_channel(&mut self, channel: Ieee802154EtmChannel) {
+    pub fn enable_etm_channel(&mut self, channel: Ieee802154EtmChannel) {
         self.task.enable_etm_channel(channel);
     }
 
-    fn set_etm_route(&mut self, route: Ieee802154EtmRoute) {
+    pub fn set_etm_route(&mut self, route: Ieee802154EtmRoute) {
         self.task.set_etm_route(route);
     }
 }

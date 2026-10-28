@@ -279,6 +279,11 @@ impl Ieee802154PanIdentity {
     }
 }
 
+/// PTI value the public common LL writes to both PTI fields when coexistence
+/// is disabled (`ieee802154_ll_disable_coex`).
+/// SOURCE: esp-idf-7b9cc1ac-ieee802154-common-ll, `ieee802154_ll_disable_coex`.
+pub const COEX_DISABLED_PTI: u8 = 3;
+
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,

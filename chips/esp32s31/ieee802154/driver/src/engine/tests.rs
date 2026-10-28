@@ -1,12 +1,13 @@
 use super::*;
 use oer_espressif_ieee802154_engine::{
     engine::{
-        FRAME_SIZE, Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo,
-        Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154TxError,
+        Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck,
+        Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154TxError,
     },
     ll::model::Ieee802154LlModel,
 };
-use oer_espressif_ieee802154_mac_values::{Ieee802154Channel, Ieee802154RxStatus};
+use oer_espressif_ieee802154_mac_values::FRAME_SIZE;
+use oer_espressif_ieee802154_mac_values::{Ieee802154Channel, Ieee802154Event, Ieee802154RxStatus};
 use std::boxed::Box;
 
 static LEVELS: [i8; 1] = [0];
@@ -105,14 +106,6 @@ fn placed_owner_publishes_its_own_frames_and_keeps_other_arenas_out() {
 }
 
 #[test]
-fn the_hal_buffer_claim_is_affine() {
-    let first = claim_buffers().expect("this test claims the HAL static once");
-    assert!(claim_buffers().is_none());
-    let _claimed = first.into_inner();
-    assert!(claim_buffers().is_none());
-}
-
-#[test]
 fn detach_rebind_reuses_placed_storage_across_mac_epochs() {
     let (mut engine, rx, tx) = model();
     let mut environment = Environment;
@@ -142,4 +135,26 @@ fn detach_rebind_reuses_placed_storage_across_mac_epochs() {
         );
         assert_eq!(engine.model_transmit_address().get(), tx);
     }
+}
+
+#[test]
+fn service_quarantines_the_placed_owner_with_its_exact_fault() {
+    let (mut engine, _, _) = model();
+    engine.model_ll().events = Ieee802154Event::ClockCountMatch.mask();
+    let fault = match engine.isr(&mut Environment) {
+        Ok(_) => panic!("unsupported event must quarantine the owner"),
+        Err(quarantined) => quarantined,
+    };
+    assert_eq!(
+        fault.fault(),
+        oer_espressif_ieee802154_engine::engine::Fault::UnhandledEvents {
+            observation:
+                oer_espressif_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
+                    Ieee802154Event::ClockCountMatch.mask(),
+                    false,
+                    false,
+                ),
+            state: oer_espressif_ieee802154_engine::engine::Ieee802154State::Disable,
+        }
+    );
 }

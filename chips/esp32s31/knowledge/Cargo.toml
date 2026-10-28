@@ -11,8 +11,5 @@ description = "ESP32-S31 chip knowledge: hardware-free calibration records, PHY 
 [dependencies]
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 
-[dev-dependencies]
-oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
-
 [lints]
 workspace = true

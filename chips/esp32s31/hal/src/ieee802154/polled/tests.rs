@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::ieee802154::mac::host::{HostMemory, changed, silent};
-use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
+use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154Event, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
 };

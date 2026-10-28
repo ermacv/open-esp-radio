@@ -458,9 +458,9 @@ whose section is checked to be `.dma.bss.<block>`; the runtime linker
 script's ASSERTs over the DMA range (from the generated `dma-window.x`) are
 the proof.
 
-The 802.15.4 HAL engine consumes its `Placed` buffers and constructs the
-complete address table through the safe placement projection. Refusal returns
-the unchanged MAC and placed buffers. Every projection names a frame
+The 802.15.4 HAL frame owner consumes its `Placed` buffers and constructs the
+complete address table through the safe placement projection. The S31 driver
+retains the MAC during projection; refusal returns both unchanged affine inputs. Every projection names a frame
 inside the retained allocation; subsequent register publications take those
 typed addresses. The shared engine and the combined engine/MAC owner contain
 no unsafe code and perform no address arithmetic.

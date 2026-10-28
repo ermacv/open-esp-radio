@@ -7,13 +7,13 @@
 //!
 //! [`engine`] ports the public ESP-IDF driver's state machine
 //! (`esp_ieee802154_dev.c`) and public API layer over the
-//! [`ll::Ieee802154LowLevel`] interface, which each chip's HAL implements over
-//! its own PAC. The engine names no executor, interrupt route or chip: a
+//! [`ll::Ieee802154LowLevel`] interface, implemented by chip adapters over
+//! their HAL transactions. The engine names no executor, interrupt route or chip: a
 //! runtime holds it with the chip's MAC owners in one critical section and
 //! calls its operation entries and interrupt handler. What differs between
 //! chips — register geometry, transmit-on delays, the transmit-power level
 //! set, coexistence tables and placed DMA storage — stays with each
-//! chip's HAL.
+//! chip's HAL and driver.
 
 #![no_std]
 #![forbid(unsafe_code)]

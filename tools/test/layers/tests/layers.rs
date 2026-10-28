@@ -350,7 +350,11 @@ fn forbidden_dependency(name: &str) -> bool {
         || name.contains("retained-record")
 }
 
-fn forbidden_paths(graph: &BTreeMap<String, BTreeSet<String>>, start: &str) -> Vec<String> {
+fn forbidden_paths(
+    graph: &BTreeMap<String, BTreeSet<String>>,
+    start: &str,
+    forbidden: impl Fn(&str) -> bool,
+) -> Vec<String> {
     let mut pending = vec![vec![start.to_owned()]];
     let mut visited = BTreeSet::new();
     let mut found = Vec::new();
@@ -359,7 +363,7 @@ fn forbidden_paths(graph: &BTreeMap<String, BTreeSet<String>>, start: &str) -> V
         if !visited.insert(name.clone()) {
             continue;
         }
-        if name != start && forbidden_dependency(name) {
+        if name != start && forbidden(name) {
             found.push(path.join(" -> "));
         } else if let Some(dependencies) = graph.get(name) {
             for dependency in dependencies {
@@ -394,7 +398,11 @@ fn sans_io_has_no_normal_dependency_on_platform_or_terminal_fault_owners() {
         .iter()
         .filter(|(path, _)| sans_io(path))
         .flat_map(|(_, manifest)| {
-            forbidden_paths(&graph, manifest["package"]["name"].as_str().expect("name"))
+            forbidden_paths(
+                &graph,
+                manifest["package"]["name"].as_str().expect("name"),
+                forbidden_dependency,
+            )
         })
         .collect::<Vec<_>>();
     assert!(
@@ -437,10 +445,10 @@ other = { package = "oer-chip-hal", version = "1" }
         ),
     ]);
     assert_eq!(
-        forbidden_paths(&graph, "core"),
+        forbidden_paths(&graph, "core", forbidden_dependency),
         ["core -> bridge -> oer-retained-record"]
     );
-    assert!(forbidden_paths(&graph, "unrelated").is_empty());
+    assert!(forbidden_paths(&graph, "unrelated", forbidden_dependency).is_empty());
 }
 
 fn lint_paths(config: &toml::Value, key: &str) -> BTreeSet<String> {
@@ -583,4 +591,51 @@ fn lint_catalogue_comparison_accepts_tables_and_strings_and_rejects_missing_path
         missing_lints(&empty, &common, "disallowed-methods"),
         BTreeSet::from(["oer_mmio::assume_owned".into()])
     );
+}
+
+/// Neither low-level HAL transactions nor chip facts may pull in the engine,
+/// including through target-specific, optional or indirect normal dependencies.
+#[test]
+fn hal_and_knowledge_do_not_reach_the_ieee802154_engine_or_driver() {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let graph = packages(&root)
+        .values()
+        .map(|manifest| {
+            (
+                manifest["package"]["name"]
+                    .as_str()
+                    .expect("name")
+                    .to_owned(),
+                normal_dependencies(manifest, &workspace["workspace"]),
+            )
+        })
+        .collect();
+    for owner in ["oer-esp32s31-hal", "oer-esp32s31-knowledge"] {
+        let violations = forbidden_paths(&graph, owner, ieee802154_execution);
+        assert!(violations.is_empty(), "{owner}: {violations:?}");
+    }
+}
+
+fn ieee802154_execution(name: &str) -> bool {
+    matches!(
+        name,
+        "oer-espressif-ieee802154-engine" | "oer-esp32s31-ieee802154-driver"
+    )
+}
+
+#[test]
+fn the_ieee802154_boundary_rejects_the_indirect_knowledge_path() {
+    let graph = BTreeMap::from([
+        ("hal".into(), BTreeSet::from(["knowledge".into()])),
+        (
+            "knowledge".into(),
+            BTreeSet::from(["hal".into(), "oer-espressif-ieee802154-engine".into()]),
+        ),
+    ]);
+    assert_eq!(
+        forbidden_paths(&graph, "hal", ieee802154_execution),
+        ["hal -> knowledge -> oer-espressif-ieee802154-engine"],
+    );
+    assert!(forbidden_paths(&graph, "unrelated", ieee802154_execution).is_empty());
 }

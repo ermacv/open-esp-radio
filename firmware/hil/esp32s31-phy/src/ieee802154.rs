@@ -5,15 +5,16 @@ use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::{CoexAbsent, Coexisting, CommonPower, Ieee802154Client, RadioDomain},
     ieee802154::{
-        Ieee802154Cold,
-        engine::{self, DetachedIeee802154Engine, Ieee802154Engine},
-        ll::Ieee802154MacOwners,
-        mac::Ieee802154InterruptOwner,
+        Ieee802154Cold, frames, mac::Ieee802154InterruptOwner, polled::Ieee802154MacOwners,
     },
     power::ChipClocks,
     root::Ieee802154RadioPartition,
 };
-use oer_esp32s31_knowledge::tx_power::ESP32S31_TX_POWER_LEVELS;
+use oer_esp32s31_ieee802154_driver::{
+    engine::{DetachedIeee802154Engine, Ieee802154Engine},
+    ll::S31Mac,
+    tx_power::ESP32S31_TX_POWER_LEVELS,
+};
 use oer_esp32s31_phy::{
     concurrent::{ConcurrentAcquire, ConcurrentPhy, PhyClientAccess, phy_ready},
     ieee802154_client::{
@@ -25,12 +26,12 @@ use oer_esp32s31_phy::{
 use oer_espressif_ieee802154_engine::{
     coex::{Ieee802154CoexPriorities, Ieee802154Coexistence},
     engine::{
-        FRAME_SIZE, Ieee802154EngineBuffers, Ieee802154EnhancedAck, Ieee802154Environment,
-        Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154SecurityFrameError,
-        Ieee802154State, Ieee802154TxError, RX_BUFFER_COUNT,
+        Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck,
+        Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154State, Ieee802154TxError,
     },
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
 };
+use oer_espressif_ieee802154_mac_values::{FRAME_SIZE, Ieee802154EngineBuffers, RX_BUFFER_COUNT};
 use oer_espressif_ieee802154_mac_values::{Ieee802154Channel, Ieee802154RxStatus};
 use oer_espressif_interrupt_table::Silent;
 use oer_hil_protocol::base::RejectReason;
@@ -149,7 +150,7 @@ impl Rx {
             power: None,
             route: None,
             silent: Some(silent),
-            buffers: Some(engine::claim_buffers().expect("one placed MAC storage claim")),
+            buffers: Some(frames::claim_buffers().expect("one placed MAC storage claim")),
             detached: None,
         }
     }
@@ -215,14 +216,21 @@ impl Rx {
                 let mut platform = ();
                 let domain = require_radio(domain_slot.take(), fault);
                 let observer = &mut observer;
-                let mut maintain = core::pin::pin!(crate::completion::construct(|| maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-                    &crate::PHY_CLOCK,
-                    domain,
-                    &mut platform,
-                    observer,
-                    phy_pilot,
-                )));
-                crate::completion::run(maintain.as_mut(), domain_slot, crate::completion::restore).await
+                let mut maintain =
+                    core::pin::pin!(crate::completion::construct(|| maintain_concurrent_phy::<
+                        _,
+                        (),
+                        RomShortDelay,
+                        _,
+                    >(
+                        &crate::PHY_CLOCK,
+                        domain,
+                        &mut platform,
+                        observer,
+                        phy_pilot,
+                    )));
+                crate::completion::run(maintain.as_mut(), domain_slot, crate::completion::restore)
+                    .await
             };
             observer.report(0).await;
             #[cfg(oer_profile)]
@@ -246,7 +254,7 @@ impl Rx {
         } = RegisteredIeee802154Operational::new(foundation, member);
         let silent = self.silent.take().ok_or(RejectReason::Internal)?;
         let (startup, interrupts) = interrupts.arm(task);
-        let mac = Ieee802154MacOwners::new(startup, interrupts, silent);
+        let mac = S31Mac::new(Ieee802154MacOwners::new(startup, interrupts, silent));
         let mut engine = match self.detached.take() {
             Some(detached) => detached.rebind(mac),
             None => Ieee802154Engine::place(
@@ -327,7 +335,7 @@ impl Rx {
             }
         };
         self.detached = Some(detached);
-        let (mut task, interrupts, silent) = mac.into_parts();
+        let (mut task, interrupts, silent) = mac.into_inner().into_parts();
         self.silent = Some(silent);
         let interrupts = interrupts.deactivate(&mut task);
         let (foundation, member) = self
@@ -366,11 +374,16 @@ impl Rx {
         {
             let mut platform = ();
             let domain = require_radio(domain_slot.take(), fault);
-            let mut close = core::pin::pin!(crate::completion::construct(|| close_concurrent_rf::<_, (), RomShortDelay>(
-                &crate::PHY_CLOCK,
-                domain,
-                &mut platform,
-            )));
+            let mut close =
+                core::pin::pin!(crate::completion::construct(|| close_concurrent_rf::<
+                    _,
+                    (),
+                    RomShortDelay,
+                >(
+                    &crate::PHY_CLOCK,
+                    domain,
+                    &mut platform,
+                )));
             crate::completion::run(close.as_mut(), domain_slot, crate::completion::restore).await
         }
         .map_err(|_| RejectReason::Internal)?;
