@@ -116,6 +116,7 @@ pub(crate) struct Hw {
     etm_enabled: [bool; 2],
     current_rx_frame: bool,
     ed_rss: i8,
+    rssi_compensation_dbm: i8,
     cca_busy: bool,
     rx_address: Option<ModelAddress>,
     panid: u16,
@@ -146,6 +147,7 @@ impl Default for Hw {
             etm_enabled: [false; 2],
             current_rx_frame: false,
             ed_rss: 0,
+            rssi_compensation_dbm: 0,
             cca_busy: false,
             rx_address: None,
             panid: 0,
@@ -246,6 +248,9 @@ impl Ieee802154LowLevel for Hw {
     fn ed_rss(&mut self) -> i8 {
         self.calls.push(Call::EdRss);
         self.ed_rss
+    }
+    fn rssi_compensation_dbm(&self) -> i8 {
+        self.rssi_compensation_dbm
     }
     fn cca_busy(&mut self) -> bool {
         self.calls.push(Call::CcaBusy);
@@ -1061,6 +1066,18 @@ fn energy_detection_and_cca_report_their_sample() {
     bench.interrupt(&[Ieee802154Event::EdDone]);
     assert_eq!(bench.take_notes(), [Note::Cca(true)]);
     assert_eq!(bench.engine.state(), Ieee802154State::Sleep);
+}
+
+/// The chip's compensation, read from the low level, shifts the reported
+/// energy-detection power.
+#[test]
+fn energy_detection_applies_the_low_level_rssi_compensation() {
+    let mut bench = Bench::enabled();
+    bench.hw.rssi_compensation_dbm = 5;
+    bench.engine.energy_detect(&mut bench.hw, &mut bench.env, 8);
+    bench.hw.ed_rss = -70;
+    bench.interrupt(&[Ieee802154Event::EdDone]);
+    assert_eq!(bench.take_notes(), [Note::EnergyDetect(-65)]);
 }
 
 /// An ED abort reports `esp_ieee802154_ed_failed` (L624-L628).

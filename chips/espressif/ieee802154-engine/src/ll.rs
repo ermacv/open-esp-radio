@@ -73,6 +73,9 @@ pub trait Ieee802154LowLevel {
     fn frequency_code(&mut self) -> u8;
     /// `ieee802154_ll_get_ed_rss`.
     fn ed_rss(&mut self) -> i8;
+    /// The chip's `IEEE802154_RSSI_COMPENSATION_VALUE` in dBm, added to every
+    /// measured RSSI and energy-detection value the engine reports.
+    fn rssi_compensation_dbm(&self) -> i8;
     /// `ieee802154_ll_is_cca_busy`.
     fn cca_busy(&mut self) -> bool;
     /// `ieee802154_ll_get_*_cnt`: one MAC diagnostic counter.

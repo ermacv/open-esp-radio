@@ -12,7 +12,6 @@ bluetooth = ["oer-esp32s31-radio-client/bluetooth"]
 
 [dependencies]
 oer-espressif-coex = { path = "../../../espressif/coex" }
-oer-ieee80211-port = { path = "../../../../protocols/ieee80211/port" }
 embassy-futures = "0.1.2"
 pin-project-lite = "0.2.16"
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }

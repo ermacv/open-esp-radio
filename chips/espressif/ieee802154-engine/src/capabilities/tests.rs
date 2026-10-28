@@ -6,9 +6,12 @@ const LEVELS: TransmitPowerLevels = match TransmitPowerLevels::new(&[-24, 0, 20]
     Err(_) => panic!("valid levels"),
 };
 
+/// A receive sensitivity no chip reports, so the test sees the value pass through.
+const SENSITIVITY_DBM: i8 = -97;
+
 #[test]
 fn single_interface_table_keeps_the_recovered_values_without_csma_or_retries() {
-    let caps = capabilities(LEVELS, false);
+    let caps = capabilities(LEVELS, false, SENSITIVITY_DBM);
     // The eleven operations the engine implements itself, and nothing else:
     // a single attempt per frame (CSMA-CA and retries live above the port)
     // and one interface.
@@ -49,7 +52,7 @@ fn single_interface_table_keeps_the_recovered_values_without_csma_or_retries() {
             reset_dbm: -75,
         })
     );
-    assert_eq!(caps.receive_sensitivity_dbm, -104);
+    assert_eq!(caps.receive_sensitivity_dbm, SENSITIVITY_DBM);
     assert_eq!(
         caps.csl,
         Some(CslCapability {
@@ -63,7 +66,7 @@ fn single_interface_table_keeps_the_recovered_values_without_csma_or_retries() {
 
 #[test]
 fn multipan_table_adds_multi_pan_and_four_interfaces() {
-    let caps = capabilities(LEVELS, true);
+    let caps = capabilities(LEVELS, true, SENSITIVITY_DBM);
     assert_eq!(
         caps.operations,
         RADIO_CAPABILITIES.union(RadioCapabilities::MULTI_PAN)

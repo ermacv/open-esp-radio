@@ -8,8 +8,5 @@ repository.workspace = true
 publish = false
 description = "ESP32-S31 chip knowledge: hardware-free calibration records, PHY relations and transmit-power levels"
 
-[dependencies]
-oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
-
 [lints]
 workspace = true

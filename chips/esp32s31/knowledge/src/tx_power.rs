@@ -1,8 +1,8 @@
 //! ESP32-S31 transmit-power levels: the BTBB provider's level set, which
 //! IEEE 802.15.4 and Bluetooth LE select from.
 //!
-//! The IEEE 802.15.4 resolution itself is chip-neutral
-//! ([`oer_espressif_ieee802154_mac_values`]).
+//! The IEEE 802.15.4 resolution itself is chip-neutral and lives in the
+//! family `oer-espressif-ieee802154-mac-values` crate.
 
 /// The BTBB provider's transmit-power levels, in dBm.
 ///

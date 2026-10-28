@@ -28,10 +28,15 @@ fn the_esp32s31_capability_table_starts_every_channel_at_the_highest_level() {
         )
         .unwrap(),
         false,
+        oer_esp32s31_knowledge::ieee802154::RECEIVE_SENSITIVITY_DBM,
     );
     let power = caps
         .transmit_power
         .expect("the ESP32-S31 power is configurable");
     assert_eq!(power.reset_dbm, 21);
     assert_eq!(power.levels.levels_dbm().len(), 16);
+    assert_eq!(
+        caps.receive_sensitivity_dbm,
+        oer_esp32s31_knowledge::ieee802154::RECEIVE_SENSITIVITY_DBM
+    );
 }

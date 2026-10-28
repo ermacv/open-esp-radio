@@ -67,13 +67,8 @@ mod tests;
 pub(crate) fn probe_priority(
     table: oer_espressif_coex::CoexPtiTable,
 ) -> oer_esp32s31_radio_client::wifi::ProbePriority {
-    use oer_espressif_coex::{wifi_event, wifi_events};
-    use oer_ieee80211_port::{ConnectionFrame, Operation, TxOperation};
-    let event = wifi_event(Operation::Transmit(TxOperation::Connection(
-        ConnectionFrame::ProbeRequest,
-    )))
-    .expect("the probe operation has a coexistence event");
-    let packet = table.pti(event).value();
+    use oer_espressif_coex::wifi_events;
+    let packet = table.pti(wifi_events::PROBE_REQUEST).value();
     let scheduler = packet.min(table.pti(wifi_events::SLICE).value());
     oer_esp32s31_radio_client::wifi::ProbePriority {
         packet: MacCoexPti::new(packet).expect("the table has four-bit PTI"),
@@ -86,12 +81,8 @@ mod probe_tests {
     use super::*;
     #[test]
     fn probe_priority_follows_the_live_shared_operation_and_slice_entries() {
-        use oer_espressif_coex::{CoexPti, CoexPtiTable, wifi_event, wifi_events};
-        use oer_ieee80211_port::{ConnectionFrame, Operation, TxOperation};
-        let event = wifi_event(Operation::Transmit(TxOperation::Connection(
-            ConnectionFrame::ProbeRequest,
-        )))
-        .expect("probe event");
+        use oer_espressif_coex::{CoexPti, CoexPtiTable, wifi_events};
+        let event = wifi_events::PROBE_REQUEST;
         let mut table = CoexPtiTable::VENDOR;
         table.set(event, CoexPti::new(2).expect("PTI"));
         table.set(wifi_events::SLICE, CoexPti::new(3).expect("PTI"));
