@@ -51,7 +51,7 @@ wifi-station = [
     "dep:oer-esp32s31-phy",
     "dep:oer-esp32s31-radio-client",
     "dep:oer-esp32s31-radio-system",
-    "dep:oer-esp32s31-radio-coex",
+    "dep:oer-espressif-coex",
     "dep:oer-esp32s31-ieee80211-driver",
     "dep:oer-esp32s31-ieee80211-mac",
     "dep:oer-ieee80211-wire",
@@ -82,7 +82,7 @@ oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy", optional = true }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", optional = true }
 oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system", optional = true }
-oer-esp32s31-radio-coex = { path = "../../../chips/esp32s31/radio/coex", optional = true }
+oer-espressif-coex = { path = "../../../chips/espressif/coex", optional = true }
 oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver", optional = true }
 oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac", optional = true }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire", optional = true }

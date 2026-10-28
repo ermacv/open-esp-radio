@@ -6,9 +6,9 @@ recovered from ESP32-S31 esp-coex-lib `fa152b3b`: the 49-event priority table
 the IEEE 802.15.4 levels it resolves, the timer programming sequence, clock
 conversion, event-to-timer mapping and software schedule state. It owns no
 register: each chip's radio domain keeps its own copy of the table as
-shared state, and a chip crate such as
-[`oer-esp32s31-radio-coex`](../../esp32s31/radio/coex/README.md) binds the
-`CoexTimerHardware` and `CoexClockHardware` ports to its HAL.
+shared state, and each chip's HAL, such as
+[`oer-esp32s31-hal`](../../esp32s31/hal/README.md)'s `coex` module, binds the
+`CoexTimerHardware` and `CoexClockHardware` ports to its registers.
 `CoexTimerHardware::pti` reads the arbiter's table when a request is
 programmed, and a priority change goes through the arbiter's lease. The
 ESP32-S31 arbiter lends only timers 0 through 4: timer 5 carries its PHY
@@ -18,8 +18,7 @@ exclusive access to the shared radio, runs the policy recorded below
 ([Participants, status and order](#participants-status-and-order)). This
 crate does not implement
 RF grant notification. See the ESP32-S31
-[source capabilities](../../esp32s31/radio/coex/FEATURES.md) for those
-boundaries.
+[radio capabilities](../../esp32s31/FEATURES.md) for those boundaries.
 
 The recovered values cite the ESP32-S31 archive where they were reviewed;
 the PTI table and the IEEE 802.15.4 level lookup were also reviewed against
@@ -63,7 +62,7 @@ notified radio; no runner is in this repository. A radio publishes its status
 through the schedule's `set_status_bits` and `clear_status_bits`; Wi-Fi
 reacts to its phases, while Bluetooth LE does not wait for its own.
 
-On the ESP32-S31, `oer_esp32s31_radio_coex::CoexDomainPorts` lends one arbiter
+On the ESP32-S31, `oer_esp32s31_hal::coex::CoexDomainPorts` lends one arbiter
 lease's timer bank, event priorities and clock to `CoexCore` as its timer and
 clock ports.
 

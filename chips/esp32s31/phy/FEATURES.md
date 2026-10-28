@@ -6,4 +6,4 @@ owners, the power lifecycle and the runtime sequence.
 
 Architecture navigation: [whole-radio map](../FEATURES.md),
 [Wi-Fi](../ieee80211/driver/FEATURES.md), and
-[coexistence](../radio/coex/FEATURES.md).
+[coexistence](../../espressif/coex/README.md).

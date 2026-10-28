@@ -1,25 +1,24 @@
 //! The coexistence ports of one radio domain.
 //!
 //! The radio domain owns the timer bank, the event priority table and the shared
-//! modem clock fields. [`CoexDomainPorts`] lends them to [`crate::CoexCore`]
-//! for one transaction: the timer port programs the policy timers and reads
-//! the domain's current event priorities, the clock port samples the bank's
-//! low-power clock selection.
+//! modem clock fields. [`CoexDomainPorts`] lends them to
+//! [`oer_espressif_coex::CoexCore`] for one transaction: the timer port
+//! programs the policy timers and reads the domain's current event
+//! priorities, the clock port samples the bank's low-power clock selection.
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_espressif_coex::{
+    CoexClient, CoexClockHardware, CoexClockSelector, CoexError, CoexEventId, CoexPti,
+    CoexTimerClock, CoexTimerHardware, CoexTimerIndex,
+};
 
-use oer_esp32s31_hal::{
-    coex::{CoexClockPort, CoexPolicyTimer, CoexPolicyTimerBank, timer_clock},
+use super::{CoexClockPort, CoexPolicyTimer, CoexPolicyTimerBank, timer_clock};
+use crate::{
     domain::RadioDomain,
+    power::PlatformClockBackend,
     types::{
         CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
         CoexTimerPtiValue,
     },
-};
-
-use crate::{
-    CoexClient, CoexClockHardware, CoexClockSelector, CoexError, CoexEventId, CoexPti,
-    CoexTimerClock, CoexTimerHardware, CoexTimerIndex,
 };
 
 const fn bank_timer(index: CoexTimerIndex) -> CoexPolicyTimer {

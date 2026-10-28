@@ -11,7 +11,7 @@ lifetime or concurrent arbitration claims.
 ## Coverage index
 
 - [Shared PHY](phy/FEATURES.md)
-- [Coexistence](radio/coex/FEATURES.md)
+- [Coexistence](../espressif/coex/README.md)
 - [Wi-Fi](ieee80211/driver/FEATURES.md)
 - Bluetooth and IEEE 802.15.4 have no capability page in this tree
 

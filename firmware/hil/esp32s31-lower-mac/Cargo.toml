@@ -19,7 +19,7 @@ oer-trace = { path = "../../../portable/trace" }
 oer-hil-agent = { path = "../../../portable/hil-agent" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["lower-mac", "async-io"] }
 oer-radio-port = { path = "../../../protocols/radio/port" }
-oer-esp32s31-radio-coex = { path = "../../../chips/esp32s31/radio/coex" }
+oer-espressif-coex = { path = "../../../chips/espressif/coex" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port", features = ["test-support"] }
