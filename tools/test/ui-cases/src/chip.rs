@@ -1,6 +1,10 @@
 //! Chip ownership twins checked as metadata, so a rejected borrow cannot
 //! pass merely because a no_std executable would fail to link.
-use std::{collections::BTreeMap, path::Path, process::Command};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+    process::Command,
+};
 
 /// Build `packages` with their chip features, then check each source's pass
 /// and reject twins with rustc metadata only. Mark every expected rejection
@@ -26,7 +30,12 @@ pub fn run_chip(
         target,
         "--message-format=json",
     ]);
-    cargo.arg("--target-dir").arg(&build);
+    cargo
+        .arg("--target-dir")
+        .arg(&build)
+        // A configured build-dir otherwise escapes the case's private build.
+        .arg("--config")
+        .arg(format!("build.build-dir={build:?}"));
     for (package, feature) in packages {
         cargo.args(["-p", package, "--features", &format!("{package}/{feature}")]);
     }
@@ -38,6 +47,7 @@ pub fn run_chip(
         String::from_utf8_lossy(&built.stderr)
     );
     let mut artifacts = BTreeMap::new();
+    let mut dependencies = BTreeSet::new();
     for line in built.stdout.split(|byte| *byte == b'\n') {
         let Ok(value) = serde_json::from_slice::<serde_json::Value>(line) else {
             continue;
@@ -55,6 +65,13 @@ pub fn run_chip(
         if let Some(files) = value.get("filenames").and_then(serde_json::Value::as_array) {
             for file in files.iter().filter_map(serde_json::Value::as_str) {
                 let path = Path::new(file);
+                // Include host proc macros as well as chip metadata, using
+                // Cargo's actual paths rather than an assumed deps layout.
+                dependencies.insert(
+                    path.parent()
+                        .expect("an artifact has a directory")
+                        .to_owned(),
+                );
                 if path
                     .extension()
                     .is_some_and(|extension| extension == "rmeta")
@@ -94,21 +111,15 @@ pub fn run_chip(
                 .arg("--out-dir")
                 .arg(&directory)
                 .arg(&path);
-            // Chip metadata also references proc macros built for the host.
-            rustc
-                .arg("-L")
-                .arg(format!("dependency={}", build.join("debug/deps").display()));
             for (name, artifact) in &artifacts {
                 rustc
                     .arg("--extern")
                     .arg(format!("{name}={}", artifact.display()));
-                rustc.arg("-L").arg(format!(
-                    "dependency={}",
-                    artifact
-                        .parent()
-                        .expect("metadata has a directory")
-                        .display()
-                ));
+            }
+            for dependency in &dependencies {
+                rustc
+                    .arg("-L")
+                    .arg(format!("dependency={}", dependency.display()));
             }
             std::fs::write(path.with_extension("command"), format!("{rustc:?}"))
                 .expect("save chip compiler invocation");
