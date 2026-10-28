@@ -65,6 +65,11 @@ impl<T: Sync + 'static> Default for StaticRef<T> {
 ///     };
 /// }
 /// ```
+///
+/// The `export` arms give an immutable static or a safe C ABI function a
+/// symbol name. The defining crate owns the name and signature; each image
+/// defines it once. Attributes, visibility and the body stay with the
+/// definition, including when a function is an associated function.
 #[macro_export]
 macro_rules! link_fn {
     (declare $(#[$attribute:meta])* fn $symbol:ident($($argument:ident: $ty:ty),* $(,)?) $(-> $ret:ty)?;) => {
@@ -77,11 +82,27 @@ macro_rules! link_fn {
     };
     (define fn $symbol:ident($($argument:ident: $ty:ty),* $(,)?) $(-> $ret:ty)? = $definition:path;) => {
         const _: () = {
+            // SAFETY: the declaring crate owns this symbol and defines it
+            // once with the declared signature and no caller precondition.
             #[unsafe(export_name = stringify!($symbol))]
             fn definition($($argument: $ty),*) $(-> $ret)? {
                 $definition($($argument),*)
             }
         };
+    };
+    (export $symbol:expr => $(#[$attribute:meta])* $vis:vis extern "C" fn $name:ident($($argument:ident: $ty:ty),* $(,)?) $(-> $ret:ty)? $body:block) => {
+        $(#[$attribute])*
+        // SAFETY: the defining crate owns this symbol's name and C ABI
+        // signature, defines it once, and supplies a safe function body.
+        #[unsafe(export_name = $symbol)]
+        $vis extern "C" fn $name($($argument: $ty),*) $(-> $ret)? $body
+    };
+    (export $symbol:expr => $(#[$attribute:meta])* $vis:vis static $name:ident: $ty:ty = $value:expr;) => {
+        $(#[$attribute])*
+        // SAFETY: the defining crate owns this symbol and defines it once;
+        // the immutable value is checked against its declared type by Rust.
+        #[unsafe(export_name = $symbol)]
+        $vis static $name: $ty = $value;
     };
 }
 

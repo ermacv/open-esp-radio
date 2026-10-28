@@ -91,10 +91,7 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
 // The only test that takes the tokens and binds: both are once per image.
 #[test]
 fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
-    // SAFETY: the test table defines this safe C ABI handler.
-    unsafe extern "C" {
-        safe fn __oer_interrupt_h0_l16();
-    }
+    let timer_handler = INTERRUPT_TABLE[0].handler.unwrap();
     let tokens = Interrupts::take().unwrap();
     assert!(Interrupts::take().is_none());
 
@@ -119,7 +116,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
 
     // Before its binding the timer's handler finds no part and runs nothing.
     assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
-    __oer_interrupt_h0_l16();
+    timer_handler();
 
     let _bound: crate::Bound<TimerToken> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
     assert_eq!(crate::Bound::<TimerToken>::SOURCE, 3);
@@ -141,8 +138,8 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         <TimerToken as Entry>::cell().with(|part| part.handled),
         Some(0)
     );
-    __oer_interrupt_h0_l16();
-    __oer_interrupt_h0_l16();
+    timer_handler();
+    timer_handler();
     // Each call of the line's symbol ran the entry's handler on the bound
     // part once.
     assert_eq!(
@@ -152,10 +149,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
 
     // The pair's entry writes its line once, then routes both sources to
     // it; its line's symbol runs its handler on the bound part.
-    // SAFETY: the test table defines this safe C ABI handler.
-    unsafe extern "C" {
-        safe fn __oer_interrupt_h0_l18();
-    }
+    let pair_handler = INTERRUPT_TABLE[2].handler.unwrap();
     let before = zero.controller.writes.len();
     let _bound: crate::Bound<PairToken> = zero.bind(tokens.pair, PairIrq::default()).unwrap();
     assert_eq!(
@@ -176,17 +170,59 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         ]
     );
     zero.verify().unwrap();
-    __oer_interrupt_h0_l18();
+    pair_handler();
     assert_eq!(
         <PairToken as Entry>::cell().with(|part| part.handled),
         Some(1)
     );
+
+    // Bypassing the once gate cannot replace a bound part or write a route.
+    #[allow(clippy::disallowed_methods, reason = "regression for a forged token")]
+    let forged = TimerToken(crate::__private::Unique::new());
+    let before = zero.controller.writes.len();
+    let crate::BindError::Fault(fault) = zero.bind(forged, TimerIrq::default()).unwrap_err() else {
+        panic!("a duplicate token must retain its part in quarantine");
+    };
+    assert_eq!(fault.fault.kind, crate::BindFaultKind::StorageClaimed);
+    assert_eq!(zero.controller.writes.len(), before);
+    timer_handler();
+    assert_eq!(TimerToken::cell().with(|part| part.handled), Some(3));
 
     let mut one = fake_router(1);
     let _bound = one.bind(token, part).unwrap();
     assert_eq!(one.controller.routes[5], Some(17));
     assert_eq!(one.controller.lines[17], LineState::bound(2, 3));
     one.verify().unwrap();
+}
+
+#[test]
+fn a_safe_entry_with_different_metadata_is_refused_before_placement() {
+    #[derive(Debug)]
+    struct Forged;
+    impl Entry for Forged {
+        type Part = TimerIrq;
+        const LINE: u8 = 19;
+        const LEVEL: u8 = TimerToken::LEVEL;
+        const HART: u8 = TimerToken::HART;
+        const CLASS: crate::Class = TimerToken::CLASS;
+        fn storage() -> &'static static_cell::StaticCell<TimerIrq> {
+            TimerToken::storage()
+        }
+        fn cell() -> &'static oer_memory::HandlerCell<TimerIrq> {
+            TimerToken::cell()
+        }
+    }
+
+    let mut router = fake_router(0);
+    let before = router.controller.writes.len();
+    let crate::BindError::Refused { error, part, .. } =
+        router.bind(Forged, TimerIrq { handled: 7 }).unwrap_err()
+    else {
+        panic!("an entry absent from the table is a pre-admission refusal");
+    };
+    assert_eq!(error, Error::NotInTable { source: 3 });
+    assert_eq!(part.handled, 7);
+    assert_eq!(router.controller.writes.len(), before);
 }
 
 #[test]

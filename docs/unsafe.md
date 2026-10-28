@@ -120,8 +120,11 @@ C5 code lies outside the workspace and its checks:
 
 `oer-espressif-interrupt-table` owns the Espressif interrupt matrix contract,
 CLIC encodings, vector ABI and staged-runtime symbols. Its narrow unsafe
-contracts cover unique entry tokens, handler-part storage, signal execution
-contexts and exported symbols. It depends on the memory and MMIO cores;
+contracts cover signal execution contexts. Entry tokens are safe: the root
+Clippy rule restricts direct construction, while binding checks table
+membership and refuses claimed storage. The memory core owns handler-part
+storage and the symbol-export attributes used by the table macros.
+It depends on the memory and MMIO cores;
 chip crates and firmware consume its bindings directly.
 
 ## Generated access and trusted handwritten code
@@ -747,7 +750,11 @@ and the panic path read without a lock. `link_fn!` binds a function at link
 time: the calling crate declares the symbol and its own macro has the image
 define it, so every call is a direct call that the stack analysis follows,
 where a function pointer would leave the callee unknown; the trace's clock
-is one. `DmaBytes<N>` holds bytes whose address a driver publishes to a
+is one. Its `export` arms also name immutable statics and safe C ABI
+functions; the defining crate owns each symbol's unique name and signature.
+The interrupt table uses them for its table slice, associated handler
+functions and exemption bytes, preserving the staged vector and tools ABI.
+`DmaBytes<N>` holds bytes whose address a driver publishes to a
 DMA engine: reads copy them out by volatile accesses through `&self`,
 writes copy them in through `&mut self`, so no reference aliases memory the
 engine writes; the IEEE 802.15.4 engine's frame buffers are such bytes.
