@@ -164,13 +164,9 @@ impl<R: InterfaceRole, const P: usize, const G: usize> PoolSet for AssociationPo
     type Pools<'id, Path: PoolPath> = VacantAssociation<'id, R, P, G, Path>;
     fn build<'id, Path: PoolPath>(builder: PoolBuilder<'id, Path>) -> Self::Pools<'id, Path> {
         const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build time"))]
-            const fn check(pairwise: usize, group: usize) {
-                if pairwise == 0 || pairwise > 256 || group > 256 {
-                    panic!("association slots must fit their pool indices");
-                }
+            if P == 0 || P > 256 || G > 256 {
+                panic!("association slots must fit their pool indices");
             }
-            check(P, G);
         }
         let ([owner], pairwise, group) = builder.into_pools::<(
             Slots<OwnerKind<R, P, G>, 1>,

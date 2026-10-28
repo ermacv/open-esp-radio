@@ -363,18 +363,18 @@ pub async fn drive(boot: Boot, slot: Slot, channel: DriverChannel) {
                 let backend = Esp32s31Backend::new(parts)
                     .ok()
                     .expect("validated conformance port parts");
-                match slot.register(backend) {
+                match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(slot.register(backend)) {
                     Ok(registered) => registered,
                     Err(error) => { response.answer(Err(RejectReason::Internal)); drop(error); continue; }
                 }
             }
-            DriverRequest::Resume { joined, epoch } => match slot
+            DriverRequest::Resume { joined, epoch } => match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(slot
                 .reinstall(joined, |stopped| {
                     stopped
                         .reinstall(epoch)
                         .ok()
                         .expect("Joined retains stopped DMA and a distinct epoch")
-                }) {
+                })) {
                     Ok(registered) => registered,
                     Err(error) => { response.answer(Err(RejectReason::Internal)); drop(error); continue; }
                 },
@@ -384,7 +384,7 @@ pub async fn drive(boot: Boot, slot: Slot, channel: DriverChannel) {
         // The guard was armed before answering. Its only owner is this P2
         // frame, including cancellation before the driver's first poll.
         let completion = { registration.run().await };
-        if let Some(completion) = completion {
+        if let Ok(completion) = completion {
             completion.unregistered();
         }
     }

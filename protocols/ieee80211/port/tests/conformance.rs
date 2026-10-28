@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::disallowed_macros)]
 //! A standalone port consumer: no runtime, chip, allocator or executor API is
 //! needed to store observations and invoke the shared case runners.
 #![cfg(feature = "test-support")]

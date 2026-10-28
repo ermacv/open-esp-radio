@@ -46,6 +46,7 @@ struct Calls {
     ended: Cell<u32>,
     shutdown: Cell<u32>,
     quarantined: Cell<bool>,
+    quarantine_calls: Cell<u32>,
     drops: Cell<u32>,
 }
 struct TestDevice {
@@ -113,6 +114,9 @@ impl Device for TestDevice {
     }
     fn quarantine(&mut self) {
         self.calls.quarantined.set(true);
+        self.calls
+            .quarantine_calls
+            .set(self.calls.quarantine_calls.get() + 1);
     }
 }
 struct Tracked(Rc<Calls>);
@@ -295,9 +299,11 @@ fn scenario(mode: Mode) {
         };
         let end = LocalExecution
             .scope(
-                slot.register(Backend::new(device))
-                    .ok()
-                    .expect("fresh test slot"),
+                crate::port::Registration::guarded(
+                    slot.register(Backend::new(device))
+                        .ok()
+                        .expect("fresh test slot"),
+                ),
                 async |front| {
                     run_port(
                         front,
@@ -391,4 +397,83 @@ fn cancelled_fifo_leader_does_not_block_the_next_original_seat() {
         drop(registration);
         slot.end_model_world();
     }));
+}
+
+#[test]
+fn cancelled_registration_is_cleaned_by_the_device_owner_guard_before_first_poll() {
+    for construct_future in [false, true] {
+        let calls = Rc::new(Calls::default());
+        let device = TestDevice {
+            timer: TestTimer(Rc::new(VirtualClock::new())),
+            calls: calls.clone(),
+            mode: Mode::Ordinary,
+            running: false,
+        };
+        let mut scope = pin!(with_local_slot(async |claim| {
+            let mut slot = claim.place();
+            let (frontend, raw) = slot
+                .register(Backend::<_, _, Tracked>::new(device))
+                .unwrap();
+            drop(frontend);
+            assert_eq!(
+                calls.quarantine_calls.get(),
+                0,
+                "the frontend only reports cancellation"
+            );
+            let registration = Registration::new(raw);
+            assert_eq!(
+                calls.quarantine_calls.get(),
+                0,
+                "the owner's guard is armed before polling"
+            );
+            if construct_future {
+                drop(registration.run());
+            } else {
+                drop(registration);
+            }
+            assert_eq!(calls.quarantine_calls.get(), 1);
+            assert!(calls.quarantined.get());
+            assert_eq!(
+                calls.shutdown.get(),
+                0,
+                "cancellation cannot claim ordinary shutdown"
+            );
+            slot.end_model_world();
+            assert_eq!(calls.quarantine_calls.get(), 1);
+        }));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(scope.as_mut().poll(&mut cx).is_ready());
+    }
+}
+
+#[test]
+fn an_ended_owner_driver_cannot_repeat_cleanup_when_polled_again() {
+    let calls = Rc::new(Calls::default());
+    let device = TestDevice {
+        timer: TestTimer(Rc::new(VirtualClock::new())),
+        calls: calls.clone(),
+        mode: Mode::Ordinary,
+        running: false,
+    };
+    let mut scope = pin!(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (frontend, raw) = slot
+            .register(Backend::<_, _, Tracked>::new(device))
+            .unwrap();
+        drop(frontend);
+        {
+            let mut driver = pin!(Registration::new(raw).run());
+            let mut cx = Context::from_waker(Waker::noop());
+            assert!(matches!(
+                driver.as_mut().poll(&mut cx),
+                Poll::Ready(Err(LifecycleError::Cancelled))
+            ));
+            assert_eq!(calls.quarantine_calls.get(), 1);
+            assert!(driver.as_mut().poll(&mut cx).is_pending());
+            assert_eq!(calls.quarantine_calls.get(), 1);
+        }
+        slot.end_model_world();
+    }));
+    let mut cx = Context::from_waker(Waker::noop());
+    assert!(scope.as_mut().poll(&mut cx).is_ready());
 }

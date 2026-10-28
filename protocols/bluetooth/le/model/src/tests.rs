@@ -206,7 +206,9 @@ fn p1_drop_never_stops_radio_and_slot_retains_actual_owners_until_world_end() {
                 power: power(),
             },
         ));
-        let mut driver = alloc::boxed::Box::pin(registration.run());
+        let mut driver = alloc::boxed::Box::pin(
+            oer_radio_port::conformance::registration::MockRegistration::new(registration).run(),
+        );
         let mut cx = Context::from_waker(Waker::noop());
         assert!(service.as_mut().poll(&mut cx).is_pending());
         assert!(driver.as_mut().poll(&mut cx).is_pending());
@@ -218,7 +220,7 @@ fn p1_drop_never_stops_radio_and_slot_retains_actual_owners_until_world_end() {
             "P1 drop publishes cleanup, it cannot stop P2 hardware"
         );
         assert_eq!(drops.get(), 0);
-        assert!(matches!(driver.as_mut().poll(&mut cx), Poll::Ready(None)));
+        assert!(matches!(driver.as_mut().poll(&mut cx), Poll::Ready(Err(_))));
         drop(driver);
         assert_eq!(air.active_radios(), 0);
         assert_eq!(
@@ -267,7 +269,9 @@ fn a_late_p2_stop_cannot_reopen_the_expired_supervisor() {
             .ok()
             .expect("fresh test slot");
         let mut service = alloc::boxed::Box::pin(run_port(front, EmptyBody));
-        let mut driver = alloc::boxed::Box::pin(registration.run());
+        let mut driver = alloc::boxed::Box::pin(
+            oer_radio_port::conformance::registration::MockRegistration::new(registration).run(),
+        );
         let mut cx = Context::from_waker(Waker::noop());
         assert!(service.as_mut().poll(&mut cx).is_pending());
         assert!(driver.as_mut().poll(&mut cx).is_pending());
@@ -280,7 +284,7 @@ fn a_late_p2_stop_cannot_reopen_the_expired_supervisor() {
         };
         assert!(matches!(outcome.outcome(), Abandon::Unconfirmed(_)));
         drop(service);
-        assert!(matches!(driver.as_mut().poll(&mut cx), Poll::Ready(None)));
+        assert!(matches!(driver.as_mut().poll(&mut cx), Poll::Ready(Err(_))));
         drop(driver);
         slot.end_model_world();
     }));
@@ -382,15 +386,18 @@ fn poison_before_admission_retains_the_whole_request_without_inventing_a_termina
         let mut slot = claim.place();
         let registered = slot.register(backend).ok().expect("fresh test slot");
         let end = LocalExecution
-            .scope(registered, async |f| {
-                run_port(
-                    f,
-                    PostFaultBody {
-                        drops: drops.clone(),
-                    },
-                )
-                .await
-            })
+            .scope(
+                oer_radio_port::conformance::registration::guarded(registered),
+                async |f| {
+                    run_port(
+                        f,
+                        PostFaultBody {
+                            drops: drops.clone(),
+                        },
+                    )
+                    .await
+                },
+            )
             .await;
         assert!(matches!(end, PortEnd::FailStopped { .. }));
         assert_eq!(

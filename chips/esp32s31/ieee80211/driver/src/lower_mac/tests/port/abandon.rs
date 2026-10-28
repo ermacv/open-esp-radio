@@ -86,7 +86,7 @@ fn abandon_preempts_queued_publication_and_rx_and_erases_keys_only_on_p2() {
         let mut slot = claim.place();
         let backend = Backend::new(parts).ok().expect("model backend");
         let (front, registration) = slot.register(backend).ok().expect("one installation");
-        let mut p2 = Box::pin(registration.run());
+        let mut p2 = Box::pin(crate::port::Registration::new(registration).run());
         let mut p1 = Box::pin(radio::run_port(
             front,
             QueueThenFail {
@@ -108,7 +108,10 @@ fn abandon_preempts_queued_publication_and_rx_and_erases_keys_only_on_p2() {
             bytes: [0; 26],
             released: released.clone(),
         });
-        assert!(matches!(poll_p2(p2.as_mut(), &observed), Poll::Ready(None)));
+        assert!(matches!(
+            poll_p2(p2.as_mut(), &observed),
+            Poll::Ready(Err(_))
+        ));
         assert_eq!(observed.borrow().abandon_contexts, [2]);
         assert!(observed.borrow().erased_keys > 0);
         assert_eq!(observed.borrow().abandoned_publications, 0);
@@ -151,7 +154,12 @@ fn shutdown_bound_expiry_is_unconfirmed_and_late_p2_cleanup_never_reissues_stora
         assert!(matches!(outcome.outcome(), radio::Abandon::Unconfirmed(_)));
         assert!(observed.borrow().abandon_contexts.is_empty());
         observed.borrow_mut().context = 2;
-        assert!(registration.run().await.is_none());
+        assert!(
+            crate::port::Registration::new(registration)
+                .run()
+                .await
+                .is_err()
+        );
         assert_eq!(observed.borrow().abandon_contexts, [2]);
         assert!(observed.borrow().erased_keys > 0);
         assert!(matches!(outcome.outcome(), radio::Abandon::Unconfirmed(_)));
@@ -180,9 +188,9 @@ fn cancelling_before_first_driver_poll_drops_the_armed_guard_once_on_p2() {
             assert!(observed.borrow().abandon_contexts.is_empty());
             observed.borrow_mut().context = 2;
             if construct_driver_future {
-                drop(registration.run());
+                drop(crate::port::Registration::new(registration).run());
             } else {
-                drop(registration);
+                drop(crate::port::Registration::new(registration));
             }
             assert_eq!(observed.borrow().device_polls, 0);
             assert_eq!(observed.borrow().starts, 0);
@@ -207,7 +215,12 @@ fn fail_stop_receives_the_actual_p2_answer_before_its_virtual_bound() {
         assert!(poll_p1(p1.as_mut(), &observed).is_pending());
         assert!(observed.borrow().abandon_contexts.is_empty());
         observed.borrow_mut().context = 2;
-        assert!(registration.run().await.is_none());
+        assert!(
+            crate::port::Registration::new(registration)
+                .run()
+                .await
+                .is_err()
+        );
         let Poll::Ready(radio::PortEnd::FailStopped { outcome, .. }) =
             poll_p1(p1.as_mut(), &observed)
         else {
@@ -290,7 +303,7 @@ fn cancelled_clock_latch_is_unavailable_until_p2_answers_and_never_reuses_the_st
             .register(Backend::new(parts).ok().expect("backend"))
             .ok()
             .expect("installation");
-        let mut p2 = Box::pin(registration.run());
+        let mut p2 = Box::pin(crate::port::Registration::new(registration).run());
         let mut p1 = Box::pin(radio::run_port(front, CancelClock { clock, yielded }));
         let mut finished = false;
         for _ in 0..20 {

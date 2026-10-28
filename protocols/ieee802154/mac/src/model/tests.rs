@@ -59,7 +59,9 @@ where
         HANDLE.with(|cell| *cell.borrow_mut() = Some(handle.clone()));
         let end = LocalExecution
             .scope(
-                (&mut slot).register(model).ok().expect("fresh local model"),
+                oer_radio_port::conformance::registration::guarded(
+                    (&mut slot).register(model).ok().expect("fresh local model"),
+                ),
                 async |frontend| run_port(frontend, body).await,
             )
             .await;
@@ -132,7 +134,9 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
         let (model, handle) = OwnedModel::new();
         let end = LocalExecution
             .scope(
-                (&mut slot).register(model).ok().expect("fresh model slot"),
+                oer_radio_port::conformance::registration::guarded(
+                    (&mut slot).register(model).ok().expect("fresh model slot"),
+                ),
                 async |frontend| run_port(frontend, Body(handle.clone())).await,
             )
             .await;
@@ -206,7 +210,9 @@ fn an_undelivered_admitted_permit_cannot_become_joined_hardware() {
         let (backend, handle) = OwnedModel::new();
         let result = LocalExecution
             .scope(
-                (&mut slot).register(backend).ok().expect("fresh slot"),
+                oer_radio_port::conformance::registration::guarded(
+                    (&mut slot).register(backend).ok().expect("fresh slot"),
+                ),
                 async |frontend| run_port(frontend, Body(handle.clone())).await,
             )
             .await;
@@ -256,7 +262,9 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
         let (backend, handle) = OwnedModel::new();
         let first = LocalExecution
             .scope(
-                (&mut slot).register(backend).ok().expect("fresh model"),
+                oer_radio_port::conformance::registration::guarded(
+                    (&mut slot).register(backend).ok().expect("fresh model"),
+                ),
                 async |frontend| {
                     run_port(
                         frontend,
@@ -277,10 +285,12 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
             "ended world remains inspectable"
         );
         let second = LocalExecution.scope(
-            (&mut slot)
-                .reinstall(joined, OwnedModel::resume)
-                .ok()
-                .expect("P2 resumes its stopped hardware"),
+            oer_radio_port::conformance::registration::guarded(
+                (&mut slot)
+                    .reinstall(joined, OwnedModel::resume)
+                    .ok()
+                    .expect("P2 resumes its stopped hardware"),
+            ),
             async |frontend| {
                 run_port(
                     frontend,

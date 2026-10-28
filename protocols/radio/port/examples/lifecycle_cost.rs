@@ -7,6 +7,11 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
+struct ProbeWake;
+impl std::task::Wake for ProbeWake {
+    fn wake(self: std::sync::Arc<Self>) {}
+}
+
 struct Probe {
     ready: AtomicU32,
     calls: AtomicU32,
@@ -30,10 +35,32 @@ impl Probe {
     }
 }
 
+fn prepared_probe(queues: Option<&Probe>) -> Result<&Probe, oer_radio_port::SlotInitError> {
+    queues.ok_or(oer_radio_port::SlotInitError::QueuesUnprepared)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unprepared_probe_returns_the_construction_error() {
+        assert!(matches!(
+            prepared_probe(None),
+            Err(oer_radio_port::SlotInitError::QueuesUnprepared)
+        ));
+        let probe = Probe::new();
+        assert!(
+            matches!(prepared_probe(Some(&probe)), Ok(actual) if core::ptr::eq(actual, &probe))
+        );
+    }
+}
+
 macro_rules! port {
     ($module:ident, $port:ident) => {
         mod $module {
             use super::*;
+            use oer_radio_port::conformance::registration::{MockCleanup, guarded};
             use $port::*;
             struct Backend<'a>(&'a Probe);
             struct View<'p, 'a, Id: SlotIdentity> {
@@ -79,7 +106,7 @@ macro_rules! port {
                     Self: 's,
                     Id: 's,
                 {
-                    let probe = queues.expect("prepared probe");
+                    let probe = prepared_probe(*queues)?;
                     Ok((probe, probe))
                 }
                 async fn run<'s>(
@@ -103,6 +130,16 @@ macro_rules! port {
                     probe.step(8);
                     proof
                 }
+
+                fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
+                where
+                    Self: 's,
+                    Id: 's,
+                {
+                    self.0.step(16);
+                }
+            }
+            impl<'r, Id: SlotIdentity> MockCleanup<Id> for Backend<'r> {
                 fn abandon<'s>(
                     &mut self,
                     _: Option<&mut Self::Invocation<'s>>,
@@ -115,14 +152,8 @@ macro_rules! port {
                     self.0.step(32);
                     Abandon::Stopped(request.stopped())
                 }
-                fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
-                where
-                    Self: 's,
-                    Id: 's,
-                {
-                    self.0.step(16);
-                }
             }
+
             impl<'r, Id: SlotIdentity> SlotBodyOwner<Id> for Backend<'r> {
                 type Body<'p>
                     = View<'p, 'r, Id>
@@ -318,13 +349,14 @@ macro_rules! port {
                         }
                     };
                     let end = LocalExecution
-                        .scope(registered, |frontend| run_port(frontend, Body))
+                        .scope(guarded(registered), |frontend| run_port(frontend, Body))
                         .await;
                     core::hint::black_box(end);
                 });
                 let bytes = core::mem::size_of_val(&future);
                 let mut future = pin!(future);
-                let mut cx = Context::from_waker(Waker::noop());
+                let waker = Waker::from(std::sync::Arc::new(ProbeWake));
+                let mut cx = Context::from_waker(&waker);
                 let _ = core::hint::black_box(future.as_mut().poll(&mut cx));
                 bytes
             }

@@ -27,7 +27,7 @@ oer-ieee80211-sta = { path = "../sta" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 
 [dev-dependencies]
-oer-ieee80211-model = { path = "../model" }
+oer-ieee80211-model = { path = "../model", features = ["test-support"] }
 oer-ieee80211-cipher = { path = "../cipher" }
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
 oer-ieee80211-sta = { path = "../sta", features = ["test-support"] }

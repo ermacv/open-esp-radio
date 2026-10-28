@@ -48,7 +48,9 @@ impl Fixture for ModelFixture {
             let mut slot = claim.place();
             let end = LocalExecution
                 .scope(
-                    slot.register(backend).map_err(|_| Violation::Lifecycle)?,
+                    oer_radio_port::conformance::registration::guarded(
+                        slot.register(backend).map_err(|_| Violation::Lifecycle)?,
+                    ),
                     async |f| {
                         run_port(
                             f,
@@ -73,10 +75,12 @@ impl Fixture for ModelFixture {
                     let previous = trace.original.ok_or(Violation::Owners)?;
                     let end = LocalExecution
                         .scope(
-                            slot.reinstall(joined, |v| {
-                                Backend::resume(v).expect("fixture epoch has room")
-                            })
-                            .map_err(|_| Violation::Lifecycle)?,
+                            oer_radio_port::conformance::registration::guarded(
+                                slot.reinstall(joined, |v| {
+                                    Backend::resume(v).expect("fixture epoch has room")
+                                })
+                                .map_err(|_| Violation::Lifecycle)?,
+                            ),
                             async |f| {
                                 run_port(
                                     f,
@@ -629,7 +633,9 @@ async fn pair(case: Case, power: TxPower) -> Result<Trace, Violation> {
             let mut slot = claim.place();
             let end = LocalExecution
                 .scope(
-                    slot.register(backend).map_err(|_| Violation::Lifecycle)?,
+                    oer_radio_port::conformance::registration::guarded(
+                        slot.register(backend).map_err(|_| Violation::Lifecycle)?,
+                    ),
                     async |f| {
                         run_port(
                             f,

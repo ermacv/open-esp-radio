@@ -9,11 +9,11 @@ warning: unused import: `SlotCompletion`
 error[E0521]: borrowed data escapes outside of function
  --> tests/ui/registration_static_escape.rs:6:5
   |
-4 | pub fn retain_for_p2_drop<'scope, Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static>(registration: SlotRegistration<'scope, Id, ...
+4 | pub fn retain_for_p2_drop<'scope, Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static>(registration: &'scope mut SlotRegistration<...
   |                           ------ lifetime `'scope` defined here                           ------------ `registration` is a reference that is only valid in the function body
 5 |     fn permanent<T: 'static>(_: T) {}
-6 |     permanent(registration.run()); // ui-error: E0521
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+6 |     permanent(registration.drive()); // ui-error: E0521
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |     |
   |     `registration` escapes the function body here
   |     argument requires that `'scope` must outlive `'static`

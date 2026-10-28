@@ -148,12 +148,12 @@ impl MacOperationOwnership {
                 HardwareServices::AMPDU_RETRY_SELECTION,
             ),
         ];
-        let mut index = 0;
-        while index < owned.len() {
-            if matches!(owned[index].0, MacOperationOwner::Hardware) {
-                services = services.union(owned[index].1);
+        let mut remaining = owned.as_slice();
+        while let Some(((owner, service), rest)) = remaining.split_first() {
+            if matches!(owner, MacOperationOwner::Hardware) {
+                services = services.union(*service);
             }
-            index += 1;
+            remaining = rest;
         }
         services
     }

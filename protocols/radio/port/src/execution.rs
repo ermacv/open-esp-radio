@@ -9,7 +9,7 @@ use core::future::Future;
 pub struct LocalExecution;
 
 impl LocalExecution {
-    /// Run a synchronously registered frontend and P2 guard beside `body`.
+    /// Run a frontend and its hardware owner's guarded P2 future beside `body`.
     ///
     /// The returned outer future belongs to P2 and outlives the inner body
     /// future. It joins or quarantines its P2 registration before returning.
@@ -20,7 +20,7 @@ impl LocalExecution {
         self,
         registered: (
             crate::SlotFrontend<'s, Id, S>,
-            crate::SlotRegistration<'s, Id, S>,
+            impl Future<Output = Result<crate::SlotCompletion<'s, Id>, crate::LifecycleError>>,
         ),
         body: impl AsyncFnOnce(crate::SlotFrontend<'s, Id, S>) -> R,
     ) -> impl Future<Output = R> {

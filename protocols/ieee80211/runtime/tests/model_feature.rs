@@ -79,10 +79,12 @@ where
         let (backend, air) = backend();
         let end = oer_radio_port::LocalExecution
             .scope(
-                (&mut slot)
-                    .register(backend)
-                    .ok()
-                    .expect("fresh local model slot"),
+                oer_radio_port::conformance::registration::guarded(
+                    (&mut slot)
+                        .register(backend)
+                        .ok()
+                        .expect("fresh local model slot"),
+                ),
                 async |frontend| run_port(frontend, body(air)).await,
             )
             .await;

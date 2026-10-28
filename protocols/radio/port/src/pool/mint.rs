@@ -145,7 +145,11 @@ impl<Kind, const N: usize> PoolSet for Slots<Kind, N> {
     type Pools<'id, Path: PoolPath> = [Slot<'id, Kind, Path>; N];
 
     fn build<'id, Path: PoolPath>(builder: PoolBuilder<'id, Path>) -> Self::Pools<'id, Path> {
-        const { assert!(N <= 256, "a pool holds at most 256 tokens") };
+        const {
+            if N > 256 {
+                panic!("a pool holds at most 256 tokens");
+            }
+        };
         core::array::from_fn(|index| Slot {
             index: index_of(index),
             brand: builder.brand,
@@ -193,8 +197,12 @@ impl<Kind, const N: usize, const S: usize> PoolSet for Permits<Kind, N, S> {
 
     fn build<'id, Path: PoolPath>(builder: PoolBuilder<'id, Path>) -> Self::Pools<'id, Path> {
         const {
-            assert!(N <= 256, "a pool holds at most 256 tokens");
-            assert!(S <= 256, "a line holds at most 256 seats");
+            if N > 256 {
+                panic!("a pool holds at most 256 tokens");
+            }
+            if S > 256 {
+                panic!("a line holds at most 256 seats");
+            }
         };
         PermitTokens {
             supply: PermitSupply {

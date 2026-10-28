@@ -158,7 +158,7 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
     let backend = Backend::new(parts)
         .ok()
         .expect("validated station port parts");
-    let (frontend, registration) = match slot.register(backend) {
+    let (frontend, registration) = match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(slot.register(backend)) {
         Ok(registered) => registered,
         Err(error) => {
             response.answer(Err("station registration failed"));
@@ -168,7 +168,7 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
         }
     };
     response.answer(Ok(frontend));
-    if let Some(completion) = registration.run().await {
+    if let Ok(completion) = registration.run().await {
         completion.unregistered();
     }
 }

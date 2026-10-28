@@ -127,3 +127,48 @@ fn group_frame_has_no_reply_and_timeout_is_an_explicit_wait_budget() {
 }
 
 mod budget;
+
+#[test]
+fn extreme_phy_geometry_stays_exact_without_overflow_or_truncation() {
+    for bytes in [0, 1, u16::MAX] {
+        for bits in [1, u16::MAX] {
+            for nanos in [1, u16::MAX] {
+                let phy = PpduTiming::BccOfdm {
+                    data_bits_per_symbol: NonZeroU16::new(bits).unwrap(),
+                    symbol_nanos: NonZeroU16::new(nanos).unwrap(),
+                    preamble_micros: u16::MAX,
+                    tail_bits: u8::MAX,
+                    signal_extension_micros: u8::MAX,
+                };
+                let symbols =
+                    (16 + u128::from(bytes) * 8 + u128::from(u8::MAX)).div_ceil(u128::from(bits));
+                let expected = u128::from(u16::MAX)
+                    + u128::from(u8::MAX)
+                    + (symbols * u128::from(nanos)).div_ceil(1_000);
+                assert_eq!(u128::from(phy.duration_micros(bytes)), expected);
+            }
+        }
+        for rate in [1, u32::MAX] {
+            let phy = PpduTiming::Dsss {
+                bitrate_kbps: NonZeroU32::new(rate).unwrap(),
+                preamble_micros: u16::MAX,
+            };
+            let expected =
+                u128::from(u16::MAX) + (u128::from(bytes) * 8_000).div_ceil(u128::from(rate));
+            assert_eq!(u128::from(phy.duration_micros(bytes)), expected);
+        }
+    }
+}
+
+#[test]
+fn nonzero_rounding_is_exact_at_the_integer_limit() {
+    for divisor in [1, 2, 3, 1_000, u64::MAX] {
+        let divisor = NonZeroU64::new(divisor).unwrap();
+        for numerator in [0, 1, u64::MAX - 1, u64::MAX] {
+            assert_eq!(
+                ceil_div(numerator, divisor),
+                numerator.div_ceil(divisor.get())
+            );
+        }
+    }
+}

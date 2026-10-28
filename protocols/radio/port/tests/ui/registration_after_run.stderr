@@ -1,16 +1,10 @@
-error[E0382]: borrow of moved value: `registration`
+error[E0499]: cannot borrow `registration` as mutable more than once at a time
  --> tests/ui/registration_after_run.rs:6:13
   |
-3 | pub fn run<Id: SlotIdentity, S: SlotOwner<Id>>(mut registration: SlotRegistration<'_, Id, S>, cx: &mut core::task::Context<'_>) {
-  |                                                ---------------- move occurs because `registration` has type `SlotRegistration<'_, Id, S>`, which does not implement the `Copy` trait
-4 |     let running = registration.run();
-  |                                ----- `registration` moved due to this method call
+4 |     let running = registration.drive();
+  |                   ------------ first mutable borrow occurs here
 5 |     #[cfg(all())]
-6 |     let _ = registration.poll_request(cx); // ui-error: E0382
-  |             ^^^^^^^^^^^^ value borrowed here after move
-  |
-note: `SlotRegistration::<'s, Id, S>::run` takes ownership of the receiver `self`, which moves `registration`
- --> src/slot.rs
-  |
-  |     pub async fn run(mut self) -> Option<SlotCompletion<'s, Id>> {
-  |                          ^^^^
+6 |     let _ = registration.poll_request(cx); // ui-error: E0499
+  |             ^^^^^^^^^^^^ second mutable borrow occurs here
+7 |     drop(running);
+  |          ------- first borrow later used here

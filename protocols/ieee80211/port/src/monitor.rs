@@ -612,8 +612,9 @@ fn frame_type(bytes: &[u8]) -> Option<MonitorFrameType> {
 fn frame_contains_address(bytes: &[u8], frame_type: MonitorFrameType, address: [u8; 6]) -> bool {
     let address_at = |offset: usize| {
         bytes
-            .get(offset..offset + 6)
-            .is_some_and(|candidate| candidate == address)
+            .get(offset..)
+            .and_then(|tail| tail.first_chunk::<6>())
+            .is_some_and(|candidate| *candidate == address)
     };
     match frame_type {
         MonitorFrameType::Management => {

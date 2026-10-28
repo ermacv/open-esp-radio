@@ -178,7 +178,7 @@ pub async fn supervisor() {
                     })
                     .await
                 };
-                match slot.register(Backend::new(device)) {
+                match oer_esp32s31_bluetooth_driver::port::Registration::guard_result(slot.register(Backend::new(device))) {
                     Ok(registered) => registered,
                     Err(error) => {
                         // Retain the rejected owner or P2 initialization guard.
@@ -189,7 +189,7 @@ pub async fn supervisor() {
                     }
                 }
             }
-            Some(joined) => match slot.reinstall(joined, |vacant| {
+            Some(joined) => match oer_esp32s31_bluetooth_driver::port::Registration::guard_result(slot.reinstall(joined, |vacant| {
                 let device = match vacant.into_device().reinitialize() {
                     Ok(device) => device,
                     Err(mut device) => {
@@ -198,7 +198,7 @@ pub async fn supervisor() {
                     }
                 };
                 Backend::new(device)
-            }) {
+            })) {
                 Ok(registered) => registered,
                 Err(error) => {
                     // Initialization faults retain P2 cleanup and their source cause.
@@ -210,7 +210,7 @@ pub async fn supervisor() {
             },
         };
         response.answer(Ok(frontend));
-        if let Some(completion) = registration.run().await {
+        if let Ok(completion) = registration.run().await {
             completion.unregistered();
         }
     }

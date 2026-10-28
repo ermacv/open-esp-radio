@@ -1,3 +1,12 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::panic,
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::unreachable
+)]
 //! The shared conformance rule of every permit pool:
 //! [`permits_serve_takers_in_arrival_order`]. Its pool's owner (a backend's
 //! held part, a runtime) calls it with the pool, three seats of its line
@@ -119,3 +128,6 @@ mod alloc_free {
         }
     }
 }
+
+/// Model-owned lifecycle cleanup fixtures.
+pub mod registration;

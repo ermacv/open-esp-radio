@@ -1,7 +1,9 @@
 use super::*;
+use crate::conformance::registration::{MockCleanup, MockRegistration, guarded};
 use core::{cell::Cell, future::pending, pin::pin, task::Waker};
 use std::{boxed::Box, rc::Rc};
 
+mod faults;
 mod initialization;
 mod queues;
 
@@ -86,6 +88,18 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
         }
     }
 
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
+    where
+        Self: 's,
+        Id: 's,
+    {
+        assert_eq!(self.0.executor.get(), Executor::P2);
+        assert_eq!(self.0.run_address.get(), core::ptr::from_ref(self));
+        self.0.finishing_address.set(core::ptr::from_ref(self));
+        self.0.finishes.set(self.0.finishes.get() + 1);
+    }
+}
+impl<Id: SlotIdentity> MockCleanup<Id> for Owner {
     fn abandon<'s>(
         &mut self,
         _: Option<&mut Self::Invocation<'s>>,
@@ -108,17 +122,6 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
         } else {
             Abandon::Unconfirmed(authority)
         }
-    }
-
-    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
-    where
-        Self: 's,
-        Id: 's,
-    {
-        assert_eq!(self.0.executor.get(), Executor::P2);
-        assert_eq!(self.0.run_address.get(), core::ptr::from_ref(self));
-        self.0.finishing_address.set(core::ptr::from_ref(self));
-        self.0.finishes.set(self.0.finishes.get() + 1);
     }
 }
 
@@ -146,8 +149,10 @@ impl<Id: SlotIdentity> ModelSlotOwner<Id> for Owner {
     fn end_vacant_world(_: &mut ()) {}
 }
 
-async fn run_p2<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's>(p2: SlotRegistration<'s, Id, S>) {
-    if let Some(completion) = p2.run().await {
+async fn run_p2<'s, Id: SlotIdentity + 's, S: MockCleanup<Id> + 's>(
+    p2: SlotRegistration<'s, Id, S>,
+) {
+    if let Ok(completion) = MockRegistration::new(p2).run().await {
         completion.unregistered();
     }
 }
@@ -219,7 +224,7 @@ fn ending_a_quarantined_model_world_consumes_its_slot_without_reissuing_identity
         drop(frontend);
         assert_eq!(model.abandons.get(), 0);
         model.executor.set(Executor::P2);
-        drop(registration);
+        drop(MockRegistration::new(registration));
         assert_eq!(model.abandons.get(), 1);
         assert_eq!(model.drops.get(), 0);
         slot.end_model_world();
@@ -275,13 +280,7 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
         {
             retire.requested().await
         }
-        fn abandon<'s>(&mut self, _: Option<&mut ()>, authority: Quarantine) -> Abandon
-        where
-            Self: 's,
-            Id: 's,
-        {
-            Abandon::Unconfirmed(authority)
-        }
+
         fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Device
         where
             Self: 's,
@@ -300,6 +299,16 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
             self.0.take().expect("retained device")
         }
     }
+    impl<Id: SlotIdentity> MockCleanup<Id> for HardwareOwner {
+        fn abandon<'s>(&mut self, _: Option<&mut ()>, authority: Quarantine) -> Abandon
+        where
+            Self: 's,
+            Id: 's,
+        {
+            Abandon::Unconfirmed(authority)
+        }
+    }
+
     impl<Id: SlotIdentity> ModelSlotOwner<Id> for HardwareOwner {
         fn end_world(&mut self, _: Option<&mut ()>) {
             assert_eq!(
@@ -368,13 +377,15 @@ fn cancelled_p1_future_never_owns_or_destroys_the_registered_p2_side() {
                 drop(p1);
                 assert_eq!(model.abandons.get(), 0);
                 assert_eq!(model.drops.get(), 0);
-                assert!(p2.is_quarantined());
+                assert!(p2.failure().is_some());
                 model.executor.set(Executor::P2);
-                assert!(p2.quarantine());
-                let outcome = p2.signals.take_answer().expect("single P2 response");
+                let signals = p2.signals;
+                let mut p2 = MockRegistration::new(p2);
+                assert!(p2.cleanup());
+                let outcome = signals.take_answer().expect("single P2 response");
                 assert_eq!(matches!(outcome, Abandon::Stopped(_)), stopped);
-                assert!(!p2.quarantine());
-                assert!(p2.signals.take_answer().is_none());
+                assert!(!p2.cleanup());
+                assert!(signals.take_answer().is_none());
                 drop(p2);
                 assert_eq!(model.abandons.get(), 1);
                 assert_eq!(model.drops.get(), 0);
@@ -401,7 +412,7 @@ fn destroying_registration_without_another_poll_cleans_up_once_on_p2() {
         drop(frontend);
         assert_eq!(model.abandons.get(), 0);
         model.executor.set(Executor::P2);
-        drop(p2);
+        drop(MockRegistration::new(p2));
         assert_eq!(model.abandons.get(), 1);
         assert_eq!(model.drops.get(), 0);
     }));
@@ -462,8 +473,9 @@ fn late_stopped_proof_never_turns_quarantine_into_joined() {
             .ok()
             .expect("fresh slot");
         let join = frontend.abandon();
-        assert!(p2.quarantine());
-        run_p2(p2).await;
+        let mut p2 = MockRegistration::new(p2);
+        assert!(p2.cleanup());
+        assert!(p2.run().await.is_err());
         let receipt = join.wait().await.err().expect("absorbing quarantine");
         assert!(matches!(receipt.outcome(), Abandon::Stopped(_)));
         assert_eq!(model.finishes.get(), 0);
@@ -500,7 +512,7 @@ fn cancelling_join_during_a_pending_p2_stop_ends_the_loan_before_cleanup() {
             .ok()
             .expect("fresh slot");
         let join = frontend.finish();
-        let mut stopping = Box::pin(p2.run());
+        let mut stopping = Box::pin(MockRegistration::new(p2).run());
         assert!(poll(stopping.as_mut()).is_pending());
         assert_eq!(model.stop_loans.get(), 1);
         model.executor.set(Executor::P1);
@@ -530,7 +542,7 @@ fn destroying_p2_task_during_stop_keeps_the_slot_owner_and_cleans_up_on_p2() {
                 .ok()
                 .expect("fresh slot");
             let join = frontend.finish();
-            let mut stopping = Box::pin(p2.run());
+            let mut stopping = Box::pin(MockRegistration::new(p2).run());
             if poll_stop {
                 assert!(poll(stopping.as_mut()).is_pending());
             }
@@ -577,10 +589,12 @@ fn local_runner_joins_after_the_inner_frontend_future_is_cancelled() {
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place();
             let outer = crate::LocalExecution.scope(
-                (&mut slot)
-                    .register(Owner(model.clone()))
-                    .ok()
-                    .expect("fresh local registration"),
+                guarded(
+                    (&mut slot)
+                        .register(Owner(model.clone()))
+                        .ok()
+                        .expect("fresh local registration"),
+                ),
                 async |frontend| {
                     let mut inner = pin!(Some(async move {
                         let _frontend = frontend;
@@ -630,10 +644,12 @@ fn local_runner_publishes_join_only_after_p2_finishes() {
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let scope = crate::LocalExecution.scope(
-            (&mut slot)
-                .register(Owner(model.clone()))
-                .ok()
-                .expect("fresh registration"),
+            guarded(
+                (&mut slot)
+                    .register(Owner(model.clone()))
+                    .ok()
+                    .expect("fresh registration"),
+            ),
             async |frontend| frontend.finish().wait().await.expect("ordinary P2 join"),
         );
         let joined = finish(scope);
@@ -665,10 +681,12 @@ fn dropping_outer_scope_ends_the_body_before_p2_cleanup_even_before_first_poll()
             model.frontend_loans.set(1);
             let loan = FrontendLoan(model.clone());
             let outer = crate::LocalExecution.scope(
-                (&mut slot)
-                    .register(Owner(model.clone()))
-                    .ok()
-                    .expect("synchronous registration"),
+                guarded(
+                    (&mut slot)
+                        .register(Owner(model.clone()))
+                        .ok()
+                        .expect("synchronous registration"),
+                ),
                 async move |frontend| {
                     let _loan = loan;
                     let _frontend = frontend;
@@ -695,10 +713,12 @@ fn returning_after_forgetting_the_frontend_cannot_leave_p2_registered() {
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let scope = crate::LocalExecution.scope(
-            (&mut slot)
-                .register(Owner(model.clone()))
-                .ok()
-                .expect("fresh registration"),
+            guarded(
+                (&mut slot)
+                    .register(Owner(model.clone()))
+                    .ok()
+                    .expect("fresh registration"),
+            ),
             async |frontend| {
                 core::mem::forget(frontend);
             },
@@ -720,9 +740,9 @@ fn completion_cannot_publish_join_before_the_old_p2_future_is_removed() {
             .ok()
             .expect("fresh slot");
         let mut join = Box::pin(frontend.finish().wait());
-        let mut p2 = Box::pin(p2.run());
+        let mut p2 = Box::pin(MockRegistration::new(p2).run());
         let completion = match poll(p2.as_mut()) {
-            Poll::Ready(Some(completion)) => completion,
+            Poll::Ready(Ok(completion)) => completion,
             _ => panic!("P2 stopped and destroyed its owner"),
         };
         assert_eq!(model.drops.get(), 1);
@@ -743,7 +763,10 @@ fn a_lost_unregistration_completion_never_issues_joined() {
             .ok()
             .expect("fresh slot");
         let join = frontend.finish();
-        let completion = p2.run().await.expect("ordinary stop");
+        let completion = MockRegistration::new(p2)
+            .run()
+            .await
+            .expect("ordinary stop");
         drop(completion);
         let receipt = join.wait().await.err().expect("no unregistration proof");
         assert!(matches!(receipt.outcome(), Abandon::Unconfirmed(_)));
@@ -783,7 +806,7 @@ fn a_late_p2_answer_cannot_upgrade_the_supervisors_expired_result() {
         assert!(matches!(receipt.outcome(), Abandon::Unconfirmed(_)));
         assert_eq!(model.abandons.get(), 0);
         model.executor.set(Executor::P2);
-        assert!(p2.run().await.is_none());
+        assert!(MockRegistration::new(p2).run().await.is_err());
         assert_eq!(model.abandons.get(), 1);
         assert_eq!(model.starts.get(), 0);
         assert!(matches!(receipt.outcome(), Abandon::Unconfirmed(_)));

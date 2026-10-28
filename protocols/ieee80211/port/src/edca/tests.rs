@@ -112,3 +112,24 @@ fn reconfiguration_keeps_the_current_window_inside_the_new_bounds() {
     contention.reset();
     assert_eq!(contention.cw_exponent(), 7);
 }
+
+#[test]
+fn every_exponent_including_zero_produces_the_exact_window() {
+    for minimum in 0..=u8::MAX {
+        for maximum in 0..=u8::MAX {
+            let mut contention = EdcaContention::new(minimum, maximum);
+            for _ in 0..=MAX_CW_EXPONENT {
+                assert_eq!(
+                    u32::from(contention.cw()),
+                    (1_u32 << contention.cw_exponent()) - 1
+                );
+                contention.record_failure();
+            }
+            contention.reconfigure(maximum, minimum);
+            assert_eq!(
+                u32::from(contention.cw()),
+                (1_u32 << contention.cw_exponent()) - 1
+            );
+        }
+    }
+}

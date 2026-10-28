@@ -17,7 +17,7 @@ where for<'scope> P: PortBody<LocalId<'scope>, ModelBackend<LocalId<'scope>>, Ou
         let (backend, _) = ModelBackend::new(channel,
             [IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(), IndividualAddress::new([2, 0, 0, 0, 0, 2]).unwrap()],
             alloc::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()));
-        drop(oer_radio_port::LocalExecution.scope((&mut slot).register(backend).ok().unwrap(), async |frontend| run_port(frontend, body).await).await);
+        drop(oer_radio_port::LocalExecution.scope(oer_radio_port::conformance::registration::guarded((&mut slot).register(backend).ok().unwrap()), async |frontend| run_port(frontend, body).await).await);
         slot.end_model_world();
     }).await
 }

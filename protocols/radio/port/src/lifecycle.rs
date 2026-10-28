@@ -11,7 +11,6 @@ use core::{
     fmt::Debug,
     future::Future,
     marker::PhantomData,
-    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
 };
 use oer_time::RadioInstant;
@@ -54,19 +53,6 @@ pub enum Abandon {
     /// reachable allocation remains quarantined until chip reset. Consumes
     /// the call authority without manufacturing a masking or stop proof.
     Unconfirmed(Quarantine),
-}
-
-/// Owners permanently withheld from reuse until the chip is reset.
-///
-/// There is no accessor or extraction operation. Dropping this value does
-/// not drop `S`, free its backing allocations or run hardware teardown.
-/// This is a quarantine receipt, not permission to recover the owners.
-/// Hardware-reachable storage must already have a durable address and
-/// lifetime: this wrapper cannot extend a borrow or preserve inline memory
-/// after its containing allocation ends.
-#[must_use = "quarantined owners require a chip reset before reuse"]
-pub struct Quarantined<S> {
-    _retained: ManuallyDrop<S>,
 }
 
 /// Disabled transition authority; lends setup and permits ordinary uninstall.
@@ -292,29 +278,27 @@ pub fn run_port<'s, Id: SlotIdentity + 's, B: PortBackend<Id> + 's, P: PortBody<
     async move {
         // End the body's future and its temporary Ended before retaining
         // the one output across the supervisor's single bounded wait.
-        let (end, output) = match frontend.run_body(BodyAdapter { signals, body }).await {
-            Ok(Ended { end, output, .. }) => (end, Ok(output)),
-            Err(cause) => (BodyEnd::FailStopRequested, Err(cause)),
+        let Ended { end, output, .. } = match frontend.run_body(BodyAdapter { signals, body }).await
+        {
+            Ok(ended) => ended,
+            Err(cause) => {
+                let outcome = frontend.abandon().wait_failure_within(bound).await;
+                return PortEnd::Abandoned { outcome, cause };
+            }
         };
-        let join = match end {
+        let result = match end {
             BodyEnd::Uninstall(control) => {
                 if B::request_uninstall(frontend.ports(), control).is_ok() {
-                    frontend.finish()
+                    frontend.finish().wait_within(bound).await
                 } else {
-                    frontend.abandon()
+                    Err(frontend.abandon().wait_failure_within(bound).await)
                 }
             }
-            BodyEnd::FailStopRequested => frontend.abandon(),
+            BodyEnd::FailStopRequested => Err(frontend.abandon().wait_failure_within(bound).await),
         };
-        match join.wait_within(bound).await {
-            Ok(joined) => PortEnd::Uninstalled {
-                joined,
-                output: output.expect("ordinary join follows a returned body output"),
-            },
-            Err(outcome) => match output {
-                Ok(output) => PortEnd::FailStopped { outcome, output },
-                Err(cause) => PortEnd::Abandoned { outcome, cause },
-            },
+        match result {
+            Ok(joined) => PortEnd::Uninstalled { joined, output },
+            Err(outcome) => PortEnd::FailStopped { outcome, output },
         }
     }
 }
@@ -397,7 +381,8 @@ impl Drop for Sentry<'_> {
     #[inline(never)]
     fn drop(&mut self) {
         if self.armed {
-            self.signals.quarantine();
+            self.signals
+                .request_failure(crate::LifecycleError::Cancelled);
         }
     }
 }
@@ -428,7 +413,9 @@ impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p, State> Owner<'a, 'p
     }
     /// Publish quarantine and wake P2 immediately, without waiting or hardware access.
     pub fn fail_stop(self) -> FailStopRequested<Id, B> {
-        self.sentry.signals.quarantine();
+        self.sentry
+            .signals
+            .request_failure(crate::LifecycleError::FailStopRequested);
         self.sentry.disarm();
         FailStopRequested {
             identity: PhantomData,
@@ -523,7 +510,9 @@ impl<Id: SlotIdentity, B: PortBackend<Id>> PoisonedOwner<'_, '_, Id, B> {
     }
     /// Publish cleanup without waiting for the supervisor's actual answer.
     pub fn fail_stop(self) -> FailStopRequested<Id, B> {
-        self.sentry.signals.quarantine();
+        self.sentry
+            .signals
+            .request_failure(crate::LifecycleError::FailStopRequested);
         self.sentry.disarm();
         FailStopRequested {
             identity: PhantomData,
@@ -552,15 +541,6 @@ impl<T> Deref for Lent<'_, T> {
 impl<T> DerefMut for Lent<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.part
-    }
-}
-
-impl<S> Quarantined<S> {
-    /// Permanently retain owners without invoking their destructors.
-    pub const fn new(state: S) -> Self {
-        Self {
-            _retained: ManuallyDrop::new(state),
-        }
     }
 }
 

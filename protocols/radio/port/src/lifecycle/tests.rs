@@ -1,3 +1,4 @@
+use crate::conformance::registration::{MockCleanup, MockRegistration, guarded};
 use crate::*;
 use core::{
     cell::Cell,
@@ -102,6 +103,18 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Backend<Id> {
         }
         retire.requested().await
     }
+
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Rc<Model>
+    where
+        Self: 's,
+        Id: 's,
+    {
+        assert_eq!(self.model.context.get(), 2);
+        self.model.finishes.set(self.model.finishes.get() + 1);
+        self.model.clone()
+    }
+}
+impl<Id: SlotIdentity> MockCleanup<Id> for Backend<Id> {
     fn abandon<'s>(&mut self, _: Option<&mut ()>, q: Quarantine) -> Abandon
     where
         Self: 's,
@@ -121,16 +134,8 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Backend<Id> {
             Abandon::Unconfirmed(q)
         }
     }
-    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Rc<Model>
-    where
-        Self: 's,
-        Id: 's,
-    {
-        assert_eq!(self.model.context.get(), 2);
-        self.model.finishes.set(self.model.finishes.get() + 1);
-        self.model.clone()
-    }
 }
+
 impl<Id: SlotIdentity> ModelSlotOwner<Id> for Backend<Id> {
     fn end_world(&mut self, _: Option<&mut Self::Queues>) {
         assert_eq!(self.model.context.get(), 2);
@@ -383,10 +388,12 @@ fn frontend_supervisor_owns_no_p2_state_and_returns_join_or_typed_stop_outcome()
                 identity: PhantomData,
             };
             let outer = LocalExecution.scope(
-                (&mut slot)
-                    .register(backend)
-                    .ok()
-                    .expect("register before body"),
+                guarded(
+                    (&mut slot)
+                        .register(backend)
+                        .ok()
+                        .expect("register before body"),
+                ),
                 async |frontend| {
                     let mut p1 = pin!(run_port(frontend, body));
                     poll_fn(|cx| {
@@ -412,7 +419,7 @@ fn frontend_supervisor_owns_no_p2_state_and_returns_join_or_typed_stop_outcome()
                         .ok()
                         .expect("same vacant hardware");
                     drop(frontend);
-                    drop(p2);
+                    drop(MockRegistration::new(p2));
                 }
                 PortEnd::FailStopped { outcome, output } => {
                     assert!(!normal && !dropped);
@@ -445,10 +452,12 @@ fn cancelling_run_port_before_or_after_first_poll_only_requests_p2_cleanup() {
                 identity: PhantomData,
             };
             let outer = LocalExecution.scope(
-                (&mut slot)
-                    .register(backend)
-                    .ok()
-                    .expect("registered before frontend publication"),
+                guarded(
+                    (&mut slot)
+                        .register(backend)
+                        .ok()
+                        .expect("registered before frontend publication"),
+                ),
                 async |frontend| {
                     let mut p1 = std::boxed::Box::pin(run_port(frontend, Body::HoldingOwner));
                     model.context.set(1);
@@ -480,7 +489,7 @@ fn ordinary_retirement_expiry_preserves_output_and_never_issues_joined() {
             identity: PhantomData,
         };
         let outer = LocalExecution.scope(
-            (&mut slot).register(backend).ok().expect("registered P2"),
+            guarded((&mut slot).register(backend).ok().expect("registered P2")),
             async |frontend| {
                 let mut p1 = pin!(run_port(frontend, Body::Normal));
                 poll_fn(|cx| {

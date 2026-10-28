@@ -1359,7 +1359,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
         retire.wait().await;
         if !matches!(held.permits.in_flight(), Ok(None)) {
             // An undelivered admitted owner cannot authorize a fresh mint.
-            retire.request_quarantine();
+            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
         {
@@ -1372,6 +1372,19 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
         retire.requested().await
     }
 
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> ModelVacant
+    where
+        Self: 's,
+        Id: 's,
+    {
+        ModelVacant {
+            shared: self.shared.clone(),
+        }
+    }
+}
+impl<Id: SlotIdentity> oer_radio_port::conformance::registration::MockCleanup<Id>
+    for OwnedModel<Id>
+{
     fn abandon<'s>(
         &mut self,
         _: Option<&mut Self::Invocation<'s>>,
@@ -1390,16 +1403,6 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
         state.consumer = None;
         state.receivers.clear();
         oer_radio_port::Abandon::Stopped(authority.stopped())
-    }
-
-    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> ModelVacant
-    where
-        Self: 's,
-        Id: 's,
-    {
-        ModelVacant {
-            shared: self.shared.clone(),
-        }
     }
 }
 

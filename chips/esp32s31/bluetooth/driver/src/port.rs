@@ -30,6 +30,8 @@ mod event;
 #[cfg(any(target_arch = "riscv32", test))]
 mod guard;
 mod lifecycle;
+mod registration;
+pub use registration::{Registration, RegistrationError};
 /// Durable command and clock endpoints for the separately retained P2 worker.
 pub mod mailbox;
 mod owned;

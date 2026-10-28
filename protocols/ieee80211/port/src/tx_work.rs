@@ -127,7 +127,11 @@ impl MacTxWork {
         add(&mut self.psdu_bytes, u32::from(psdu_bytes));
         add(&mut self.mpdus, u32::from(mpdus));
         if let Some(rate) = nominal_kbps {
-            let micros = (u32::from(psdu_bytes) * 8_000).div_ceil(rate.get());
+            let micros = crate::tx_cost::PpduTiming::Dsss {
+                bitrate_kbps: rate,
+                preamble_micros: 0,
+            }
+            .duration_micros(psdu_bytes);
             add(&mut self.nominal_data_micros, micros);
         } else {
             add(&mut self.unestimated_publications, 1);
