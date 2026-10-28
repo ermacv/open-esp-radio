@@ -20,7 +20,8 @@ fn irq_enable_0(s: &Session<'_>) -> u32 {
         | (u32::from(v.source_16()) << r::SOURCE_16_MASK.trailing_zeros())
         | (u32::from(v.source_21()) << r::SOURCE_21_MASK.trailing_zeros())
         | (v.sources_27_28().get() << r::SOURCES_27_28_MASK.trailing_zeros())
-        | (v.bits_2_7_opaque().get() << r::BITS_2_7_OPAQUE_MASK.trailing_zeros())
+        | (u32::from(v.iso_cig_reset_source()) << r::ISO_CIG_RESET_SOURCE_MASK.trailing_zeros())
+        | (v.bits_3_7_opaque().get() << r::BITS_3_7_OPAQUE_MASK.trailing_zeros())
         | (v.bits_9_12_opaque().get() << r::BITS_9_12_OPAQUE_MASK.trailing_zeros())
         | (u32::from(v.bit_14_opaque()) << r::BIT_14_OPAQUE_MASK.trailing_zeros())
         | (v.bits_17_20_opaque().get() << r::BITS_17_20_OPAQUE_MASK.trailing_zeros())
@@ -126,7 +127,8 @@ fn seed_enables(s: &mut Session<'_>) {
             .set_source_8(true)
             .set_source_13(true)
             .set_source_16(true)
-            .set_bits_2_7_opaque(Bits::constant::<1>())
+            .set_iso_cig_reset_source(true)
+            .set_bits_3_7_opaque(Bits::constant::<0>())
             .set_source_21(true)
             .set_sources_27_28(Bits::constant::<3>());
     });
