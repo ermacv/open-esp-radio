@@ -78,7 +78,7 @@ fn complete<O: sealed::Reply<TestClient>>(
         panic!("the actor's answer makes the pending request ready");
     };
     assert!(Pin::new(&mut pending).poll(&mut cx).is_pending());
-    result
+    result.unwrap()
 }
 
 #[test]
@@ -216,4 +216,26 @@ fn refused_requests_return_the_original_payload_membership_and_cell() {
     assert_eq!(payload, 73);
     let _retry = cell3.retune(member, payload);
     let _retry = cell.join(71);
+}
+
+#[test]
+fn an_abandoned_actor_response_returns_an_error_without_a_new_cell() {
+    let (cell, inbox, _) = client();
+    let mut pending = core::pin::pin!(cell.join(11));
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    assert!(pending.as_mut().poll(&mut cx).is_pending());
+    let Request::Join(_, responder) = inbox.take().unwrap() else {
+        panic!("join request");
+    };
+    drop(responder);
+    assert!(matches!(
+        pending.as_mut().poll(&mut cx),
+        Poll::Ready(Err(oer_memory::RequestError::Unanswered))
+    ));
+    assert!(pending.as_mut().poll(&mut cx).is_pending());
+    assert!(inbox.take().is_none());
+    assert!(inbox.slot.claim().is_none());
+    assert!(inbox.slot.track.claim().is_none());
+    assert!(inbox.slot.retune.claim().is_none());
+    assert!(inbox.slot.leave.claim().is_none());
 }

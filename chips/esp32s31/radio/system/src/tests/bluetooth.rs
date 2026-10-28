@@ -141,21 +141,28 @@ fn wifi_then_ble_share_one_rf_epoch_and_only_the_last_leave_closes_it() {
         ..Script::default()
     });
     multi(&model, |cells, ble| async {
-        let (wifi, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (wifi, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let joined = joined.ok().expect("Wi-Fi first");
         let epoch = joined.epoch;
         let (wifi, tracked) = wifi
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let tracked = tracked.ok().expect("Wi-Fi tracking");
-        let (ble, joined) = ble.join(join()).await;
+        let (ble, joined) = ble.join(join()).await.unwrap();
         let joined = joined.ok().expect("BLE second");
         assert_eq!(joined.epoch, epoch);
         assert_eq!(joined.payload.phy, PhyPreparation::AlreadyOpen);
-        let (ble, bt) = ble.track(joined.member, joined.payload.installation).await;
+        let (ble, bt) = ble
+            .track(joined.member, joined.payload.installation)
+            .await
+            .unwrap();
         let bt = bt.ok().expect("BLE initial tracking");
         model.0.borrow_mut().ble_stopped = true;
-        let (_, left) = ble.leave(Leaving::Tracked(bt.member), bt.payload).await;
+        let (_, left) = ble
+            .leave(Leaving::Tracked(bt.member), bt.payload)
+            .await
+            .unwrap();
         assert!(left.payload.stopped);
         assert_eq!(left.domain, DomainHealth::Healthy);
         assert!(!model.log().contains(&Event::CloseRf));
@@ -166,7 +173,8 @@ fn wifi_then_ble_share_one_rf_epoch_and_only_the_last_leave_closes_it() {
                     wifi: tracked.payload.wifi,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(left.domain, DomainHealth::Healthy);
     });
     assert_eq!(
@@ -192,17 +200,21 @@ fn ble_then_wifi_preserve_ble_membership_through_wifi_stop() {
         ..Script::default()
     });
     multi(&model, |cells, ble| async {
-        let (ble, joined) = ble.join(join()).await;
+        let (ble, joined) = ble.join(join()).await.unwrap();
         let joined = joined.ok().expect("BLE first");
         let epoch = joined.epoch;
-        let (ble, bt) = ble.track(joined.member, joined.payload.installation).await;
+        let (ble, bt) = ble
+            .track(joined.member, joined.payload.installation)
+            .await
+            .unwrap();
         let bt = bt.ok().expect("BLE tracking");
-        let (wifi, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (wifi, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let joined = joined.ok().expect("Wi-Fi second");
         assert_eq!(joined.epoch, epoch);
         let (wifi, tracked) = wifi
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let tracked = tracked.ok().expect("Wi-Fi tracking");
         let (_, left) = wifi
             .leave(
@@ -211,12 +223,16 @@ fn ble_then_wifi_preserve_ble_membership_through_wifi_stop() {
                     wifi: tracked.payload.wifi,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(left.domain, DomainHealth::Healthy);
         assert!(model.0.borrow().bluetooth);
         assert!(!model.log().contains(&Event::CloseRf));
         model.0.borrow_mut().ble_stopped = true;
-        let (_, left) = ble.leave(Leaving::Tracked(bt.member), bt.payload).await;
+        let (_, left) = ble
+            .leave(Leaving::Tracked(bt.member), bt.payload)
+            .await
+            .unwrap();
         assert!(left.payload.stopped);
     });
     assert_eq!(model.log().last(), Some(&Event::CloseRf));
@@ -238,14 +254,17 @@ fn failed_ble_rf_work_poisons_the_same_domain_seen_by_wifi() {
         ..Script::default()
     });
     multi(&model, |cells, ble| async {
-        let (ble, joined) = ble.join(join()).await;
+        let (ble, joined) = ble.join(join()).await.unwrap();
         let joined = joined.ok().expect("BLE joined");
-        let (_, tracked) = ble.track(joined.member, joined.payload.installation).await;
+        let (_, tracked) = ble
+            .track(joined.member, joined.payload.installation)
+            .await
+            .unwrap();
         assert_eq!(
             tracked.err().expect("RF write failed").cause,
             Failure::Poisoned(BLE_TRACK_POISON)
         );
-        let (_, wifi) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (_, wifi) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         assert_eq!(
             wifi.err().expect("shared domain poisoned").cause,
             Failure::Poisoned(BLE_TRACK_POISON)
@@ -264,31 +283,41 @@ fn late_retirement_after_reinstall_never_releases_the_new_graph() {
         ..Script::default()
     });
     multi(&model, |cells, ble| async {
-        let (wifi, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (wifi, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let joined = joined.ok().expect("Wi-Fi holds the common RF epoch");
         let epoch = joined.epoch;
         let (_wifi, wifi) = wifi
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let _wifi = wifi.ok().expect("Wi-Fi tracked through BLE reinstall");
-        let (ble, first) = ble.join(join()).await;
+        let (ble, first) = ble.join(join()).await.unwrap();
         let first = first.ok().expect("first installation");
         assert_eq!(first.epoch, epoch);
-        let (ble, first) = ble.track(first.member, first.payload.installation).await;
+        let (ble, first) = ble
+            .track(first.member, first.payload.installation)
+            .await
+            .unwrap();
         let first = first.ok().expect("first tracking");
         let old = first.payload;
         model.0.borrow_mut().ble_stopped = true;
-        let (ble, _) = ble.leave(Leaving::Tracked(first.member), old).await;
-        let (ble, next) = ble.join(join()).await;
+        let (ble, _) = ble
+            .leave(Leaving::Tracked(first.member), old)
+            .await
+            .unwrap();
+        let (ble, next) = ble.join(join()).await.unwrap();
         let next = next.ok().expect("reinstall");
         assert_eq!(
             next.epoch, epoch,
             "Controller reinstall does not reopen common RF"
         );
         assert_ne!(next.payload.installation, old);
-        let (ble, next) = ble.track(next.member, next.payload.installation).await;
+        let (ble, next) = ble
+            .track(next.member, next.payload.installation)
+            .await
+            .unwrap();
         let next = next.ok().expect("new tracking");
-        let (_, late) = ble.leave(Leaving::Tracked(next.member), old).await;
+        let (_, late) = ble.leave(Leaving::Tracked(next.member), old).await.unwrap();
         assert!(!late.payload.stopped);
         assert_eq!(late.domain, DomainHealth::Poisoned(BLE_LEAVE_POISON));
         assert!(model.0.borrow().bluetooth);
@@ -304,7 +333,7 @@ fn late_retirement_after_reinstall_never_releases_the_new_graph() {
 fn preflight_refusal_never_registers_or_wakes_rf() {
     let model = model(Script::default());
     multi(&model, |_, ble| async {
-        let (_, joined) = ble.join(join()).await;
+        let (_, joined) = ble.join(join()).await.unwrap();
         assert_eq!(
             joined.err().expect("no available controller").cause,
             Failure::Refused
@@ -320,11 +349,14 @@ fn a_second_role_cannot_join_another_bluetooth_client() {
         ..Script::default()
     });
     multi(&model, |_, ble| async {
-        let (ble, first) = ble.join(join()).await;
+        let (ble, first) = ble.join(join()).await.unwrap();
         let first = first.ok().expect("one Bluetooth installation");
-        let (ble, first) = ble.track(first.member, first.payload.installation).await;
+        let (ble, first) = ble
+            .track(first.member, first.payload.installation)
+            .await
+            .unwrap();
         let first = first.ok().expect("tracked Bluetooth");
-        let (ble, duplicate) = ble.join(join()).await;
+        let (ble, duplicate) = ble.join(join()).await.unwrap();
         assert_eq!(
             duplicate
                 .err()
@@ -335,7 +367,8 @@ fn a_second_role_cannot_join_another_bluetooth_client() {
         model.0.borrow_mut().ble_stopped = true;
         let (_, left) = ble
             .leave(Leaving::Tracked(first.member), first.payload)
-            .await;
+            .await
+            .unwrap();
         assert!(left.payload.stopped);
     });
     assert_eq!(
@@ -372,9 +405,12 @@ fn runtime_handover_waits_for_the_entered_tracking_transaction() {
         .ok()
         .expect("one model attachment");
     let mut client = pin!(async {
-        let (ble, joined) = ble.join(join()).await;
+        let (ble, joined) = ble.join(join()).await.unwrap();
         let joined = joined.expect("accepted BLE join");
-        let (ble, tracked) = ble.track(joined.member, joined.payload.installation).await;
+        let (ble, tracked) = ble
+            .track(joined.member, joined.payload.installation)
+            .await
+            .unwrap();
         (ble, tracked.expect("completed initial tracking"))
     });
     let boundary = poll_fn(|cx| {
@@ -390,7 +426,8 @@ fn runtime_handover_waits_for_the_entered_tracking_transaction() {
     // The same actor, RF epoch and member now perform the ordinary leave.
     model.0.borrow_mut().ble_stopped = true;
     let left =
-        block_on(attached.run_until(ble.leave(Leaving::Tracked(tracked.member), tracked.payload)));
+        block_on(attached.run_until(ble.leave(Leaving::Tracked(tracked.member), tracked.payload)))
+            .unwrap();
     assert!(left.1.payload.stopped);
     assert_eq!(model.log().last(), Some(&Event::CloseRf));
     let out = block_on(attached.run_until(core::future::ready(42)));
@@ -419,7 +456,7 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
         .attach_bluetooth(inbox, &mut attachment)
         .ok()
         .expect("one model attachment");
-    let (ble, joined) = block_on(attached.run_until(ble.join(join())));
+    let (ble, joined) = block_on(attached.run_until(ble.join(join()))).unwrap();
     let joined = joined.expect("first installation");
     let epoch = joined.epoch;
     let mut attached = attached
@@ -430,7 +467,8 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
     let (ble, left) = block_on(attached.run_until(ble.leave(
         Leaving::Untracked(joined.member),
         joined.payload.installation,
-    )));
+    )))
+    .unwrap();
     assert!(left.payload.stopped);
     let inbox = attached.detach().ok().expect("normal stop detaches");
     assert_eq!(backend, core::ptr::from_ref(&actor.backend));
@@ -439,14 +477,15 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
         .attach_bluetooth(inbox, &mut attachment)
         .ok()
         .expect("reinstall same actor");
-    let (ble, joined) = block_on(attached.run_until(ble.join(join())));
+    let (ble, joined) = block_on(attached.run_until(ble.join(join()))).unwrap();
     let joined = joined.expect("fresh installation");
     assert_ne!(epoch, joined.epoch);
     model.0.borrow_mut().ble_stopped = true;
     let (_, left) = block_on(attached.run_until(ble.leave(
         Leaving::Untracked(joined.member),
         joined.payload.installation,
-    )));
+    )))
+    .unwrap();
     assert!(left.payload.stopped);
     let _ = attached.detach().ok().expect("second normal stop");
 }
@@ -501,7 +540,7 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
         .attach_bluetooth(inbox, &mut a)
         .ok()
         .expect("first loan");
-    let (ble, failed) = block_on(loan.run_until(ble.join(join())));
+    let (ble, failed) = block_on(loan.run_until(ble.join(join()))).unwrap();
     assert_eq!(
         failed.err().expect("failed prepare").cause,
         Failure::Poisoned(PREPARE_POISON)
@@ -511,7 +550,7 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
         .attach_bluetooth(inbox, &mut a)
         .ok()
         .expect("same common domain");
-    let (_, failed) = block_on(loan.run_until(ble.join(join())));
+    let (_, failed) = block_on(loan.run_until(ble.join(join()))).unwrap();
     assert_eq!(
         failed.err().expect("poison persists").cause,
         Failure::Poisoned(PREPARE_POISON)

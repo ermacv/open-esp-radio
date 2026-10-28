@@ -152,8 +152,8 @@ fn the_compile_time_predicates_accept_exactly_the_words_inside() {
     assert!(!ascending(&[0, 0]));
     assert!(!ascending(&[4, 0]));
     assert!(!ascending(&[2]));
-    assert_eq!(end(&[0, 0x10]), 0x14);
-    assert_eq!(end(&[]), 0);
+    assert_eq!(end(&[0, 0x10]), Some(0x14));
+    assert_eq!(end(&[]), Some(0));
     assert!(listed(&[0, 8, 0x10, 0x7c80], 0x7c80));
     assert!(!listed(&[0, 8, 0x10], 4));
     assert!(!listed(&[], 0));
@@ -326,4 +326,14 @@ fn a_shared_store_through_a_shared_borrow_writes_only_its_word() {
 fn a_shared_block_at_a_fixed_address_is_sync() {
     fn sync<T: Sync>() {}
     sync::<Block<Fixed<0x1000>, Shared>>();
+}
+
+#[test]
+fn overflowing_geometry_is_refused_without_wrapping_register_authority() {
+    assert_eq!(crate::end(&[usize::MAX]), None);
+    assert!(!crate::check::disjoint_blocks(&[
+        (usize::MAX, &[4]),
+        (0, &[0])
+    ]));
+    assert!(!crate::array_listed(&[0], usize::MAX, 4, 2));
 }

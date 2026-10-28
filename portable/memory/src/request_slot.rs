@@ -40,6 +40,29 @@ const IDLE: u8 = 0;
 const POSTED: u8 = 1;
 const WORKING: u8 = 2;
 const ANSWERED: u8 = 3;
+const QUARANTINED: u8 = 4;
+
+/// The server abandoned its response; the seat remains permanently claimed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RequestError {
+    Unanswered,
+}
+
+/// Owners retained after a request lost its mandatory response. Dropping or
+/// forgetting this diagnostic never releases those owners for reuse.
+pub struct RequestQuarantine<T> {
+    pub reason: RequestError,
+    _owners: ManuallyDrop<T>,
+}
+
+impl<T> RequestQuarantine<T> {
+    pub fn new(reason: RequestError, owners: T) -> Self {
+        Self {
+            reason,
+            _owners: ManuallyDrop::new(owners),
+        }
+    }
+}
 
 /// The server's wake source: one bit per slot that has a request posted.
 pub struct Doorbell {
@@ -153,8 +176,11 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
     }
 
     /// The answer, once the server gave it; the slot is `IDLE` again.
-    fn poll_answer(&self, cx: &mut Context<'_>) -> Poll<Ans> {
+    fn poll_answer(&self, cx: &mut Context<'_>) -> Poll<Result<Ans, RequestError>> {
         self.mode.client.register(cx.waker());
+        if self.state.load(Ordering::Acquire) == QUARANTINED {
+            return Poll::Ready(Err(RequestError::Unanswered));
+        }
         if self
             .state
             .compare_exchange(ANSWERED, IDLE, Ordering::Acquire, Ordering::Relaxed)
@@ -170,7 +196,7 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
         // client is the answer place's only accessor; the server's write
         // happened before its Release store of ANSWERED, which the Acquire
         // CAS observed.
-        Poll::Ready(unsafe { (*self.answer.get()).assume_init_read() })
+        Poll::Ready(Ok(unsafe { (*self.answer.get()).assume_init_read() }))
     }
 }
 
@@ -351,8 +377,8 @@ impl<Req, Ans> core::fmt::Debug for Poster<Req, Ans> {
 /// A posted request whose answer has not been taken yet.
 ///
 /// Dropping it while it waits loses nothing: the answer stays in the slot.
-/// Once it gave the answer it is spent and stays pending, so it never takes
-/// the answer of a later request.
+/// Once it gave the answer or reported quarantine it is spent and stays
+/// pending, so it never takes the answer of a later request.
 #[must_use = "the poster returns only with the answer"]
 pub struct Awaiting<Req: 'static, Ans: 'static> {
     slot: Option<&'static RequestSlot<Req, Ans>>,
@@ -360,21 +386,25 @@ pub struct Awaiting<Req: 'static, Ans: 'static> {
 
 impl<Req, Ans> Awaiting<Req, Ans> {
     /// The answer and the returned poster, once the server answered.
-    pub fn poll_answer(&mut self, cx: &mut Context<'_>) -> Poll<(Poster<Req, Ans>, Ans)> {
+    pub fn poll_answer(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(Poster<Req, Ans>, Ans), RequestError>> {
         let Some(slot) = self.slot else {
             return Poll::Pending;
         };
         let answer = core::task::ready!(slot.poll_answer(cx));
         self.slot = None;
-        Poll::Ready((Poster { slot }, answer))
+        Poll::Ready(answer.map(|answer| (Poster { slot }, answer)))
     }
 }
 
 /// The server's duty to answer one taken request.
 ///
-/// Dropping it unanswered would leave its client waiting forever, so the drop
-/// panics; [`Responder::answer`] consumes it without dropping.
-#[must_use = "a taken request must be answered, or its client waits forever"]
+/// Dropping it unanswered quarantines the seat and wakes its client with
+/// [`RequestError::Unanswered`]. No poster is returned and the seat is never
+/// reused. [`Responder::answer`] consumes it without running this drop.
+#[must_use = "answer the request or dropping the responder quarantines its seat"]
 pub struct Responder<'s, Req, Ans> {
     slot: &'s RequestSlot<Req, Ans>,
 }
@@ -400,12 +430,9 @@ impl<Req, Ans> Responder<'_, Req, Ans> {
 }
 
 impl<Req, Ans> Drop for Responder<'_, Req, Ans> {
-    #[expect(
-        clippy::unreachable,
-        reason = "internal invariant: `answer` consumes the responder without running this drop, so reaching it means the request was dropped unanswered"
-    )]
     fn drop(&mut self) {
-        unreachable!("a taken request must be answered");
+        self.slot.state.store(QUARANTINED, Ordering::Release);
+        self.slot.mode.client.wake();
     }
 }
 

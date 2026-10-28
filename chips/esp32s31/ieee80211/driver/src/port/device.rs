@@ -287,7 +287,14 @@ where
     ) -> Poll<Result<(), Fault>> {
         self.pausing = false;
         if let Some(retune) = self.retune.as_mut() {
-            let (cell, result) = core::task::ready!(Pin::new(retune).poll(cx));
+            let (cell, result) = match core::task::ready!(Pin::new(retune).poll(cx)) {
+                Ok(answer) => answer,
+                Err(quarantine) => {
+                    self.retune = None;
+                    drop(quarantine);
+                    return Poll::Ready(Err(Fault::Abandoned));
+                }
+            };
             self.retune = None;
             self.actor = Some(cell);
             match result {

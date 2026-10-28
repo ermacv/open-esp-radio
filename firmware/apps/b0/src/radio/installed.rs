@@ -33,7 +33,10 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         let (permission, power) = permission(profile);
         let join = BluetoothJoin::new(permission, Operation::DtmTx, Some(power))
             .expect("build-validated DTM transmit permission");
-        let (cell, joined) = core::pin::pin!(actor.run_until(cell.join(join))).await;
+        let (cell, joined) = core::pin::pin!(actor.run_until(cell.join(join))).await.unwrap_or_else(|_| {
+        oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+    });
         let joined = match joined {
             Ok(j) => j,
             Err(_) => fail(&mut actor, &mut boot.reply).await,
@@ -41,7 +44,10 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         let (cell, tracked) = core::pin::pin!(
             actor.run_until(cell.track(joined.member, joined.payload.installation))
         )
-        .await;
+        .await.unwrap_or_else(|_| {
+        oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+    });
         let tracked = match tracked {
             Ok(t) => t,
             Err(_) => fail(&mut actor, &mut boot.reply).await,
@@ -160,7 +166,10 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         let (cell, left) = core::pin::pin!(
             actor.run_until(cell.leave(Leaving::Tracked(tracked.member), tracked.payload))
         )
-        .await;
+        .await.unwrap_or_else(|_| {
+        oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+    });
         if !left.payload.stopped {
             fail(&mut actor, &mut boot.reply).await;
         }

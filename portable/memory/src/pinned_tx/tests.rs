@@ -37,21 +37,23 @@ fn pinned_pool() -> TestHandle {
 }
 
 fn prepared_radio(pool: &TestHandle) -> PinnedDmaTxRadioLease<'_, 32, 8, 4> {
-    let network = pool.claim_network(0);
-    let (index, ()) = network.publish(4, |frame| frame.copy_from_slice(&[1, 2, 3, 4]));
-    pool.claim_radio(index)
+    let network = pool.claim_network(0).unwrap();
+    let (index, ()) = network.publish(crate::FrameLen::constant::<4>(), |frame| {
+        frame.copy_from_slice(&[1, 2, 3, 4])
+    });
+    pool.claim_radio(index).unwrap()
 }
 
 #[test]
 fn dropped_stage_leases_restore_the_slot() {
     let pool = pinned_pool();
-    drop(pool.claim_network(0));
+    drop(pool.claim_network(0).unwrap());
 
     let radio = prepared_radio(&pool);
     assert_eq!(radio.ethernet(), &[1, 2, 3, 4]);
     drop(radio);
 
-    assert_eq!(pool.claim_network(0).release(), 0);
+    assert_eq!(pool.claim_network(0).unwrap().release(), 0);
 }
 
 #[test]
@@ -60,14 +62,16 @@ fn claimed_slots_tracks_publication_and_returns_across_slots() {
     let pool = TwoSlotPool::pin_static(Box::leak(Box::new(TwoSlotPool::new())));
     assert_eq!(pool.claimed_slots(), 0);
 
-    let first = pool.claim_network(0);
+    let first = pool.claim_network(0).unwrap();
     assert_eq!(pool.claimed_slots(), 1);
-    let second = pool.claim_network(1);
+    let second = pool.claim_network(1).unwrap();
     assert_eq!(pool.claimed_slots(), 2);
 
-    let (index, ()) = first.publish(4, |frame| frame.copy_from_slice(&[1, 2, 3, 4]));
+    let (index, ()) = first.publish(crate::FrameLen::constant::<4>(), |frame| {
+        frame.copy_from_slice(&[1, 2, 3, 4])
+    });
     assert_eq!(pool.claimed_slots(), 2);
-    let radio = pool.claim_radio(index);
+    let radio = pool.claim_radio(index).unwrap();
     assert_eq!(radio.ethernet(), &[1, 2, 3, 4]);
     assert_eq!(pool.claimed_slots(), 2);
 
@@ -75,7 +79,7 @@ fn claimed_slots_tracks_publication_and_returns_across_slots() {
     assert_eq!(pool.claimed_slots(), 1);
     assert_eq!(radio.release(), 0);
     assert_eq!(pool.claimed_slots(), 0);
-    assert_eq!(pool.claim_network(0).release(), 0);
+    assert_eq!(pool.claim_network(0).unwrap().release(), 0);
 }
 
 #[test]
@@ -92,16 +96,16 @@ fn radio_backing_runs_target_prepare_only_at_dma_publication_edge() {
 #[test]
 fn failed_transactional_writer_never_publishes_the_slot() {
     let pool = pinned_pool();
-    let lease = pool.claim_network(0);
+    let lease = pool.claim_network(0).unwrap();
     let (lease, error) = lease
-        .try_publish(4, |frame| {
+        .try_publish(crate::FrameLen::constant::<4>(), |frame| {
             frame.copy_from_slice(&[1, 2, 3, 4]);
             Err::<(), _>(7)
         })
         .unwrap_err();
     assert_eq!(error, 7);
     assert_eq!(lease.release(), 0);
-    assert_eq!(pool.claim_network(0).release(), 0);
+    assert_eq!(pool.claim_network(0).unwrap().release(), 0);
 }
 
 #[test]
@@ -119,7 +123,7 @@ fn returning_backing_releases_before_publishing_its_index() {
     assert_eq!(returned.get(), None);
     drop(backing);
     assert_eq!(returned.get(), Some(0));
-    assert_eq!(pool.claim_network(0).release(), 0);
+    assert_eq!(pool.claim_network(0).unwrap().release(), 0);
 }
 
 #[test]
@@ -180,8 +184,11 @@ fn forgotten_tagged_returning_lease_outlives_its_cpu_only_borrows() {
 fn radio_claim_outlives_the_affine_handle_without_reinitializing_storage() {
     let mut radio = {
         let handle = pinned_pool();
-        handle.claim_network(0).publish(4, |frame| frame.fill(0x5a));
-        handle.claim_radio(0)
+        handle
+            .claim_network(0)
+            .unwrap()
+            .publish(crate::FrameLen::constant::<4>(), |frame| frame.fill(0x5a));
+        handle.claim_radio(0).unwrap()
     };
     assert_eq!(radio.ethernet(), &[0x5a; 4]);
     radio.ethernet_mut()[1] = 0x33;
@@ -192,8 +199,11 @@ fn radio_claim_outlives_the_affine_handle_without_reinitializing_storage() {
 fn forgotten_radio_and_dropped_handle_keep_the_dma_allocation_reserved() {
     let (slot, address) = {
         let handle = pinned_pool();
-        handle.claim_network(0).publish(4, |frame| frame.fill(0x6b));
-        let radio = handle.claim_radio(0);
+        handle
+            .claim_network(0)
+            .unwrap()
+            .publish(crate::FrameLen::constant::<4>(), |frame| frame.fill(0x6b));
+        let radio = handle.claim_radio(0).unwrap();
         let address = radio.ethernet().as_ptr();
         core::mem::forget(radio);
         (handle.pool.get_ref().slots.first().unwrap(), address)
@@ -226,8 +236,10 @@ fn pre_pin_locations_name_the_exact_regions_later_lent_to_radio() {
     let pool = PinnedDmaTxPool::pin_static(storage);
     for (index, (pointer, capacity)) in locations.into_iter().enumerate() {
         let index = u8::try_from(index).unwrap();
-        pool.claim_network(index).publish(0, |_| {});
-        let mut lease = pool.claim_radio(index);
+        pool.claim_network(index)
+            .unwrap()
+            .publish(crate::FrameLen::constant::<0>(), |_| {});
+        let mut lease = pool.claim_radio(index).unwrap();
         let bytes = lease.stable_dma_region().into_mut_slice();
         assert_eq!(bytes.as_ptr(), pointer);
         assert_eq!(bytes.len(), capacity);
@@ -236,15 +248,29 @@ fn pre_pin_locations_name_the_exact_regions_later_lent_to_radio() {
 }
 
 #[test]
-fn a_rejected_transition_keeps_the_slot_and_reports_static_bytes() {
-    let slot = PinnedTxSlot::<16, 0, 0>::new();
-    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        slot.claim(SLOT_READY, SLOT_RADIO);
-    }))
-    .expect_err("a free slot is not ready");
-    assert_eq!(slot.state.load(Ordering::Acquire), SLOT_FREE);
-    assert_eq!(
-        panic.downcast_ref::<&str>().map(|s| s.as_bytes()),
-        Some(b"pinned TX slot ownership transition".as_slice())
-    );
+fn a_rejected_transition_keeps_the_slot_and_returns_observations() {
+    let pool = pinned_pool();
+    assert!(matches!(
+        pool.claim_radio(0),
+        Err(PoolError::State {
+            index: 0,
+            expected: SLOT_READY,
+            observed: SLOT_FREE
+        })
+    ));
+    assert!(matches!(
+        pool.claim_network(1),
+        Err(PoolError::Index { index: 1, slots: 1 })
+    ));
+    let owner = pool.claim_network(0).unwrap();
+    assert!(matches!(
+        pool.claim_network(0),
+        Err(PoolError::State {
+            observed: SLOT_NETWORK,
+            ..
+        })
+    ));
+    assert_eq!(pool.claimed_slots(), 1);
+    drop(owner);
+    assert_eq!(pool.claimed_slots(), 0);
 }

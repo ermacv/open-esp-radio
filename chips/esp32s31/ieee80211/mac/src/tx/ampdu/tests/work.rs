@@ -6,9 +6,10 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
     let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(std::boxed::Box::new(
         PinnedDmaTxPool::new(),
     )));
-    let (index, ()) = pool
-        .claim_network(0)
-        .publish(TX_AMPDU_METADATA_SIZE + 32, |_| {});
+    let (index, ()) = pool.claim_network(0).unwrap().publish(
+        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        |_| {},
+    );
     let mut retention = RetainedAmpduDmaStorage::new();
     let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
     let cookie = owner.begin().unwrap();

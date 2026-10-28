@@ -395,10 +395,21 @@ release a secondary hart.
   the bug it prevents.
 - DMA-reachable storage is permanent and is released only after a proof that
   DMA stopped; otherwise it is quarantined until reset.
-- An impossible state is a named fault retaining its source observations.
-  Its owners stay quarantined while safe `fatal::reset_recording` retains
-  the reason and resets; the next boot prints it. Watchdog expiry is not
-  the fault transition.
+- A hardware fault describes a proven impossible state, with its primary
+  `SOURCE` and retained observations. Its owners stay quarantined while safe
+  `fatal::reset_recording` retains the reason and resets; the next boot prints
+  it. Watchdog expiry is not the fault transition. API length, range and
+  ownership refusals are typed errors, without a hardware-fault claim.
+- Packet pools accept `oer-memory::FrameLen<CAP>` at publication and prefix
+  access. Runtime construction validates input; constants are checked at
+  monomorphization. A refused consuming range operation returns the original
+  lease, and refused index/state claims lend no bytes. Only affine leases
+  publish or release their current slot.
+- Dropping a by-value request responder without answering permanently
+  quarantines its seat. The client receives `RequestError::Unanswered` once,
+  without a new poster. `RequestQuarantine` retains dependent owners without
+  running their destructors. Images report this software lifecycle terminal
+  through their existing reset owner; it is not a hardware observation.
 - A fatal path never takes over a block another owner holds: it keeps its
   record and resets the chip, and the next boot reports it. Its stop of the
   other hart (`StopTheWorld`: its hart masked, the other hart confirmed

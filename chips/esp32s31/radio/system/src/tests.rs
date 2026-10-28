@@ -349,7 +349,7 @@ fn a_borrowed_run_keeps_membership_when_polled_again() {
     let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
     let lp = LpClock::<RcSlow>::for_host_test();
     let mut actor = RadioSystem::new(end, model.clone(), clock(), lp);
-    let Either::Second((cell, joined)) = block_on(select(
+    let Either::Second(Ok((cell, joined))) = block_on(select(
         actor.run(),
         cells.wifi.join(WifiJoin { wifi: cold() }),
     )) else {
@@ -361,7 +361,7 @@ fn a_borrowed_run_keeps_membership_when_polled_again() {
 
     // The completed select drops the first run future. The same actor
     // must still own the member and close RF on its last leave.
-    let Either::Second((_cell, left)) = block_on(select(
+    let Either::Second(Ok((_cell, left))) = block_on(select(
         actor.run(),
         cell.leave(
             Leaving::Untracked(joined.member),
@@ -383,7 +383,7 @@ fn a_borrowed_run_keeps_membership_when_polled_again() {
 fn join_track_and_leave_run_in_order_and_the_last_leave_closes_rf() {
     let model = model(Script::default());
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Ok(joined) = joined else {
             panic!("a cold join registers")
         };
@@ -394,7 +394,8 @@ fn join_track_and_leave_run_in_order_and_the_last_leave_closes_rf() {
         ));
         let (cell, tracked) = cell
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let Ok(tracked) = tracked else {
             panic!("tracking runs")
         };
@@ -406,7 +407,8 @@ fn join_track_and_leave_run_in_order_and_the_last_leave_closes_rf() {
                     wifi: tracked.payload.wifi,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(left.domain, DomainHealth::Healthy);
     });
     assert_eq!(
@@ -425,7 +427,7 @@ fn join_track_and_leave_run_in_order_and_the_last_leave_closes_rf() {
 fn a_join_after_rf_closed_wakes_rf_with_a_new_epoch() {
     let model = model(Script::default());
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Ok(first) = joined else {
             panic!("a cold join registers")
         };
@@ -436,8 +438,9 @@ fn a_join_after_rf_closed_wakes_rf_with_a_new_epoch() {
                     wifi: first.payload.wifi,
                 },
             )
-            .await;
-        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
+            .await
+            .unwrap();
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Ok(second) = joined else {
             panic!("a join wakes closed RF")
         };
@@ -463,7 +466,7 @@ fn a_refused_first_member_leaves_rf_closed_and_gets_its_partition_back() {
         ..Script::default()
     });
     run(&model, clock(), |cells| async move {
-        let (_cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (_cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Err(failed) = joined else {
             panic!("the backend refused")
         };
@@ -480,12 +483,12 @@ fn a_failed_preparation_poisons_the_domain_for_every_later_request() {
         ..Script::default()
     });
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Err(failed) = joined else {
             panic!("the preparation failed")
         };
         assert_eq!(failed.cause, Failure::Poisoned(PREPARE_POISON));
-        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Err(failed) = joined else {
             panic!("the domain stays poisoned")
         };
@@ -502,13 +505,14 @@ fn a_poisoned_track_hands_back_the_member_and_the_client() {
         ..Script::default()
     });
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Ok(joined) = joined else {
             panic!("a cold join registers")
         };
         let (cell, tracked) = cell
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let Err(Failed {
             returned: (member, wifi),
             cause,
@@ -519,7 +523,8 @@ fn a_poisoned_track_hands_back_the_member_and_the_client() {
         assert_eq!(cause, Failure::Poisoned(TRACK_POISON));
         let (_cell, left) = cell
             .leave(Leaving::Untracked(member), WifiLeave { wifi })
-            .await;
+            .await
+            .unwrap();
         assert_eq!(left.domain, DomainHealth::Poisoned(TRACK_POISON));
     });
     // A poisoned domain closes no RF.
@@ -533,7 +538,7 @@ fn a_member_that_is_not_the_last_keeps_rf_open() {
         ..Script::default()
     });
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Ok(joined) = joined else {
             panic!("a cold join registers")
         };
@@ -544,7 +549,8 @@ fn a_member_that_is_not_the_last_keeps_rf_open() {
                     wifi: joined.payload.wifi,
                 },
             )
-            .await;
+            .await
+            .unwrap();
     });
     assert!(!model.log().contains(&Event::CloseRf));
 }
@@ -557,13 +563,14 @@ fn a_tracked_member_gets_periodic_ticks_when_they_fall_due() {
         ..Script::default()
     });
     run(&model, clock, |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Ok(joined) = joined else {
             panic!("a cold join registers")
         };
         let (_cell, tracked) = cell
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let Ok(tracked) = tracked else {
             panic!("tracking runs")
         };
@@ -604,11 +611,12 @@ fn a_failed_tracking_tick_names_itself_in_the_next_retune_and_stops_tracking() {
         cause: TICK_CAUSE,
     };
     run(&model, clock, |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let joined = joined.ok().expect("join");
         let (cell, tracked) = cell
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let tracked = tracked.ok().expect("track");
         // A long association: the tick falls due once a second.
         for second in 1..=120 {
@@ -627,7 +635,8 @@ fn a_failed_tracking_tick_names_itself_in_the_next_retune_and_stops_tracking() {
                     tx_ceiling: config.tx_ceiling,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         let Err(Failed {
             returned: (member, wifi),
             cause,
@@ -638,7 +647,8 @@ fn a_failed_tracking_tick_names_itself_in_the_next_retune_and_stops_tracking() {
         assert_eq!(cause, Failure::Poisoned(tick));
         let (_, left) = cell
             .leave(Leaving::Tracked(member), WifiLeave { wifi })
-            .await;
+            .await
+            .unwrap();
         assert_eq!(left.domain, DomainHealth::Poisoned(tick));
     });
     let log = model.log();
@@ -659,7 +669,7 @@ fn a_recoverable_close_keeps_rf_open_in_the_same_epoch() {
         ..Script::default()
     });
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Ok(first) = joined else {
             panic!("a cold join registers")
         };
@@ -670,9 +680,10 @@ fn a_recoverable_close_keeps_rf_open_in_the_same_epoch() {
                     wifi: first.payload.wifi,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(left.domain, DomainHealth::Healthy);
-        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Ok(second) = joined else {
             panic!("the domain stays healthy")
         };
@@ -699,12 +710,12 @@ fn a_client_failure_keeps_the_domain_healthy_and_closes_rf_it_opened() {
         ..Script::default()
     });
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let Err(failed) = joined else {
             panic!("the client failed")
         };
         assert_eq!(failed.cause, Failure::ClientFailed);
-        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await.unwrap();
         assert!(joined.is_ok(), "a client failure poisons nothing");
     });
     assert_eq!(
@@ -722,11 +733,12 @@ fn a_client_failure_keeps_the_domain_healthy_and_closes_rf_it_opened() {
 fn retune_preserves_membership_and_the_last_leave_still_closes_rf() {
     let model = model(Script::default());
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let joined = joined.ok().expect("join");
         let (cell, tracked) = cell
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let tracked = tracked.ok().expect("track");
         let config = track_request(tracked.payload.wifi);
         let (cell, tuned) = cell
@@ -738,7 +750,8 @@ fn retune_preserves_membership_and_the_last_leave_still_closes_rf() {
                     tx_ceiling: config.tx_ceiling,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         let tuned = tuned.ok().expect("retune");
         assert_eq!(tuned.payload.report.micros, 11);
         let (_, left) = cell
@@ -748,7 +761,8 @@ fn retune_preserves_membership_and_the_last_leave_still_closes_rf() {
                     wifi: tuned.payload.wifi,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         assert_eq!(left.domain, DomainHealth::Healthy);
     });
     assert_eq!(
@@ -771,11 +785,12 @@ fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
         ..Default::default()
     });
     run(&model, clock(), |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
         let joined = joined.ok().expect("join");
         let (cell, tracked) = cell
             .track(joined.member, track_request(joined.payload.wifi))
-            .await;
+            .await
+            .unwrap();
         let tracked = tracked.ok().expect("track");
         let config = track_request(tracked.payload.wifi);
         let (cell, answer) = cell
@@ -787,7 +802,8 @@ fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
                     tx_ceiling: config.tx_ceiling,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         let Err(Failed {
             returned: (member, wifi),
             cause,
@@ -806,7 +822,8 @@ fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
                     tx_ceiling: config.tx_ceiling,
                 },
             )
-            .await;
+            .await
+            .unwrap();
         let Err(Failed {
             returned: (member, wifi),
             cause,
@@ -817,7 +834,8 @@ fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
         assert_eq!(cause, Failure::Poisoned(RETUNE_POISON));
         let (_, left) = cell
             .leave(Leaving::Tracked(member), WifiLeave { wifi })
-            .await;
+            .await
+            .unwrap();
         assert_eq!(left.domain, DomainHealth::Poisoned(RETUNE_POISON));
     });
     assert_eq!(

@@ -177,7 +177,10 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
 }
 pub async fn serve(channel: FrontendChannel, body: super::station::Body) {
     let mut pending = channel.0.post(());
-    let (_, front) = poll_fn(|cx| pending.poll_answer(cx)).await;
+    let (_, front) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(|_| {
+            oer_espressif_staged_runtime::panic::reset_fault(
+                oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+        });
     match front {
         Ok(front) => {
             let mut running = core::pin::pin!(radio::run_port(front, body));
@@ -224,7 +227,10 @@ async fn install(boot: Boot, config: RadioConfig) -> Result<PortParts<Device, TX
         },
         start,
     )
-    .await;
+    .await.unwrap_or_else(|_| {
+        oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+    });
     let stopped = stopped.map_err(|_| "radio start")?;
     let power = stopped.start_report().track.tx_power;
     let arena = irq::RX.take().ok_or("RX claimed")?;

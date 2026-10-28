@@ -383,8 +383,9 @@ reply!(Left<K>, (Leaving<K>, K::Leave), leave,
     track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
     retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>);
 
-/// A posted request: a future of its typed answer and the returned cell.
-/// A spent future stays pending and cannot consume a later request's answer.
+/// A posted request: a future of its typed answer and returned cell, or a
+/// typed abandonment terminal without a reusable cell. A spent future stays
+/// pending and cannot consume a later request's answer.
 #[must_use = "the cell returns only with the answer"]
 pub struct Pending<K: Client, O: sealed::Reply<K>> {
     state: Option<(Awaiting<O::Request, O>, O::Idle)>,
@@ -401,14 +402,19 @@ impl<K: Client, O: sealed::Reply<K>> Pending<K, O> {
 }
 
 impl<K: Client, O: sealed::Reply<K>> Future for Pending<K, O> {
-    type Output = (MembershipCell<K>, O);
+    type Output = Result<(MembershipCell<K>, O), oer_memory::RequestError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let Some((mut awaiting, idle)) = self.state.take() else {
             return Poll::Pending;
         };
         match awaiting.poll_answer(cx) {
-            Poll::Ready((poster, answer)) => Poll::Ready((O::reunite(poster, idle), answer)),
+            Poll::Ready(Ok((poster, answer))) => {
+                Poll::Ready(Ok((O::reunite(poster, idle), answer)))
+            }
+            // Dropped idle posters retain their claimed seats. An abandoned
+            // operation cannot reconstitute any part of the membership cell.
+            Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
             Poll::Pending => {
                 self.state = Some((awaiting, idle));
                 Poll::Pending

@@ -2,8 +2,7 @@
 //!
 //! Pinning is a type boundary: only the affine [`PinnedDmaTxPoolHandle`]
 //! issues leases. Slot indices still follow the caller's free/ready queues:
-//! an out-of-range index or a claim in the wrong state panics, rather than
-//! lending aliased bytes.
+//! an out-of-range index or a claim in the wrong state returns an error.
 //! Publication lengths must fit the frame capacity before the writer runs.
 
 use core::{
@@ -15,30 +14,12 @@ use core::{
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
 };
 
-use crate::{StableDmaBacking, StableDmaRegion};
+use crate::{FrameLen, PoolError, StableDmaBacking, StableDmaRegion};
 
 const SLOT_FREE: u8 = 0;
 const SLOT_NETWORK: u8 = 1;
 const SLOT_READY: u8 = 2;
 const SLOT_RADIO: u8 = 3;
-/// The Ethernet frame of `length` bytes behind the headroom.
-#[expect(
-    clippy::indexing_slicing,
-    reason = "internal invariant: length is checked against FRAME_CAPACITY at publish, and storage holds HEADROOM + FRAME_CAPACITY + TRAILER"
-)]
-fn frame<const HEADROOM: usize>(storage: &[u8], length: usize) -> &[u8] {
-    &storage[HEADROOM..HEADROOM + length]
-}
-
-/// The mutable Ethernet frame of `length` bytes behind the headroom.
-#[expect(
-    clippy::indexing_slicing,
-    reason = "internal invariant: length is checked against FRAME_CAPACITY at publish, and storage holds HEADROOM + FRAME_CAPACITY + TRAILER"
-)]
-fn frame_mut<const HEADROOM: usize>(storage: &mut [u8], length: usize) -> &mut [u8] {
-    &mut storage[HEADROOM..HEADROOM + length]
-}
-
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
 struct PinnedTxBytes<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> {
@@ -78,30 +59,27 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         }
     }
 
-    fn claim(&self, from: u8, to: u8) {
-        let observed = self
-            .state
-            .compare_exchange(from, to, Ordering::AcqRel, Ordering::Acquire);
-        assert!(observed == Ok(from), "pinned TX slot ownership transition");
+    fn claim(&self, index: u8, from: u8, to: u8) -> Result<(), PoolError> {
+        self.state
+            .compare_exchange(from, to, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| ())
+            .map_err(|observed| PoolError::State {
+                index,
+                expected: from,
+                observed,
+            })
     }
 
-    fn publish_ready(&self, length: usize) {
-        self.length.store(length, Ordering::Relaxed);
-        let observed = self.state.compare_exchange(
-            SLOT_NETWORK,
-            SLOT_READY,
-            Ordering::Release,
-            Ordering::Acquire,
-        );
-        assert!(
-            observed == Ok(SLOT_NETWORK),
-            "only the network lease may publish a pinned TX slot"
-        );
+    // Only the affine network lease can publish or release NETWORK; only the
+    // affine radio lease can release RADIO. Neither state can be stolen.
+    fn publish_ready(&self, length: FrameLen<FRAME_CAPACITY>) {
+        self.length.store(length.get(), Ordering::Relaxed);
+        self.state.store(SLOT_READY, Ordering::Release);
     }
 
-    fn release_radio(&self) {
+    fn release(&self) {
         self.length.store(0, Ordering::Relaxed);
-        self.claim(SLOT_RADIO, SLOT_FREE);
+        self.state.store(SLOT_FREE, Ordering::Release);
     }
 
     fn length(&self) -> usize {
@@ -112,16 +90,12 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         unsafe_code,
         reason = "TX slot exposes its contiguous storage to a typed lease"
     )]
-    fn storage(&self) -> &[u8] {
+    fn ethernet(&self) -> &[u8] {
         // SAFETY: the caller holds the unique state-specific lease. The three
         // byte-aligned repr(C) fields form one padding-free allocation.
         unsafe {
             let bytes = &*self.bytes.get();
-            debug_assert!(core::mem::size_of_val(bytes) == HEADROOM + FRAME_CAPACITY + TRAILER);
-            core::slice::from_raw_parts(
-                ptr::addr_of!(bytes.headroom).cast::<u8>(),
-                HEADROOM + FRAME_CAPACITY + TRAILER,
-            )
+            core::slice::from_raw_parts(ptr::addr_of!(bytes.ethernet).cast::<u8>(), self.length())
         }
     }
 
@@ -130,7 +104,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     }
 
     const fn storage_capacity(&self) -> usize {
-        HEADROOM + FRAME_CAPACITY + TRAILER
+        core::mem::size_of::<PinnedTxBytes<FRAME_CAPACITY, HEADROOM, TRAILER>>()
     }
 }
 
@@ -251,52 +225,48 @@ impl<
     const QUEUE_DEPTH: usize,
 > PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
 {
-    /// The slot `index` names.
-    #[expect(
-        clippy::expect_used,
-        reason = "documented panic of the claims: the index comes from this pool's own channels, so a foreign one is a driver defect"
-    )]
-    fn slot_of(&self, index: u8) -> &'static PinnedTxSlot<FRAME_CAPACITY, HEADROOM, TRAILER> {
+    fn slot_of(
+        &self,
+        index: u8,
+    ) -> Result<&'static PinnedTxSlot<FRAME_CAPACITY, HEADROOM, TRAILER>, PoolError> {
         self.pool
             .get_ref()
             .slots
             .get(usize::from(index))
-            .expect("pinned TX index belongs to this pool")
+            .ok_or(PoolError::Index {
+                index,
+                slots: QUEUE_DEPTH,
+            })
     }
 
     /// Claim a free slot for a unique network writer.
-    ///
-    /// # Panics
-    /// The index must belong to this pool and name a free slot.
     pub fn claim_network(
         &self,
         index: u8,
-    ) -> PinnedDmaTxNetworkLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER> {
-        let slot = self.slot_of(index);
-        slot.claim(SLOT_FREE, SLOT_NETWORK);
-        PinnedDmaTxNetworkLease {
+    ) -> Result<PinnedDmaTxNetworkLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>, PoolError>
+    {
+        let slot = self.slot_of(index)?;
+        slot.claim(index, SLOT_FREE, SLOT_NETWORK)?;
+        Ok(PinnedDmaTxNetworkLease {
             slot,
             index,
             live: true,
-        }
+        })
     }
 
-    /// Claim a slot whose network writer has published its complete frame.
-    ///
-    /// # Panics
-    /// The index must belong to this pool and name a ready slot.
+    /// Claim a slot whose network writer published its complete frame.
     pub fn claim_radio(
         &self,
         index: u8,
-    ) -> PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER> {
-        let slot = self.slot_of(index);
-        slot.claim(SLOT_READY, SLOT_RADIO);
-        PinnedDmaTxRadioLease {
+    ) -> Result<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>, PoolError> {
+        let slot = self.slot_of(index)?;
+        slot.claim(index, SLOT_READY, SLOT_RADIO)?;
+        Ok(PinnedDmaTxRadioLease {
             slot,
             index,
             live: true,
             prepare_for_dma_read: self.pool.prepare_for_dma_read.unwrap_or(coherent_dma_read),
-        }
+        })
     }
 
     /// Number of slots retained by a network, ready-queue or radio stage.
@@ -342,22 +312,23 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
 {
     /// Write and publish one frame, consuming its network lease.
     ///
-    /// # Panics
-    /// `length` must fit `FRAME_CAPACITY`. The writer may itself panic; on
-    /// unwind the unpublished network lease returns its slot. A corrupted
-    /// ownership state is fatal.
-    pub fn publish<R>(mut self, length: usize, write: impl FnOnce(&mut [u8]) -> R) -> (u8, R) {
-        assert!(length <= FRAME_CAPACITY, "TX frame exceeds slot capacity");
+    /// The checked length bounds the writer's slice. On callback unwind the
+    /// unpublished network lease returns its slot.
+    pub fn publish<R>(
+        mut self,
+        length: FrameLen<FRAME_CAPACITY>,
+        write: impl FnOnce(&mut [u8]) -> R,
+    ) -> (u8, R) {
         // SAFETY: this non-Clone Network lease is the unique SLOT_NETWORK
         // owner. No radio lease can exist before `publish_ready` below.
         #[allow(unsafe_code, reason = "network lease uniquely initializes its TX slot")]
         let storage = unsafe {
             core::slice::from_raw_parts_mut(
-                self.slot.storage_mut_ptr(),
-                self.slot.storage_capacity(),
+                self.slot.storage_mut_ptr().wrapping_add(HEADROOM),
+                length.get(),
             )
         };
-        let result = write(frame_mut::<HEADROOM>(storage, length));
+        let result = write(storage);
         self.slot.publish_ready(length);
         self.live = false;
         (self.index, result)
@@ -369,25 +340,22 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     /// a failed callback remain private to that lease and can never be
     /// observed by a radio owner.
     ///
-    /// # Panics
-    /// As with [`Self::publish`], an oversized length or corrupted ownership
-    /// state is fatal. A callback's ordinary `Err` returns the live lease.
+    /// A callback's ordinary `Err` returns the live lease.
     pub fn try_publish<R, E>(
         mut self,
-        length: usize,
+        length: FrameLen<FRAME_CAPACITY>,
         write: impl FnOnce(&mut [u8]) -> Result<R, E>,
     ) -> Result<(u8, R), (Self, E)> {
-        assert!(length <= FRAME_CAPACITY, "TX frame exceeds slot capacity");
         // SAFETY: this non-Clone Network lease is the unique SLOT_NETWORK
         // owner. No radio lease can exist before `publish_ready` below.
         #[allow(unsafe_code, reason = "network lease uniquely initializes its TX slot")]
         let storage = unsafe {
             core::slice::from_raw_parts_mut(
-                self.slot.storage_mut_ptr(),
-                self.slot.storage_capacity(),
+                self.slot.storage_mut_ptr().wrapping_add(HEADROOM),
+                length.get(),
             )
         };
-        let result = match write(frame_mut::<HEADROOM>(storage, length)) {
+        let result = match write(storage) {
             Ok(result) => result,
             Err(error) => return Err((self, error)),
         };
@@ -397,7 +365,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     }
 
     pub fn release(mut self) -> u8 {
-        self.slot.claim(SLOT_NETWORK, SLOT_FREE);
+        self.slot.release();
         self.live = false;
         self.index
     }
@@ -408,7 +376,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> D
 {
     fn drop(&mut self) {
         if self.live {
-            self.slot.claim(SLOT_NETWORK, SLOT_FREE);
+            self.slot.release();
         }
     }
 }
@@ -446,8 +414,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     }
 
     pub fn ethernet(&self) -> &[u8] {
-        let length = self.ethernet_length();
-        frame::<HEADROOM>(self.slot.storage(), length)
+        self.slot.ethernet()
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -455,17 +422,20 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     }
 
     pub fn ethernet_mut(&mut self) -> &mut [u8] {
-        let length = self.ethernet_length();
-        frame_mut::<HEADROOM>(self.storage_mut(), length)
+        self.view_mut(HEADROOM, self.ethernet_length())
     }
 
     pub fn storage_mut(&mut self) -> &mut [u8] {
+        self.view_mut(0, self.slot.storage_capacity())
+    }
+
+    fn view_mut(&mut self, offset: usize, length: usize) -> &mut [u8] {
         // SAFETY: `&mut self` borrows the unique non-Clone SLOT_RADIO lease.
         #[allow(unsafe_code, reason = "radio lease uniquely owns its pinned TX slot")]
         unsafe {
             core::slice::from_raw_parts_mut(
-                self.slot.storage_mut_ptr(),
-                self.slot.storage_capacity(),
+                self.slot.storage_mut_ptr().wrapping_add(offset),
+                length,
             )
         }
     }
@@ -475,7 +445,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     }
 
     pub fn release(mut self) -> u8 {
-        self.slot.release_radio();
+        self.slot.release();
         self.live = false;
         self.index
     }
@@ -510,16 +480,17 @@ unsafe impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: u
     }
 }
 
-/// Stable DMA lease which yields its pool index when explicitly released.
+/// Stable DMA lease whose destructor releases its slot before its index is returned.
+/// `index` must identify that exact slot for the entire lease lifetime.
 pub trait IndexedStableDmaLease: StableDmaBacking {
-    fn release_index(self) -> u8;
+    fn index(&self) -> u8;
 }
 
 impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> IndexedStableDmaLease
     for PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER>
 {
-    fn release_index(self) -> u8 {
-        self.release()
+    fn index(&self) -> u8 {
+        self.index
     }
 }
 
@@ -534,8 +505,9 @@ pub trait DmaIndexReturn {
 /// the pool index to another producer. Any hardware access must already be
 /// quiescent; this wrapper does not stop DMA or establish completion.
 pub struct ReturningStableDmaBacking<B: IndexedStableDmaLease, R: DmaIndexReturn> {
-    backing: Option<B>,
-    returner: R,
+    // Fields drop in declaration order: release storage before publishing its index.
+    backing: B,
+    _returner: ReturnIndex<R>,
 }
 
 /// Immutable CPU metadata paired with one stable DMA owner.
@@ -591,33 +563,14 @@ unsafe impl<T, B: StableDmaBacking> StableDmaBacking for TaggedStableDmaBacking<
 }
 
 impl<B: IndexedStableDmaLease, R: DmaIndexReturn> ReturningStableDmaBacking<B, R> {
-    pub const fn new(backing: B, returner: R) -> Self {
+    pub fn new(backing: B, returner: R) -> Self {
         Self {
-            backing: Some(backing),
-            returner,
+            _returner: ReturnIndex {
+                index: backing.index(),
+                returner,
+            },
+            backing,
         }
-    }
-}
-
-impl<B: IndexedStableDmaLease, R: DmaIndexReturn> ReturningStableDmaBacking<B, R> {
-    #[expect(
-        clippy::expect_used,
-        reason = "internal invariant: the backing is taken only by the drop that ends the value"
-    )]
-    fn live_backing(&self) -> &B {
-        self.backing
-            .as_ref()
-            .expect("returning DMA backing remains live until drop")
-    }
-
-    #[expect(
-        clippy::expect_used,
-        reason = "internal invariant: the backing is taken only by the drop that ends the value"
-    )]
-    fn live_backing_mut(&mut self) -> &mut B {
-        self.backing
-            .as_mut()
-            .expect("returning DMA backing remains live until drop")
     }
 }
 
@@ -625,13 +578,7 @@ impl<B: IndexedStableDmaLease, R: DmaIndexReturn> Deref for ReturningStableDmaBa
     type Target = B;
 
     fn deref(&self) -> &Self::Target {
-        self.live_backing()
-    }
-}
-
-impl<B: IndexedStableDmaLease, R: DmaIndexReturn> DerefMut for ReturningStableDmaBacking<B, R> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.live_backing_mut()
+        &self.backing
     }
 }
 
@@ -647,20 +594,22 @@ unsafe impl<B: IndexedStableDmaLease, R: DmaIndexReturn> StableDmaBacking
     for ReturningStableDmaBacking<B, R>
 {
     fn stable_dma_region(&mut self) -> StableDmaRegion<'_> {
-        self.deref_mut().stable_dma_region()
+        self.backing.stable_dma_region()
     }
 
     fn prepare_for_dma_read(&mut self) {
-        self.deref_mut().prepare_for_dma_read();
+        self.backing.prepare_for_dma_read();
     }
 }
 
-impl<B: IndexedStableDmaLease, R: DmaIndexReturn> Drop for ReturningStableDmaBacking<B, R> {
+struct ReturnIndex<R: DmaIndexReturn> {
+    index: u8,
+    returner: R,
+}
+
+impl<R: DmaIndexReturn> Drop for ReturnIndex<R> {
     fn drop(&mut self) {
-        if let Some(backing) = self.backing.take() {
-            let index = backing.release_index();
-            self.returner.return_index(index);
-        }
+        self.returner.return_index(self.index);
     }
 }
 
@@ -669,7 +618,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> D
 {
     fn drop(&mut self) {
         if self.live {
-            self.slot.release_radio();
+            self.slot.release();
         }
     }
 }

@@ -287,7 +287,17 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
         .map_err(drop)
         .expect("rotated handoff slot");
     let length = radio.frame().len();
-    let mut network = pool.claim_network(radio.republish(0, length));
+    let mut network = pool
+        .claim_network(
+            radio
+                .republish(
+                    0,
+                    oer_memory::FrameLen::new(length).expect("test frame length"),
+                )
+                .ok()
+                .expect("valid test range"),
+        )
+        .unwrap();
     assert_eq!(
         network.with_frame(|frame| frame[4..8].to_vec()),
         [5, 6, 7, 8],
@@ -343,7 +353,17 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
         .map_err(drop)
         .expect("external handoff slot");
     let length = radio.frame().len();
-    let mut network = pool.claim_network(radio.republish(0, length));
+    let mut network = pool
+        .claim_network(
+            radio
+                .republish(
+                    0,
+                    oer_memory::FrameLen::new(length).expect("test frame length"),
+                )
+                .ok()
+                .expect("valid test range"),
+        )
+        .unwrap();
     assert_eq!(
         network.with_frame(|frame| frame[4..8].to_vec()),
         [1, 2, 3, 4]
@@ -402,7 +422,18 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
         .map_err(drop)
         .expect("external handoff slot");
     let length = radio.frame().len();
-    drop(pool.claim_network(radio.republish(0, length)));
+    drop(
+        pool.claim_network(
+            radio
+                .republish(
+                    0,
+                    oer_memory::FrameLen::new(length).expect("test frame length"),
+                )
+                .ok()
+                .expect("valid test range"),
+        )
+        .unwrap(),
+    );
     assert_eq!(storage.released_buffer_count(), 1);
 
     let append = storage
@@ -465,13 +496,33 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
         .map_err(drop)
         .expect("first handoff slot");
     let first_length = first.frame().len();
-    let first = pool.claim_network(first.republish(0, first_length));
+    let first = pool
+        .claim_network(
+            first
+                .republish(
+                    0,
+                    oer_memory::FrameLen::new(first_length).expect("test frame length"),
+                )
+                .ok()
+                .expect("valid test range"),
+        )
+        .unwrap();
     let second = pool
         .try_claim_radio(second.into_buffer(), 1)
         .map_err(drop)
         .expect("second handoff slot");
     let second_length = second.frame().len();
-    let second = pool.claim_network(second.republish(0, second_length));
+    let second = pool
+        .claim_network(
+            second
+                .republish(
+                    0,
+                    oer_memory::FrameLen::new(second_length).expect("test frame length"),
+                )
+                .ok()
+                .expect("valid test range"),
+        )
+        .unwrap();
 
     drop(second);
     assert_eq!(storage.released_buffer_count(), 1);
@@ -2179,7 +2230,18 @@ fn base_names_only_the_reserved_descriptor_once_per_epoch_across_full_ring_relea
                 .map_err(drop)
                 .unwrap();
             let length = radio.frame().len();
-            leases.push(pool.claim_network(radio.republish(0, length)));
+            leases.push(
+                pool.claim_network(
+                    radio
+                        .republish(
+                            0,
+                            oer_memory::FrameLen::new(length).expect("test frame length"),
+                        )
+                        .ok()
+                        .expect("valid test range"),
+                )
+                .unwrap(),
+            );
         }
         assert!(
             !ring.live.observed_mask().contains(COUNT),
@@ -2727,7 +2789,18 @@ impl<const COUNT: usize> Walked<COUNT> {
                 .map_err(drop)
                 .unwrap();
             let length = radio.frame().len();
-            leases.push(pool.claim_network(radio.republish(0, length)));
+            leases.push(
+                pool.claim_network(
+                    radio
+                        .republish(
+                            0,
+                            oer_memory::FrameLen::new(length).expect("test frame length"),
+                        )
+                        .ok()
+                        .expect("valid test range"),
+                )
+                .unwrap(),
+            );
         }
         leases
     }
@@ -2918,7 +2991,18 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
             .map_err(drop)
             .unwrap();
         let length = radio.frame().len();
-        leases.push(pool.claim_network(radio.republish(0, length)));
+        leases.push(
+            pool.claim_network(
+                radio
+                    .republish(
+                        0,
+                        oer_memory::FrameLen::new(length).expect("test frame length"),
+                    )
+                    .ok()
+                    .expect("valid test range"),
+            )
+            .unwrap(),
+        );
     }
     // The take itself stops at LAST: the same cursor hands out nothing more.
     assert!(

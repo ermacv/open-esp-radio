@@ -167,8 +167,11 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
         let start = self.next_claim.load(Ordering::Relaxed);
         let lease = match self.external.try_claim_radio(detached.into_buffer(), start) {
             Ok(lease) => lease,
-            Err(buffer) => {
+            Err((buffer, error)) => {
                 drop(buffer);
+                if let oer_memory::PoolError::Length(_) = error {
+                    return Err(RxStageTransactionError::Stage(RxStageError::TooLong));
+                }
                 return Err(RxStageTransactionError::Stage(RxStageError::Exhausted));
             }
         };
@@ -300,18 +303,36 @@ impl<const SLOTS: usize, const CAPACITY: usize> NetworkRxFrame<'_, SLOTS, CAPACI
         let Some(frame_offset) = payload_offset.checked_sub(14) else {
             return Err((self, RxInPlaceEthernetError::InsufficientHeadroom));
         };
-        let ethernet_length = 14 + payload_length;
+        let Some(ethernet_length) = 14_usize.checked_add(payload_length) else {
+            return Err((self, RxInPlaceEthernetError::PayloadOutsideFrame));
+        };
+        let ethernet_length = match oer_memory::FrameLen::new(ethernet_length) {
+            Ok(length) => length,
+            Err(_) => return Err((self, RxInPlaceEthernetError::PayloadOutsideFrame)),
+        };
         let NetworkRxFrame {
             mut lease,
-            _slots: _,
-            metadata: _,
-            times: _,
+            _slots,
+            metadata,
+            times,
         } = self;
         lease.with_frame(|raw| {
             raw[frame_offset..frame_offset + 6].copy_from_slice(&destination);
             raw[frame_offset + 6..frame_offset + 12].copy_from_slice(&source);
             raw[frame_offset + 12..frame_offset + 14].copy_from_slice(&ether_type.to_be_bytes());
         });
-        Ok(lease.republish(frame_offset, ethernet_length))
+        lease
+            .republish(frame_offset, ethernet_length)
+            .map_err(|(lease, _error)| {
+                (
+                    NetworkRxFrame {
+                        lease,
+                        _slots,
+                        metadata,
+                        times,
+                    },
+                    RxInPlaceEthernetError::PayloadOutsideFrame,
+                )
+            })
     }
 }

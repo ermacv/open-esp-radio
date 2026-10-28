@@ -29,9 +29,10 @@ fn exchange_byte_limit_stops_existing_builder_without_consuming_the_next_owner()
                 .can_commit_referenced_ht_frame(cookie, 32, 8, 0, rate, 256)
                 .unwrap()
         );
-        let (index, ()) = pool
-            .claim_network(index)
-            .publish(TX_AMPDU_METADATA_SIZE + 32, |_| {});
+        let (index, ()) = pool.claim_network(index).unwrap().publish(
+            oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+            |_| {},
+        );
         owner
             .commit_ht(
                 cookie,
@@ -40,7 +41,7 @@ fn exchange_byte_limit_stops_existing_builder_without_consuming_the_next_owner()
             )
             .unwrap();
     }
-    let next = pool.claim_network(2);
+    let next = pool.claim_network(2).unwrap();
     let before = owner.prepared_aggregate(cookie).unwrap();
     assert!(
         !owner

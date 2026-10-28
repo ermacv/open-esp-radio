@@ -48,7 +48,9 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     fn prepare_for_recycle(&self) -> Result<(), RxRingError> {
         match self.1.state() {
             ExternalRxReturnState::Attached => {}
-            ExternalRxReturnState::Detached | ExternalRxReturnState::Returned => {
+            ExternalRxReturnState::Detached
+            | ExternalRxReturnState::Returned
+            | ExternalRxReturnState::Invalid { .. } => {
                 return Err(RxRingError::BufferOwnershipConflict);
             }
         }

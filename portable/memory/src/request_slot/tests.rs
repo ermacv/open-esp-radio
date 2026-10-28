@@ -39,7 +39,7 @@ fn a_posted_request_rings_once_and_is_answered_once() {
     assert!(slot.take_request().is_none());
     assert!(awaiting.poll_answer(&mut cx).is_pending());
     responder.answer(70);
-    let Poll::Ready((poster, 70)) = awaiting.poll_answer(&mut cx) else {
+    let Poll::Ready(Ok((poster, 70))) = awaiting.poll_answer(&mut cx) else {
         panic!("the answer is ready");
     };
     assert!(awaiting.poll_answer(&mut cx).is_pending());
@@ -56,7 +56,7 @@ fn a_spent_wait_never_takes_a_later_answer() {
     let mut first = slot.claim().unwrap().post(1);
     let (_, responder) = slot.take_request().unwrap();
     responder.answer(10);
-    let Poll::Ready((poster, 10)) = first.poll_answer(&mut noop()) else {
+    let Poll::Ready(Ok((poster, 10))) = first.poll_answer(&mut noop()) else {
         panic!("the first answer is ready");
     };
     let mut second = poster.post(2);
@@ -66,7 +66,7 @@ fn a_spent_wait_never_takes_a_later_answer() {
     assert!(first.poll_answer(&mut noop()).is_pending());
     assert!(matches!(
         second.poll_answer(&mut noop()),
-        Poll::Ready((_, 20))
+        Poll::Ready(Ok((_, 20)))
     ));
 }
 
@@ -89,7 +89,10 @@ fn the_client_is_woken_when_the_answer_arrives() {
     let (_, responder) = slot.take_request().unwrap();
     responder.answer(2);
     assert!(flag.0.load(Ordering::SeqCst));
-    assert!(matches!(awaiting.poll_answer(&mut cx), Poll::Ready((_, 2))));
+    assert!(matches!(
+        awaiting.poll_answer(&mut cx),
+        Poll::Ready(Ok((_, 2)))
+    ));
 }
 
 #[test]
@@ -101,7 +104,7 @@ fn a_dropped_wait_loses_no_answer() {
     responder.answer(50);
     assert!(matches!(
         awaiting.poll_answer(&mut noop()),
-        Poll::Ready((_, 50))
+        Poll::Ready(Ok((_, 50)))
     ));
 }
 
@@ -128,7 +131,7 @@ fn post_take_and_answer_race_without_loss_or_duplication() {
     for round in 0..ROUNDS {
         let mut awaiting = poster.post(round);
         poster = loop {
-            if let Poll::Ready((poster, answer)) = awaiting.poll_answer(&mut noop()) {
+            if let Poll::Ready(Ok((poster, answer))) = awaiting.poll_answer(&mut noop()) {
                 answers.push(answer);
                 break poster;
             }
@@ -145,12 +148,25 @@ fn post_take_and_answer_race_without_loss_or_duplication() {
 }
 
 #[test]
-#[should_panic(expected = "a taken request must be answered")]
-fn a_responder_dropped_unanswered_panics() {
+fn an_unanswered_responder_wakes_the_client_and_permanently_quarantines_the_seat() {
     let slot = slot();
-    let _awaiting = slot.claim().unwrap().post(7);
-    let (_request, responder) = slot.take_request().unwrap();
+    let flag = Arc::new(Flag(AtomicBool::new(false)));
+    let waker = Waker::from(flag.clone());
+    let mut cx = Context::from_waker(&waker);
+    let mut awaiting = slot.claim().unwrap().post(7);
+    assert!(awaiting.poll_answer(&mut cx).is_pending());
+    let (request, responder) = slot.take_request().unwrap();
     drop(responder);
+    assert_eq!(request, 7);
+    assert!(flag.0.load(Ordering::SeqCst));
+    assert!(matches!(
+        awaiting.poll_answer(&mut cx),
+        Poll::Ready(Err(RequestError::Unanswered))
+    ));
+    assert!(awaiting.poll_answer(&mut cx).is_pending());
+    assert_eq!(slot.state.load(Ordering::Acquire), QUARANTINED);
+    assert!(slot.claim().is_none());
+    assert!(slot.take_request().is_none());
 }
 
 fn in_place<T>() -> &'static RequestSlot<T, (), InPlace> {
@@ -349,4 +365,19 @@ fn in_place_post_service_and_take_race_without_loss_or_duplication() {
         }
     }
     assert!(client.reunite(worker.join().unwrap()).is_ok());
+}
+
+#[test]
+fn dropping_a_quarantine_does_not_release_its_original_owners() {
+    struct Owner<'a>(&'a core::cell::Cell<usize>);
+    impl Drop for Owner<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    let drops = core::cell::Cell::new(0);
+    let quarantine = RequestQuarantine::new(RequestError::Unanswered, Owner(&drops));
+    assert_eq!(quarantine.reason, RequestError::Unanswered);
+    drop(quarantine);
+    assert_eq!(drops.get(), 0);
 }

@@ -13,6 +13,8 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
+use crate::{FrameLen, FrameLenError, FrameRangeError, PoolError};
+
 const SLOT_FREE: u8 = 0;
 const SLOT_NETWORK: u8 = 1;
 const SLOT_READY: u8 = 2;
@@ -29,6 +31,13 @@ pub enum ExternalRxReturnState {
     Attached,
     Detached,
     Returned,
+    Invalid { observed: u8 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExternalRxDetachError {
+    Length(FrameLenError),
+    State(ExternalRxReturnState),
 }
 
 impl ExternalRxReturn {
@@ -40,16 +49,12 @@ impl ExternalRxReturn {
         Self::decode(self.0.load(Ordering::Acquire))
     }
 
-    #[expect(
-        clippy::unreachable,
-        reason = "internal invariant: the atomic holds only values `encode` produced"
-    )]
     fn decode(state: u8) -> ExternalRxReturnState {
         match state {
             0 => ExternalRxReturnState::Attached,
             1 => ExternalRxReturnState::Detached,
             2 => ExternalRxReturnState::Returned,
-            _ => unreachable!("external RX return state is always valid"),
+            observed => ExternalRxReturnState::Invalid { observed },
         }
     }
 
@@ -71,11 +76,16 @@ impl ExternalRxReturn {
         pointer: NonNull<u8>,
         length: usize,
         capacity: usize,
-    ) -> Result<ExternalRxBuffer, ExternalRxReturnState> {
-        assert!(length <= capacity, "external RX length exceeds capacity");
+    ) -> Result<ExternalRxBuffer, ExternalRxDetachError> {
+        if length > capacity {
+            return Err(ExternalRxDetachError::Length(FrameLenError {
+                length,
+                capacity,
+            }));
+        }
         self.0
             .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
-            .map_err(Self::decode)?;
+            .map_err(|state| ExternalRxDetachError::State(Self::decode(state)))?;
         Ok(ExternalRxBuffer {
             pointer,
             length,
@@ -89,7 +99,9 @@ impl ExternalRxReturn {
     pub fn reattach(&self) -> Result<(), ExternalRxReturnState> {
         match self.state() {
             ExternalRxReturnState::Attached => Ok(()),
-            ExternalRxReturnState::Detached => Err(ExternalRxReturnState::Detached),
+            state @ (ExternalRxReturnState::Detached | ExternalRxReturnState::Invalid { .. }) => {
+                Err(state)
+            }
             ExternalRxReturnState::Returned => self
                 .0
                 .compare_exchange(2, 0, Ordering::AcqRel, Ordering::Acquire)
@@ -99,12 +111,9 @@ impl ExternalRxReturn {
     }
 
     fn return_once(&self) {
-        assert!(
-            self.0
-                .compare_exchange(1, 2, Ordering::Release, Ordering::Acquire)
-                == Ok(1),
-            "detached RX DMA buffer must be released exactly once"
-        );
+        // The sole affine detached buffer owns this edge. Reattach refuses
+        // DETACHED, and no second detach can succeed until this store.
+        self.0.store(2, Ordering::Release);
         #[cfg(test)]
         tests::observe_return();
     }
@@ -135,12 +144,6 @@ impl ExternalRxBuffer {
     }
 
     fn frame(&self, offset: usize, length: usize) -> &[u8] {
-        assert!(
-            offset
-                .checked_add(length)
-                .is_some_and(|end| end <= self.length),
-            "external RX view stays inside initialized bytes"
-        );
         // SAFETY: the affine value retains exclusive CPU ownership and the
         // checked range lies inside its stable allocation.
         #[allow(unsafe_code, reason = "affine external buffer owns this range")]
@@ -150,12 +153,6 @@ impl ExternalRxBuffer {
     }
 
     fn frame_mut(&mut self, offset: usize, length: usize) -> &mut [u8] {
-        assert!(
-            offset
-                .checked_add(length)
-                .is_some_and(|end| end <= self.length),
-            "external RX mutable view stays inside initialized bytes"
-        );
         // SAFETY: `&mut self` borrows the sole affine owner and the range was
         // checked against initialized bytes.
         #[allow(unsafe_code, reason = "affine external buffer owns this range")]
@@ -166,14 +163,10 @@ impl ExternalRxBuffer {
 
     /// Start of `offset` and the bytes from there to the allocation end.
     fn raw_from(&self, offset: usize) -> (NonNull<u8>, usize) {
-        assert!(
-            offset <= self.length,
-            "external RX adoption starts inside initialized bytes"
-        );
         // SAFETY: `offset` lies inside the stable allocation checked above.
         #[allow(unsafe_code, reason = "affine external buffer owns this range")]
         let pointer = unsafe { self.pointer.add(offset) };
-        (pointer, self.capacity - offset)
+        (pointer, self.capacity.wrapping_sub(offset))
     }
 
     fn release_once(&mut self) {
@@ -252,39 +245,33 @@ impl ExternalRxHandoffSlot {
         Ok(())
     }
 
-    fn publish(&self, owner: u8, offset: usize, length: usize) {
-        let initialized = self.initialized_length();
-        assert!(
-            offset
-                .checked_add(length)
-                .is_some_and(|end| end <= initialized),
-            "published external RX range stays initialized"
-        );
-        // SAFETY: the current affine owner is the only stage allowed to alter
-        // the published view before its Release transition.
+    fn publish(&self, offset: usize, length: usize) -> Result<(), FrameRangeError> {
+        FrameRangeError::check(offset, length, 0, self.initialized_length())?;
+        // SAFETY: the current affine owner alone mutates this view; the
+        // checked range remains inside the retained initialized allocation.
         #[allow(unsafe_code, reason = "slot owner exclusively mutates range metadata")]
         unsafe {
             *self.offset.get() = offset;
             *self.length.get() = length;
         }
-        assert!(
-            self.state
-                .compare_exchange(owner, SLOT_READY, Ordering::Release, Ordering::Acquire,)
-                == Ok(owner),
-            "only the current external RX owner may publish"
-        );
+        self.state.store(SLOT_READY, Ordering::Release);
+        Ok(())
     }
 
-    fn claim_network(&self) {
-        assert!(
-            self.state.compare_exchange(
+    fn claim_network(&self, index: u8) -> Result<(), PoolError> {
+        self.state
+            .compare_exchange(
                 SLOT_READY,
                 SLOT_NETWORK,
                 Ordering::Acquire,
                 Ordering::Relaxed,
-            ) == Ok(SLOT_READY),
-            "ready index did not name an external RX slot"
-        );
+            )
+            .map(|_| ())
+            .map_err(|observed| PoolError::State {
+                index,
+                expected: SLOT_READY,
+                observed,
+            })
     }
 
     fn initialized_length(&self) -> usize {
@@ -338,18 +325,12 @@ impl ExternalRxHandoffSlot {
         }
     }
 
-    fn release(&self, owner: u8) {
-        assert!(
-            self.state.compare_exchange(
-                owner,
-                SLOT_RELEASING,
-                Ordering::Acquire,
-                Ordering::Acquire,
-            ) == Ok(owner),
-            "only the current external RX owner may release"
-        );
-        // SAFETY: the successful exchange to SLOT_RELEASING grants this call
-        // exclusive access to the binding cells and excludes a new producer
+    fn release(&self) {
+        // The affine lease (or consuming adoption's unsafe contract) owns
+        // this exact slot until FREE is published after the buffer is dropped.
+        self.state.store(SLOT_RELEASING, Ordering::Relaxed);
+        // SAFETY: the affine lease or checked adoption return retains sole
+        // access to the binding cells. SLOT_RELEASING excludes a new producer
         // until the old binding has been removed. The affine buffer's Drop
         // then publishes its separate DMA-release state.
         #[allow(unsafe_code, reason = "free slot exclusively owns binding removal")]
@@ -395,17 +376,21 @@ impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize>
         &self,
         buffer: ExternalRxBuffer,
         start: usize,
-    ) -> Result<ExternalRxRadioLease<'_, FRAME_CAPACITY>, ExternalRxBuffer> {
-        assert!(
-            buffer.length() <= FRAME_CAPACITY,
-            "external RX frame exceeds the handoff profile"
-        );
+    ) -> Result<ExternalRxRadioLease<'_, FRAME_CAPACITY>, (ExternalRxBuffer, PoolError)> {
+        if let Err(error) = FrameLen::<FRAME_CAPACITY>::new(buffer.length()) {
+            return Err((buffer, PoolError::Length(error)));
+        }
         if SLOT_COUNT == 0 || SLOT_COUNT > usize::from(u8::MAX) + 1 {
-            return Err(buffer);
+            return Err((buffer, PoolError::Full));
         }
         let mut buffer = buffer;
         for distance in 0..SLOT_COUNT {
-            let index = (start + distance) % SLOT_COUNT;
+            let Some(index) = start
+                .checked_rem(SLOT_COUNT)
+                .and_then(|start| start.wrapping_add(distance).checked_rem(SLOT_COUNT))
+            else {
+                return Err((buffer, PoolError::Full));
+            };
             let Some(slot) = self.slots.get(index) else {
                 continue;
             };
@@ -420,27 +405,27 @@ impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize>
                 Err(returned) => buffer = returned,
             }
         }
-        Err(buffer)
+        Err((buffer, PoolError::Full))
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "documented panic of the claims: the index comes from this pool's own channels, so a foreign one is a driver defect"
-    )]
-    fn slot_of(&self, index: u8) -> &ExternalRxHandoffSlot {
-        self.slots
-            .get(usize::from(index))
-            .expect("external RX index belongs to its pool")
+    fn slot_of(&self, index: u8) -> Result<&ExternalRxHandoffSlot, PoolError> {
+        self.slots.get(usize::from(index)).ok_or(PoolError::Index {
+            index,
+            slots: SLOT_COUNT,
+        })
     }
 
-    pub fn claim_network(&self, index: u8) -> ExternalRxNetworkLease<'_, FRAME_CAPACITY> {
-        let slot = self.slot_of(index);
-        slot.claim_network();
-        ExternalRxNetworkLease {
+    pub fn claim_network(
+        &self,
+        index: u8,
+    ) -> Result<ExternalRxNetworkLease<'_, FRAME_CAPACITY>, PoolError> {
+        let slot = self.slot_of(index)?;
+        slot.claim_network(index)?;
+        Ok(ExternalRxNetworkLease {
             slot,
             index,
             live: true,
-        }
+        })
     }
 
     /// Return the storage of an adopted network slot to its DMA owner.
@@ -454,8 +439,23 @@ impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize>
         unsafe_code,
         reason = "an adopter returns the slot it took out of its affine lease"
     )]
-    pub unsafe fn release_adopted(&self, index: u8) {
-        self.slot_of(index).release(SLOT_NETWORK);
+    pub unsafe fn release_adopted(&self, index: u8) -> Result<(), PoolError> {
+        let slot = self.slot_of(index)?;
+        // Acquiring NETWORK proves that this is still the adopted seat.
+        slot.state
+            .compare_exchange(
+                SLOT_NETWORK,
+                SLOT_RELEASING,
+                Ordering::Acquire,
+                Ordering::Acquire,
+            )
+            .map_err(|observed| PoolError::State {
+                index,
+                expected: SLOT_NETWORK,
+                observed,
+            })?;
+        slot.release();
+        Ok(())
     }
 
     pub fn claimed_slots(&self) -> usize {
@@ -505,17 +505,23 @@ impl<'pool, const FRAME_CAPACITY: usize> ExternalRxRadioLease<'pool, FRAME_CAPAC
     /// The radio/protocol owner remains affine until this transition. Unlike
     /// an eager `RADIO -> READY -> NETWORK` handoff, this does not fabricate a
     /// network owner while Core0 is still decoding and transforming the MPDU.
-    pub fn republish(mut self, offset: usize, length: usize) -> u8 {
-        self.slot.publish(SLOT_RADIO, offset, length);
+    pub fn republish(
+        mut self,
+        offset: usize,
+        length: FrameLen<FRAME_CAPACITY>,
+    ) -> Result<u8, (Self, FrameRangeError)> {
+        if let Err(error) = self.slot.publish(offset, length.get()) {
+            return Err((self, error));
+        }
         self.live = false;
-        self.index
+        Ok(self.index)
     }
 }
 
 impl<const FRAME_CAPACITY: usize> Drop for ExternalRxRadioLease<'_, FRAME_CAPACITY> {
     fn drop(&mut self) {
         if self.live {
-            self.slot.release(SLOT_RADIO);
+            self.slot.release();
         }
     }
 }
@@ -539,14 +545,20 @@ impl<const FRAME_CAPACITY: usize> ExternalRxNetworkLease<'_, FRAME_CAPACITY> {
         self.slot.with_frame(f)
     }
 
-    pub fn republish(mut self, offset: usize, length: usize) -> u8 {
-        self.slot.publish(SLOT_NETWORK, offset, length);
+    pub fn republish(
+        mut self,
+        offset: usize,
+        length: FrameLen<FRAME_CAPACITY>,
+    ) -> Result<u8, (Self, FrameRangeError)> {
+        if let Err(error) = self.slot.publish(offset, length.get()) {
+            return Err((self, error));
+        }
         self.live = false;
-        self.index
+        Ok(self.index)
     }
 
     pub fn release(mut self) -> u8 {
-        self.slot.release(SLOT_NETWORK);
+        self.slot.release();
         self.live = false;
         self.index
     }
@@ -590,7 +602,7 @@ pub struct ExternalRxAdoption {
 impl<const FRAME_CAPACITY: usize> Drop for ExternalRxNetworkLease<'_, FRAME_CAPACITY> {
     fn drop(&mut self) {
         if self.live {
-            self.slot.release(SLOT_NETWORK);
+            self.slot.release();
         }
     }
 }

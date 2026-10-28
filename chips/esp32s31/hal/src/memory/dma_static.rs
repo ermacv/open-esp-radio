@@ -198,7 +198,10 @@ impl<
     pub fn claim_network(
         &self,
         index: u8,
-    ) -> PinnedDmaTxNetworkLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER> {
+    ) -> Result<
+        PinnedDmaTxNetworkLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>,
+        oer_memory::PoolError,
+    > {
         self.handle.claim_network(index)
     }
 
@@ -212,14 +215,16 @@ impl<
         index: u8,
     ) -> Result<
         PlacedTxLease<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>>,
-        crate::memory::dma_address::ProjectionError,
+        TxClaimError,
     > {
         let region = *self
             .regions
             .get(usize::from(index))
-            .ok_or(crate::memory::dma_address::ProjectionError::OutsideAllocation)?;
+            .ok_or(TxClaimError::Projection(
+                crate::memory::dma_address::ProjectionError::OutsideAllocation,
+            ))?;
         Ok(PlacedTxLease {
-            lease: self.handle.claim_radio(index),
+            lease: self.handle.claim_radio(index).map_err(TxClaimError::Pool)?,
             region: Ok(region),
         })
     }
@@ -228,6 +233,13 @@ impl<
     pub fn claimed_slots(&self) -> usize {
         self.handle.claimed_slots()
     }
+}
+
+/// A refused pool claim, retaining the geometry or ownership observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxClaimError {
+    Projection(crate::memory::dma_address::ProjectionError),
+    Pool(oer_memory::PoolError),
 }
 
 /// A buffer lease of a pool placed in the DMA window: only
@@ -290,8 +302,8 @@ unsafe impl<L: StableDmaBacking> StableDmaBacking for PlacedTxLease<L> {
 }
 
 impl<L: IndexedStableDmaLease> IndexedStableDmaLease for PlacedTxLease<L> {
-    fn release_index(self) -> u8 {
-        self.lease.release_index()
+    fn index(&self) -> u8 {
+        self.lease.index()
     }
 }
 
@@ -438,9 +450,20 @@ mod lease_region_tests {
         let pool = PlacedTxPool::pin(Placed::host(storage))
             .unwrap_or_else(|_| panic!("placed pool geometry"));
         assert!(pool.claim_radio(2).is_err());
+        assert!(pool.claim_network(2).is_err());
+        assert!(matches!(
+            pool.claim_radio(0),
+            Err(TxClaimError::Pool(oer_memory::PoolError::State {
+                observed: 0,
+                ..
+            }))
+        ));
+        assert_eq!(pool.claimed_slots(), 0);
         let mut previous = None;
         for index in 0..2 {
-            pool.claim_network(index).publish(0, |_| {});
+            pool.claim_network(index)
+                .unwrap()
+                .publish(oer_memory::FrameLen::constant::<0>(), |_| {});
             let mut lease = pool.claim_radio(index).unwrap();
             let region = lease.dma_region().unwrap();
             assert_eq!(region.len() as usize, lease.stable_dma_region().len());

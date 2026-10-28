@@ -301,11 +301,12 @@ fn frame<const CAPACITY: usize, const DEPTH: usize>(
     length: usize,
     encode: impl FnOnce(&mut [u8]),
 ) -> PlacedTxLease<PinnedDmaTxRadioLease<'static, CAPACITY, 0, 0>> {
-    let (index, ()) = pool
-        .claim_network(slot)
-        .publish(TX_AMPDU_METADATA_SIZE + length, |bytes| {
+    let (index, ()) = pool.claim_network(slot).unwrap().publish(
+        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + length).expect("test frame length"),
+        |bytes| {
             encode(&mut bytes[TX_AMPDU_METADATA_SIZE..]);
-        });
+        },
+    );
     pool.claim_radio(index).expect("ready placed slot")
 }
 
@@ -318,7 +319,11 @@ fn released_slot<const CAPACITY: usize, const DEPTH: usize>(
 ) -> std::vec::Vec<u8> {
     let (lease, bytes) = pool
         .claim_network(slot)
-        .try_publish(length, |bytes| Err::<(), _>(bytes.to_vec()))
+        .unwrap()
+        .try_publish(
+            oer_memory::FrameLen::new(length).expect("test frame length"),
+            |bytes| Err::<(), _>(bytes.to_vec()),
+        )
         .err()
         .unwrap();
     lease.release();
@@ -371,10 +376,13 @@ fn retained_dma_owner_cancels_reserved_storage_before_releasing_backing() {
     let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(std::boxed::Box::new(
         PinnedDmaTxPool::new(),
     )));
-    let network = pool.claim_network(0);
-    let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |bytes| {
-        bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
-    });
+    let network = pool.claim_network(0).unwrap();
+    let (index, ()) = network.publish(
+        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        |bytes| {
+            bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
+        },
+    );
     let backing = pool.claim_radio(index).expect("ready placed slot");
     let mut retention = RetainedAmpduDmaStorage::new();
 
@@ -402,7 +410,7 @@ fn retained_dma_owner_cancels_reserved_storage_before_releasing_backing() {
     }
 
     assert_eq!(storage.state(), TxDmaState::Free);
-    assert_eq!(pool.claim_network(0).release(), 0);
+    assert_eq!(pool.claim_network(0).unwrap().release(), 0);
 }
 
 #[test]
@@ -412,8 +420,11 @@ fn rejected_referenced_commit_rolls_back_the_lower_lease() {
     let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(std::boxed::Box::new(
         PinnedDmaTxPool::new(),
     )));
-    let network = pool.claim_network(0);
-    let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |_| {});
+    let network = pool.claim_network(0).unwrap();
+    let (index, ()) = network.publish(
+        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        |_| {},
+    );
     let backing = pool.claim_radio(index).expect("ready placed slot");
 
     {
@@ -442,7 +453,7 @@ fn rejected_referenced_commit_rolls_back_the_lower_lease() {
         owner.cancel(cookie).unwrap();
     }
 
-    assert_eq!(pool.claim_network(0).release(), 0);
+    assert_eq!(pool.claim_network(0).unwrap().release(), 0);
 }
 
 #[test]
@@ -452,10 +463,13 @@ fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
     let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(std::boxed::Box::new(
         PinnedDmaTxPool::new(),
     )));
-    let network = pool.claim_network(0);
-    let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |bytes| {
-        bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
-    });
+    let network = pool.claim_network(0).unwrap();
+    let (index, ()) = network.publish(
+        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        |bytes| {
+            bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
+        },
+    );
     let backing = pool.claim_radio(index).expect("ready placed slot");
 
     {
@@ -497,9 +511,10 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
         let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(
             std::boxed::Box::new(PinnedDmaTxPool::new()),
         ));
-        let (index, ()) = pool
-            .claim_network(0)
-            .publish(TX_AMPDU_METADATA_SIZE + 32, |_| {});
+        let (index, ()) = pool.claim_network(0).unwrap().publish(
+            oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+            |_| {},
+        );
         let mut retention = RetainedAmpduDmaStorage::new();
         let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
         let cookie = owner.begin().unwrap();
@@ -569,11 +584,14 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
     let cookie = owner.begin().unwrap();
 
     for slot in 0..4 {
-        let network = pool.claim_network(slot);
-        let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |bytes| {
-            bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(slot);
-            bytes[TX_AMPDU_METADATA_SIZE + 1] = 0x41;
-        });
+        let network = pool.claim_network(slot).unwrap();
+        let (index, ()) = network.publish(
+            oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+            |bytes| {
+                bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(slot);
+                bytes[TX_AMPDU_METADATA_SIZE + 1] = 0x41;
+            },
+        );
         owner
             .commit_ht(
                 cookie,

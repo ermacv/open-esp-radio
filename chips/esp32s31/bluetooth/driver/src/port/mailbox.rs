@@ -98,8 +98,18 @@ impl ClockState {
     }
     fn take_answer(&mut self, cx: &mut Context<'_>) -> Poll<ClockAnswer> {
         let pending = self.pending.as_mut().expect("one retained clock call");
-        let (poster, answer) = core::task::ready!(pending.awaiting.poll_answer(cx));
         let request = pending.request;
+        let (poster, answer) = match core::task::ready!(pending.awaiting.poll_answer(cx)) {
+            Ok(answer) => answer,
+            Err(oer_memory::RequestError::Unanswered) => {
+                self.pending = None;
+                let fault = self.fail(Fault::Accounting);
+                return Poll::Ready(ClockAnswer {
+                    request,
+                    result: Err(fault),
+                });
+            }
+        };
         self.poster = Some(poster);
         self.pending = None;
         if answer.request != request {
@@ -369,6 +379,13 @@ impl<T> MailboxDevice<T> {
             pending.awaiting.poll_answer(cx)
         })
         .await;
+        let answer = match answer {
+            Ok(answer) => answer,
+            Err(oer_memory::RequestError::Unanswered) => {
+                self.pending = None;
+                return Err(self.fail(Fault::Accounting));
+            }
+        };
         self.poster = Some(answer.0);
         self.pending = None;
         if answer.1.epoch != self.epoch {

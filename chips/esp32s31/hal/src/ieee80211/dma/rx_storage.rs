@@ -848,6 +848,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 .state()
             {
                 ExternalRxReturnState::Attached => {}
+                ExternalRxReturnState::Invalid { .. } => {
+                    return Err(RxRingError::OutstandingLeases);
+                }
                 ExternalRxReturnState::Detached | ExternalRxReturnState::Returned => {
                     return Ok(None);
                 }

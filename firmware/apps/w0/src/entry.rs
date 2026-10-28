@@ -309,7 +309,10 @@ async fn run(
         },
         config,
     )
-    .await;
+    .await.unwrap_or_else(|_| {
+        oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+    });
     let mut stopped = match started {
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {
@@ -420,7 +423,10 @@ async fn run(
         ),
     )
     .await;
-    let (_cell, released) = stopped.release(cell).await;
+    let (_cell, released) = stopped.release(cell).await.unwrap_or_else(|_| {
+        oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+    });
     match released {
         Ok(released) => {
             let cold = matches!(

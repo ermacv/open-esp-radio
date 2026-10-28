@@ -292,7 +292,10 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
     loop {
         let (id, request) = REQUESTS.receive().await;
         let mut pending = poster.post(request);
-        let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx)).await;
+        let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(|_| {
+            oer_espressif_staged_runtime::panic::reset_fault(
+                oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+        });
         poster = returned;
         match answer {
             Answer::Prepared(value) => {

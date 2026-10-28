@@ -702,7 +702,10 @@ async fn run(
         },
         start,
     )
-    .await;
+    .await.unwrap_or_else(|_| {
+        oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
+    });
     let stopped = match started {
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {
