@@ -3066,6 +3066,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-ieee80211-instrumentation"
+version = "0.1.0"
+dependencies = [
+ "oer-trace",
+]
+
+[[package]]
 name = "oer-ieee80211-model"
 version = "0.1.0"
 dependencies = [
