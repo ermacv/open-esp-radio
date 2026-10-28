@@ -1,5 +1,5 @@
 //! The pinned vendor artifacts of the installed chip's `artifacts.toml`,
-//! read through `oer-vendor-artifacts`, the one reader of the pins.
+//! read through `oer-pins-artifacts`, the one reader of the pins.
 //!
 //! Every scenario input of a pinned artifact is authenticated against one
 //! digest: the pinned SHA-256 of a fetched artifact, which has one cache
@@ -7,7 +7,7 @@
 //! output at its pinned location once its build follows the current recipe
 //! of its catalog image. The manifest is the only place a pin changes.
 use crate::harness::{Result, invalid};
-use oer_tool_pins::{Artifact, Manifest};
+use oer_pins_artifacts::{Artifact, Manifest};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

@@ -1,16 +1,22 @@
-//! Versioned Linux fixture provisioning shared by the runner and root apply owner.
+//! The Linux fixture contract of the HIL stand: provisioning of the fixture
+//! software and the requests and reports of its finite helpers.
 //!
-//! The privileged `open-radio-fixture-install` binary and the fixed launchers
-//! (`tools/lab/fixture-install`) link only this package, so its dependency
-//! closure is the root-executed surface. The runner uses the same library for planning and preparation.
+//! The privileged `open-radio-fixture-install` program and the fixed
+//! launchers (`tools/lab/fixture-install`) install and admit the software; the
+//! unprivileged runner plans and prepares through the same library, and
+//! parses the requests and reports of `open-radio-bluetooth` and
+//! `open-radio-probe` (`tools/hil/fixture`) with the same types. The programs
+//! are packages without a library.
 #![forbid(unsafe_code)]
 
 mod admission;
-pub mod bluetooth_contract;
+pub mod bluetooth;
 pub mod launcher;
 mod model;
 pub mod network_client;
 mod prepare;
+#[cfg(target_os = "linux")]
+pub mod probe;
 mod transaction;
 
 pub use admission::{OperationalLease, admit_system};

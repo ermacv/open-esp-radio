@@ -2,7 +2,7 @@
 //! a test process of its own, apart from the engine's tests with their test
 //! chip.
 
-use oer_tool_pins::SourceKind;
+use oer_pins_artifacts::SourceKind;
 use oer_vendor_scenario::esp32s31::{
     artifacts::{manifest, sha256},
     install,

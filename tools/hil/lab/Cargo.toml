@@ -21,10 +21,9 @@ oer-hil-model = { path = "../model" }
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-chip-profile = { path = "../../chip/profile" }
 oer-lab-arbiter = { path = "../../lab/arbiter" }
-oer-tool-hil-fixture = { path = "../fixture" }
 oer-lab-model = { path = "../../lab/model" }
 oer-os-durable = { path = "../../os/durable" }
-oer-tool-lab-fixture-install = { path = "../../lab/fixture-install" }
+oer-lab-fixture = { path = "../../lab/fixture" }
 oer-hil-link = { path = "../link" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
 oer-os-process = { path = "../../os/process" }

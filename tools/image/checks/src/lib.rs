@@ -198,7 +198,7 @@ fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_espressif_facts::R
     let Some(rom) = &profile.facts.rom else {
         return Ok(Vec::new());
     };
-    let bytes = std::fs::read(oer_tool_pins::artifacts::ensure(
+    let bytes = std::fs::read(oer_pins_artifacts::artifacts::ensure(
         root,
         &profile.facts.id,
         &rom.elf,

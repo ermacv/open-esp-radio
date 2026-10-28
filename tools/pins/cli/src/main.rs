@@ -1,7 +1,7 @@
 //! `cargo pins`: fetch and verify a chip's pinned vendor artifacts
 //! (`chips/<chip>/vendor/artifacts.toml`) into the host-wide store that
-//! every checkout's `target/vendor` links to. This binary parses the command
-//! line and calls `oer-vendor-artifacts`.
+//! every checkout's `target/vendor` links to. This program parses the command
+//! line and calls `oer-pins-artifacts`.
 
 #![forbid(unsafe_code)]
 
@@ -11,7 +11,7 @@ use std::{
 };
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-use oer_tool_pins::artifacts;
+use oer_pins_artifacts::artifacts;
 
 #[derive(Parser)]
 #[command(about = "Fetch and verify pinned vendor artifacts")]
@@ -43,7 +43,7 @@ enum Command {
 /// The repository this tool runs in.
 fn root() -> artifacts::Result<PathBuf> {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    Ok(std::fs::canonicalize(manifest.join("../.."))?)
+    Ok(std::fs::canonicalize(manifest.join("../../.."))?)
 }
 
 fn main() -> ExitCode {

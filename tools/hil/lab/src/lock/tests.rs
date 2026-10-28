@@ -46,8 +46,7 @@ fn a_run_shares_its_fixture_software_with_other_runs_but_not_an_installation() {
             ..LeaseRequest::device(required)
         },
     );
-    let software =
-        oer_tool_lab_fixture_install::resource(oer_tool_lab_fixture_install::Provider::LinuxNet);
+    let software = oer_lab_fixture::resource(oer_lab_fixture::Provider::LinuxNet);
     assert!(claims.contains(&Claim::shared(&software)), "{claims:?}");
     assert!(!claims.contains(&Claim::exclusive(&software)));
 }

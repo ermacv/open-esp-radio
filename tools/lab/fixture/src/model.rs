@@ -20,7 +20,7 @@ impl Provider {
     pub(crate) fn runtime_contract(self) -> &'static str {
         match self {
             Self::LinuxNet => crate::network_client::CONTRACT,
-            Self::LinuxBluetooth => crate::bluetooth_contract::HELPER_CAPABILITIES,
+            Self::LinuxBluetooth => crate::bluetooth::model::HELPER_CAPABILITIES,
         }
     }
 

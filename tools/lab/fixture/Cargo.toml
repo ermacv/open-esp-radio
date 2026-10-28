@@ -1,0 +1,29 @@
+[package]
+name = "oer-lab-fixture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The Linux fixture contract of the HIL stand: versioned provisioning and the requests and reports of the finite helpers"
+
+[dependencies]
+oer-os-durable = { path = "../../os/durable" }
+clap = { version = "4.5", features = ["derive"] }
+libc = "0.2"
+rustix = { version = "1.1.4", features = ["fs", "process", "event", "time"] }
+oer-os-process = { path = "../../os/process" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tempfile = "3"
+
+[dev-dependencies]
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
+
+[lints]
+workspace = true

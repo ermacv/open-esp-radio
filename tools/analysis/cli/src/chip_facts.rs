@@ -83,7 +83,7 @@ mod tests {
             check(directory.path(), chip).unwrap();
             // This is the same profile parser used by --input ROLE=pin:CHIP/ID,
             // including core-start, table-class and every other current key.
-            oer_tool_pins::Manifest::load(directory.path(), chip).unwrap();
+            oer_pins_artifacts::Manifest::load(directory.path(), chip).unwrap();
         }
     }
 

@@ -1,7 +1,7 @@
 //! The pins of a chip's vendor artifacts: the one reader of its tracked
 //! `chips/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
 //! each fetched one) and where a pinned artifact lies in a checkout.
-//! Fetching and the host-wide store are `oer-vendor-artifacts`.
+//! Fetching and the host-wide store are `oer-pins-artifacts`.
 
 #![forbid(unsafe_code)]
 pub mod artifacts;

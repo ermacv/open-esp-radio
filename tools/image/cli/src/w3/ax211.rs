@@ -12,6 +12,10 @@ use std::{
 };
 
 use oer_lab_arbiter::{Arbiter, Request, claims::Claim, resource_lock::ResourceLock};
+use oer_lab_fixture::{
+    ArtifactRole, Provider, admit_system,
+    network_client::{self, Lease},
+};
 use oer_lab_router::{
     credentials,
     mac::Mac,
@@ -23,10 +27,6 @@ use oer_lab_router::{
     },
 };
 use oer_os_process::{self as process, owned::Child};
-use oer_tool_lab_fixture_install::{
-    ArtifactRole, Provider, admit_system,
-    network_client::{self, Lease},
-};
 use serde::{Deserialize, Serialize};
 
 type Result<T> = oer_image_build::Result<T>;
@@ -267,7 +267,7 @@ pub fn run(root: &Path) -> Result<ExitCode> {
         Claim::exclusive("air"),
         Claim::exclusive(&router_key),
         Claim::exclusive(&radio_key),
-        Claim::shared(oer_tool_lab_fixture_install::resource(Provider::LinuxNet)),
+        Claim::shared(oer_lab_fixture::resource(Provider::LinuxNet)),
     ];
     eprintln!("fw: AX211 queueing for router, radio and exclusive air");
     let mut grant = Arbiter::open()?.acquire(&request)?;

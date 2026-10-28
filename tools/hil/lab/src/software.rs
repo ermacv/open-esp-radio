@@ -7,7 +7,7 @@
 //! runs queue behind it. Runs take the software lease only
 //! once the stand granted their claims, never while they wait.
 
-use oer_tool_lab_fixture_install::{OperationalLease, Provider};
+use oer_lab_fixture::{OperationalLease, Provider};
 
 use crate::Result;
 
@@ -35,7 +35,7 @@ impl SoftwareLease {
             providers.dedup();
             let mut leases = Vec::new();
             for provider in providers {
-                leases.push(oer_tool_lab_fixture_install::admit_system(provider)?);
+                leases.push(oer_lab_fixture::admit_system(provider)?);
             }
             Ok(Self { _leases: leases })
         }

@@ -22,7 +22,7 @@ oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process", features = ["clap"] }
 oer-lab-arbiter = { path = "../arbiter" }
 oer-lab-model = { path = "../model" }
-oer-tool-lab-fixture-install = { path = "../fixture-install" }
+oer-lab-fixture = { path = "../fixture" }
 oer-lab-router = { path = "../router" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 rustix = { version = "=1.1.4", features = ["process"] }

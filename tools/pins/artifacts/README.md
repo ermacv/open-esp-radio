@@ -1,4 +1,4 @@
-# oer-tool-pins
+# oer-pins-artifacts
 
 The pinned vendor artifacts of a chip. `chips/<chip>/vendor/artifacts.toml`
 is the only pin: git sources at a revision and release assets, each

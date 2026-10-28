@@ -4,9 +4,7 @@
 
 use std::path::Path;
 
-use oer_tool_lab_fixture_install::{
-    INSTALLER_BINARY, Provider, build_plan, inspect_system, prepare,
-};
+use oer_lab_fixture::{INSTALLER_BINARY, Provider, build_plan, inspect_system, prepare};
 
 use crate::Result;
 
@@ -81,7 +79,7 @@ pub(crate) fn run(
         // worse than a late one.
         eprintln!(
             "stand: queueing for {}",
-            oer_tool_lab_fixture_install::resource(provider)
+            oer_lab_fixture::resource(provider)
         );
         let grant = install_grant(provider)?;
         // sudo runs in this foreground process group with the terminal's
@@ -117,7 +115,7 @@ fn install_grant(provider: Provider) -> Result<oer_lab_arbiter::Grant> {
         provider.as_str()
     ))?;
     request.claims = vec![oer_lab_arbiter::claims::Claim::exclusive(
-        oer_tool_lab_fixture_install::resource(provider),
+        oer_lab_fixture::resource(provider),
     )];
     let reason = format!(
         "fixture maintenance: {} install by {}",

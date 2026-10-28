@@ -5,7 +5,7 @@ stand: ESP-IDF applications run on it as reference peers for the ESP32-S31.
 
 | Path | Holds | Read by |
 | --- | --- | --- |
-| `vendor/artifacts.toml` | the pin of the ESP-IDF revision and vendor archives the peers build against | `oer-tool-pins` |
+| `vendor/artifacts.toml` | the pin of the ESP-IDF revision and vendor archives the peers build against | `oer-pins-artifacts` |
 | `platform/flash.toml` | the flash map of the peer board: bootloader, partition table, application and OTA data offsets, image header encoding, how a written image starts | `oer-image-build` (the bundle of a catalog image) |
 | `platform/partitions/applications.csv` | the peers' partition table | `platform/flash.toml` |
 

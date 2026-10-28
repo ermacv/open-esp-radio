@@ -12,7 +12,7 @@ description = "ESP-IDF projects built against a chip's pinned ESP-IDF in the hos
 hex = "=0.4.3"
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
-oer-tool-pins = { path = "../../pins" }
+oer-pins-artifacts = { path = "../../pins/artifacts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"

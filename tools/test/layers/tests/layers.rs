@@ -1816,83 +1816,11 @@ fn portable_reaches_a_protocol_or_a_chip(from: &Member, to: &Member) -> bool {
 
 /// Nothing depends on an image or on a program of `tools/` (a package with a
 /// binary target) through a normal dependency.
-const NO_EDGE_ON_AN_IMAGE_OR_PROGRAM: &[Deviation] = &[
-    (
-        "firmware/hil/esp32s31",
-        "firmware/apps/w3",
-        "the IEEE 802.11 facade (#844)",
-    ),
-    (
-        "tools/hil/fixture",
-        "tools/lab/fixture-install",
-        "the fixture program/library split (#848)",
-    ),
-    (
-        "tools/hil/fixtures-bluetooth",
-        "tools/hil/fixture",
-        "the fixture program/library split (#848)",
-    ),
-    (
-        "tools/hil/lab",
-        "tools/hil/fixture",
-        "the fixture program/library split (#848)",
-    ),
-    (
-        "tools/hil/lab",
-        "tools/lab/fixture-install",
-        "the fixture program/library split (#848)",
-    ),
-    (
-        "tools/hil/net-traffic",
-        "tools/hil/fixture",
-        "the fixture program/library split (#848)",
-    ),
-    (
-        "tools/image/cli",
-        "tools/lab/fixture-install",
-        "the fixture program/library split (#848)",
-    ),
-    (
-        "tools/lab/cli",
-        "tools/lab/fixture-install",
-        "the fixture program/library split (#848)",
-    ),
-    (
-        "tools/analysis/cli",
-        "tools/pins",
-        "the pins program/library split (#848)",
-    ),
-    (
-        "tools/image/checks",
-        "tools/pins",
-        "the pins program/library split (#848)",
-    ),
-    (
-        "tools/image/esp-idf",
-        "tools/pins",
-        "the pins program/library split (#848)",
-    ),
-    (
-        "tools/registers/generate",
-        "tools/pins",
-        "the pins program/library split (#848)",
-    ),
-    (
-        "tools/vendor/cli",
-        "tools/pins",
-        "the pins program/library split (#848)",
-    ),
-    (
-        "tools/vendor/provenance",
-        "tools/pins",
-        "the pins program/library split (#848)",
-    ),
-    (
-        "tools/vendor/scenario",
-        "tools/pins",
-        "the pins program/library split (#848)",
-    ),
-];
+const NO_EDGE_ON_AN_IMAGE_OR_PROGRAM: &[Deviation] = &[(
+    "firmware/hil/esp32s31",
+    "firmware/apps/w3",
+    "the IEEE 802.11 facade (#844)",
+)];
 
 /// `chips/espressif` depends on no chip: it is the family below them.
 const FAMILY_BELOW_THE_CHIPS: &[Deviation] = &[

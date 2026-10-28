@@ -49,7 +49,7 @@ inventory, keeping repeated ROM comparisons separate. Defaults are 8192 MiB,
 Typed counts come directly from each `mmio_diff` result; operation exhaustion
 fails without writing a report for that run.
 
-Pins come from `oer-tool-pins`, the reader of `artifacts.toml`.
+Pins come from `oer-pins-artifacts`, the reader of `artifacts.toml`.
 
 ## Declare an entry
 

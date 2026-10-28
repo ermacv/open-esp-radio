@@ -13,7 +13,7 @@ oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process", features = ["linux-socket"] }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
 oer-hil-runs = { path = "../runs" }
-oer-tool-hil-fixture = { path = "../fixture" }
+oer-lab-fixture = { path = "../../lab/fixture" }
 oer-hil-lab = { path = "../lab" }
 async-channel = "2.5"
 async-io = "2.6"

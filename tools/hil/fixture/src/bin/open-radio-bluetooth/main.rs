@@ -7,7 +7,7 @@ mod connection_reset;
 mod dtm;
 #[cfg(target_os = "linux")]
 mod hci;
-use oer_tool_hil_fixture::bluetooth::model;
+use oer_lab_fixture::bluetooth::model;
 #[cfg(target_os = "linux")]
 mod owner;
 #[cfg(target_os = "linux")]
@@ -102,8 +102,8 @@ fn main() {
         return;
     }
     #[cfg(target_os = "linux")]
-    let _software = match oer_tool_lab_fixture_install::launcher::enter(
-        oer_tool_lab_fixture_install::launcher::LaunchTarget::Bluetooth,
+    let _software = match oer_lab_fixture::launcher::enter(
+        oer_lab_fixture::launcher::LaunchTarget::Bluetooth,
     ) {
         Ok(lease) => lease,
         Err(error) => {

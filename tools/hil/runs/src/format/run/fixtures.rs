@@ -20,7 +20,7 @@
 //! - [`Reception`] (`<label>-reception.json`): one host UDP reception of a
 //!   target's transmission;
 //! - [`Helper`] (`helper.json`): a privileged fixture helper's report, of
-//!   the helper's own runner contract (`oer_tool_hil_fixture`).
+//!   the helper's own runner contract (`oer_lab_fixture`).
 
 use std::{net::Ipv4Addr, path::Path};
 

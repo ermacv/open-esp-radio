@@ -33,11 +33,14 @@ Separate Cargo packages bound the privilege and radio-family scopes:
 | `../../stand/arbiter/` (`oer-lab-arbiter`) | none | Claims, the queue and its job tickets, balances, preemption, maintenance; a board whose device lock a foreign process holds is busy |
 | `flash/` (`oer-hil-run`) | none | The flash operation of HIL: lease, write, journal, start; and the ESP-IDF catalog flash |
 | `../../stand/discover/`, `../../stand/doctor/`, `../../stand/ssh/` | none | The stand's host: discovery of its boards, the host doctor, fixture reachability and the one SSH helper to its OpenWrt hosts |
-| `fixture/` (`oer-tool-hil-fixture`) | `open-radio-probe` | Finite Linux helper; the library is its versioned request/report contract with the runner |
-| `../../stand/fixture-install/` (`oer-tool-lab-fixture-install`) | `open-radio-fixture-install` and the two fixed launchers | Root-executed installation and admission; the runner uses the same library to plan and prepare |
+| `fixture/` (`oer-tool-hil-fixture`) | `open-radio-bluetooth`, `open-radio-probe` | Finite Linux helpers, programs without a library; their request/report contract with the runner is `oer-lab-fixture` |
+| `../../lab/fixture-install/` (`oer-tool-lab-fixture-install`) | `open-radio-fixture-install` and the fixed launchers | Root-executed installation and admission, a program without a library; the runner plans and prepares through `oer-lab-fixture` |
+| `../../lab/fixture/` (`oer-lab-fixture`) | none | The Linux fixture contract: provisioning, admission, and the requests and reports of the helpers |
 
-The installer package depends on no radio or HIL execution crate, so
-its dependency graph is the whole root-executed installation surface.
+The installer program and `oer-lab-fixture` depend on no radio or HIL
+execution crate (`oer-hil-protocol` is the one protocol crate in the
+library's graph), so their dependency graph is the whole root-executed
+installation surface.
 
 The three packages deny `unsafe_code` at their crate roots, and the helper and
 installer binaries forbid it. System calls go through `rustix`. The host's

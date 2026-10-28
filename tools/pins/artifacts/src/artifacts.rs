@@ -560,27 +560,27 @@ pub(crate) fn repository() -> tempfile::TempDir {
     for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
         (
             "chips/esp32c5/vendor/artifacts.toml",
-            include_str!("../../../chips/esp32c5/vendor/artifacts.toml"),
+            include_str!("../../../../chips/esp32c5/vendor/artifacts.toml"),
         ),
         (
             "chips/esp32s31/vendor/artifacts.toml",
-            include_str!("../../../chips/esp32s31/vendor/artifacts.toml"),
+            include_str!("../../../../chips/esp32s31/vendor/artifacts.toml"),
         ),
         (
             "chips/esp32s31/vendor/facts/provenance.toml",
-            include_str!("../../../chips/esp32s31/vendor/facts/provenance.toml"),
+            include_str!("../../../../chips/esp32s31/vendor/facts/provenance.toml"),
         ),
         (
             "chips/esp32s31/platform/partitions/applications.csv",
-            include_str!("../../../chips/esp32s31/platform/partitions/applications.csv"),
+            include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
         ),
         (
             "tools/analysis/cli/tests/riscv_conformance/inputs.toml",
-            include_str!("../../analysis/cli/tests/riscv_conformance/inputs.toml"),
+            include_str!("../../../analysis/cli/tests/riscv_conformance/inputs.toml"),
         ),
         (
             "tools/vendor/scenario-cli/Cargo.toml",
-            include_str!("../../vendor/scenario-cli/Cargo.toml"),
+            include_str!("../../../vendor/scenario-cli/Cargo.toml"),
         ),
     ]) {
         let path = root.join(path);

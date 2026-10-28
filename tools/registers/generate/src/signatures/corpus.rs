@@ -63,7 +63,7 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
     let mut inputs = Vec::new();
     let mut names = BTreeSet::new();
     let mut defined = BTreeSet::new();
-    for pin in oer_tool_pins::artifacts::pinned(&ctx.root, chip)? {
+    for pin in oer_pins_artifacts::artifacts::pinned(&ctx.root, chip)? {
         if pin.firmware {
             continue;
         }

@@ -127,12 +127,12 @@ enum Check {
 
 /// The chips with pinned vendor artifacts.
 fn verified_chips(ctx: &Checkout) -> Result<Vec<String>> {
-    Ok(oer_tool_pins::artifacts::project::projects(&ctx.root)?)
+    Ok(oer_pins_artifacts::artifacts::project::projects(&ctx.root)?)
 }
 
 fn provenance(ctx: &Checkout, chip: &str) -> Result<()> {
-    if !oer_tool_pins::artifacts::unfetched(&ctx.root, chip)?.is_empty() {
-        oer_tool_pins::artifacts::fetch_vendor_sources(&ctx.root, chip)?;
+    if !oer_pins_artifacts::artifacts::unfetched(&ctx.root, chip)?.is_empty() {
+        oer_pins_artifacts::artifacts::fetch_vendor_sources(&ctx.root, chip)?;
     }
     oer_vendor_provenance::registry::check(&ctx.root, chip)
 }

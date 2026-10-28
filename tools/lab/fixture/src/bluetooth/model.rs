@@ -5,9 +5,13 @@ pub mod security_failure;
 use oer_hil_protocol::bluetooth::BluetoothPeripheralTermination;
 use serde::{Deserialize, Serialize};
 
-pub use oer_tool_lab_fixture_install::bluetooth_contract::{
-    CONNECTION_RESET_SCHEMA, HELPER_CAPABILITIES,
-};
+/// The privileged helper's connection-reset report schema.
+pub const CONNECTION_RESET_SCHEMA: u32 = 14;
+
+/// What the privileged helper answers to its capability query. It reports what
+/// the target answered; the unprivileged runner judges it against the target
+/// profile, so a target change never requires a reinstallation.
+pub const HELPER_CAPABILITIES: &str = "schema=21 dtm-check=v1,v2 dtm-profile=receive-transmit,transmit,receive-silence encrypted-acl=true key-refresh=true security-failure=missing-key,wrong-key,missing-refresh-key,active-data-mic post-rejection-version=true termination=peer-reset,peer-rfkill,target-disconnect,target-reset att-parameters=7.5ms,restore";
 
 /// The target's LE features as the central's Controller reports them:
 /// Encryption, Peripheral Feature Exchange, Ping, LE Data Packet Length

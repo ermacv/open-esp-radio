@@ -18,7 +18,7 @@ oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
 oer-analysis-blobray-application = { path = "../../analysis/blobray-application" }
 oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
-oer-tool-pins = { path = "../../pins" }
+oer-pins-artifacts = { path = "../../pins/artifacts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 toml = "=1.1.4"
