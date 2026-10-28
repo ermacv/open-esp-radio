@@ -1,9 +1,12 @@
 use core::mem::size_of;
-use oer_esp32s31_hal::{self as hal, boot};
+use oer_esp32s31_hal::{self as hal, boot, platform::Port};
 use oer_esp32s31_layout::LAYOUT;
 use oer_espressif_boot::{BootFailure, cache, clock, flash, mmu, watchdog::BootWatchdogs};
 use oer_espressif_staged_bootstrap::{self as staged, fail, print};
 use static_cell::ConstStaticCell;
+
+// The bootstrap's reports and panic go through the HAL's early writer.
+staged::panic_handler!(Port);
 
 staged::app_descriptor!(
     "0.1.0",
@@ -50,19 +53,19 @@ extern "C" fn bootstrap_main() -> ! {
     // early writer, so it comes before any output; the boot-hart check of
     // `start` prints nothing before it fails.
     let root = hal::root::Root::take();
-    staged::start();
-    let root = root.unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=root-taken\r\n"));
+    staged::start::<Port>();
+    let root = root.unwrap_or_else(|| fail::<Port>("OER_BOOT bootstrap=FAIL reason=root-taken\r\n"));
     let mut hardware = root.into_bootstrap().unwrap_or_else(|error| {
-        print("OER_BOOT bootstrap=FAIL reason=");
-        print(error.name().as_str());
-        fail("\r\n")
+        print::<Port>("OER_BOOT bootstrap=FAIL reason=");
+        print::<Port>(error.name().as_str());
+        fail::<Port>("\r\n")
     });
     let deadline = boot::BootDeadline::start(&hardware.monotonic, boot::BOOT_BUDGET);
     checked(hardware.lp_fast_clock.select(&deadline));
     hardware
         .soc
         .initialize(&deadline)
-        .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=soc-init\r\n"));
+        .unwrap_or_else(|_| fail::<Port>("OER_BOOT bootstrap=FAIL reason=soc-init\r\n"));
     let watchdogs = BootWatchdogs::take_over(
         hardware.main_watchdog0,
         hardware.rtc_watchdog,
@@ -71,8 +74,8 @@ extern "C" fn bootstrap_main() -> ! {
     hardware
         .brownout
         .apply_idf_policy(&deadline)
-        .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=brownout-policy\r\n"));
-    print("OER_BOOT bootstrap=BROWNOUT\r\n");
+        .unwrap_or_else(|_| fail::<Port>("OER_BOOT bootstrap=FAIL reason=brownout-policy\r\n"));
+    print::<Port>("OER_BOOT bootstrap=BROWNOUT\r\n");
 
     let rates = checked(clock::bring_up(
         &mut hardware.clock,
@@ -81,7 +84,7 @@ extern "C" fn bootstrap_main() -> ! {
         boot::CLOCK_WAITS,
         &deadline,
     ));
-    print("OER_BOOT bootstrap=INIT\r\n");
+    print::<Port>("OER_BOOT bootstrap=INIT\r\n");
     let memory = checked(hardware.psram.into_region(
         &mut hardware.clock,
         &mut hardware.active_power,
@@ -90,7 +93,7 @@ extern "C" fn bootstrap_main() -> ! {
         &deadline,
     ));
     if memory.as_ptr() as usize != LAYOUT.psram.origin() as usize {
-        fail("OER_BOOT bootstrap=FAIL reason=psram-init\r\n");
+        fail::<Port>("OER_BOOT bootstrap=FAIL reason=psram-init\r\n");
     }
     let image = staged::stage(
         &LAYOUT,
@@ -98,25 +101,25 @@ extern "C" fn bootstrap_main() -> ! {
         memory,
         |progress| match progress {
             staged::StageProgress::Psram => {
-                print("OER_BOOT bootstrap=PSRAM\r\n");
+                print::<Port>("OER_BOOT bootstrap=PSRAM\r\n");
                 let source_address = RUNTIME_PAYLOAD.as_ptr() as usize;
                 let source_end = source_address
                     .checked_add(RUNTIME_PAYLOAD.len())
-                    .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=source-overflow\r\n"));
+                    .unwrap_or_else(|| fail::<Port>("OER_BOOT bootstrap=FAIL reason=source-overflow\r\n"));
                 let xip = LAYOUT.flash_xip;
                 if !(xip.origin() as usize..xip.end() as usize).contains(&source_address)
                     || source_end > xip.end() as usize
                 {
-                    fail("OER_BOOT bootstrap=FAIL reason=source-not-xip\r\n");
+                    fail::<Port>("OER_BOOT bootstrap=FAIL reason=source-not-xip\r\n");
                 }
             }
-            staged::StageProgress::SourceCrc => print("OER_BOOT bootstrap=SOURCE_CRC\r\n"),
+            staged::StageProgress::SourceCrc => print::<Port>("OER_BOOT bootstrap=SOURCE_CRC\r\n"),
             staged::StageProgress::DestinationCrc => {
-                print("OER_BOOT bootstrap=DESTINATION_CRC\r\n")
+                print::<Port>("OER_BOOT bootstrap=DESTINATION_CRC\r\n")
             }
         },
     )
-    .unwrap_or_else(|error| staged::fail_stage(error));
+    .unwrap_or_else(|error| staged::fail_stage::<Port>(error));
     let tuning_virtual = FLASH_TUNING_REFERENCE.as_ptr() as u32;
     let tuning_physical = checked(mmu::physical_address(
         &mut hardware.flash,
@@ -147,7 +150,7 @@ extern "C" fn bootstrap_main() -> ! {
         boot::TUNING_WAITS,
         &deadline,
     ));
-    print("OER_BOOT bootstrap=FLASH_TUNED\r\n");
+    print::<Port>("OER_BOOT bootstrap=FLASH_TUNED\r\n");
     let published = checked(cache::publish_code(
         &mut hardware.cache,
         boot::CACHE_GEOMETRY,
@@ -156,11 +159,11 @@ extern "C" fn bootstrap_main() -> ! {
         boot::CACHE_SYNC,
         &deadline,
     ));
-    staged::hand_off::<RUNTIME_ENTRY>(image, published, || {
+    staged::hand_off::<Port, RUNTIME_ENTRY>(image, published, || {
         let _stopped = watchdogs.hand_off();
     })
 }
 
 fn checked<T>(result: Result<T, BootFailure>) -> T {
-    result.unwrap_or_else(|error| staged::fail_boot(error))
+    result.unwrap_or_else(|error| staged::fail_boot::<Port>(error))
 }

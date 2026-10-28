@@ -1,25 +1,42 @@
-//! The executor's platform contract on this chip (`oer-espressif-executor`'s
-//! `ExecutorPlatform`): the source identities of the software interrupt
-//! lines and the system timer's comparators, from the PAC's interrupt
-//! parts, and pending/debug reads selected by a checked hart identity.
+//! The family platform contracts on this chip (`oer-espressif-platform-port`),
+//! implemented by [`Port`]: the early console writer, the source identities
+//! of the software interrupt lines and the system timer's comparators from
+//! the PAC's interrupt parts, the owned executor blocks, and pending/debug
+//! reads selected by a checked hart identity.
 
 use oer_esp32s31_pac::{bus_monitor::DebugModeStatus, ownership::DebugPeripherals};
+use oer_espressif_platform_port as port;
 use oer_memory::zeroed::ZeroedOnce;
 use oer_mmio::InterruptSource;
 
 use crate::platform::{
-    FromCpu0Irq, FromCpu1Irq, FromCpu2Irq, FromCpu3Irq, Hart, SystimerAlarm0, SystimerAlarm1,
-    SystimerAlarm2, interrupt_controller,
+    FromCpu0, FromCpu0Irq, FromCpu1, FromCpu1Irq, FromCpu2, FromCpu2Irq, FromCpu3, FromCpu3Irq,
+    Hart, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2, SystimerComparators, SystimerCounter,
+    interrupt_controller, system_timer,
 };
 
-/// The chip's executor platform.
-pub struct Platform;
+/// The chip's implementation of the family platform contracts.
+pub struct Port;
+
+/// The port's hart geometry is the PAC's: both come from the same facts.
+const _: () = {
+    if port::BOOT_HART.get() != crate::platform::BOOT_HART.get() {
+        panic!("the port's boot hart is the PAC's");
+    }
+};
+
+/// The PAC's identity of a checked port hart. The selection type-checks
+/// only while both geometries hold the same hart count.
+#[inline(always)]
+fn hart(hart: port::Hart) -> Hart {
+    *hart.at(&Hart::ALL)
+}
 
 /// Per-hart debug status, published once by the stage-two split of the
 /// reset root ([`publish_debug_status`]), before any executor exists.
 static DEBUG: ZeroedOnce<DebugModeStatus> = ZeroedOnce::new();
 
-/// Publish the per-hart debug status for [`Platform::debugger_connected`], from
+/// Publish the per-hart debug status for [`Port::debugger_connected`], from
 /// the root's partition.
 ///
 /// # Panics
@@ -30,9 +47,16 @@ pub(crate) fn publish_debug_status(peripherals: DebugPeripherals) {
     let _ = DEBUG.get_or_init(|| peripherals.debug_mode_status);
 }
 
-impl Platform {
+impl port::EarlyText for Port {
+    #[inline(always)]
+    fn text(bytes: &[u8]) -> bool {
+        crate::usb_serial_jtag::early_text(bytes)
+    }
+}
+
+impl port::ExecutorPlatform for Port {
     /// Sources of `FROM_CPU_INTR0..3`, in line order.
-    pub const SOFTWARE_SOURCES: [u16; 4] = [
+    const SOFTWARE_SOURCES: [u16; 4] = [
         FromCpu0Irq::SOURCE,
         FromCpu1Irq::SOURCE,
         FromCpu2Irq::SOURCE,
@@ -40,17 +64,26 @@ impl Platform {
     ];
 
     /// Sources of `SYSTIMER_TARGET0..2`, in comparator order.
-    pub const ALARM_SOURCES: [u16; 3] = [
+    const ALARM_SOURCES: [u16; 3] = [
         <SystimerAlarm0 as InterruptSource>::SOURCE,
         <SystimerAlarm1 as InterruptSource>::SOURCE,
         <SystimerAlarm2 as InterruptSource>::SOURCE,
     ];
 
+    const TICKS_PER_MICROSECOND: u64 = system_timer::TICKS_PER_MICROSECOND;
+
+    type Line0 = FromCpu0;
+    type Line1 = FromCpu1;
+    type Line2 = FromCpu2;
+    type Line3 = FromCpu3;
+    type Counter = SystimerCounter;
+    type Comparators = SystimerComparators;
+
     /// Whether `source` is pending at the checked hart's bank, without
     /// changing its route. The caller supplies its current hart's identity.
     #[inline(always)]
-    pub fn is_pending(hart: Hart, source: u16) -> bool {
-        interrupt_controller::is_pending(hart, source)
+    fn is_pending(hart: port::Hart, source: u16) -> bool {
+        interrupt_controller::is_pending(self::hart(hart), source)
     }
 
     /// Whether a debugger is attached to the checked hart: its debug module is
@@ -63,10 +96,10 @@ impl Platform {
     /// `DEBUG_MODULE_ACTIVE`) and ESP-IDF 4d59230d
     /// `components/soc/esp32s31/include/soc/assist_debug_reg.h:11-14`.
     #[inline(always)]
-    pub fn debugger_connected(hart: Hart) -> bool {
+    fn debugger_connected(hart: port::Hart) -> bool {
         DEBUG
             .get()
-            .is_some_and(|status| debug_module_active(status, hart))
+            .is_some_and(|status| debug_module_active(status, self::hart(hart)))
     }
 }
 
@@ -77,13 +110,14 @@ fn debug_module_active<P: oer_mmio::Placement>(status: &DebugModeStatus<P>, hart
 
 #[cfg(test)]
 mod tests {
-    use super::Platform;
+    use super::Port;
     use oer_esp32s31_pac::Interrupt;
+    use oer_espressif_platform_port::ExecutorPlatform;
 
     #[test]
     fn the_sources_are_the_pac_s_interrupts() {
         assert_eq!(
-            Platform::SOFTWARE_SOURCES,
+            Port::SOFTWARE_SOURCES,
             [
                 Interrupt::CPU_INTR_FROM_CPU_0.source(),
                 Interrupt::CPU_INTR_FROM_CPU_1.source(),
@@ -92,7 +126,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            Platform::ALARM_SOURCES,
+            Port::ALARM_SOURCES,
             [
                 Interrupt::SYSTIMER_TARGET0.source(),
                 Interrupt::SYSTIMER_TARGET1.source(),
@@ -129,10 +163,22 @@ mod tests {
     }
 
     #[test]
+    fn every_port_hart_is_the_pac_hart_of_its_index() {
+        for (port, pac) in oer_espressif_platform_port::Hart::ALL
+            .into_iter()
+            .zip(crate::platform::Hart::ALL)
+        {
+            assert_eq!(super::hart(port), pac);
+            assert_eq!(port.get(), pac.get());
+        }
+    }
+
+    #[test]
     fn nothing_is_pending_before_the_bank_is_published() {
         // The host test binary never splits the root's interrupt matrix.
-        for hart in crate::platform::Hart::ALL {
-            assert!(!Platform::is_pending(hart, 68));
+        for hart in oer_espressif_platform_port::Hart::ALL {
+            assert!(!Port::is_pending(hart, 68));
+            assert!(!Port::debugger_connected(hart));
         }
     }
 }

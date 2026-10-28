@@ -1,0 +1,26 @@
+[package]
+name = "oer-espressif-platform-port"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The Espressif family's platform contracts, which a chip HAL implements on its own types, and the hart geometry of the chip that HAL selects"
+# The selected chip reaches the build scripts of family crates through this
+# package's metadata (`DEP_OER_ESPRESSIF_PLATFORM_PORT_CHIP`).
+links = "oer_espressif_platform_port"
+
+[features]
+# The chip HAL selects its chip; a feature enables no dependency. Exactly
+# one chip, or none on a build without chip geometry.
+esp32s31 = []
+
+[dependencies]
+oer-mmio = { path = "../../../portable/mmio" }
+
+[build-dependencies]
+oer-espressif-facts = { path = "../facts" }
+
+[lints]
+workspace = true

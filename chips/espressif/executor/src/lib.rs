@@ -50,7 +50,6 @@ mod executor;
 mod fault;
 #[cfg(any(feature = "chip", test))]
 pub use fault::{Failure, Fault};
-pub mod hardware;
 #[cfg(feature = "chip")]
 mod hart_binding;
 #[cfg(any(feature = "chip", test))]

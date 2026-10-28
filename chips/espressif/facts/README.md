@@ -123,5 +123,5 @@ For an interrupt-bearing chip, `properties.cores` is derived from
 `[interrupts] harts`; a supplied count must agree. The hart list is contiguous
 from zero and its guards cover it exactly once. `boot-hart` selects primary
 initialization. `generate::hart_geometry` renders the PAC's checked identities
-and const-admitted indices; vector generation derives its cardinality from the
+and const-admitted indices, and the same identities of the platform port; vector generation derives its cardinality from the
 same list. Unknown architectural IDs remain errors carrying their full raw word.

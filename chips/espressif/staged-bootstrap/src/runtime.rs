@@ -1,34 +1,43 @@
 //! Slice-based stage-two validation, PSRAM probing and relocation.
 //! The chip bootstrap checks its physical mapping and flash source, reports
 //! progress, publishes the copied code and enters it through [`hand_off`].
+//! Every report goes through the early writer `C` the bootstrap names
+//! ([`EarlyText`](oer_espressif_platform_port::EarlyText)), which also
+//! prints its panic ([`panic_handler!`]).
 
 use core::mem::size_of;
 
+#[cfg(target_arch = "riscv32")]
+use oer_espressif_platform_port::EarlyText;
 use oer_espressif_staged_layout::{
     Layout,
     stage_two::{Header as RuntimeHeader, PayloadCrc},
 };
 use oer_memory::{read_volatile, write_volatile};
 
-#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
-use oer_esp32s31_hal::usb_serial_jtag::early_text;
-
-#[cfg(target_arch = "riscv32")]
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
-    print("OER_BOOT bootstrap=PANIC\r\n");
-    halt()
+/// The bootstrap's panic handler: it prints `OER_BOOT bootstrap=PANIC`
+/// through the early writer `$console`
+/// ([`EarlyText`](oer_espressif_platform_port::EarlyText)) and halts. The
+/// bootstrap image invokes it once, naming its chip's writer.
+#[macro_export]
+macro_rules! panic_handler {
+    ($console:ty) => {
+        #[panic_handler]
+        fn panic(_info: &::core::panic::PanicInfo<'_>) -> ! {
+            $crate::fail::<$console>("OER_BOOT bootstrap=PANIC\r\n")
+        }
+    };
 }
 
 /// Report the bootstrap's start on the USB Serial/JTAG console. Call first.
 /// Any hart but [`oer_espressif_staged_layout::boot::BOOT_HART`] stops here.
 #[cfg(target_arch = "riscv32")]
-pub fn start() {
+pub fn start<C: EarlyText>() {
     let hart = oer_riscv::hart_id();
     if !oer_espressif_staged_layout::boot::may_boot(hart) {
-        fail("OER_BOOT bootstrap=FAIL reason=not-boot-hart\r\n");
+        fail::<C>("OER_BOOT bootstrap=FAIL reason=not-boot-hart\r\n");
     }
-    print("OER_BOOT bootstrap=START\r\n");
+    print::<C>("OER_BOOT bootstrap=START\r\n");
 }
 
 /// The entry word of the packed runtime `payload`, for [`hand_off`]'s
@@ -189,7 +198,7 @@ pub fn stage<'a>(
 /// error instead of jumping.
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "publishes and enters the stage-two image")]
-pub fn hand_off<const ENTRY: usize>(
+pub fn hand_off<C: EarlyText, const ENTRY: usize>(
     staged: Staged<'_>,
     published: oer_espressif_boot::cache::PublishedCode,
     finish_boot: impl FnOnce(),
@@ -197,15 +206,15 @@ pub fn hand_off<const ENTRY: usize>(
     if published.range().start() as usize != staged.load_address()
         || (published.range().size() as usize) < staged.payload_len()
     {
-        fail("OER_BOOT bootstrap=FAIL reason=psram-code-range\r\n");
+        fail::<C>("OER_BOOT bootstrap=FAIL reason=psram-code-range\r\n");
     }
     let payload_end = staged.load_address().checked_add(staged.payload_len());
     if staged.entry != ENTRY
         || !payload_end.is_some_and(|end| (staged.load_address()..end).contains(&ENTRY))
     {
-        fail("OER_BOOT bootstrap=FAIL reason=entry-mismatch\r\n");
+        fail::<C>("OER_BOOT bootstrap=FAIL reason=entry-mismatch\r\n");
     }
-    print("OER_BOOT bootstrap=PASS handoff=stage2\r\n");
+    print::<C>("OER_BOOT bootstrap=PASS handoff=stage2\r\n");
     finish_boot();
     // SAFETY: the entry equals the build's constant and lies in the checked
     // executable range of the published image; its entry installs its own stack.
@@ -275,19 +284,19 @@ fn payload_crc32(payload: &[u8]) -> u32 {
     crc.finish()
 }
 
-/// Print one `OER_BOOT` line through the early USB writer, which drops what
+/// Print one `OER_BOOT` line through the early writer `C`, which drops what
 /// the FIFO has no room for and counts it. The bootstrap never retires the
 /// writer, so it owns the block throughout.
 #[cfg(target_arch = "riscv32")]
-pub fn print(message: &'static str) {
-    early_text(message.as_bytes());
+pub fn print<C: EarlyText>(message: &'static str) {
+    C::text(message.as_bytes());
 }
 
 /// Report the typed cold-boot failure, retaining its observed density, and halt.
 #[cfg(target_arch = "riscv32")]
-pub fn fail_boot(error: oer_espressif_boot::BootFailure) -> ! {
+pub fn fail_boot<C: EarlyText>(error: oer_espressif_boot::BootFailure) -> ! {
     BootFailureRecord(error).write(|bytes| {
-        let _ = early_text(bytes);
+        let _ = C::text(bytes);
     });
     halt()
 }
@@ -353,20 +362,20 @@ fn decimal(mut value: usize, output: &mut impl FnMut(&[u8])) {
 
 /// Report a typed staging failure and halt the bootstrap.
 #[cfg(target_arch = "riscv32")]
-pub fn fail_stage(error: StageError) -> ! {
-    print("OER_BOOT bootstrap=FAIL reason=");
-    print(error.reason());
+pub fn fail_stage<C: EarlyText>(error: StageError) -> ! {
+    print::<C>("OER_BOOT bootstrap=FAIL reason=");
+    print::<C>(error.reason());
     if let StageError::SourceCrc { expected, observed } = error {
-        print(" expected=");
-        print_hex(expected);
-        print(" observed=");
-        print_hex(observed);
+        print::<C>(" expected=");
+        print_hex::<C>(expected);
+        print::<C>(" observed=");
+        print_hex::<C>(observed);
     }
-    fail("\r\n")
+    fail::<C>("\r\n")
 }
 
 #[cfg(target_arch = "riscv32")]
-fn print_hex(word: u32) {
+fn print_hex<C: EarlyText>(word: u32) {
     let mut digits = [0; 8];
     for (index, digit) in digits.iter_mut().enumerate() {
         let nibble = (word >> (28 - 4 * index)) & 0xf;
@@ -377,13 +386,13 @@ fn print_hex(word: u32) {
             b'a' + (nibble as u8 - 10)
         };
     }
-    early_text(&digits);
+    C::text(&digits);
 }
 
-/// Print `message` and halt.
+/// Print `message` through the early writer `C` and halt.
 #[cfg(target_arch = "riscv32")]
-pub fn fail(message: &'static str) -> ! {
-    print(message);
+pub fn fail<C: EarlyText>(message: &'static str) -> ! {
+    print::<C>(message);
     halt()
 }
 

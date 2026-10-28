@@ -10,6 +10,7 @@
 use oer_esp32s31_pac::{
     hp_sys_clkrst::HpSysClkrstSystimer, instances, ownership::SystemTimerPeripherals, systimer,
 };
+use oer_espressif_platform_port::{AlarmPart, Comparator, Comparators, LatchStuck, SystemCounter};
 use oer_mmio::{Bits, Fixed, Index, InterruptSource, Placement};
 use oer_time::{Clock, Instant};
 
@@ -26,37 +27,17 @@ pub const TICKS_PER_MICROSECOND: u64 = 16;
 /// Where the system timer lies.
 pub type SystimerPlacement = Fixed<{ instances::systimer::BASE }>;
 
-/// A hardware comparator; every value names an existing target.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Comparator {
-    Zero,
-    One,
-    Two,
-}
-
-impl Comparator {
-    /// The comparator of index `index`.
-    pub const fn from_index(index: u8) -> Option<Self> {
-        match index {
-            0 => Some(Self::Zero),
-            1 => Some(Self::One),
-            2 => Some(Self::Two),
-            _ => None,
-        }
-    }
-
-    /// The comparator's element of the SYSTIMER arrays.
-    const fn index(self) -> Index<3> {
-        const INDICES: [Index<3>; 3] = [
-            Index::constant::<0>(),
-            Index::constant::<1>(),
-            Index::constant::<2>(),
-        ];
-        match self {
-            Self::Zero => INDICES[0],
-            Self::One => INDICES[1],
-            Self::Two => INDICES[2],
-        }
+/// The comparator's element of the SYSTIMER arrays.
+const fn index(comparator: Comparator) -> Index<3> {
+    const INDICES: [Index<3>; 3] = [
+        Index::constant::<0>(),
+        Index::constant::<1>(),
+        Index::constant::<2>(),
+    ];
+    match comparator {
+        Comparator::Zero => INDICES[0],
+        Comparator::One => INDICES[1],
+        Comparator::Two => INDICES[2],
     }
 }
 
@@ -68,14 +49,6 @@ pub struct SystimerComparators<P: Placement = SystimerPlacement>(systimer::Systi
 /// The counter latch of unit zero, which every context reads: a strobe
 /// latches the counter, a flag says when the latched words are valid.
 pub struct SystimerCounter<P: Placement = SystimerPlacement>(systimer::SystimerCounter<P>);
-
-/// A comparator's alarm part: its handler acknowledges its own interrupt.
-pub trait AlarmPart: InterruptSource {
-    /// The comparator whose interrupt the part serves.
-    const COMPARATOR: Comparator;
-    /// Strobe the comparator's acknowledgement bit alone.
-    fn acknowledge(&mut self);
-}
 
 macro_rules! alarm {
     ($(#[$doc:meta])* $name:ident, $comparator:ident, $trigger:ident) => {
@@ -172,6 +145,18 @@ impl<P: Placement> SystimerCounter<P> {
     }
 }
 
+impl<P: Placement> SystemCounter for SystimerCounter<P> {
+    #[inline(always)]
+    fn check(&self) -> Result<(), LatchStuck> {
+        counter::check(self)
+    }
+
+    #[inline(always)]
+    fn read(&self) -> Result<u64, oer_espressif_platform_port::Unverified> {
+        counter::read(self)
+    }
+}
+
 /// Open the system timer's clocks before the first read of its counter: the
 /// bus clock, a reset pulse, then the function clock. The source selector
 /// and the counter's own configuration stay as found (unit zero counts from
@@ -216,7 +201,7 @@ impl<P: Placement> Monotonic<P> {
     ///
     /// [`MonotonicStuck`] when the latch never turns valid.
     pub fn new(counter: SystimerCounter<P>) -> Result<Self, MonotonicStuck> {
-        counter::check(&counter).map_err(|counter::LatchStuck| MonotonicStuck)?;
+        counter::check(&counter).map_err(|LatchStuck| MonotonicStuck)?;
         Ok(Self(counter))
     }
 
@@ -234,12 +219,25 @@ impl<P: Placement> Clock for Monotonic<P> {
 }
 
 impl<P: Placement> SystimerComparators<P> {
+    #[inline(always)]
+    fn set_enabled(&mut self, comparator: Comparator, enabled: bool) {
+        self.0.modify_conf(|conf| {
+            match comparator {
+                Comparator::Zero => conf.set_target0_work_en(enabled),
+                Comparator::One => conf.set_target1_work_en(enabled),
+                Comparator::Two => conf.set_target2_work_en(enabled),
+            };
+        });
+    }
+}
+
+impl<P: Placement> Comparators for SystimerComparators<P> {
     /// Bind `alarm`'s comparator in one-shot mode on unit zero before its
     /// handler's route is enabled: the mode set, the comparator disabled,
     /// a stale interrupt acknowledged, then its interrupt enabled.
-    pub fn bind<A: AlarmPart>(&mut self, alarm: &mut A) {
+    fn bind<A: AlarmPart>(&mut self, alarm: &mut A) {
         let comparator = A::COMPARATOR;
-        self.0.modify_target_conf(comparator.index(), |conf| {
+        self.0.modify_target_conf(index(comparator), |conf| {
             conf.set_period_mode(false).set_timer_unit_sel(false);
         });
         self.set_enabled(comparator, false);
@@ -253,27 +251,16 @@ impl<P: Placement> SystimerComparators<P> {
         });
     }
 
-    #[inline(always)]
-    fn set_enabled(&mut self, comparator: Comparator, enabled: bool) {
-        self.0.modify_conf(|conf| {
-            match comparator {
-                Comparator::Zero => conf.set_target0_work_en(enabled),
-                Comparator::One => conf.set_target1_work_en(enabled),
-                Comparator::Two => conf.set_target2_work_en(enabled),
-            };
-        });
-    }
-
     /// Disable `comparator`, load the high and low target and strobe its
     /// load, then enable it. `None` only disables the comparator. The
     /// target's bits above the counter's 52 are dropped.
     ///
     /// SOURCE: ESP-IDF 4d80c1b2 `esp_hal_systimer/systimer_hal.c`
     /// (`systimer_hal_set_alarm_target`).
-    pub fn program(&mut self, comparator: Comparator, ticks: Option<u64>) {
+    fn program(&mut self, comparator: Comparator, ticks: Option<u64>) {
         self.set_enabled(comparator, false);
         let Some(ticks) = ticks else { return };
-        let index = comparator.index();
+        let index = index(comparator);
         // Both supported targets are little-endian; split the counter value
         // into words without raw register masks or shifts.
         let [low, high]: [u32; 2] = bytemuck::cast(ticks);

@@ -44,7 +44,6 @@ pub mod coex;
 pub mod cores;
 
 pub mod domain;
-pub mod executor;
 pub mod modem;
 pub mod power;
 pub mod root;

@@ -21,6 +21,8 @@
 //! (`systimer_hal_get_counter_value`: update, wait for valid, LO/HI/LO) and
 //! esp-hal 1f646c5 `timer/systimer.rs` (`Unit::read_count`).
 
+use oer_espressif_platform_port::{LatchStuck, Unverified};
+
 /// The counter latch of system timer unit zero, shared by every context.
 pub trait CounterLatch {
     /// Strobe the latch: copy the count into the value registers.
@@ -65,10 +67,6 @@ pub const LATCH_SETTLE_POLLS: u32 = 64;
 pub const READ_ROUNDS: u32 = 16;
 const _: () = assert!(READ_ROUNDS > 0, "a read takes at least one round");
 
-/// The latch did not settle within its bound: a fault of the system timer.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LatchStuck;
-
 /// Wait the latch's settle: whether its value turned valid within the bound.
 fn settle(latch: &impl CounterLatch) -> bool {
     (0..LATCH_SETTLE_POLLS).any(|_| latch.valid())
@@ -88,16 +86,6 @@ pub fn check(latch: &impl CounterLatch) -> Result<(), LatchStuck> {
     } else {
         Err(LatchStuck)
     }
-}
-
-/// A read whose LO reads never agreed with the latch valid within
-/// [`READ_ROUNDS`] rounds: preempting strobes kept relatching, or the latch
-/// stayed invalid.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Unverified {
-    /// A count between two copies of the last round: no earlier read
-    /// returned more, and no later read returns less.
-    pub floor: u64,
 }
 
 fn join(high: u32, low: u32) -> u64 {

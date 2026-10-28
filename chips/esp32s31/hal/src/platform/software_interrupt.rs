@@ -70,6 +70,18 @@ macro_rules! software_interrupt {
             }
         }
 
+        impl<P: Placement> oer_espressif_platform_port::SoftwareLine for $line<P> {
+            #[inline(always)]
+            fn raise(&self) {
+                Self::raise(self);
+            }
+
+            #[inline(always)]
+            fn lower(&self) {
+                Self::lower(self);
+            }
+        }
+
         #[cfg(any(test, feature = "test-support"))]
         impl<'a> $line<oer_mmio::Host<'a>> {
             /// The line over host memory from the instance's base.

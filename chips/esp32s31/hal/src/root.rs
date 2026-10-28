@@ -254,7 +254,7 @@ impl Root {
             Uart0ClockRegisters::new(uart0_clock),
         )
         .map_err(|_| InitError::CoreControlInstalled)?;
-        crate::executor::publish_debug_status(debug);
+        crate::platform::port::publish_debug_status(debug);
         Ok(Runtime {
             watchdogs: Watchdogs::new(WatchdogRegisters::new(watchdog)),
             system_timer: SystemTimer::new(system_timer),

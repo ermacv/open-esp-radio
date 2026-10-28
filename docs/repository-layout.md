@@ -36,7 +36,8 @@ chips/      everything about Espressif hardware
   espressif/    IP shared by Espressif chips: analog, modem
                 clock, coexistence, the 802.15.4 engine, Wi-Fi policy, the
                 staged boot (bootstrap, runtime, layout), interrupt table,
-                executor, the chip facts model (facts/) and the
+                executor, the platform contracts a chip HAL implements
+                (platform-port/), the chip facts model (facts/) and the
                 family and ISA fact layers (platform/); registers/ and notes/
                 shared by the chips
   esp32s31/     PAC, HAL, PHY, drivers, radio system, board, memory layout,
@@ -68,7 +69,10 @@ on images or tools except through build, proc-macro and test dependencies
 (`tools/probe/macros`, `tools/test/ui-cases`): no package takes a normal
 dependency on a package of `firmware/` or on a program of `tools/` (a package
 with a binary target). `chips/espressif` is the family below the chips and
-depends on no `chips/<chip>` package. `portable` depends on no protocol and no
+depends on no `chips/<chip>` package, through a normal or a build dependency:
+a chip's HAL implements the family's platform contracts
+(`chips/espressif/platform-port`) on its own types and selects its chip
+through the port's chip feature. `portable` depends on no protocol and no
 chip; only `portable/embassy` adapts protocol boundaries. The layer tests check
 normal transitive dependencies, including optional and target-specific
 declarations: backends and reference models do not reach protocol cores or
@@ -180,9 +184,10 @@ The tree does not yet follow these rules in these places:
   `chips/espressif/ieee80211-policy`.
 - `firmware/hil/esp32s31` -> `firmware/apps/w3` (removed by the IEEE 802.11
   facade, #844).
-- `chips/espressif/executor`, `chips/espressif/staged-bootstrap` and
-  `chips/espressif/staged-runtime` -> `chips/esp32s31/hal` (optional, feature
-  `esp32s31`; removed by the family platform contracts, #848, B1).
+- `chips/espressif/executor` and `chips/espressif/staged-runtime` ->
+  `chips/esp32s31/hal` (optional, feature `esp32s31`; removed by the staged
+  runtime over the platform port and the executor over a chip binding, #848,
+  B1).
 - `portable/hil-agent` -> `protocols/hil/protocol` (removed by the move of
   hil-agent to `protocols/hil/agent`, #848, B6).
 

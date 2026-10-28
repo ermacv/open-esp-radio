@@ -11,8 +11,8 @@ use oer_esp32s31_pac::instances;
 use oer_mmio::InterruptSource;
 
 use super::{
-    AlarmPart, Comparator, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2, SystimerComparators,
-    SystimerCounter, alarms_host,
+    AlarmPart, Comparator, Comparators, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2,
+    SystimerComparators, SystimerCounter, alarms_host,
 };
 
 fn memory() -> Vec<u32> {

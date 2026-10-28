@@ -85,7 +85,10 @@ no signal context and no timer slot. The executor's calls into the chip
 (software interrupt lines, the wait for an interrupt, the interrupt level,
 the core, the system timer's counter, the pending sources) sit in
 `chip.rs`; architectural instructions come from `oer-riscv`. The chip HAL
-implements `hardware::ExecutorPlatform` for source IDs and pending status.
+implements the platform port's `ExecutorPlatform`
+(`oer-espressif-platform-port`) for source IDs, pending and debugger reads,
+the software lines, the counter and the comparators; the hart geometry is
+the port's.
 
 ## Radio interrupt levels
 

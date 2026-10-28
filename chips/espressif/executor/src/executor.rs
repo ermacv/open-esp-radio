@@ -19,7 +19,7 @@ pub(crate) use crate::context::NO_EXECUTOR;
 use crate::context::Running;
 use crate::task::{Current, Interrupt as InterruptMode, Ready, Spawner, TaskId, Tasks, Thread};
 
-use platform::HARTS;
+use oer_espressif_platform_port::HARTS;
 const UNASSIGNED_CORE: usize = usize::MAX;
 
 /// Each thread-mode executor's wake flag: work other than a ready task (an

@@ -4,13 +4,9 @@
 //! the raises announced ([`serve`]): a raise that lands while the handler
 //! takes the work raises the line again, and the handler runs another round.
 
-/// One software interrupt line, shared by every context that raises it.
-pub(crate) trait SoftwareLine {
-    /// Raise the line's interrupt.
-    fn raise(&self);
-    /// Lower the line.
-    fn lower(&self);
-}
+/// One software interrupt line, shared by every context that raises it: the
+/// platform port's contract.
+pub(crate) use oer_espressif_platform_port::SoftwareLine;
 
 /// One handler round: lower the line, then take the work (`drain`). A raise
 /// during `drain` leaves the line raised for the next round.
