@@ -248,14 +248,29 @@ pub const BOOT_BUDGET: BootBudget =
 pub const CLOCK_WAITS: ClockWaits = ClockWaits {
     // ESP-IDF 4d80c1b2 `components/esp_hw_support/port/esp32s31/rtc_clk.c:144`
     // polls `clk_ll_cpll_calibration_is_done` without a limit.
-    calibration: BootWait::new("cpll-calibration", Duration::from_millis(1)),
+    calibration: const {
+        match BootWait::new("cpll-calibration", Duration::from_millis(1)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
     // SOURCE: ESP-IDF 4d80c1b2
     // `components/esp_hw_support/port/esp32s31/rtc_clk.c:145`:
     // 10 µs after calibration completes ("wait for true stop").
-    calibration_settle: BootWait::new("cpll-settle", Duration::from_micros(10)),
+    calibration_settle: const {
+        match BootWait::new("cpll-settle", Duration::from_micros(10)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
     // ESP-IDF 4d80c1b2 `clk_tree_ll.h:602-606` (`clk_ll_bus_update`) polls
     // `SOC_CLK_UPDATE` without a limit.
-    update: BootWait::new("clock-update", Duration::from_micros(100)),
+    update: const {
+        match BootWait::new("clock-update", Duration::from_micros(100)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 /// The L1 cache's publication geometry: 64-byte lines, the data cache
@@ -279,25 +294,65 @@ pub const CACHE_GEOMETRY: CacheGeometry<CacheMap> = CacheGeometry {
 /// One sync command over a range of at most the stage-two image. ESP-IDF
 /// 4d80c1b2 `components/esp_rom/patches/esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50`
 /// polls `SYNC_DONE` without a limit.
-pub const CACHE_SYNC: BootWait = BootWait::new("cache-sync", Duration::from_millis(50));
+pub const CACHE_SYNC: BootWait = const {
+    match BootWait::new("cache-sync", Duration::from_millis(50)) {
+        Ok(wait) => wait,
+        Err(_) => panic!("a boot wait has a nonzero bound"),
+    }
+};
 
 /// The fetch suspension's waits: each replaces an unbounded poll of the
 /// pinned rev0 ROM's `Cache_Suspend_L1_CORE0_ICache` and its callees
 /// (`oer_espressif_boot::cache`).
 pub const SUSPEND_WAITS: SuspendWaits = SuspendWaits {
-    autoload: BootWait::new("icache-autoload", Duration::from_millis(1)),
-    preload: BootWait::new("icache-preload", Duration::from_millis(1)),
-    sync: BootWait::new("cache-sync-idle", Duration::from_millis(50)),
-    lock: BootWait::new("cache-lock-idle", Duration::from_millis(1)),
-    freeze: BootWait::new("icache-freeze", Duration::from_millis(1)),
-    thaw: BootWait::new("icache-thaw", Duration::from_millis(1)),
+    autoload: const {
+        match BootWait::new("icache-autoload", Duration::from_millis(1)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    preload: const {
+        match BootWait::new("icache-preload", Duration::from_millis(1)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    sync: const {
+        match BootWait::new("cache-sync-idle", Duration::from_millis(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    lock: const {
+        match BootWait::new("cache-lock-idle", Duration::from_millis(1)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    freeze: const {
+        match BootWait::new("icache-freeze", Duration::from_millis(1)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    thaw: const {
+        match BootWait::new("icache-thaw", Duration::from_millis(1)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 /// One user command of the flash or PSRAM command port: 64 bytes or a
 /// 16-bit mode register at the bootloader's 80 MHz take microseconds. The
 /// ROM's `Wait_SPI_Idle` and `SPI_read_data` poll `CMD.USR` without a
 /// time limit (`oer_espressif_boot::flash`); this bound is this crate's.
-pub const COMMAND_WAIT: BootWait = BootWait::new("spi-command", Duration::from_millis(1));
+pub const COMMAND_WAIT: BootWait = const {
+    match BootWait::new("spi-command", Duration::from_millis(1)) {
+        Ok(wait) => wait,
+        Err(_) => panic!("a boot wait has a nonzero bound"),
+    }
+};
 
 /// The flash timing sweep's waits.
 pub const TUNING_WAITS: TuningWaits = TuningWaits {
@@ -491,7 +546,12 @@ pub const PSRAM_WAITS: PsramWaits = PsramWaits {
     // `components/esp_hw_support/port/esp32s31/Kconfig.ldo:35-38`
     // (1000 µs) and `components/esp_hw_support/ldo/esp_ldo_regulator.c:92-119`
     // (current limit off before the voltage-stable delay).
-    supply_settle: BootWait::new("psram-supply", Duration::from_millis(1)),
+    supply_settle: const {
+        match BootWait::new("psram-supply", Duration::from_millis(1)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
     command: COMMAND_WAIT,
     cache_sync: CACHE_SYNC,
 };

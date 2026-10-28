@@ -14,7 +14,12 @@ use crate::{
     wait::{BootBudget, BootDeadline, BootWait},
 };
 
-const SYNC: BootWait = BootWait::new("cache-sync", Duration::from_micros(100));
+const SYNC: BootWait = const {
+    match BootWait::new("cache-sync", Duration::from_micros(100)) {
+        Ok(wait) => wait,
+        Err(_) => panic!("a boot wait has a nonzero bound"),
+    }
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Map {
@@ -263,12 +268,42 @@ fn a_refused_range_starts_no_command() {
 }
 
 const SUSPEND: SuspendWaits = SuspendWaits {
-    autoload: BootWait::new("icache-autoload", Duration::from_micros(50)),
-    preload: BootWait::new("icache-preload", Duration::from_micros(50)),
-    sync: BootWait::new("cache-sync-idle", Duration::from_micros(50)),
-    lock: BootWait::new("cache-lock-idle", Duration::from_micros(50)),
-    freeze: BootWait::new("icache-freeze", Duration::from_micros(50)),
-    thaw: BootWait::new("icache-thaw", Duration::from_micros(50)),
+    autoload: const {
+        match BootWait::new("icache-autoload", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    preload: const {
+        match BootWait::new("icache-preload", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    sync: const {
+        match BootWait::new("cache-sync-idle", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    lock: const {
+        match BootWait::new("cache-lock-idle", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    freeze: const {
+        match BootWait::new("icache-freeze", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    thaw: const {
+        match BootWait::new("icache-thaw", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

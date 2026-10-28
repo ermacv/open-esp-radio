@@ -37,9 +37,24 @@ const CACHE: CacheGeometry<()> = CacheGeometry {
 };
 
 const WAITS: PsramWaits = PsramWaits {
-    supply_settle: BootWait::new("psram-supply", Duration::from_micros(1000)),
-    command: BootWait::new("psram-command", Duration::from_micros(50)),
-    cache_sync: BootWait::new("cache-sync", Duration::from_micros(50)),
+    supply_settle: const {
+        match BootWait::new("psram-supply", Duration::from_micros(1000)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    command: const {
+        match BootWait::new("psram-command", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    cache_sync: const {
+        match BootWait::new("cache-sync", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 const PROFILE: OctalPsramProfile<u8> = OctalPsramProfile {

@@ -41,15 +41,50 @@ const GEOMETRY: FlashGeometry = FlashGeometry {
     commands: COMMANDS,
 };
 
-const COMMAND: BootWait = BootWait::new("flash-command", Duration::from_micros(50));
+const COMMAND: BootWait = const {
+    match BootWait::new("flash-command", Duration::from_micros(50)) {
+        Ok(wait) => wait,
+        Err(_) => panic!("a boot wait has a nonzero bound"),
+    }
+};
 
 const SUSPEND: SuspendWaits = SuspendWaits {
-    autoload: BootWait::new("icache-autoload", Duration::from_micros(20)),
-    preload: BootWait::new("icache-preload", Duration::from_micros(20)),
-    sync: BootWait::new("cache-sync-idle", Duration::from_micros(20)),
-    lock: BootWait::new("cache-lock-idle", Duration::from_micros(20)),
-    freeze: BootWait::new("icache-freeze", Duration::from_micros(20)),
-    thaw: BootWait::new("icache-thaw", Duration::from_micros(20)),
+    autoload: const {
+        match BootWait::new("icache-autoload", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    preload: const {
+        match BootWait::new("icache-preload", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    sync: const {
+        match BootWait::new("cache-sync-idle", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    lock: const {
+        match BootWait::new("cache-lock-idle", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    freeze: const {
+        match BootWait::new("icache-freeze", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    thaw: const {
+        match BootWait::new("icache-thaw", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 const WAITS: TuningWaits = TuningWaits {

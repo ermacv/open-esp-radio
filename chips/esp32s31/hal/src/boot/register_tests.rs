@@ -149,9 +149,24 @@ const PROFILE: CpuClockProfile<CpuRoot, BusDividers, CpllDividers> = CpuClockPro
 };
 
 const WAITS: ClockWaits = ClockWaits {
-    calibration: BootWait::new("cpll-calibration", Duration::from_micros(100)),
-    calibration_settle: BootWait::new("cpll-settle", Duration::from_micros(10)),
-    update: BootWait::new("clock-update", Duration::from_micros(100)),
+    calibration: const {
+        match BootWait::new("cpll-calibration", Duration::from_micros(100)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    calibration_settle: const {
+        match BootWait::new("cpll-settle", Duration::from_micros(10)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    update: const {
+        match BootWait::new("clock-update", Duration::from_micros(100)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 #[test]
@@ -240,7 +255,12 @@ fn a_publication_starts_one_writeback_of_the_data_caches_whole_lines() {
     let ticking = Ticking(&virtual_clock);
     let deadline = BootDeadline::start(&ticking, budget());
     let mut owner = CacheRegisters::host(&mut words).expect("host memory holds it");
-    let sync = BootWait::new("cache-sync", Duration::from_micros(50));
+    let sync = const {
+        match BootWait::new("cache-sync", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    };
     assert_eq!(
         publish_code(&mut owner, GEOMETRY, 0x5000_0123, 0x100, sync, &deadline),
         Err(BootFailure::Wait(WaitFailure::TimedOut("cache-sync")))
@@ -297,7 +317,12 @@ fn a_flash_read_sets_up_the_read_modes_command_then_starts_the_user_command() {
     let ticking = Ticking(&virtual_clock);
     let deadline = BootDeadline::start(&ticking, budget());
     let mut owner = FlashRegisters::host(&mut spi0, &mut spi1).expect("host memory holds them");
-    let wait = BootWait::new("flash-command", Duration::from_micros(50));
+    let wait = const {
+        match BootWait::new("flash-command", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    };
     let mut destination = [0_u32; 4];
     assert_eq!(
         read(&mut owner, FLASH, 0x2000, &mut destination, wait, &deadline),
@@ -335,7 +360,12 @@ fn a_flash_read_waits_for_every_command_of_the_word_before_writing_its_phases() 
     let ticking = Ticking(&virtual_clock);
     let deadline = BootDeadline::start(&ticking, budget());
     let mut owner = FlashRegisters::host(&mut spi0, &mut spi1).expect("host memory holds them");
-    let wait = BootWait::new("flash-command", Duration::from_micros(50));
+    let wait = const {
+        match BootWait::new("flash-command", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    };
     let mut destination = [0_u32; 1];
     assert_eq!(
         read(&mut owner, FLASH, 0, &mut destination, wait, &deadline),
@@ -354,7 +384,12 @@ fn a_flash_read_while_the_status_word_sends_mode_bits_is_refused_unwritten() {
     let virtual_clock = VirtualClock::new();
     let ticking = Ticking(&virtual_clock);
     let deadline = BootDeadline::start(&ticking, budget());
-    let wait = BootWait::new("flash-command", Duration::from_micros(50));
+    let wait = const {
+        match BootWait::new("flash-command", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    };
     let mut destination = [0_u32; 1];
     assert_eq!(
         read(&mut owner, FLASH, 0, &mut destination, wait, &deadline),
@@ -508,9 +543,24 @@ const PSRAM_PROFILE: OctalPsramProfile<PsramSupplyLevel> = OctalPsramProfile {
 };
 
 const PSRAM_WAITS: PsramWaits = PsramWaits {
-    supply_settle: BootWait::new("psram-supply", Duration::from_micros(1000)),
-    command: BootWait::new("psram-command", Duration::from_micros(50)),
-    cache_sync: BootWait::new("cache-sync", Duration::from_micros(50)),
+    supply_settle: const {
+        match BootWait::new("psram-supply", Duration::from_micros(1000)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    command: const {
+        match BootWait::new("psram-command", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    cache_sync: const {
+        match BootWait::new("cache-sync", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 #[test]
@@ -690,12 +740,42 @@ fn a_cold_psram_is_powered_and_clocked_and_its_first_mode_register_read_never_en
 }
 
 const SUSPEND: SuspendWaits = SuspendWaits {
-    autoload: BootWait::new("icache-autoload", Duration::from_micros(20)),
-    preload: BootWait::new("icache-preload", Duration::from_micros(20)),
-    sync: BootWait::new("cache-sync-idle", Duration::from_micros(20)),
-    lock: BootWait::new("cache-lock-idle", Duration::from_micros(20)),
-    freeze: BootWait::new("icache-freeze", Duration::from_micros(20)),
-    thaw: BootWait::new("icache-thaw", Duration::from_micros(20)),
+    autoload: const {
+        match BootWait::new("icache-autoload", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    preload: const {
+        match BootWait::new("icache-preload", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    sync: const {
+        match BootWait::new("cache-sync-idle", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    lock: const {
+        match BootWait::new("cache-lock-idle", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    freeze: const {
+        match BootWait::new("icache-freeze", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
+    thaw: const {
+        match BootWait::new("icache-thaw", Duration::from_micros(20)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    },
 };
 
 #[test]

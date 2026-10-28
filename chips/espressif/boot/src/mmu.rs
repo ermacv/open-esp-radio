@@ -18,6 +18,8 @@
 //! `components/esp_hal_cache/esp32c5/include/hal/mmu_ll.h:214-268` (C5: one
 //! table for flash and PSRAM).
 
+use core::num::NonZeroU32;
+
 use crate::{Access, BootFailure};
 
 /// What an MMU entry maps.
@@ -62,18 +64,25 @@ impl MmuWindow {
     /// The entry of `address` and its offset in the page, or `None` outside
     /// the window.
     pub const fn locate(self, address: u32) -> Option<(u16, u32)> {
-        if !self.page_bytes.is_power_of_two() || address < self.virtual_base {
+        if !self.page_bytes.is_power_of_two() {
             return None;
         }
-        let offset = address - self.virtual_base;
-        let page = offset / self.page_bytes;
+        let Some(offset) = address.checked_sub(self.virtual_base) else {
+            return None;
+        };
+        let Some(page) = offset.checked_div(self.page_bytes) else {
+            return None;
+        };
         if page >= self.entries as u32 {
             return None;
         }
-        Some((
-            self.first_entry + page as u16,
-            offset & (self.page_bytes - 1),
-        ))
+        let Some(index) = self.first_entry.checked_add(page as u16) else {
+            return None;
+        };
+        let Some(in_page) = offset.checked_rem(self.page_bytes) else {
+            return None;
+        };
+        Some((index, in_page))
     }
 }
 
@@ -164,37 +173,33 @@ pub fn map<R: MmuRegisters>(
     if offset != 0 {
         return Err(MmuFailure::Misaligned.into());
     }
+    let page_bytes = NonZeroU32::new(page_bytes).ok_or(MmuFailure::Misaligned)?;
     let pages = len / page_bytes;
+    let last_offset = len.checked_sub(1).ok_or(MmuFailure::Misaligned)?;
     let last = virtual_start
-        .checked_add(len - 1)
+        .checked_add(last_offset)
         .ok_or(MmuFailure::OutsideWindow)?;
-    window.locate(last).ok_or(MmuFailure::OutsideWindow)?;
+    let (last, _) = window.locate(last).ok_or(MmuFailure::OutsideWindow)?;
     let first_page = physical / page_bytes;
-    if first_page
+    let physical_end = first_page
         .checked_add(pages)
-        .is_none_or(|end| end > window.physical_pages)
-    {
+        .ok_or(MmuFailure::PhysicalRange)?;
+    if physical_end > window.physical_pages {
         return Err(MmuFailure::PhysicalRange.into());
     }
-    // `locate` admitted the last address, so every index below fits.
-    for page in 0..pages {
-        let index = first + page as u16;
-        let wanted = MmuEntry {
-            target,
-            page: first_page + page,
-        };
+    // Both ends are admitted before any register access. The paired
+    // ranges have one index and physical page per virtual page.
+    let entries = (first..=last).zip(first_page..physical_end);
+    for (index, page) in entries.clone() {
+        let wanted = MmuEntry { target, page };
         match registers.read_entry(Access::new(), index) {
             None => {}
             Some(entry) if entry == wanted => {}
             Some(_) => return Err(MmuFailure::Occupied.into()),
         }
     }
-    for page in 0..pages {
-        let index = first + page as u16;
-        let wanted = MmuEntry {
-            target,
-            page: first_page + page,
-        };
+    for (index, page) in entries {
+        let wanted = MmuEntry { target, page };
         registers.write_entry(Access::new(), index, wanted);
         if registers.read_entry(Access::new(), index) != Some(wanted) {
             return Err(MmuFailure::Readback.into());

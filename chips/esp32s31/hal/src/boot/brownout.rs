@@ -38,7 +38,12 @@ const THRESHOLD: u8 = 7;
 /// One analog-I2C byte transaction of the threshold's write: a few bus
 /// clocks at the master's rate. ESP-IDF's `regi2c_write_mask` polls the
 /// host's busy bit without a limit; this bound is this crate's.
-pub const THRESHOLD_WAIT: BootWait = BootWait::new("bod-threshold", Duration::from_millis(1));
+pub const THRESHOLD_WAIT: BootWait = const {
+    match BootWait::new("bod-threshold", Duration::from_millis(1)) {
+        Ok(wait) => wait,
+        Err(_) => panic!("a boot wait has a nonzero bound"),
+    }
+};
 
 /// Why the policy was not applied.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
