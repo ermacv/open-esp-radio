@@ -83,7 +83,9 @@ fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
     assert_eq!(status, if h2e { 126 } else { 0 });
     let station = SaeCommitValues::parse(body, h2e).unwrap();
     let element = if h2e {
-        SaePasswordToken::derive(SSID, b"password", None).password_element(BSSID, LOCAL)
+        SaePasswordToken::derive(SSID, b"password", None)
+            .unwrap()
+            .password_element(BSSID, LOCAL)
     } else {
         SaePasswordElement::hunting_and_pecking(b"password", BSSID, LOCAL).unwrap()
     };
@@ -150,7 +152,7 @@ fn finish_handshake(
     )
     .unwrap();
     assert!(
-        message2.key_frame().verify_mic(&ptk),
+        message2.key_frame().unwrap().verify_mic(&ptk),
         "wire M2 must use the authenticated PMK"
     );
     let mut plain = advertisement[55..].to_vec();
@@ -300,4 +302,27 @@ fn anti_clogging_response_waits_for_credit_without_extending_the_deadline() {
         assert_eq!(world.station.tickets.len(), 2);
         assert_eq!(world.station.buffers.len(), 2);
     });
+}
+
+#[test]
+fn password_element_invariant_is_a_local_fault_with_its_peer_and_derivation() {
+    for pwe in [
+        oer_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+        oer_ieee80211_wire::security::SaePwe::HashToElement,
+    ] {
+        assert_eq!(
+            sae_derivation_failure(oer_ieee80211_rsn::sae::SaeError::Crypto, BSSID, pwe),
+            StaDisconnectReason::Sae(StaSaeFailure::Crypto { peer: BSSID, pwe })
+        );
+        assert_eq!(
+            sae_derivation_failure(
+                oer_ieee80211_rsn::sae::SaeError::NoPasswordElement,
+                BSSID,
+                pwe
+            ),
+            StaDisconnectReason::Sae(StaSaeFailure::Protocol(
+                oer_ieee80211_rsn::sae::SaeError::NoPasswordElement
+            ))
+        );
+    }
 }

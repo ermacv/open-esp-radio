@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 use super::*;
 use oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation;
 use oer_ieee80211_wire::{ccmp::CCMP_HEADER_LEN, security::Spp};

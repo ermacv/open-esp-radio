@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 use hmac::Mac;
 
 use super::*;
@@ -26,7 +32,8 @@ fn process(
 ) -> Result<RsnStaReady<512>, RsnStaProcessError<SoftwareAesKeyUnwrapError>> {
     match supplicant.on_frame(frame, pmk)? {
         RsnStaSupplicantAction::UnwrapKeyData(request) => {
-            let unwrapped = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
+            let unwrapped =
+                software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
             supplicant.complete_key_data_unwrap(request, unwrapped)
         }
         RsnStaSupplicantAction::Ready(action) => Ok(action),
@@ -100,7 +107,7 @@ fn connected(ptk: Ptk) -> RsnConnectedSupplicant {
         RsnTxFrame::<512>::message3(crate::Akm::Psk, LOCAL, 2, ANONCE, [0; 8], &[0x55; 24])
             .unwrap()
             .authenticate(&ptk);
-    let completed_message3 = RsnCompletedMessage3::capture(message3.key_frame());
+    let completed_message3 = RsnCompletedMessage3::capture(message3.key_frame().unwrap());
     let (key_confirmation, key_encryption) = ptk.into_connected_keys();
     RsnConnectedSupplicant {
         authenticator: AP,
@@ -201,8 +208,8 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     else {
         panic!("Message 1 must produce Message 2")
     };
-    assert_eq!(message2.key_frame().replay_counter(), 1);
-    assert!(message2.key_frame().verify_mic(&expected_ptk));
+    assert_eq!(message2.key_frame().unwrap().replay_counter(), 1);
+    assert!(message2.key_frame().unwrap().verify_mic(&expected_ptk));
 
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
@@ -242,8 +249,8 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
         panic!("installed keys must produce Message 4")
     };
     assert_eq!(supplicant.phase(), RsnStaPhase::Completed);
-    assert_eq!(message4.key_frame().replay_counter(), 2);
-    assert!(message4.key_frame().verify_mic(&expected_ptk));
+    assert_eq!(message4.key_frame().unwrap().replay_counter(), 2);
+    assert!(message4.key_frame().unwrap().verify_mic(&expected_ptk));
 }
 
 #[test]
@@ -303,12 +310,12 @@ fn connected_exact_duplicate_message3_retransmits_authenticated_m4() {
     };
 
     assert_eq!(
-        message4.key_frame().message(),
+        message4.key_frame().unwrap().message(),
         crate::EapolKeyMessage::PairwiseMessage4
     );
-    assert_eq!(message4.key_frame().replay_counter(), 2);
+    assert_eq!(message4.key_frame().unwrap().replay_counter(), 2);
     assert!(message4.retransmission());
-    assert!(message4.key_frame().verify_mic(&ptk));
+    assert!(message4.key_frame().unwrap().verify_mic(&ptk));
 }
 
 #[test]
@@ -439,7 +446,7 @@ fn a_newer_completed_group_request_cannot_be_rolled_back_by_an_older_owner() {
         panic!()
     };
     let response = connected.complete_group_key_install(newer, true).unwrap();
-    assert_eq!(response.key_frame().replay_counter(), 4);
+    assert_eq!(response.key_frame().unwrap().replay_counter(), 4);
     assert!(matches!(
         connected.complete_group_key_install(older, true),
         Err(RsnConnectedSupplicantError::StaleCompletion)
@@ -481,10 +488,10 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
     assert_eq!(request.group().key().as_bytes(), &[0x6a; 16]);
     let response = connected.complete_group_key_install(request, true).unwrap();
     assert_eq!(
-        response.key_frame().message(),
+        response.key_frame().unwrap().message(),
         crate::EapolKeyMessage::GroupMessage2
     );
-    assert!(response.key_frame().verify_mic(&ptk));
+    assert!(response.key_frame().unwrap().verify_mic(&ptk));
     assert_eq!(connected.replay_counter(), 3);
 
     let GroupStep::Retransmit(repeated) =
@@ -492,7 +499,7 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
     else {
         panic!("repeated Group Message 1 must not reinstall GTK")
     };
-    assert!(repeated.key_frame().verify_mic(&ptk));
+    assert!(repeated.key_frame().unwrap().verify_mic(&ptk));
 }
 
 #[test]
@@ -734,7 +741,7 @@ fn awaiting_encrypted_message3() -> (RsnStaSupplicant, crate::OwnedEapolFrame<51
 #[test]
 fn message3_key_data_request_carries_the_ptk_kek_and_completes_into_install() {
     let (mut supplicant, message3, pmk, ptk) = awaiting_encrypted_message3();
-    let wrapped_len = message3.key_frame().key_data().len();
+    let wrapped_len = message3.key_frame().unwrap().key_data().len();
     let RsnStaSupplicantAction::UnwrapKeyData(request) =
         supplicant.on_frame(message3, &pmk).unwrap()
     else {
@@ -742,10 +749,10 @@ fn message3_key_data_request_carries_the_ptk_kek_and_completes_into_install() {
     };
     assert_eq!(supplicant.phase(), RsnStaPhase::DecryptingKeyData);
     assert_eq!(request.kek(), ptk.kek());
-    assert_eq!(request.wrapped_key_data().len(), wrapped_len);
+    assert_eq!(request.wrapped_key_data().unwrap().len(), wrapped_len);
     assert_eq!(request.replay_counter(), 2);
 
-    let unwrapped = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
+    let unwrapped = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
     let RsnStaReady::InstallKeys(install) = supplicant
         .complete_key_data_unwrap(request, unwrapped)
         .unwrap()
@@ -800,8 +807,8 @@ fn completed_handshake_repeated_m3_only_grants_group_installation() {
     else {
         panic!("retry M4")
     };
-    assert_eq!(message4.key_frame().replay_counter(), 3);
-    assert!(message4.key_frame().verify_mic(&ptk));
+    assert_eq!(message4.key_frame().unwrap().replay_counter(), 3);
+    assert!(message4.key_frame().unwrap().verify_mic(&ptk));
 }
 
 #[test]
@@ -825,7 +832,7 @@ fn group_key_data_request_owns_verified_bytes_without_blocking_new_authenticatio
         panic!("new Group Message 1 must request its key-data unwrap")
     };
     assert_eq!(request.kek(), ptk.kek());
-    assert_eq!(request.wrapped_key_data(), &[0x55; 24]);
+    assert_eq!(request.wrapped_key_data().unwrap(), &[0x55; 24]);
     assert_eq!(request.replay_counter(), 3);
     let newer = RsnTxFrame::<512>::group_message1(crate::Akm::Psk, LOCAL, 4, [9; 8], &[0x66; 24])
         .unwrap()
@@ -836,7 +843,7 @@ fn group_key_data_request_owns_verified_bytes_without_blocking_new_authenticatio
         panic!("a newer frame must authenticate while the old request is owned")
     };
     assert_eq!(newer_request.replay_counter(), 4);
-    assert_eq!(newer_request.wrapped_key_data(), &[0x66; 24]);
+    assert_eq!(newer_request.wrapped_key_data().unwrap(), &[0x66; 24]);
 
     let install = connected
         .complete_group_key_data_unwrap(
@@ -895,5 +902,62 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
     assert!(matches!(
         connected.on_group_message1(owned(&frame)),
         Ok(RsnConnectedAction::UnwrapGroupKeyData(_))
+    ));
+}
+
+#[test]
+fn retained_authenticator_ies_fail_locally_during_initial_key_install() {
+    let (mut supplicant, message3, pmk, _) = awaiting_encrypted_message3();
+    let RsnStaSupplicantAction::UnwrapKeyData(request) =
+        supplicant.on_frame(message3, &pmk).unwrap()
+    else {
+        panic!()
+    };
+    let plain = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
+    supplicant.invalidate_security_ies_for_test();
+    let error = supplicant
+        .complete_key_data_unwrap(request, plain)
+        .err()
+        .unwrap();
+    assert_eq!(
+        error,
+        RsnStaProcessError::Supplicant(RsnStaSupplicantError::RetainedSecurityIes(
+            RsnFrameError::InvalidRsnIe
+        ))
+    );
+    assert!(!error.is_peer_input_rejection());
+}
+
+#[test]
+fn retained_authenticator_ies_fail_locally_during_connected_key_install() {
+    let (mut supplicant, message3, pmk, ptk) = awaiting_encrypted_message3();
+    let RsnStaReady::InstallKeys(request) = process(&mut supplicant, message3, &pmk).unwrap()
+    else {
+        panic!()
+    };
+    let _ = supplicant
+        .complete_key_install::<512>(request, true)
+        .unwrap();
+    let mut connected = supplicant.into_connected().unwrap();
+    let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
+    let gtk = RsnGtk::new(
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+        false,
+        &[0x5a; 16],
+    );
+    let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
+    let message3 = encrypted_message3(&ptk, [0; 8], plain.as_bytes());
+    let retry = resign_eapol_key_variant(&message3, &ptk, true, |bytes| bytes[16] = 3);
+    let RsnConnectedAction::UnwrapGroupKeyData(request) = connected.on_message3(retry).unwrap()
+    else {
+        panic!()
+    };
+    let plain = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
+    connected.invalidate_security_ies_for_test();
+    assert!(matches!(
+        connected.complete_group_key_data_unwrap(request, plain),
+        Err(RsnConnectedProcessError::Supplicant(
+            RsnConnectedSupplicantError::RetainedSecurityIes(RsnFrameError::InvalidRsnIe)
+        ))
     ));
 }

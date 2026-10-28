@@ -12,22 +12,24 @@ pub struct PmkDerivation {
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 struct State {
-    password: [u8; PSK_PASSPHRASE_MAX_LEN],
-    password_len: usize,
-    ssid: [u8; PSK_SSID_MAX_LEN],
-    ssid_len: usize,
+    password: heapless::Vec<u8, PSK_PASSPHRASE_MAX_LEN, u8>,
+    ssid: heapless::Vec<u8, PSK_SSID_MAX_LEN, u8>,
     previous: [u8; 20],
     sum: [u8; 20],
     output: [u8; 32],
     block: u32,
-    round: u32,
+    round: Rounds,
+}
+
+/// A finite sequence of exactly one block's HMAC rounds.
+struct Rounds(core::ops::Range<u32>);
+impl Zeroize for Rounds {
+    fn zeroize(&mut self) {
+        self.0 = 0..0;
+    }
 }
 
 impl PmkDerivation {
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "input lengths are validated against the fixed backing arrays"
-    )]
     pub fn new(password: &[u8], ssid: &[u8]) -> Result<Self, PskDerivationError> {
         if !(PSK_PASSPHRASE_MIN_LEN..=PSK_PASSPHRASE_MAX_LEN).contains(&password.len()) {
             return Err(PskDerivationError::InvalidPassphraseLength);
@@ -35,19 +37,17 @@ impl PmkDerivation {
         if ssid.is_empty() || ssid.len() > PSK_SSID_MAX_LEN {
             return Err(PskDerivationError::InvalidSsidLength);
         }
-        let mut state = State {
-            password: [0; PSK_PASSPHRASE_MAX_LEN],
-            password_len: password.len(),
-            ssid: [0; PSK_SSID_MAX_LEN],
-            ssid_len: ssid.len(),
+        let state = State {
+            password: heapless::Vec::from_slice(password)
+                .map_err(|_| PskDerivationError::InvalidPassphraseLength)?,
+            ssid: heapless::Vec::from_slice(ssid)
+                .map_err(|_| PskDerivationError::InvalidSsidLength)?,
             previous: [0; 20],
             sum: [0; 20],
             output: [0; 32],
             block: 1,
-            round: 0,
+            round: Rounds(0..PSK_PBKDF2_ITERATIONS),
         };
-        state.password[..password.len()].copy_from_slice(password);
-        state.ssid[..ssid.len()].copy_from_slice(ssid);
         Ok(Self { state: Some(state) })
     }
 
@@ -67,57 +67,61 @@ impl PmkDerivation {
 }
 
 impl State {
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "private lengths are validated on construction; PBKDF2 has exactly two fixed output blocks"
-    )]
     fn advance(&mut self, hmac: impl FnOnce(&[u8], &[u8], &[u8]) -> [u8; 20]) -> Option<Pmk> {
         // FnOnce makes the one-HMAC step budget structural, also when a
         // block finishes. No second block is started in the same step.
-        self.previous = if self.round == 0 {
+        let round = self.round.0.next()?;
+        self.previous = if round == 0 {
             hmac(
-                &self.password[..self.password_len],
-                &self.ssid[..self.ssid_len],
+                self.password.as_slice(),
+                self.ssid.as_slice(),
                 &self.block.to_be_bytes(),
             )
         } else {
-            hmac(&self.password[..self.password_len], &self.previous, &[])
+            hmac(self.password.as_slice(), &self.previous, &[])
         };
         for (sum, byte) in self.sum.iter_mut().zip(self.previous) {
             *sum ^= byte;
         }
-        self.round += 1;
-        if self.round != PSK_PBKDF2_ITERATIONS {
+        if !self.round.0.is_empty() {
             return None;
         }
         if self.block == 1 {
-            self.output[..20].copy_from_slice(&self.sum);
+            for (target, source) in self.output.iter_mut().zip(&self.sum) {
+                *target = *source;
+            }
             self.block = 2;
-            self.round = 0;
+            self.round = Rounds(0..PSK_PBKDF2_ITERATIONS);
             self.sum.zeroize();
             self.previous.zeroize();
             None
         } else {
-            self.output[20..].copy_from_slice(&self.sum[..12]);
+            for (target, source) in self.output.iter_mut().skip(20).zip(&self.sum) {
+                *target = *source;
+            }
             Some(Pmk(self.output))
         }
     }
 }
 
-#[expect(clippy::expect_used, reason = "HMAC accepts every passphrase length")]
 fn hmac_sha1(password: &[u8], first: &[u8], second: &[u8]) -> [u8; 20] {
-    let mut mac = Hmac::<Sha1>::new_from_slice(password).expect("HMAC accepts the password");
+    let mut mac = crate::mac::sha1(password);
     mac.update(first);
     mac.update(second);
     let mut digest = mac.finalize().into_bytes();
-    let mut result = [0; 20];
-    result.copy_from_slice(&digest);
+    let result = digest.into();
     digest.zeroize();
     result
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects,
+        clippy::unreachable
+    )]
     use super::*;
 
     #[test]
@@ -170,14 +174,14 @@ mod tests {
             // storage is released; no access after drop is needed.
             let state = derive.state.as_mut().unwrap();
             state.zeroize();
-            assert_eq!(state.password, [0; 63]);
-            assert_eq!(state.ssid, [0; 32]);
+            assert!(state.password.is_empty());
+            assert!(state.ssid.is_empty());
             assert_eq!(state.previous, [0; 20]);
             assert_eq!(state.sum, [0; 20]);
             assert_eq!(state.output, [0; 32]);
             assert_eq!(
-                (state.password_len, state.ssid_len, state.block, state.round),
-                (0, 0, 0, 0)
+                (state.block, state.round.0.start, state.round.0.end),
+                (0, 0, 0)
             );
             derive.zeroize();
             assert!(derive.state.is_none());

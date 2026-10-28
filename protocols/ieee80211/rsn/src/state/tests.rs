@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 use super::*;
 use crate::{
     EAPOL_KEY_FIXED_LEN, EAPOL_KEY_PACKET_LEN, EAPOL_PACKET_TYPE_KEY, RSN_KEY_DESCRIPTOR_TYPE,
@@ -114,7 +120,7 @@ fn sta_completes_once_and_does_not_reinstall_on_message3_replay() {
         RsnStaAction::InstallKeys { ticket, frame } => (ticket, frame),
         action => panic!("unexpected action: {action:?}"),
     };
-    assert_eq!(retained.key_frame().replay_counter(), 11);
+    assert_eq!(retained.key_frame().unwrap().replay_counter(), 11);
     assert_eq!(
         state
             .complete_key_install::<MESSAGE3_CAPACITY>(ticket, true)

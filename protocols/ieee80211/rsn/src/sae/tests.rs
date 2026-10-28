@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 use super::*;
 
 // IEEE Std 802.11-2020 Annex J.10, as hostap's `sae_tests` carries it.
@@ -41,7 +47,7 @@ fn hunting_and_pecking_matches_annex_j10() {
 
 #[test]
 fn hash_to_element_matches_annex_j10() {
-    let token = SaePasswordToken::derive(b"byteme", PASSWORD, Some(b"psk4internet"));
+    let token = SaePasswordToken::derive(b"byteme", PASSWORD, Some(b"psk4internet")).unwrap();
     let pwe = token.password_element(
         [0x00, 0x09, 0x5b, 0x66, 0xec, 0x1e],
         [0x00, 0x0b, 0x6b, 0xd9, 0x02, 0x46],
@@ -69,7 +75,9 @@ fn both_peers_derive_one_pmk_and_verify_each_confirm() {
             SaePasswordElement::hunting_and_pecking(PASSWORD, local, peer).unwrap()
         }),
         peers(|local, peer| {
-            SaePasswordToken::derive(b"byteme", PASSWORD, None).password_element(local, peer)
+            SaePasswordToken::derive(b"byteme", PASSWORD, None)
+                .unwrap()
+                .password_element(local, peer)
         }),
     ] {
         assert_eq!(station.pmk, access_point.pmk);
@@ -306,9 +314,9 @@ fn secret_owners_wipe_and_redact_debug() {
     assert_eq!(std::format!("{password:?}"), "SaePassword(<redacted>)");
     password.zeroize();
     assert!(password.as_bytes().is_empty());
-    assert_eq!(password.bytes, [0; SAE_PASSWORD_MAX_LEN]);
+    assert!(password.bytes.is_empty());
 
-    let mut token = SaePasswordToken::derive(b"byteme", PASSWORD, None);
+    let mut token = SaePasswordToken::derive(b"byteme", PASSWORD, None).unwrap();
     assert_eq!(std::format!("{token:?}"), "SaePasswordToken(<redacted>)");
     let mut element = token.password_element(ADDR1, ADDR2);
     assert_eq!(
@@ -340,8 +348,9 @@ fn secret_owners_wipe_and_redact_debug() {
 
 #[test]
 fn a_wiped_password_element_cannot_panic_when_reused_for_a_commit() {
-    let mut pwe =
-        SaePasswordToken::derive(b"byteme", PASSWORD, None).password_element(ADDR1, ADDR2);
+    let mut pwe = SaePasswordToken::derive(b"byteme", PASSWORD, None)
+        .unwrap()
+        .password_element(ADDR1, ADDR2);
     pwe.zeroize();
     assert!(matches!(
         SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]),
@@ -360,4 +369,59 @@ fn sae_password_lengths_are_admitted_before_copying_and_wiping_keeps_a_valid_emp
         password.zeroize();
         assert!(password.as_bytes().is_empty());
     }
+}
+
+#[test]
+fn failed_h2e_maps_return_crypto_errors_after_evaluating_both_elements() {
+    for failed_call in [1, 2] {
+        let mut calls = 0;
+        let result = SaePasswordToken::derive_with_map(b"ssid", PASSWORD, None, |_| {
+            calls += 1;
+            CtOption::new(
+                ProjectivePoint::GENERATOR,
+                Choice::from(u8::from(calls != failed_call)),
+            )
+        });
+        assert!(matches!(result, Err(SaeError::Crypto)));
+        assert_eq!(calls, 2);
+    }
+}
+
+#[test]
+fn invalid_curve_coordinates_keep_their_validity_bit() {
+    let invalid = point(&FieldElement::ZERO, &FieldElement::ZERO);
+    assert!(bool::from(invalid.is_none()));
+    assert!(peer_element(&[0; 2 * SAE_PRIME_LEN]).is_none());
+    let pwe = SaePasswordToken::derive(b"ssid", PASSWORD, None)
+        .unwrap()
+        .password_element(ADDR1, ADDR2);
+    let encoded = element_bytes(&pwe.0.to_affine()).unwrap();
+    assert!(peer_element(&encoded).is_some());
+    let mut changed = encoded;
+    changed[2 * SAE_PRIME_LEN - 1] ^= 2;
+    assert!(peer_element(&changed).is_none());
+    for value in [
+        FieldElement::ZERO,
+        FieldElement::ONE,
+        FieldElement::from_u64(10),
+    ] {
+        assert!(bool::from(sswu(&value).is_some()));
+    }
+}
+
+#[test]
+fn every_comeback_slot_is_updated_without_affecting_another_slot() {
+    let mut tokens = SaeComebackTokens::new();
+    for slot in 0_u8..=u8::MAX {
+        tokens.set_pending(slot, u16::from(slot) + 1);
+    }
+    for (pending, slot) in tokens.pending.iter().zip(0_u8..=u8::MAX) {
+        assert_eq!(*pending, u16::from(slot) + 1);
+    }
+    tokens.set_pending(0, 0);
+    tokens.set_pending(255, 0);
+    assert_eq!(tokens.pending[0], 0);
+    assert_eq!(tokens.pending[255], 0);
+    assert_eq!(tokens.pending[1], 2);
+    assert_eq!(tokens.pending[254], 255);
 }

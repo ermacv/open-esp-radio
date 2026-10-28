@@ -30,10 +30,17 @@ use oer_ieee80211_sta::{
 use oer_ieee80211_wire::station::StaDisconnectKind;
 use oer_radio_port::PortBackend;
 
+#[path = "security_report.rs"]
+mod security_report;
+
 pub fn disconnect(reason: StaDisconnectReason) -> StationDisconnectReason {
     use StaDisconnectReason as R;
     use StationDisconnectReason as W;
     match reason {
+        R::InvalidEapol(error) => W::InvalidEapol(security_report::eapol(error)),
+        R::RetainedSecurityIes(error) => {
+            W::RetainedSecurityIes(security_report::retained_security_ies(error))
+        }
         R::TransmitRefused(refusal) => W::TransmitRefused(transmit(refusal)),
         R::Requested => W::LocalRequest,
         R::NotFound { partial } => W::NotFound { partial },
@@ -91,6 +98,10 @@ fn channel(refusal: Refusal) -> StationChannelRefusal {
 
 fn sae(failure: StaSaeFailure) -> StationSaeFailure {
     match failure {
+        StaSaeFailure::Crypto { peer, pwe } => StationSaeFailure::Crypto {
+            peer,
+            pwe: security_report::sae_pwe(pwe),
+        },
         StaSaeFailure::Timeout => StationSaeFailure::Timeout,
         StaSaeFailure::DeadlineOverflow => StationSaeFailure::DeadlineOverflow,
         StaSaeFailure::PeerDisconnect(disconnect) => StationSaeFailure::PeerDisconnect {
@@ -102,6 +113,7 @@ fn sae(failure: StaSaeFailure) -> StationSaeFailure {
         },
         StaSaeFailure::Rejected { status_code } => StationSaeFailure::Rejected { status_code },
         StaSaeFailure::Protocol(error) => StationSaeFailure::Protocol(match error {
+            SaeError::Crypto => StationSaeError::Crypto,
             SaeError::NoPasswordElement => StationSaeError::NoPasswordElement,
             SaeError::UnsuitableRandom => StationSaeError::UnsuitableRandom,
             SaeError::UnsupportedGroup(group) => StationSaeError::UnsupportedGroup(group),

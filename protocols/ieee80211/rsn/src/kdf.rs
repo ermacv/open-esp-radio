@@ -1,28 +1,34 @@
-//! The IEEE 802.11 key derivation function with SHA-256.
-//!
-//! SOURCE: IEEE Std 802.11-2020 12.7.1.6.2 (KDF).
-
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
+//! IEEE Std 802.11-2020 12.7.1.6.2 SHA-256 KDF.
+use hmac::Mac;
 use zeroize::Zeroize;
 
-/// The IEEE 802.11 KDF-Hash-Length with SHA-256: HMAC blocks over a 16-bit
-/// counter, the label, the context and the output length in bits.
-#[expect(
-    clippy::expect_used,
-    reason = "HMAC accepts every key length; the key contents cannot affect constructor success"
-)]
-pub(crate) fn kdf_sha256(key: &[u8], label: &[u8], context: &[u8], output: &mut [u8]) {
-    let bits = (output.len() * 8) as u16;
-    for (counter, chunk) in (1_u16..).zip(output.chunks_mut(32)) {
-        let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts every key length");
+pub(crate) fn kdf_sha256<const N: usize>(
+    key: &[u8],
+    label: &[u8],
+    context: &[u8],
+    output: &mut [u8; N],
+) {
+    const {
+        if N > (u16::MAX as usize) / 8 {
+            panic!("KDF output bit length must fit u16");
+        }
+    }
+    let bits = const { (N * 8) as u16 };
+    let mut remaining = output.iter_mut().peekable();
+    for counter in 1_u16..=u16::MAX {
+        if remaining.peek().is_none() {
+            break;
+        }
+        let mut mac = crate::mac::sha256(key);
         mac.update(&counter.to_le_bytes());
         mac.update(label);
         mac.update(context);
         mac.update(&bits.to_le_bytes());
         let mut block = mac.finalize().into_bytes();
-        for (target, source) in chunk.iter_mut().zip(block.iter()) {
-            *target = *source;
+        for source in &block {
+            if let Some(target) = remaining.next() {
+                *target = *source;
+            }
         }
         block.zeroize();
     }

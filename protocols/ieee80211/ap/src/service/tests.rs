@@ -710,7 +710,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         .unwrap();
     let (message1, message1_context) = service.begin_wpa2_frame::<512>(PEER).unwrap().into_parts();
     assert_eq!(
-        message1.key_frame().message(),
+        message1.key_frame().unwrap().message(),
         EapolKeyMessage::PairwiseMessage1
     );
     assert!(!message1.retransmission());
@@ -767,11 +767,11 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     };
     let (message3, message3_context) = message3.into_parts();
     assert_eq!(
-        message3.key_frame().message(),
+        message3.key_frame().unwrap().message(),
         EapolKeyMessage::PairwiseMessage3
     );
-    assert!(message3.key_frame().verify_mic(&ptk));
-    let plaintext = software_aes128_key_unwrap(ptk.kek(), message3.key_frame().key_data())
+    assert!(message3.key_frame().unwrap().verify_mic(&ptk));
+    let plaintext = software_aes128_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
         .expect("AP wrapped its Message 3 key data");
     assert!(
         parse_gtk_key_data(
@@ -1633,13 +1633,21 @@ fn a_station_resuming_a_pmksa_is_refused_by_an_access_point_without_a_cache() {
         storage.lend(),
     )
     .unwrap();
-    assert!(service.matches_association_security(association_security(&WPA2_RSN)));
+    assert!(
+        service
+            .matches_association_security(association_security(&WPA2_RSN))
+            .unwrap()
+    );
     let mut resuming = [0_u8; 40];
     resuming[..22].copy_from_slice(&WPA2_RSN);
     resuming[1] = 38;
     resuming[22..24].copy_from_slice(&1_u16.to_le_bytes());
     resuming[24..40].copy_from_slice(&[0x5a; 16]);
-    assert!(!service.matches_association_security(association_security(&resuming)));
+    assert!(
+        !service
+            .matches_association_security(association_security(&resuming))
+            .unwrap()
+    );
 }
 
 const SAE_STATION_RSN: [u8; 22] = [
@@ -1740,8 +1748,8 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         panic!("message 2 must produce message 3");
     };
     let (message3, message3_context) = message3.into_parts();
-    assert!(message3.key_frame().verify_mic(&ptk));
-    let plaintext = software_aes128_key_unwrap(ptk.kek(), message3.key_frame().key_data())
+    assert!(message3.key_frame().unwrap().verify_mic(&ptk));
+    let plaintext = software_aes128_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
         .expect("AP wrapped its Message 3 key data");
     let keys = parse_gtk_key_data(
         plaintext.as_bytes(),
@@ -1824,10 +1832,18 @@ fn a_wpa3_access_point_refuses_psk_and_stations_without_protection() {
             oer_time::Instant::from_micros(0),
         )
         .unwrap();
-    assert!(!service.matches_association_security(association_security(&WPA2_RSN)));
+    assert!(
+        !service
+            .matches_association_security(association_security(&WPA2_RSN))
+            .unwrap()
+    );
     let mut unprotected = SAE_STATION_RSN;
     unprotected[20] = 0;
-    assert!(!service.matches_association_security(association_security(&unprotected)));
+    assert!(
+        !service
+            .matches_association_security(association_security(&unprotected))
+            .unwrap()
+    );
     assert_eq!(
         association_status(
             service
@@ -2056,7 +2072,8 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     assert_eq!(&second[len + 4..len + 10], &[2, 0, 0, 0, 0, 0]);
     let (ptk, message3) = begin_management_handshake(&mut service, PEER);
     let (message3, message3_context) = message3.into_parts();
-    let plaintext = software_aes128_key_unwrap(ptk.kek(), message3.key_frame().key_data()).unwrap();
+    let plaintext =
+        software_aes128_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data()).unwrap();
     let keys = parse_gtk_key_data(
         plaintext.as_bytes(),
         &oer_ieee80211_wire::security::AP_WPA3_PERSONAL_RSN_ELEMENT,

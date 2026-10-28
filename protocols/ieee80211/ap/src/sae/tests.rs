@@ -31,7 +31,7 @@ fn frame(peer: [u8; 6], transaction: u16, status: u16, body: &[u8]) -> ApSaeFram
 fn responder() -> ApSaeResponder {
     ApSaeResponder::new(
         ACCESS_POINT,
-        ApSaeCredential::derive(SSID, SaePassword::new(PASSWORD).unwrap()),
+        ApSaeCredential::derive(SSID, SaePassword::new(PASSWORD).unwrap()).unwrap(),
     )
 }
 
@@ -45,7 +45,9 @@ struct Station {
 impl Station {
     fn new(station: [u8; 6], password: &[u8], h2e: bool) -> Self {
         let pwe = if h2e {
-            SaePasswordToken::derive(SSID, password, None).password_element(station, ACCESS_POINT)
+            SaePasswordToken::derive(SSID, password, None)
+                .unwrap()
+                .password_element(station, ACCESS_POINT)
         } else {
             SaePasswordElement::hunting_and_pecking(password, station, ACCESS_POINT).unwrap()
         };
@@ -415,4 +417,32 @@ fn processing_failure_keeps_both_the_commit_and_failure_reply_in_order() {
             status: AP_SAE_STATUS_UNSPECIFIED_FAILURE
         }
     );
+}
+
+#[test]
+fn a_commit_curve_fault_retains_peer_and_stage_without_replies_or_phase_advance() {
+    let station = Station::new(STATION, PASSWORD, true);
+    let mut session = Session::new(STATION);
+    let output = commit_step_with(
+        &mut session,
+        station.commit.values(),
+        true,
+        false,
+        |peer, h2e| {
+            assert_eq!(peer, STATION);
+            assert!(h2e);
+            Err(SaeError::Crypto)
+        },
+    );
+    assert_eq!(
+        output.result,
+        ApSaeResult::Fault(ApSaeFault::Crypto {
+            peer: STATION,
+            stage: ApSaeCryptoStage::DrawCommit
+        })
+    );
+    assert_eq!(output.replies().count(), 0);
+    assert_eq!(session.phase, ApSaePhase::Nothing);
+    assert!(session.own.is_none());
+    assert!(session.keys.is_none());
 }

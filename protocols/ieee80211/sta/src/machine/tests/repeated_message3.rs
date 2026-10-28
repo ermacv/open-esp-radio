@@ -335,8 +335,8 @@ fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
                 panic!("disable must return both affine owners")
             };
             for (frame, counter) in [(message3.into_frame(), 4), (group.into_frame(), 5)] {
-                assert_eq!(frame.key_frame().replay_counter(), counter);
-                assert!(frame.key_frame().verify_mic(&ptk));
+                assert_eq!(frame.key_frame().unwrap().replay_counter(), counter);
+                assert!(frame.key_frame().unwrap().verify_mic(&ptk));
             }
         });
     }
@@ -576,4 +576,128 @@ fn every_capacity_retains_keys_then_evicts_the_oldest_non_current_installation()
     exercise::<2>();
     exercise::<3>();
     exercise::<4>();
+}
+
+#[test]
+fn damaged_deferred_eapol_disconnects_on_both_rx_and_tx_terminal_paths() {
+    for rx in [true, false] {
+        installed(|mint| {
+            let (mut world, ptk) = wpa2_connected::<2>(mint);
+            world.hold_transmissions = true;
+            world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
+            world.receive(at(51), &retry_message3(&ptk, 4, 0x99));
+            world.take();
+            let State::Connected(connected) = &mut world.station.state else {
+                panic!()
+            };
+            let rsn = connected.rsn.as_mut().unwrap();
+            let DeferredEapol::Message3(pending) = &mut rsn.deferred else {
+                panic!()
+            };
+            pending.request.invalidate_frame_for_test();
+            if rx {
+                // RX can advance the queue when there is no outstanding response.
+                rsn.rekey = Rekey::None;
+                let error = world
+                    .station
+                    .receive(at(52), &retry_message3(&ptk, 1, 0x99), meta(), |_| {})
+                    .unwrap_err();
+                // The triggering peer rejection survives the deferred local fault.
+                assert_eq!(
+                    error,
+                    StaRxError::Security(RsnConnectedProcessError::Supplicant(
+                        RsnConnectedSupplicantError::StaleReplayCounter
+                    ))
+                );
+                let State::Connected(connected) = &world.station.state else {
+                    panic!()
+                };
+                assert_eq!(
+                    connected.rsn.as_ref().unwrap().fault,
+                    Some(StaDisconnectReason::InvalidEapol(
+                        oer_ieee80211_rsn::EapolParseError::Truncated
+                    ))
+                );
+            } else {
+                world.outcomes.push_back((ended(End::Delivered), true));
+            }
+            world.hold_transmissions = false;
+            world.end_transmissions(at(52));
+            world.run(at(52));
+            assert!(!world.station.is_connected());
+            assert_eq!(
+                world
+                    .take()
+                    .iter()
+                    .filter(|event| matches!(
+                        event,
+                        Seen::Notify(StaNotice::Disconnected(StaDisconnectReason::InvalidEapol(
+                            oer_ieee80211_rsn::EapolParseError::Truncated
+                        )))
+                    ))
+                    .count(),
+                1
+            );
+        });
+    }
+}
+
+#[test]
+fn retained_security_ies_are_terminal_without_counting_a_peer_drop() {
+    installed(|mint| {
+        let (mut world, ptk) = wpa2_connected::<2>(mint);
+        let State::Connected(connected) = &mut world.station.state else {
+            panic!()
+        };
+        connected
+            .rsn
+            .as_mut()
+            .unwrap()
+            .supplicant
+            .invalidate_security_ies_for_test();
+        let before = security_drops(&world);
+        world
+            .station
+            .receive(at(50), &retry_message3(&ptk, 3, 0x99), meta(), |_| {})
+            .unwrap();
+        assert_eq!(security_drops(&world), before);
+        let State::Connected(connected) = &world.station.state else {
+            panic!()
+        };
+        assert_eq!(
+            connected.rsn.as_ref().unwrap().fault,
+            Some(StaDisconnectReason::RetainedSecurityIes(
+                oer_ieee80211_rsn::frames::RsnFrameError::InvalidRsnIe
+            ))
+        );
+        world.run(at(50));
+        assert!(!world.station.is_connected());
+        assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
+            StaDisconnectReason::RetainedSecurityIes(
+                oer_ieee80211_rsn::frames::RsnFrameError::InvalidRsnIe
+            )
+        ))));
+    });
+}
+
+#[test]
+fn retained_security_ies_fail_with_the_same_cause_during_the_initial_handshake() {
+    installed(|mint| {
+        let (mut world, ptk) = wpa2_associated::<2>(mint);
+        let State::Handshake(handshake) = &mut world.station.state else {
+            panic!()
+        };
+        handshake
+            .supplicant
+            .as_mut()
+            .unwrap()
+            .invalidate_security_ies_for_test();
+        world.receive(at(33), &retry_message3(&ptk, 2, 0x99));
+        assert!(!world.station.is_connected());
+        assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
+            StaDisconnectReason::RetainedSecurityIes(
+                oer_ieee80211_rsn::frames::RsnFrameError::InvalidRsnIe
+            )
+        ))));
+    });
 }

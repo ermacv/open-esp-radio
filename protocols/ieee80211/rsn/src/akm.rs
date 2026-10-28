@@ -46,18 +46,12 @@ impl AkmKeys for Akm {
         }
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "HMAC accepts every key length and AES-128 CMAC receives a fixed 16-byte KCK"
-    )]
     fn mic(self, kck: &[u8; RSN_KCK_LEN]) -> EapolMic {
         match self {
-            Self::Psk => EapolMic::HmacSha1(
-                Hmac::<Sha1>::new_from_slice(kck).expect("KCK length is always accepted by HMAC"),
-            ),
-            Self::PskSha256 | Self::Sae => EapolMic::AesCmac(
-                Cmac::<Aes128>::new_from_slice(kck).expect("a 16-byte KCK is an AES-128 key"),
-            ),
+            Self::Psk => EapolMic::HmacSha1(crate::mac::sha1(kck)),
+            Self::PskSha256 | Self::Sae => {
+                EapolMic::AesCmac(<Cmac<Aes128> as Mac>::new(kck.into()))
+            }
         }
     }
 }
@@ -93,8 +87,7 @@ impl EapolMic {
             }
             Self::AesCmac(mac) => {
                 let mut tag = mac.finalize().into_bytes();
-                let mut mic = [0; RSN_MIC_LEN];
-                mic.copy_from_slice(&tag);
+                let mic = tag.into();
                 tag.zeroize();
                 mic
             }
@@ -111,33 +104,37 @@ impl EapolMic {
 }
 
 /// IEEE 802.11 PRF-384 with HMAC-SHA1 and the pairwise expansion label.
-#[expect(
-    clippy::expect_used,
-    reason = "HMAC accepts every key length, including the fixed PMK"
-)]
 fn prf_sha1(pmk: &[u8; 32], context: &[u8; 76], ptk: &mut [u8; RSN_PTK_LEN]) {
-    let mut written = 0;
-    let mut counter = 0_u8;
-    while written < ptk.len() {
-        let mut mac =
-            Hmac::<Sha1>::new_from_slice(pmk).expect("PMK length is always accepted by HMAC");
+    const {
+        if !(3 * 20 >= RSN_PTK_LEN && 2 * 20 < RSN_PTK_LEN) {
+            panic!("PRF-384 SHA-1 block geometry");
+        }
+    }
+    let mut remaining = ptk.iter_mut();
+    for counter in 0_u8..3 {
+        let mut mac = crate::mac::sha1(pmk);
         mac.update(PTK_EXPANSION_LABEL);
         mac.update(&[0]);
         mac.update(context);
         mac.update(&[counter]);
         let mut block = mac.finalize().into_bytes();
-        let count = core::cmp::min(block.len(), ptk.len() - written);
-        for (target, source) in ptk.iter_mut().skip(written).take(count).zip(block.iter()) {
-            *target = *source;
+        for source in &block {
+            if let Some(target) = remaining.next() {
+                *target = *source;
+            }
         }
         block.zeroize();
-        written += count;
-        counter = counter.wrapping_add(1);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects,
+        clippy::unreachable
+    )]
     use super::*;
 
     fn expanded(akm: Akm, pmk: &[u8; 32], context: &[u8; 76]) -> [u8; RSN_PTK_LEN] {

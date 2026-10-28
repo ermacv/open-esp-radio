@@ -69,8 +69,15 @@ pub enum StaSaeFailure {
     Timeout,
     DeadlineOverflow,
     PeerDisconnect(StaDisconnect),
-    Rejected { status_code: u16 },
+    Rejected {
+        status_code: u16,
+    },
     Protocol(SaeError),
+    /// Local password-element derivation failed its mathematical invariant.
+    Crypto {
+        peer: [u8; 6],
+        pwe: SaePwe,
+    },
     TokenTooLong,
 }
 

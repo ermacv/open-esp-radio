@@ -733,6 +733,8 @@ pub enum StaNotice {
 /// Why the station is not connected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaDisconnectReason {
+    InvalidEapol(oer_ieee80211_rsn::EapolParseError),
+    RetainedSecurityIes(oer_ieee80211_rsn::frames::RsnFrameError),
     /// A required frame was refused before admission.
     TransmitRefused(TxRefusal),
     /// The application asked it to leave.
@@ -1528,6 +1530,7 @@ impl<T: StaTokens, K> State<T, K> {
                         rekey: Rekey::None,
                         deferred: DeferredEapol::Empty,
                         dropped: crate::Counter::ZERO,
+                        fault: None,
                     }
                 )
             });
@@ -1880,6 +1883,8 @@ enum Sending {
 
 /// A protected link's supplicant and its group key's handshake.
 struct ConnectedRsn {
+    /// First local failure; no further link work is admitted before leaving.
+    fault: Option<StaDisconnectReason>,
     management: Option<ManagementProtection>,
     supplicant: RsnConnectedSupplicant,
     rekey: Rekey,
@@ -1916,8 +1921,31 @@ impl ConnectedRsn {
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
     ) -> Result<(), StaRxError> {
+        if self.fault.is_some() {
+            return Ok(());
+        }
+        match self.receive_eapol(eapol, protection) {
+            Err(error) => match connected_rsn_fault(error) {
+                Some(reason) => {
+                    self.fault = Some(reason);
+                    Ok(())
+                }
+                None => Err(error.into()),
+            },
+            Ok(()) => Ok(()),
+        }
+    }
+
+    fn receive_eapol(
+        &mut self,
+        eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
+        protection: EapolProtection,
+    ) -> Result<(), RsnConnectedSupplicantError> {
         use oer_ieee80211_rsn::EapolKeyMessage;
-        let message = eapol.key_frame().message();
+        let message = eapol
+            .key_frame()
+            .map_err(RsnConnectedSupplicantError::from)?
+            .message();
         let action = match (message, protection) {
             (EapolKeyMessage::PairwiseMessage3, _) => self.supplicant.on_message3(eapol),
             (EapolKeyMessage::GroupMessage1, EapolProtection::Pairwise) => {
@@ -1930,10 +1958,12 @@ impl ConnectedRsn {
             Ok(RsnConnectedAction::Retransmit(frame))
                 if message == EapolKeyMessage::PairwiseMessage3 =>
             {
-                if self
-                    .deferred
-                    .has_newer_message3(frame.key_frame().replay_counter())
-                {
+                if self.deferred.has_newer_message3(
+                    frame
+                        .key_frame()
+                        .map_err(RsnConnectedSupplicantError::from)?
+                        .replay_counter(),
+                ) {
                     Err(RsnConnectedSupplicantError::StaleReplayCounter)
                 } else {
                     if matches!(self.message4, DuplicateMessage4::None) {
@@ -1944,10 +1974,12 @@ impl ConnectedRsn {
                 }
             }
             Ok(RsnConnectedAction::Retransmit(frame)) => {
-                if self
-                    .deferred
-                    .has_newer_group(frame.key_frame().replay_counter())
-                {
+                if self.deferred.has_newer_group(
+                    frame
+                        .key_frame()
+                        .map_err(RsnConnectedSupplicantError::from)?
+                        .replay_counter(),
+                ) {
                     Err(RsnConnectedSupplicantError::StaleReplayCounter)
                 } else {
                     // An exact duplicate coalesces with its current GM2.
@@ -1990,29 +2022,35 @@ impl ConnectedRsn {
                 }
             }
         };
-        if result.is_err() {
+        if let Err(error) = result {
+            if let Some(reason) = connected_rsn_fault(error) {
+                self.fault = Some(reason);
+                return Err(error);
+            }
             self.dropped.increment();
         }
-        self.advance_deferred();
-        result.map_err(Into::into)
+        if let Err(reason) = self.advance_deferred() {
+            self.fault = Some(reason);
+        }
+        result
     }
 
     /// Consume the smallest verified replay counter into installation work.
     /// M3 and GM1 advance the same frontier; their kind grants no priority.
     /// Invalid key data remains a counted protocol drop, not a local failure.
     #[inline(never)]
-    fn advance_deferred(&mut self) {
+    fn advance_deferred(&mut self) -> Result<(), StaDisconnectReason> {
         if !matches!(self.rekey, Rekey::None)
             || matches!(self.message4, DuplicateMessage4::AwaitSent)
         {
-            return;
+            return Ok(());
         }
         loop {
             let (request, protection, rest) =
                 match core::mem::replace(&mut self.deferred, DeferredEapol::Empty) {
                     DeferredEapol::Empty => {
                         self.deferred = DeferredEapol::Empty;
-                        return;
+                        return Ok(());
                     }
                     DeferredEapol::Message3(PendingM3 {
                         request,
@@ -2039,18 +2077,50 @@ impl ConnectedRsn {
                     }
                 };
             self.deferred = rest;
-            let unwrapped = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
+            let wrapped = request
+                .wrapped_key_data()
+                .map_err(StaDisconnectReason::InvalidEapol)?;
+            let unwrapped = software_aes128_key_unwrap(request.kek(), wrapped);
             match self
                 .supplicant
                 .complete_group_key_data_unwrap(request, unwrapped)
             {
                 Ok(install) => {
                     self.rekey = Rekey::Install(install, protection);
-                    return;
+                    return Ok(());
+                }
+                Err(oer_ieee80211_rsn::supplicant::RsnConnectedProcessError::Supplicant(error)) => {
+                    if let Some(reason) = connected_rsn_fault(error) {
+                        return Err(reason);
+                    }
+                    self.dropped.increment();
                 }
                 Err(_) => self.dropped.increment(),
             }
         }
+    }
+}
+
+fn sae_derivation_failure(
+    error: oer_ieee80211_rsn::sae::SaeError,
+    peer: [u8; 6],
+    pwe: oer_ieee80211_wire::security::SaePwe,
+) -> StaDisconnectReason {
+    StaDisconnectReason::Sae(match error {
+        oer_ieee80211_rsn::sae::SaeError::Crypto => StaSaeFailure::Crypto { peer, pwe },
+        error => StaSaeFailure::Protocol(error),
+    })
+}
+
+fn connected_rsn_fault(error: RsnConnectedSupplicantError) -> Option<StaDisconnectReason> {
+    match error {
+        RsnConnectedSupplicantError::InvalidFrame(error) => {
+            Some(StaDisconnectReason::InvalidEapol(error))
+        }
+        RsnConnectedSupplicantError::RetainedSecurityIes(error) => {
+            Some(StaDisconnectReason::RetainedSecurityIes(error))
+        }
+        _ => None,
     }
 }
 
@@ -3868,8 +3938,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         ) {
             return leave_disabled(connected);
         }
-        self.update_connected(connected, now, done);
-        Change::Keep
+        match self.update_connected(connected, now, done) {
+            Ok(()) => Change::Keep,
+            Err(reason) => leave_connected(connected, reason, None),
+        }
     }
 
     #[inline(never)]
@@ -3878,7 +3950,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         connected: &mut Connected<T, K>,
         now: Instant,
         done: StaDone<T>,
-    ) {
+    ) -> Result<(), StaDisconnectReason> {
+        if let Some(reason) = connected.rsn.as_ref().and_then(|rsn| rsn.fault) {
+            return Err(reason);
+        }
         let sent = match done {
             Done::Tx {
                 purpose: TxPurpose::Connected(sending),
@@ -3934,7 +4009,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         if matches!(rsn.message4, DuplicateMessage4::AwaitSent) {
                             rsn.message4 = DuplicateMessage4::None;
                         }
-                        rsn.advance_deferred();
+                        rsn.advance_deferred()?;
                     }
                 }
                 Sending::Probe | Sending::SaQuery | Sending::BlockAck => {}
@@ -3952,7 +4027,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 );
             }
             self.background_done(connected);
-            return;
+            return Ok(());
         }
         let dwell = self.config.dwell;
         if let Some(background) = &mut connected.background {
@@ -3975,7 +4050,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             interrupted: Some(reason),
                         },
                     );
-                    return;
+                    return Ok(());
                 }
                 (BackgroundStep::AwaitNarrowed(None), Done::Configured) => {
                     self.next_visit(background);
@@ -3984,7 +4059,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 (step, _) => step,
             };
         }
-        self.background_done(connected)
+        self.background_done(connected);
+        Ok(())
     }
 
     /// The next visit of the background scan, or its end.
@@ -4117,9 +4193,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                                     self.config.address.get(),
                                     bssid.get(),
                                 )
-                                .map_err(|error| {
-                                    StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
-                                })?
+                                .map_err(|error| sae_derivation_failure(error, bssid.get(), pwe))?
                             }
                             oer_ieee80211_wire::security::SaePwe::HashToElement => {
                                 SaePasswordToken::derive(
@@ -4127,6 +4201,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                                     password.as_bytes(),
                                     None,
                                 )
+                                .map_err(|error| sae_derivation_failure(error, bssid.get(), pwe))?
                                 .password_element(self.config.address.get(), bssid.get())
                             }
                         };
@@ -4135,9 +4210,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             self.config.callbacks.nonce(),
                             self.config.callbacks.nonce(),
                         )
-                        .map_err(|error| {
-                            StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
-                        })?;
+                        .map_err(|error| sae_derivation_failure(error, bssid.get(), pwe))?;
                         let (authentication, transmission) =
                             StaSaeAuthentication::new(self.config.address, bssid, commit, pwe, now)
                                 .map_err(StaDisconnectReason::Sae)?;
@@ -4293,6 +4366,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         if self.epoch.is_none()
             || connected.confirmation.is_some()
             || self.absence.is_some()
+            || connected
+                .rsn
+                .as_ref()
+                .is_some_and(|rsn| rsn.fault.is_some())
             || connected.power.asleep()
         {
             return false;
@@ -4869,18 +4946,37 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         let action = match received {
             // Message 3's key data, unwrapped in the step: a few AES blocks.
             Ok(RsnStaSupplicantAction::UnwrapKeyData(request)) => {
-                let unwrapped =
-                    software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
+                let wrapped = match request.wrapped_key_data() {
+                    Ok(wrapped) => wrapped,
+                    Err(error) => {
+                        return leave_keyed(StaDisconnectReason::InvalidEapol(error), None);
+                    }
+                };
+                let unwrapped = software_aes128_key_unwrap(request.kek(), wrapped);
                 match handshake
                     .supplicant()
                     .map_err(oer_ieee80211_rsn::supplicant::RsnStaProcessError::from)
                     .and_then(|supplicant| supplicant.complete_key_data_unwrap(request, unwrapped))
                 {
                     Ok(action) => action,
+                    Err(oer_ieee80211_rsn::supplicant::RsnStaProcessError::Supplicant(
+                        RsnStaSupplicantError::RetainedSecurityIes(error),
+                    )) => {
+                        return leave_keyed(StaDisconnectReason::RetainedSecurityIes(error), None);
+                    }
+                    Err(oer_ieee80211_rsn::supplicant::RsnStaProcessError::Supplicant(
+                        RsnStaSupplicantError::InvalidFrame(error),
+                    )) => return leave_keyed(StaDisconnectReason::InvalidEapol(error), None),
                     Err(_) => return leave_handshake(handshake, REASON_UNSPECIFIED),
                 }
             }
             Ok(RsnStaSupplicantAction::Ready(action)) => action,
+            Err(RsnStaSupplicantError::RetainedSecurityIes(error)) => {
+                return leave_keyed(StaDisconnectReason::RetainedSecurityIes(error), None);
+            }
+            Err(RsnStaSupplicantError::InvalidFrame(error)) => {
+                return leave_keyed(StaDisconnectReason::InvalidEapol(error), None);
+            }
             // A peer frame the supplicant rejects changes nothing.
             Err(error) if error.is_peer_input_rejection() => RsnStaReady::None,
             Err(_) => return leave_handshake(handshake, REASON_UNSPECIFIED),
@@ -5054,6 +5150,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         now: Instant,
         pairwise_purpose: TxPurpose,
     ) -> ActionStep<'id, T, K> {
+        if let Some(reason) = connected.rsn.as_ref().and_then(|rsn| rsn.fault) {
+            return (
+                leave_connected(connected, reason, None),
+                ActionProgress::Transition,
+            );
+        }
         if connected
             .rsn
             .as_ref()
@@ -5354,14 +5456,16 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 Rekey::Send(message)
                     if !connected.sending && self.link_up(&connected.power, &(*self.keys)) =>
                 {
+                    let message_kind = match message.frame.key_frame() {
+                        Ok(frame) => frame.message(),
+                        Err(error) => return Some(Err(StaDisconnectReason::InvalidEapol(error))),
+                    };
                     let qos = connected.qos.then_some(&mut connected.qos_sequences);
                     match self.encode_eapol_response(
                         connected.bssid,
                         qos,
                         &message,
-                        if message.frame.key_frame().message()
-                            == oer_ieee80211_rsn::EapolKeyMessage::PairwiseMessage4
-                        {
+                        if message_kind == oer_ieee80211_rsn::EapolKeyMessage::PairwiseMessage4 {
                             pairwise_purpose
                         } else {
                             TxPurpose::Connected(Sending::GroupResponse)

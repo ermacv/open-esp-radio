@@ -17,20 +17,19 @@
 //! `libnet80211.a[ieee80211_ioctl.o]::map_wifi_config_sae_pwe_to_supp`;
 //! IEEE Std 802.11-2020 12.4 and Annex J.10.
 
-use hmac::{Hmac, Mac};
+use core::ops::{Mul, Neg};
+use hmac::Mac;
 use p256::{
-    AffinePoint, EncodedPoint, FieldBytes, FieldElement, ProjectivePoint, Scalar,
+    AffinePoint, FieldBytes, FieldElement, ProjectivePoint, Scalar,
     elliptic_curve::{
         Field, PrimeField,
         bigint::{Encoding, NonZero, U256, U384},
         group::Group,
         ops::Reduce,
-        point::AffineCoordinates,
-        sec1::{FromEncodedPoint, ToEncodedPoint},
-        subtle::{Choice, ConditionallySelectable, ConstantTimeEq},
+        point::{AffineCoordinates, DecompressPoint},
+        subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
     },
 };
-use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::kdf::kdf_sha256;
@@ -66,20 +65,50 @@ const MAXIMUM_PWE_ITERATIONS: u8 = 200;
 /// SSWU parameter Z of group 19.
 const SSWU_Z: u64 = 10;
 /// Octets of pwd-value in H2E: olen(p) + ceil(olen(p)/2).
-const H2E_PWD_VALUE_LEN: usize = SAE_PRIME_LEN + SAE_PRIME_LEN.div_ceil(2);
+const H2E_PWD_VALUE_LEN: usize = {
+    if !SAE_PRIME_LEN.is_multiple_of(2) {
+        panic!("group 19 field length must be even");
+    }
+    SAE_PRIME_LEN + SAE_PRIME_LEN / 2
+};
 
 const P256_MODULUS: U256 =
     U256::from_be_hex("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
 const P256_ORDER: U256 =
     U256::from_be_hex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
-const P256_B: [u8; 32] = [
-    0x5a, 0xc6, 0x35, 0xd8, 0xaa, 0x3a, 0x93, 0xe7, 0xb3, 0xeb, 0xbd, 0x55, 0x76, 0x98, 0x86, 0xbc,
-    0x65, 0x1d, 0x06, 0xb0, 0xcc, 0x53, 0xb0, 0xf6, 0x3b, 0xce, 0x3c, 0x3e, 0x27, 0xd2, 0x60, 0x4b,
-];
+// b represented in four base-2^64 limbs, evaluated entirely at compile time.
+const CURVE_B: FieldElement = {
+    let radix = FieldElement::from_u64(u64::MAX).add(&FieldElement::ONE);
+    FieldElement::from_u64(0x5ac635d8aa3a93e7)
+        .multiply(&radix)
+        .add(&FieldElement::from_u64(0xb3ebbd55769886bc))
+        .multiply(&radix)
+        .add(&FieldElement::from_u64(0x651d06b0cc53b0f6))
+        .multiply(&radix)
+        .add(&FieldElement::from_u64(0x3bce3c3e27d2604b))
+};
+const WIDE_MODULUS: NonZero<U384> = {
+    let value = U384::from_be_hex(
+        "00000000000000000000000000000000ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
+    );
+    if value.bits_vartime() == 0 {
+        panic!("the P-256 modulus must be nonzero");
+    }
+    NonZero::<U384>::const_new(value).0
+};
+const ORDER_MINUS_ONE: NonZero<U256> = {
+    let value = P256_ORDER.wrapping_sub(&U256::ONE);
+    if value.bits_vartime() == 0 {
+        panic!("the P-256 order minus one must be nonzero");
+    }
+    NonZero::<U256>::const_new(value).0
+};
 
 /// Why an SAE computation or received message was rejected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SaeError {
+    /// An internal field or curve conversion failed its mathematical invariant.
+    Crypto,
     /// Hunting and pecking found no password element.
     NoPasswordElement,
     /// A random value outside 1 < value < r, or a commit scalar of 0 or 1.
@@ -108,8 +137,7 @@ pub const SAE_PASSWORD_MAX_LEN: usize = 63;
 /// derives and cleared on drop. It cannot be formatted.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaePassword {
-    bytes: [u8; SAE_PASSWORD_MAX_LEN],
-    len: u8,
+    bytes: heapless::Vec<u8, SAE_PASSWORD_MAX_LEN, u8>,
 }
 
 impl SaePassword {
@@ -118,24 +146,13 @@ impl SaePassword {
         if password.is_empty() || password.len() > SAE_PASSWORD_MAX_LEN {
             return None;
         }
-        let mut bytes = [0; SAE_PASSWORD_MAX_LEN];
-        for (target, source) in bytes.iter_mut().zip(password.iter()) {
-            *target = *source;
-        }
         Some(Self {
-            bytes,
-            len: password.len() as u8,
+            bytes: heapless::Vec::from_slice(password).ok()?,
         })
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "new bounds the private password length to the fixed 63-byte storage"
-    )]
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes
-            .get(..usize::from(self.len))
-            .expect("validated SAE password fits its storage")
+        self.bytes.as_slice()
     }
 }
 
@@ -153,12 +170,8 @@ pub struct SaePasswordElement(ProjectivePoint);
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaePasswordToken(ProjectivePoint);
 
-#[expect(
-    clippy::expect_used,
-    reason = "HMAC accepts every key length, including peer-provided byte strings"
-)]
 fn hmac_sha256(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
-    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts every key length");
+    let mut mac = crate::mac::sha256(key);
     for part in parts {
         mac.update(part);
     }
@@ -167,19 +180,25 @@ fn hmac_sha256(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
 
 /// The larger address first, then the smaller.
 fn max_min(first: [u8; 6], second: [u8; 6]) -> [u8; 12] {
+    const {
+        if 12 != 2 * core::mem::size_of::<[u8; 6]>() {
+            panic!("SAE address context geometry");
+        }
+    }
     let (high, low) = if first > second {
         (first, second)
     } else {
         (second, first)
     };
     let mut addresses = [0; 12];
-    addresses[..6].copy_from_slice(&high);
-    addresses[6..].copy_from_slice(&low);
+    for (target, source) in addresses.iter_mut().zip(high.iter().chain(&low)) {
+        *target = *source;
+    }
     addresses
 }
 
 fn curve_b() -> FieldElement {
-    FieldElement::from_bytes(&FieldBytes::from(P256_B)).expect("b is a field element")
+    CURVE_B
 }
 
 /// x^3 - 3x + b.
@@ -191,9 +210,14 @@ fn curve_rhs(x: &FieldElement) -> FieldElement {
         .add(&curve_b())
 }
 
-fn point(x: &FieldElement, y: &FieldElement) -> Option<ProjectivePoint> {
-    let encoded = EncodedPoint::from_affine_coordinates(&x.to_bytes(), &y.to_bytes(), false);
-    Option::<AffinePoint>::from(AffinePoint::from_encoded_point(&encoded)).map(Into::into)
+/// Validate coordinates without SEC1's tag parser or any secret-dependent branch.
+fn point(x: &FieldElement, y: &FieldElement) -> CtOption<ProjectivePoint> {
+    AffinePoint::decompress(&x.to_bytes(), y.is_odd()).and_then(|point| {
+        CtOption::new(
+            ProjectivePoint::from(point),
+            y.square().ct_eq(&curve_rhs(x)),
+        )
+    })
 }
 
 impl SaePasswordElement {
@@ -210,11 +234,7 @@ impl SaePasswordElement {
         let mut found = Choice::from(0);
         let mut x_bytes = [0_u8; SAE_PRIME_LEN];
         let mut seed_odd = Choice::from(0);
-        let mut counter = 1_u8;
-        while counter <= MINIMUM_PWE_ITERATIONS || !bool::from(found) {
-            if counter > MAXIMUM_PWE_ITERATIONS {
-                return Err(SaeError::NoPasswordElement);
-            }
+        for counter in 1..=MAXIMUM_PWE_ITERATIONS {
             let mut seed = hmac_sha256(&key, &[password, &[counter]]);
             let mut value = [0_u8; SAE_PRIME_LEN];
             kdf_sha256(&seed, b"SAE Hunting and Pecking", &prime, &mut value);
@@ -227,107 +247,145 @@ impl SaePasswordElement {
             for (stored, byte) in x_bytes.iter_mut().zip(value) {
                 stored.conditional_assign(&byte, take);
             }
-            seed_odd.conditional_assign(&Choice::from(seed[31] & 1), take);
+            let [.., last_seed] = seed;
+            seed_odd.conditional_assign(&Choice::from(last_seed & 1), take);
             found |= on_curve;
             seed.zeroize();
             value.zeroize();
-            counter += 1;
+            if counter >= MINIMUM_PWE_ITERATIONS && bool::from(found) {
+                break;
+            }
         }
-        let x = FieldElement::from_bytes(&FieldBytes::from(x_bytes)).expect("a found x is reduced");
+        if !bool::from(found) {
+            return Err(SaeError::NoPasswordElement);
+        }
+        let x = FieldElement::from_bytes(&FieldBytes::from(x_bytes));
         x_bytes.zeroize();
-        let y = curve_rhs(&x).sqrt().expect("a found x has a y");
-        let y = FieldElement::conditional_select(&y.neg(), &y, y.is_odd().ct_eq(&seed_odd));
-        point(&x, &y).map(Self).ok_or(SaeError::NoPasswordElement)
+        let point = x.and_then(|x| {
+            curve_rhs(&x).sqrt().and_then(|y| {
+                let y = FieldElement::conditional_select(&y.neg(), &y, y.is_odd().ct_eq(&seed_odd));
+                point(&x, &y)
+            })
+        });
+        Option::<ProjectivePoint>::from(point)
+            .map(Self)
+            .ok_or(SaeError::Crypto)
     }
 }
 
 /// u = value mod p for a 48-octet H2E value.
-fn reduce_wide(value: &[u8; H2E_PWD_VALUE_LEN]) -> FieldElement {
-    let modulus = NonZero::new(U384::from_be_hex(
-        "00000000000000000000000000000000ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
-    ))
-    .expect("p is not zero");
-    let reduced = U384::from_be_slice(value).rem(&modulus).to_be_bytes();
-    let mut low = [0_u8; SAE_PRIME_LEN];
-    low.copy_from_slice(&reduced[H2E_PWD_VALUE_LEN - SAE_PRIME_LEN..]);
-    FieldElement::from_bytes(&FieldBytes::from(low)).expect("a value below p is a field element")
+fn reduce_wide(value: &[u8; H2E_PWD_VALUE_LEN]) -> CtOption<FieldElement> {
+    let reduced = U384::from_be_bytes(*value).rem(&WIDE_MODULUS).to_be_bytes();
+    let mut low = [0; SAE_PRIME_LEN];
+    for (target, source) in low.iter_mut().rev().zip(reduced.iter().rev()) {
+        *target = *source;
+    }
+    FieldElement::from_bytes(&FieldBytes::from(low))
 }
 
-/// The simplified SWU map of IEEE 802.11 with Z = -10.
-#[expect(
-    clippy::expect_used,
-    reason = "SSWU over P-256 maps every field element to an on-curve point; field reduction precedes this private function"
-)]
-fn sswu(u: &FieldElement) -> ProjectivePoint {
+/// Simplified SWU. Invalid intermediate values retain their validity bit;
+/// both candidate coordinates are always evaluated and selected in constant time.
+fn sswu(u: &FieldElement) -> CtOption<ProjectivePoint> {
     let z = FieldElement::ZERO.sub(&FieldElement::from_u64(SSWU_Z));
     let a = FieldElement::ZERO.sub(&FieldElement::from_u64(3));
     let b = curve_b();
-    let u2 = u.square();
-    let t1 = z.multiply(&u2);
+    let t1 = z.multiply(&u.square());
     let m = t1.add(&t1.square());
-    let m_is_zero = m.is_zero();
-    // m^(p-2), which is zero for m = 0.
+    // SSWU defines inv0(0) = 0; x1a is selected for this case below.
     let t = m.invert().unwrap_or(FieldElement::ZERO);
-    let x1a = b.multiply(&z.multiply(&a).invert().expect("z * a is not zero"));
-    let x1b = FieldElement::ZERO
-        .sub(&b)
-        .multiply(&a.invert().expect("a is not zero"))
-        .multiply(&FieldElement::ONE.add(&t));
-    let x1 = FieldElement::conditional_select(&x1b, &x1a, m_is_zero);
-    let gx1 = curve_rhs(&x1);
-    let x2 = t1.multiply(&x1);
-    let gx2 = curve_rhs(&x2);
-    let gx1_square = gx1.sqrt().is_some();
-    let v = FieldElement::conditional_select(&gx2, &gx1, gx1_square);
-    let x = FieldElement::conditional_select(&x2, &x1, gx1_square);
-    let y = v.sqrt().expect("gx1 or gx2 is a square");
-    let y = FieldElement::conditional_select(&y.neg(), &y, u.is_odd().ct_eq(&y.is_odd()));
-    point(&x, &y).expect("SSWU maps onto the curve")
+    z.multiply(&a).invert().and_then(|za_inv| {
+        a.invert().and_then(|a_inv| {
+            let x1a = b.multiply(&za_inv);
+            let x1b = FieldElement::ZERO
+                .sub(&b)
+                .multiply(&a_inv)
+                .multiply(&FieldElement::ONE.add(&t));
+            let x1 = FieldElement::conditional_select(&x1b, &x1a, m.is_zero());
+            let gx1 = curve_rhs(&x1);
+            let x2 = t1.multiply(&x1);
+            let gx2 = curve_rhs(&x2);
+            let gx1_square = gx1.sqrt().is_some();
+            let v = FieldElement::conditional_select(&gx2, &gx1, gx1_square);
+            let x = FieldElement::conditional_select(&x2, &x1, gx1_square);
+            v.sqrt().and_then(|y| {
+                let y =
+                    FieldElement::conditional_select(&y.neg(), &y, u.is_odd().ct_eq(&y.is_odd()));
+                point(&x, &y)
+            })
+        })
+    })
 }
 
 impl SaePasswordToken {
     /// PT = SSWU(u1) + SSWU(u2) with u1, u2 expanded from
     /// HKDF-Extract(ssid, password [|| identifier]).
-    pub fn derive(ssid: &[u8], password: &[u8], identifier: Option<&[u8]>) -> Self {
+    pub fn derive(
+        ssid: &[u8],
+        password: &[u8],
+        identifier: Option<&[u8]>,
+    ) -> Result<Self, SaeError> {
+        Self::derive_with_map(ssid, password, identifier, sswu)
+    }
+
+    fn derive_with_map(
+        ssid: &[u8],
+        password: &[u8],
+        identifier: Option<&[u8]>,
+        mut map: impl FnMut(&FieldElement) -> CtOption<ProjectivePoint>,
+    ) -> Result<Self, SaeError> {
         let mut seed = hmac_sha256(ssid, &[password, identifier.unwrap_or(&[])]);
-        let element = |label: &[u8]| {
+        let mut element = |label: &[u8]| {
             let mut value = [0_u8; H2E_PWD_VALUE_LEN];
             hkdf_expand(&seed, label, &mut value);
             let u = reduce_wide(&value);
             value.zeroize();
-            sswu(&u)
+            u.and_then(|u| map(&u))
         };
-        let token = element(b"SAE Hash to Element u1 P1") + element(b"SAE Hash to Element u2 P2");
+        let first = element(b"SAE Hash to Element u1 P1");
+        let second = element(b"SAE Hash to Element u2 P2");
+        let token = first.and_then(|first| second.map(|second| core::ops::Add::add(first, second)));
         seed.zeroize();
-        Self(token)
+        Option::<ProjectivePoint>::from(token)
+            .map(Self)
+            .ok_or(SaeError::Crypto)
     }
 
     /// PWE = val * PT, val = H(0^32, MAX(addresses) || MIN(addresses))
     /// mod (r - 1) + 1.
     pub fn password_element(&self, local: [u8; 6], peer: [u8; 6]) -> SaePasswordElement {
         let hash = hmac_sha256(&[0; 32], &[&max_min(local, peer)]);
-        let order_minus_one =
-            NonZero::new(P256_ORDER.wrapping_sub(&U256::ONE)).expect("r - 1 is not zero");
-        let value = U256::from_be_slice(&hash)
-            .rem(&order_minus_one)
+
+        let value = U256::from_be_bytes(hash)
+            .rem(&ORDER_MINUS_ONE)
             .wrapping_add(&U256::ONE);
-        SaePasswordElement(self.0 * <Scalar as Reduce<U256>>::reduce(value))
+        SaePasswordElement(self.0.mul(<Scalar as Reduce<U256>>::reduce(value)))
     }
 }
 
 /// HKDF-Expand with SHA-256.
-fn hkdf_expand(prk: &[u8; 32], info: &[u8], output: &mut [u8]) {
+fn hkdf_expand<const N: usize>(prk: &[u8; 32], info: &[u8], output: &mut [u8; N]) {
+    const {
+        if N > 255 * 32 {
+            panic!("HKDF output must fit 255 blocks");
+        }
+    }
     let mut previous = [0_u8; 32];
 
-    for (counter, chunk) in (1_u8..).zip(output.chunks_mut(32)) {
-        let previous_input = if counter == 1 {
-            &[][..]
+    let mut remaining = output.iter_mut().peekable();
+    for counter in 1_u8..=u8::MAX {
+        if remaining.peek().is_none() {
+            break;
+        }
+        let previous_input: &[u8] = if counter == 1 {
+            &[]
         } else {
             previous.as_slice()
         };
         let block = hmac_sha256(prk, &[previous_input, info, &[counter]]);
-        for (target, source) in chunk.iter_mut().zip(block.iter()) {
-            *target = *source;
+        for source in &block {
+            if let Some(target) = remaining.next() {
+                *target = *source;
+            }
         }
         previous = block;
     }
@@ -339,14 +397,28 @@ fn scalar_from(bytes: &[u8; SAE_PRIME_LEN]) -> Option<Scalar> {
 }
 
 fn element_bytes(element: &AffinePoint) -> Result<[u8; 2 * SAE_PRIME_LEN], SaeError> {
-    let encoded = element.to_encoded_point(false);
-    let Some((&[4], coordinates)) = encoded.as_bytes().split_first_chunk::<1>() else {
+    let x = FieldElement::from_bytes(&element.x());
+    let coordinates = x.and_then(|x| {
+        curve_rhs(&x).sqrt().map(|y| {
+            let y = FieldElement::conditional_select(
+                &y.neg(),
+                &y,
+                element.y_is_odd().ct_eq(&y.is_odd()),
+            );
+            let mut bytes = [0; 2 * SAE_PRIME_LEN];
+            for (target, source) in bytes
+                .iter_mut()
+                .zip(x.to_bytes().iter().chain(y.to_bytes().iter()))
+            {
+                *target = *source;
+            }
+            bytes
+        })
+    });
+    if bool::from(element.is_identity()) {
         return Err(SaeError::InfiniteSecret);
-    };
-    let Some(&bytes) = coordinates.first_chunk::<{ 2 * SAE_PRIME_LEN }>() else {
-        return Err(SaeError::InfiniteSecret);
-    };
-    Ok(bytes)
+    }
+    Option::<[u8; 2 * SAE_PRIME_LEN]>::from(coordinates).ok_or(SaeError::Crypto)
 }
 
 /// One peer's commit: its scalar and element.
@@ -391,7 +463,11 @@ impl SaeCommitValues {
             let [EXTENSION_ELEMENT_ID, length, extension, ..] = *rest else {
                 return Err(SaeError::Malformed);
             };
-            let Some((whole, tail)) = rest.split_at_checked(2 + usize::from(length)) else {
+            let Some((whole, tail)) = rest.split_at_checked(
+                usize::from(length)
+                    .checked_add(2)
+                    .ok_or(SaeError::Malformed)?,
+            ) else {
                 return Err(SaeError::Malformed);
             };
             let [_, _, _, value @ ..] = whole else {
@@ -399,10 +475,7 @@ impl SaeCommitValues {
             };
             match extension {
                 REJECTED_GROUPS_ELEMENT
-                    if value.len().is_multiple_of(2)
-                        && !value
-                            .chunks_exact(2)
-                            .any(|group| group == SAE_GROUP_P256.to_le_bytes()) => {}
+                    if value.len().is_multiple_of(2) && !contains_offered_group(value) => {}
                 _ => return Err(SaeError::Malformed),
             }
             rest = tail;
@@ -461,7 +534,9 @@ fn put(output: &mut &mut [u8], bytes: &[u8]) -> Result<(), SaeError> {
     let (front, rest) = core::mem::take(output)
         .split_at_mut_checked(bytes.len())
         .ok_or(SaeError::Malformed)?;
-    front.copy_from_slice(bytes);
+    for (target, source) in front.iter_mut().zip(bytes) {
+        *target = *source;
+    }
     *output = rest;
     Ok(())
 }
@@ -564,11 +639,7 @@ impl<'a> SaeReceivedCommit<'a> {
     /// Whether the station rejected group 19, the only group this access
     /// point offers.
     pub fn rejects_offered_group(&self) -> bool {
-        self.rejected_groups.is_some_and(|groups| {
-            groups
-                .chunks_exact(2)
-                .any(|group| group == SAE_GROUP_P256.to_le_bytes())
-        })
+        self.rejected_groups.is_some_and(contains_offered_group)
     }
 }
 
@@ -629,26 +700,35 @@ impl SaeComebackTokens {
             self.key_drawn = Some(now);
             self.pending = [0; 256];
         }
-        let pending = self.pending_mut(station);
-        if *pending == 0 {
-            *pending = 1;
-        }
+        let (slot, pending) = self.pending_index(station);
+        let pending = u16::conditional_select(&pending, &1, pending.ct_eq(&0));
+        self.set_pending(slot, pending);
         let index = pending.to_be_bytes();
         let mut token = hmac_sha256(&self.key, &[&station, &index]);
-        let (head, _) = token.split_at_mut(2);
-        head.copy_from_slice(&index);
+        for (target, source) in token.iter_mut().zip(index) {
+            *target = source;
+        }
         token
     }
 
     /// `station`'s pending index, in the slot of the first octet of
     /// HMAC-SHA256(key, station address).
-    fn pending_mut(&mut self, station: [u8; 6]) -> &mut u16 {
+    fn pending_index(&self, station: [u8; 6]) -> (u8, u16) {
         let [first, ..] = hmac_sha256(&self.key, &[&station]);
-        #[expect(
-            clippy::indexing_slicing,
-            reason = "a one-octet slot indexes the 256 entries of the table"
-        )]
-        &mut self.pending[usize::from(first)]
+        let pending = self
+            .pending
+            .iter()
+            .zip(0_u8..=u8::MAX)
+            .fold(0, |value, (pending, slot)| {
+                u16::conditional_select(&value, pending, slot.ct_eq(&first))
+            });
+        (first, pending)
+    }
+
+    fn set_pending(&mut self, selected: u8, value: u16) {
+        for (pending, slot) in self.pending.iter_mut().zip(0_u8..=u8::MAX) {
+            pending.conditional_assign(&value, slot.ct_eq(&selected));
+        }
     }
 
     /// Whether `token` is the one pending for `station`; a valid token is
@@ -661,15 +741,15 @@ impl SaeComebackTokens {
             return false;
         }
         let mac = hmac_sha256(&self.key, &[&station, index_bytes]);
-        let (_, mac_tail) = mac.split_at(2);
-        let pending = self.pending_mut(station);
-        if *pending == 0 || pending.to_be_bytes() != *index_bytes {
+        let [_, _, mac_tail @ ..] = &mac;
+        let (slot, pending) = self.pending_index(station);
+        if pending == 0 || pending.to_be_bytes() != *index_bytes {
             return false;
         }
         if !bool::from(mac_tail.ct_eq(tail)) {
             return false;
         }
-        *pending = 0;
+        self.set_pending(slot, 0);
         true
     }
 }
@@ -698,7 +778,7 @@ fn extension_element(bytes: &[u8], extension: u8, minimum_length: u8) -> Option<
     if id != extension || length < minimum_length {
         return None;
     }
-    let (element, tail) = bytes.split_at_checked(2 + usize::from(length))?;
+    let (element, tail) = bytes.split_at_checked(usize::from(length).checked_add(2)?)?;
     let [_, _, _, value @ ..] = element else {
         return None;
     };
@@ -714,13 +794,12 @@ fn extension_element(bytes: &[u8], extension: u8, minimum_length: u8) -> Option<
     clippy::arithmetic_side_effects
 )]
 fn peer_element(element: &[u8; 2 * SAE_PRIME_LEN]) -> Option<AffinePoint> {
-    let mut encoded = [0_u8; 1 + 2 * SAE_PRIME_LEN];
-    let (tag, coordinates) = encoded.split_at_mut(1);
-    tag.copy_from_slice(&[4]);
-    coordinates.copy_from_slice(element);
-    EncodedPoint::from_bytes(encoded)
-        .ok()
-        .and_then(|point| Option::<AffinePoint>::from(AffinePoint::from_encoded_point(&point)))
+    let (x, y) = element.split_first_chunk::<SAE_PRIME_LEN>()?;
+    let y: &[u8; SAE_PRIME_LEN] = y.try_into().ok()?;
+    let x = FieldElement::from_bytes(&FieldBytes::from(*x));
+    let y = FieldElement::from_bytes(&FieldBytes::from(*y));
+    Option::<ProjectivePoint>::from(x.and_then(|x| y.and_then(|y| point(&x, &y))))
+        .map(|point| point.to_affine())
 }
 
 /// The anti-clogging token of a commit refused with status 76: after the
@@ -750,7 +829,11 @@ pub fn anti_clogging_token(body: &[u8], h2e: bool) -> Result<&[u8], SaeError> {
     if length == 0 {
         return Err(SaeError::Malformed);
     }
-    let Some((element, _)) = rest.split_at_checked(2 + usize::from(length)) else {
+    let Some((element, _)) = rest.split_at_checked(
+        usize::from(length)
+            .checked_add(2)
+            .ok_or(SaeError::Malformed)?,
+    ) else {
         return Err(SaeError::Malformed);
     };
     let [_, _, _, token @ ..] = element else {
@@ -764,7 +847,8 @@ pub fn anti_clogging_token(body: &[u8], h2e: bool) -> Result<&[u8], SaeError> {
 pub struct SaeCommit {
     #[zeroize(skip)]
     pwe: SaePasswordElement,
-    rand: [u8; SAE_PRIME_LEN],
+    rand: Scalar,
+    own_scalar: Scalar,
     #[zeroize(skip)]
     own: SaeCommitValues,
 }
@@ -798,14 +882,15 @@ impl SaeCommit {
         {
             return Err(SaeError::UnsuitableRandom);
         }
-        let scalar = rand_scalar + mask_scalar;
+        let scalar = core::ops::Add::add(rand_scalar, mask_scalar);
         if bool::from(scalar.is_zero() | scalar.ct_eq(&Scalar::ONE)) {
             return Err(SaeError::UnsuitableRandom);
         }
-        let element = (-(pwe.0 * mask_scalar)).to_affine();
+        let element = pwe.0.mul(mask_scalar).neg().to_affine();
         Ok(Self {
             pwe: SaePasswordElement(pwe.0),
-            rand,
+            rand: rand_scalar,
+            own_scalar: scalar,
             own: SaeCommitValues {
                 scalar: scalar.to_bytes().into(),
                 element: element_bytes(&element)?,
@@ -837,33 +922,28 @@ impl SaeCommit {
         if peer == self.own {
             return Err(SaeError::Reflection);
         }
-        #[expect(
-            clippy::expect_used,
-            reason = "`SaeCommit::new` admitted `rand` only as a reduced scalar; a failure is a bug here"
-        )]
-        let rand = scalar_from(&self.rand).expect("rand was validated");
-        #[allow(
-            clippy::arithmetic_side_effects,
-            reason = "elliptic-curve group operations are total; they neither overflow nor panic"
-        )]
-        let shared = ((self.pwe.0 * peer_scalar) + ProjectivePoint::from(peer_element)) * rand;
+        let rand = self.rand;
+        let shared = core::ops::Add::add(
+            self.pwe.0.mul(peer_scalar),
+            ProjectivePoint::from(peer_element),
+        )
+        .mul(rand);
         if bool::from(shared.is_identity()) {
             return Err(SaeError::InfiniteSecret);
         }
         let mut k: [u8; SAE_PRIME_LEN] = shared.to_affine().x().into();
         let mut keyseed = hmac_sha256(&[0; 32], &[&k]);
         k.zeroize();
-        #[expect(
-            clippy::expect_used,
-            reason = "`SaeCommit::new` produced the scalar from a reduced sum; a failure is a bug here"
-        )]
-        let own_scalar = scalar_from(&self.own.scalar).expect("own scalar is reduced");
-        #[allow(
-            clippy::arithmetic_side_effects,
-            reason = "scalar addition is modulo the group order; it neither overflows nor panics"
-        )]
-        let context: [u8; SAE_PRIME_LEN] = (own_scalar + peer_scalar).to_bytes().into();
-        let mut keys = [0_u8; 2 * SAE_KEY_LEN];
+        let own_scalar = self.own_scalar;
+        let context: [u8; SAE_PRIME_LEN] = core::ops::Add::add(own_scalar, peer_scalar)
+            .to_bytes()
+            .into();
+        const {
+            if !(2 * SAE_KEY_LEN == 64 && SAE_PMKID_LEN <= SAE_PRIME_LEN) {
+                panic!("SAE derived key geometry");
+            }
+        }
+        let mut keys = [0_u8; 64];
         kdf_sha256(&keyseed, b"SAE KCK and PMK", &context, &mut keys);
         keyseed.zeroize();
         let mut derived = SaeKeys {
@@ -873,11 +953,12 @@ impl SaeCommit {
             own: self.own,
             peer,
         };
-        let (kck, pmk) = keys.split_at(SAE_KEY_LEN);
-        derived.kck.copy_from_slice(kck);
-        derived.pmk.copy_from_slice(pmk);
-        let (pmkid, _) = context.split_at(SAE_PMKID_LEN);
-        derived.pmkid.copy_from_slice(pmkid);
+        for (target, source) in derived.kck.iter_mut().chain(&mut derived.pmk).zip(&keys) {
+            *target = *source;
+        }
+        for (target, source) in derived.pmkid.iter_mut().zip(&context) {
+            *target = *source;
+        }
         keys.zeroize();
         Ok(derived)
     }
@@ -914,9 +995,20 @@ impl SaeKeys {
 
     /// This station's confirm body.
     pub fn own_confirm(&self, send_confirm: u16) -> [u8; SAE_CONFIRM_LEN] {
+        const {
+            if SAE_CONFIRM_LEN != core::mem::size_of::<u16>() + 32 {
+                panic!("SAE confirm geometry");
+            }
+        }
         let mut body = [0; SAE_CONFIRM_LEN];
-        body[..2].copy_from_slice(&send_confirm.to_le_bytes());
-        body[2..].copy_from_slice(&self.confirm(send_confirm, &self.own, &self.peer));
+        for (target, source) in body.iter_mut().zip(
+            send_confirm
+                .to_le_bytes()
+                .iter()
+                .chain(self.confirm(send_confirm, &self.own, &self.peer).iter()),
+        ) {
+            *target = *source;
+        }
         body
     }
 
@@ -971,4 +1063,14 @@ impl core::fmt::Debug for SaeComebackTokens {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("SaeComebackTokens(<redacted>)")
     }
+}
+
+fn contains_offered_group(mut groups: &[u8]) -> bool {
+    while let Some((group, rest)) = groups.split_first_chunk::<2>() {
+        if *group == SAE_GROUP_P256.to_le_bytes() {
+            return true;
+        }
+        groups = rest;
+    }
+    false
 }

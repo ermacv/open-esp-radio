@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 use super::*;
 use crate::EapolKeyMessage;
 use crate::state::RsnApAction;
@@ -22,7 +28,7 @@ fn contiguous_association_security_ies_retain_exact_rsn_and_rsnxe() {
     bytes[22..].copy_from_slice(&rsnxe);
     let owned = OwnedAssociationSecurityIes::<128>::try_copy_bytes(&bytes).unwrap();
     assert_eq!(owned.as_bytes(), &bytes);
-    assert_eq!(owned.rsn_ie(), rsn.as_bytes());
+    assert_eq!(owned.rsn_ie().unwrap(), rsn.as_bytes());
 
     bytes[23] = 3;
     assert_eq!(
@@ -80,19 +86,31 @@ fn builders_produce_classified_m1_to_m4() {
     let m3 =
         RsnTxFrame::<128>::message3(crate::Akm::Psk, [2; 6], 8, [3; 32], [5; 8], &[6; 24]).unwrap();
     let m4 = RsnTxFrame::<128>::message4(crate::Akm::Psk, [1; 6], 8).unwrap();
-    assert_eq!(m1.key_frame().message(), EapolKeyMessage::PairwiseMessage1);
-    assert_eq!(m2.key_frame().message(), EapolKeyMessage::PairwiseMessage2);
-    assert_eq!(m3.key_frame().message(), EapolKeyMessage::PairwiseMessage3);
-    assert!(m3.key_frame().key_info().encrypted_key_data());
-    assert_eq!(m4.key_frame().message(), EapolKeyMessage::PairwiseMessage4);
-    assert_eq!(m1.key_frame().key_length(), RSN_GTK_LEN as u16);
-    assert_eq!(m2.key_frame().key_length(), 0);
-    assert_eq!(m3.key_frame().key_length(), RSN_GTK_LEN as u16);
-    assert_eq!(m4.key_frame().key_length(), 0);
-    assert_eq!(m1.key_frame().protocol_version(), 2);
-    assert_eq!(m2.key_frame().protocol_version(), 1);
-    assert_eq!(m3.key_frame().protocol_version(), 2);
-    assert_eq!(m4.key_frame().protocol_version(), 1);
+    assert_eq!(
+        m1.key_frame().unwrap().message(),
+        EapolKeyMessage::PairwiseMessage1
+    );
+    assert_eq!(
+        m2.key_frame().unwrap().message(),
+        EapolKeyMessage::PairwiseMessage2
+    );
+    assert_eq!(
+        m3.key_frame().unwrap().message(),
+        EapolKeyMessage::PairwiseMessage3
+    );
+    assert!(m3.key_frame().unwrap().key_info().encrypted_key_data());
+    assert_eq!(
+        m4.key_frame().unwrap().message(),
+        EapolKeyMessage::PairwiseMessage4
+    );
+    assert_eq!(m1.key_frame().unwrap().key_length(), RSN_GTK_LEN as u16);
+    assert_eq!(m2.key_frame().unwrap().key_length(), 0);
+    assert_eq!(m3.key_frame().unwrap().key_length(), RSN_GTK_LEN as u16);
+    assert_eq!(m4.key_frame().unwrap().key_length(), 0);
+    assert_eq!(m1.key_frame().unwrap().protocol_version(), 2);
+    assert_eq!(m2.key_frame().unwrap().protocol_version(), 1);
+    assert_eq!(m3.key_frame().unwrap().protocol_version(), 2);
+    assert_eq!(m4.key_frame().unwrap().protocol_version(), 1);
 }
 
 #[test]
@@ -106,7 +124,7 @@ fn state_actions_are_bound_to_role_peer_and_nonce_context() {
     };
     let m2 = build_sta_action_frame::<128, _>(&sta, m2_action, &security_ies).unwrap();
     assert_eq!(m2.peer(), &[2; 6]);
-    assert_eq!(m2.key_frame().nonce(), &[3; 32]);
+    assert_eq!(m2.key_frame().unwrap().nonce(), &[3; 32]);
     assert_eq!(
         build_ap_action_frame::<128>(
             &RsnApState::new(crate::Akm::Psk, [2; 6], [1; 6], [4; 32], 7).unwrap(),
@@ -124,7 +142,7 @@ fn state_actions_are_bound_to_role_peer_and_nonce_context() {
     };
     let m1 = build_ap_action_frame::<128>(&ap, m1_action, [0; 8], &[]).unwrap();
     assert_eq!(m1.peer(), &[1; 6]);
-    assert_eq!(m1.key_frame().nonce(), &[4; 32]);
+    assert_eq!(m1.key_frame().unwrap().nonce(), &[4; 32]);
 }
 
 #[test]

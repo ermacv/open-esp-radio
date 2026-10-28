@@ -8,7 +8,11 @@ repository.workspace = true
 description = "Allocation-free RSN (WPA2/WPA3) protocol types and four-way-handshake state machines"
 readme = "README.md"
 
+[features]
+test-support = []
+
 [dependencies]
+heapless = { version = "0.9.3", features = ["zeroize"] }
 # Erase the stream wrapper's buffered keystream as well as the ChaCha core.
 cipher = { version = "0.5", default-features = false, features = ["zeroize"] }
 chacha20 = { version = "0.10.2", default-features = false, features = ["cipher", "zeroize"] }
