@@ -28,7 +28,7 @@ const STANDARD_WMM: [u8; 26] = [
 
 fn ipv4_with_dscp(dscp: u8) -> [u8; 16] {
     let mut frame = [0_u8; 16];
-    frame[12..14].copy_from_slice(&0x0800_u16.to_be_bytes());
+    frame[12] = 0x08;
     frame[14] = 0x45;
     frame[15] = dscp << 2;
     frame

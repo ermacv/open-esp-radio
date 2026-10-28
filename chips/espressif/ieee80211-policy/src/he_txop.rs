@@ -166,7 +166,9 @@ fn whole_symbols(numerator: u64, symbol: NonZeroU64) -> u64 {
     // by rounding up to the next integer. At a power of two the spacing
     // immediately below that integer is half the spacing above it.
     let floor = numerator / symbol;
-    let next = floor.wrapping_add(1);
+    // floor < 2405, so the addition is exact; the nonzero type also makes
+    // ilog2 total, including a budget that fits no complete symbol.
+    let next = NonZeroU64::MIN.saturating_add(floor);
     let midpoint_shift = 24_u32
         .wrapping_sub(next.ilog2())
         .wrapping_add(u32::from(next.is_power_of_two()));
@@ -218,6 +220,21 @@ mod tests {
     use oer_ieee80211_wire::phy::{FecCoding, HeMcs, PpduBandwidth, SpatialStreams};
 
     use super::*;
+
+    #[test]
+    fn whole_symbol_rounding_handles_zero_and_power_of_two_midpoints() {
+        let symbol = NonZeroU64::new(16 << 20).unwrap();
+        assert_eq!(whole_symbols(0, symbol), 0);
+        assert_eq!(whole_symbols(1, symbol), 0);
+        for next in [2_u64, 4, 8, 16, 1024, 2048] {
+            // Immediately below a power of two, half an f32 ULP is
+            // next / 2 units of this exact binary32 symbol duration.
+            let exact = next * symbol.get();
+            let halfway = next / 2;
+            assert_eq!(whole_symbols(exact - halfway, symbol), next);
+            assert_eq!(whole_symbols(exact - halfway - 1, symbol), next - 1);
+        }
+    }
 
     // The original vendor-ordered single-precision calculation is an
     // independent oracle; production code contains no floating point.
