@@ -1,5 +1,5 @@
 //! Structural rules read from package manifests: names, the unsafe boundary
-//! and dependency direction for the Wi-Fi chip backends.
+//! and protocol core/runtime isolation from backends.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -638,4 +638,265 @@ fn the_ieee802154_boundary_rejects_the_indirect_knowledge_path() {
         ["hal -> knowledge -> oer-espressif-ieee802154-engine"],
     );
     assert!(forbidden_paths(&graph, "unrelated", ieee802154_execution).is_empty());
+}
+
+/// Protocol roles follow the leaf directory, including nested protocols such
+/// as bluetooth/le. Shared radio, network and HIL vocabulary is infrastructure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProtocolRole {
+    Wire,
+    Cipher,
+    Port,
+    Core,
+    Model,
+    Runtime,
+}
+
+fn protocol_role(path: &str) -> Option<ProtocolRole> {
+    let protocol = path.strip_prefix("protocols/")?;
+    if ["radio", "network", "hil"].contains(&protocol.split('/').next()?) {
+        return None;
+    }
+    Some(match protocol.rsplit('/').next()? {
+        "wire" => ProtocolRole::Wire,
+        "cipher" => ProtocolRole::Cipher,
+        "port" => ProtocolRole::Port,
+        "model" => ProtocolRole::Model,
+        "runtime" => ProtocolRole::Runtime,
+        _ => ProtocolRole::Core,
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ChipRole {
+    Backend,
+    CoreSidePolicy,
+}
+
+fn chip_role(path: &str) -> Option<ChipRole> {
+    if !path.starts_with("chips/") {
+        return None;
+    }
+    // docs/repository-layout.md#a-protocol-wire-port-cores-backends:
+    // "Wi-Fi upper-MAC and the family policy select each attempt's rate and
+    // protection" places this family policy above the backend with the cores.
+    Some(if path == "chips/espressif/ieee80211-policy" {
+        ChipRole::CoreSidePolicy
+    } else {
+        ChipRole::Backend
+    })
+}
+
+fn backend_core_paths(
+    graph: &BTreeMap<String, BTreeSet<String>>,
+    roles: &BTreeMap<String, ProtocolRole>,
+    start: &str,
+) -> Vec<String> {
+    forbidden_paths(graph, start, |name| {
+        matches!(
+            roles.get(name),
+            Some(ProtocolRole::Core | ProtocolRole::Runtime)
+        )
+    })
+}
+
+#[test]
+fn backends_and_models_do_not_reach_protocol_cores_or_runtimes() {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let packages = packages(&root);
+    let roles = packages
+        .iter()
+        .filter_map(|(path, manifest)| {
+            protocol_role(path)
+                .or_else(|| {
+                    (chip_role(path) == Some(ChipRole::CoreSidePolicy))
+                        .then_some(ProtocolRole::Core)
+                })
+                .map(|role| {
+                    (
+                        manifest["package"]["name"]
+                            .as_str()
+                            .expect("name")
+                            .to_owned(),
+                        role,
+                    )
+                })
+        })
+        .collect();
+    let graph = packages
+        .values()
+        .map(|manifest| {
+            (
+                manifest["package"]["name"]
+                    .as_str()
+                    .expect("name")
+                    .to_owned(),
+                normal_dependencies(manifest, &workspace["workspace"]),
+            )
+        })
+        .collect();
+    let violations = packages
+        .iter()
+        .filter(|(path, _)| {
+            chip_role(path) == Some(ChipRole::Backend)
+                || protocol_role(path) == Some(ProtocolRole::Model)
+        })
+        .flat_map(|(_, manifest)| {
+            backend_core_paths(
+                &graph,
+                &roles,
+                manifest["package"]["name"].as_str().expect("name"),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        violations.is_empty(),
+        "backend reaches core/runtime:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn protocol_roles_and_core_side_family_policy_follow_the_layout() {
+    for prefix in [
+        "protocols/ieee802154",
+        "protocols/bluetooth/le",
+        "protocols/example",
+    ] {
+        for (directory, role) in [
+            ("wire", ProtocolRole::Wire),
+            ("cipher", ProtocolRole::Cipher),
+            ("port", ProtocolRole::Port),
+            ("model", ProtocolRole::Model),
+            ("runtime", ProtocolRole::Runtime),
+            ("mac", ProtocolRole::Core),
+            ("controller", ProtocolRole::Core),
+        ] {
+            assert_eq!(protocol_role(&format!("{prefix}/{directory}")), Some(role));
+        }
+    }
+    assert_eq!(
+        protocol_role("protocols/bluetooth/hci"),
+        Some(ProtocolRole::Core)
+    );
+    for path in [
+        "protocols/radio/port",
+        "protocols/hil/protocol",
+        "protocols/network",
+        "portable/wire",
+        "chips/esp32s31/hal",
+    ] {
+        assert_eq!(protocol_role(path), None, "{path}");
+    }
+    assert_eq!(
+        chip_role("chips/espressif/ieee80211-policy"),
+        Some(ChipRole::CoreSidePolicy)
+    );
+    assert_eq!(
+        chip_role("chips/esp32s31/ieee80211/driver"),
+        Some(ChipRole::Backend)
+    );
+    assert_eq!(chip_role("protocols/ieee802154/model"), None);
+}
+
+#[test]
+fn backend_rule_rejects_transitive_cross_protocol_and_model_paths() {
+    let roles = BTreeMap::from([
+        ("wire".into(), ProtocolRole::Wire),
+        ("port".into(), ProtocolRole::Port),
+        ("cipher".into(), ProtocolRole::Cipher),
+        ("core".into(), ProtocolRole::Core),
+        ("other-core".into(), ProtocolRole::Core),
+        ("family-policy".into(), ProtocolRole::Core),
+        ("runtime".into(), ProtocolRole::Runtime),
+    ]);
+    let graph = BTreeMap::from([
+        ("backend".into(), BTreeSet::from(["hal".into()])),
+        ("hal".into(), BTreeSet::from(["coex".into()])),
+        (
+            "coex".into(),
+            BTreeSet::from(["hal".into(), "other-core".into()]),
+        ),
+        ("model".into(), BTreeSet::from(["helper".into()])),
+        ("helper".into(), BTreeSet::from(["runtime".into()])),
+        (
+            "backend-policy".into(),
+            BTreeSet::from(["family-policy".into()]),
+        ),
+        (
+            "allowed".into(),
+            BTreeSet::from(["port".into(), "wire".into(), "cipher".into()]),
+        ),
+    ]);
+    assert_eq!(
+        backend_core_paths(&graph, &roles, "backend"),
+        ["backend -> hal -> coex -> other-core"]
+    );
+    assert_eq!(
+        backend_core_paths(&graph, &roles, "model"),
+        ["model -> helper -> runtime"]
+    );
+    assert!(backend_core_paths(&graph, &roles, "allowed").is_empty());
+    assert_eq!(
+        backend_core_paths(&graph, &roles, "backend-policy"),
+        ["backend-policy -> family-policy"]
+    );
+}
+
+#[test]
+fn backend_rule_checks_optional_target_aliases_and_excludes_dev_and_build_edges() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+optional = { package = "core", version = "1", optional = true }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+alias = { workspace = true }
+[dev-dependencies]
+model = "1"
+[build-dependencies]
+build-core = "1"
+"#,
+    )
+    .expect("manifest");
+    let workspace: toml::Value =
+        toml::from_str("[dependencies]\nalias = { package = 'runtime', version = '1' }")
+            .expect("workspace");
+    let graph = BTreeMap::from([("backend".into(), normal_dependencies(&manifest, &workspace))]);
+    let roles = BTreeMap::from([
+        ("core".into(), ProtocolRole::Core),
+        ("runtime".into(), ProtocolRole::Runtime),
+        ("build-core".into(), ProtocolRole::Core),
+        ("model".into(), ProtocolRole::Model),
+    ]);
+    assert_eq!(
+        backend_core_paths(&graph, &roles, "backend"),
+        ["backend -> core", "backend -> runtime"]
+    );
+}
+
+#[test]
+fn bluetooth_backend_core_edges_have_no_exemption() {
+    let graph = BTreeMap::from([(
+        "oer-esp32s31-bluetooth-driver".into(),
+        BTreeSet::from([
+            "oer-bluetooth-le-ll".into(),
+            "oer-bluetooth-hci".into(),
+            "oer-bluetooth-le-port".into(),
+            "oer-bluetooth-le-wire".into(),
+        ]),
+    )]);
+    let roles = BTreeMap::from([
+        ("oer-bluetooth-le-ll".into(), ProtocolRole::Core),
+        ("oer-bluetooth-hci".into(), ProtocolRole::Core),
+        ("oer-bluetooth-le-port".into(), ProtocolRole::Port),
+        ("oer-bluetooth-le-wire".into(), ProtocolRole::Wire),
+    ]);
+    assert_eq!(
+        backend_core_paths(&graph, &roles, "oer-esp32s31-bluetooth-driver"),
+        [
+            "oer-esp32s31-bluetooth-driver -> oer-bluetooth-hci",
+            "oer-esp32s31-bluetooth-driver -> oer-bluetooth-le-ll",
+        ]
+    );
 }

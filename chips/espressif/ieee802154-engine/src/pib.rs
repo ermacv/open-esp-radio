@@ -17,8 +17,8 @@ use oer_espressif_ieee802154_mac_values::{
     IEEE802154_MIN_CHANNEL, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanIndex,
     Ieee802154TxPowerLevels,
 };
-pub use oer_ieee802154_mac::AutoPendingMode;
-use oer_ieee802154_mac::CcaThresholdError;
+use oer_ieee802154_port::AutoPendingMode;
+use oer_ieee802154_port::CcaThresholdError;
 
 use crate::ll::Ieee802154LowLevel;
 

@@ -11,27 +11,8 @@
 //! Ermachenkov; see `NOTICE`.
 //!
 
-use crate::mac::header::PhrFrame;
-
-/// The CSL header IE element identifier (`CslIe::kHeaderIeId`).
-pub const CSL_IE_ID: u8 = 0x1a;
-
-/// Microseconds of the CSL period and phase unit: ten symbols
-/// (`OT_US_PER_TEN_SYMBOLS`).
+/// Microseconds per ten-symbol CSL unit (`OT_US_PER_TEN_SYMBOLS`).
 pub const CSL_UNIT_MICROS: u32 = 160;
-
-/// Bytes of the CSL IE content: phase, then period, both little endian.
-const CSL_IE_CONTENT: u16 = 4;
-
-/// A CSL header IE with zero phase and period, as
-/// `otMacFrameGenerateCslIeTemplate` writes it for an enhanced ACK: the
-/// descriptor (length 4, element 0x1a, header type), then the content the
-/// radio fills when the ACK starts on the air.
-pub const CSL_IE_TEMPLATE: [u8; 6] = {
-    let descriptor = CSL_IE_CONTENT | (CSL_IE_ID as u16) << 7;
-    let bytes = descriptor.to_le_bytes();
-    [bytes[0], bytes[1], 0, 0, 0, 0]
-};
 
 /// The phase to the next CSL sample time, in units of ten symbols, as the
 /// port's `get_csl_phase` computes it from the radio clock's low 32 bits:
@@ -65,28 +46,6 @@ pub const fn csl_phase(now: u32, sample_time: u32, period: u16) -> Option<u16> {
         Some(phase) => Some(phase as u16),
         None => None,
     }
-}
-
-/// Write `period` and `phase` into the CSL IE of the `[PHR, MAC...]` image
-/// of a frame, as `otMacFrameSetCslIe` does. Returns `false`, leaving the
-/// image, for a frame without a CSL IE.
-pub fn write_csl_ie(image: &mut [u8], period: u16, phase: u16) -> bool {
-    let Some(offset) = PhrFrame::new(image).header_ie(CSL_IE_ID) else {
-        return false;
-    };
-    let Some((_, content)) = image.split_at_mut_checked(usize::from(offset)) else {
-        return false;
-    };
-    let Some((_, content)) = content.split_first_chunk_mut::<2>() else {
-        return false;
-    };
-    let Some((target, _)) = content.split_first_chunk_mut::<4>() else {
-        return false;
-    };
-    let [phase_low, phase_high] = phase.to_le_bytes();
-    let [period_low, period_high] = period.to_le_bytes();
-    *target = [phase_low, phase_high, period_low, period_high];
-    true
 }
 
 #[cfg(test)]

@@ -1459,7 +1459,7 @@ fn listening_publishes_rx_settings_without_publishing_transmit_settings() {
             pib.set_auto_ack_tx(false);
             pib.set_pending_mode(
                 Ieee802154MultipanIndex::CONTEXT0,
-                oer_ieee802154_mac::AutoPendingMode::Enhanced,
+                oer_ieee802154_port::AutoPendingMode::Enhanced,
             );
         });
     assert_subsequence(
@@ -1511,7 +1511,7 @@ fn rx_settings_wait_for_the_current_frame_and_its_ack() {
             pib.set_coordinator(true);
             pib.set_pending_mode(
                 Ieee802154MultipanIndex::CONTEXT0,
-                oer_ieee802154_mac::AutoPendingMode::Enhanced,
+                oer_ieee802154_port::AutoPendingMode::Enhanced,
             );
         });
     assert_eq!(bench.hw.calls, [Call::IsCurrentRxFrame]);

@@ -7,7 +7,7 @@
 //! A priority is a request to the hardware arbiter, never a grant.
 
 use crate::operation::ieee802154_event;
-use oer_ieee802154_mac::RadioOperation;
+use oer_ieee802154_port::RadioOperation;
 
 /// Number of coexistence events, event zero included.
 pub const COEX_EVENT_COUNT: usize = 49;

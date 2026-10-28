@@ -10,42 +10,13 @@
 //! Ermachenkov; see `NOTICE`.
 //!
 
-/// The Time IE of one transmission, as OpenThread describes it in the
-/// frame's `otRadioIeInfo`.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct TimeSync {
-    /// Offset of the Time IE content - the sequence byte, then the eight
-    /// bytes of network time - from the first MAC byte (`mTimeIeOffset`).
-    pub ie_offset: u8,
-    /// The time sync sequence (`mTimeSyncSeq`).
-    pub sequence: u8,
-    /// The network time minus the radio clock, in microseconds
-    /// (`mNetworkTimeOffset`).
-    pub network_time_offset: i64,
-}
+use oer_ieee802154_port::TimeSync;
 
-/// Bytes of the Time IE content the radio writes: the sequence and the
-/// network time.
-const TIME_IE_CONTENT: usize = 1 + 8;
-
-impl TimeSync {
-    /// Write the sequence and the network time into the Time IE of the
-    /// frame whose MAC bytes are `mac`: the radio time `now_micros` plus
-    /// the network time offset, wrapping, little endian. Returns `false`,
-    /// leaving the bytes, when the IE does not fit.
-    pub fn write(&self, mac: &mut [u8], now_micros: u64) -> bool {
-        let Some((_, content)) = mac.split_at_mut_checked(usize::from(self.ie_offset)) else {
-            return false;
-        };
-        let Some((content, _)) = content.split_first_chunk_mut::<TIME_IE_CONTENT>() else {
-            return false;
-        };
-        let [t0, t1, t2, t3, t4, t5, t6, t7] = (now_micros as i64)
-            .wrapping_add(self.network_time_offset)
-            .to_le_bytes();
-        *content = [self.sequence, t0, t1, t2, t3, t4, t5, t6, t7];
-        true
-    }
+/// Fill the Time IE at the supplied SFD observation with the sequence and
+/// wrapping network time. A refused write leaves the frame unchanged.
+pub fn write_time_sync(sync: &TimeSync, mac: &mut [u8], now_micros: u64) -> bool {
+    let network_time = (now_micros as i64).wrapping_add(sync.network_time_offset) as u64;
+    oer_ieee802154_wire::write_time_ie(mac, sync.ie_offset, sync.sequence, network_time)
 }
 
 #[cfg(test)]

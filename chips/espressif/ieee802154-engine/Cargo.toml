@@ -16,7 +16,8 @@ oer-espressif-ieee802154-mac-values = { path = "../ieee802154-mac-values" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-memory = { path = "../../../portable/memory" }
 oer-espressif-coex = { path = "../coex" }
-oer-ieee802154-mac = { path = "../../../protocols/ieee802154/mac" }
+oer-ieee802154-port = { path = "../../../protocols/ieee802154/port" }
+oer-ieee802154-wire = { path = "../../../protocols/ieee802154/wire" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 
 [dev-dependencies]

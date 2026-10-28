@@ -19,7 +19,7 @@
 pub use oer_espressif_coex::CoexPti;
 
 use oer_espressif_coex::CoexPtiTable;
-pub use oer_ieee802154_mac::RadioOperation;
+use oer_ieee802154_port::RadioOperation;
 
 /// The priorities of every operation, resolved from one snapshot of the
 /// shared table: the idle scene, immediate and timed transmission and

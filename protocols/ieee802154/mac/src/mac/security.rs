@@ -10,14 +10,8 @@
 //! Ermachenkov; see `NOTICE`.
 //!
 
-use crate::mac::enhanced_ack::{EnhancedAck, KeyIdMode};
-use crate::mac::header::PhrFrame;
-use crate::radio::event::AppliedSecurity;
-
-const SECURITY_CONTROL_SIZE: usize = 1;
-const FRAME_COUNTER_SIZE: usize = 4;
-const KEY_ID_MODE_MASK: u8 = 0x18;
-const KEY_ID_MODE_1: u8 = 0x08;
+use oer_ieee802154_port::TransmitSecurity;
+use oer_ieee802154_wire::{EnhancedAck, KeyIdMode};
 
 /// The MAC keys of key identifier mode 1 and the MAC frame counter, as
 /// ESP-IDF's OpenThread port keeps them for its driver callback
@@ -119,91 +113,6 @@ impl MacKeys {
         } else {
             None
         }
-    }
-}
-
-/// The frame counter, key identifier and key the port gives one transmit
-/// attempt of a secured frame (`otPlatRadioTransmit`).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TransmitSecurity {
-    /// The frame counter written into the frame; `None` keeps the frame's.
-    pub frame_counter: Option<u32>,
-    /// The key index written into a key identifier mode 1 frame; `None`
-    /// keeps the frame's.
-    pub key_id: Option<u8>,
-    /// The key the frame is secured with.
-    pub key: [u8; 16],
-}
-
-impl TransmitSecurity {
-    /// Write the frame counter and, in key identifier mode 1, the key index
-    /// into the `[PHR, MAC...]` image of a secured frame, as
-    /// `otMacFrameSetFrameCounter` and `otMacFrameSetKeyId` do. Returns the
-    /// frame's key identifier mode, or `None` when the image has no
-    /// auxiliary security header to write.
-    pub fn apply(&self, image: &mut [u8]) -> Option<KeyIdMode> {
-        write_security_header(image, self.frame_counter, self.key_id)
-    }
-
-    /// The fields [`Self::apply`] wrote into a frame of `mode`: none when
-    /// the attempt kept the frame's counter.
-    pub fn applied(&self, mode: KeyIdMode) -> Option<AppliedSecurity> {
-        Some(AppliedSecurity {
-            frame_counter: self.frame_counter?,
-            key_id: match mode {
-                KeyIdMode::Index => self.key_id,
-                _ => None,
-            },
-        })
-    }
-}
-
-impl AppliedSecurity {
-    /// Write these fields into the `[PHR, MAC...]` image of the same secured
-    /// frame, as the radio wrote them into its copy. Returns `false` when
-    /// the image has no auxiliary security header to write.
-    pub fn write(&self, image: &mut [u8]) -> bool {
-        write_security_header(image, Some(self.frame_counter), self.key_id).is_some()
-    }
-}
-
-/// Write the frame counter and, in key identifier mode 1, the key index
-/// into the auxiliary security header of a secured `[PHR, MAC...]` image.
-fn write_security_header(
-    image: &mut [u8],
-    frame_counter: Option<u32>,
-    key_id: Option<u8>,
-) -> Option<KeyIdMode> {
-    let frame = PhrFrame::new(image);
-    if !frame.security_enabled() {
-        return None;
-    }
-    let offset = usize::from(frame.security_header_offset()?);
-    let (_, header) = image.split_at_mut_checked(offset)?;
-    let (control, rest) = header.split_first_chunk_mut::<SECURITY_CONTROL_SIZE>()?;
-    let [control] = *control;
-    let mode_1 = control & KEY_ID_MODE_MASK == KEY_ID_MODE_1;
-    let (counter, rest) = rest.split_first_chunk_mut::<FRAME_COUNTER_SIZE>()?;
-    // Admit every field before writing either, preserving refusal atomicity.
-    let index = if mode_1 {
-        Some(rest.first_mut()?)
-    } else {
-        None
-    };
-    if let Some(value) = frame_counter {
-        *counter = value.to_le_bytes();
-    }
-    if let Some(index) = index {
-        if let Some(key_id) = key_id {
-            *index = key_id;
-        }
-        Some(KeyIdMode::Index)
-    } else {
-        Some(match control & KEY_ID_MODE_MASK {
-            0x00 => KeyIdMode::Implicit,
-            0x10 => KeyIdMode::Source4,
-            _ => KeyIdMode::Source8,
-        })
     }
 }
 

@@ -6,13 +6,13 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
+use oer_radio_port::EventsLost;
 use oer_radio_port::{
     Ended, LocalExecution, LocalId, Owner, PortBody, PortPhase, run_port, with_local_slot,
 };
-use oer_radio_port::{EventsLost, Poisoned};
 
 use super::*;
-use crate::owner::{Ieee802154Clients, Transmission};
+use oer_ieee802154_port::owner::{Ieee802154Clients, Transmission};
 
 /// Poll `future` once with a waker that does nothing.
 fn poll_once<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
@@ -37,12 +37,12 @@ const DATA: [u8; 9] = [0x61, 0x88, 0x01, 0xcd, 0xab, 0x02, 0x00, 0x01, 0x00];
 
 fn transmission<'f>(frame: &'f [u8]) -> SupportedTransmit<'f, ModelCaps> {
     SupportedTransmit::new(Transmission {
-        frame: crate::FrameView::new(frame).unwrap_or_else(|_| panic!("a MAC frame")),
+        frame: oer_ieee802154_wire::FrameView::new(frame).unwrap_or_else(|_| panic!("a MAC frame")),
         channel: channel(15),
-        mode: crate::TxMode::CsmaCa { max_backoffs: 4 },
+        mode: oer_ieee802154_port::TxMode::CsmaCa { max_backoffs: 4 },
         power: None,
         max_frame_retries: 3,
-        security: crate::TxSecurity::Radio,
+        security: oer_ieee802154_port::TxSecurity::Radio,
         time_sync: None,
     })
     .unwrap_or_else(|_| panic!("the model performs every transmission"))
@@ -1081,15 +1081,15 @@ fn interface_settings_replace_latest_values_during_work_without_changing_its_sec
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
                 let client = parts.clients.client(&mut zero);
-                let original = crate::TxSecurity::Key {
+                let original = oer_ieee802154_port::TxSecurity::Key {
                     key: [3; 16],
                     address: [4; 8],
                 };
                 let request = SupportedTransmit::new(Transmission {
                     security: original,
-                    frame: crate::FrameView::new(&DATA).expect("MAC frame"),
+                    frame: oer_ieee802154_wire::FrameView::new(&DATA).expect("MAC frame"),
                     channel: channel(15),
-                    mode: crate::TxMode::Direct,
+                    mode: oer_ieee802154_port::TxMode::Direct,
                     power: None,
                     max_frame_retries: 0,
                     time_sync: None,
@@ -1184,12 +1184,12 @@ fn validated_values_check_the_capabilities() {
     assert!(SupportedEnergyScan::<Plain>::new(channel(11), 1).is_none());
     assert!(SupportedCca::<Plain>::new(channel(11)).is_none());
     let refused = SupportedTransmit::<Plain>::new(Transmission {
-        frame: crate::FrameView::new(&DATA).unwrap_or_else(|_| panic!("a MAC frame")),
+        frame: oer_ieee802154_wire::FrameView::new(&DATA).unwrap_or_else(|_| panic!("a MAC frame")),
         channel: channel(15),
-        mode: crate::TxMode::CsmaCa { max_backoffs: 4 },
+        mode: oer_ieee802154_port::TxMode::CsmaCa { max_backoffs: 4 },
         power: None,
         max_frame_retries: 3,
-        security: crate::TxSecurity::Radio,
+        security: oer_ieee802154_port::TxSecurity::Radio,
         time_sync: None,
     });
     let Err((_, missing)) = refused else {
@@ -1210,16 +1210,18 @@ fn validated_values_check_the_capabilities() {
         };
     }
     let refused = SupportedTransmit::<Scheduler>::new(Transmission {
-        frame: crate::FrameView::new(&[0x41, 0x88, 0x01, 0xcd, 0xab, 0xff, 0xff, 0x01, 0x00])
-            .unwrap_or_else(|_| panic!("a MAC frame")),
+        frame: oer_ieee802154_wire::FrameView::new(&[
+            0x41, 0x88, 0x01, 0xcd, 0xab, 0xff, 0xff, 0x01, 0x00,
+        ])
+        .unwrap_or_else(|_| panic!("a MAC frame")),
         channel: channel(15),
-        mode: crate::TxMode::Scheduled {
+        mode: oer_ieee802154_port::TxMode::Scheduled {
             at: Ieee802154Instant::from_micros(10),
             cca: true,
         },
         power: None,
         max_frame_retries: 0,
-        security: crate::TxSecurity::Radio,
+        security: oer_ieee802154_port::TxSecurity::Radio,
         time_sync: None,
     });
     let Err((_, missing)) = refused else {
@@ -1418,7 +1420,7 @@ fn removing_an_interface_keeps_its_pending_entries() {
 
 #[test]
 fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
-    use crate::owner::{Operation, OperationPermits};
+    use oer_ieee802154_port::owner::{Operation, OperationPermits};
     use oer_radio_port::{Permits, branded};
     ready(branded::<Permits<Operation, 1, 2>, _>(async |mint| {
         let (permits, [mut first, mut second]) =
@@ -1442,7 +1444,7 @@ fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
             );
         }
         let mismatch = match permits.complete(RequestId::new(42)) {
-            Err(crate::owner::CompletionError::Mismatch(mismatch)) => mismatch,
+            Err(oer_ieee802154_port::owner::CompletionError::Mismatch(mismatch)) => mismatch,
             _ => panic!("another terminal cannot release the held operation"),
         };
         assert_eq!(mismatch.held, Some((Interface::new(1), id)));

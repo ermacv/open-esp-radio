@@ -10,7 +10,11 @@ fn the_time_ie_gets_the_sequence_and_the_network_time() {
         network_time_offset: -1_000,
     };
     let mut mac = [0xee; 12];
-    assert!(sync.write(&mut mac, 0x0102_0304_0506_0708 + 1_000));
+    assert!(write_time_sync(
+        &sync,
+        &mut mac,
+        0x0102_0304_0506_0708 + 1_000
+    ));
     assert_eq!(
         mac,
         [
@@ -28,7 +32,7 @@ fn the_network_time_wraps() {
         network_time_offset: -5,
     };
     let mut mac = [0; 9];
-    assert!(sync.write(&mut mac, 3));
+    assert!(write_time_sync(&sync, &mut mac, 3));
     assert_eq!(mac[1..], (-2_i64 as u64).to_le_bytes());
 }
 
@@ -41,6 +45,6 @@ fn an_ie_beyond_the_frame_is_not_written() {
         network_time_offset: 0,
     };
     let mut mac = [0; 12];
-    assert!(!sync.write(&mut mac, 3));
+    assert!(!write_time_sync(&sync, &mut mac, 3));
     assert_eq!(mac, [0; 12]);
 }

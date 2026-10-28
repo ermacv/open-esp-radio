@@ -46,9 +46,10 @@ platform             Espressif staged boot, interrupt table, panic record, linke
 
 Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
 contract), sans-IO cores and a `runtime`. Bluetooth LE has wire formats, a
-backend port, LL/controller cores and a reference model. IEEE 802.15.4 grows
-the same split. A backend
-depends on its protocol's port, its wire formats and `cipher` only.
+backend port, LL/controller cores and a reference model. IEEE 802.15.4 has
+`wire`, `port` and the `mac` core; its reference model is test-only inside
+`mac`. A backend depends on its protocol's port, wire formats and implemented
+`cipher` only.
 
 Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They
@@ -504,10 +505,11 @@ its model and conformance case.
   Failed construction retains its registered owner and source cause; it
   publishes no frontend or ordinary join. No missing resource is replaced with
   an empty or newly minted owner.
-- Every port has a reference model in its own host crate,
-  `protocols/<protocol>/model`; the hardware backend runs the same
-  conformance cases. Frame protection is the `cipher` layer that backends
-  and models take.
+- Reference models are backends and use the port's conformance cases.
+  Wi-Fi and Bluetooth LE models live in `protocols/<protocol>/model`;
+  the IEEE 802.15.4 model is test-only inside `mac`. Frame protection
+  lives in `cipher` where a software implementation exists; IEEE 802.15.4
+  currently describes hardware offload through its port.
 - One owner holds a lower-MAC core and its phase; every lifecycle transition
   is a method of a borrowed typestate view.
 - A caller that drops an admitted request detaches only its waker; the port
@@ -589,8 +591,11 @@ its model and conformance case.
   level set. The port boundary follows the
   OpenThread radio platform: the backend executes acknowledgement, CSMA-CA
   and the cipher as advertised capabilities; retries, the pending-table
-  policy, keys and counters stay in the core. Configuration is admitted in
-  any radio state.
+  policy, keys and counters stay in the core. The port owns shared pending
+  tables, pending-bit selection, CSMA helpers and enhanced-ACK probing tables:
+  the core configures their data and the backend executes the advertised
+  offloads. CSL phase and network-time calculations stay in the core; wire
+  codecs write ready IE values. Configuration is admitted in any radio state.
 
 ## Instrumentation and probes
 

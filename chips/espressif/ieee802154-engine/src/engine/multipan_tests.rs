@@ -10,8 +10,9 @@ use oer_espressif_ieee802154_mac_values::{
 };
 use std::{boxed::Box, vec, vec::Vec};
 
-use crate::pib::{AutoPendingMode, Ieee802154PibDefaults};
-use oer_ieee802154_mac::FrameAddress;
+use crate::pib::Ieee802154PibDefaults;
+use oer_ieee802154_port::AutoPendingMode;
+use oer_ieee802154_wire::FrameAddress;
 
 use super::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
@@ -327,13 +328,13 @@ fn settings_survive_disable_enable_and_complete_register_loss() {
     assert_eq!(
         hw.ack_pti,
         priorities
-            .operation(crate::coex::RadioOperation::Ack)
+            .operation(oer_ieee802154_port::RadioOperation::Ack)
             .value()
     );
     assert_eq!(
         hw.txrx_pti,
         priorities
-            .operation(crate::coex::RadioOperation::Idle)
+            .operation(oer_ieee802154_port::RadioOperation::Idle)
             .value()
     );
     engine.multipan_set_rx_when_idle(IF1, false);

@@ -24,7 +24,7 @@
 //! or publishing the scene priorities where the vendor's
 //! `IEEE802154_SET_TXRX_PTI` does.
 
-use crate::coex::{Ieee802154Coexistence, RadioOperation};
+use crate::coex::Ieee802154Coexistence;
 use crate::ll::{self, Ieee802154LowLevel};
 use crate::pib::{Ieee802154Permit, Ieee802154Pib, Ieee802154PibDefaults};
 use oer_espressif_ieee802154_mac_values::{
@@ -34,9 +34,9 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortReason,
     Ieee802154TxAbortReasonObservation, Ieee802154TxPowerLevels,
 };
-use oer_ieee802154_mac::{
-    FrameAddress, FrameType, FrameVersion, PendingTable, PhrFrame, ack_pending,
-};
+use oer_ieee802154_port::RadioOperation;
+use oer_ieee802154_port::{PendingTable, ack_pending};
+use oer_ieee802154_wire::{FrameAddress, FrameType, FrameVersion, PhrFrame};
 
 mod settings;
 mod statistics;
@@ -530,7 +530,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         env: &mut E,
         index: Ieee802154MultipanIndex,
-        mode: oer_ieee802154_mac::AutoPendingMode,
+        mode: oer_ieee802154_port::AutoPendingMode,
     ) where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,

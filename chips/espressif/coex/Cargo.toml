@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
-oer-ieee802154-mac = { path = "../../../protocols/ieee802154/mac" }
+oer-ieee802154-port = { path = "../../../protocols/ieee802154/port" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
 
 [lints]
