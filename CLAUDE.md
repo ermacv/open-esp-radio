@@ -93,6 +93,9 @@ system these rules serve.
   in session RAM; they do not link the staged runtime.
   Remove existing runtime panics from image crates, including probes and
   HIL; image panic budgets are reports with a target of 0, not build gates.
+  Compiler `panic_const_async_fn_resumed` sites have a separate row outside
+  the budgets and target of 0, based on the executor's runtime `DONE` check
+  (not a type guarantee) and `.await` never polling a completed child again.
   Introduce no new runtime panics. `const` panics evaluated at
   compile time are allowed. Air, peer, host and API input return a handled
   error. New panic-lint `allow` and `expect` attributes are test-only. A crate

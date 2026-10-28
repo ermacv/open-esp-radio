@@ -419,11 +419,11 @@ mod tests {
             ("bootstrap-frames.txt", "8192\tover limit\tboot::large"),
             (
                 "runtime-panics.txt",
-                "hal\t1\t0\nHAL::call at 0x00001024 calls panic",
+                "hal\t1\t0\ncompiler-async-fn-resumed\t2\texcluded\nHAL::call at 0x00001024 calls panic",
             ),
             (
                 "bootstrap-panics.txt",
-                "unnamed\t1\t0\n_start at 0x00001028 calls panic",
+                "unnamed\t1\t0\ncompiler-async-fn-resumed\t0\texcluded\n_start at 0x00001028 calls panic",
             ),
         ] {
             std::fs::write(bundle.path(name), text).unwrap();
@@ -439,6 +439,8 @@ mod tests {
             "boot::large",
             "hal\t1\t0",
             "unnamed\t1\t0",
+            "compiler-async-fn-resumed\t2\texcluded",
+            "compiler-async-fn-resumed\t0\texcluded",
             "0x00001024",
             "0x00001028",
         ] {

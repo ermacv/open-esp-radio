@@ -29,6 +29,10 @@ fn caller(name: &'static str, at: u32, target: u32) -> Code {
 /// calls `core::panicking::panic`, which calls `panic_fmt`; `unreached`
 /// also calls `panic`, but no root reaches it.
 fn program() -> Image {
+    program_with_panic("core::panicking::panic", PANIC)
+}
+
+fn program_with_panic(entry: &'static str, protocol_target: u32) -> Image {
     image(
         &[
             Code {
@@ -45,8 +49,8 @@ fn program() -> Image {
                 frame: Some(16),
             },
             caller("oer_esp32s31_hal::register::write", HAL, PANIC),
-            caller("oer_ieee80211_mac::receive", PROTOCOL, PANIC),
-            caller("core::panicking::panic", PANIC, PANIC_FMT),
+            caller("oer_ieee80211_mac::receive", PROTOCOL, protocol_target),
+            caller(entry, PANIC, PANIC_FMT),
             Code {
                 name: "core::panicking::panic_fmt",
                 words: vec![RET],
@@ -126,6 +130,97 @@ fn a_reachable_panic_counts_once_in_the_layer_of_its_caller() {
         text.contains("oer_esp32s31_hal::register::write at 0x00001024 calls core::panicking::panic\t[CPU0, T0]"),
         "{text}"
     );
+}
+
+#[test]
+fn compiler_resumed_checks_have_a_separate_row_and_keep_their_locations() {
+    let image = program_with_panic(ASYNC_FN_RESUMED, PANIC_FMT);
+    let mut contract = contract_with(&[(Layer::Protocols, 1)], 1);
+    contract.budget.bootstrap = contract.budget.runtime.clone();
+    for elf in [CheckedElf::Runtime, CheckedElf::Bootstrap] {
+        let report = Report {
+            elf,
+            roots: vec![root(&image, "CPU0", true), root(&image, "T0", false)],
+            names: &image.names,
+        };
+        // Both direct callees are discovered, even though only one is budgeted.
+        assert_eq!(report.roots[0].sites.len(), 2);
+        assert_eq!(
+            report.counts(&contract),
+            BTreeMap::from([(Layer::Protocols, 1)])
+        );
+        assert!(report.warnings(&contract).is_empty());
+        let text = report.render(&contract);
+        for expected in [
+            "panic sites (excluding compiler resumed-future checks, distinct over all roots): 1",
+            "hal\t0\t0",
+            "protocols\t1\t1",
+            "hardware\t1\t1",
+            "compiler-async-fn-resumed\t1\texcluded",
+            "CPU0 (hardware): 1 (protocols 1); compiler-async-fn-resumed 1",
+            "T0: 1 (protocols 1); compiler-async-fn-resumed 1",
+            "compiler-async-fn-resumed\toer_esp32s31_hal::register::write at 0x00001024 calls core::panicking::panic_const::panic_const_async_fn_resumed\t[CPU0, T0]",
+            "protocols\toer_ieee80211_mac::receive at 0x0000103c calls core::panicking::panic_fmt\t[CPU0, T0]",
+        ] {
+            assert!(text.contains(expected), "missing {expected:?}: {text}");
+        }
+    }
+}
+
+#[test]
+fn compiler_resumed_checks_do_not_spend_a_zero_budget_or_the_zero_target() {
+    let image = program_with_panic(ASYNC_FN_RESUMED, PANIC);
+    let report = Report {
+        elf: CheckedElf::Runtime,
+        roots: vec![root(&image, "CPU0", true), root(&image, "T0", false)],
+        names: &image.names,
+    };
+    let contract = Contract::default();
+    assert!(report.counts(&contract).is_empty());
+    assert!(report.warnings(&contract).is_empty());
+    let text = report.render(&contract);
+    assert!(text.contains("distinct over all roots): 0"), "{text}");
+    assert!(
+        text.contains("compiler-async-fn-resumed\t2\texcluded"),
+        "{text}"
+    );
+    assert!(text.contains("hardware\t0\t0"), "{text}");
+    assert!(
+        text.contains("CPU0 (hardware): 0; compiler-async-fn-resumed 2"),
+        "{text}"
+    );
+}
+
+#[test]
+fn ordinary_panics_are_not_classified_by_a_similar_callee_or_the_caller_name() {
+    for entry in [
+        "core::panicking::panic",
+        "core::panicking::panic_const::panic_const_async_fn_resumed_extra",
+        "core::panicking::panic_const::panic_const_async_gen_fn_resumed",
+    ] {
+        let mut image = program_with_panic(entry, PANIC);
+        image
+            .names
+            .insert(HAL, "oer_esp32s31_hal::panic_const_async_fn_resumed".into());
+        let report = Report {
+            elf: CheckedElf::Runtime,
+            roots: vec![root(&image, "CPU0", true)],
+            names: &image.names,
+        };
+        let contract = contract_with(&[(Layer::Hal, 1), (Layer::Protocols, 1)], 2);
+        assert_eq!(report.counts(&contract).values().sum::<usize>(), 2);
+        assert!(report.warnings(&contract).is_empty());
+        let text = report.render(&contract);
+        assert!(
+            text.contains("compiler-async-fn-resumed\t0\texcluded"),
+            "{text}"
+        );
+        assert!(
+            text.contains("hal\toer_esp32s31_hal::panic_const_async_fn_resumed"),
+            "{text}"
+        );
+        assert!(text.contains("hardware\t2\t2"), "{text}");
+    }
 }
 
 #[test]

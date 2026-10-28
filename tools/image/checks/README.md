@@ -161,6 +161,11 @@ of `chips/` is `chips`; `portable`, `protocols`, `firmware`), then `core`
 (core, alloc, compiler_builtins), `embassy` (`embassy_*`), `third-party` (every other crate) and `unnamed` (names
 without a crate: `#[no_mangle]` and assembly symbols). An inlined call counts in the function it is inlined into.
 
+Compiler `panic_const_async_fn_resumed` sites have a separate
+`compiler-async-fn-resumed` row outside the budgets and target of 0, based on
+the executor's runtime `DONE` check (not a type guarantee) and `.await` never
+polling a completed child again.
+
 The image's `[package.metadata.open-radio.panic-budget]` gives each ELF's
 budget by layer, sites counted once over all its roots:
 

@@ -9,6 +9,9 @@
 //! hart's exception), each hart's task entry and each task root in the
 //! runtime; the bootstrap root in the bootstrap. A site counts once per ELF
 //! however many roots reach it.
+//! Compiler `panic_const_async_fn_resumed` calls have a separate row outside
+//! the budgets and target of 0: the executor's runtime `DONE` check skips
+//! completed tasks, and `.await` does not poll a completed child again.
 //!
 //! Each layer takes its budget from the image's
 //! `[package.metadata.open-radio.panic-budget]`, and so do the sites the
@@ -27,6 +30,9 @@ use crate::{CheckedElf, Result};
 pub const RUNTIME_REPORT: &str = "runtime-panics.txt";
 /// The bootstrap ELF's panic report.
 pub const BOOTSTRAP_REPORT: &str = "bootstrap-panics.txt";
+
+const ASYNC_FN_RESUMED: &str = "core::panicking::panic_const::panic_const_async_fn_resumed";
+const COMPILER_RESUMED: &str = "compiler-async-fn-resumed";
 
 /// The crate layer a function belongs to.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -404,6 +410,13 @@ impl Report<'_> {
         contract.layers.of(&self.name(site.caller))
     }
 
+    /// Classify the resolved callee symbol, never the caller or panic text.
+    fn async_fn_resumed(&self, site: &Site) -> bool {
+        self.names
+            .get(&site.entry)
+            .is_some_and(|name| name == ASYNC_FN_RESUMED)
+    }
+
     /// Every distinct site any root reaches.
     fn all_sites(&self) -> BTreeSet<Site> {
         self.roots
@@ -412,19 +425,24 @@ impl Report<'_> {
             .collect()
     }
 
-    /// Every distinct site a `Hardware` context reaches.
+    /// Every distinct budgeted site a `Hardware` context reaches.
     fn hardware_sites(&self) -> BTreeSet<Site> {
         self.roots
             .iter()
             .filter(|root| root.hardware)
             .flat_map(|root| root.sites.iter().copied())
+            .filter(|site| !self.async_fn_resumed(site))
             .collect()
     }
 
-    /// The distinct sites of each layer over all roots.
+    /// The distinct sites of each layer over all roots, excluding compiler
+    /// resumed-future checks from the budgets and target of 0.
     pub fn counts(&self, contract: &Contract) -> BTreeMap<Layer, usize> {
         let mut counts = BTreeMap::new();
         for site in self.all_sites() {
+            if self.async_fn_resumed(&site) {
+                continue;
+            }
             *counts.entry(self.layer(contract, &site)).or_insert(0) += 1;
         }
         counts
@@ -468,14 +486,15 @@ impl Report<'_> {
     }
 
     /// The report: the counts and budget by layer, each root's sites by
-    /// layer, and every site with the roots that reach it.
+    /// layer, compiler resumed-future checks separately, and every site with
+    /// the roots that reach it.
     pub fn render(&self, contract: &Contract) -> String {
         let mut out = String::new();
         let counts = self.counts(contract);
         let total: usize = counts.values().sum();
         let _ = writeln!(
             out,
-            "panic sites (calls into the panic machinery, distinct over all roots): {total}"
+            "panic sites (excluding compiler resumed-future checks, distinct over all roots): {total}"
         );
         let _ = writeln!(out, "layer\tsites\tbudget");
         for layer in Layer::ALL {
@@ -492,21 +511,35 @@ impl Report<'_> {
             self.hardware_sites().len(),
             contract.budget.hardware(self.elf)
         );
+        let resumed = self
+            .all_sites()
+            .iter()
+            .filter(|site| self.async_fn_resumed(site))
+            .count();
+        let _ = writeln!(out, "{COMPILER_RESUMED}\t{resumed}\texcluded");
         for warning in self.warnings(contract) {
             let _ = writeln!(out, "warning: {warning}");
         }
         let _ = writeln!(out, "roots:");
         for root in &self.roots {
             let mut by_layer: BTreeMap<Layer, usize> = BTreeMap::new();
+            let resumed = root
+                .sites
+                .iter()
+                .filter(|site| self.async_fn_resumed(site))
+                .count();
             for site in &root.sites {
+                if self.async_fn_resumed(site) {
+                    continue;
+                }
                 *by_layer.entry(self.layer(contract, site)).or_insert(0) += 1;
             }
             let _ = writeln!(
                 out,
-                "  {}{}: {}{}",
+                "  {}{}: {}{}; {COMPILER_RESUMED} {resumed}",
                 root.label,
                 if root.hardware { " (hardware)" } else { "" },
-                root.sites.len(),
+                by_layer.values().sum::<usize>(),
                 if by_layer.is_empty() {
                     String::new()
                 } else {
@@ -532,7 +565,11 @@ impl Report<'_> {
             let _ = writeln!(
                 out,
                 "  {}\t{} at {:#010x} calls {}\t[{}]",
-                self.layer(contract, &site),
+                if self.async_fn_resumed(&site) {
+                    COMPILER_RESUMED.to_owned()
+                } else {
+                    self.layer(contract, &site).to_string()
+                },
                 self.name(site.caller),
                 site.site,
                 self.name(site.entry),

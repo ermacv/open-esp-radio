@@ -73,6 +73,9 @@ may grow only by the relocated operations while the branch total falls and
 no calling crate's count grows. Runtime panic counts never increase. Image
 panic budgets report counts and sites without gating builds; zero reachable
 panics remains the code goal.
+Compiler `panic_const_async_fn_resumed` sites have a separate row outside
+the budgets and target of 0, based on the executor's runtime `DONE` check
+(not a type guarantee) and `.await` never polling a completed child again.
 
 Compiler-runtime coverage reviews explain missing frame metadata only; they
 supply no trusted frame size or callee bound. A frame without metadata needs
