@@ -117,11 +117,16 @@ pub enum EndpointSplitError {
 }
 
 /// Wake a displaced registration only after shared state has been restored.
+// The stack analyzer proves Waker calls from their DWARF method scopes.
+// Separate fixed-slot wake/drop calls keep scopes that merged calls can lose.
 fn wake_replaced(previous: Option<Waker>, current: &Waker) {
-    if let Some(previous) = previous
-        && !previous.will_wake(current)
-    {
-        previous.wake();
+    if let Some(previous) = previous {
+        if !previous.will_wake(current) {
+            previous.wake_by_ref();
+            drop(previous);
+        } else {
+            drop(previous);
+        }
     }
 }
 

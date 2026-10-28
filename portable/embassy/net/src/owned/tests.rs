@@ -21,6 +21,25 @@ impl Wake for WakeCount {
     }
 }
 
+#[test]
+fn a_displaced_registration_wakes_only_a_different_task_and_releases_its_waker() {
+    let current_count = Arc::new(WakeCount::default());
+    let current = Waker::from(current_count.clone());
+
+    wake_replaced(None, &current);
+    wake_replaced(Some(current.clone()), &current);
+    assert_eq!(current_count.0.load(StdOrdering::Relaxed), 0);
+    assert_eq!(Arc::strong_count(&current_count), 2);
+
+    let previous_count = Arc::new(WakeCount::default());
+    let previous = Waker::from(previous_count.clone());
+    wake_replaced(Some(previous), &current);
+    assert_eq!(previous_count.0.load(StdOrdering::Relaxed), 1);
+    assert_eq!(current_count.0.load(StdOrdering::Relaxed), 0);
+    assert_eq!(Arc::strong_count(&previous_count), 1);
+    assert_eq!(Arc::strong_count(&current_count), 2);
+}
+
 fn allocator<const N: usize>() -> PacketBufAllocator {
     let storage = Box::leak(Box::new(PacketPoolStorage::<N>::new()));
     Box::leak(Box::new(PacketPool::new(storage))).allocator()

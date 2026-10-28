@@ -74,7 +74,14 @@ fn proven_bound(audit: &StackAudit, hart: u32, which: &str) -> Result<u64> {
     let stack = stack_of(audit, hart)?;
     let bound = &stack.linked.1;
     let Some(bytes) = bound.bytes.filter(|_| stack.unresolved.is_empty()) else {
-        return Err(format!("hart {hart} {which} task bound from `{}` is {} + ? bytes with {} unresolved sites; no further link attempted", stack.root, bound.partial, stack.unresolved.len()).into());
+        return Err(format!(
+            "hart {hart} {which} task bound from `{}` is {} + ? bytes with {} unresolved sites; no further link attempted:\n{}",
+            stack.root,
+            bound.partial,
+            stack.unresolved.len(),
+            stack.render()
+        )
+        .into());
     };
     if let Some(assumption) = bound
         .assumptions
@@ -197,6 +204,36 @@ mod tests {
 mod hart_tests {
     use super::*;
     use crate::stack::tests::{image, policy_with, program};
+
+    #[test]
+    fn an_unresolved_task_bound_names_the_call_site_and_its_function() {
+        use crate::stack::tests::{TEXT, call};
+
+        let (_directory, policy) = policy_with(
+            "schema=6\ncoverage_policy='coverage.toml'\nmax_move_bytes=4096\n\
+             [core.0.task_stack]\nroot='runtime_main'\nstorage_symbol='task_0'\n\
+             minimum_free_bytes=16\n[core.0.interrupt_stack]\n",
+            "",
+        );
+        let mut code = program(true);
+        code[0].words[2] = call(TEXT + 8, TEXT + 36);
+        let image = image(&code, &[("task_0", 0, 1024)]);
+        let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks()).unwrap();
+
+        for which in ["first", "final"] {
+            let error = proven_bound(&audit, 0, which).unwrap_err().to_string();
+            for detail in [
+                which,
+                "runtime_main",
+                "1 unresolved sites",
+                "0x00001030",
+                "in indirect",
+                "no further link attempted",
+            ] {
+                assert!(error.contains(detail), "missing {detail}: {error}");
+            }
+        }
+    }
 
     #[test]
     fn relink_selection_and_verification_are_keyed_by_hart() {
