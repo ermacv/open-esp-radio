@@ -228,21 +228,17 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         &mut self,
         now: oer_time::Instant,
     ) -> Result<ApWpa2RetryProgress<N>, ApWpa2Error> {
-        let Some(index) = self.storage().peers.iter().position(|peer| {
-            peer.as_ref()
-                .and_then(|peer| peer.wpa2_retry_alarm)
+        let Some(peer) = self.storage_mut().peers.iter_mut().flatten().find(|peer| {
+            peer.wpa2_retry_alarm
                 .is_some_and(|alarm| alarm.deadline <= now)
         }) else {
             return Ok(ApWpa2RetryProgress::None);
         };
         let (peer_address, action) = {
-            let peer = self.storage_mut().peers[index]
-                .as_mut()
-                .expect("due WPA2 retry belongs to an occupied peer");
             let alarm = peer
                 .wpa2_retry_alarm
                 .take()
-                .expect("due WPA2 retry retains its alarm");
+                .ok_or(ApWpa2Error::UnexpectedAction)?;
             let action = peer.wpa2_retry.on_alarm(alarm, now)?;
             (peer.address, action)
         };
@@ -422,7 +418,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
 
         let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
         let management_ipn = self.igtk().map_or([0; 6], RsnIgtk::packet_number);
-        self.storage_mut().message3_management_ipns[index] = management_ipn;
+        *self
+            .storage_mut()
+            .message3_management_ipns
+            .get_mut(index)
+            .ok_or(ApServiceError::PeerStorageInvariant { index })? = management_ipn;
         let plain = self.message3_key_data(peer)?;
         let wrapped = software_aes128_key_wrap(ptk.kek(), plain.as_bytes())?;
         let action = self
@@ -510,19 +510,31 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         let advertised = policy.advertisement();
         let (rsn, rsnx) = (advertised.rsne, advertised.rsnxe);
         let mut elements = [0_u8; 64];
-        elements[..rsn.len()].copy_from_slice(rsn);
-        elements[rsn.len()..rsn.len() + rsnx.len()].copy_from_slice(rsnx);
+        let length = rsn
+            .len()
+            .checked_add(rsnx.len())
+            .ok_or(RsnFrameError::CapacityExceeded)?;
+        let elements = elements
+            .get_mut(..length)
+            .ok_or(RsnFrameError::CapacityExceeded)?;
+        for (destination, source) in elements.iter_mut().zip(rsn.iter().chain(rsnx)) {
+            *destination = *source;
+        }
         let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
-        let igtk = self.igtk().map(|igtk| {
-            RsnIgtk::new(
+        let igtk = match self.igtk() {
+            Some(igtk) => Some(RsnIgtk::new(
                 igtk.key_id(),
-                self.storage().message3_management_ipns[index],
+                *self
+                    .storage()
+                    .message3_management_ipns
+                    .get(index)
+                    .ok_or(ApServiceError::PeerStorageInvariant { index })?,
                 igtk.key(),
-            )
-            .expect("the existing IGTK key identifier is valid")
-        });
+            )?),
+            None => None,
+        };
         Ok(RsnPlainKeyData::build(
-            &elements[..rsn.len() + rsnx.len()],
+            elements,
             self.gtk()?,
             igtk.as_ref(),
         )?)
@@ -551,7 +563,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         existing.last_activity = now;
         existing.deadline = now.saturating_add(inactive_timeout);
         if management_protection {
-            self.storage_mut().management_replay[index].activate();
+            self.storage_mut()
+                .management_replay
+                .get_mut(index)
+                .ok_or(ApServiceError::PeerStorageInvariant { index })?
+                .activate();
         }
         self.revise_status();
         Ok(())

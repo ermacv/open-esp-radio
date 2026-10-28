@@ -69,29 +69,35 @@ impl ApPmksaCache {
     /// drops its oldest entry first.
     pub fn insert(&mut self, entry: ApPmksa) {
         self.remove(entry.station);
-        if self.entries.iter().all(Option::is_some) {
-            self.entries.rotate_left(1);
-            self.entries[AP_PMKSA_CAPACITY - 1] = None;
+        if let Some(slot) = self.entries.iter_mut().find(|slot| slot.is_none()) {
+            *slot = Some(entry);
+            return;
         }
-        let slot = self
-            .entries
-            .iter_mut()
-            .find(|slot| slot.is_none())
-            .expect("a slot is free after dropping the oldest entry");
-        *slot = Some(entry);
+        // Array geometry proves there is an oldest entry. Move the others
+        // through its hole and put the new association at the end.
+        let [oldest, rest @ ..] = &mut self.entries;
+        let mut hole = oldest;
+        for next in rest {
+            *hole = next.take();
+            hole = next;
+        }
+        *hole = Some(entry);
     }
 
     /// Forget the association of `station`, keeping the others in order.
     pub fn remove(&mut self, station: [u8; 6]) {
-        let Some(index) = self
-            .entries
-            .iter()
-            .position(|entry| entry.as_ref().is_some_and(|entry| entry.station == station))
+        let mut entries = self.entries.iter_mut();
+        let Some(removed) =
+            entries.find(|entry| entry.as_ref().is_some_and(|entry| entry.station == station))
         else {
             return;
         };
-        self.entries[index] = None;
-        self.entries[index..].rotate_left(1);
+        *removed = None;
+        let mut hole = removed;
+        for next in entries {
+            *hole = next.take();
+            hole = next;
+        }
     }
 }
 

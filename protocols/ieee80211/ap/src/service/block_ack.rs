@@ -42,7 +42,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         }
         let starting_sequence = self
             .current_qos_sequence(peer, AP_TX_BLOCK_ACK_TID)
-            .expect("AP data TID is representable");
+            .ok_or(ApServiceError::UnknownPeer)?;
         let peer = self.checked_peer_mut(peer)?;
         if peer.phase != ApPeerPhase::Authorized
             || peer.tx_block_ack.operational(AP_TX_BLOCK_ACK_TID).is_some()

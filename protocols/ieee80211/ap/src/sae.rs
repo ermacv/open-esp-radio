@@ -101,31 +101,68 @@ pub struct ApSaeReply {
     pub peer: [u8; 6],
     pub transaction: u16,
     pub status: u16,
-    len: u8,
-    body: [u8; AP_SAE_REPLY_BODY_CAPACITY],
+    body: ReplyBody,
+}
+
+// Only protocol-defined body lengths can be published. No run-time length
+// accompanies the fixed arrays, so reading a reply cannot fail or truncate it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReplyBody {
+    Empty,
+    Group([u8; 2]),
+    Token([u8; 2 + SAE_ANTI_CLOGGING_TOKEN_LEN]),
+    H2eToken([u8; 5 + SAE_ANTI_CLOGGING_TOKEN_LEN]),
+    Commit([u8; SAE_COMMIT_LEN]),
+    Confirm([u8; SAE_CONFIRM_LEN]),
 }
 
 impl ApSaeReply {
-    fn new(peer: [u8; 6], transaction: u16, status: u16, body: &[u8]) -> Self {
-        let mut reply = Self {
+    fn new(peer: [u8; 6], transaction: u16, status: u16, body: ReplyBody) -> Self {
+        Self {
             peer,
             transaction,
             status,
-            len: body.len() as u8,
-            body: [0; AP_SAE_REPLY_BODY_CAPACITY],
-        };
-        reply.body[..body.len()].copy_from_slice(body);
-        reply
+            body,
+        }
     }
 
     pub fn body(&self) -> &[u8] {
-        &self.body[..usize::from(self.len)]
+        match &self.body {
+            ReplyBody::Empty => &[],
+            ReplyBody::Group(body) => body,
+            ReplyBody::Token(body) => body,
+            ReplyBody::H2eToken(body) => body,
+            ReplyBody::Commit(body) => body,
+            ReplyBody::Confirm(body) => body,
+        }
     }
+}
+
+/// A responder invariant failure, retaining its source observations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApSaeFault {
+    MissingSession {
+        slot: usize,
+    },
+    InvalidSession {
+        peer: [u8; 6],
+        phase: ApSaePhase,
+        own_commit: bool,
+        peer_commit: bool,
+        keys: bool,
+        sync: u8,
+    },
+    Encoding(SaeError),
+    CommitLength {
+        length: usize,
+    },
 }
 
 /// What one received SAE frame changed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApSaeResult {
+    /// A local invariant failed; the caller retains this epoch for diagnosis.
+    Fault(ApSaeFault),
     /// The exchange continues, or the frame was dropped.
     Continue,
     /// The station's Confirm verified: the session is Accepted.
@@ -157,24 +194,30 @@ impl ApSaeOutput {
         self.replies.iter().flatten()
     }
 
-    fn send(&mut self, reply: ApSaeReply) {
-        let slot = self
-            .replies
-            .iter_mut()
-            .find(|slot| slot.is_none())
-            .expect("one received frame sends at most two replies");
-        *slot = Some(reply);
+    fn reply(reply: ApSaeReply) -> Self {
+        Self {
+            replies: [Some(reply), None],
+            result: ApSaeResult::Continue,
+        }
     }
 
-    fn fail(mut self, peer: [u8; 6], transaction: u16, status: u16, body: &[u8]) -> Self {
-        self.send(ApSaeReply::new(peer, transaction, status, body));
-        self.result = ApSaeResult::Failed { status };
-        self
+    fn fault(fault: ApSaeFault) -> Self {
+        Self {
+            result: ApSaeResult::Fault(fault),
+            ..Self::new()
+        }
+    }
+
+    fn failure(peer: [u8; 6], transaction: u16, status: u16, body: ReplyBody) -> Self {
+        Self {
+            replies: [Some(ApSaeReply::new(peer, transaction, status, body)), None],
+            result: ApSaeResult::Failed { status },
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Phase {
+pub enum ApSaePhase {
     Nothing,
     Committed,
     Confirmed,
@@ -183,7 +226,7 @@ enum Phase {
 
 struct Session {
     peer: [u8; 6],
-    phase: Phase,
+    phase: ApSaePhase,
     h2e: bool,
     password_identifier: bool,
     own: Option<SaeCommit>,
@@ -200,7 +243,7 @@ impl Session {
     const fn new(peer: [u8; 6]) -> Self {
         Self {
             peer,
-            phase: Phase::Nothing,
+            phase: ApSaePhase::Nothing,
             h2e: false,
             password_identifier: false,
             own: None,
@@ -214,6 +257,17 @@ impl Session {
         }
     }
 
+    fn fault(&self) -> ApSaeFault {
+        ApSaeFault::InvalidSession {
+            peer: self.peer,
+            phase: self.phase,
+            own_commit: self.own.is_some(),
+            peer_commit: self.peer_commit.is_some(),
+            keys: self.keys.is_some(),
+            sync: self.sync,
+        }
+    }
+
     fn clear_exchange(&mut self) {
         self.own = None;
         self.peer_commit = None;
@@ -221,7 +275,7 @@ impl Session {
     }
 
     fn awaits_confirm(&self) -> bool {
-        matches!(self.phase, Phase::Committed | Phase::Confirmed)
+        matches!(self.phase, ApSaePhase::Committed | ApSaePhase::Confirmed)
     }
 }
 
@@ -270,8 +324,10 @@ impl ApSaeResponder {
 
     /// Drop the session of a station this access point removed.
     pub fn forget(&mut self, peer: [u8; 6]) {
-        if let Some(slot) = self.slot(peer) {
-            self.sessions[slot] = None;
+        for session in &mut self.sessions {
+            if session.as_ref().is_some_and(|session| session.peer == peer) {
+                *session = None;
+            }
         }
     }
 
@@ -288,7 +344,9 @@ impl ApSaeResponder {
             .flatten()
             .filter(|session| session.awaits_confirm())
             .count();
-        open + queued_commits >= AP_SAE_ANTI_CLOGGING_THRESHOLD
+        // This is only a threshold predicate, not a stored count: saturation
+        // preserves the mathematical comparison even for usize::MAX queued.
+        open.saturating_add(queued_commits) >= AP_SAE_ANTI_CLOGGING_THRESHOLD
     }
 
     fn receive_commit<R: ApSaeRandom>(
@@ -305,16 +363,17 @@ impl ApSaeResponder {
             Some(slot) => slot,
             None => {
                 let Some(slot) = self.sessions.iter().position(Option::is_none) else {
-                    let mut output = output;
-                    output.send(ApSaeReply::new(
+                    return ApSaeOutput::reply(ApSaeReply::new(
                         peer,
                         COMMIT_TRANSACTION,
                         AP_SAE_STATUS_UNABLE_TO_HANDLE_NEW_STA,
-                        &[],
+                        ReplyBody::Empty,
                     ));
-                    return output;
                 };
-                self.sessions[slot] = Some(Session::new(peer));
+                let Some(entry) = self.sessions.get_mut(slot) else {
+                    return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
+                };
+                *entry = Some(Session::new(peer));
                 slot
             }
         };
@@ -324,13 +383,13 @@ impl ApSaeResponder {
         ) {
             return output;
         }
-        let group_offered = body.get(..2) == Some(&SAE_GROUP_P256.to_le_bytes()[..]);
-        let session = self.sessions[slot]
-            .as_mut()
-            .expect("the slot holds a session");
+        let group_offered = body.first_chunk::<2>() == Some(&SAE_GROUP_P256.to_le_bytes());
+        let Some(session) = self.sessions.get_mut(slot).and_then(Option::as_mut) else {
+            return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
+        };
         let mut allow_reuse = false;
-        if session.phase == Phase::Committed {
-            session.phase = Phase::Nothing;
+        if session.phase == ApSaePhase::Committed {
+            session.phase = ApSaePhase::Nothing;
             if group_offered {
                 allow_reuse = true;
             } else {
@@ -341,29 +400,33 @@ impl ApSaeResponder {
         let commit = match SaeReceivedCommit::parse(body, h2e) {
             Ok(commit) => commit,
             Err(SaeCommitRefusal::UnsupportedGroup) => {
-                return output.fail(
+                return ApSaeOutput::failure(
                     peer,
                     COMMIT_TRANSACTION,
                     AP_SAE_STATUS_UNSUPPORTED_GROUP,
-                    &body[..2],
+                    ReplyBody::Group(match body.first_chunk::<2>() {
+                        Some(group) => *group,
+                        None => return ApSaeOutput::fault(session.fault()),
+                    }),
                 );
             }
             Err(SaeCommitRefusal::Unspecified) => {
-                return output.fail(
+                return ApSaeOutput::failure(
                     peer,
                     COMMIT_TRANSACTION,
                     AP_SAE_STATUS_UNSPECIFIED_FAILURE,
-                    &[],
+                    ReplyBody::Empty,
                 );
             }
         };
-        if session.phase == Phase::Accepted && session.accepted_scalar == Some(commit.values.scalar)
+        if session.phase == ApSaePhase::Accepted
+            && session.accepted_scalar == Some(commit.values.scalar)
         {
-            return output.fail(
+            return ApSaeOutput::failure(
                 peer,
                 COMMIT_TRANSACTION,
                 AP_SAE_STATUS_UNSPECIFIED_FAILURE,
-                &[],
+                ReplyBody::Empty,
             );
         }
         if session
@@ -384,47 +447,60 @@ impl ApSaeResponder {
             return output;
         }
         if commit.rejects_offered_group() {
-            return output.fail(
+            return ApSaeOutput::failure(
                 peer,
                 COMMIT_TRANSACTION,
                 AP_SAE_STATUS_UNSPECIFIED_FAILURE,
-                &[],
+                ReplyBody::Empty,
             );
         }
         if commit.token.is_none() && !allow_reuse && self.use_anti_clogging(queued_commits) {
-            let session = self.sessions[slot]
-                .as_ref()
-                .expect("the slot holds a session");
+            let Some(session) = self.sessions.get(slot).and_then(Option::as_ref) else {
+                return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
+            };
             let h2e = h2e || session.h2e;
             let token = self.comeback.issue(peer, now, || {
                 let mut key = [0; 32];
                 random.fill(&mut key);
                 key
             });
-            let mut request = [0_u8; 2 + 3 + SAE_ANTI_CLOGGING_TOKEN_LEN];
-            request[..2].copy_from_slice(&SAE_GROUP_P256.to_le_bytes());
-            let len = if h2e {
-                request[2..5].copy_from_slice(&[255, 1 + SAE_ANTI_CLOGGING_TOKEN_LEN as u8, 93]);
-                request[5..].copy_from_slice(&token);
-                request.len()
+            let group = SAE_GROUP_P256.to_le_bytes();
+            let reply_body = if h2e {
+                let mut request = [0; 5 + SAE_ANTI_CLOGGING_TOKEN_LEN];
+                let header = [
+                    group[0],
+                    group[1],
+                    255,
+                    const { 1 + SAE_ANTI_CLOGGING_TOKEN_LEN as u8 },
+                    93,
+                ];
+                for (destination, source) in
+                    request.iter_mut().zip(header.iter().chain(token.iter()))
+                {
+                    *destination = *source;
+                }
+                ReplyBody::H2eToken(request)
             } else {
-                request[2..2 + SAE_ANTI_CLOGGING_TOKEN_LEN].copy_from_slice(&token);
-                2 + SAE_ANTI_CLOGGING_TOKEN_LEN
+                let mut request = [0; 2 + SAE_ANTI_CLOGGING_TOKEN_LEN];
+                for (destination, source) in
+                    request.iter_mut().zip(group.iter().chain(token.iter()))
+                {
+                    *destination = *source;
+                }
+                ReplyBody::Token(request)
             };
-            let mut output = output;
-            output.send(ApSaeReply::new(
+            return ApSaeOutput::reply(ApSaeReply::new(
                 peer,
                 COMMIT_TRANSACTION,
                 AP_SAE_STATUS_ANTI_CLOGGING_TOKEN_REQUIRED,
-                &request[..len],
+                reply_body,
             ));
-            return output;
         }
         let local = self.local;
         let credential = &self.credential;
-        let session = self.sessions[slot]
-            .as_mut()
-            .expect("the slot holds a session");
+        let Some(session) = self.sessions.get_mut(slot).and_then(Option::as_mut) else {
+            return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
+        };
         session.password_identifier = commit.password_identifier;
         commit_step(
             local,
@@ -442,28 +518,33 @@ impl ApSaeResponder {
         let Some(slot) = self.slot(peer) else {
             return output;
         };
-        let session = self.sessions[slot]
-            .as_mut()
-            .expect("the slot holds a session");
+        let Some(session) = self.sessions.get_mut(slot).and_then(Option::as_mut) else {
+            return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
+        };
         if status != AP_SAE_STATUS_SUCCESS {
             return output;
         }
-        let Some(send_confirm) = body
-            .get(..2)
-            .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
-        else {
-            return output.fail(
+        let Some(send_confirm) = body.first_chunk::<2>().copied().map(u16::from_le_bytes) else {
+            return ApSaeOutput::failure(
                 peer,
                 CONFIRM_TRANSACTION,
                 AP_SAE_STATUS_UNSPECIFIED_FAILURE,
-                &[],
+                ReplyBody::Empty,
             );
         };
-        if session.phase == Phase::Accepted
+        if session.phase == ApSaePhase::Accepted
             && (send_confirm <= session.received_confirm || send_confirm == u16::MAX)
         {
             if let Some(confirm) = session.stored_confirm {
-                output.send(ApSaeReply::new(peer, CONFIRM_TRANSACTION, 0, &confirm));
+                output.replies = [
+                    Some(ApSaeReply::new(
+                        peer,
+                        CONFIRM_TRANSACTION,
+                        0,
+                        ReplyBody::Confirm(confirm),
+                    )),
+                    None,
+                ];
             }
             return output;
         }
@@ -472,35 +553,52 @@ impl ApSaeResponder {
             .as_ref()
             .is_some_and(|keys| keys.verify_peer_confirm(body).is_ok());
         if !verified {
-            return output.fail(
+            return ApSaeOutput::failure(
                 peer,
                 CONFIRM_TRANSACTION,
                 AP_SAE_STATUS_CHALLENGE_FAILURE,
-                &[],
+                ReplyBody::Empty,
             );
         }
         session.received_confirm = send_confirm;
         match session.phase {
-            Phase::Nothing => {}
-            Phase::Committed => {
-                store_confirm(session);
-                session.phase = Phase::Confirmed;
-                output.result = accept(session);
+            ApSaePhase::Nothing => {}
+            ApSaePhase::Committed => {
+                if let Err(fault) = store_confirm(session) {
+                    return ApSaeOutput::fault(fault);
+                }
+                session.phase = ApSaePhase::Confirmed;
+                output.result = accept(session).unwrap_or_else(ApSaeResult::Fault);
             }
-            Phase::Confirmed => output.result = accept(session),
-            Phase::Accepted => {
+            ApSaePhase::Confirmed => {
+                output.result = accept(session).unwrap_or_else(ApSaeResult::Fault)
+            }
+            ApSaePhase::Accepted => {
                 if session.sync > AP_SAE_SYNC {
-                    session.phase = Phase::Nothing;
+                    session.phase = ApSaePhase::Nothing;
                     session.sync = 0;
                 } else {
-                    session.sync += 1;
-                    store_confirm(session);
+                    session.sync = match session.sync.checked_add(1) {
+                        Some(sync) => sync,
+                        None => return ApSaeOutput::fault(session.fault()),
+                    };
+                    if let Err(fault) = store_confirm(session) {
+                        return ApSaeOutput::fault(fault);
+                    }
                     session.clear_exchange();
                 }
             }
         }
         if let Some(confirm) = session.stored_confirm {
-            output.send(ApSaeReply::new(peer, CONFIRM_TRANSACTION, 0, &confirm));
+            output.replies = [
+                Some(ApSaeReply::new(
+                    peer,
+                    CONFIRM_TRANSACTION,
+                    0,
+                    ReplyBody::Confirm(confirm),
+                )),
+                None,
+            ];
         }
         output
     }
@@ -519,59 +617,65 @@ fn commit_step<R: ApSaeRandom>(
     let mut output = ApSaeOutput::new();
     let peer = session.peer;
     let refresh = match session.phase {
-        Phase::Nothing => {
+        ApSaePhase::Nothing => {
             session.h2e = h2e;
             !allow_reuse
         }
-        Phase::Committed => unreachable!("a Committed session is reset before its step"),
-        Phase::Confirmed => {
+        ApSaePhase::Committed => return ApSaeOutput::fault(session.fault()),
+        ApSaePhase::Confirmed => {
             if session.sync > AP_SAE_SYNC {
-                session.phase = Phase::Nothing;
+                session.phase = ApSaePhase::Nothing;
                 session.sync = 0;
                 return output;
             }
-            session.sync += 1;
+            session.sync = match session.sync.checked_add(1) {
+                Some(sync) => sync,
+                None => return ApSaeOutput::fault(session.fault()),
+            };
             true
         }
-        Phase::Accepted => true,
+        ApSaePhase::Accepted => true,
     };
     if refresh || session.own.is_none() {
         let use_token = session.password_identifier || h2e;
         match draw_commit(local, peer, credential, use_token, random) {
             Ok(own) => session.own = Some(own),
             Err(_) => {
-                return output.fail(
+                return ApSaeOutput::failure(
                     peer,
                     COMMIT_TRANSACTION,
                     AP_SAE_STATUS_UNSPECIFIED_FAILURE,
-                    &[],
+                    ReplyBody::Empty,
                 );
             }
         }
     }
-    let own = session
-        .own
-        .as_ref()
-        .expect("the session holds its own commit");
+    let Some(own) = session.own.as_ref() else {
+        return ApSaeOutput::fault(session.fault());
+    };
     let mut body = [0_u8; SAE_COMMIT_LEN];
-    let len = own
-        .values()
-        .encode(None, session.h2e, &mut body)
-        .expect("a commit without a token fits its capacity");
+    let len = match own.values().encode(None, session.h2e, &mut body) {
+        Ok(len) => len,
+        Err(error) => return ApSaeOutput::fault(ApSaeFault::Encoding(error)),
+    };
+    if len != SAE_COMMIT_LEN {
+        return ApSaeOutput::fault(ApSaeFault::CommitLength { length: len });
+    }
     let commit_status = if session.h2e {
         AP_SAE_STATUS_HASH_TO_ELEMENT
     } else {
         AP_SAE_STATUS_SUCCESS
     };
-    output.send(ApSaeReply::new(
+    let commit_reply = ApSaeReply::new(
         peer,
         COMMIT_TRANSACTION,
         commit_status,
-        &body[..len],
-    ));
+        ReplyBody::Commit(body),
+    );
+    output.replies = [Some(commit_reply), None];
     let continuing = session.phase;
-    if continuing != Phase::Confirmed {
-        session.phase = Phase::Committed;
+    if continuing != ApSaePhase::Confirmed {
+        session.phase = ApSaePhase::Committed;
     }
     match own.process(peer_commit) {
         Ok(keys) => {
@@ -579,16 +683,26 @@ fn commit_step<R: ApSaeRandom>(
             session.peer_commit = Some(peer_commit);
         }
         Err(_) => {
-            return output.fail(
-                peer,
-                COMMIT_TRANSACTION,
-                AP_SAE_STATUS_UNSPECIFIED_FAILURE,
-                &[],
-            );
+            return ApSaeOutput {
+                replies: [
+                    Some(commit_reply),
+                    Some(ApSaeReply::new(
+                        peer,
+                        COMMIT_TRANSACTION,
+                        AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                        ReplyBody::Empty,
+                    )),
+                ],
+                result: ApSaeResult::Failed {
+                    status: AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                },
+            };
         }
     }
-    if continuing == Phase::Confirmed {
-        store_confirm(session);
+    if continuing == ApSaePhase::Confirmed {
+        if let Err(fault) = store_confirm(session) {
+            output.result = ApSaeResult::Fault(fault);
+        }
     } else {
         session.sync = 0;
     }
@@ -622,28 +736,23 @@ fn draw_commit<R: ApSaeRandom>(
 
 /// `sae_write_confirm`: advance send-confirm and keep the Confirm for the
 /// reply the next handled Confirm sends.
-fn store_confirm(session: &mut Session) {
+fn store_confirm(session: &mut Session) -> Result<(), ApSaeFault> {
+    let keys = session.keys.as_ref().ok_or_else(|| session.fault())?;
     session.send_confirm = session.send_confirm.saturating_add(1);
-    let keys = session
-        .keys
-        .as_ref()
-        .expect("a confirm follows a processed commit");
     session.stored_confirm = Some(keys.own_confirm(session.send_confirm));
+    Ok(())
 }
 
 /// `sae_accept_sta`.
-fn accept(session: &mut Session) -> ApSaeResult {
+fn accept(session: &mut Session) -> Result<ApSaeResult, ApSaeFault> {
+    let keys = session.keys.as_ref().ok_or_else(|| session.fault())?;
     session.send_confirm = u16::MAX;
     session.accepted_scalar = session.peer_commit.map(|commit| commit.scalar);
-    session.phase = Phase::Accepted;
-    let keys = session
-        .keys
-        .as_ref()
-        .expect("an accepted session holds its keys");
-    ApSaeResult::Accepted {
+    session.phase = ApSaePhase::Accepted;
+    Ok(ApSaeResult::Accepted {
         pmk: *keys.pmk(),
         pmkid: *keys.pmkid(),
-    }
+    })
 }
 
 #[cfg(test)]

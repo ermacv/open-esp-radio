@@ -4,6 +4,15 @@
 No other crate uses it yet; its public calls are reached only from its own
 tests.
 
+Runtime panic lints and the complete sans-IO catalogue are denied at the
+crate root. Service construction, authentication and removal report
+`ApServiceError::GenerationExhausted` before reusing an identity generation;
+failed authentication or removal retains the live peer and its security
+state. SAE invariant failures return `ApSaeResult::Fault` with session
+observations, while reply bodies have fixed protocol-defined lengths.
+Initialized beacon lengths are validated, and advertisement access returns
+its typed length error if the stored invariant is broken.
+
 An access point uses 40 MHz in 2.4 GHz only under the 20/40 coexistence rules;
 a station reports 20/40 OBSS as the standard requires.
 
@@ -19,7 +28,6 @@ a station reports 20/40 OBSS as the standard requires.
   and `build_pending_transmit`); it must carry the GTK's current TX PN, as
   the IGTK IPN already does. A station may accept replayed group frames.
 - **BIP does not guard +HTC** (`service/management.rs::protect_group_management`).
-- **No strict lint block** in `lib.rs`, no `clippy.toml`.
 
 **Timing and protocol**
 
@@ -27,8 +35,6 @@ a station reports 20/40 OBSS as the standard requires.
   stamps `now` as the TSF and starts the TBTT grid at the first `prepare`;
   `mac`'s `beacon.rs::stamp` and `tbtt.rs::next_tbtt` follow it. TBTT is not
   at TSF mod BI×1024 = 0 and DTIM jitters around BI boundaries.
-- **`service/block_ack.rs::take_tx_block_ack_offer` panics** (`expect`) on
-  an unknown peer of a protected BSS.
 - **No reassociation.** `mac`'s parser drops Reassociation Request, and
   `service/peer.rs` `associate_rsn`/`associate_open` refuse an Association
   Request from an authorized peer (`WrongPeerPhase`) instead of resetting
@@ -40,8 +46,7 @@ a station reports 20/40 OBSS as the standard requires.
   and `management_tx_protection` have no caller.
 - **The SAE responder can be exhausted with spoofed MACs.**
   `sae.rs::receive_commit` allocates a session before checking status,
-  token or commit; sessions have no expiry or retransmission timer and are
-  a phase plus `Option` fields behind eight `expect`s.
+  token or commit; sessions have no expiry or retransmission timer.
 - **Untyped DTIM grant:** `service/power_save.rs::begin_buffered_group_release`
   returns `Option` over a bare `u16` count; `beacon/publication.rs::ApDtimRelease`
   is not consumed per frame.
@@ -50,21 +55,19 @@ a station reports 20/40 OBSS as the standard requires.
 
 - `service.rs` `ApBufferedGroupRelease`/`ApBufferedUnicastRelease` lack
   `#[must_use]` and a stop rollback (`discard_buffered_groups` refuses).
-- `service.rs` `with_security`/`advance_peer_generation`: the `u32`
-  generation overflows into an `expect`; `ApPeerBinding` takes the global
-  generation, separate from `ApAssociationIdentity`.
+- `ApPeerBinding` takes the global generation, separate from
+  `ApAssociationIdentity`.
 - Listen Interval is discarded: no PS aging, no status 51, no filtered-frame
   requeue, no Null for an empty PS-Poll; no class-2/3 Deauthentication
   (reason 6/7); no null-data poll before `service/peer.rs::begin_due_peer_close`.
 - CSA: `ApBeacon::prepare` decrements the count per prepared beacon, and
   `announce_channel_switch`/`channel_switch_due` have no consumer.
 - BIP lives in `AccessPointService.group_management: Option<BipTransmitter>`
-  outside the WPA3 security variant, so `protect_group_management` and
-  `message3_key_data` need `unreachable!`/`expect`.
+  outside the WPA3 security variant; group protection checks that both
+  owners are present.
 - `service.rs::ApPeer` holds flags and `Option`s beside its `phase`;
   `ApMlmeAction` is one enum for unrelated calls; `new_ap_tx_block_ack` is
   not `const`; `power_save.rs::complete_buffered_group` is unused;
-  `beacon.rs::ApBeacon::from_initialized` does not validate `len`;
   a misplaced doc on `restart_schedule`; `status_revision` is bumped per
   frame; no TX aggregation on an Open BSS; no GTK rekey; `Cargo.toml`
   still says "single-peer".

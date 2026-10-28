@@ -46,9 +46,13 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             .copied()
     }
 
-    pub fn authenticate_open(&mut self, peer: [u8; 6], now: oer_time::Instant) -> ApMlmeAction {
-        let status = self.authenticate(peer, now);
-        ApMlmeAction::AuthenticationResponse { peer, status }
+    pub fn authenticate_open(
+        &mut self,
+        peer: [u8; 6],
+        now: oer_time::Instant,
+    ) -> Result<ApMlmeAction, ApServiceError> {
+        let status = self.authenticate(peer, now)?;
+        Ok(ApMlmeAction::AuthenticationResponse { peer, status })
     }
 
     /// Record `peer`'s accepted SAE exchange: the station is authenticated
@@ -64,10 +68,10 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         if self.security_policy() != ApSecurityPolicy::Wpa3Personal {
             return Err(ApServiceError::SecurityModeMismatch);
         }
+        let status = self.authenticate(peer, now)?;
         self.storage_mut()
             .pmksa
             .insert(ApPmksa::new(peer, pmk.duplicate(), pmkid));
-        let status = self.authenticate(peer, now);
         if status == AP_STATUS_SUCCESS {
             let existing = self.checked_peer_mut(peer)?;
             existing.pmk = Some(pmk);
@@ -78,45 +82,45 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
 
     /// Give `peer` a fresh Authenticated entry, keeping the AID of an entry
     /// it already had.
-    fn authenticate(&mut self, peer: [u8; 6], now: oer_time::Instant) -> u16 {
-        let (status, changed) = if let Some(index) = self.peer_index(peer) {
-            let association_id = self.storage().peers[index]
-                .as_ref()
-                .expect("peer index resolves an occupied entry")
-                .association_id;
-            self.advance_peer_generation();
-            let association_epoch = self.storage().generation;
-            self.storage_mut().management_replay[index] =
-                management::ApManagementReplay::inactive();
-            self.storage_mut().peers[index] = Some(ApPeer::authenticated(
-                peer,
-                association_id,
-                association_epoch,
-                now,
-            ));
-            (AP_STATUS_SUCCESS, true)
-        } else if self.occupied_count() >= self.client_limit.get() {
-            (AP_STATUS_TOO_MANY_STATIONS, false)
-        } else if let Some(index) = self.storage().peers.iter().position(Option::is_none) {
-            let association_id = u16::try_from(index + 1).expect("fifteen AIDs fit u16");
-            self.advance_peer_generation();
-            let association_epoch = self.storage().generation;
-            self.storage_mut().management_replay[index] =
-                management::ApManagementReplay::inactive();
-            self.storage_mut().peers[index] = Some(ApPeer::authenticated(
-                peer,
-                association_id,
-                association_epoch,
-                now,
-            ));
-            (AP_STATUS_SUCCESS, true)
-        } else {
-            (AP_STATUS_TOO_MANY_STATIONS, false)
-        };
-        if changed {
-            self.revise_status();
+    fn authenticate(
+        &mut self,
+        peer: [u8; 6],
+        now: oer_time::Instant,
+    ) -> Result<u16, ApServiceError> {
+        let existing = self.peer_index(peer).is_some();
+        if !existing && self.occupied_count() >= self.client_limit.get() {
+            return Ok(AP_STATUS_TOO_MANY_STATIONS);
         }
-        status
+        let generation = self
+            .storage()
+            .generation
+            .checked_add(1)
+            .ok_or(ApServiceError::GenerationExhausted)?;
+        let storage = self.storage_mut();
+        let Some(((entry, replay), slot_aid)) = storage
+            .peers
+            .iter_mut()
+            .zip(&mut storage.management_replay)
+            .zip(1..=u16::from(AccessPointClientLimit::MAX))
+            .find(|((entry, _), _)| {
+                if existing {
+                    entry.as_ref().is_some_and(|entry| entry.address == peer)
+                } else {
+                    entry.is_none()
+                }
+            })
+        else {
+            return Ok(AP_STATUS_TOO_MANY_STATIONS);
+        };
+        let association_id = entry
+            .as_ref()
+            .map_or(slot_aid, |entry| entry.association_id);
+        let replacement = ApPeer::authenticated(peer, association_id, generation, now)?;
+        *entry = Some(replacement);
+        *replay = management::ApManagementReplay::inactive();
+        storage.generation = generation;
+        self.revise_status();
+        Ok(AP_STATUS_SUCCESS)
     }
 
     /// Admit an association into an RSN epoch. A WPA3 station uses the PMK of
@@ -378,11 +382,12 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     }
 
     pub fn begin_due_peer_close(&mut self, now: oer_time::Instant) -> Option<ApPeerClose> {
-        let index = self.storage().peers.iter().position(|peer| {
-            peer.as_ref()
-                .is_some_and(|peer| peer.phase != ApPeerPhase::Closing && peer.deadline <= now)
-        })?;
-        let peer = self.storage_mut().peers[index].as_mut()?;
+        let peer = self
+            .storage_mut()
+            .peers
+            .iter_mut()
+            .flatten()
+            .find(|peer| peer.phase != ApPeerPhase::Closing && peer.deadline <= now)?;
         let was_associated = matches!(peer.phase, ApPeerPhase::Securing | ApPeerPhase::Authorized);
         let close = ApPeerClose {
             peer: peer.address,
@@ -421,11 +426,12 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     }
 
     pub fn begin_stop_peer(&mut self) -> Option<ApPeerClose> {
-        let index = self.storage().peers.iter().position(|peer| {
-            peer.as_ref()
-                .is_some_and(|peer| peer.phase != ApPeerPhase::Closing)
-        })?;
-        let peer = self.storage_mut().peers[index].as_mut()?;
+        let peer = self
+            .storage_mut()
+            .peers
+            .iter_mut()
+            .flatten()
+            .find(|peer| peer.phase != ApPeerPhase::Closing)?;
         let was_associated = matches!(peer.phase, ApPeerPhase::Securing | ApPeerPhase::Authorized);
         let close = ApPeerClose {
             peer: peer.address,
@@ -439,10 +445,21 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     }
 
     pub fn remove_peer(&mut self, peer: [u8; 6]) -> Result<ApMlmeAction, ApServiceError> {
-        let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
-        self.storage_mut().peers[index] = None;
-        self.storage_mut().management_replay[index] = management::ApManagementReplay::inactive();
-        self.advance_peer_generation();
+        let storage = self.storage_mut();
+        let (entry, replay) = storage
+            .peers
+            .iter_mut()
+            .zip(&mut storage.management_replay)
+            .find(|(entry, _)| entry.as_ref().is_some_and(|entry| entry.address == peer))
+            .ok_or(ApServiceError::UnknownPeer)?;
+        // Refuse exhaustion before releasing peer state or invalidating its binding.
+        let generation = storage
+            .generation
+            .checked_add(1)
+            .ok_or(ApServiceError::GenerationExhausted)?;
+        *entry = None;
+        *replay = management::ApManagementReplay::inactive();
+        storage.generation = generation;
         self.revise_status();
         Ok(ApMlmeAction::PeerRemoved { peer })
     }
