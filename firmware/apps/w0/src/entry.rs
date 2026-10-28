@@ -4,7 +4,7 @@ compile_error!(
     "w0 declares the trace class: build it with `cargo fw build w0`, check it with RUSTFLAGS=\"--cfg oer_trace\""
 );
 
-use oer_diagnostics::{DiagPath, DiagnosticPath, Note};
+use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::ieee80211::init::{
@@ -111,7 +111,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
-        fail("root-taken")
+        fail(oer_diagnostics::name!("root-taken"; 32))
     };
     let runtime = root
         .into_runtime()
@@ -128,7 +128,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         usb::early_previous_panic(&record);
     }
     let Some(interrupts) = Interrupts::take() else {
-        fail("interrupt-table")
+        fail(oer_diagnostics::name!("interrupt-table"; 32))
     };
 
     let factory = FactoryIdentity::read(runtime.efuse);
@@ -150,7 +150,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         u32::from(identity.mac_extension),
     ));
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
-        fail("claim")
+        fail(oer_diagnostics::name!("claim"; 32))
     };
     let ProtocolPartitions {
         wifi, wifi_coex, ..
@@ -188,7 +188,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
     if RadioTasks::radio_actor(&radio, actor).is_err() {
-        fail("radio-actor-start");
+        fail(oer_diagnostics::name!("radio-actor-start"; 32));
     }
     let (console, pads) = usb::open(adopted.router(), interrupts.console_usb);
     let executor = Executor::<0>::new(software.line0);
@@ -218,7 +218,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
                 if AppTasks::w0(spawner, boot).is_err()
                     || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
                 {
-                    fail("task-start");
+                    fail(oer_diagnostics::name!("task-start"; 32));
                 }
             },
         )
@@ -267,22 +267,23 @@ async fn run(
     rng: Rng,
     station: [u8; 6],
     access_point: [u8; 6],
-) -> Result<(), &'static str> {
+) -> Result<(), oer_diagnostics::Name<32>> {
     let (Ok(station), Ok(access_point)) = (
         IndividualAddress::for_interface(station),
         IndividualAddress::for_interface(access_point),
     ) else {
-        return Err("efuse-mac");
+        return Err(oer_diagnostics::name!("efuse-mac"; 32));
     };
-    let channel = WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).map_err(|_| "channel")?;
-    let country = COUNTRY.ok_or("unconfigured")?;
+    let channel = WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20)
+        .map_err(|_| oer_diagnostics::name!("channel"; 32))?;
+    let country = COUNTRY.ok_or(oer_diagnostics::name!("unconfigured"; 32))?;
     let domain = Country::new(country)
         .ok()
         .and_then(RegulatoryDomain::of)
-        .ok_or("domain")?;
+        .ok_or(oer_diagnostics::name!("domain"; 32))?;
     let channel = domain
         .permit(channel)
-        .map_err(|_| "channel-not-permitted")?;
+        .map_err(|_| oer_diagnostics::name!("channel-not-permitted"; 32))?;
     let ceiling = channel.tx_ceiling(board::wifi_power_limits(
         i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
         None,
@@ -290,7 +291,7 @@ async fn run(
     let config = RadioStartConfig::new(
         WifiColdStartConfig::new(channel, ceiling),
         WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point)
-            .map_err(|_| "mac-address")?,
+            .map_err(|_| oer_diagnostics::name!("mac-address"; 32))?,
     );
     let (cell, started) = start_esp32s31_radio(
         cell,
@@ -306,15 +307,15 @@ async fn run(
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {
             note(console, &Note::w0_join_failed(failure_name(failed.cause))).await;
-            return Err("join");
+            return Err(oer_diagnostics::name!("join"; 32));
         }
         Err(RadioStartFailure::Track { failed, .. }) => {
             note(console, &Note::w0_track_failed(failure_name(failed.cause))).await;
-            return Err("track");
+            return Err(oer_diagnostics::name!("track"; 32));
         }
     };
     if !stopped.radio_mut().0.mac_core_gates_closed() {
-        return Err("mac-gates-open");
+        return Err(oer_diagnostics::name!("mac-gates-open"; 32));
     }
     let report = stopped.start_report();
     match report.phy {
@@ -323,15 +324,9 @@ async fn run(
             micros,
             outcome,
         } => {
-            let mut path = DiagPath::new();
-            calibration_path.push_path(&mut path);
             note(
                 console,
-                &Note::w0_join(
-                    report.epoch.get(),
-                    path.names().first().copied().unwrap_or(""),
-                    micros,
-                ),
+                &Note::w0_join(report.epoch.get(), calibration_path.name(), micros),
             )
             .await;
             note(
@@ -357,9 +352,9 @@ async fn run(
                     .await;
                     if let Some(frequency) = frequency {
                         for (name, point) in [
-                            ("nominal", frequency.nominal),
-                            ("low", frequency.low),
-                            ("high", frequency.high),
+                            (oer_diagnostics::name!("nominal"; 32), frequency.nominal),
+                            (oer_diagnostics::name!("low"; 32), frequency.low),
+                            (oer_diagnostics::name!("high"; 32), frequency.high),
                         ] {
                             note(
                                 console,
@@ -379,12 +374,12 @@ async fn run(
         }
         other => {
             let (name, micros) = match other {
-                PhyPreparation::AlreadyOpen => ("AlreadyOpen", 0),
-                PhyPreparation::Woke { micros } => ("Woke", micros),
-                PhyPreparation::Registered { .. } => ("Registered", 0),
+                PhyPreparation::AlreadyOpen => (oer_diagnostics::name!("AlreadyOpen"; 32), 0),
+                PhyPreparation::Woke { micros } => (oer_diagnostics::name!("Woke"; 32), micros),
+                PhyPreparation::Registered { .. } => (oer_diagnostics::name!("Registered"; 32), 0),
             };
             note(console, &Note::w0_join_phy(name, micros)).await;
-            return Err("not-registered");
+            return Err(oer_diagnostics::name!("not-registered"; 32));
         }
     }
     note(
@@ -398,11 +393,15 @@ async fn run(
     )
     .await;
     let (name, started, completed) = match report.track.temperature.acquisition {
-        TemperatureAcquisition::Unobserved => ("Unobserved", 0, 0),
-        TemperatureAcquisition::Undated => ("Undated", 0, 0),
-        TemperatureAcquisition::Overlong => ("Overlong", 0, 0),
-        TemperatureAcquisition::ClockReversed => ("ClockReversed", 0, 0),
-        TemperatureAcquisition::Window { started, completed } => ("Window", started, completed),
+        TemperatureAcquisition::Unobserved => (oer_diagnostics::name!("Unobserved"; 32), 0, 0),
+        TemperatureAcquisition::Undated => (oer_diagnostics::name!("Undated"; 32), 0, 0),
+        TemperatureAcquisition::Overlong => (oer_diagnostics::name!("Overlong"; 32), 0, 0),
+        TemperatureAcquisition::ClockReversed => {
+            (oer_diagnostics::name!("ClockReversed"; 32), 0, 0)
+        }
+        TemperatureAcquisition::Window { started, completed } => {
+            (oer_diagnostics::name!("Window"; 32), started, completed)
+        }
     };
     note(
         console,
@@ -425,28 +424,28 @@ async fn run(
                 console,
                 &Note::w0_leave(
                     match released.domain {
-                        DomainHealth::Healthy => "Healthy",
-                        DomainHealth::Poisoned(_) => "Poisoned",
+                        DomainHealth::Healthy => oer_diagnostics::name!("Healthy"; 32),
+                        DomainHealth::Poisoned(_) => oer_diagnostics::name!("Poisoned"; 32),
                     },
                     cold,
                 ),
             )
             .await;
             if !cold || released.domain != oer_esp32s31_radio_client::DomainHealth::Healthy {
-                return Err("leave");
+                return Err(oer_diagnostics::name!("leave"; 32));
             }
         }
         Err(failure) => {
             let (name, state) = match failure.error {
                 oer_esp32s31_hal::owner::maintenance::Error::MacActive { state } => {
-                    ("MacActive", u32::from(state))
+                    (oer_diagnostics::name!("MacActive"; 32), u32::from(state))
                 }
                 oer_esp32s31_hal::owner::maintenance::Error::RxWalkerEnabled => {
-                    ("RxWalkerEnabled", 0)
+                    (oer_diagnostics::name!("RxWalkerEnabled"; 32), 0)
                 }
             };
             note(console, &Note::w0_release_refused(name, state)).await;
-            return Err("release");
+            return Err(oer_diagnostics::name!("release"; 32));
         }
     }
     Ok(())
@@ -483,17 +482,17 @@ async fn note(console: &mut Console, note: &Note<'_>) {
     let _ = oer_espressif_usb_serial_jtag::write_note(console, note).await;
 }
 
-fn failure_name(cause: Failure) -> &'static str {
+fn failure_name(cause: Failure) -> oer_diagnostics::Name<32> {
     match cause {
-        Failure::Refused => "Refused",
-        Failure::ClientFailed => "ClientFailed",
-        Failure::Poisoned(_) => "Poisoned",
+        Failure::Refused => oer_diagnostics::name!("Refused"; 32),
+        Failure::ClientFailed => oer_diagnostics::name!("ClientFailed"; 32),
+        Failure::Poisoned(_) => oer_diagnostics::name!("Poisoned"; 32),
     }
 }
 
 /// Report a failed boot step on the early writer and wait: no task feeds
 /// the RTC watchdog, which resets the chip.
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     usb::early(&Note::w0_fail(reason));
     oer_espressif_staged_runtime::idle()
 }

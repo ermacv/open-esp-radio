@@ -155,14 +155,14 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let runtime = root
         .into_runtime()
-        .unwrap_or_else(|error| crate::fail(error.name()));
+        .unwrap_or_else(|error| crate::fail(error.name().as_str()));
     let (_psram, mut adopted) = match handoff.adopt(
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         board::BootstrapPsram,
     ) {
         Ok(adopted) => adopted,
-        Err(error) => crate::fail(error.name()),
+        Err(error) => crate::fail(error.name().as_str()),
     };
     crate::gate_fault::report_previous();
     crate::release_fault::report_previous();
@@ -266,7 +266,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let app = Executor::<0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
-        Err(error) => crate::fail(error.name()),
+        Err(error) => crate::fail(error.name().as_str()),
     };
     let rng = host::Rng::new(runtime.entropy, EmbassyClock);
     let watchdog = runtime.watchdogs.rtc;

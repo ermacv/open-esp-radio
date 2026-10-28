@@ -11,7 +11,7 @@ oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
-        fail("root-taken");
+        fail(oer_diagnostics::name!("root-taken"; 32));
     };
     let runtime = match root.into_runtime() {
         Ok(runtime) => runtime,
@@ -38,12 +38,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             &record,
         );
     }
-    fail("unconfigured")
+    fail(oer_diagnostics::name!("unconfigured"; 32))
 }
 
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     let _ = usb_serial_jtag::early_text(b"OER-RESULT: fail w2 ");
-    let _ = usb_serial_jtag::early_text(reason.as_bytes());
+    let _ = usb_serial_jtag::early_text(reason.as_str().as_bytes());
     let _ = usb_serial_jtag::early_text(b"\r\n");
     oer_espressif_staged_runtime::idle()
 }

@@ -38,9 +38,9 @@ pub(crate) enum OpenError {
 
 impl OpenError {
     /// The reason the image's failure names.
-    pub(crate) const fn reason(&self) -> &'static str {
+    pub(crate) const fn reason(&self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::Retire => "console-retire",
+            Self::Retire => oer_diagnostics::name!("console-retire"; 32),
         }
     }
 }

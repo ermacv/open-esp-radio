@@ -6,9 +6,9 @@ use oer_esp32s31_hal::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
+use oer_espressif_interrupt_table::{Controller, Router};
 use oer_espressif_staged_runtime::panic::PanicRecord;
 use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
-use oer_espressif_interrupt_table::{Controller, Router};
 
 /// The console's endpoint, polled by the core-0 executor's task.
 pub(crate) type Console = Endpoint<Executor<0>, ConsoleEndpoint>;
@@ -53,9 +53,9 @@ pub(crate) enum OpenError {
 
 impl OpenError {
     /// The reason the image's failure names.
-    pub(crate) const fn reason(&self) -> &'static str {
+    pub(crate) const fn reason(&self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::Retire => "console-retire",
+            Self::Retire => oer_diagnostics::name!("console-retire"; 32),
         }
     }
 }

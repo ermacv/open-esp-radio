@@ -28,20 +28,20 @@ pub enum Point {
 
 impl Point {
     /// The variant's name, as the host prints it.
-    const fn name(self) -> &'static str {
+    const fn name(self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::BeforeRx => "BeforeRx",
-            Self::AfterRx => "AfterRx",
-            Self::BeforeChannel => "BeforeChannel",
-            Self::AfterChannel => "AfterChannel",
-            Self::BeforeMac => "BeforeMac",
-            Self::AfterMac => "AfterMac",
-            Self::Settled(_) => "Settled",
-            Self::CapturePrepared => "CapturePrepared",
-            Self::BeforeRing => "BeforeRing",
-            Self::RingOpen => "RingOpen",
-            Self::RingSample(_) => "RingSample",
-            Self::RingClosed => "RingClosed",
+            Self::BeforeRx => oer_diagnostics::name!("BeforeRx"; 32),
+            Self::AfterRx => oer_diagnostics::name!("AfterRx"; 32),
+            Self::BeforeChannel => oer_diagnostics::name!("BeforeChannel"; 32),
+            Self::AfterChannel => oer_diagnostics::name!("AfterChannel"; 32),
+            Self::BeforeMac => oer_diagnostics::name!("BeforeMac"; 32),
+            Self::AfterMac => oer_diagnostics::name!("AfterMac"; 32),
+            Self::Settled(_) => oer_diagnostics::name!("Settled"; 32),
+            Self::CapturePrepared => oer_diagnostics::name!("CapturePrepared"; 32),
+            Self::BeforeRing => oer_diagnostics::name!("BeforeRing"; 32),
+            Self::RingOpen => oer_diagnostics::name!("RingOpen"; 32),
+            Self::RingSample(_) => oer_diagnostics::name!("RingSample"; 32),
+            Self::RingClosed => oer_diagnostics::name!("RingClosed"; 32),
         }
     }
 

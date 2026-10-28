@@ -38,7 +38,7 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::r
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(root) = Root::take() else {
-        fail("root");
+        fail(oer_diagnostics::name!("root"; 32));
     };
     let runtime = match root.into_runtime() {
         Ok(runtime) => runtime,
@@ -53,7 +53,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.name()),
     };
     let Some(interrupts) = Interrupts::take() else {
-        fail("interrupts");
+        fail(oer_diagnostics::name!("interrupts"; 32));
     };
     let factory = FactoryIdentity::read(runtime.efuse);
     let identity = PhyCalibrationIdentity {
@@ -89,7 +89,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         identity,
     };
     if RadioTasks::sheets(&radio, boot).is_err() {
-        fail("radio-task");
+        fail(oer_diagnostics::name!("radio-task"; 32));
     }
     match Executor::<0>::new(software.line0)
         .run(
@@ -100,13 +100,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             (),
             move |spawner| {
                 if AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err() {
-                    fail("watchdog-task");
+                    fail(oer_diagnostics::name!("watchdog-task"; 32));
                 }
             },
         )
         .unwrap_or_else(|failure| failure.reset()) {}
 }
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt(|_| {
         let _ = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
@@ -135,7 +135,7 @@ async fn sheets(boot: Boot) {
     let timer = oer_espressif_executor::Cooperative::new(EmbassyClock);
     let started = oer_riscv::cycle32();
     let Some(place) = CALIBRATION.try_take() else {
-        fail("calibration-place");
+        fail(oer_diagnostics::name!("calibration-place"; 32));
     };
     let reason = place
         .future(|| {
@@ -151,7 +151,7 @@ async fn sheets(boot: Boot) {
     if reason != 0 {
         crate::est_freq::emit(150, reason, oer_riscv::cycle32().wrapping_sub(started), 0);
         crate::est_freq::status(0x1950_bad0);
-        fail("calibration");
+        fail(oer_diagnostics::name!("calibration"; 32));
     }
     crate::est_freq::emit(150, 0, oer_riscv::cycle32().wrapping_sub(started), 1);
     crate::est_freq::status(0x1950_0001);

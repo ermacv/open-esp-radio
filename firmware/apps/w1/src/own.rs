@@ -64,10 +64,10 @@ impl Order {
         }
     }
 
-    pub const fn name(self) -> &'static str {
+    pub const fn name(self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::Forward => "forward",
-            Self::Reverse => "reverse",
+            Self::Forward => oer_diagnostics::name!("forward"; 32),
+            Self::Reverse => oer_diagnostics::name!("reverse"; 32),
         }
     }
 }
@@ -114,11 +114,11 @@ impl Full {
     }
 
     /// The reason in `w1.hold`.
-    pub const fn reason(self) -> &'static str {
+    pub const fn reason(self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::No => "-",
-            Self::All => "all",
-            Self::StuckAtLast => "stuck-at-last",
+            Self::No => oer_diagnostics::name!("-"; 32),
+            Self::All => oer_diagnostics::name!("all"; 32),
+            Self::StuckAtLast => oer_diagnostics::name!("stuck-at-last"; 32),
         }
     }
 }

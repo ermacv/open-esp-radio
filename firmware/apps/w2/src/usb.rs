@@ -6,9 +6,9 @@ use oer_esp32s31_hal::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
+use oer_espressif_interrupt_table::{Controller, Router};
 use oer_espressif_staged_runtime::panic::PanicRecord;
 use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
-use oer_espressif_interrupt_table::{Controller, Router};
 
 /// The console's endpoint, polled by the core-0 executor's task.
 pub(crate) type Console = Endpoint<Executor<0>, ConsoleEndpoint>;
@@ -52,7 +52,7 @@ pub(crate) fn open<C: Controller>(
     token: crate::ConsoleUsb,
 ) -> (Console, UsbPads) {
     let Ok((endpoint, interrupt, pads)) = retire_early_writer() else {
-        crate::fail("console-retire")
+        crate::fail(oer_diagnostics::name!("console-retire"; 32))
     };
     let bound = router
         .bind(token, interrupt)

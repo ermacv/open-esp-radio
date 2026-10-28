@@ -453,7 +453,8 @@ impl Radio {
         let outcome = match outcome {
             Ok(outcome) => outcome,
             Err(_) => {
-                crate::transport::CONSOLE.note_immediately(&Note::phy_fail("registration"));
+                crate::transport::CONSOLE
+                    .note_immediately(&Note::phy_fail(oer_diagnostics::name!("registration")));
                 return Err(RejectReason::Internal);
             }
         };
@@ -979,16 +980,18 @@ async fn report_capture_stop(observed: &Result<()>, closed: &Result<()>, rf_clos
 }
 
 /// `Ok` or the rejection's name, for the capture-stop note.
-fn outcome_name(result: &Result<()>) -> &'static str {
+fn outcome_name(result: &Result<()>) -> oer_diagnostics::Name<32> {
     match result {
-        Ok(()) => "Ok",
-        Err(RejectReason::BootId) => "BootId",
-        Err(RejectReason::SessionId) => "SessionId",
-        Err(RejectReason::InvalidState) => "InvalidState",
-        Err(RejectReason::InvalidConfiguration) => "InvalidConfiguration",
-        Err(RejectReason::Unsupported) => "Unsupported",
-        Err(RejectReason::Busy) => "Busy",
-        Err(RejectReason::Internal) => "Internal",
+        Ok(()) => oer_diagnostics::name!("Ok"; 32),
+        Err(RejectReason::BootId) => oer_diagnostics::name!("BootId"; 32),
+        Err(RejectReason::SessionId) => oer_diagnostics::name!("SessionId"; 32),
+        Err(RejectReason::InvalidState) => oer_diagnostics::name!("InvalidState"; 32),
+        Err(RejectReason::InvalidConfiguration) => {
+            oer_diagnostics::name!("InvalidConfiguration"; 32)
+        }
+        Err(RejectReason::Unsupported) => oer_diagnostics::name!("Unsupported"; 32),
+        Err(RejectReason::Busy) => oer_diagnostics::name!("Busy"; 32),
+        Err(RejectReason::Internal) => oer_diagnostics::name!("Internal"; 32),
     }
 }
 

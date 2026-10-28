@@ -14,13 +14,13 @@ pub struct ProbeCounters {
 }
 
 impl ProbeCounters {
-    pub const fn last_socket_error_text(&self) -> &'static str {
+    pub const fn last_socket_error_text(&self) -> oer_diagnostics::Name<32> {
         match self.last_socket_error {
-            None => "None",
-            Some(SendError::InvalidState) => "Some(InvalidState)",
-            Some(SendError::Unaddressable) => "Some(Unaddressable)",
-            Some(SendError::BufferFull) => "Some(BufferFull)",
-            Some(SendError::Malformed) => "Some(Malformed)",
+            None => oer_diagnostics::name!("None"; 32),
+            Some(SendError::InvalidState) => oer_diagnostics::name!("Some(InvalidState)"; 32),
+            Some(SendError::Unaddressable) => oer_diagnostics::name!("Some(Unaddressable)"; 32),
+            Some(SendError::BufferFull) => oer_diagnostics::name!("Some(BufferFull)"; 32),
+            Some(SendError::Malformed) => oer_diagnostics::name!("Some(Malformed)"; 32),
         }
     }
 }

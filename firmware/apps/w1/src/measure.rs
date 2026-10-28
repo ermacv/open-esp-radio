@@ -60,15 +60,15 @@ impl Phase {
     ];
 
     /// The phase's name in the report.
-    pub const fn name(self) -> &'static str {
+    pub const fn name(self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::BringUp => "bringup",
-            Self::FirstFrame => "first_frame",
-            Self::Window => "window",
-            Self::Stress => "stress",
-            Self::Hold => "hold",
-            Self::Stop => "stop",
-            Self::Report => "report",
+            Self::BringUp => oer_diagnostics::name!("bringup"; 32),
+            Self::FirstFrame => oer_diagnostics::name!("first_frame"; 32),
+            Self::Window => oer_diagnostics::name!("window"; 32),
+            Self::Stress => oer_diagnostics::name!("stress"; 32),
+            Self::Hold => oer_diagnostics::name!("hold"; 32),
+            Self::Stop => oer_diagnostics::name!("stop"; 32),
+            Self::Report => oer_diagnostics::name!("report"; 32),
         }
     }
 
@@ -208,13 +208,13 @@ pub const CLOCKS: [PlatformClock; 5] = [
 ];
 
 /// A clock's name in the report.
-pub const fn clock_name(clock: PlatformClock) -> &'static str {
+pub const fn clock_name(clock: PlatformClock) -> oer_diagnostics::Name<32> {
     match clock {
-        PlatformClock::Pll160m => "pll160m",
-        PlatformClock::AnalogI2cMaster => "analog_i2c_master",
-        PlatformClock::Mpll => "mpll",
-        PlatformClock::ModemCoexistence => "modem_coexistence",
-        PlatformClock::ModemLowPowerTimer => "modem_low_power_timer",
+        PlatformClock::Pll160m => oer_diagnostics::name!("pll160m"; 32),
+        PlatformClock::AnalogI2cMaster => oer_diagnostics::name!("analog_i2c_master"; 32),
+        PlatformClock::Mpll => oer_diagnostics::name!("mpll"; 32),
+        PlatformClock::ModemCoexistence => oer_diagnostics::name!("modem_coexistence"; 32),
+        PlatformClock::ModemLowPowerTimer => oer_diagnostics::name!("modem_low_power_timer"; 32),
     }
 }
 
@@ -239,11 +239,11 @@ pub enum ClockOp {
 impl ClockOp {
     pub const ALL: [Self; 3] = [Self::Acquire, Self::Release, Self::Abandon];
 
-    pub const fn name(self) -> &'static str {
+    pub const fn name(self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::Acquire => "acquire",
-            Self::Release => "release",
-            Self::Abandon => "abandon",
+            Self::Acquire => oer_diagnostics::name!("acquire"; 32),
+            Self::Release => oer_diagnostics::name!("release"; 32),
+            Self::Abandon => oer_diagnostics::name!("abandon"; 32),
         }
     }
 }

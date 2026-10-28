@@ -170,7 +170,7 @@ impl Rx {
             .take()
             .ok_or(RejectReason::Internal)?
             .power_up(require_radio(domain_slot.as_mut(), fault), clocks)
-            .map_err(|_| failed("154-power-up"))?;
+            .map_err(|_| failed(oer_diagnostics::name!("154-power-up"; 32)))?;
         self.power = Some(power);
         crate::tx_rate_checkpoint::observe(
             require_radio(domain_slot.as_ref(), fault),
@@ -179,9 +179,9 @@ impl Rx {
         .await?;
         let clocked = powered
             .enable_clocks(require_radio(domain_slot.as_mut(), fault), clocks)
-            .map_err(|_| failed("154-clocks-on"))?;
+            .map_err(|_| failed(oer_diagnostics::name!("154-clocks-on"; 32)))?;
         let ready = phy_ready(require_radio(domain_slot.as_mut(), fault))
-            .map_err(|_| failed("154-phy-ready"))?;
+            .map_err(|_| failed(oer_diagnostics::name!("154-phy-ready"; 32)))?;
         let PhyClientAccess::Available(available) = ready.client::<Ieee802154PhyMembership>()
         else {
             return Err(RejectReason::Internal);
@@ -233,9 +233,9 @@ impl Rx {
         }
         let foundation = clocked
             .reset_mac(require_radio(domain_slot.as_mut(), fault))
-            .map_err(|_| failed("154-reset"))?
+            .map_err(|_| failed(oer_diagnostics::name!("154-reset"; 32)))?
             .configure_foundation()
-            .map_err(|_| failed("154-foundation"))?;
+            .map_err(|_| failed(oer_diagnostics::name!("154-foundation"; 32)))?;
         let RegisteredIeee802154Operational {
             task,
             interrupts,
@@ -253,7 +253,7 @@ impl Rx {
                 Ieee802154PibDefaults::default(),
                 permit,
             )
-            .map_err(|_| failed("154-placement"))?,
+            .map_err(|_| failed(oer_diagnostics::name!("154-placement"; 32)))?,
         };
         engine.set_coexistence(Ieee802154Coexistence::Software(
             Ieee802154CoexPriorities::resolve(
@@ -332,16 +332,16 @@ impl Rx {
             .take()
             .ok_or(RejectReason::Internal)?
             .into_foundation(task, interrupts)
-            .map_err(|_| failed("154-return"))?;
+            .map_err(|_| failed(oer_diagnostics::name!("154-return"; 32)))?;
         let clocked = foundation.into_clocked();
         if !leave_ieee802154(require_radio(domain_slot.as_mut(), fault), &clocked, member)
-            .map_err(|_| failed("154-leave"))?
+            .map_err(|_| failed(oer_diagnostics::name!("154-leave"; 32)))?
         {
             return Err(RejectReason::Internal);
         }
         let powered = clocked
             .disable_clocks(require_radio(domain_slot.as_mut(), fault))
-            .map_err(|_| failed("154-clocks-off"))?;
+            .map_err(|_| failed(oer_diagnostics::name!("154-clocks-off"; 32)))?;
         let (absent, _) = require_radio(domain_slot.as_mut(), fault)
             .leave_coex(self.coex.take().ok_or(RejectReason::Internal)?);
         self.cold = Some(
@@ -464,7 +464,7 @@ impl Ieee802154Environment for Environment {
     }
 }
 
-fn failed(step: &'static str) -> RejectReason {
+fn failed<const B: usize>(step: oer_diagnostics::Name<B>) -> RejectReason {
     crate::transport::CONSOLE.note_immediately(&Note::phy_fail(step));
     RejectReason::Internal
 }

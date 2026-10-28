@@ -14,9 +14,9 @@
 
 use oer_diagnostics::Note;
 use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
+use oer_espressif_interrupt_table::Trigger;
 use oer_espressif_staged_runtime::fatal::{StopError, StopTheWorld};
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
-use oer_espressif_interrupt_table::Trigger;
 
 const MAGIC: u32 = u32::from_le_bytes(*b"OFTL");
 #[cfg(feature = "panic-hook")]
@@ -137,8 +137,8 @@ impl Failure {
     ];
 
     pub(crate) fn from_boot(error: oer_espressif_staged_runtime::BootError) -> Self {
-        use oer_espressif_staged_runtime::BootError;
         use oer_espressif_interrupt_table::Error;
+        use oer_espressif_staged_runtime::BootError;
         match error {
             BootError::WrongHart { .. } => Self::InterruptHart,
             BootError::NoInterruptStack { .. } => Self::InterruptStack,
@@ -157,22 +157,22 @@ impl Failure {
         }
     }
 
-    pub(crate) const fn name(self) -> &'static str {
+    pub(crate) const fn name(self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::Layout => "layout",
-            Self::TaskAllocation => "task-allocation",
-            Self::EntropySource => "entropy-source",
-            Self::RootTaken => "root-taken",
-            Self::RootInitialization => "root-initialization",
-            Self::InterruptTable => "interrupt-table",
-            Self::Console => "console",
-            Self::InterruptHart => "interrupt-hart",
-            Self::InterruptStack => "interrupt-stack",
-            Self::InterruptStackGuard => "interrupt-stack-guard",
-            Self::InterruptVectors => "interrupt-vectors",
-            Self::InterruptControlBits => "interrupt-control-bits",
-            Self::InterruptCount => "interrupt-count",
-            Self::InterruptLevelBits => "interrupt-level-bits",
+            Self::Layout => oer_diagnostics::name!("layout"; 32),
+            Self::TaskAllocation => oer_diagnostics::name!("task-allocation"; 32),
+            Self::EntropySource => oer_diagnostics::name!("entropy-source"; 32),
+            Self::RootTaken => oer_diagnostics::name!("root-taken"; 32),
+            Self::RootInitialization => oer_diagnostics::name!("root-initialization"; 32),
+            Self::InterruptTable => oer_diagnostics::name!("interrupt-table"; 32),
+            Self::Console => oer_diagnostics::name!("console"; 32),
+            Self::InterruptHart => oer_diagnostics::name!("interrupt-hart"; 32),
+            Self::InterruptStack => oer_diagnostics::name!("interrupt-stack"; 32),
+            Self::InterruptStackGuard => oer_diagnostics::name!("interrupt-stack-guard"; 32),
+            Self::InterruptVectors => oer_diagnostics::name!("interrupt-vectors"; 32),
+            Self::InterruptControlBits => oer_diagnostics::name!("interrupt-control-bits"; 32),
+            Self::InterruptCount => oer_diagnostics::name!("interrupt-count"; 32),
+            Self::InterruptLevelBits => oer_diagnostics::name!("interrupt-level-bits"; 32),
         }
     }
 

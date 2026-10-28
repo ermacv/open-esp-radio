@@ -64,11 +64,11 @@ fn calibration_names_remain_correlated_with_the_poll_and_atom_they_measure() {
     assert_eq!(execution.maximum_engine_micros, [48, 41]);
     assert_eq!(execution.maximum_engine_actions, [0x95, 24]);
     assert_eq!(
-        calibration::name(false, execution.maximum_engine_actions[0]),
+        calibration::name(false, execution.maximum_engine_actions[0]).as_str(),
         "DcIq.Configure"
     );
     assert_eq!(
-        calibration::name(false, execution.maximum_engine_actions[1]),
+        calibration::name(false, execution.maximum_engine_actions[1]).as_str(),
         "DcIq.AwaitReadinessEdge"
     );
 }

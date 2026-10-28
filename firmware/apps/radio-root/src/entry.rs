@@ -31,7 +31,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
-        fail("root-taken");
+        fail(oer_diagnostics::name!("root-taken"; 32));
     };
     let runtime = root
         .into_runtime()
@@ -78,7 +78,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         &RadioRoot::ClockFailed
     });
     let Some(interrupts) = Interrupts::take() else {
-        fail("interrupt-table");
+        fail(oer_diagnostics::name!("interrupt-table"; 32));
     };
     let timer = runtime.system_timer;
     oer_espressif_executor::init::<0, _, _>(
@@ -107,7 +107,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             (),
             move |spawner| {
                 if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
-                    fail("task-start");
+                    fail(oer_diagnostics::name!("task-start"; 32));
                 }
             },
         )
@@ -134,7 +134,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 
 /// Halt the image on a failed boot step, its reason on the console while
 /// no one holds the block.
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt(|_path| {
         let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
     })

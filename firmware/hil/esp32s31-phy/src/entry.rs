@@ -149,9 +149,11 @@ pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::Emba
 oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start("phy"));
+    oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start(
+        oer_diagnostics::name!("phy"),
+    ));
     let Some(root) = Root::take() else {
-        fail("root-taken");
+        fail(oer_diagnostics::name!("root-taken"; 32));
     };
     let runtime = root
         .into_runtime()
@@ -166,10 +168,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.name()),
     };
     let Some(interrupts) = Interrupts::take() else {
-        fail("interrupt-table");
+        fail(oer_diagnostics::name!("interrupt-table"; 32));
     };
     let Ok(silent) = adopted.router().silent::<Ieee802154InterruptOwner>() else {
-        fail("ieee802154-route");
+        fail(oer_diagnostics::name!("ieee802154-route"; 32));
     };
     let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(runtime.efuse);
     let identity = PhyCalibrationIdentity {
@@ -220,16 +222,16 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
     if RadioTasks::serve_radio(&radio_spawner, radio).is_err() {
-        fail("task-start");
+        fail(oer_diagnostics::name!("task-start"; 32));
     }
     let Some(poster) = SLOT.claim() else {
-        fail("requester");
+        fail(oer_diagnostics::name!("requester"; 32));
     };
     let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
         runtime.reset_cause,
     ));
     let Ok((usb, _pads)) = transport::open_usb(adopted.router(), interrupts.console_usb) else {
-        fail("console");
+        fail(oer_diagnostics::name!("console"; 32));
     };
     transport::CONSOLE.start(boot);
     let (mut router, hart) = match adopted.enable_interrupts() {
@@ -249,7 +251,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
                     || AppTasks::dispatch(spawner, poster).is_err()
                     || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
                 {
-                    fail("task-start");
+                    fail(oer_diagnostics::name!("task-start"; 32));
                 }
             },
         )
@@ -258,7 +260,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 
 /// Halt the image on a failed boot step, its reason on the console while
 /// no one holds the block.
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt(|_path| {
         let _note = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),

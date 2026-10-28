@@ -99,7 +99,7 @@ oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
     let Some(root) = Root::take() else {
-        fail("root-taken")
+        fail(oer_diagnostics::name!("root-taken"; 32))
     };
     let runtime = root
         .into_runtime()
@@ -118,7 +118,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     }
     let config = CONFIG;
     let Some(interrupts) = Interrupts::take() else {
-        fail("interrupt-table")
+        fail(oer_diagnostics::name!("interrupt-table"; 32))
     };
     let factory = FactoryIdentity::read(runtime.efuse);
     let station = factory.address(Interface::Station);
@@ -133,7 +133,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_espressif_staged_runtime::phy_fault::identity(),
     );
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
-        fail("claim")
+        fail(oer_diagnostics::name!("claim"; 32))
     };
     let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
     let backend = Esp32s31Radio::new(
@@ -178,7 +178,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .unwrap_or_else(|failure| failure.reset());
     let (sender, receiver) = REPORT.init(AffineSpscQueue::new()).split();
     if RadioTasks::radio_actor(&radio, actor).is_err() {
-        fail("radio-actor-start");
+        fail(oer_diagnostics::name!("radio-actor-start"; 32));
     }
     let scanner = RadioTasks::scanner(
         &radio,
@@ -195,7 +195,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         },
     );
     if scanner.is_err() {
-        fail("scanner-start");
+        fail(oer_diagnostics::name!("scanner-start"; 32));
     }
     let (console, pads) = usb::open(adopted.router(), interrupts.console_usb);
     let executor = Executor::<0>::new(software.line0);
@@ -215,7 +215,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
                 if AppTasks::reporting(spawner, console, pads, receiver).is_err()
                     || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
                 {
-                    fail("task-start");
+                    fail(oer_diagnostics::name!("task-start"; 32));
                 }
             },
         )
@@ -258,9 +258,9 @@ async fn reporting(
 }
 /// Report a failed boot step on the early writer and wait: no task feeds
 /// the RTC watchdog, which resets the chip.
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     usb::early_text(b"OER-RESULT: fail w2 ");
-    usb::early_text(reason.as_bytes());
+    usb::early_text(reason.as_str().as_bytes());
     usb::early_text(b"\r\n");
     oer_espressif_staged_runtime::idle()
 }

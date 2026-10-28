@@ -156,6 +156,43 @@ fn raw_encoder_propagates_sink_errors_without_a_transport() {
             }
         },
     );
-    assert_eq!(error, Err("bounded payload is full"));
+    assert_eq!(error, Err(EncodeError::Sink("bounded payload is full")));
     assert_eq!(writes, 2);
+}
+
+#[test]
+fn oversize_retained_text_is_refused_before_the_sink_is_called() {
+    let file = "é".repeat(24) + "x";
+    let message = "é".repeat(32) + "x";
+    for (file, message, expected) in [
+        (
+            file.as_str(),
+            None,
+            PanicTextError::FileTooLong { bytes: 49 },
+        ),
+        (
+            "valid.rs",
+            Some(message.as_str()),
+            PanicTextError::MessageTooLong { bytes: 65 },
+        ),
+    ] {
+        let record = Record::PreviousPanic(PreviousPanic {
+            hart: 0,
+            in_interrupt: false,
+            interrupted_pc: None,
+            line: 1,
+            column: 1,
+            file,
+            message,
+        });
+        let mut writes = 0;
+        assert_eq!(
+            encode(&record, |_| {
+                writes += 1;
+                Ok::<_, ()>(())
+            }),
+            Err(EncodeError::Input(expected))
+        );
+        assert_eq!(writes, 0);
+    }
 }

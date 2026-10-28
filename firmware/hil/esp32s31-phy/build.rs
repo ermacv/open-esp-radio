@@ -71,7 +71,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             len = image.len(),
         ),
     )?;
-    let mut selectors = String::from("const REGISTERS: &[(&str, usize)] = &[\n");
+    let mut selectors =
+        String::from("const REGISTERS: &[(oer_diagnostics::Name<64>, usize)] = &[\n");
     for identity in [
         "WIFI_BB.CCA_COUNTER_CONTROL",
         "WIFI_BB.CCA_COUNTER_RESULT_0",
@@ -82,16 +83,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "WIFI_BB.RX_11B_PATH_CONTROL_0",
         "FE.FRONT_END_AND_TONE_STOP_CONTROL",
     ] {
-        selectors.push_str(&format!("    (\"{identity}\", {}),\n", index_of(identity)?));
+        selectors.push_str(&format!(
+            "    (oer_diagnostics::name!(\"{identity}\"; 64), {}),\n",
+            index_of(identity)?
+        ));
     }
     selectors.push_str("];\n");
-    selectors.push_str("const ENABLE_REGISTERS: &[(&str, usize)] = &[\n");
+    selectors.push_str("const ENABLE_REGISTERS: &[(oer_diagnostics::Name<64>, usize)] = &[\n");
     for identity in [
         "FE.STATUS_CLOCK_FORCE",
         "WIFI_BB.NOISE_FLOOR_CONTROL",
         "WIFI_BB.WORD_001C_OPAQUE",
     ] {
-        selectors.push_str(&format!("    (\"{identity}\", {}),\n", index_of(identity)?));
+        selectors.push_str(&format!(
+            "    (oer_diagnostics::name!(\"{identity}\"; 64), {}),\n",
+            index_of(identity)?
+        ));
     }
     selectors.push_str("];\n");
     fs::write(output.join("cca_checkpoint.rs"), selectors)?;

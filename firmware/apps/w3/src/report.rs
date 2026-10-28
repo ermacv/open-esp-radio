@@ -158,7 +158,16 @@ impl Report {
         ))
         .await?;
         emit(&Note::w3_departure(self.deauth_sent)).await?;
-        for (id, pass) in ["a", "b", "c", "d", "f"].into_iter().zip(gates) {
+        for (id, pass) in [
+            oer_diagnostics::name!("a"; 32),
+            oer_diagnostics::name!("b"; 32),
+            oer_diagnostics::name!("c"; 32),
+            oer_diagnostics::name!("d"; 32),
+            oer_diagnostics::name!("f"; 32),
+        ]
+        .into_iter()
+        .zip(gates)
+        {
             emit(&Note::w3_gate(id, pass)).await?;
         }
         emit(&Note::w3_end()).await?;
