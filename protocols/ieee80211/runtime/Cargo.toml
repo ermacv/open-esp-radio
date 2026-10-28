@@ -20,9 +20,11 @@ oer-radio-port = { path = "../../radio/port" }
 oer-time = { path = "../../../portable/time" }
 oer-ieee80211-arbiter = { path = "../arbiter" }
 oer-ieee80211-sta = { path = "../sta" }
+oer-crypto = { path = "../../../portable/crypto" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 
 [dev-dependencies]
+oer-crypto = { path = "../../../portable/crypto", features = ["test-support"] }
 # The compile-fail example of a shareable command channel.
 embassy-sync = "0.8.0"
 oer-ieee80211-model = { path = "../model", features = ["test-support"] }

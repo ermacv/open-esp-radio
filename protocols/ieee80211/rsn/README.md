@@ -16,13 +16,15 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 | `eapol` | Validated borrowed/owned EAPOL-Key packets and MIC verification |
 | `frames` | EAPOL-Key/Ethernet construction, GTK key data and owned security elements; the Key Information field, KDEs, SAE element IDs and status codes are `oer-ieee80211-wire`'s |
 | `state` | Station and authenticator four-way-handshake transitions |
-| `supplicant` | Station orchestration: typed key-data unwrap and key-install requests and their completions, response deadlines |
+| `supplicant` | Station orchestration: typed key-data unwrap and key-install requests and their completions, response deadlines; each key-data request yields an owned `oer_crypto::KeyUnwrapRequest` (`RsnKeyUnwrapRequest`) |
 | `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification, the binding of the station's security IEs and the Message 3 wrap and MIC over key data the access point supplies; `authenticator::sae` is the access point's SAE responder |
 | `pmksa` | The PMKSA cache of both roles: per peer and, for a station, per SSID |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
 
-`oer-ieee80211-cipher` owns software CCMP, BIP-CMAC-128 and bounded RFC 3394
-AES key wrap/unwrap. It has no handshake state, replay frontier or clock.
+`oer-ieee80211-cipher` owns software CCMP, BIP-CMAC-128 and the software
+AES-128 block primitive with its key-unwrap engine; the RFC 3394 algorithm is
+`oer-crypto`'s. Key data is bounded by `RSN_KEY_DATA_CAPACITY`. It has no
+handshake state, replay frontier or clock.
 
 The crate is Apache-2.0: `authenticator/sae.rs` ports the ESP-IDF access
 point's SAE handling (`NOTICE`).

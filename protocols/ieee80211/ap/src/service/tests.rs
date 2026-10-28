@@ -1,3 +1,16 @@
+/// Unwrap `wrapped` under `kek` in the software engine, as a station would.
+fn software_key_unwrap(
+    kek: &[u8; 16],
+    wrapped: &[u8],
+) -> Result<RsnKeyData, oer_crypto::KeyUnwrapError> {
+    SoftwareKeyUnwrap::new(SoftwareAes128)
+        .unwrap_now(oer_crypto::KeyUnwrapRequest::new(
+            oer_crypto::Aes128Key::copy_from(kek),
+            RsnKeyData::try_copy(wrapped).unwrap(),
+        ))
+        .into_plaintext()
+}
+
 const TEST_HT_CAPABILITIES: oer_ieee80211_wire::ht::HtLocalCapabilities =
     oer_ieee80211_wire::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01);
 
@@ -6,7 +19,7 @@ mod transmit;
 
 use super::*;
 use crate::security_policy::AP_WPA2_PERSONAL_RSN_ELEMENT;
-use oer_ieee80211_cipher::aes::software_aes128_key_unwrap;
+use oer_ieee80211_cipher::aes::{RsnKeyData, SoftwareAes128, SoftwareKeyUnwrap};
 use oer_ieee80211_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
     frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnGtk, RsnTxFrame, parse_gtk_key_data},
@@ -772,7 +785,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         EapolKeyMessage::PairwiseMessage3
     );
     assert!(message3.key_frame().unwrap().verify_mic(&ptk));
-    let plaintext = software_aes128_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
+    let plaintext = software_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
         .expect("AP wrapped its Message 3 key data");
     assert!(
         parse_gtk_key_data(
@@ -1751,7 +1764,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     };
     let (message3, message3_context) = message3.into_parts();
     assert!(message3.key_frame().unwrap().verify_mic(&ptk));
-    let plaintext = software_aes128_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
+    let plaintext = software_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
         .expect("AP wrapped its Message 3 key data");
     let keys = parse_gtk_key_data(
         plaintext.as_bytes(),
@@ -2075,7 +2088,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     let (ptk, message3) = begin_management_handshake(&mut service, PEER);
     let (message3, message3_context) = message3.into_parts();
     let plaintext =
-        software_aes128_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data()).unwrap();
+        software_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data()).unwrap();
     let keys = parse_gtk_key_data(
         plaintext.as_bytes(),
         &crate::security_policy::AP_WPA3_PERSONAL_RSN_ELEMENT,

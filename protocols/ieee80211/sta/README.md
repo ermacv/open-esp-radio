@@ -360,6 +360,20 @@ their delivery outcomes. An exact completed M3 still
 coalesces a cached M4 without reinstalling PTK. Every M4 mirrors the received
 M3's MAC protection; an open M3 produces an open M4 even with an installed PTK.
 
+Key data is unwrapped outside the machine. The station owns one affine
+`KeyUnwrapId`; a state that needs an unwrap moves it out in
+`StaAction::UnwrapKeyData { id, request }` with the owned
+`oer_crypto::KeyUnwrapRequest`, and `StaInput::KeyDataUnwrapped { id, result }`
+returns it with the response. While the ticket is out the station issues no
+other request, so a service needs one slot; a state whose request waits for
+the ticket stays in its `Unwrap` step. The handshake waits in `AwaitUnwrap`
+with its D4 deadline running and ignores a repeated M3; a connected rekey waits
+in `Rekey::AwaitUnwrap`, where a repeated frame is a stale counter and a newer
+one is deferred. The waiting state retains the sequence it issued: a response
+after the handshake or link left, or for another request, returns only the
+ticket. The machine holds no future; the service runs the engine and finishes
+an operation in flight before the station retires.
+
 The installed-key phase before connection uses the same group-only exchange,
 under the original D4 M1/M3 deadline. Only a delivered M4 opens application
 data. Replacing a deferred frame never extends that deadline. Connected has

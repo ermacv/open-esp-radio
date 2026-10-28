@@ -32,6 +32,29 @@ extern crate std;
 #[cfg(test)]
 mod fuzz;
 
+/// Unwrap `request` in the software engine, as a test's station would.
+#[cfg(test)]
+pub(crate) fn test_unwrap(
+    request: supplicant::RsnKeyUnwrapRequest,
+) -> Result<oer_ieee80211_cipher::aes::RsnKeyData, oer_crypto::KeyUnwrapError> {
+    oer_ieee80211_cipher::aes::SoftwareKeyUnwrap::new(oer_ieee80211_cipher::aes::SoftwareAes128)
+        .unwrap_now(request)
+        .into_plaintext()
+}
+
+/// Unwrap `wrapped` under `kek` in the software engine.
+#[cfg(test)]
+pub(crate) fn test_unwrap_bytes(
+    kek: &[u8; RSN_KEK_LEN],
+    wrapped: &[u8],
+) -> Result<oer_ieee80211_cipher::aes::RsnKeyData, oer_crypto::KeyUnwrapError> {
+    test_unwrap(oer_crypto::KeyUnwrapRequest::new(
+        oer_crypto::Aes128Key::copy_from(kek),
+        oer_ieee80211_cipher::aes::RsnKeyData::try_copy(wrapped)
+            .map_err(|_| oer_crypto::KeyUnwrapError::InvalidLength)?,
+    ))
+}
+
 pub mod akm;
 pub mod authenticator;
 pub mod bip;

@@ -3,10 +3,11 @@
 //! [`RsnStaState`] remains the protocol transition owner. This module joins
 //! those transitions to PMK/PTK derivation, MIC verification, exact
 //! Association security IEs and typed key-data unwrap and key-install
-//! requests. It never waits: the caller performs each requested AES key
-//! unwrap (synchronously or through [`oer_ieee80211_cipher::aes::AsyncRsnKeyUnwrap`]) and
-//! completes the request, so a target handles only complete EAPOL RX/TX frames,
-//! the unwrap and the platform-specific key-slot transaction.
+//! requests. It never waits: each key-data request yields an owned
+//! `oer_crypto::KeyUnwrapRequest` for the caller's RFC 3394 engine, and the
+//! caller completes the request with the plaintext, so a target handles only
+//! complete EAPOL RX/TX frames, the unwrap and the platform-specific key-slot
+//! transaction.
 
 use crate::AkmKeys;
 use crate::{
@@ -20,7 +21,8 @@ use crate::{
     keys::RsnKeyInstall,
     state::{RsnStaAction, RsnStaPhase, RsnStaState, RsnStateError, RsnTransmit},
 };
-use oer_ieee80211_cipher::aes::RsnUnwrappedKeyData;
+use oer_crypto::{Aes128Key, KeyUnwrapRequest};
+use oer_ieee80211_cipher::aes::{RSN_KEY_DATA_CAPACITY, RsnKeyData};
 use oer_time::{Duration, Instant};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -246,8 +248,8 @@ impl RsnStaRetryInstall {
 
 /// RFC 3394 unwrap of the encrypted key data of one authenticated Message 3.
 ///
-/// The caller unwraps [`Self::wrapped_key_data`] under [`Self::kek`] and
-/// returns the result to [`RsnStaSupplicant::complete_key_data_unwrap`]; until
+/// The caller unwraps [`Self::key_unwrap`] in its engine and returns the
+/// result to [`RsnStaSupplicant::complete_key_data_unwrap`]; until
 /// then the handshake waits in its key-data phase. The KEK copy is cleared on
 /// drop, and the private state ticket makes the completion valid only for the
 /// exact Message 3 that produced this request.
@@ -269,9 +271,44 @@ impl<const N: usize> RsnStaKeyDataRequest<N> {
         Ok(self.frame.key_frame()?.key_data())
     }
 
+    /// The owned unwrap of the Key Data field under this request's KEK.
+    pub fn key_unwrap(&self) -> Result<RsnKeyUnwrapRequest, RsnKeyUnwrapRequestError> {
+        key_unwrap(&self.kek, self.wrapped_key_data()?)
+    }
+
     pub fn replay_counter(&self) -> u64 {
         self.replay_counter
     }
+}
+
+/// The owned RFC 3394 unwrap of one WPA2 Key Data field.
+pub type RsnKeyUnwrapRequest = KeyUnwrapRequest<RSN_KEY_DATA_CAPACITY>;
+
+/// Why a key-data request yields no unwrap request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RsnKeyUnwrapRequestError {
+    /// The retained frame lost its EAPOL-Key invariant.
+    InvalidFrame(crate::EapolParseError),
+    /// The Key Data field is longer than [`RSN_KEY_DATA_CAPACITY`].
+    CapacityExceeded,
+}
+
+impl From<crate::EapolParseError> for RsnKeyUnwrapRequestError {
+    fn from(error: crate::EapolParseError) -> Self {
+        Self::InvalidFrame(error)
+    }
+}
+
+fn key_unwrap(
+    kek: &RsnKeyEncryptionKey,
+    wrapped: &[u8],
+) -> Result<RsnKeyUnwrapRequest, RsnKeyUnwrapRequestError> {
+    let wrapped =
+        RsnKeyData::try_copy(wrapped).map_err(|_| RsnKeyUnwrapRequestError::CapacityExceeded)?;
+    Ok(KeyUnwrapRequest::new(
+        Aes128Key::copy_from(kek.as_bytes()),
+        wrapped,
+    ))
 }
 
 #[must_use]
@@ -372,9 +409,8 @@ impl<const N: usize> RsnGroupKeyInstallRequest<N> {
 /// RFC 3394 unwrap of the encrypted key data of one authenticated Group
 /// Message 1.
 ///
-/// The caller unwraps [`Self::wrapped_key_data`] under [`Self::kek`] and
-/// returns the result to
-/// [`RsnConnectedSupplicant::complete_group_key_data_unwrap`]. The supplicant
+/// The caller unwraps [`Self::key_unwrap`] in its engine and returns the
+/// result to [`RsnConnectedSupplicant::complete_group_key_data_unwrap`]. The supplicant
 /// request is an affine owner of the authenticated frame and KEK. A station
 /// may retain it until the current TX ends, or replace it with a newer checked
 /// frame. No ticket or busy latch is needed; completion checks the committed
@@ -399,6 +435,11 @@ impl<const N: usize> RsnGroupKeyDataRequest<N> {
     /// The wrapped Key Data field of Group Message 1.
     pub fn wrapped_key_data(&self) -> Result<&[u8], crate::EapolParseError> {
         Ok(self.frame.key_frame()?.key_data())
+    }
+
+    /// The owned unwrap of the Key Data field under this request's KEK.
+    pub fn key_unwrap(&self) -> Result<RsnKeyUnwrapRequest, RsnKeyUnwrapRequestError> {
+        key_unwrap(&self.kek, self.wrapped_key_data()?)
     }
 
     pub fn replay_counter(&self) -> u64 {
@@ -652,7 +693,7 @@ impl RsnConnectedSupplicant {
     pub fn complete_group_key_data_unwrap<const N: usize, E>(
         &mut self,
         request: RsnGroupKeyDataRequest<N>,
-        unwrapped: Result<RsnUnwrappedKeyData, E>,
+        unwrapped: Result<RsnKeyData, E>,
     ) -> Result<RsnGroupKeyInstallRequest<N>, RsnConnectedProcessError<E>> {
         let RsnGroupKeyDataRequest {
             frame,
@@ -671,7 +712,7 @@ impl RsnConnectedSupplicant {
     fn prepare_group_key_install<const N: usize, E>(
         &self,
         frame: &crate::OwnedEapolFrame<N>,
-        unwrapped: Result<RsnUnwrappedKeyData, E>,
+        unwrapped: Result<RsnKeyData, E>,
     ) -> Result<RsnGroupKeyInstallRequest<N>, RsnConnectedProcessError<E>> {
         let key = frame.key_frame()?;
         let replay_counter = key.replay_counter();
@@ -928,7 +969,7 @@ impl RsnStaSupplicant {
     pub fn complete_key_data_unwrap<const N: usize, E>(
         &mut self,
         request: RsnStaKeyDataRequest<N>,
-        unwrapped: Result<RsnUnwrappedKeyData, E>,
+        unwrapped: Result<RsnKeyData, E>,
     ) -> Result<RsnStaReady<N>, RsnStaProcessError<E>> {
         let RsnStaKeyDataRequest {
             ticket,

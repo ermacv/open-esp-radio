@@ -1883,6 +1883,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-crypto"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "zeroize",
+]
+
+[[package]]
 name = "oer-diagnostics"
 version = "0.1.0"
 dependencies = [
@@ -2480,6 +2488,7 @@ dependencies = [
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-arbiter",
+ "oer-ieee80211-cipher",
  "oer-ieee80211-port",
  "oer-ieee80211-runtime",
  "oer-ieee80211-sta",
@@ -2541,6 +2550,7 @@ dependencies = [
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-ieee80211-arbiter",
+ "oer-ieee80211-cipher",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
  "oer-ieee80211-runtime",
@@ -3008,6 +3018,7 @@ dependencies = [
 name = "oer-ieee80211-ap"
 version = "0.1.0"
 dependencies = [
+ "oer-crypto",
  "oer-ieee80211-cipher",
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
@@ -3036,9 +3047,9 @@ dependencies = [
  "aes",
  "ccm",
  "cmac",
+ "oer-crypto",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
- "oer-wire",
  "subtle",
  "zeroize",
 ]
@@ -3099,6 +3110,7 @@ dependencies = [
  "cmac",
  "heapless",
  "hmac",
+ "oer-crypto",
  "oer-ieee80211-cipher",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
@@ -3121,6 +3133,7 @@ dependencies = [
  "embassy-futures",
  "embassy-sync",
  "heapless",
+ "oer-crypto",
  "oer-espressif-ieee80211-policy",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
@@ -3143,6 +3156,7 @@ name = "oer-ieee80211-sta"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "oer-crypto",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
  "oer-ieee80211-port",

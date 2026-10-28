@@ -410,6 +410,98 @@ struct World<'b> {
     stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
     delivered: RefCell<WakingSpscReceiver<'b, EthernetFrame, 8>>,
+    /// How long the key-unwrap engine takes; zero is ready on the first poll.
+    unwrap_delay: Cell<Duration>,
+    /// What the key-unwrap engine did, in order.
+    unwraps: RefCell<Vec<UnwrapEvent>>,
+}
+
+/// One observation of the test's key-unwrap engine.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UnwrapEvent {
+    Started(Instant),
+    /// The request's buffer came back with the response, after `outputs`
+    /// service outputs.
+    Completed {
+        at: Instant,
+        outputs: usize,
+    },
+    /// The operation was dropped while it still held the request.
+    DroppedRunning,
+}
+
+/// The software unwrap after the world's delay on its clock, observing when
+/// the operation holds and returns the request's buffer.
+struct TestUnwrap<'w, 'b> {
+    world: &'w World<'b>,
+}
+
+/// Records an operation dropped before its response.
+struct RunningGuard<'w, 'b> {
+    world: &'w World<'b>,
+    completed: bool,
+}
+
+impl Drop for RunningGuard<'_, '_> {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.world
+                .unwraps
+                .borrow_mut()
+                .push(UnwrapEvent::DroppedRunning);
+        }
+    }
+}
+
+impl<'w, 'b> oer_crypto::KeyUnwrap<{ oer_ieee80211_sta::machine::KEY_DATA_CAPACITY }>
+    for TestUnwrap<'w, 'b>
+{
+    type Operation = Pin<
+        Box<
+            dyn Future<
+                    Output = oer_crypto::KeyUnwrapDone<
+                        Self,
+                        { oer_ieee80211_sta::machine::KEY_DATA_CAPACITY },
+                    >,
+                > + 'w,
+        >,
+    >;
+
+    fn unwrap_key(
+        self,
+        request: oer_ieee80211_sta::machine::StaKeyUnwrapRequest,
+    ) -> Self::Operation {
+        Box::pin(async move {
+            use oer_time::{Clock as _, Timer as _};
+            let world = self.world;
+            let started = world.clock.now();
+            world
+                .unwraps
+                .borrow_mut()
+                .push(UnwrapEvent::Started(started));
+            let mut guard = RunningGuard {
+                world,
+                completed: false,
+            };
+            let delay = world.unwrap_delay.get();
+            if delay != Duration::ZERO {
+                world.clock.wait_until(started.saturating_add(delay)).await;
+            }
+            let response = oer_ieee80211_cipher::aes::SoftwareKeyUnwrap::new(
+                oer_ieee80211_cipher::aes::SoftwareAes128,
+            )
+            .unwrap_now(request);
+            guard.completed = true;
+            world.unwraps.borrow_mut().push(UnwrapEvent::Completed {
+                at: world.clock.now(),
+                outputs: world.outputs.borrow().len(),
+            });
+            oer_crypto::KeyUnwrapDone {
+                engine: self,
+                response,
+            }
+        })
+    }
 }
 
 /// Observe the operation class supplied by the service, independently of
@@ -953,6 +1045,7 @@ where
                 script(world).await;
                 world.command(ServiceCommand::Stop).await;
             };
+            let mut unwrap = KeyUnwrapSlot::new(TestUnwrap { world });
             let completed = match self.placed {
                 #[cfg(feature = "placement")]
                 true => {
@@ -968,6 +1061,7 @@ where
                             owner,
                             &mut io,
                             &*world.clock,
+                            &mut unwrap,
                         ),
                         script,
                     )
@@ -975,9 +1069,12 @@ where
                     completed.read()
                 }
                 _ => {
-                    join(service.run(owner, &mut io, &*world.clock), script)
-                        .await
-                        .0
+                    join(
+                        service.run(owner, &mut io, &*world.clock, &mut unwrap),
+                        script,
+                    )
+                    .await
+                    .0
                 }
             };
             let completed = if let Some(protected) = world.restart_stopped_service.get() {
@@ -997,28 +1094,31 @@ where
                 ));
                 assert!(notice.is_none());
                 world.outputs.borrow_mut().clear();
-                let (completed, ()) = join(service.run(owner, &mut io, &*world.clock), async {
-                    let mut seen = world.air.sent().len();
-                    world.associate(&mut seen, protected).await;
-                    if protected {
-                        world.handshake(&mut seen).await;
-                    } else {
-                        world
-                            .notice(StaNotice::Connected {
-                                bssid: oer_ieee80211_wire::address::Bssid::new(
-                                    IndividualAddress::new(BSSID).unwrap(),
-                                )
-                                .unwrap(),
-                                channel: 6,
-                            })
-                            .await;
-                    }
-                    world.send_msdu(ACCESS_POINT_ADDRESS);
-                    let data = world.sent(&mut seen, DATA).await;
-                    assert_eq!(data.plaintext[4..10], BSSID);
-                    assert_eq!(data.key.is_some(), protected);
-                    world.command(ServiceCommand::Stop).await;
-                })
+                let (completed, ()) = join(
+                    service.run(owner, &mut io, &*world.clock, &mut unwrap),
+                    async {
+                        let mut seen = world.air.sent().len();
+                        world.associate(&mut seen, protected).await;
+                        if protected {
+                            world.handshake(&mut seen).await;
+                        } else {
+                            world
+                                .notice(StaNotice::Connected {
+                                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                                        IndividualAddress::new(BSSID).unwrap(),
+                                    )
+                                    .unwrap(),
+                                    channel: 6,
+                                })
+                                .await;
+                        }
+                        world.send_msdu(ACCESS_POINT_ADDRESS);
+                        let data = world.sent(&mut seen, DATA).await;
+                        assert_eq!(data.plaintext[4..10], BSSID);
+                        assert_eq!(data.key.is_some(), protected);
+                        world.command(ServiceCommand::Stop).await;
+                    },
+                )
                 .await;
                 completed
             } else {
@@ -1274,6 +1374,8 @@ where
             restart_stopped_service: Cell::new(None),
             stack: RefCell::new(stack),
             delivered: RefCell::new(delivered),
+            unwrap_delay: Cell::new(Duration::ZERO),
+            unwraps: RefCell::new(Vec::new()),
         };
         let uninstalled = oer_radio_port::LocalExecution
             .scope(
@@ -1596,6 +1698,126 @@ fn on_wpa2_the_join_goes_on_the_default_record_and_the_handshake_on_the_associat
                 world.station_command(2, StaCommand::Disconnect).await;
                 let deauthentication = world.sent(&mut seen, DEAUTHENTICATION).await;
                 assert_eq!(deauthentication.rate, dsss1());
+            })
+        },
+    );
+}
+
+/// The instant the test engine started its only operation, once it did.
+async fn unwrap_started(world: &World<'_>) -> Instant {
+    for _ in 0..1000 {
+        yield_now().await;
+        if let Some(UnwrapEvent::Started(at)) = world.unwraps.borrow().first() {
+            return *at;
+        }
+    }
+    panic!("the station never asked for its key data");
+}
+
+#[test]
+fn a_delayed_unwrap_leaves_the_loop_serving_the_port_and_completes_the_handshake() {
+    const DELAY: Duration = Duration::from_millis(40);
+    run(
+        StaSecurity::Personal {
+            password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").unwrap(),
+            pmk: Pmk::from_bytes(PMK),
+        },
+        |world| {
+            Box::pin(async move {
+                world.unwrap_delay.set(DELAY);
+                let mut seen = 0;
+                world.associate(&mut seen, true).await;
+                let ptk = world.start_handshake(&mut seen).await;
+                world.air.receive(&message3(&ptk), meta());
+                let started = unwrap_started(world).await;
+
+                // While the engine works, the loop still takes the port's
+                // events: a frame it cannot admit is dropped at once.
+                world
+                    .air
+                    .receive(&protected_data(1, ACCESS_POINT_ADDRESS, &[0; 8]), meta());
+                for _ in 0..50 {
+                    yield_now().await;
+                }
+                assert!(
+                    world
+                        .outputs
+                        .borrow()
+                        .iter()
+                        .any(|output| matches!(output, ObservedOutput::RxFrameDropped(_)))
+                );
+                assert_eq!(world.unwraps.borrow().len(), 1, "still unwrapping");
+                {
+                    use oer_time::Clock as _;
+                    assert!(world.clock.now() < started.saturating_add(DELAY));
+                }
+
+                // Message 4 follows the response, not the request.
+                let message4 = world.sent(&mut seen, DATA).await;
+                assert_eq!(message4.key, None);
+                let unwraps = world.unwraps.borrow().clone();
+                let [_, UnwrapEvent::Completed { at, .. }] = unwraps[..] else {
+                    panic!("{unwraps:?}")
+                };
+                assert!(at >= started.saturating_add(DELAY));
+                world
+                    .notice(StaNotice::Connected {
+                        bssid: oer_ieee80211_wire::address::Bssid::new(
+                            IndividualAddress::new(BSSID).unwrap(),
+                        )
+                        .unwrap(),
+                        channel: 6,
+                    })
+                    .await;
+            })
+        },
+    );
+}
+
+#[test]
+fn stop_during_an_unwrap_waits_for_the_engine_before_the_station_retires() {
+    const DELAY: Duration = Duration::from_millis(40);
+    run(
+        StaSecurity::Personal {
+            password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").unwrap(),
+            pmk: Pmk::from_bytes(PMK),
+        },
+        |world| {
+            Box::pin(async move {
+                world.unwrap_delay.set(DELAY);
+                let mut seen = 0;
+                world.associate(&mut seen, true).await;
+                let ptk = world.start_handshake(&mut seen).await;
+                world.air.receive(&message3(&ptk), meta());
+                unwrap_started(world).await;
+                world.command(ServiceCommand::Stop).await;
+                for _ in 0..200 {
+                    yield_now().await;
+                }
+                // The stop does not drop the operation or retire the station
+                // while the engine still holds the request's buffer.
+                assert_eq!(world.unwraps.borrow().len(), 1);
+                assert!(!world.outputs.borrow().iter().any(|output| matches!(
+                    output,
+                    ObservedOutput::Notice(StaNotice::Disconnected(_))
+                )));
+                world.clock.advance(DELAY).unwrap();
+                for _ in 0..200 {
+                    yield_now().await;
+                }
+                let unwraps = world.unwraps.borrow().clone();
+                let [_, UnwrapEvent::Completed { outputs, .. }] = unwraps[..] else {
+                    panic!("{unwraps:?}")
+                };
+                let disconnected = world
+                    .outputs
+                    .borrow()
+                    .iter()
+                    .position(|output| {
+                        matches!(output, ObservedOutput::Notice(StaNotice::Disconnected(_)))
+                    })
+                    .expect("the station retires after the response");
+                assert!(disconnected >= outputs);
             })
         },
     );

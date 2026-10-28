@@ -27,6 +27,7 @@ type TestGatePath<'id> = oer_radio_port::Child<Root<oer_radio_port::LocalId<'id>
 type TestConfigurationPath<'id> = oer_radio_port::Child<Root<oer_radio_port::LocalId<'id>>, 1>;
 
 mod block_ack;
+mod key_unwrap;
 mod repeated_message3;
 mod restart;
 mod sae;
@@ -215,6 +216,12 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     wmm: [0; 9],
 };
 
+/// The software engine's unwrap, as an image composes it.
+fn unwrap(request: StaKeyUnwrapRequest) -> crate::machine::StaKeyUnwrapResponse {
+    oer_ieee80211_cipher::aes::SoftwareKeyUnwrap::new(oer_ieee80211_cipher::aes::SoftwareAes128)
+        .unwrap_now(request)
+}
+
 fn channel(number: u8) -> SupportedChannel<Caps> {
     SupportedChannel::new(
         oer_radio_regulatory::TEST_DOMAIN
@@ -349,6 +356,11 @@ struct World<'id, const G: usize = 2> {
     associated: Option<(usize, Peer<RxMeta>)>,
     /// The signal of the frames the world delivers.
     rssi: i8,
+    /// Key-data unwraps wait for the test's release.
+    hold_unwraps: bool,
+    pending_unwraps: Vec<(KeyUnwrapId, StaKeyUnwrapRequest)>,
+    /// The key-data unwraps the station asked for.
+    unwraps: usize,
 }
 
 impl<'id> World<'id> {
@@ -487,6 +499,9 @@ impl<'id> World<'id> {
             unsend_next: false,
             associated: None,
             rssi: i8::MIN,
+            hold_unwraps: false,
+            pending_unwraps: Vec::new(),
+            unwraps: 0,
         }
     }
 }
@@ -762,6 +777,20 @@ impl<'id, const G: usize> World<'id, G> {
                     StaAction::Associated(peer) => {
                         self.associated = Some((self.frames.len(), peer))
                     }
+                    StaAction::UnwrapKeyData { id, request } => {
+                        self.unwraps += 1;
+                        if self.hold_unwraps {
+                            self.pending_unwraps.push((id, request));
+                        } else {
+                            self.station.input(
+                                now,
+                                StaInput::KeyDataUnwrapped {
+                                    id,
+                                    result: unwrap(request),
+                                },
+                            );
+                        }
+                    }
                 }
             }
             while let Some(action) = self.arbiter.poll_action(now) {
@@ -802,6 +831,18 @@ impl<'id, const G: usize> World<'id, G> {
                 return;
             }
         }
+    }
+
+    /// Complete the oldest held key-data unwrap in the software engine.
+    fn release_unwrap(&mut self, now: Instant) {
+        let (id, request) = self.pending_unwraps.remove(0);
+        self.station.input(
+            now,
+            StaInput::KeyDataUnwrapped {
+                id,
+                result: unwrap(request),
+            },
+        );
     }
 
     fn installed(&mut self, now: Instant, input: StaInput<'id, Tokens<'id, G>, Caps>) {
@@ -3188,7 +3229,7 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
 fn handshake_deadline_covers_every_message_key_and_tx_wait() {
     use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
     use oer_ieee80211_wire::security::rsn::Akm;
-    for point in 0..8 {
+    for point in 0..9 {
         installed(|mint| {
             let mut world = World::with_security(
                 mint,
@@ -3255,7 +3296,18 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                     |_| {},
                 );
             }
+            // The unwrap is out: the deadline keeps running.
             if point >= 4 {
+                let Some(StaAction::UnwrapKeyData { id, request }) =
+                    world.station.poll_action(at(33))
+                else {
+                    panic!("key-data unwrap")
+                };
+                assert!(world.station.poll_action(at(33)).is_none());
+                world.pending_unwraps.push((id, request));
+            }
+            if point >= 5 {
+                world.release_unwrap(at(33));
                 let Some(StaAction::InstallPairwiseKey {
                     association,
                     pending,
@@ -3270,7 +3322,7 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                     key: Pairwise(Key(slot), association),
                 });
             }
-            if point >= 5 {
+            if point >= 6 {
                 let pairwise = world.pending_installs.pop().unwrap();
                 world.station.input(at(33), pairwise);
                 let Some(StaAction::InstallGroupKey {
@@ -3288,12 +3340,12 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                     key: Key(slot),
                 });
             }
-            if point >= 6 {
+            if point >= 7 {
                 for installed in core::mem::take(&mut world.pending_installs) {
                     world.station.input(at(33), installed);
                 }
             }
-            if point >= 7 {
+            if point >= 8 {
                 let Some(StaAction::Transmit(tx)) = world.station.poll_action(at(33)) else {
                     panic!("M4")
                 };
@@ -3313,6 +3365,12 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
             for installed in core::mem::take(&mut world.pending_installs) {
                 world.station.input(at(6032), installed);
             }
+            // A late response finds no waiting handshake: only its ticket
+            // comes back.
+            while !world.pending_unwraps.is_empty() {
+                world.release_unwrap(at(6032));
+            }
+            assert!(!world.station.key_unwrap.in_flight());
             for tx in transmissions {
                 world.transmitted(tx, false);
             }

@@ -13,6 +13,7 @@ use oer_hil_protocol::wifi::{StationLinkState, StationServiceEnd};
 use oer_ieee80211_port::*;
 use oer_ieee80211_rsn::{Pmk, nonce::SNonceSource, sae::SaePassword};
 use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscQueue, WakingSpscSender};
 use oer_ieee80211_sta::{
@@ -300,13 +301,14 @@ fn running_future<'s, 'c, 'p, 'id, Id: SlotIdentity + 'id>(
     output: &'s mut MaybeUninit<Completed<'p, 'id, Id>>,
     owner: rp::Owner<'p, 'id, Id, Backend<Id>, rp::Disabled>,
     io: &'s mut Io<'c, 'id, Id>,
+    unwrap: &'s mut KeyUnwrapSlot<SoftwareKeyUnwrap>,
 ) -> Running<'s, 'c, 'p, 'id, Id>
 where
     'id: 'p + 'c,
     'p: 's,
     'c: 's,
 {
-    StationService::run_placed(service, output, owner, io, &EmbassyClock)
+    StationService::run_placed(service, output, owner, io, &EmbassyClock, unwrap)
 }
 
 fn running<'s, 'c, 'p, 'id, Id: SlotIdentity + 'id>(
@@ -314,6 +316,7 @@ fn running<'s, 'c, 'p, 'id, Id: SlotIdentity + 'id>(
     output: &'s mut MaybeUninit<Completed<'p, 'id, Id>>,
     owner: rp::Owner<'p, 'id, Id, Backend<Id>, rp::Disabled>,
     io: &'s mut Io<'c, 'id, Id>,
+    unwrap: &'s mut KeyUnwrapSlot<SoftwareKeyUnwrap>,
 ) -> PlacedFuture<'s, Running<'s, 'c, 'p, 'id, Id>>
 where
     'id: 'p + 'c,
@@ -322,7 +325,7 @@ where
 {
     RUNNING
         .take()
-        .future(|| running_future(service, output, owner, io))
+        .future(|| running_future(service, output, owner, io, unwrap))
 }
 
 // Keep construction's resource and capability temporaries out of the body poll.
@@ -458,8 +461,16 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             receive: rx_send,
             output: &mut output,
         };
+        // The image's key-unwrap engine: software AES, ready on its first poll.
+        let mut unwrap = KeyUnwrapSlot::new(SoftwareKeyUnwrap::new(SoftwareAes128));
         let completed_storage = COMPLETED.take().uninit();
-        let mut running = core::pin::pin!(running(service, completed_storage, owner, &mut io,));
+        let mut running = core::pin::pin!(running(
+            service,
+            completed_storage,
+            owner,
+            &mut io,
+            &mut unwrap,
+        ));
         let mut controls = core::pin::pin!(reconnect(
             command_send,
             &retry,

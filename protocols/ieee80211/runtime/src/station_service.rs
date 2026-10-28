@@ -95,6 +95,7 @@ use oer_ieee80211_sta::machine::TxRefusal;
 use core::future::{Future, poll_fn};
 use core::task::Poll;
 use embassy_futures::yield_now;
+use oer_crypto::KeyUnwrap;
 use oer_ieee80211_arbiter::{
     AccessPointCommand, AccessPointFact, Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice,
     NoReservation, RetiredArbiter, RetuneRefused,
@@ -113,8 +114,9 @@ use oer_ieee80211_sta::{
         EthernetFrame, FrameTooLong, Msdu, StaData, TxMsdu,
     },
     machine::{
-        Peer, RxBlockAckReply, StaAction, StaCallbacks, StaCommandRefused, StaCommandTerminal,
-        StaInput, StaNotice, StaRequest, StaTokens, StaTransmit, StaTxContext, Station,
+        KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks,
+        StaCommandRefused, StaCommandTerminal, StaInput, StaKeyUnwrapRequest, StaNotice,
+        StaRequest, StaTokens, StaTransmit, StaTxContext, Station,
     },
 };
 use oer_ieee80211_upper_mac::block_ack::RxDisposition;
@@ -376,10 +378,12 @@ use rx_block_ack::PhaseBlockAcks;
 pub use rx_block_ack::{PortRxBlockAck, RxBlockAckStorage, RxBlockAckView};
 
 mod custody;
+mod key_unwrap;
 use custody::{ContractFault, StepFailure};
 pub use custody::{
     QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedTx,
 };
+pub use key_unwrap::KeyUnwrapSlot;
 
 /// What the application asks of the service.
 #[derive(Debug, Eq, PartialEq)]
@@ -476,6 +480,9 @@ pub enum BackendContractViolation {
     GroupTerminalKindMismatch,
     TxContextBufferMismatch,
     StationKeyBank(oer_ieee80211_sta::machine::StaKeyContractViolation),
+    /// The station asked for a second key-data unwrap while one was waiting
+    /// to start; it owns one ticket.
+    StationKeyUnwrap,
 }
 
 /// The original failure that ended this service. A poisoned disabled owner
@@ -982,6 +989,8 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
         >,
     >,
     group: Option<PendingGroup<'id, B>>,
+    /// The station's unwrap request, until the key-unwrap slot takes it.
+    unwrap: Option<(KeyUnwrapId, StaKeyUnwrapRequest)>,
 }
 
 struct PendingGroup<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
@@ -1057,6 +1066,7 @@ impl<
                     admissions: Admissions::default(),
                     retune: None,
                     group: None,
+                    unwrap: None,
                 },
             },
         }
@@ -1101,7 +1111,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     counters: ServiceCounters::default(),
-                    pending: PendingActions { receive, admissions: Admissions::default(), retune: None, group: None },
+                    pending: PendingActions { receive, admissions: Admissions::default(), retune: None, group: None, unwrap: None },
                 }),
             })
         })
@@ -1132,6 +1142,7 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
+        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
     ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS>> {
         let (arbiter, mut state) = oer_memory::unpack_placed!(service, Self { arbiter, state });
         let mut custody_storage = core::mem::MaybeUninit::uninit();
@@ -1139,8 +1150,9 @@ impl<
             place.write(TerminalCustody::Clear)
         });
         let (end, arbiter) = state
-            .run_loop(arbiter.read(), owner, io, timer, &mut custody)
+            .run_loop(arbiter.read(), owner, io, timer, unwrap, &mut custody)
             .await;
+        state.drain_key_unwrap(timer, unwrap).await;
         let reason = match &end {
             ServiceStop::Stopped(_) => oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
             _ => oer_ieee80211_sta::machine::StaDisconnectReason::Arbiter(
@@ -1217,12 +1229,14 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
+        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
     ) -> ServiceCompleted<'p, 'id, B, C, S, GROUPS> {
         let Self { arbiter, mut state } = self;
         let mut custody = TerminalCustody::Clear;
         let (end, mut arbiter) = state
-            .run_loop(arbiter, owner, io, timer, &mut custody)
+            .run_loop(arbiter, owner, io, timer, unwrap, &mut custody)
             .await;
+        state.drain_key_unwrap(timer, unwrap).await;
         let end = end.into_end(custody);
         let reason = match &end {
             ServiceEnd::Stopped(_) => oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
@@ -1307,11 +1321,15 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
+        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
         custody: &mut TerminalCustody<'id, B>,
     ) -> (
         ServiceStop<'p, 'id, B>,
         RetiredArbiter<'id, B::Caps, NoReservation, <B::Types<'id> as PhaseTypes<'id>>::GatePath>,
     ) {
+        // An operation left by a dropped run belongs to a station that no
+        // longer exists: its engine finishes it before this station's first.
+        let _abandoned = unwrap.finish().await;
         let (mut arbiter, mut owner) = match self.enable(arbiter, owner, None, io, timer).await {
             Ok(running) => running,
             Err(ended) => return ended,
@@ -1320,7 +1338,7 @@ impl<
             let next = {
                 let mut lent = owner.phase();
                 let phase = B::lend_phase(&mut lent);
-                self.serve(&mut arbiter, phase, io, timer).await
+                self.serve(&mut arbiter, phase, io, timer, unwrap).await
             };
             match next {
                 Served::Stop => {
@@ -1572,6 +1590,7 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
+        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
     ) -> Served<'id, B>
     where
         'id: 'p,
@@ -1607,9 +1626,16 @@ impl<
             .into_iter()
             .flatten()
             .min();
+            // The station's unwrap request goes to the engine; its response
+            // is one more input source.
+            if let Some((id, request)) = self.pending.unwrap.take()
+                && let Err(waiting) = unwrap.start(id, request)
+            {
+                self.pending.unwrap = Some(waiting);
+            }
             let sending = self.data.accepts() && self.station.link().is_some();
             let accepting_commands = !self.station.is_reclaiming();
-            let (event, command_ready, tick, transmit) = {
+            let (event, command_ready, tick, transmit, unwrapped) = {
                 let event = phase.next_event();
                 let command = io.commands.ready();
                 let alarm = async {
@@ -1631,8 +1657,12 @@ impl<
                     let command_ready = accepting_commands && command.as_mut().poll(cx).is_ready();
                     let tick = alarm.as_mut().poll(cx).is_ready();
                     let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
-                    if event.is_some() || command_ready || tick || transmit {
-                        Poll::Ready((event, command_ready, tick, transmit))
+                    let unwrapped = match unwrap.poll_done(cx) {
+                        Poll::Ready(done) => Some(done),
+                        Poll::Pending => None,
+                    };
+                    if event.is_some() || command_ready || tick || transmit || unwrapped.is_some() {
+                        Poll::Ready((event, command_ready, tick, transmit, unwrapped))
                     } else {
                         Poll::Pending
                     }
@@ -1640,6 +1670,12 @@ impl<
                 .await
             };
             let now = timer.now();
+            // The response returns the station's ticket before any other
+            // input can end the phase.
+            if let Some((id, result)) = unwrapped {
+                self.station
+                    .input(now, StaInput::KeyDataUnwrapped { id, result });
+            }
             match event {
                 Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), phase, io) {
                     Ok(Some(buffer)) => phase.recycle(buffer),
@@ -1685,6 +1721,30 @@ impl<
             if batch == MAX_INPUT_STEPS_PER_BATCH {
                 batch = 0;
                 yield_now().await;
+            }
+        }
+    }
+
+    /// Finish the station's unwrap before it retires, so its ticket comes
+    /// back: a request not yet started still runs in the engine. The station
+    /// takes the response without an action being served.
+    async fn drain_key_unwrap(
+        &mut self,
+        timer: &impl Timer,
+        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
+    ) {
+        loop {
+            if let Some((id, request)) = self.pending.unwrap.take()
+                && let Err(waiting) = unwrap.start(id, request)
+            {
+                self.pending.unwrap = Some(waiting);
+            }
+            match unwrap.finish().await {
+                Some((id, result)) => self
+                    .station
+                    .input(timer.now(), StaInput::KeyDataUnwrapped { id, result }),
+                None if self.pending.unwrap.is_none() => return,
+                None => {}
             }
         }
     }
@@ -2543,6 +2603,10 @@ impl<
 }
 
 /// What follows a station's action.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a station input owns its key-unwrap response by value; the service has no allocator"
+)]
 enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: usize> {
     Nothing,
     /// An arbiter's answer or a key, back to the station.
@@ -2917,6 +2981,15 @@ where
         }
         StaAction::Associated(peer) => {
             return Ok(Follow::Associated(peer));
+        }
+        StaAction::UnwrapKeyData { id, request } => {
+            if pending_actions.unwrap.is_some() {
+                return Err(ServiceFault::Contract(
+                    BackendContractViolation::StationKeyUnwrap,
+                ));
+            }
+            pending_actions.unwrap = Some((id, request));
+            return Ok(Follow::Nothing);
         }
     };
     Ok(Follow::Input(input))

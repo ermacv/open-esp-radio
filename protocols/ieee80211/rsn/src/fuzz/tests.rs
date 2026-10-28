@@ -10,8 +10,6 @@
 //! mutated real frames) and, `#[ignore]`d, with [`FULL`]. The SAE exchange,
 //! a scalar multiplication per accepted commit, runs a tenth as many.
 
-use oer_ieee80211_cipher::aes::software_aes128_key_unwrap;
-
 use oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation;
 use oer_ieee80211_wire::management_ccmp_vector::management_wire;
 
@@ -55,7 +53,7 @@ fn message3() -> (crate::Ptk, Vec<u8>) {
             supplicant_nonce: SNONCE,
         },
     );
-    let plain = software_aes128_key_unwrap(ptk.kek(), frame.key_data()).unwrap();
+    let plain = crate::test_unwrap_bytes(ptk.kek(), frame.key_data()).unwrap();
     let plain = Vec::from(plain.as_bytes());
     (ptk, plain)
 }
@@ -159,7 +157,7 @@ fn key_unwrap(count: usize) {
     let (ptk, _) = message3();
     let wrapped = EapolKeyFrame::parse(&MESSAGE3).unwrap().key_data().to_vec();
     inputs(&[&wrapped], count, 200, |bytes| {
-        let _ = software_aes128_key_unwrap(ptk.kek(), bytes);
+        let _ = crate::test_unwrap_bytes(ptk.kek(), bytes);
     });
 }
 

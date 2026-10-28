@@ -356,6 +356,7 @@ fn service_end_preserves_the_fault_and_its_typed_cause() {
             StationKeyContractViolation::IncompleteBank,
         )),
         StationServiceFault::Contract(StationContractViolation::GroupSlotMismatch),
+        StationServiceFault::Contract(StationContractViolation::StationKeyUnwrap),
     ];
     for cause in backend {
         faults.extend([

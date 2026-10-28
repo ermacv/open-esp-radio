@@ -11,10 +11,7 @@ use crate::{
     frames::{RsnGtk, RsnPlainKeyData},
     keys::RsnKeyKind,
 };
-use oer_ieee80211_cipher::aes::{
-    RsnUnwrappedKeyData, SoftwareAesKeyUnwrapError, software_aes128_key_unwrap,
-    software_aes128_key_wrap,
-};
+use oer_ieee80211_cipher::aes::{RsnKeyData, software_aes128_key_wrap};
 
 const LOCAL: [u8; 6] = [1; 6];
 const AP: [u8; 6] = [2; 6];
@@ -29,11 +26,10 @@ fn process(
     supplicant: &mut RsnStaSupplicant,
     frame: crate::OwnedEapolFrame<512>,
     pmk: &Pmk,
-) -> Result<RsnStaReady<512>, RsnStaProcessError<SoftwareAesKeyUnwrapError>> {
+) -> Result<RsnStaReady<512>, RsnStaProcessError<oer_crypto::KeyUnwrapError>> {
     match supplicant.on_frame(frame, pmk)? {
         RsnStaSupplicantAction::UnwrapKeyData(request) => {
-            let unwrapped =
-                software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
+            let unwrapped = crate::test_unwrap(request.key_unwrap().unwrap());
             supplicant.complete_key_data_unwrap(request, unwrapped)
         }
         RsnStaSupplicantAction::Ready(action) => Ok(action),
@@ -96,7 +92,7 @@ fn group_message1(
         RsnConnectedAction::UnwrapGroupKeyData(request) => connected
             .complete_group_key_data_unwrap(
                 request,
-                Ok(RsnUnwrappedKeyData::try_copy(&unwrap.plain).unwrap()),
+                Ok(RsnKeyData::try_copy(&unwrap.plain).unwrap()),
             )
             .map(GroupStep::Install),
     }
@@ -752,7 +748,7 @@ fn message3_key_data_request_carries_the_ptk_kek_and_completes_into_install() {
     assert_eq!(request.wrapped_key_data().unwrap().len(), wrapped_len);
     assert_eq!(request.replay_counter(), 2);
 
-    let unwrapped = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
+    let unwrapped = crate::test_unwrap(request.key_unwrap().unwrap());
     let RsnStaReady::InstallKeys(install) = supplicant
         .complete_key_data_unwrap(request, unwrapped)
         .unwrap()
@@ -774,7 +770,7 @@ fn failed_message3_key_data_unwrap_fails_the_handshake_with_the_backend_error() 
         panic!("encrypted Message 3 key data must be requested for unwrap")
     };
     assert!(matches!(
-        supplicant.complete_key_data_unwrap(request, Err::<RsnUnwrappedKeyData, _>(9_u8)),
+        supplicant.complete_key_data_unwrap(request, Err::<RsnKeyData, _>(9_u8)),
         Err(RsnStaProcessError::KeyUnwrap(9))
     ));
     assert_eq!(supplicant.phase(), RsnStaPhase::Failed);
@@ -848,7 +844,7 @@ fn group_key_data_request_owns_verified_bytes_without_blocking_new_authenticatio
     let install = connected
         .complete_group_key_data_unwrap(
             request,
-            Ok::<_, ()>(RsnUnwrappedKeyData::try_copy(&group_kde(1, 0x6a)).unwrap()),
+            Ok::<_, ()>(RsnKeyData::try_copy(&group_kde(1, 0x6a)).unwrap()),
         )
         .unwrap();
     assert_eq!(install.replay_counter(), 3);
@@ -879,7 +875,7 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
         panic!("new Group Message 1 must request its key-data unwrap")
     };
     assert!(matches!(
-        connected.complete_group_key_data_unwrap(request, Err::<RsnUnwrappedKeyData, _>(5_u8)),
+        connected.complete_group_key_data_unwrap(request, Err::<RsnKeyData, _>(5_u8)),
         Err(RsnConnectedProcessError::KeyUnwrap(5))
     ));
     assert_eq!(connected.replay_counter(), 2);
@@ -893,7 +889,7 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
     assert!(matches!(
         connected.complete_group_key_data_unwrap(
             request,
-            Ok::<_, ()>(RsnUnwrappedKeyData::try_copy(&[0; 24]).unwrap()),
+            Ok::<_, ()>(RsnKeyData::try_copy(&[0; 24]).unwrap()),
         ),
         Err(RsnConnectedProcessError::Supplicant(
             RsnConnectedSupplicantError::Frame(_)
@@ -913,7 +909,7 @@ fn retained_authenticator_ies_fail_locally_during_initial_key_install() {
     else {
         panic!()
     };
-    let plain = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
+    let plain = crate::test_unwrap(request.key_unwrap().unwrap());
     supplicant.invalidate_security_ies_for_test();
     let error = supplicant
         .complete_key_data_unwrap(request, plain)
@@ -952,7 +948,7 @@ fn retained_authenticator_ies_fail_locally_during_connected_key_install() {
     else {
         panic!()
     };
-    let plain = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
+    let plain = crate::test_unwrap(request.key_unwrap().unwrap());
     connected.invalidate_security_ies_for_test();
     assert!(matches!(
         connected.complete_group_key_data_unwrap(request, plain),

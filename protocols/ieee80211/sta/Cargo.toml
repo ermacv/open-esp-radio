@@ -16,6 +16,7 @@ test-support = []
 
 [dependencies]
 oer-memory = { path = "../../../portable/memory" }
+oer-crypto = { path = "../../../portable/crypto" }
 oer-ieee80211-cipher = { path = "../cipher" }
 heapless = "0.9.3"
 oer-ieee80211-arbiter = { path = "../arbiter" }
