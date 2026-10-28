@@ -123,6 +123,10 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154LowLevel for S31Mac<P, 
         self.inner.ed_rss()
     }
 
+    fn rssi_compensation_dbm(&self) -> i8 {
+        oer_esp32s31_knowledge::ieee802154::RSSI_COMPENSATION_DBM
+    }
+
     fn cca_busy(&mut self) -> bool {
         self.inner.cca_busy()
     }

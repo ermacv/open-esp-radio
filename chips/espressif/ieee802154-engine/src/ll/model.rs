@@ -30,6 +30,8 @@ pub struct Ieee802154LlModel<Address = ModelAddress> {
     pub current_rx_frame: bool,
     /// Energy-detection result.
     pub ed_rss: i8,
+    /// The RSSI compensation [`Ieee802154LowLevel::rssi_compensation_dbm`] reports.
+    pub rssi_compensation_dbm: i8,
     /// The live RSSI [`Ieee802154RecentRssi::recent_rssi`] reads.
     pub recent_rssi: i8,
     /// CCA result.
@@ -96,6 +98,7 @@ impl<Address> Default for Ieee802154LlModel<Address> {
             tx_abort: Ieee802154TxAbortReasonObservation::Unclassified,
             current_rx_frame: false,
             ed_rss: 0,
+            rssi_compensation_dbm: 0,
             recent_rssi: 0,
             cca_busy: false,
             command: None,
@@ -228,6 +231,9 @@ impl<Address: Copy + Eq> Ieee802154LowLevel for Ieee802154LlModel<Address> {
     }
     fn ed_rss(&mut self) -> i8 {
         self.ed_rss
+    }
+    fn rssi_compensation_dbm(&self) -> i8 {
+        self.rssi_compensation_dbm
     }
     fn cca_busy(&mut self) -> bool {
         self.cca_busy

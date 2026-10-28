@@ -59,13 +59,6 @@ pub use statistics::{
 /// Pending-table entries per address kind (`CONFIG_IEEE802154_PENDING_TABLE_SIZE`).
 pub const PENDING_TABLE_SIZE: usize = 20;
 
-/// ESP32-S31 `IEEE802154_RX_SENSITIVITY` in dBm
-/// (`esp_ieee802154_get_receive_sensitivity`).
-pub const RECEIVE_SENSITIVITY_DBM: i8 = -104;
-
-/// ESP32-S31 `IEEE802154_RSSI_COMPENSATION_VALUE`.
-const RSSI_COMPENSATION: i8 = 0;
-
 /// `CCA_DETECTION_TIME` in 16-microsecond symbols.
 const CCA_DETECTION_TIME: u16 = 8;
 
@@ -1369,7 +1362,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                     let busy = cx.ll.cca_busy();
                     cx.env.cca_done(busy);
                 } else if self.state == Ieee802154State::Ed {
-                    let power = cx.ll.ed_rss().wrapping_add(RSSI_COMPENSATION);
+                    let power = cx.ll.ed_rss().wrapping_add(cx.ll.rssi_compensation_dbm());
                     cx.env.energy_detect_done(power);
                 }
                 self.needs_next_operation = true;
@@ -1519,7 +1512,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             .ok_or(ServiceError::FrequencyCode(code))?;
         let info = index.select_mut(&mut self.rx_info);
         info.channel = channel.number();
-        info.rssi = rssi.wrapping_add(RSSI_COMPENSATION);
+        info.rssi = rssi.wrapping_add(cx.ll.rssi_compensation_dbm());
         info.lqi = lqi;
         self.recent_rx_info_index = self.rx_index;
         Ok(())

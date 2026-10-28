@@ -23,6 +23,8 @@
 //! drivers and the host tools share, without hardware access.
 //!
 //! - [`calibration_cache`]: the hardware-free S31 calibration record codec.
+//! - [`ieee802154`]: the IEEE 802.15.4 receive sensitivity and RSSI
+//!   compensation.
 //! - [`reset_cause`]: why an HP core last left reset.
 //! - [`tx_power`]: the BTBB provider's transmit-power levels.
 #![no_std]
@@ -30,6 +32,8 @@
 #![deny(missing_docs)]
 
 pub mod calibration_cache;
+
+pub mod ieee802154;
 
 pub mod phy_relation;
 

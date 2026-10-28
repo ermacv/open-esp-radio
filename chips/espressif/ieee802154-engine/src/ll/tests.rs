@@ -68,6 +68,9 @@ macro_rules! unused {
 
 impl Ieee802154LowLevel for Recorder {
     type Address = crate::ll::model::ModelAddress;
+    fn rssi_compensation_dbm(&self) -> i8 {
+        0
+    }
     unused! {
         set_command(Ieee802154MacCommand);
         events() -> Ieee802154EventObservation;

@@ -13,7 +13,6 @@ use oer_ieee802154_port::{
     TransmitPowerCapability, TransmitPowerLevels,
 };
 
-use crate::engine::RECEIVE_SENSITIVITY_DBM;
 use crate::pib::CCA_THRESHOLD_RANGE_DBM;
 
 /// Convert a validated chip level set into the portable port's vocabulary.
@@ -76,7 +75,13 @@ pub const CCA_RESET_DBM: i8 = -75;
 /// channel starts at the highest level, the CCA threshold at
 /// [`CCA_RESET_DBM`] within [`CCA_THRESHOLD_RANGE_DBM`]. A multi-PAN engine
 /// addresses [`Ieee802154MultipanIndex::COUNT`] interfaces, any other one.
-pub const fn capabilities(levels: TransmitPowerLevels, multipan: bool) -> Ieee802154Capabilities {
+/// `receive_sensitivity_dbm` is the chip's `IEEE802154_RX_SENSITIVITY`
+/// (`esp_ieee802154_get_receive_sensitivity`).
+pub const fn capabilities(
+    levels: TransmitPowerLevels,
+    multipan: bool,
+    receive_sensitivity_dbm: i8,
+) -> Ieee802154Capabilities {
     let (operations, interfaces) = if multipan {
         (MULTIPAN_CAPABILITIES, Ieee802154MultipanIndex::COUNT)
     } else {
@@ -94,7 +99,7 @@ pub const fn capabilities(levels: TransmitPowerLevels, multipan: bool) -> Ieee80
             highest_dbm: *CCA_THRESHOLD_RANGE_DBM.end(),
             reset_dbm: CCA_RESET_DBM,
         }),
-        receive_sensitivity_dbm: RECEIVE_SENSITIVITY_DBM,
+        receive_sensitivity_dbm,
         csl: Some(CSL_CAPABILITY),
         enhanced_ack_header_ies: ENHANCED_ACK_IE_CAPACITY as u8,
     }

@@ -408,6 +408,9 @@ impl Ieee802154LowLevel for PortLl {
     fn frequency_code(&mut self) -> u8 {
         self.ll("ieee802154_ll_get_freq", &[]) as u8
     }
+    fn rssi_compensation_dbm(&self) -> i8 {
+        oer_esp32s31_knowledge::ieee802154::RSSI_COMPENSATION_DBM
+    }
     fn ed_rss(&mut self) -> i8 {
         self.ll("ieee802154_ll_get_ed_rss", &[]) as i8
     }
