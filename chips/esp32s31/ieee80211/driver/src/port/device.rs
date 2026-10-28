@@ -42,13 +42,19 @@ pub trait Composition: 'static {
 pub type Power = crate::tx::CappedTxPowerProfile<oer_esp32s31_phy::PhyTxTargetPowerProfile>;
 
 /// One retained original DMA allocation; normalization borrows it in place.
-pub struct StagedReceive<const Q: usize, const RB: usize>(NetworkRxFrame<'static, Q, RB>);
+pub struct StagedReceive<const Q: usize, const RB: usize>(
+    NetworkRxFrame<'static, Q, RB>,
+    &'static crate::rx::counters::WifiRxCounters,
+);
 impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
     fn normalized(&self) -> Result<NormalizedRxFrame<'_>, RxError> {
         super::receive::normalize(self.0.segment(), W1_INGRESS)
     }
     fn bytes(&self) -> &[u8] {
         self.0.segment().buffer
+    }
+    fn observe_rx(&self, outcome: crate::rx::counters::loss::RxPortOutcome) {
+        self.1.loss.port(self.0.segment(), outcome);
     }
 }
 
@@ -105,6 +111,7 @@ pub struct RadioDevice<
     retune: Option<WifiRetunePending<W>>,
     failed_retune: Option<WifiRetuneFailure<W>>,
     received: Received<Q, RB>,
+    counters: &'static crate::rx::counters::WifiRxCounters,
     timer: T,
     doorbell: D,
     domain: RegulatoryDomain,
@@ -162,6 +169,14 @@ impl<
             mut registers,
             context,
         } = parts.wifi.into_runtime_parts();
+        let counters = parts.rx.counters();
+        counters.loss.hardware(
+            registers
+                .split_rx_dma()
+                .0
+                .receive_statistics_snapshot()
+                .primary,
+        );
         let session =
             ReceiveSession::new(parts.rx, parts.bound, &mut registers, parts.interrupt_cell)
                 .map_err(Fault::Receive);
@@ -177,6 +192,7 @@ impl<
             retune: None,
             failed_retune: None,
             received: Received(RefCell::new(heapless::Deque::new())),
+            counters,
             timer: parts.timer,
             doorbell: parts.doorbell,
             domain: parts.domain,
@@ -381,7 +397,10 @@ where
         let session = self.session.as_mut().map_err(|e| *e)?;
         if receive_room != 0 {
             if let Some(frame) = self.received.0.borrow_mut().pop_front() {
-                return Poll::Ready(Ok(DeviceEvent::Receive(StagedReceive(frame))));
+                return Poll::Ready(Ok(DeviceEvent::Receive(StagedReceive(
+                    frame,
+                    self.counters,
+                ))));
             }
         }
         if self.cut || self.pausing {
@@ -439,7 +458,10 @@ where
                 }
             }
             if let Some(frame) = self.received.0.borrow_mut().pop_front() {
-                return Poll::Ready(Ok(DeviceEvent::Receive(StagedReceive(frame))));
+                return Poll::Ready(Ok(DeviceEvent::Receive(StagedReceive(
+                    frame,
+                    self.counters,
+                ))));
             }
         }
         if self.tx_pending != 0 {
@@ -461,7 +483,7 @@ where
         self.cut = true;
         if receive_room != 0 {
             if let Some(frame) = self.received.0.borrow_mut().pop_front() {
-                return Poll::Ready(Ok(Some(StagedReceive(frame))));
+                return Poll::Ready(Ok(Some(StagedReceive(frame, self.counters))));
             }
         }
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
@@ -490,7 +512,7 @@ where
             )
             .map_err(Fault::Receive)?;
         if let Some(frame) = self.received.0.borrow_mut().pop_front() {
-            return Poll::Ready(Ok(Some(StagedReceive(frame))));
+            return Poll::Ready(Ok(Some(StagedReceive(frame, self.counters))));
         }
         if matches!(
             progress,

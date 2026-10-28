@@ -216,6 +216,18 @@ impl<
         &self.unit
     }
 
+    /// Borrow the completed head with its real descriptor identity. The
+    /// view retains this unit's read authority and cannot outlive its loan.
+    pub fn first_segment(&self) -> Option<RxSegment<'_>> {
+        let descriptor = self.storage.descriptors.ring().get(self.head_index())?;
+        Some(RxSegment {
+            descriptor_address: S::address(self.storage, descriptor.layout())?,
+            descriptor_word0: descriptor.word0(),
+            buffer: self.segment(0)?,
+            next_descriptor_address: descriptor.next_address(),
+        })
+    }
+
     #[allow(unsafe_code, reason = "completed unit token retains every segment")]
     pub fn segment(&self, step: usize) -> Option<&[u8]> {
         let length = self.unit.segment_length(step)?;

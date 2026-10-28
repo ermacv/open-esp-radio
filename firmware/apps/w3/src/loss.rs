@@ -1,4 +1,21 @@
 //! Passive observations at the bridge boundaries. Means are computed on the host.
+/// Render one typed traffic row without a target formatter.
+pub fn traffic_note(
+    stage: oer_diagnostics::Name<32>,
+    counts: oer_ieee80211_wire::data::traffic::TrafficCounts,
+) -> oer_diagnostics::Note<'static> {
+    oer_diagnostics::Note::w3_rx_traffic(
+        stage,
+        counts.echo_request,
+        counts.echo_reply,
+        counts.other_icmp,
+        counts.other_ipv4,
+        counts.arp,
+        counts.ipv6,
+        counts.other,
+        counts.unidentified,
+    )
+}
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Counters {
     pub queue_samples: u32,
@@ -30,6 +47,24 @@ impl Counters {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn typed_receive_note_preserves_every_traffic_class() {
+        let note = traffic_note(
+            oer_diagnostics::name!("dma"; 32),
+            oer_ieee80211_wire::data::traffic::TrafficCounts {
+                echo_request: 1,
+                echo_reply: 2,
+                other_icmp: 3,
+                other_ipv4: 4,
+                arp: 5,
+                ipv6: 6,
+                other: 7,
+                unidentified: 8,
+            },
+        );
+        assert_eq!(note.words(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(note.names(), &["dma"]);
+    }
     #[test]
     fn samples_include_empty_turns_and_saturate() {
         let mut counts = Counters::new();

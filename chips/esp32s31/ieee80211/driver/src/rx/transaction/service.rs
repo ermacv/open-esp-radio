@@ -329,6 +329,14 @@ where
         } else {
             None
         };
+        hooks.unit_taken(
+            unit.first_segment(),
+            if overload_drop {
+                Some(Discard::OverloadBulk)
+            } else {
+                recoverable_discard
+            },
+        );
         remaining_descriptors = remaining_descriptors
             .checked_sub(unit_descriptor_count)
             .ok_or(RxStageTransactionError::Ring(RxRingError::Corrupt))?;

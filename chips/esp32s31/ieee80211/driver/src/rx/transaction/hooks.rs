@@ -29,6 +29,14 @@ pub trait Hooks {
     fn entry_remaining(&mut self, remaining: Option<usize>) {}
     fn phase(&mut self, phase: Phase) {}
     fn stage_discarded(&self, discard: Discard) {}
+    /// One newly taken DMA unit, before any staging or discard. Repeated
+    /// frontier probes and units preserved for capacity do not call this.
+    fn unit_taken(
+        &self,
+        segment: Option<oer_esp32s31_ieee80211_mac::rx::RxSegment<'_>>,
+        discard: Option<Discard>,
+    ) {
+    }
     fn now_micros(&self) -> Option<u64> {
         None
     }

@@ -157,7 +157,9 @@ impl ReceiveUnit for TestReceive {
     fn bytes(&self) -> &[u8] {
         &self.bytes
     }
+    fn observe_rx(&self, _: crate::rx::counters::loss::RxPortOutcome) {}
 }
+
 impl Drop for TestReceive {
     fn drop(&mut self) {
         self.released.set(self.released.get() + 1);

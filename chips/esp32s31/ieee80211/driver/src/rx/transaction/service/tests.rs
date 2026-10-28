@@ -53,6 +53,7 @@ struct Recorder {
     observations: RefCell<Vec<Observation>>,
     discards: RefCell<Vec<Discard>>,
     services: RefCell<Vec<ServiceObservation>>,
+    taken: RefCell<Vec<Option<Discard>>>,
 }
 
 impl Admission for Recorder {
@@ -62,6 +63,17 @@ impl Admission for Recorder {
 }
 
 impl Hooks for &Recorder {
+    fn unit_taken(
+        &self,
+        segment: Option<oer_esp32s31_ieee80211_mac::rx::RxSegment<'_>>,
+        discard: Option<Discard>,
+    ) {
+        assert!(
+            segment.is_some(),
+            "owned DMA input has a read loan before recycling"
+        );
+        self.taken.borrow_mut().push(discard);
+    }
     fn observing(&self) -> bool {
         true
     }
@@ -141,6 +153,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
 
     let length = 2 * BUFFER + 100;
     assert!(rx_armed_word(u32::try_from(length).unwrap()).is_none());
+    assert_eq!(*recorder.taken.borrow(), [Some(Discard::Oversized)]);
     assert_eq!(*recorder.discards.borrow(), [Discard::Oversized]);
     assert_eq!(
         *recorder.observations.borrow(),
@@ -263,6 +276,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
         &recorder,
     )
     .expect("one frame is staged");
+    assert_eq!(*recorder.taken.borrow(), [None]);
     assert_eq!((units, bytes), (1, 40));
     assert_eq!(*publisher.seen.borrow(), [completed.with_owner(false)]);
     assert_eq!(ring.reload_evidence().walker_on_detached, 0);

@@ -103,6 +103,8 @@ type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<
 pub trait ReceiveUnit: 'static {
     fn normalized(&self) -> Result<NormalizedRxFrame<'_>, RxError>;
     fn bytes(&self) -> &[u8];
+    /// Observe the existing terminal RX decision without changing ownership.
+    fn observe_rx(&self, outcome: crate::rx::counters::loss::RxPortOutcome);
 }
 
 /// One bounded P2 hardware step. Implementations retain all progress in

@@ -74,6 +74,17 @@ service TX and AP reply boundaries; the flood is also counted independently
 by identifier. A mismatch refuses the accounting instead of assigning losses.
 The AP-to-bridge residual includes service queue-full and any earlier loss;
 the aggregate service queue-full count also includes non-ICMP traffic.
+`w3.rx-traffic` reports the DMA/ring, staging, lower-MAC and service boundaries,
+including every existing discard reason and the queue's non-ICMP classes.
+`w3.rx-hardware` reports independent general MAC counter deltas. `w3.rx-retry`
+reports recognizable request retries and the retired ring's remaining complete
+descriptor frontier; cold reserved-descriptor landings precede association.
+Load accounting checks every software boundary by traffic class. It labels
+only `AP requests - recognizable DMA requests` as the unassigned pre-DMA
+air/PHY residual, and refuses this attribution if the ring remains undrained,
+an unidentified frame was discarded, a recognizable request has MAC Retry,
+or any boundary fails conservation. These counters do not establish a
+physical cause for the pre-DMA residual.
 The preflash load gate requires a complete P1 bound <=42,192 bytes and zero
 unresolved sites; memory growth is reported. The source extraction is removed
 before releasing the lease. Loss measurements use AP evidence and make no

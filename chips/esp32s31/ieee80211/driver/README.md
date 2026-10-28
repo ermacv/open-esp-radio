@@ -50,6 +50,15 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   every protected protocol RX frame. This validation path has a 1056-byte
   additional SRAM placement budget; other SRAM sections and allocated stacks
   retain their existing limits.
+- **RX loss accounting.** Independent saturating counters observe each taken
+  completed DMA unit before staging/discard and each existing protocol-port
+  decision. They distinguish chain/length/pool refusal, prefix/integrity
+  refusal and VIF filtering, with passive traffic classes. MAC statistics are
+  separate wrapping hardware samples accumulated into saturating totals; they
+  count general radio traffic and are not ICMP identities. Retirement records
+  any completed descriptors left at the frontier and cold reserved-descriptor
+  landings. Existing wrapping diagnostics, admission and poll budgets remain
+  unchanged. Each new atomic row has one P2 writer; P1 only reads snapshots.
 - **GTK replacement.** The station keeps one physical group-key slot. A key
   table write failure poisons the port even when an internal rollback restores
   the old material; no success terminal or reusable old GTK is returned.

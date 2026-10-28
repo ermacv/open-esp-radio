@@ -208,8 +208,14 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
             .min()
     }
 
-    /// End only this role's agreements; every bank and retained frame returns
-    /// through the same phase before a healthy Stop; temporary absences keep them.
+    /// Observe retained owners without consuming or reordering them.
+    pub(super) fn observe_retained(&self, mut observe: impl FnMut(&Ty::RxBuffer)) {
+        for (frame, _) in self.frames.iter().filter_map(Option::as_ref) {
+            observe(frame);
+        }
+    }
+
+    /// End this role's agreements and return every retained owner.
     pub(super) fn clear<'p, K, P>(&mut self, phase: &mut P)
     where
         'id: 'p,

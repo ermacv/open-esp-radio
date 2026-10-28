@@ -275,10 +275,15 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
     mmio.next_descriptor_low = 0;
 
     let frozen = live.freeze_cursor(&mut mmio).unwrap();
-    let detached = storage
+    let completed = storage
         .take_completed_unit(&mut live, frozen)
         .unwrap()
-        .expect("completed rotated unit")
+        .expect("completed rotated unit");
+    let observed = completed.first_segment().expect("completed head borrow");
+    assert_eq!(observed.descriptor_address, base);
+    assert_eq!(&observed.buffer[4..8], &[5, 6, 7, 8]);
+    assert!(observed.descriptor_word0.rx_done());
+    let detached = completed
         .detach_single(&mut mmio)
         .expect("rotated buffer detaches");
     let pool = oer_memory::ExternalRxHandoffPool::<16, 1>::new();

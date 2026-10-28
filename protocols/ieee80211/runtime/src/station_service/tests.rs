@@ -2326,6 +2326,63 @@ fn continuous_rx_cannot_starve_data_tx_or_application_commands() {
 }
 
 #[test]
+fn rx_queue_full_counts_echo_and_arp_without_changing_the_eight_queued_frames() {
+    let counters = run_with(config(StaSecurity::Open), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            world
+                .notice(StaNotice::Connected {
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+                    )
+                    .unwrap(),
+                    channel: 6,
+                })
+                .await;
+            for sequence in 0..12 {
+                let mut payload = [0; 28];
+                payload[0] = 0x45;
+                payload[2..4].copy_from_slice(&28u16.to_be_bytes());
+                payload[9] = 1;
+                payload[20] = 8;
+                payload[27] = sequence as u8;
+                let mut frame = [0; 128];
+                let len = oer_ieee80211_wire::ap::ApDataFrame {
+                    access_point: BSSID,
+                    destination: LOCAL,
+                    sequence_number: oer_ieee80211_wire::sequence::SequenceNumber::new(sequence)
+                        .unwrap(),
+                    ether_type: if sequence < 10 { 0x0800 } else { 0x0806 },
+                    payload: &payload,
+                }
+                .encode(&mut frame)
+                .unwrap();
+                world.air.receive(&frame[..len], meta());
+                for _ in 0..8 {
+                    yield_now().await;
+                }
+            }
+            for sequence in 0..8 {
+                let frame = world
+                    .delivered
+                    .borrow_mut()
+                    .try_receive()
+                    .expect("original RX credit");
+                assert_eq!(frame.parts().payload[27], sequence);
+            }
+            assert!(world.delivered.borrow_mut().try_receive().is_none());
+        })
+    });
+    assert_eq!(counters.rx_msdus_queue_full.get(), 4);
+    assert_eq!(counters.rx.queue_full.echo_request, 2);
+    assert_eq!(counters.rx.queue_full.arp, 2);
+    assert_eq!(counters.rx.queued.echo_request, 8);
+    assert_eq!(counters.rx.input.echo_request, 10);
+    assert_eq!(counters.events_lost.get(), 0);
+}
+
+#[test]
 fn lost_port_events_are_counted_and_the_service_keeps_running() {
     let counters = run_with(config(StaSecurity::Open), |world| {
         Box::pin(async move {

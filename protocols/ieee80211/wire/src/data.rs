@@ -20,6 +20,8 @@
 
 use crate::frame::QosControl;
 
+pub mod traffic;
+
 use crate::qos::{WmmAccessCategory, WmmUserPriority};
 
 pub const ETHERNET_HEADER_LEN: usize = 14;

@@ -276,6 +276,10 @@ async fn reporting(mut console: Console, _pads: oer_esp32s31_hal::usb_serial_jta
             .wait_for(oer_time::Duration::from_millis(10))
             .await;
     };
+    let _ = crate::station::receive_notes(async |note| {
+        oer_espressif_usb_serial_jtag::write_note(&mut console, note).await
+    })
+    .await;
     let _ = result
         .notes(async |note| oer_espressif_usb_serial_jtag::write_note(&mut console, note).await)
         .await;

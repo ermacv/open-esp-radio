@@ -486,7 +486,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                             )
                         })
                 }
-                Err(_) => None,
+                Err(error) => {
+                    unit.observe_rx(crate::rx::counters::loss::RxPortOutcome::Prefix(error));
+                    device.recycle(unit);
+                    return Ok(());
+                }
             }
         };
         if let Some((Some(start), len, meta)) = accepted {
@@ -494,6 +498,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 .checked_add(len)
                 .filter(|end| *end <= unit.bytes().len())
                 .ok_or(Fault::Capacity)?;
+            unit.observe_rx(crate::rx::counters::loss::RxPortOutcome::Delivered);
             held.rx_out.set(held.rx_out.get() + 1);
             if let Err(event) = held.events.push(owned::OwnedEvent::Received {
                 frame: ReceiveBuffer {
@@ -510,6 +515,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             }
             held.storage.shared.wake_body();
         } else {
+            unit.observe_rx(crate::rx::counters::loss::RxPortOutcome::Filtered);
             device.recycle(unit);
         }
         Ok(())

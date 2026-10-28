@@ -21,9 +21,13 @@ use oer_time::Duration;
 use super::transaction::Discard;
 use crate::datapath::DatapathRxProgress;
 
+pub mod loss;
+
 /// Counters beside the receive arena. Its zero bytes are zero counts.
 #[derive(bytemuck::Zeroable, Default)]
 pub struct WifiRxCounters {
+    /// Independent saturating accounting; existing wrapping diagnostics stay intact.
+    pub loss: loss::RxLossCounters,
     mac_irqs: AtomicU32,
     spurious_mac_irqs: AtomicU32,
     auxiliary_mac_irqs: AtomicU32,
@@ -823,6 +827,7 @@ fn bump(counter: &AtomicU32) {
 impl WifiRxCounters {
     pub const fn new() -> Self {
         Self {
+            loss: loss::RxLossCounters::new(),
             mac_irqs: AtomicU32::new(0),
             spurious_mac_irqs: AtomicU32::new(0),
             auxiliary_mac_irqs: AtomicU32::new(0),

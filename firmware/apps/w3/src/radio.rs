@@ -70,6 +70,9 @@ static STORAGE: StaticCell<PortStorage<Device, TX>> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
 pub static TIMEOUTS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub static COLLISIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+pub static RX_COUNTERS: oer_memory::OnceValue<
+    &'static oer_esp32s31_ieee80211_driver::rx::counters::WifiRxCounters,
+> = oer_memory::OnceValue::new();
 pub struct Boot {
     pub cell: MembershipCell<Wifi>,
     pub wifi: WifiPartition,
@@ -158,15 +161,18 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
         }
     };
     let backend = Backend::new(parts).ok().expect("validated W3 port parts");
-    let (frontend, registration) = match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(slot.register(backend)) {
-        Ok(registered) => registered,
-        Err(error) => {
-            response.answer(Err("W3 registration failed"));
-            // The rejected owner or initialization guard stays on this P2 frame.
-            drop(error);
-            return;
-        }
-    };
+    let (frontend, registration) =
+        match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(
+            slot.register(backend),
+        ) {
+            Ok(registered) => registered,
+            Err(error) => {
+                response.answer(Err("W3 registration failed"));
+                // The rejected owner or initialization guard stays on this P2 frame.
+                drop(error);
+                return;
+            }
+        };
     response.answer(Ok(frontend));
     if let Ok(completion) = registration.run().await {
         completion.unregistered();
@@ -233,7 +239,7 @@ async fn install(boot: Boot, config: W3Config) -> Result<PortParts<Device, TX>, 
     let stopped = stopped.map_err(|_| "radio start")?;
     let power = stopped.start_report().track.tx_power;
     let arena = irq::RX.take().ok_or("RX claimed")?;
-    let (rx, _, _) = irq::Arena::bind(
+    let (mut rx, _, _) = irq::Arena::bind(
         arena,
         WifiIrqSignals {
             mac: &irq::MAC_SIGNAL,
@@ -241,6 +247,8 @@ async fn install(boot: Boot, config: W3Config) -> Result<PortParts<Device, TX>, 
         },
     )
     .map_err(|_| "RX bind")?;
+    rx.scope_rx_traffic(boot.station, config.stand);
+    let _ = RX_COUNTERS.set(rx.counters());
     let device = DEVICE.init_with(|| {
         Device(RadioDevice::new(RadioParts {
             wifi: stopped,

@@ -335,7 +335,11 @@ where
             totals: &mut self.totals,
             full_since: &mut self.full_since,
         };
-        receiver.service_once(self.frontier.live_mut().map_err(WifiRxCause::Start)?)
+        let result = receiver.service_once(self.frontier.live_mut().map_err(WifiRxCause::Start)?);
+        self.counters
+            .loss
+            .hardware(mac.receive_statistics_snapshot().primary);
+        result
     }
 
     pub(crate) fn port_unmask(&self, doorbell: &impl RadioDoorbell) {
@@ -450,6 +454,18 @@ where
             return Poll::Pending;
         }
         if self.frontier.phase() == super::frontier::RxFrontierPhase::Live {
+            if let Ok(ring) = self.frontier.live_mut() {
+                self.counters.loss.retirement(
+                    ring.completed_descriptor_frontier().descriptor_count,
+                    ring.reload_evidence().reserved_landings,
+                );
+            }
+            self.counters.loss.hardware(
+                registers
+                    .wifi_mac_hal()
+                    .receive_statistics_snapshot()
+                    .primary,
+            );
             let (_, dma) = registers.split_rx_dma();
             self.frontier.stop(dma).map_err(WifiRxCause::Start)?;
         }

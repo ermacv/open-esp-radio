@@ -785,6 +785,16 @@ topics! {
          "tx" tx: dec, "tx_refused" tx_refused: dec, "echo_refused" echo_refused: dec);
     W3Echo = 118, w3_echo, "w3.echo"
         ("requests" requests: dec, "replies" replies: dec);
+    W3RxTraffic = 119, w3_rx_traffic, "w3.rx-traffic"
+        ("stage" stage: name, "request" request: dec, "reply" reply: dec,
+         "icmp" icmp: dec, "ipv4" ipv4: dec, "arp" arp: dec,
+         "ipv6" ipv6: dec, "other" other: dec, "unidentified" unidentified: dec);
+    W3RxHardware = 132, w3_rx_hardware, "w3.rx-hardware"
+        ("mpdu" mpdu: dec, "end" end: dec, "data" data: dec, "fcs" fcs: dec,
+         "abort" abort: dec, "other_unicast" other_unicast: dec,
+         "buffer_full" buffer_full: dec, "fifo_overflow" fifo_overflow: dec);
+    W3RxRetry = 133, w3_rx_retry, "w3.rx-retry"
+        ("request" request: dec, "retired" retired: dec, "pending" pending: dec, "reserved" reserved: dec, "scoped" scoped: dec);
 
     /// W2 console block.
     W2Begin = 120, w2_begin, "OER-W2-BEGIN v=1" ();

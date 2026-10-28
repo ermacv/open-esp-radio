@@ -18,6 +18,14 @@ its resource bank across stop/restart. `ServiceIo` borrows a concrete
 `ServiceOutputSink`; closures implement that trait without erasing their type.
 Each output still transfers its original command or frame owner by value.
 
+`ServiceCounters::rx` passively counts port input, station delivery, reorder
+recycles, shutdown discards, checked admission refusals and MSDU queue outcomes.
+Each row keeps saturating counts for echo requests/replies, other ICMP, other
+IPv4, ARP, IPv6, other and unidentified traffic. Reorder recycles include BAR
+consumption as well as rejected duplicate/reordered data. Queue-full counts
+classify the original payload before its existing discard; they grant no
+credit and do not alter admission or wake order.
+
 The image lends `StationService` a placed `RxBlockAckStorage`. Its const generic
 bank count selects existing shared RX BA slot owners; retained frames borrow
 the port's RX buffers without copying payloads. Negotiation bounds each window

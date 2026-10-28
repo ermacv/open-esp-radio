@@ -227,6 +227,12 @@ impl<
         self.requests
     }
 
+    /// Select echo peers before these affine parts start their receive epoch.
+    /// Only passive telemetry is scoped; no radio filter is programmed.
+    pub fn scope_rx_traffic(&mut self, local: [u8; 6], bssid: [u8; 6]) {
+        self.counters.loss.scope_station(local, bssid);
+    }
+
     pub const fn counters(&self) -> &'a WifiRxCounters {
         self.counters
     }

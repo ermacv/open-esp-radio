@@ -61,6 +61,96 @@ static NETWORK_RX: ConstStaticCell<
     MsduQueue<EthernetFrame, { oer_firmware_apps_w3::policy::RX_DEPTH }>,
 > = ConstStaticCell::new(MsduQueue::new());
 static NETWORK_TX: ConstStaticCell<MsduQueue<TxMsdu, 2>> = ConstStaticCell::new(MsduQueue::new());
+static RX_COUNTS: oer_memory::OnceValue<rx_counts::ServiceRxCounts> = oer_memory::OnceValue::new();
+
+/// Emit after the traffic workload, keeping snapshots outside its report/future.
+pub async fn receive_notes<E>(
+    mut emit: impl AsyncFnMut(&oer_diagnostics::Note<'static>) -> Result<(), E>,
+) -> Result<(), E> {
+    if let Some(counters) = radio::RX_COUNTERS.get() {
+        let report = counters.loss.report();
+        for (name, counts) in [
+            (oer_diagnostics::name!("dma"; 32), report.dma),
+            (oer_diagnostics::name!("staged"; 32), report.staged),
+            (oer_diagnostics::name!("dma-chained"; 32), report.chained),
+            (oer_diagnostics::name!("dma-length"; 32), report.length),
+            (oer_diagnostics::name!("rx-pool"; 32), report.pool),
+            (oer_diagnostics::name!("prefix"; 32), report.prefix),
+            (oer_diagnostics::name!("decrypt-mic"; 32), report.integrity),
+            (
+                oer_diagnostics::name!("filter-address"; 32),
+                report.filtered,
+            ),
+            (oer_diagnostics::name!("port"; 32), report.delivered),
+        ] {
+            emit(&oer_firmware_apps_w3::loss::traffic_note(name, counts)).await?;
+        }
+        let [
+            mpdu,
+            end,
+            data,
+            fcs,
+            abort,
+            other_unicast,
+            buffer_full,
+            fifo_overflow,
+        ] = report.hardware;
+        emit(&oer_diagnostics::Note::w3_rx_hardware(
+            mpdu,
+            end,
+            data,
+            fcs,
+            abort,
+            other_unicast,
+            buffer_full,
+            fifo_overflow,
+        ))
+        .await?;
+        emit(&oer_diagnostics::Note::w3_rx_retry(
+            report.retry_echo,
+            u32::from(report.retired),
+            report.pending,
+            report.reserved,
+            u32::from(report.scoped),
+        ))
+        .await?;
+    }
+    if let Some(counts) = RX_COUNTS.get() {
+        for (name, row) in [
+            (oer_diagnostics::name!("service"; 32), counts.input),
+            (oer_diagnostics::name!("station"; 32), counts.delivered),
+            (
+                oer_diagnostics::name!("reorder-duplicate"; 32),
+                counts.reorder_dropped,
+            ),
+            (oer_diagnostics::name!("drain"; 32), counts.drained),
+            (oer_diagnostics::name!("handled"; 32), counts.handled),
+            (oer_diagnostics::name!("queue-full"; 32), counts.queue_full),
+            (oer_diagnostics::name!("queue-admitted"; 32), counts.queued),
+            (oer_diagnostics::name!("msdu-length"; 32), counts.too_long),
+        ] {
+            emit(&oer_firmware_apps_w3::loss::traffic_note(name, row)).await?;
+        }
+        for (name, row) in [
+            oer_diagnostics::name!("header"; 32),
+            oer_diagnostics::name!("frame-kind"; 32),
+            oer_diagnostics::name!("address"; 32),
+            oer_diagnostics::name!("fragmented"; 32),
+            oer_diagnostics::name!("protection"; 32),
+            oer_diagnostics::name!("integrity"; 32),
+            oer_diagnostics::name!("replay"; 32),
+            oer_diagnostics::name!("payload"; 32),
+            oer_diagnostics::name!("not-connected"; 32),
+            oer_diagnostics::name!("security"; 32),
+        ]
+        .into_iter()
+        .zip(&counts.rejections)
+        {
+            emit(&oer_firmware_apps_w3::loss::traffic_note(name, *row)).await?;
+        }
+    }
+    Ok(())
+}
 
 fn observe_terminal<'id, Id: SlotIdentity + 'id>(terminal: &LowerMacTerminal<'id, Family<Id>>) {
     if let LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) = terminal
@@ -500,6 +590,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         ));
         let joined = joined.as_mut().await;
         let mut report = joined.1;
+        let _ = RX_COUNTS.set(joined.0.retired.counters.rx);
         report.service_rx_queue_full = joined.0.retired.counters.rx_msdus_queue_full.get();
         report.service_rx_rejected = joined
             .0

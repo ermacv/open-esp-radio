@@ -290,6 +290,8 @@ const MAX_INPUT_STEPS_PER_BATCH: u8 = 8;
 /// What the service dropped or could not send, counted.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ServiceCounters {
+    /// Passive, saturating RX boundary and traffic accounting.
+    pub rx: rx_counts::ServiceRxCounts,
     /// Frames or subframes dropped by checked RX admission.
     pub rx_frames_dropped: oer_ieee80211_sta::Counter,
     /// Indications of lost port events; EventsLost carries no frame count.
@@ -502,6 +504,7 @@ impl<K: Ieee80211Capabilities> Levels<K> {
 
 mod admissions;
 mod rx_block_ack;
+pub mod rx_counts;
 use admissions::Admissions;
 pub use admissions::{ControlTerminal, PendingTerminal};
 pub use rx_block_ack::{RxBlockAckStorage, RxBlockAckView};
@@ -1786,11 +1789,19 @@ impl<
             };
             let now = timer.now();
             match event {
-                Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), phase, io) {
-                    Ok(Some(buffer)) => phase.recycle(buffer),
-                    Ok(None) => {}
-                    Err(fault) => return Served::Failed(fault.into()),
-                },
+                Some(Ok(Ok(event))) => {
+                    let event = B::event(event);
+                    if let LowerMacEvent::Received { frame, .. } = &event {
+                        self.counters.rx.input.record(
+                            oer_ieee80211_wire::data::traffic::Traffic::mpdu(frame.bytes()),
+                        );
+                    }
+                    match self.event(arbiter, now, event, phase, io) {
+                        Ok(Some(buffer)) => phase.recycle(buffer),
+                        Ok(None) => {}
+                        Err(fault) => return Served::Failed(fault.into()),
+                    }
+                }
                 Some(Ok(Err(_))) => self.counters.events_lost.increment(),
                 None => {}
                 Some(Err(end)) => {
@@ -1818,6 +1829,11 @@ impl<
                     ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact),
                     ServiceCommand::WantAccessPoint => arbiter.want_access_point(),
                     ServiceCommand::Stop => {
+                        self.pending.receive.observe_retained(|frame| {
+                            self.counters.rx.drained.record(
+                                oer_ieee80211_wire::data::traffic::Traffic::mpdu(frame.bytes()),
+                            );
+                        });
                         self.pending.receive.clear(phase);
                         return Served::Stop;
                     }
@@ -1856,6 +1872,10 @@ impl<
                         }
                     }
                     Ok(Ok(LowerMacEvent::Received { frame, .. })) => {
+                        let traffic =
+                            oer_ieee80211_wire::data::traffic::Traffic::mpdu(frame.bytes());
+                        self.counters.rx.input.record(traffic);
+                        self.counters.rx.drained.record(traffic);
                         phase.recycle(frame);
                         self.counters.rx_frames_dropped.increment();
                     }
@@ -1952,6 +1972,11 @@ impl<
                 return Next::Failed(ServiceFault::RxBlockAckCapacity.into());
             }
             if !self.station.is_connected() && self.pending.receive.association().is_some() {
+                self.pending.receive.observe_retained(|frame| {
+                    self.counters.rx.drained.record(
+                        oer_ieee80211_wire::data::traffic::Traffic::mpdu(frame.bytes()),
+                    );
+                });
                 self.pending.receive.clear(phase);
             }
             while let Some(action) = arbiter.poll_action(now) {
@@ -2316,6 +2341,7 @@ impl<
     {
         match event {
             LowerMacEvent::Received { frame, meta } => {
+                let traffic = oer_ieee80211_wire::data::traffic::Traffic::mpdu(frame.bytes());
                 let management = oer_ieee80211_wire::frame::DecodedHeader::decode(frame.bytes())
                     .is_some_and(|header| {
                         !header.control().is_data() && header.control().subtype() == 13
@@ -2337,7 +2363,10 @@ impl<
                 let (frame, meta) = match received {
                     rx_block_ack::RxDisposition::Deliver(received) => received,
                     rx_block_ack::RxDisposition::Retained => return Ok(None),
-                    rx_block_ack::RxDisposition::Recycle(frame) => return Ok(Some(frame)),
+                    rx_block_ack::RxDisposition::Recycle(frame) => {
+                        self.counters.rx.reorder_dropped.record(traffic);
+                        return Ok(Some(frame));
+                    }
                     rx_block_ack::RxDisposition::Capacity(frame) => {
                         phase.recycle(frame);
                         return Err(ServiceFault::RxBlockAckCapacity.into());
@@ -2395,14 +2424,22 @@ impl<
         >,
     ) {
         let bytes = frame.bytes();
+        let traffic = oer_ieee80211_wire::data::traffic::Traffic::mpdu(bytes);
         let counters = &mut self.counters;
+        counters.rx.delivered.record(traffic);
+        let mut delivered = false;
         let result = self.station.receive(now, bytes, meta, |parts| {
             if let Some(observation) = ArpFrameObservation::receive(bytes, &parts) {
                 io.output.emit(ServiceOutput::ArpFrame(observation));
             }
+            delivered = true;
             Self::queue_received(counters, io, parts);
         });
+        if result.is_ok() && !delivered {
+            self.counters.rx.handled.record(traffic);
+        }
         if let Err(reason) = result {
+            self.counters.rx.rejected(traffic, reason);
             self.counters.rx_frames_dropped.increment();
             io.output.emit(ServiceOutput::RxFrameDropped(reason));
         }
@@ -2423,13 +2460,18 @@ impl<
         >,
         parts: oer_ieee80211_wire::data::EthernetFrameParts<'_>,
     ) {
+        let traffic = oer_ieee80211_wire::data::traffic::Traffic::ethernet(parts);
         match EthernetFrame::from_parts(parts) {
             Ok(frame) => {
                 if io.receive.try_send(frame).is_err() {
+                    counters.rx.queue_full.record(traffic);
                     counters.rx_msdus_queue_full.increment();
+                } else {
+                    counters.rx.queued.record(traffic);
                 }
             }
             Err(reason) => {
+                counters.rx.too_long.record(traffic);
                 counters.rx_msdus_too_long.increment();
                 io.output.emit(ServiceOutput::RxMsduRefused(reason));
             }

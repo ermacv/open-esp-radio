@@ -499,7 +499,7 @@ where
             self.rx_dma,
             self.hardware,
             Settle::new(RELOAD_SETTLE_LIMIT, self.timer),
-            (),
+            &self.counters.loss,
         );
         self.counters.reload_evidence(ring.reload_evidence());
         result.map_err(|error| {
