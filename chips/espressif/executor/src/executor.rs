@@ -399,7 +399,7 @@ macro_rules! impl_executor_constructors {
                 cx: &Context<'_>,
                 _: &ContextToken<Self::Context>,
             ) -> Result<TaskId, ForeignTask> {
-                crate::task::signal_current(&CURRENT[usize::from($number)], $number, cx)
+                crate::task::signal_current(&CURRENT[$number], $number, cx)
             }
             fn wake(task: TaskId, _: &ContextToken<Self::Context>) {
                 crate::task::signal_wake(task);
@@ -421,7 +421,7 @@ macro_rules! impl_executor_constructors {
                 cx: &Context<'_>,
                 _: &ContextToken<Self::Context>,
             ) -> Result<TaskId, ForeignTask> {
-                crate::task::signal_current(&CURRENT[usize::from($number)], $number, cx)
+                crate::task::signal_current(&CURRENT[$number], $number, cx)
             }
             fn wake(task: TaskId, _: &ContextToken<Self::Context>) {
                 crate::task::signal_wake(task);
