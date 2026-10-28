@@ -1,4 +1,4 @@
-//! Association mode vocabulary shared by the port and portable policy.
+//! The PHY mode of one association and the elements it requests.
 use oer_ieee80211_wire::{
     he::{parse_he20_capabilities, parse_he20_operation},
     scan::ScanRecord,
@@ -39,23 +39,6 @@ impl PhyMode {
             Self::He20 => "he20",
         }
     }
-}
-
-/// Caller policy applied before constructing one STA association request.
-///
-/// These are preferences rather than unchecked PHY claims. `PreferHe20`
-/// still falls back when the peer does not advertise the complete HE20 MCS9
-/// contract; `ForceHt20` is retained as the diagnostic negative-control mode
-/// and may subsequently be rejected by
-/// [`AssociationRequest::encode`](oer_ieee80211_wire::station::AssociationRequest::encode).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Preference {
-    /// Select among the mutually supported modes.
-    Automatic,
-    /// Prefer HE20 when the peer admits it.
-    PreferHe20,
-    /// Require the diagnostic HT20 selection.
-    ForceHt20,
 }
 
 impl AssociationPhy for PhyMode {

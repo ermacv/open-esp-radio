@@ -14,7 +14,7 @@ use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_time::Instant;
 
 use crate::rate_control::RatePeer;
-use oer_ieee80211_port::backend_protection::BasicRates;
+use crate::protection::BasicRates;
 
 /// Lowest management/group rate admitted by the band and BSS basic set.
 ///

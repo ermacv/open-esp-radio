@@ -72,6 +72,16 @@ pub enum Protection {
     },
 }
 
+impl Protection {
+    /// The legacy rate of the protection frame, if the attempt has one.
+    pub const fn control_rate(self) -> Option<oer_ieee80211_wire::phy::LegacyRate> {
+        match self {
+            Self::None => None,
+            Self::RtsCts { rate } | Self::CtsToSelf { rate } => Some(rate),
+        }
+    }
+}
+
 /// Transmit power of one attempt.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum TxPower {

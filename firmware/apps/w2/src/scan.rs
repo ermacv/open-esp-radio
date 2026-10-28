@@ -37,7 +37,7 @@ use oer_esp32s31_radio_client::{
     wifi::{ProbePriority, Wifi},
 };
 use oer_espressif_interrupt_table::Bound;
-use oer_ieee80211_port::backend_protection::BasicRates;
+use oer_ieee80211_upper_mac::protection::BasicRates;
 use oer_ieee80211_port::{Band, ManagementTxPlan};
 use oer_ieee80211_upper_mac::rate_selection::management_rate;
 use oer_ieee80211_wire::{

@@ -55,17 +55,17 @@ fn exchange_reserves_reply_and_protection_before_assigning_payload() {
         psdu_bytes: NonZeroU16::new(32).unwrap(),
     };
     for (reply, protection) in [
-        (TxResponse::None, TxProtection::None),
-        (TxResponse::Ack(basic()), TxProtection::None),
-        (ba, TxProtection::None),
+        (TxResponse::None, TxProtectionTiming::None),
+        (TxResponse::Ack(basic()), TxProtectionTiming::None),
+        (ba, TxProtectionTiming::None),
         (
             ba,
-            TxProtection::RtsCts {
+            TxProtectionTiming::RtsCts {
                 rts: basic(),
                 cts: basic(),
             },
         ),
-        (TxResponse::Timeout { micros: 100 }, TxProtection::None),
+        (TxResponse::Timeout { micros: 100 }, TxProtectionTiming::None),
     ] {
         let bytes = TxCost::maximum_psdu_bytes(1000, Some(phy), 10, reply, protection)
             .unwrap()
@@ -83,13 +83,13 @@ fn exchange_reserves_reply_and_protection_before_assigning_payload() {
 #[test]
 fn incomplete_or_exhausted_budget_cannot_admit_a_packet() {
     for (phy, reply, protection) in [
-        (None, TxResponse::None, TxProtection::None),
-        (Some(basic()), TxResponse::Unknown, TxProtection::None),
-        (Some(basic()), TxResponse::None, TxProtection::Unknown),
+        (None, TxResponse::None, TxProtectionTiming::None),
+        (Some(basic()), TxResponse::Unknown, TxProtectionTiming::None),
+        (Some(basic()), TxResponse::None, TxProtectionTiming::Unknown),
         (
             Some(basic()),
             TxResponse::Timeout { micros: u32::MAX },
-            TxProtection::None,
+            TxProtectionTiming::None,
         ),
     ] {
         assert_eq!(
@@ -103,7 +103,7 @@ fn incomplete_or_exhausted_budget_cannot_admit_a_packet() {
             Some(basic()),
             10,
             TxResponse::Ack(basic()),
-            TxProtection::None
+            TxProtectionTiming::None
         ),
         None
     );

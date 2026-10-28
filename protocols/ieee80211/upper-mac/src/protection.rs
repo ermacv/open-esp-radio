@@ -63,7 +63,12 @@ impl<B: HeTxopRtsBudget + ?Sized> HeTxopRtsBudget for &B {
     }
 }
 
-use oer_ieee80211_port::backend_protection::*;
+mod bss;
+pub use bss::{
+    BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold, ProtectedPpdu,
+    RtsLengthThreshold, TxProtectionDecision, TxProtectionReasons, TxPsdu, TxReceiver,
+};
+use oer_ieee80211_port::Protection;
 
 /// BSS requirements plus the local length threshold of one transmitter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -150,15 +155,15 @@ impl ProtectionPolicy {
 
         let rts = individual && (ht_protected || he_txop || length);
         let protection = if rts {
-            TxProtection::RtsCts {
+            Protection::RtsCts {
                 rate: self.control_rate(ppdu.rate),
             }
         } else if erp || ht_protected {
-            TxProtection::CtsToSelf {
+            Protection::CtsToSelf {
                 rate: self.control_rate(ppdu.rate),
             }
         } else {
-            TxProtection::None
+            Protection::None
         };
         TxProtectionDecision {
             protection,

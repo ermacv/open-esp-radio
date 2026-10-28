@@ -28,7 +28,7 @@
 
 use core::marker::PhantomData;
 use core::num::NonZeroU8;
-use oer_ieee80211_port::backend::RateScheduleRef;
+use crate::rate_record::RateScheduleRef;
 
 use oer_ieee80211_port::{
     AckSnr, Band, Ieee80211Capabilities, Protection, RateSample, RetryPlan, RetryStage,

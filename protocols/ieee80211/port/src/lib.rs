@@ -186,11 +186,6 @@ pub use owner::CheckedPoolAggregate;
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
 )]
-pub mod configuration;
-#[allow(
-    missing_docs,
-    reason = "preserve the carried service vocabulary's documentation coverage"
-)]
 pub mod contract;
 #[allow(
     missing_docs,
@@ -201,59 +196,22 @@ pub mod edca;
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
 )]
-pub mod interface;
-#[allow(
-    missing_docs,
-    reason = "preserve the carried service vocabulary's documentation coverage"
-)]
 pub mod monitor;
-#[allow(
-    missing_docs,
-    reason = "preserve the carried service vocabulary's documentation coverage"
-)]
-pub mod tx_cost;
-#[allow(
-    missing_docs,
-    reason = "preserve the carried service vocabulary's documentation coverage"
-)]
-pub mod tx_work;
 
-pub use configuration::{
-    WifiAccessPointConfig, WifiConfig, WifiConfigError, WifiMonitorConfig, WifiPlan,
-    WifiStandaloneEspNowPlan, WifiStandaloneMonitorPlan, WifiStationConfig,
-};
 pub use contract::{
-    MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries, MacInterfaceCapabilities,
-    MacOperationOwner, MacOperationOwnership, MacResourceLimits, MacRxMetadata,
-    MacServiceCapabilities, MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus,
+    MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
+    MacRxMetadata, MacServiceCapabilities, MacTxResult, MacTxStatus,
 };
-pub use edca::{BackoffEntropy, EdcaAcParameters, EdcaContention, EdcaParameterSet, draw_backoff};
+pub use edca::{EdcaAcParameters, EdcaParameterSet};
 pub use monitor::{
-    MONITOR_CHANNEL_SEQUENCE_CAPACITY, MonitorChannelPolicy, MonitorChannelSequence,
-    MonitorChannelSequenceError, MonitorDropReason, MonitorFilter, MonitorFrame, MonitorFrameType,
-    MonitorFrameTypeMask, MonitorInjectionBindingError, MonitorInjectionChannelBinding,
-    MonitorInjectionFrameError, MonitorInjectionFrameType, MonitorInjectionMpdu,
-    MonitorInjectionRate, MonitorInjectionRequest, MonitorPublishOutcome, MonitorSink,
+    ChannelContextId, MonitorDropReason, MonitorFrame, MonitorInjectionBindingError,
+    MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest,
+    MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
 };
-pub use tx_work::MacTxWork;
 
-/// Association PHY mode and caller preference.
-pub mod phy;
-pub use phy::{PhyMode, Preference};
 
-/// A literal test sequence number; panics outside twelve bits.
-#[cfg(test)]
-pub(crate) const fn seq(value: u16) -> oer_ieee80211_wire::sequence::SequenceNumber {
-    match oer_ieee80211_wire::sequence::SequenceNumber::new(value) {
-        Some(sequence) => sequence,
-        None => panic!("test sequence number exceeds twelve bits"),
-    }
-}
-
-pub mod espressif;
 
 pub mod backend;
-pub mod backend_protection;
 
 pub mod backend_aggregate;
 

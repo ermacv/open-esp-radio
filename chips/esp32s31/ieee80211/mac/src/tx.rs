@@ -4,7 +4,7 @@
 
 use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 
-pub use oer_ieee80211_port::tx_cost::TxContention;
+pub use crate::tx_cost::TxContention;
 
 use core::{
     num::{NonZeroU32, NonZeroU64},
@@ -3054,7 +3054,7 @@ fn slot(dma: PinnedTxDmaStorage<512>) -> TxSlot<512> {
 pub struct TxSlot<const BUFFER_SIZE: usize> {
     dma: PinnedTxDmaStorage<BUFFER_SIZE>,
     generation_cursor: u32,
-    work: oer_ieee80211_port::MacTxWork,
+    work: crate::tx_work::MacTxWork,
     active: TxCookie,
     queue: LegacyTxQueue,
 }
@@ -3098,7 +3098,7 @@ impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
     }
 
     pub fn reset_work(&mut self) {
-        self.slot.as_mut().get_mut().work = oer_ieee80211_port::MacTxWork::new();
+        self.slot.as_mut().get_mut().work = crate::tx_work::MacTxWork::new();
     }
 
     pub fn reserve(self, buffer_capacity: u32, transfer_length: u32) -> Result<TxCookie, TxError> {
@@ -3125,7 +3125,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         Self {
             dma,
             generation_cursor: 0,
-            work: oer_ieee80211_port::MacTxWork::new(),
+            work: crate::tx_work::MacTxWork::new(),
             active: TxCookie(0),
             queue: LegacyTxQueue::Voice,
         }
@@ -3154,7 +3154,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
 
     /// Receipt remains in pinned CPU metadata across retry detach/abort. Read
     /// at the terminal edge before a new ordinary exchange resets it.
-    pub const fn work(&self) -> oer_ieee80211_port::MacTxWork {
+    pub const fn work(&self) -> crate::tx_work::MacTxWork {
         self.work
     }
 

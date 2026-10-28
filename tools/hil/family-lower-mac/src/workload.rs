@@ -6,14 +6,13 @@ use oer_hil_scenario::{
 };
 use oer_ieee80211_port::{
     Band, Channel, ChannelWidth,
-    backend_protection::BasicRates,
     conformance::{
         Execution,
         catalog::{Case, Extension},
         outcomes,
     },
 };
-use oer_ieee80211_upper_mac::rate_selection::management_rate;
+use oer_ieee80211_upper_mac::{protection::BasicRates, rate_selection::management_rate};
 use oer_lab_router::{router, ssh::Ssh};
 use sha2::{Digest as _, Sha256};
 use std::{

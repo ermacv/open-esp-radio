@@ -1,8 +1,5 @@
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use oer_ieee80211_port::{
-    MacRxMetadata,
-    interface::{ChannelContextId, MonitorTapPoint},
-};
+use oer_ieee80211_port::{ChannelContextId, MacRxMetadata, MonitorTapPoint};
 
 use super::*;
 

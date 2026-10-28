@@ -27,7 +27,7 @@ use oer_esp32s31_hal::types::{
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
 use oer_espressif_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
-use oer_ieee80211_port::backend_aggregate::{AmpduRetryDecision, AmpduRetryPolicy};
+use oer_ieee80211_port::backend_aggregate::AmpduRetryDecision;
 use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
@@ -585,12 +585,10 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
     let mut retry = AmpduRetryState::<4>::new(
         SequenceNumber::new(0).unwrap(),
         4,
-        AmpduRetryPolicy {
-            lifetime: oer_time::Duration::from_micros(
-                oer_espressif_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
-            ),
-            retain_single_mpdu: true,
-        },
+        oer_time::Duration::from_micros(
+            oer_espressif_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
+        ),
+        true,
     )
     .unwrap();
     let mut hardware = DetachingCompletionHardware::with_bitmap(0b0101);

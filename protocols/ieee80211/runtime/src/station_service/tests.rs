@@ -29,7 +29,7 @@ use std::boxed::Box;
 use std::rc::Rc;
 use std::vec::Vec;
 use {
-    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_upper_mac::phy_mode::PhyMode,
     oer_ieee80211_wire::{
         phy::{LegacyRate, PhyRate},
         security::rsn::Akm,
@@ -198,8 +198,8 @@ impl oer_ieee80211_sta::machine::StaCallbacks for Callbacks {
     fn he_packet_padding(
         &self,
         _: &[u8],
-    ) -> oer_ieee80211_port::backend_protection::HePacketPadding {
-        oer_ieee80211_port::backend_protection::HePacketPadding::None
+    ) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
+        oer_ieee80211_upper_mac::protection::HePacketPadding::None
     }
 }
 

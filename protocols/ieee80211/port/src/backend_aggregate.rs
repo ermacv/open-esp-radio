@@ -1,27 +1,10 @@
-//! Bounded aggregate retry commands supplied by a core.
+//! The boundary between a backend's aggregate publication and the core's
+//! retry owner: the completion facts a backend detaches, the decision it
+//! executes and the trait through which it asks.
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 /// Number of subframe positions carried by the port's `u32` retry/aging masks.
 pub const AMPDU_SUBFRAME_MASK_BITS: usize = u32::BITS as usize;
-
-/// Policy for retained A-MPDU retries.
-///
-/// As the vendor's `ppResortTxAMPDU` does, a partial BlockAck keeps the
-/// missing MPDUs in the aggregate without counting publications; only their
-/// MSDU lifetime bounds the retries.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AmpduRetryPolicy {
-    /// Time from an MSDU's admission after which its MPDU is aged and
-    /// discarded instead of retried.
-    pub lifetime: oer_time::Duration,
-    /// Keep one missing MPDU in the aggregate owner.
-    ///
-    /// The recovered HE path requires this because converting a one-member
-    /// HE A-MPDU to the ordinary queue first needs the distinct
-    /// `ppHEAMPDU2Normal` metadata transition. The qualified HT path instead
-    /// sends one remaining MPDU through its ordinary retry owner.
-    pub retain_single_mpdu: bool,
-}
 
 /// Invalid construction or a disagreement with the pinned DMA owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

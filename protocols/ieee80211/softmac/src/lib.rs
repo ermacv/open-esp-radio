@@ -16,9 +16,12 @@
 //! Portable ESP-NOW and Espressif long-range protocol owners.
 //!
 //! [`extensions`] retains peer tables, security, duplicate detection and
-//! bounded v2 reassembly above the wire codecs and lower-MAC port.
+//! bounded v2 reassembly above the wire codecs and lower-MAC port, and the
+//! Espressif PHY request of an ESP-NOW peer. [`interface`] names a virtual
+//! interface and binds it to a channel context.
 
 pub mod extensions;
+pub mod interface;
 
 pub use extensions::espressif::esp_now::protocol::{
     ESP_NOW_DEFAULT_PEER_CAPACITY, ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY, EspNowConfig,

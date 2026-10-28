@@ -153,7 +153,7 @@ fn by_frame_class_accounting_counts_a_long_frame_ack_timeout_as_long() {
         }
     );
     // The ladder follows the MPDU counter.
-    assert_eq!(state.counters().ladder_step(), 4);
+    assert_eq!(ladder_step(state.counters()), 4);
 }
 
 #[test]

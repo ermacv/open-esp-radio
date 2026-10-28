@@ -1,4 +1,4 @@
-//! Espressif on-air PHY requests used by portable ESP-NOW protocol owners.
+//! Espressif on-air PHY requests of an ESP-NOW peer.
 
 /// Requested Espressif Long Range on-air rate, not a chip register value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

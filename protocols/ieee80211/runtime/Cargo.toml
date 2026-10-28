@@ -23,6 +23,7 @@ oer-radio-port = { path = "../../radio/port" }
 oer-time = { path = "../../../portable/time" }
 oer-ieee80211-arbiter = { path = "../arbiter" }
 oer-ieee80211-sta = { path = "../sta" }
+oer-ieee80211-softmac = { path = "../softmac" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 
 [dev-dependencies]

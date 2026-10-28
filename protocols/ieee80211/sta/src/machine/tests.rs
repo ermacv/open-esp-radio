@@ -202,8 +202,8 @@ impl StaCallbacks for Callbacks {
     fn he_packet_padding(
         &self,
         _: &[u8],
-    ) -> oer_ieee80211_port::backend_protection::HePacketPadding {
-        oer_ieee80211_port::backend_protection::HePacketPadding::None
+    ) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
+        oer_ieee80211_upper_mac::protection::HePacketPadding::None
     }
 }
 

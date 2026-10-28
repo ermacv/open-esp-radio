@@ -18,7 +18,7 @@ use {
     oer_ieee80211_port::{
         MacRxMetadata, MonitorDropReason, MonitorFrame, MonitorInjectionChannelBinding,
         MonitorPublishOutcome, MonitorSink,
-        interface::{ChannelContextId, MonitorTapPoint},
+        ChannelContextId, MonitorTapPoint,
     },
     oer_ieee80211_wire::channel::WifiChannel,
 };

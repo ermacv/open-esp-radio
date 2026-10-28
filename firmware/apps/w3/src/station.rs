@@ -251,8 +251,8 @@ impl machine::StaCallbacks for Callbacks {
     fn nonce(&mut self) -> [u8; 32] {
         [0; 32]
     }
-    fn he_packet_padding(&self, _: &[u8]) -> backend_protection::HePacketPadding {
-        backend_protection::HePacketPadding::None
+    fn he_packet_padding(&self, _: &[u8]) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
+        oer_ieee80211_upper_mac::protection::HePacketPadding::None
     }
 }
 

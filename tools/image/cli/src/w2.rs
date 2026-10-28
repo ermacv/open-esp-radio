@@ -2,7 +2,7 @@
 //! to this lab profile; a board and the production driver have no default cap.
 
 use crate::w1;
-use oer_ieee80211_port::backend_protection::BasicRates;
+use oer_ieee80211_upper_mac::protection::BasicRates;
 
 pub const IMAGE: &str = "w2";
 pub const LAB_POWER_CAP_DBM: i8 = 10;

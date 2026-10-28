@@ -12,7 +12,6 @@ use oer_esp32s31_ieee80211_mac::tx::LegacyRate;
 
 use oer_ieee80211_port::{
     MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest, MonitorSink,
-    WifiStandaloneMonitorPlan,
 };
 
 /// First unproven hardware edge after portable request and buffer validation.
@@ -71,10 +70,10 @@ pub const fn esp32s31_monitor_injection_rate(rate: MonitorInjectionRate) -> Lega
 ///
 /// `sink` is the actual monitor task's retained capture owner. Its binding is
 /// created by `begin_channel_epoch`, not copied from the application request.
-/// Passing a checked [`WifiStandaloneMonitorPlan`] excludes connected and
-/// concurrent monitor topologies at the API boundary.
+/// The runtime's checked standalone-monitor topology
+/// (`oer_ieee80211_runtime::configuration::WifiStandaloneMonitorPlan`)
+/// excludes connected and concurrent monitor topologies before a sink exists.
 pub fn admit_esp32s31_monitor_injection<Rate, S: MonitorSink<Rate>, const TX_BUFFER_SIZE: usize>(
-    _plan: WifiStandaloneMonitorPlan,
     sink: &S,
     request: MonitorInjectionRequest<'_>,
 ) -> Result<MonitorInjectionAdmission, MonitorInjectionAdmissionError> {

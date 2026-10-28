@@ -36,7 +36,7 @@ fn ack_block_ack_protection_and_selected_contention_are_separate() {
         Some(ht(260, false)),
         10,
         TxResponse::Ack(basic()),
-        TxProtection::None,
+        TxProtectionTiming::None,
         Some(TxAccess {
             contention: TxContention {
                 aifsn: 3,
@@ -58,7 +58,7 @@ fn ack_block_ack_protection_and_selected_contention_are_separate() {
             timing: basic(),
             psdu_bytes: NonZeroU16::new(32).unwrap(),
         },
-        TxProtection::RtsCts {
+        TxProtectionTiming::RtsCts {
             rts: basic(),
             cts: basic(),
         },
@@ -72,7 +72,7 @@ fn ack_block_ack_protection_and_selected_contention_are_separate() {
 
 #[test]
 fn unknown_is_not_zero_and_overflow_cannot_reduce_cost() {
-    let unknown = TxCost::estimate(100, None, 10, TxResponse::Unknown, TxProtection::None, None);
+    let unknown = TxCost::estimate(100, None, 10, TxResponse::Unknown, TxProtectionTiming::None, None);
     assert_eq!(unknown.ppdu_micros, None);
     assert_eq!(unknown.exchange_micros(), None);
     let overflow = TxCost {
@@ -87,7 +87,7 @@ fn unknown_is_not_zero_and_overflow_cannot_reduce_cost() {
         Some(basic()),
         u16::MAX,
         TxResponse::None,
-        TxProtection::None,
+        TxProtectionTiming::None,
         Some(TxAccess {
             contention: TxContention {
                 aifsn: u8::MAX,
@@ -111,7 +111,7 @@ fn group_frame_has_no_reply_and_timeout_is_an_explicit_wait_budget() {
         Some(phy),
         10,
         TxResponse::None,
-        TxProtection::None,
+        TxProtectionTiming::None,
         None,
     );
     assert_eq!(group.exchange_micros(), Some(992));
@@ -120,7 +120,7 @@ fn group_frame_has_no_reply_and_timeout_is_an_explicit_wait_budget() {
         Some(phy),
         10,
         TxResponse::Timeout { micros: 500 },
-        TxProtection::None,
+        TxProtectionTiming::None,
         None,
     );
     assert_eq!(failed.exchange_micros(), Some(1492));

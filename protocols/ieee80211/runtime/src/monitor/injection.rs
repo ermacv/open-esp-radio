@@ -19,9 +19,9 @@ use embassy_sync::{
     channel::{Channel, Receiver, Sender, TrySendError},
 };
 use oer_ieee80211_port::{
-    MonitorInjectionChannelBinding, MonitorInjectionFrameError, MonitorInjectionMpdu,
-    MonitorInjectionRate, MonitorInjectionRequest, MonitorSink,
+    MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest, MonitorSink,
 };
+use oer_ieee80211_wire::monitor_injection::{MonitorInjectionFrameError, MonitorInjectionMpdu};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MonitorInjectionTicket {

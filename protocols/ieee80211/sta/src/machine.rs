@@ -78,7 +78,7 @@ use oer_ieee80211_arbiter::{
     AbsenceAnswer, AbsencePlace, Answer, ChannelRequest, Lease, LeaseId, LeasePlace, LeaveReason,
     Purpose, Refusal, StationNotice, StationPlaceReturns, StationPlaces, UpstreamFact,
 };
-use oer_ieee80211_port::backend_protection::HePacketPadding;
+use oer_ieee80211_upper_mac::protection::HePacketPadding;
 use oer_ieee80211_port::{
     AckHeader, ConnectionFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength,
     ReceiveFilter, ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame,
@@ -100,7 +100,7 @@ use oer_ieee80211_rsn::{
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
 use {
     crate::{scan::ScanTable, sequence::StaSequenceCounter},
-    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_upper_mac::phy_mode::PhyMode,
     oer_ieee80211_wire::{
         management::{MAX_SSID_LEN, ProbeRequest},
         scan::ScanRecord,

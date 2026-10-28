@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_port::interface::{VifId, VirtualInterface};
+use crate::interface::{VifId, VirtualInterface};
 use oer_ieee80211_wire::channel::ChannelWidth;
 
 fn channel(number: u8) -> WifiChannel {

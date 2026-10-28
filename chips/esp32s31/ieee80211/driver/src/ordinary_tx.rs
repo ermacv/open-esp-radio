@@ -27,7 +27,8 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::WifiTxRuntimePolicy,
     },
 };
-use oer_ieee80211_port::{MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus};
+use oer_ieee80211_port::{MacTxResult, MacTxStatus};
+use oer_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory};
 use oer_ieee80211_port::{ManagementTxPlan, VifRole};
 use oer_ieee80211_wire::frame::FrameControl;
 
@@ -283,6 +284,42 @@ fn capped_control_frame<P: WifiTxPowerProfile>(
     control.power_primary = pair.primary as u8;
     control.power_alternate = pair.alternate as u8;
     control
+}
+
+/// Caller policy for one logical ordinary-MPDU exchange.
+///
+/// The encoded frame and its ownership lease are deliberately not embedded in
+/// this copyable value. The ordinary TX owner combines this policy with an owned TX
+/// lease and translates the access category and typed PHY rate into its
+/// private queue/register representation. `Rate` is the portable
+/// [`PhyRate`] unless the retry ladder needs its own rate type. Descriptor
+/// capacity, hardware key indices, coexistence priorities and DMA metadata
+/// are not part of this plan.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MacTxPlan<Rate = PhyRate> {
+    /// Standard WMM/EDCA category selected by protocol policy.
+    pub access_category: WmmAccessCategory,
+    /// Initial typed PHY policy selected for this logical exchange.
+    pub initial_rate: Rate,
+    /// Maximum hardware publications, including the first publication.
+    pub publication_limit: u8,
+    /// Executor watchdog applied independently to each publication.
+    ///
+    /// This is not the on-air MPDU lifetime and not a blocking delay.
+    pub publication_timeout: oer_time::Duration,
+}
+
+/// Observable state of the ordinary transmit queue.
+///
+/// `Backpressured` is a normal ownership condition: an earlier lease or
+/// hardware transaction is still live and the caller must wait for progress.
+/// `ResetRequired` is terminal for the current radio epoch and must never be
+/// treated as ordinary queue pressure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MacTxQueueState {
+    Ready,
+    Backpressured,
+    ResetRequired,
 }
 
 /// Everything needed to publish one already encoded MPDU.
@@ -830,7 +867,7 @@ where
 
     /// Submitted work for the current/last exchange, retained through retries
     /// and timeout detach; independent of terminal delivery status.
-    pub fn work(&self) -> oer_ieee80211_port::MacTxWork {
+    pub fn work(&self) -> oer_esp32s31_ieee80211_mac::tx_work::MacTxWork {
         self.slot.as_ref().get_ref().work()
     }
 
@@ -1841,3 +1878,6 @@ impl FixedRateRetry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

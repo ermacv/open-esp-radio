@@ -18,12 +18,3 @@ fn vif_and_channel_context_are_distinct_domains() {
         station_binding
     );
 }
-
-#[test]
-fn monitor_is_an_observation_point_not_a_vif_role() {
-    assert_ne!(MonitorTapPoint::Raw, MonitorTapPoint::Normalized);
-    assert_ne!(
-        MonitorTapPoint::Normalized,
-        MonitorTapPoint::ProtocolValidated
-    );
-}

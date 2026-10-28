@@ -5,7 +5,7 @@
 //! does not claim receive-filter, key-slot, PHY-low-rate or DMA authority.
 
 use core::fmt;
-use oer_ieee80211_port::espressif::EspNowPhyMode;
+use crate::extensions::espressif::phy::EspNowPhyMode;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use {
@@ -20,7 +20,8 @@ use {
     },
 };
 
-use oer_ieee80211_port::interface::{BoundVirtualInterface, ChannelContextId, VifRole};
+use crate::interface::BoundVirtualInterface;
+use oer_ieee80211_port::{ChannelContextId, VifRole};
 
 /// Default source-owned peer storage. The const-generic table remains usable
 /// with a smaller application-selected capacity.

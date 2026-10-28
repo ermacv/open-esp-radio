@@ -189,15 +189,13 @@ fn completion(status: u8, starting_sequence: u16, bitmap: u64) -> HtAmpduTxCompl
     )
 }
 
-const HT_POLICY: AmpduRetryPolicy = AmpduRetryPolicy {
-    lifetime: oer_time::Duration::from_micros(VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64),
-    retain_single_mpdu: false,
-};
+const HT_LIFETIME: oer_time::Duration =
+    oer_time::Duration::from_micros(VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64);
 
 #[test]
 fn partial_block_ack_compacts_sequences_across_retained_attempts() {
     let mut state =
-        AmpduRetryState::<32>::new(SequenceNumber::new(0x0ffe).unwrap(), 4, HT_POLICY).unwrap();
+        AmpduRetryState::<32>::new(SequenceNumber::new(0x0ffe).unwrap(), 4, HT_LIFETIME, false).unwrap();
     assert_eq!(
         state.observe(
             completion(0, 0x0ffe, 0b0101),
@@ -232,7 +230,7 @@ fn partial_block_ack_compacts_sequences_across_retained_attempts() {
 #[test]
 fn cts_timeout_republishes_the_unchanged_aggregate_then_requests_its_block_ack() {
     let mut state =
-        AmpduRetryState::<32>::new(SequenceNumber::new(40).unwrap(), 3, HT_POLICY).unwrap();
+        AmpduRetryState::<32>::new(SequenceNumber::new(40).unwrap(), 3, HT_LIFETIME, false).unwrap();
     // Status two is a CTS timeout; a stale bitmap must not be consumed.
     let cts_timeout = completion(2, 40, u64::MAX);
     for failure in 1..VENDOR_SHORT_RETRY_LIMIT {
@@ -279,7 +277,7 @@ fn exhaust_protection(state: &mut AmpduRetryState<32>, first: u16, subframes: u8
 #[test]
 fn block_ack_request_answer_resorts_the_kept_aggregate() {
     let mut state =
-        AmpduRetryState::<32>::new(SequenceNumber::new(40).unwrap(), 4, HT_POLICY).unwrap();
+        AmpduRetryState::<32>::new(SequenceNumber::new(40).unwrap(), 4, HT_LIFETIME, false).unwrap();
     exhaust_protection(&mut state, 40, 4);
     // The receiver already holds 40 and 42 from an earlier exchange.
     assert_eq!(
@@ -299,7 +297,7 @@ fn block_ack_request_answer_resorts_the_kept_aggregate() {
 #[test]
 fn unanswered_block_ack_request_keeps_every_mpdu_missing() {
     let mut state =
-        AmpduRetryState::<32>::new(SequenceNumber::new(7).unwrap(), 3, HT_POLICY).unwrap();
+        AmpduRetryState::<32>::new(SequenceNumber::new(7).unwrap(), 3, HT_LIFETIME, false).unwrap();
     exhaust_protection(&mut state, 7, 3);
     assert_eq!(
         state
@@ -313,7 +311,7 @@ fn unanswered_block_ack_request_keeps_every_mpdu_missing() {
 #[test]
 fn block_ack_request_answer_after_the_agreement_ended_unaggregates() {
     let mut state =
-        AmpduRetryState::<32>::new(SequenceNumber::new(7).unwrap(), 3, HT_POLICY).unwrap();
+        AmpduRetryState::<32>::new(SequenceNumber::new(7).unwrap(), 3, HT_LIFETIME, false).unwrap();
     exhaust_protection(&mut state, 7, 3);
     assert_eq!(
         state
@@ -326,7 +324,7 @@ fn block_ack_request_answer_after_the_agreement_ended_unaggregates() {
 #[test]
 fn aged_aggregate_ends_at_its_block_ack_request_answer() {
     let mut state =
-        AmpduRetryState::<32>::new(SequenceNumber::new(7).unwrap(), 3, HT_POLICY).unwrap();
+        AmpduRetryState::<32>::new(SequenceNumber::new(7).unwrap(), 3, HT_LIFETIME, false).unwrap();
     exhaust_protection(&mut state, 7, 3);
     assert_eq!(
         state
@@ -349,7 +347,7 @@ fn aged_aggregate_ends_at_its_block_ack_request_answer() {
 #[test]
 fn advanced_block_ack_ssn_completes_preceding_mpdu_without_retry() {
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_LIFETIME, false).unwrap();
     assert_eq!(
         state.observe(completion(0, 102, 0), 2, mono(0), true, admitted_at_zero),
         Ok(AmpduRetryDecision::Finish { retry_mask: 0 })
@@ -361,7 +359,7 @@ fn advanced_block_ack_ssn_completes_preceding_mpdu_without_retry() {
 #[test]
 fn ack_timeout_completion_applies_a_received_block_ack_bitmap() {
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_LIFETIME, false).unwrap();
     assert_eq!(
         state.observe(
             completion(5, 20, u64::MAX),
@@ -378,7 +376,7 @@ fn ack_timeout_completion_applies_a_received_block_ack_bitmap() {
 #[test]
 fn missing_block_ack_result_ignores_a_stale_success_bitmap() {
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_LIFETIME, false).unwrap();
     let mut stale = completion(5, 20, u64::MAX);
     stale.block_ack_received = false;
     assert_eq!(
@@ -390,7 +388,7 @@ fn missing_block_ack_result_ignores_a_stale_success_bitmap() {
 
 #[test]
 fn ht_unaggregates_one_missing_mpdu_but_he_retains_it() {
-    let mut ht = AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_POLICY).unwrap();
+    let mut ht = AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_LIFETIME, false).unwrap();
     assert_eq!(
         ht.observe(completion(0, 20, 0b01), 2, mono(0), true, admitted_at_zero),
         Ok(AmpduRetryDecision::Unaggregate { retry_mask: 0b10 })
@@ -399,10 +397,8 @@ fn ht_unaggregates_one_missing_mpdu_but_he_retains_it() {
     let mut he = AmpduRetryState::<4>::new(
         SequenceNumber::new(20).unwrap(),
         2,
-        AmpduRetryPolicy {
-            retain_single_mpdu: true,
-            ..HT_POLICY
-        },
+        HT_LIFETIME,
+        true,
     )
     .unwrap();
     assert_eq!(
@@ -417,7 +413,7 @@ fn missing_mpdus_are_retried_until_their_lifetime_leaves_less_than_one_unit() {
     let admitted = 5_000;
     let at_admission = |_: u8| Some(mono(admitted));
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_LIFETIME, false).unwrap();
     // No publication count ends the aggregate: only its MSDU lifetime does.
     let last_live = admitted + u64::from(VENDOR_AMPDU_MSDU_LIFETIME_MICROS) - 1_024;
     for now in [admitted + 1, admitted + 1_000_000, last_live] {
@@ -453,7 +449,7 @@ fn each_mpdu_ages_from_its_own_admission() {
     let admission = |index: u8| Some(mono(if index == 0 { 0 } else { 500_000 }));
     let aged_head = u64::from(VENDOR_AMPDU_MSDU_LIFETIME_MICROS);
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_LIFETIME, false).unwrap();
     assert_eq!(
         state.observe(completion(5, 100, 0), 2, mono(aged_head), true, admission),
         Ok(AmpduRetryDecision::DiscardAged {
@@ -469,14 +465,14 @@ fn each_mpdu_ages_from_its_own_admission() {
     assert_eq!(state.current_subframes(), 1);
     // Without the agreement nothing goes to the window: 101 leaves alone.
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_LIFETIME, false).unwrap();
     assert_eq!(
         state.observe(completion(5, 100, 0), 2, mono(aged_head), false, admission),
         Ok(AmpduRetryDecision::Unaggregate { retry_mask: 0b10 })
     );
     // An MPDU without an admission instant is refused, not guessed.
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 2, HT_LIFETIME, false).unwrap();
     assert_eq!(
         state.observe(completion(5, 100, 0), 2, mono(1), true, |_| None),
         Err(AmpduRetryError::UnknownSubframe { index: 0 })
@@ -486,15 +482,15 @@ fn each_mpdu_ages_from_its_own_admission() {
 #[test]
 fn construction_and_dma_count_disagreements_fail_closed() {
     assert!(matches!(
-        AmpduRetryState::<33>::new(SequenceNumber::new(0).unwrap(), 1, HT_POLICY),
+        AmpduRetryState::<33>::new(SequenceNumber::new(0).unwrap(), 1, HT_LIFETIME, false),
         Err(AmpduRetryError::CapacityExceedsHardwareWindow { capacity: 33 })
     ));
     assert!(matches!(
-        AmpduRetryState::<2>::new(SequenceNumber::new(0).unwrap(), 3, HT_POLICY),
+        AmpduRetryState::<2>::new(SequenceNumber::new(0).unwrap(), 3, HT_LIFETIME, false),
         Err(AmpduRetryError::AggregateExceedsCapacity { .. })
     ));
     let mut state =
-        AmpduRetryState::<2>::new(SequenceNumber::new(0).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<2>::new(SequenceNumber::new(0).unwrap(), 2, HT_LIFETIME, false).unwrap();
     assert_eq!(
         state.observe(completion(0, 0, 0b11), 1, mono(0), true, admitted_at_zero),
         Err(AmpduRetryError::FrameCountChanged {
@@ -507,7 +503,7 @@ fn construction_and_dma_count_disagreements_fail_closed() {
 #[test]
 fn vendor_trigger_timeout_finishes_without_fabricating_block_ack() {
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_LIFETIME, false).unwrap();
     let trigger_timeout = completion_with_tx(
         model_completion(TxCookie(1), TxCompletion::ACK_TIMEOUT_STATUS, 0)
             .with_trigger_flow_model(true),
@@ -531,7 +527,7 @@ fn trigger_timeout_with_reported_packets_stays_on_retry_path() {
         [(1, false, 0), (0, true, 1), (1, true, 0)]
     {
         let mut state =
-            AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_POLICY).unwrap();
+            AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_LIFETIME, false).unwrap();
         let completion = completion_with_tx(
             model_completion(TxCookie(1), TxCompletion::ACK_TIMEOUT_STATUS, 0)
                 .with_trigger_flow_model(true)
@@ -552,7 +548,7 @@ fn trigger_timeout_with_reported_packets_stays_on_retry_path() {
 fn trigger_success_predicate_rejects_wrong_status_or_queue_state() {
     for (status, trigger_flow) in [(0, true), (4, true), (5, false)] {
         let mut state =
-            AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_POLICY).unwrap();
+            AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_LIFETIME, false).unwrap();
         let completion = completion_with_tx(
             model_completion(TxCookie(1), status, 0).with_trigger_flow_model(trigger_flow),
             20,
@@ -568,7 +564,7 @@ fn trigger_success_predicate_rejects_wrong_status_or_queue_state() {
 #[test]
 fn an_aggregate_without_any_block_ack_ends_on_the_vendor_retry_limit() {
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 3, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 3, HT_LIFETIME, false).unwrap();
     let timeout = HtAmpduTxCompletion {
         block_ack_received: false,
         ..completion(5, 100, 0)
@@ -595,7 +591,7 @@ fn an_aggregate_without_any_block_ack_ends_on_the_vendor_retry_limit() {
 #[test]
 fn an_aged_aggregate_without_any_block_ack_ends_before_the_retry_limit() {
     let mut state =
-        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 3, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(100).unwrap(), 3, HT_LIFETIME, false).unwrap();
     let timeout = HtAmpduTxCompletion {
         block_ack_received: false,
         ..completion(5, 100, 0)
@@ -618,14 +614,10 @@ fn an_aged_aggregate_without_any_block_ack_ends_before_the_retry_limit() {
 
 #[test]
 fn an_ended_agreement_sends_the_live_missing_mpdus_individually() {
-    let he_policy = AmpduRetryPolicy {
-        retain_single_mpdu: true,
-        ..HT_POLICY
-    };
-    for policy in [HT_POLICY, he_policy] {
+    for retain_single_mpdu in [false, true] {
         // Partial BlockAck: the two missing MPDUs leave the aggregate.
         let mut partial =
-            AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 3, policy).unwrap();
+            AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 3, HT_LIFETIME, retain_single_mpdu).unwrap();
         assert_eq!(
             partial.observe(
                 completion(0, 20, 0b010),
@@ -640,7 +632,7 @@ fn an_ended_agreement_sends_the_live_missing_mpdus_individually() {
 
         // No BlockAck at all: every MPDU leaves the aggregate.
         let mut timeout =
-            AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 3, policy).unwrap();
+            AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 3, HT_LIFETIME, retain_single_mpdu).unwrap();
         let no_block_ack = HtAmpduTxCompletion {
             block_ack_received: false,
             ..completion(5, 20, 0)
@@ -655,7 +647,7 @@ fn an_ended_agreement_sends_the_live_missing_mpdus_individually() {
 #[test]
 fn an_ended_agreement_still_discards_aged_or_completes_acknowledged_mpdus() {
     let mut aged =
-        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_LIFETIME, false).unwrap();
     let expired = u64::from(VENDOR_AMPDU_MSDU_LIFETIME_MICROS);
     assert_eq!(
         aged.observe(
@@ -669,7 +661,7 @@ fn an_ended_agreement_still_discards_aged_or_completes_acknowledged_mpdus() {
     );
 
     let mut acknowledged =
-        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_POLICY).unwrap();
+        AmpduRetryState::<4>::new(SequenceNumber::new(20).unwrap(), 2, HT_LIFETIME, false).unwrap();
     assert_eq!(
         acknowledged.observe(completion(0, 20, 0b11), 2, mono(0), false, admitted_at_zero),
         Ok(AmpduRetryDecision::Finish { retry_mask: 0 })

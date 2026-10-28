@@ -92,11 +92,11 @@ fn erp_protection_sends_cts_to_self_at_a_dsss_rate_for_every_receiver() {
         let decision = policy.select(mpdu(OFDM24, receiver, 100), &ProtectEveryHeTxop);
         assert_eq!(
             decision.protection,
-            TxProtection::CtsToSelf { rate: CCK11_SHORT }
+            Protection::CtsToSelf { rate: CCK11_SHORT }
         );
         assert_eq!(decision.reasons, TxProtectionReasons::ERP);
         assert_eq!(
-            decision.protection.port_protection(),
+            decision.protection,
             Protection::CtsToSelf { rate: CCK11_SHORT }
         );
     }
@@ -105,7 +105,7 @@ fn erp_protection_sends_cts_to_self_at_a_dsss_rate_for_every_receiver() {
         policy
             .select(mpdu(dsss, TxReceiver::Individual, 100), &ProtectEveryHeTxop)
             .protection,
-        TxProtection::None
+        Protection::None
     );
 }
 
@@ -123,7 +123,7 @@ fn barker_preamble_mode_keeps_dsss_control_frames_long() {
                 &ProtectEveryHeTxop
             )
             .protection,
-        TxProtection::CtsToSelf {
+        Protection::CtsToSelf {
             rate: LegacyRate::Cck11M(DsssPreamble::Long)
         }
     );
@@ -140,12 +140,12 @@ fn ht_protection_uses_rts_for_individual_and_cts_to_self_for_group_receivers() {
     let unicast = policy.select(mpdu(rate, TxReceiver::Individual, 100), &ProtectEveryHeTxop);
     assert_eq!(
         unicast.protection,
-        TxProtection::RtsCts {
+        Protection::RtsCts {
             rate: LegacyRate::Ofdm24M
         }
     );
     assert_eq!(
-        unicast.protection.port_protection(),
+        unicast.protection,
         Protection::RtsCts {
             rate: LegacyRate::Ofdm24M
         }
@@ -154,7 +154,7 @@ fn ht_protection_uses_rts_for_individual_and_cts_to_self_for_group_receivers() {
         policy
             .select(mpdu(rate, TxReceiver::Group, 100), &ProtectEveryHeTxop)
             .protection,
-        TxProtection::CtsToSelf {
+        Protection::CtsToSelf {
             rate: LegacyRate::Ofdm24M
         }
     );
@@ -171,7 +171,7 @@ fn ht_protection_uses_rts_for_individual_and_cts_to_self_for_group_receivers() {
                 &ProtectEveryHeTxop
             )
             .protection,
-        TxProtection::None
+        Protection::None
     );
 }
 
@@ -213,9 +213,9 @@ fn control_rate_is_the_fastest_basic_rate_not_faster_than_the_data_rate() {
 
 #[test]
 fn every_basic_set_selects_the_required_control_rate() {
-    for mask in 0..1 << BasicRates::ORDER.len() {
+    for mask in 0..1 << oer_ieee80211_wire::rates::LEGACY_RATES.len() {
         for dsss_only in [false, true] {
-            let encoded: std::vec::Vec<_> = BasicRates::ORDER
+            let encoded: std::vec::Vec<_> = oer_ieee80211_wire::rates::LEGACY_RATES
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| mask & (1 << i) != 0)
@@ -233,7 +233,7 @@ fn every_basic_set_selects_the_required_control_rate() {
                 HtProtectionMode::None,
                 selected,
             );
-            for (_, data) in BasicRates::ORDER {
+            for (_, data) in oer_ieee80211_wire::rates::LEGACY_RATES {
                 let expected = candidates
                     .rates()
                     .filter(eligible)
@@ -267,14 +267,14 @@ fn the_length_threshold_protects_only_long_individual_mpdus() {
     let select = |ppdu| policy.select(ppdu, &ProtectEveryHeTxop);
     assert_eq!(
         select(mpdu(rate, TxReceiver::Individual, 2346)).protection,
-        TxProtection::None
+        Protection::None
     );
     let long = select(mpdu(rate, TxReceiver::Individual, 2347));
     assert_eq!(long.reasons, TxProtectionReasons::LENGTH);
-    assert!(matches!(long.protection, TxProtection::RtsCts { .. }));
+    assert!(matches!(long.protection, Protection::RtsCts { .. }));
     assert_eq!(
         select(mpdu(rate, TxReceiver::Group, 4000)).protection,
-        TxProtection::None
+        Protection::None
     );
     // An aggregate is protected only by the BSS rules.
     assert_eq!(
@@ -284,7 +284,7 @@ fn the_length_threshold_protects_only_long_individual_mpdus() {
             48_000
         ))
         .protection,
-        TxProtection::None
+        Protection::None
     );
 }
 
@@ -305,23 +305,23 @@ fn the_he_txop_budget_protects_individual_he_ppdus_above_it() {
         policy
             .select(ampdu(rate, TxReceiver::Individual, 1_000), &budget)
             .protection,
-        TxProtection::None
+        Protection::None
     );
     let decision = policy.select(ampdu(rate, TxReceiver::Individual, 1_001), &budget);
     assert_eq!(decision.reasons, TxProtectionReasons::HE_TXOP_DURATION);
-    assert!(matches!(decision.protection, TxProtection::RtsCts { .. }));
+    assert!(matches!(decision.protection, Protection::RtsCts { .. }));
     assert_eq!(
         policy
             .select(ampdu(rate, TxReceiver::Group, 1_001), &budget)
             .protection,
-        TxProtection::None
+        Protection::None
     );
     // Without an estimate every individual HE PPDU is protected.
     assert!(matches!(
         policy
             .select(mpdu(rate, TxReceiver::Individual, 1), &ProtectEveryHeTxop)
             .protection,
-        TxProtection::RtsCts { .. }
+        Protection::RtsCts { .. }
     ));
     assert!(HeTxopDurationRtsThreshold::new(0).is_none());
     assert!(HeTxopDurationRtsThreshold::new(1023).is_none());
