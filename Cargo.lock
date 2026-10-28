@@ -2563,6 +2563,7 @@ dependencies = [
  "oer-memory",
  "oer-radio-regulatory",
  "oer-registers-model",
+ "oer-riscv",
  "oer-time",
  "oer-time-virtual",
  "static_cell",

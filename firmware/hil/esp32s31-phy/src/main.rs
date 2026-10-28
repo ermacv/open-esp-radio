@@ -7,6 +7,8 @@ include!("entry.rs");
 mod cache;
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod completion;
+#[cfg(all(test, not(target_arch = "riscv32")))]
+mod pilot_timing;
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}
 

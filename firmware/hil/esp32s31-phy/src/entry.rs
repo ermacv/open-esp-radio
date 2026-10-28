@@ -55,6 +55,7 @@ use static_cell::StaticCell;
 // engine (`ieee802154::poll`), with the router's proof that no line
 // receives it.
 mod phy_pilot;
+mod pilot_timing;
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
@@ -198,7 +199,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     .unwrap_or_else(|failure| failure.reset());
     let mut rng = Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
-    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
+    let (phy_pilot, pilot_timing) =
+        crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
     let radio = radio::Radio::place(
         RADIO.uninit(),
         domain,
@@ -211,6 +213,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         access_point,
         rng,
         phy_pilot,
+        pilot_timing,
     );
     #[cfg(feature = "diagnostic-radio-health")]
     radio.set_health_boot(boot);
@@ -412,7 +415,8 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
                     // while an unrelated registration or hold is polled.
                     let mut operation = core::pin::pin!(async {
                         let result = {
-                            let mut request = core::pin::pin!(radio.request(request, &mut capture_rx));
+                            let mut request =
+                                core::pin::pin!(radio.request(request, &mut capture_rx));
                             request.as_mut().await
                         };
                         radio.request_finished(&result);
