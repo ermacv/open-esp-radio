@@ -159,6 +159,7 @@ impl SampledByte {
 }
 
 #[cfg(test)]
+#[allow(clippy::arithmetic_side_effects, clippy::disallowed_macros)]
 mod tests {
     use super::*;
 

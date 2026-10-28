@@ -59,7 +59,7 @@ fn the_table_is_consistent() {
 
 #[test]
 fn the_ieee802154_set_is_acquired_and_released_low_bit_first() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let (planner, lease, edges) = acquire(planner, ModemClockModule::Ieee802154.dependencies());
     assert_eq!(edges, IEEE802154_EDGES);
@@ -69,7 +69,7 @@ fn the_ieee802154_set_is_acquired_and_released_low_bit_first() {
 
 #[test]
 fn a_second_module_enables_only_its_missing_dependencies() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let (planner, wifi, _) = acquire(planner, ModemClockModule::Wifi.dependencies());
     // Coexistence, the PLL source and the 80x1 clock are already on for Wi-Fi.
@@ -113,7 +113,7 @@ fn a_second_module_enables_only_its_missing_dependencies() {
 
 #[test]
 fn the_analog_i2c_master_edge_follows_every_module_request() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let (planner, first, first_edges) = acquire(planner, ModemClockModule::Phy.dependencies());
     assert!(first_edges.contains(&Dependency::AnalogI2cMaster));
@@ -130,7 +130,7 @@ fn the_analog_i2c_master_edge_follows_every_module_request() {
 
 #[test]
 fn initialized_wifi_keeps_its_clocks_and_re_enables_them_on_the_next_request() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut planner = ModemClockPlanner::managed(identity);
     planner.set_wifi_initialized(true);
     let (planner, wifi, _) = acquire(planner, ModemClockModule::Wifi.dependencies());

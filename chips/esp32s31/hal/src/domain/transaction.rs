@@ -38,6 +38,7 @@ pub use oer_memory::link_fn as __link_fn;
 pub enum FaultReason {
     Cancelled(Operation),
     IdentityClaimed,
+    ModemClockIdentityExhausted,
     OwnerUnavailable,
     SarTransfer {
         operation: Operation,

@@ -124,10 +124,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
-    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(
-        ConcurrentPhy::new(),
-        oer_espressif_staged_runtime::phy_fault::identity(),
-    );
+    let (domain, partitions) = runtime
+        .radio
+        .split::<ChipClocks, _>(
+            ConcurrentPhy::new(),
+            oer_espressif_staged_runtime::phy_fault::identity(),
+        )
+        .unwrap_or_else(|failure| {
+            let fault = failure.fault();
+            let _owners = failure;
+            oer_espressif_staged_runtime::phy_fault::reset(fault)
+        });
     let Some(lp) = LpClock::<RcSlow>::claim() else {
         fail(oer_diagnostics::name!("claim"; 32));
     };

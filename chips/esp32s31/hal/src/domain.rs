@@ -240,9 +240,9 @@ enum ModemClocks {
 }
 
 impl ModemClocks {
-    fn new() -> Self {
+    fn new(identity: ModemClockPlannerIdentity) -> Self {
         Self::Ready {
-            planner: ModemClockPlanner::managed(ModemClockPlannerIdentity::new()),
+            planner: ModemClockPlanner::managed(identity),
             leases: [const { None }; CLOCK_SLOTS],
         }
     }
@@ -371,6 +371,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         phy: PhyRouteState,
         attachment: T,
         identity: PhyIdentity,
+        clock_identity: ModemClockPlannerIdentity,
     ) -> Self {
         Self {
             state: SharedRadioState {
@@ -380,7 +381,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 wifi_power_entry: crate::ieee80211::client::WifiPowerEntry::default(),
                 btbb_clients: 0,
                 btbb_gain_generation: 0,
-                clocks: ModemClocks::new(),
+                clocks: ModemClocks::new(clock_identity),
                 modem_platform_clocks: ModemPlatformClocks::default(),
                 coex_pti: CoexPtiTable::VENDOR,
                 phy_grant_protected: false,

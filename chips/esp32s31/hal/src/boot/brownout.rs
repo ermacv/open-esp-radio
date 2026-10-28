@@ -52,6 +52,7 @@ pub enum BrownoutFailure {
     Threshold(WaitFailure),
     /// The detector does not read back in the policy.
     Readback,
+    Transition(oer_espressif_analog::TransitionError),
 }
 
 /// The brownout detector's control words.
@@ -157,10 +158,11 @@ where
     };
     deadline
         .poll(THRESHOLD_WAIT, || match write.poll() {
-            Step::Ready(()) => Some(()),
-            Step::Pending => None,
+            Ok(Step::Ready(())) => Some(Ok(())),
+            Ok(Step::Pending) => None,
+            Err(error) => Some(Err(BrownoutFailure::Transition(error))),
         })
-        .map_err(BrownoutFailure::Threshold)?;
+        .map_err(BrownoutFailure::Threshold)??;
     registers.enable();
     if registers.in_policy() {
         Ok(())

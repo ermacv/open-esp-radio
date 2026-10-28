@@ -617,6 +617,41 @@ impl<B: PlatformClockBackend, T> ReunionFailure<B, T> {
     }
 }
 
+/// Refused split, retaining the exact hardware, attachment and PHY identity.
+#[must_use = "a refused split retains all input owners"]
+pub struct RadioSplitFailure<T> {
+    hardware: RadioHardware,
+    attachment: T,
+    identity: crate::domain::transaction::PhyIdentity,
+    error: oer_espressif_modem_clock::IdentityExhausted,
+}
+
+impl<T> core::fmt::Debug for RadioSplitFailure<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RadioSplitFailure")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T> RadioSplitFailure<T> {
+    pub const fn error(&self) -> oer_espressif_modem_clock::IdentityExhausted {
+        self.error
+    }
+
+    pub fn into_parts(self) -> (RadioHardware, T, crate::domain::transaction::PhyIdentity) {
+        (self.hardware, self.attachment, self.identity)
+    }
+
+    /// Observation for the image's existing PHY fault reporter. No reset or MMIO occurs here.
+    pub const fn fault(&self) -> crate::domain::transaction::Fault {
+        crate::domain::transaction::Fault {
+            reason: crate::domain::transaction::FaultReason::ModemClockIdentityExhausted,
+            registration: None,
+        }
+    }
+}
+
 impl RadioHardware {
     /// Split the root for concurrently running protocols. This performs no
     /// MMIO.
@@ -631,23 +666,55 @@ impl RadioHardware {
     ///
     /// `attachment` is the upper layer's state kept with the domain, such
     /// as the PHY layer's registered domain slot.
+    ///
+    /// # Errors
+    ///
+    /// Identity exhaustion returns every input owner before any split or MMIO.
     pub fn split<B: PlatformClockBackend, T>(
         self,
         attachment: T,
         identity: crate::domain::transaction::PhyIdentity,
-    ) -> (RadioDomain<B, T>, ProtocolPartitions) {
+    ) -> Result<(RadioDomain<B, T>, ProtocolPartitions), RadioSplitFailure<T>> {
+        self.split_with_clock_identity(
+            attachment,
+            identity,
+            crate::power::clock::ModemClockPlannerIdentity::new(),
+        )
+    }
+
+    fn split_with_clock_identity<B: PlatformClockBackend, T>(
+        self,
+        attachment: T,
+        identity: crate::domain::transaction::PhyIdentity,
+        clock_identity: Result<
+            crate::power::clock::ModemClockPlannerIdentity,
+            oer_espressif_modem_clock::IdentityExhausted,
+        >,
+    ) -> Result<(RadioDomain<B, T>, ProtocolPartitions), RadioSplitFailure<T>> {
+        let clock_identity = match clock_identity {
+            Ok(identity) => identity,
+            Err(error) => {
+                return Err(RadioSplitFailure {
+                    hardware: self,
+                    attachment,
+                    identity,
+                    error,
+                });
+            }
+        };
         let RadioPartitions {
             shared,
             wifi,
             bluetooth,
             ieee802154,
         } = self.partitions;
-        (
+        Ok((
             RadioDomain::new(
                 shared,
                 PhyRouteState::new(self.phy_registration),
                 attachment,
                 identity,
+                clock_identity,
             ),
             ProtocolPartitions {
                 wifi,
@@ -657,7 +724,7 @@ impl RadioHardware {
                 bluetooth_coex: CoexAbsent::issued(),
                 ieee802154_coex: CoexAbsent::issued(),
             },
-        )
+        ))
     }
 
     /// Reunite a split into the neutral root. This performs no MMIO.

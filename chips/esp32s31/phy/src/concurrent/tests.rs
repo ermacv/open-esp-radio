@@ -15,9 +15,10 @@ use crate::{
 fn registered_domain() -> RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy> {
     let (mut radio, _partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        ConcurrentPhy::new(),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            ConcurrentPhy::new(),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     {
         let domain = &mut radio;
         let grant = domain.begin_registration_for_host_test();
@@ -37,9 +38,10 @@ fn registered_domain() -> RadioDomain<crate::test_clocks::TestClockBackend, Conc
 fn rf_closed_domain() -> RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy> {
     let (mut radio, _partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        ConcurrentPhy::new(),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            ConcurrentPhy::new(),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     {
         let domain = &mut radio;
         let grant = domain.begin_registration_for_host_test();
@@ -92,9 +94,10 @@ fn clients_share_one_domain_and_leave_it_one_by_one() {
 fn an_unregistered_domain_rejects_every_client_operation() {
     let (mut radio, _partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        ConcurrentPhy::new(),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            ConcurrentPhy::new(),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let domain = &mut radio;
     assert_eq!(
         phy_ready(domain).map(|_| ()),
@@ -205,9 +208,10 @@ fn the_final_state_cache_follows_the_registered_domain_across_rf_close() {
     };
     let (mut radio, _partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        ConcurrentPhy::new(),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            ConcurrentPhy::new(),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     {
         let radio = &mut radio;
         assert!(matches!(

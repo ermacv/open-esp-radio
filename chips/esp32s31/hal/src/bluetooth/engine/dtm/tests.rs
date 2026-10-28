@@ -231,9 +231,10 @@ fn dtm_only_arena_receives_and_rotates_without_global_rx_chains() {
     type Memory = ArenaMemory<'static, 'static, 0, 0, 0, 0, 0, 0, 1>;
     let (_, partitions) = crate::root::RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let clocked = crate::bluetooth::ClockedOwner::for_host_test(partitions.bluetooth);
     let backing = Box::leak(Box::new(BluetoothArena::<0, 0, 0, 0, 0, 0>::zeroed()));
     let (mut engine, _) = Engine::<Memory>::for_host_test::<HostDma<0x2f00_1000>>(

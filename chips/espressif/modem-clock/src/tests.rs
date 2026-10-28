@@ -45,8 +45,26 @@ impl ModemClockDependency for Fixture {
         Self::Ieee802154ApbAndMac,
     ];
 
-    fn index(self) -> usize {
-        self as usize
+    fn index(self) -> crate::DependencyIndex {
+        use crate::DependencyIndex;
+        match self {
+            Self::ModemAdcCommonFe => DependencyIndex::constant::<0>(),
+            Self::ModemPrivateFe => DependencyIndex::constant::<1>(),
+            Self::Pll160AndModemSource => DependencyIndex::constant::<2>(),
+            Self::Coexistence => DependencyIndex::constant::<3>(),
+            Self::AnalogI2cMaster => DependencyIndex::constant::<4>(),
+            Self::WifiApb => DependencyIndex::constant::<5>(),
+            Self::WifiBb44m => DependencyIndex::constant::<6>(),
+            Self::WifiMac => DependencyIndex::constant::<7>(),
+            Self::WifiBb => DependencyIndex::constant::<8>(),
+            Self::WifiBb80x1 => DependencyIndex::constant::<9>(),
+            Self::Etm => DependencyIndex::constant::<10>(),
+            Self::BtMac => DependencyIndex::constant::<11>(),
+            Self::BtPeripheral => DependencyIndex::constant::<12>(),
+            Self::BtApbAndSecurity => DependencyIndex::constant::<13>(),
+            Self::BtIeee802154CommonBaseband => DependencyIndex::constant::<14>(),
+            Self::Ieee802154ApbAndMac => DependencyIndex::constant::<15>(),
+        }
     }
 
     fn refcounted(self) -> bool {
@@ -138,7 +156,7 @@ fn ieee802154_counts(count: u16) -> [u16; DEPENDENCY_CAPACITY] {
     let mut counts = [0; DEPENDENCY_CAPACITY];
     for &dependency in Fixture::LOW_BIT_FIRST {
         if Module::Ieee802154.dependencies().contains(dependency) {
-            counts[dependency.index()] = count;
+            counts[dependency.index().get()] = count;
         }
     }
     counts
@@ -148,7 +166,7 @@ fn ieee802154_counts(count: u16) -> [u16; DEPENDENCY_CAPACITY] {
 fn counts_of(counts: &[(Fixture, u16)]) -> [u16; DEPENDENCY_CAPACITY] {
     let mut all = [0; DEPENDENCY_CAPACITY];
     for (dependency, count) in counts {
-        all[dependency.index()] = *count;
+        all[dependency.index().get()] = *count;
     }
     all
 }
@@ -203,7 +221,7 @@ fn duplicate_for_adversarial_test(lease: &ModemClockLease<Fixture>) -> ModemCloc
 
 #[test]
 fn exact_ieee_set_uses_low_bit_first_order_for_acquire_and_release() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let prepared = planner
         .prepare_acquire(Module::Ieee802154.dependencies())
@@ -220,7 +238,7 @@ fn exact_ieee_set_uses_low_bit_first_order_for_acquire_and_release() {
 
 #[test]
 fn overlapping_leases_emit_only_zero_one_and_one_zero_boundaries() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let (planner, first, first_edges) = finish_acquire(
         planner
@@ -255,7 +273,7 @@ fn overlapping_leases_emit_only_zero_one_and_one_zero_boundaries() {
 
 #[test]
 fn local_lease_capacity_fails_closed_and_preserves_all_owners() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut planner = Planner::managed(identity);
     let mut leases = Vec::new();
 
@@ -294,7 +312,7 @@ fn local_lease_capacity_fails_closed_and_preserves_all_owners() {
 
 #[test]
 fn exhausted_slot_generation_fails_closed_without_count_changes() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut planner = Planner::managed(identity);
     planner.slots[0].generation = u64::MAX;
 
@@ -314,7 +332,7 @@ fn exhausted_slot_generation_fails_closed_without_count_changes() {
 
 #[test]
 fn partial_dependency_overlap_preserves_order_and_independent_counts() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let first_set = DependencySet::of(&[
         Fixture::Pll160AndModemSource,
@@ -378,7 +396,7 @@ fn partial_dependency_overlap_preserves_order_and_independent_counts() {
 
 #[test]
 fn preparation_and_commit_are_transactionally_separate() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let prepared = planner
         .prepare_acquire(Module::Ieee802154.dependencies())
@@ -406,7 +424,7 @@ fn preparation_and_commit_are_transactionally_separate() {
 
 #[test]
 fn release_failure_is_poisoned_and_keeps_counts_and_lease_until_commit() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let (planner, lease, _) = finish_acquire(
         planner
@@ -435,9 +453,9 @@ fn release_failure_is_poisoned_and_keeps_counts_and_lease_until_commit() {
 
 #[test]
 fn source_refcount_boundary_accepts_max_then_rejects_overflow() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut planner = Planner::managed(identity);
-    planner.counts[Fixture::WifiBb80x1.index()] = MAX_REFCOUNT - 1;
+    planner.counts[Fixture::WifiBb80x1.index().get()] = MAX_REFCOUNT - 1;
     let identity_address = planner.identity.key;
 
     let prepared = planner
@@ -445,7 +463,10 @@ fn source_refcount_boundary_accepts_max_then_rejects_overflow() {
         .expect("MAX_REFCOUNT - 1 may advance to the source maximum");
     let (planner, _lease, edges) = finish_acquire(prepared);
     assert!(!edges.contains(&Fixture::WifiBb80x1));
-    assert_eq!(planner.counts[Fixture::WifiBb80x1.index()], MAX_REFCOUNT);
+    assert_eq!(
+        planner.counts[Fixture::WifiBb80x1.index().get()],
+        MAX_REFCOUNT
+    );
 
     let failure = match planner.prepare_acquire(Module::Ieee802154.dependencies()) {
         Ok(_) => panic!("MAX_REFCOUNT must not exceed the source contract"),
@@ -457,20 +478,23 @@ fn source_refcount_boundary_accepts_max_then_rejects_overflow() {
     );
     let planner = failure.into_planner();
     assert_eq!(planner.identity.key, identity_address);
-    assert_eq!(planner.counts[Fixture::WifiBb80x1.index()], MAX_REFCOUNT);
+    assert_eq!(
+        planner.counts[Fixture::WifiBb80x1.index().get()],
+        MAX_REFCOUNT
+    );
     assert_eq!(planner.slots.iter().filter(|slot| slot.active).count(), 1);
 }
 
 #[test]
 fn underflow_fails_transactionally_and_returns_both_opaque_owners() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let (mut planner, lease, _) = finish_acquire(
         planner
             .prepare_acquire(Module::Ieee802154.dependencies())
             .expect("managed baseline"),
     );
-    planner.counts[Fixture::Etm.index()] = 0;
+    planner.counts[Fixture::Etm.index().get()] = 0;
     let lease_slot = lease.slot;
 
     let failure = match planner.prepare_release(lease) {
@@ -483,13 +507,13 @@ fn underflow_fails_transactionally_and_returns_both_opaque_owners() {
     );
     let (planner, lease) = failure.into_owners();
     assert_eq!(lease.slot, lease_slot);
-    assert_eq!(planner.counts[Fixture::Etm.index()], 0);
+    assert_eq!(planner.counts[Fixture::Etm.index().get()], 0);
     assert!(planner.slots[usize::from(lease.slot)].active);
 }
 
 #[test]
 fn duplicate_and_stale_leases_are_rejected_without_owner_loss() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let (planner, first, _) = finish_acquire(
         planner
@@ -536,8 +560,8 @@ fn duplicate_and_stale_leases_are_rejected_without_owner_loss() {
 
 #[test]
 fn cross_manager_lease_is_rejected_and_both_epochs_are_retained() {
-    let first_identity = ModemClockPlannerIdentity::new();
-    let second_identity = ModemClockPlannerIdentity::new();
+    let first_identity = ModemClockPlannerIdentity::new().expect("identity capacity");
+    let second_identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let first_planner = Planner::managed(first_identity);
     let second_planner = Planner::managed(second_identity);
     let (first_planner, lease, _) = finish_acquire(
@@ -570,7 +594,7 @@ fn cross_manager_lease_is_rejected_and_both_epochs_are_retained() {
 
 #[test]
 fn externally_retained_baseline_cannot_issue_acquire_or_release_plans() {
-    let external_identity = ModemClockPlannerIdentity::new();
+    let external_identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let external = Planner::externally_retained(external_identity);
     let failure = match external.prepare_acquire(Module::Ieee802154.dependencies()) {
         Ok(_) => panic!("unknown baseline cannot plan acquisition"),
@@ -584,7 +608,7 @@ fn externally_retained_baseline_cannot_issue_acquire_or_release_plans() {
     assert_eq!(external.baseline, Baseline::ExternallyRetained);
     assert_eq!(external.counts, ieee802154_counts(0));
 
-    let managed_identity = ModemClockPlannerIdentity::new();
+    let managed_identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let managed = Planner::managed(managed_identity);
     let (managed, lease, _) = finish_acquire(
         managed
@@ -614,7 +638,7 @@ fn externally_retained_baseline_cannot_issue_acquire_or_release_plans() {
 
 #[test]
 fn a_second_module_enables_only_its_missing_dependencies() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let (planner, wifi, _) = finish_acquire(
         planner
@@ -658,7 +682,7 @@ fn a_second_module_enables_only_its_missing_dependencies() {
 
 #[test]
 fn the_analog_i2c_master_edge_follows_every_module_request() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let (planner, first, first_edges) = finish_acquire(
         planner
@@ -683,7 +707,7 @@ fn the_analog_i2c_master_edge_follows_every_module_request() {
 
 #[test]
 fn initialized_wifi_keeps_its_clocks_and_re_enables_them_on_the_next_request() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut planner = Planner::managed(identity);
     planner.set_wifi_initialized(true);
     let (planner, wifi, _) = finish_acquire(
@@ -710,7 +734,7 @@ fn initialized_wifi_keeps_its_clocks_and_re_enables_them_on_the_next_request() {
 
 #[test]
 fn the_executor_performs_edges_in_order_and_poisons_at_a_failed_edge() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = Planner::managed(identity);
     let mut performed = Vec::new();
     let (planner, lease) = execute_acquire(
@@ -747,4 +771,92 @@ fn the_executor_performs_edges_in_order_and_poisons_at_a_failed_edge() {
     // Nothing was committed: the lease is still recorded as held.
     let pending = poisoned.reexpose_for_test();
     assert_eq!(pending.transaction.planner.counts, ieee802154_counts(1));
+}
+
+#[test]
+fn identity_exhaustion_is_repeatable_and_never_reuses_a_key() {
+    let next = AtomicU32::new(u32::MAX - 1);
+    let last = ModemClockPlannerIdentity::claim_from(&next).unwrap();
+    assert_eq!(last.key, u32::MAX - 1);
+    for _ in 0..2 {
+        assert!(matches!(
+            ModemClockPlannerIdentity::claim_from(&next),
+            Err(IdentityExhausted)
+        ));
+        assert_eq!(next.load(Ordering::Relaxed), u32::MAX);
+    }
+}
+
+#[test]
+fn dependency_indices_reject_values_that_previously_overflowed_the_shift() {
+    for index in 0..32 {
+        assert_eq!(DependencyIndex::new(index).unwrap().bit(), 1_u32 << index);
+    }
+    for index in [32, 64, u8::MAX] {
+        assert_eq!(DependencyIndex::new(index), None);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Sparse<const MALFORMED: bool>(u8);
+impl<const MALFORMED: bool> ModemClockDependency for Sparse<MALFORMED> {
+    const LOW_BIT_FIRST: &'static [Self] = if MALFORMED { &[Self(1)] } else { &[Self(0)] };
+    fn index(self) -> DependencyIndex {
+        DependencyIndex::new(self.0).unwrap()
+    }
+    fn refcounted(self) -> bool {
+        true
+    }
+    fn retained_while_wifi_initialized(self) -> bool {
+        false
+    }
+}
+
+fn rejected_table<const MALFORMED: bool>() {
+    type Error<const M: bool> = ModemClockAcquirePreparationError<Sparse<M>>;
+    let dependencies = DependencySet::of(&[Sparse::<MALFORMED>(31)]);
+    let planner = ModemClockPlanner::managed(ModemClockPlannerIdentity::new().unwrap());
+    let failure = planner.prepare_acquire(dependencies).err().unwrap();
+    assert_eq!(
+        failure.error(),
+        if MALFORMED {
+            Error::<MALFORMED>::InvalidDependencyTable
+        } else {
+            Error::<MALFORMED>::UnlistedDependencies
+        }
+    );
+    let mut planner = failure.into_planner();
+    assert_eq!(planner.counts, [0; DEPENDENCY_CAPACITY]);
+    assert!(planner.slots.iter().all(|slot| !slot.active));
+    // Forge only the private test record to exercise release validation before any edges.
+    planner.slots[0] = LeaseSlot {
+        generation: 1,
+        active: true,
+        dependencies,
+    };
+    let lease = ModemClockLease {
+        identity: planner.identity.key,
+        slot: 0,
+        generation: 1,
+        dependencies,
+    };
+    let failure = planner.prepare_release(lease).err().unwrap();
+    assert_eq!(
+        failure.error(),
+        if MALFORMED {
+            ModemClockReleasePreparationError::InvalidDependencyTable
+        } else {
+            ModemClockReleasePreparationError::UnlistedDependencies
+        }
+    );
+    let (planner, lease) = failure.into_owners();
+    assert_eq!(planner.counts, [0; DEPENDENCY_CAPACITY]);
+    assert!(planner.slots[0].active);
+    assert_eq!(planner.slots[0].dependencies, lease.dependencies);
+}
+
+#[test]
+fn invalid_tables_and_unlisted_dependencies_return_every_unchanged_owner() {
+    rejected_table::<true>();
+    rejected_table::<false>();
 }

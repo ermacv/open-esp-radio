@@ -51,6 +51,7 @@ pub(crate) const ROOT_INIT: u32 = 5;
 /// Start the session: [`STARTED`] or why it did not.
 pub(crate) fn init(
     identity: impl FnOnce() -> oer_esp32s31_hal::domain::transaction::PhyIdentity,
+    report: impl FnOnce(oer_esp32s31_hal::domain::transaction::Fault) -> core::convert::Infallible,
 ) -> u32 {
     let Some(root) = Root::take() else {
         return ROOT_TAKEN;
@@ -62,7 +63,12 @@ pub(crate) fn init(
     let clocks = runtime.clocks;
     let (radio, partitions) = runtime
         .radio
-        .split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity);
+        .split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity)
+        .unwrap_or_else(|failure| {
+            let fault = failure.fault();
+            let _owners = failure;
+            match report(fault) {}
+        });
     let session = match powered(radio, partitions.wifi, clocks) {
         Ok(session) => session,
         Err(reason) => return reason,
@@ -106,12 +112,18 @@ pub(crate) async fn calibrated(
     identity: oer_esp32s31_phy::PhyCalibrationIdentity,
     timer: &impl oer_cooperate::CooperativeTimer,
     transaction_identity: oer_esp32s31_hal::domain::transaction::PhyIdentity,
+    report: impl FnOnce(oer_esp32s31_hal::domain::transaction::Fault) -> core::convert::Infallible,
 ) -> u32 {
     use oer_esp32s31_phy::{
         NoopPhyTargetObserver, PhyRegisterConfig, RomShortDelay, register_concurrent_phy,
     };
-    let (radio, partitions) =
-        hardware.split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity);
+    let (radio, partitions) = hardware
+        .split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity)
+        .unwrap_or_else(|failure| {
+            let fault = failure.fault();
+            let _owners = failure;
+            match report(fault) {}
+        });
     let (radio, registration) = register_concurrent_phy::<_, (), RomShortDelay, _>(
         timer,
         radio,

@@ -69,7 +69,7 @@ fn every_offered_module_has_published_device_actions() {
 
 #[test]
 fn ieee802154_enables_and_disables_its_devices_in_vendor_order() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut clocks = Core::with_port(Recorder::default(), identity);
     let grant = clocks
         .enable(ModemClockModule::Ieee802154)
@@ -87,7 +87,7 @@ fn a_shared_device_switches_only_at_its_count_boundaries() {
         ModemClockDevice::Ieee802154Mac,
     ];
     let bluetooth_apb = [ModemClockDevice::Etm, ModemClockDevice::BluetoothApb];
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut clocks = Core::with_port(Recorder::default(), identity);
     let apb = clocks
         .enable(ModemClockModule::BluetoothApb)
@@ -105,7 +105,7 @@ fn a_shared_device_switches_only_at_its_count_boundaries() {
 
 #[test]
 fn only_an_ieee802154_grant_resets_the_mac() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut clocks = Core::with_port(Recorder::default(), identity);
     let etm = clocks.enable(ModemClockModule::ModemEtm).expect("ETM");
     let ieee802154 = clocks
@@ -125,7 +125,7 @@ fn only_an_ieee802154_grant_resets_the_mac() {
 
 #[test]
 fn the_port_returns_only_after_every_grant() {
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut clocks = Core::with_port(Recorder::default(), identity);
     let grant = clocks
         .enable(ModemClockModule::Coexistence)
@@ -139,8 +139,8 @@ fn the_port_returns_only_after_every_grant() {
 
 #[test]
 fn a_grant_of_another_owner_is_rejected_and_returned() {
-    let first_identity = ModemClockPlannerIdentity::new();
-    let second_identity = ModemClockPlannerIdentity::new();
+    let first_identity = ModemClockPlannerIdentity::new().expect("identity capacity");
+    let second_identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut first = Core::with_port(Recorder::default(), first_identity);
     let mut second = Core::with_port(Recorder::default(), second_identity);
     let grant = first.enable(ModemClockModule::ModemEtm).expect("ETM");

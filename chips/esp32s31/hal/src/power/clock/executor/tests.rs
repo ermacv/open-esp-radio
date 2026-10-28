@@ -52,7 +52,7 @@ fn setup() -> (Log, Port, CountingPlatformClocks) {
 fn the_pll_source_brackets_the_modem_gate_and_the_analog_clock_goes_to_the_platform() {
     let (log, mut port, platform) = setup();
     let mut held_clocks = ModemPlatformClocks::default();
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
         .prepare_acquire(ModemClockModule::Phy.dependencies())
@@ -105,7 +105,7 @@ fn a_refused_platform_request_poisons_the_transaction_before_the_gate() {
     let (log, mut port, platform) = setup();
     platform.set_refused(PlatformClock::Pll160m, true);
     let mut held_clocks = ModemPlatformClocks::default();
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
         .prepare_acquire(ModemClockModule::Coexistence.dependencies())
@@ -124,7 +124,7 @@ fn a_poisoned_acquisition_is_abandoned_with_its_references_on() {
     let (_, mut port, platform) = setup();
     platform.set_refused(PlatformClock::AnalogI2cMaster, true);
     let mut held_clocks = ModemPlatformClocks::default();
-    let identity = ModemClockPlannerIdentity::new();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
         .prepare_acquire(ModemClockModule::Phy.dependencies())
@@ -296,7 +296,7 @@ fn phy_and_calibration_publish_power_before_any_clock_edge() {
     for module in [ModemClockModule::Phy, ModemClockModule::PhyCalibration] {
         let (log, mut port, platform) = setup();
         let mut held_clocks = ModemPlatformClocks::default();
-        let identity = ModemClockPlannerIdentity::new();
+        let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
         let planner = ModemClockPlanner::managed(identity);
         let prepared = planner
             .prepare_acquire(module.dependencies())

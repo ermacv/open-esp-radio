@@ -25,9 +25,10 @@ fn radio_domain(
 ) {
     let (mut radio, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        ConcurrentPhy::new(),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            ConcurrentPhy::new(),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     {
         let domain = &mut radio;
         let grant = domain.begin_registration_for_host_test();
@@ -59,9 +60,10 @@ fn ieee802154_is_client(
 fn joining_an_unregistered_domain_changes_nothing() {
     let (mut radio, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        ConcurrentPhy::new(),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            ConcurrentPhy::new(),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let radio = &mut radio;
 

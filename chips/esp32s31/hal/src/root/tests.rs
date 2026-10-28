@@ -54,9 +54,10 @@ fn every_pending_restore_blocks_the_reunion() {
     for restore in Restore::ALL {
         let (mut shared, partitions) = RadioHardware::for_host_test()
             .split::<crate::power::test_clocks::CountingBackend, _>(
-            (),
-            crate::domain::transaction::PhyIdentity::for_host_test(),
-        );
+                (),
+                crate::domain::transaction::PhyIdentity::for_host_test(),
+            )
+            .expect("identity capacity");
         restore.occupy(shared.phy_state_mut_for_test());
         let Err(failure) = RadioHardware::reunite(shared, partitions) else {
             panic!("the split reunited over a pending restore");
@@ -72,9 +73,10 @@ fn every_pending_restore_blocks_the_reunion() {
 fn a_split_reunites_and_retires_the_registration() {
     let (mut shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let first = register(&mut shared);
     let second = register(&mut shared);
     assert_ne!(first, second);
@@ -86,7 +88,8 @@ fn a_split_reunites_and_retires_the_registration() {
         .split::<crate::power::test_clocks::CountingBackend, _>(
             (),
             crate::domain::transaction::PhyIdentity::for_host_test(),
-        );
+        )
+        .expect("identity capacity");
     {
         let radio = &mut shared;
         assert_eq!(radio.registration_epoch(), None);
@@ -104,9 +107,10 @@ fn reunion_waits_for_platform_clocks_a_failed_power_sequence_kept() {
     let platform = CountingPlatformClocks::new();
     let (mut shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     shared.hold_platform_clock_for_test(PlatformClock::Pll160m, &platform);
     let Err(failure) = RadioHardware::reunite(shared, partitions) else {
         panic!("common power still holds the 160 MHz source");
@@ -128,9 +132,10 @@ fn reunion_waits_for_common_power() {
     use crate::domain::RadioClient;
     let (mut shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::power::test_clocks::CountingBackend, _>(
-        (),
-        crate::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            crate::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     shared.hold_common_power_for_test(RadioClient::Bluetooth);
     let Err(failure) = RadioHardware::reunite(shared, partitions) else {
         panic!("a client still holds common power");
@@ -140,4 +145,34 @@ fn reunion_waits_for_common_power() {
         super::ReunionError::Shared(RadioDomainReleaseError::CommonPowerHeld)
     );
     let (_shared, _partitions) = failure.into_parts();
+}
+
+#[test]
+fn exhausted_clock_identity_returns_every_split_owner_before_construction() {
+    use crate::domain::transaction::{FaultReason, PhyIdentity};
+    use oer_espressif_modem_clock::IdentityExhausted;
+    let payload = std::rc::Rc::new(());
+    let failure = RadioHardware::for_host_test()
+        .split_with_clock_identity::<crate::power::test_clocks::CountingBackend, _>(
+            payload.clone(),
+            PhyIdentity::for_host_test(),
+            Err(IdentityExhausted),
+        )
+        .err()
+        .expect("exhausted identity refuses split");
+    assert_eq!(failure.error(), IdentityExhausted);
+    assert_eq!(
+        failure.fault().reason,
+        FaultReason::ModemClockIdentityExhausted
+    );
+    assert_eq!(failure.fault().registration, None);
+    assert_eq!(std::rc::Rc::strong_count(&payload), 2);
+    let (hardware, returned, identity) = failure.into_parts();
+    assert!(std::rc::Rc::ptr_eq(&payload, &returned));
+    let (domain, partitions) = hardware
+        .split::<crate::power::test_clocks::CountingBackend, _>(returned, identity)
+        .expect("new identity available");
+    let (_hardware, returned) = RadioHardware::reunite(domain, partitions)
+        .unwrap_or_else(|_| panic!("unchanged root reunites"));
+    assert!(std::rc::Rc::ptr_eq(&payload, &returned));
 }

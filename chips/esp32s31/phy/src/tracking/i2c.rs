@@ -141,7 +141,8 @@ impl PhyWifiI2cTrackingTransition {
         };
         let PhyWifiI2cTrackingCompletion::MaskedWrite(completion) = completion;
         write.advance(completion).map_err(|error| match error {
-            oer_espressif_analog::TransitionError::WrongCompletion => {
+            oer_espressif_analog::TransitionError::WrongCompletion
+            | oer_espressif_analog::TransitionError::IndexExhausted { .. } => {
                 PhyWifiI2cTrackingTransitionError::WrongCompletion
             }
             oer_espressif_analog::TransitionError::AlreadyComplete => {

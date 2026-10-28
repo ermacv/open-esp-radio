@@ -787,9 +787,10 @@ fn only_the_minting_registration_describes_a_detached_client_set() {
     use oer_esp32s31_hal::owner::PhyInitializationAccess;
     let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        (),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let domain = &mut radio;
     let first = domain.begin_registration_for_host_test().epoch();
     let second = domain.begin_registration_for_host_test().epoch();
@@ -863,9 +864,10 @@ fn a_new_registration_epoch_starts_untracked() {
     use oer_esp32s31_hal::owner::PhyInitializationAccess;
     let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
-        (),
-        oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
-    );
+            (),
+            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+        )
+        .expect("identity capacity");
     let epoch = radio.begin_registration_for_host_test().epoch();
     let snapshot =
         PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch).snapshot();

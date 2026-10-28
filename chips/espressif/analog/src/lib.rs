@@ -1,10 +1,14 @@
 #![deny(
+    clippy::panic,
     clippy::unwrap_used,
     clippy::expect_used,
-    clippy::panic,
+    clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 //! Chip-neutral analog register bus of the Espressif PHY.
 //!
@@ -80,13 +84,23 @@ pub struct AnalogField<Address> {
     address: Address,
     msb: u8,
     lsb: u8,
+    mask: u8,
 }
 
 impl<Address: Copy> AnalogField<Address> {
     /// The field, when `lsb <= msb <= 7`.
     pub const fn new(address: Address, msb: u8, lsb: u8) -> Option<Self> {
         if lsb <= msb && msb < 8 {
-            Some(Self { address, msb, lsb })
+            let Some(upper_shift) = 7_u8.checked_sub(msb) else {
+                return None;
+            };
+            let mask = (u8::MAX << lsb) & (u8::MAX >> upper_shift);
+            Some(Self {
+                address,
+                msb,
+                lsb,
+                mask,
+            })
         } else {
             None
         }
@@ -102,8 +116,7 @@ impl<Address: Copy> AnalogField<Address> {
 
     /// The field's bits in place.
     const fn mask(self) -> u8 {
-        let width = self.msb - self.lsb + 1;
-        ((((1_u16) << width) - 1) as u8) << self.lsb
+        self.mask
     }
 
     /// The field's value in `byte`, as `phy_i2c_readReg_Mask` extracts it.
@@ -117,8 +130,7 @@ impl<Address: Copy> AnalogField<Address> {
     /// The vendor leaf ORs `value << lsb` in unmasked, so a wider value
     /// would also set bits above the field; such values are rejected here.
     pub const fn insert(self, byte: u8, value: u8) -> Option<u8> {
-        let width = self.msb - self.lsb + 1;
-        if width < 8 && value >> width != 0 {
+        if value & !(self.mask >> self.lsb) != 0 {
             return None;
         }
         Some((byte & !self.mask()) | (value << self.lsb))
@@ -171,6 +183,8 @@ pub enum TransitionError {
     WrongCompletion,
     /// The transition already completed.
     AlreadyComplete,
+    /// The completed command has no representable successor index.
+    IndexExhausted { index: usize },
 }
 
 /// A transaction as a sequence of whole-byte reads and writes.
@@ -246,7 +260,8 @@ pub struct ValueTooWide;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FieldWriteTransition<Address> {
     field: AnalogField<Address>,
-    value: u8,
+    /// Validated field bits already positioned in their byte.
+    bits: u8,
     step: FieldWriteStep,
 }
 
@@ -257,12 +272,12 @@ impl<Address: Copy> FieldWriteTransition<Address> {
     ///
     /// `value` does not fit the field.
     pub const fn new(field: AnalogField<Address>, value: u8) -> Result<Self, ValueTooWide> {
-        if field.insert(0, value).is_none() {
+        let Some(bits) = field.insert(0, value) else {
             return Err(ValueTooWide);
-        }
+        };
         Ok(Self {
             field,
-            value,
+            bits,
             step: FieldWriteStep::Read,
         })
     }
@@ -299,10 +314,7 @@ impl<Address: Copy + Eq> FieldWriteTransition<Address> {
                     address: read,
                     value,
                 },
-            ) if read == address => match self.field.insert(value, self.value) {
-                Some(byte) => FieldWriteStep::Write(byte),
-                None => unreachable!("the value was checked at construction"),
-            },
+            ) if read == address => FieldWriteStep::Write((value & !self.field.mask()) | self.bits),
             (FieldWriteStep::Write(_), Completion::Written { address: written })
                 if written == address =>
             {
@@ -369,7 +381,7 @@ where
 enum ConfigurationStep<Address> {
     Reading(usize, Address),
     Writing(usize, Address, u8),
-    Modifying(usize, FieldWriteTransition<Address>),
+    Modifying(usize, AnalogField<Address>, u8),
     Invalid(usize),
     Complete,
 }
@@ -402,13 +414,18 @@ where
             Some(ConfigurationCommand::Write(address, value)) => {
                 ConfigurationStep::Writing(index, address, value)
             }
-            Some(ConfigurationCommand::Modify(field, value)) => {
-                match FieldWriteTransition::new(field, value) {
-                    Ok(write) => ConfigurationStep::Modifying(index, write),
-                    Err(ValueTooWide) => ConfigurationStep::Invalid(index),
-                }
-            }
+            Some(ConfigurationCommand::Modify(field, value)) => match field.insert(0, value) {
+                Some(bits) => ConfigurationStep::Modifying(index, field, bits),
+                None => ConfigurationStep::Invalid(index),
+            },
         }
+    }
+
+    fn next(&self, index: usize) -> Result<ConfigurationStep<Address>, TransitionError> {
+        let next = index
+            .checked_add(1)
+            .ok_or(TransitionError::IndexExhausted { index })?;
+        Ok(self.enter(next))
     }
 
     /// The command whose value does not fit its field, before any bus
@@ -432,10 +449,8 @@ where
         match self.step {
             ConfigurationStep::Reading(_, address) => Action::Read { address },
             ConfigurationStep::Writing(_, address, value) => Action::Write { address, value },
-            ConfigurationStep::Modifying(_, write) => match write.action() {
-                Action::Read { address } => Action::Read { address },
-                Action::Write { address, value } => Action::Write { address, value },
-                Action::Complete(()) => unreachable!("a completed field write advances"),
+            ConfigurationStep::Modifying(_, field, _) => Action::Read {
+                address: field.address,
             },
             ConfigurationStep::Invalid(index) => Action::Complete(Err(InvalidCommand { index })),
             ConfigurationStep::Complete => Action::Complete(Ok(())),
@@ -447,18 +462,16 @@ where
             (
                 ConfigurationStep::Reading(index, address),
                 Completion::Read { address: read, .. },
-            ) if read == address => self.enter(index + 1),
+            ) if read == address => self.next(index)?,
             (
                 ConfigurationStep::Writing(index, address, _),
                 Completion::Written { address: written },
-            ) if written == address => self.enter(index + 1),
-            (ConfigurationStep::Modifying(index, mut write), completion) => {
-                write.advance(completion)?;
-                if write.action() == Action::Complete(()) {
-                    self.enter(index + 1)
-                } else {
-                    ConfigurationStep::Modifying(index, write)
-                }
+            ) if written == address => self.next(index)?,
+            (
+                ConfigurationStep::Modifying(index, field, bits),
+                Completion::Read { address, value },
+            ) if address == field.address => {
+                ConfigurationStep::Writing(index, address, (value & !field.mask()) | bits)
             }
             (ConfigurationStep::Complete | ConfigurationStep::Invalid(_), _) => {
                 return Err(TransitionError::AlreadyComplete);
@@ -473,6 +486,7 @@ where
 enum BusPhase {
     Idle,
     Started,
+    Failed(TransitionError),
 }
 
 /// Run a [`ByteTransition`] over an [`AnalogRegisterBus`], at most one bus
@@ -512,42 +526,54 @@ where
     }
 
     /// Advance the transition by at most one bus action.
-    pub fn poll(&mut self) -> Step<Transition::Output> {
+    ///
+    /// # Errors
+    ///
+    /// The transition refused its completion. The refusal is retained and
+    /// subsequent polls perform no further bus actions.
+    pub fn poll(&mut self) -> Result<Step<Transition::Output>, TransitionError> {
+        if let BusPhase::Failed(error) = self.phase {
+            return Err(error);
+        }
         let bus = &mut self.bus;
         let action = self.transition.action();
         let completion = match (self.phase, action) {
-            (_, Action::Complete(output)) => return Step::Ready(output),
+            (BusPhase::Failed(error), _) => return Err(error),
+            (_, Action::Complete(output)) => return Ok(Step::Ready(output)),
             (BusPhase::Idle, Action::Read { address }) => {
                 if bus.try_start_read(address).is_ok() {
                     self.phase = BusPhase::Started;
                 }
-                return Step::Pending;
+                return Ok(Step::Pending);
             }
             (BusPhase::Idle, Action::Write { address, value }) => {
                 if bus.try_start_write(address, value).is_ok() {
                     self.phase = BusPhase::Started;
                 }
-                return Step::Pending;
+                return Ok(Step::Pending);
             }
             (BusPhase::Started, Action::Read { address }) => match bus.try_finish_read(address) {
                 Ok(value) => Completion::Read { address, value },
-                Err(Busy) => return Step::Pending,
+                Err(Busy) => return Ok(Step::Pending),
             },
             (BusPhase::Started, Action::Write { address, .. }) => {
                 match bus.try_finish_write(address) {
                     Ok(()) => Completion::Written { address },
-                    Err(Busy) => return Step::Pending,
+                    Err(Busy) => return Ok(Step::Pending),
                 }
             }
         };
         self.phase = BusPhase::Idle;
         match self.transition.advance(completion) {
             Ok(()) => {}
-            Err(_) => unreachable!("the driver completes the action it started"),
+            Err(error) => {
+                self.phase = BusPhase::Failed(error);
+                return Err(error);
+            }
         }
         match self.transition.action() {
-            Action::Complete(output) => Step::Ready(output),
-            _ => Step::Pending,
+            Action::Complete(output) => Ok(Step::Ready(output)),
+            _ => Ok(Step::Pending),
         }
     }
 }
@@ -574,7 +600,7 @@ impl<'bus, Bus: AnalogRegisterBus> FieldRead<'bus, Bus> {
     }
 
     /// Advance the read by at most one bus action.
-    pub fn poll(&mut self) -> Step<u8> {
+    pub fn poll(&mut self) -> Result<Step<u8>, TransitionError> {
         self.0.poll()
     }
 }
@@ -614,9 +640,16 @@ impl<'bus, Bus: AnalogRegisterBus> FieldWrite<'bus, Bus> {
     }
 
     /// Advance the write by at most one bus action.
-    pub fn poll(&mut self) -> Step<()> {
+    pub fn poll(&mut self) -> Result<Step<()>, TransitionError> {
         self.0.poll()
     }
+}
+
+/// A configuration command or its transition refused progress.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConfigurationError {
+    InvalidCommand(InvalidCommand),
+    Transition(TransitionError),
 }
 
 /// Polled vendor configuration leaf over a bus.
@@ -650,10 +683,12 @@ where
     ///
     /// A `Modify` command's value does not fit its field; no bus action was
     /// performed for it.
-    pub fn poll(&mut self) -> Result<Step<()>, InvalidCommand> {
-        match self.0.poll() {
+    pub fn poll(&mut self) -> Result<Step<()>, ConfigurationError> {
+        match self.0.poll().map_err(ConfigurationError::Transition)? {
             Step::Pending => Ok(Step::Pending),
-            Step::Ready(result) => result.map(Step::Ready),
+            Step::Ready(result) => result
+                .map(Step::Ready)
+                .map_err(ConfigurationError::InvalidCommand),
         }
     }
 }
@@ -751,7 +786,11 @@ impl<Pairs> ParallelTransition<Pairs> {
     }
 
     /// Record that the current step completed.
-    pub fn advance<Pair>(&mut self)
+    ///
+    /// # Errors
+    ///
+    /// The completed pair has no representable successor index; no state is changed.
+    pub fn advance<Pair>(&mut self) -> Result<(), TransitionError>
     where
         Pairs: Fn(usize) -> Option<Pair>,
     {
@@ -764,9 +803,14 @@ impl<Pairs> ParallelTransition<Pairs> {
             ParallelPhase::Await(index, ParallelHost::First) => {
                 ParallelPhase::Await(index, ParallelHost::Second)
             }
-            ParallelPhase::Await(index, ParallelHost::Second) => ParallelPhase::Start(index + 1),
+            ParallelPhase::Await(index, ParallelHost::Second) => ParallelPhase::Start(
+                index
+                    .checked_add(1)
+                    .ok_or(TransitionError::IndexExhausted { index })?,
+            ),
             ParallelPhase::Done => ParallelPhase::Done,
         };
+        Ok(())
     }
 }
 
@@ -786,6 +830,7 @@ impl<Pairs> ParallelTransition<Pairs> {
 pub struct ParallelWrites<'bus, Bus, Pairs> {
     bus: &'bus mut Bus,
     transition: ParallelTransition<Pairs>,
+    error: Option<TransitionError>,
 }
 
 impl<'bus, Bus: ParallelAnalogBus, Pairs> ParallelWrites<'bus, Bus, Pairs>
@@ -798,33 +843,44 @@ where
         Self {
             bus,
             transition: ParallelTransition::new(pairs),
+            error: None,
         }
     }
 
     /// Advance the sequence by at most one bus action.
-    pub fn poll(&mut self) -> Step<()> {
+    pub fn poll(&mut self) -> Result<Step<()>, TransitionError> {
+        if let Some(error) = self.error {
+            return Err(error);
+        }
         let bus = &mut self.bus;
         match self.transition.action() {
             ParallelAction::SelectParallelMap => bus.select_parallel_host_map(),
             ParallelAction::StartPair(pair) => bus.start_pair(pair),
             ParallelAction::AwaitIdle(host) => {
                 if bus.is_busy(host) {
-                    return Step::Pending;
+                    return Ok(Step::Pending);
                 }
             }
             ParallelAction::RestoreMap => {
                 bus.restore_host_map();
-                self.transition.advance();
-                return Step::Ready(());
+                self.advance()?;
+                return Ok(Step::Ready(()));
             }
-            ParallelAction::Complete => return Step::Ready(()),
+            ParallelAction::Complete => return Ok(Step::Ready(())),
         }
-        self.transition.advance();
-        Step::Pending
+        self.advance()?;
+        Ok(Step::Pending)
+    }
+
+    fn advance(&mut self) -> Result<(), TransitionError> {
+        self.transition
+            .advance()
+            .inspect_err(|error| self.error = Some(*error))
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::arithmetic_side_effects, clippy::disallowed_macros)]
 mod tests;
 
 /// Pure transport and sampled-value vocabulary of generated analog models.

@@ -34,7 +34,7 @@ static SESSION: ClaimCell<Session> = ClaimCell::new();
 /// through its public client path. Zero, or why it did not start: one when
 /// the root was taken before, two or three when Wi-Fi's power or clocks did
 /// not come up, four when a session was installed before, five when the reset
-/// root could not install the platform owners.
+/// root could not install the platform owners; six is exhausted clock identity on the host.
 fn start_session() -> u32 {
     let Some(root) = Root::take() else {
         return 1;
@@ -47,7 +47,22 @@ fn start_session() -> u32 {
     #[cfg(not(target_arch = "riscv32"))]
     let identity = oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test();
     let clocks = runtime.clocks;
-    let (mut radio, partitions) = runtime.radio.split::<ChipClocks, _>((), identity);
+    let (mut radio, partitions) = match runtime.radio.split::<ChipClocks, _>((), identity) {
+        Ok(split) => split,
+        Err(failure) => {
+            #[cfg(target_arch = "riscv32")]
+            {
+                let fault = failure.fault();
+                let _owners = failure;
+                report_phy_fault(fault)
+            }
+            #[cfg(not(target_arch = "riscv32"))]
+            {
+                let _owners = failure;
+                return 6;
+            }
+        }
+    };
     let Ok((powered, power)) =
         WifiCold::from_partition(partitions.wifi).power_up(&mut radio, &clocks)
     else {

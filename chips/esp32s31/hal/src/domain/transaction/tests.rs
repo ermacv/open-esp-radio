@@ -18,6 +18,7 @@ use std::{
 fn domain<T>(attachment: T) -> RadioDomain<CountingBackend, T> {
     RadioHardware::for_host_test()
         .split(attachment, PhyIdentity::for_host_test())
+        .expect("identity capacity")
         .0
 }
 
@@ -105,7 +106,8 @@ fn cancellation_before_poll_and_while_waiting_quarantines_every_owner() {
         assert!(seat.claim().is_none());
         let drops = Rc::new(Cell::new(0));
         let (mut radio, _) = RadioHardware::for_host_test()
-            .split::<CountingBackend, _>(Drops(drops.clone()), identity);
+            .split::<CountingBackend, _>(Drops(drops.clone()), identity)
+            .expect("identity capacity");
         let epoch = radio.begin_registration_for_host_test().epoch();
         let handle = radio.fault_handle();
         let clock: VirtualClock = VirtualClock::new();
@@ -151,7 +153,8 @@ fn losing_the_movable_half_retains_the_original_fault_and_return_payload() {
     let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
     let drops = Rc::new(Cell::new(0));
     let (radio, _) = RadioHardware::for_host_test()
-        .split::<CountingBackend, _>(Drops(drops.clone()), seat.claim().unwrap());
+        .split::<CountingBackend, _>(Drops(drops.clone()), seat.claim().unwrap())
+        .expect("identity capacity");
     let (owner, phy) = radio.detach(Operation::Maintain).split();
     let error = catch_unwind(AssertUnwindSafe(|| drop(phy))).unwrap_err();
     let fault = *error.downcast::<Fault>().unwrap();
@@ -164,8 +167,9 @@ fn losing_the_movable_half_retains_the_original_fault_and_return_payload() {
 #[test]
 fn diagnostic_handle_reports_only_the_missing_owner_observation() {
     let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
-    let (mut radio, _) =
-        RadioHardware::for_host_test().split::<CountingBackend, _>((), seat.claim().unwrap());
+    let (mut radio, _) = RadioHardware::for_host_test()
+        .split::<CountingBackend, _>((), seat.claim().unwrap())
+        .expect("identity capacity");
     let epoch = radio.begin_registration_for_host_test().epoch();
     let handle = radio.fault_handle();
     assert_eq!(handle.require_owner(Some(17)), 17);
@@ -182,7 +186,8 @@ fn channel_custody_records_channel_or_retune_on_unpolled_and_pending_drop() {
         for polled in [false, true] {
             let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
             let (mut radio, partitions) = RadioHardware::for_host_test()
-                .split::<CountingBackend, _>((), seat.claim().unwrap());
+                .split::<CountingBackend, _>((), seat.claim().unwrap())
+                .expect("identity capacity");
             let epoch = radio.begin_registration_for_host_test().epoch();
             let mut wifi = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
             let mut platform = ();

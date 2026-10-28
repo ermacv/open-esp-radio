@@ -387,9 +387,10 @@ impl RadioAccess {
     pub fn claim_for_host_test() -> Self {
         let (_shared, partitions) = crate::root::RadioHardware::for_host_test()
             .split::<crate::power::test_clocks::CountingBackend, _>(
-            (),
-            crate::domain::transaction::PhyIdentity::for_host_test(),
-        );
+                (),
+                crate::domain::transaction::PhyIdentity::for_host_test(),
+            )
+            .expect("identity capacity");
         let clocked = crate::ieee80211::client::WifiClocked::for_host_test(
             crate::ieee80211::client::WifiCold::from_partition(partitions.wifi),
         );
