@@ -10,6 +10,7 @@
 # interval or the measured stand profile.
 disallowed-methods = [
     # Clippy uses the nearest config; retain every common workspace ban.
+    { path = "oer_espressif_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
     { path = "oer_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
     { path = "oer_memory::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
     { path = "oer_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
