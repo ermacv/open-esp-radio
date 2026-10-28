@@ -7,9 +7,7 @@ use oer_esp32c5_hal::watchdog::{DeadlineBudget, Watchdogs};
 use oer_hil_agent::base::{Either, Intake, PanicRequest, Platform, WatchdogRequest};
 use oer_hil_agent::console::{Console as HilConsole, Immediate};
 use oer_hil_protocol::RequestIdentity;
-use oer_hil_protocol::base::{
-    BootEvidence, ImageKeySet, PostMortemCheckpoints, RejectReason, Rejected,
-};
+use oer_hil_protocol::base::{BootEvidence, PostMortemCheckpoints, RejectReason, Rejected};
 use oer_hil_protocol::feature_keys::{ImageKeys, image_keys};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 use static_cell::StaticCell;
@@ -98,7 +96,7 @@ pub(crate) async fn run(mut console: Console) {
     // derives the system-watchdog class's keys with.
     static KEYS: StaticCell<ImageKeys> = StaticCell::new();
     let keys = KEYS.init(image_keys(&|feature| feature == "system-watchdog"));
-    let intake = Intake::new(boot, ImageKeySet::new(keys), 0);
+    let intake = Intake::new(boot, keys.as_set(), 0);
     let serving = CONSOLE.run(
         usb,
         intake,

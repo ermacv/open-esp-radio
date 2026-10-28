@@ -170,3 +170,15 @@ fn inspecting_retained_temperature_cannot_make_it_fresh() {
     };
     assert_eq!(t.age_micros(100), None);
 }
+
+#[test]
+fn peer_counts_do_not_wrap_at_the_individual_field_width() {
+    let counts = Counts {
+        counters: u16::MAX,
+        signals: u16::MAX,
+        tracking: u16::MAX,
+        measurements: u16::MAX,
+    };
+    assert_eq!(counts.total(), Some(262_140));
+    assert_eq!(Counts::default().total(), Some(0));
+}

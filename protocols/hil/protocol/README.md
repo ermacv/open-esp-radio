@@ -62,3 +62,9 @@ build, and the evidence bound to its sources, reads only their files; a
 family that is off has no messages in the build. The host decodes every
 message: the `registry` feature enables every family and lists each
 message's path, key, kind, schema and readable decoder.
+
+Credential lengths are private bounded array variants, so SSID and passphrase
+access is infallible after creation or decoding. Each variant retains its
+entire inactive tail, preserving every fixed-width SSID wire byte. Explicit
+erasure zeroizes both the prefix and tail before resetting the length; the
+[credential storage contract](wifi.md#credential-storage) defines these rules.

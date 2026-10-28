@@ -108,7 +108,7 @@ impl Temperature {
     pub const fn age_micros(self, read_micros: u64) -> Option<u64> {
         match self.acquisition {
             Acquisition::Window(b) if b.valid() && b.last_micros <= read_micros => {
-                Some(read_micros - b.first_micros)
+                read_micros.checked_sub(b.first_micros)
             }
             _ => None,
         }

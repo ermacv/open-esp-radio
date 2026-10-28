@@ -56,11 +56,15 @@ pub struct Counts {
     pub measurements: u16,
 }
 impl Counts {
-    pub const fn total(self) -> usize {
-        self.counters as usize
-            + self.signals as usize
-            + self.tracking as usize
-            + self.measurements as usize
+    /// The exact count, or `None` if the host's `usize` cannot hold it.
+    pub const fn total(self) -> Option<usize> {
+        let Some(total) = (self.counters as usize).checked_add(self.signals as usize) else {
+            return None;
+        };
+        let Some(total) = total.checked_add(self.tracking as usize) else {
+            return None;
+        };
+        total.checked_add(self.measurements as usize)
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]

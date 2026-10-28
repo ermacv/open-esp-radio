@@ -24,7 +24,7 @@ use oer_espressif_executor::{Doorbell, Executor, InterruptExecutor};
 use oer_hil_agent::base::Intake;
 use oer_hil_protocol::{
     RequestIdentity,
-    base::{ImageKeySet, RejectReason, Rejected},
+    base::{RejectReason, Rejected},
     lower_mac::*,
 };
 use oer_memory::{Doorbell as RequestDoorbell, Poster, RequestSlot};
@@ -259,7 +259,7 @@ async fn radio_actor(actor: &'static mut Actor) {
 async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let keys =
         oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-lower-mac");
-    let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
+    let intake = Intake::new(boot, keys.as_set(), 0);
     let failure = transport::CONSOLE
         .run(usb, intake, &chip, |id, request: Request| {
             if REQUESTS.try_send((id, request)).is_err() {

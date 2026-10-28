@@ -258,7 +258,10 @@ fn postcard_rejects_oversized_pages_and_only_diagnostic_phy_advertises_manual_ca
             GetCalibrationStartStatus::KEY,
             ReadCalibrationSnapshot::KEY,
         ] {
-            assert_eq!(keys.contains(&key), features.contains(&"diagnostic-phy"));
+            assert_eq!(
+                keys.as_slice().contains(&key),
+                features.contains(&"diagnostic-phy")
+            );
         }
     }
 }

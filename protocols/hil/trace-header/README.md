@@ -14,3 +14,7 @@ A port's conformance crate owns its bounds (`struct Bounds` with named
 fields and `const CEILINGS: Bounds`) and needs no HIL dependency; the HIL
 agent sends `(case, header, trace)`. The `wire` feature derives
 `postcard_schema::Schema` for the HIL protocol.
+
+A run iterator that exceeds the representable case index returns
+`RunHeaderError::CaseIndexOverflow`. The final representable index remains a
+valid case index.

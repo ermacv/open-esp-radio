@@ -5,7 +5,7 @@ pub(crate) async fn console(usb: transport::Usb, boot: u64, chip: transport::Chi
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| {
         feature == "diagnostic-phy" || feature == "diagnostic-radio-health"
     });
-    let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
+    let intake = Intake::new(boot, keys.as_set(), 0);
     let failure = transport::CONSOLE
         .run(
             usb,

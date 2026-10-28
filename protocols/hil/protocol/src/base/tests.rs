@@ -169,7 +169,7 @@ const SERVED: [Key; 4] = sorted_keys([
 
 #[test]
 fn capabilities_page_out_the_same_sorted_keys_every_time() {
-    let image_keys = ImageKeySet::new(&SERVED);
+    let image_keys = ImageKeySet::new(&SERVED).unwrap();
     assert!(
         SERVED
             .windows(2)
@@ -196,7 +196,7 @@ fn capabilities_page_out_the_same_sorted_keys_every_time() {
 fn a_full_capability_page_fits_a_frame() {
     let keys: [Key; IMAGE_KEYS_PER_PAGE] =
         core::array::from_fn(|index| Key((index as u64).to_le_bytes()));
-    let page = ImageKeySet::new(&keys).page(0);
+    let page = ImageKeySet::new(&keys).unwrap().page(0);
     assert_eq!(page.keys.len(), IMAGE_KEYS_PER_PAGE);
     let expected = Envelope::new(u64::MAX, u32::MAX, u64::MAX, u32::MAX, page);
     assert_eq!(transmit(&expected), expected);

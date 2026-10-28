@@ -656,3 +656,27 @@ fn a_message_serialized_by_its_producer_frames_like_an_encoded_one() {
         .to_vec();
     assert_eq!(queued, direct);
 }
+
+#[test]
+fn invalid_internal_lengths_return_typed_errors() {
+    let header = Header {
+        kind: WireKind::Command,
+        key: <InjectPanic as crate::Message>::KEY,
+        boot_id: 1,
+        message_sequence: 2,
+        session_id: 3,
+        request_id: 4,
+    };
+    let mut encoder = FrameEncoder::new();
+    for length in [MAX_POSTCARD_BYTES + 1, u16::MAX as usize, usize::MAX] {
+        assert_eq!(encoder.frame(&header, length), Err(EncodeError::Serialize));
+    }
+    let mut decoder = FrameDecoder::new();
+    assert_eq!(
+        decoder.decode(WireKind::Command, usize::MAX),
+        Err(DecodeError::TooShort)
+    );
+    let mut remaining = &[1, 2, 3][..];
+    assert_eq!(take::<4>(&mut remaining), Err(DecodeError::TooShort));
+    assert_eq!(remaining, &[1, 2, 3]);
+}

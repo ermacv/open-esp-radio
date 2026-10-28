@@ -1,3 +1,4 @@
+#![cfg_attr(test, allow(clippy::disallowed_macros))]
 //! The registry of every message: identities are unique and well formed.
 
 use std::collections::{BTreeMap, BTreeSet};

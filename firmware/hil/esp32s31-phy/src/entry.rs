@@ -44,7 +44,7 @@ use oer_espressif_executor::{Executor, InterruptExecutor};
 use oer_hil_agent::base::Intake;
 use oer_hil_protocol::{
     RequestIdentity,
-    base::{ImageKeySet, RejectReason, Rejected},
+    base::{RejectReason, Rejected},
     phy::*,
 };
 use oer_memory::{Doorbell, Poster, RequestSlot};
@@ -280,7 +280,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 #[cfg(not(feature = "diagnostic-radio-health"))]
 async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-phy");
-    let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
+    let intake = Intake::new(boot, keys.as_set(), 0);
     let failure = transport::CONSOLE
         .run(usb, intake, &chip, |id, request: WireRequest| {
             if REQUESTS.try_send((id, Request::Wire(request))).is_err() {

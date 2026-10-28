@@ -5,7 +5,9 @@ mod boot;
 mod image_keys;
 
 pub use boot::*;
-pub use image_keys::{Hello, IMAGE_KEYS_PER_PAGE, ImageKeyPage, ImageKeySet, digest, sorted_keys};
+pub use image_keys::{
+    Hello, IMAGE_KEYS_PER_PAGE, ImageKeyPage, ImageKeySet, ImageKeySetError, digest, sorted_keys,
+};
 
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};

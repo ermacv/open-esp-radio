@@ -13,24 +13,56 @@ impl UdpProbe {
     pub const LENGTH: usize = 16;
 
     pub fn encode(self) -> [u8; Self::LENGTH] {
-        let mut bytes = [0xff; Self::LENGTH];
-        bytes[3] = if self.response { 0xfe } else { 0xff };
-        bytes[4..8].copy_from_slice(b"OERP");
-        bytes[8..].copy_from_slice(&self.nonce.to_be_bytes());
-        bytes
+        let [a, b, c, d, e, f, g, h] = self.nonce.to_be_bytes();
+        [
+            0xff,
+            0xff,
+            0xff,
+            if self.response { 0xfe } else { 0xff },
+            b'O',
+            b'E',
+            b'R',
+            b'P',
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            h,
+        ]
     }
 
     pub fn decode(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != Self::LENGTH || bytes[..3] != [0xff; 3] || &bytes[4..8] != b"OERP" {
+        let &[
+            0xff,
+            0xff,
+            0xff,
+            response,
+            b'O',
+            b'E',
+            b'R',
+            b'P',
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            h,
+        ] = bytes
+        else {
             return None;
-        }
-        let response = match bytes[3] {
+        };
+        let response = match response {
             0xff => false,
             0xfe => true,
             _ => return None,
         };
         Some(Self {
-            nonce: u64::from_be_bytes(bytes[8..].try_into().ok()?),
+            nonce: u64::from_be_bytes([a, b, c, d, e, f, g, h]),
             response,
         })
     }
