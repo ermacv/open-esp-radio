@@ -51,17 +51,17 @@ fn sparse_destination_is_directly_available_behind_a_large_bulk_backlog() {
     }
     device.transmit(packet(pool, 4, 200)).unwrap();
     assert!(!device.can_transmit());
-    let sparse = radio.try_take_for([4; 6]).unwrap();
+    let sparse = radio.try_take_for([4; 6]).unwrap().unwrap();
     assert_eq!(sparse.ethernet()[14], 200);
-    assert_eq!(radio.pending_for([2; 6]), 127);
-    assert!(radio.try_take_for([4; 6]).is_none());
+    assert_eq!(radio.pending_for([2; 6]).unwrap(), 127);
+    assert!(radio.try_take_for([4; 6]).unwrap().is_none());
     assert!(
         pool.try_alloc().is_none(),
         "selection retains its exact packet owner"
     );
     drop(sparse);
     for n in 0..127 {
-        let bulk = radio.try_take_for([2; 6]).unwrap();
+        let bulk = radio.try_take_for([2; 6]).unwrap().unwrap();
         assert_eq!(bulk.ethernet()[14], n);
     }
     assert_eq!(radio.tx_queue_len(), 0);
@@ -91,11 +91,11 @@ fn selected_wait_ignores_other_backlog_and_wakes_for_matching_publication() {
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
     assert_eq!(
         radio.poll_ready_for([4; 6], 1, &mut context),
-        Poll::Ready(())
+        Poll::Ready(Ok(()))
     );
-    drop(radio.try_take_for([4; 6]));
+    drop(radio.try_take_for([4; 6]).unwrap());
     assert_eq!(radio.poll_ready_for([4; 6], 1, &mut context), Poll::Pending);
-    assert_eq!(radio.pending_for([2; 6]), 2);
+    assert_eq!(radio.pending_for([2; 6]).unwrap(), 2);
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn selected_dequeue_cannot_retarget_owners_across_link_epochs() {
     link.set_link_up(true);
     device.transmit(packet(pool, 2, 1)).unwrap();
     device.transmit(packet(pool, 4, 2)).unwrap();
-    let old_head = radio.head_for([4; 6]).unwrap();
+    let old_head = radio.head_for([4; 6]).unwrap().unwrap();
     assert_eq!(old_head.ethernet_bytes, 15);
     link.set_link_up(false);
     link.set_link_up(true);
@@ -117,7 +117,7 @@ fn selected_dequeue_cannot_retarget_owners_across_link_epochs() {
     replacement.set_len(60);
     replacement[15..].fill(0);
     device.transmit(replacement).unwrap();
-    let claimed = radio.try_take_for([4; 6]).unwrap();
+    let claimed = radio.try_take_for([4; 6]).unwrap().unwrap();
     assert_eq!(claimed.ethernet()[14], 3);
     assert_eq!(claimed.ethernet().len(), 60);
     assert_ne!(
@@ -125,7 +125,7 @@ fn selected_dequeue_cannot_retarget_owners_across_link_epochs() {
         old_head.ethernet_bytes,
         "a demand snapshot cannot authorize geometry across a link epoch"
     );
-    assert!(radio.try_take_for([2; 6]).is_none());
+    assert!(radio.try_take_for([2; 6]).unwrap().is_none());
     assert_eq!(radio.tx_queue_len(), 0);
 }
 
@@ -144,12 +144,12 @@ fn an_any_destination_wait_wakes_for_the_first_publication_to_any_destination() 
     assert_eq!(radio.poll_ready_any(&mut context), Poll::Pending);
     device.transmit(packet(pool, 9, 1)).unwrap();
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
-    assert_eq!(radio.poll_ready_any(&mut context), Poll::Ready(()));
+    assert_eq!(radio.poll_ready_any(&mut context), Poll::Ready(Ok(())));
     // A ready check consumes the registration: the next publication does not
     // wake a radio that is not waiting.
     device.transmit(packet(pool, 4, 2)).unwrap();
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
-    drop(radio.try_take_for([9; 6]));
-    drop(radio.try_take_for([4; 6]));
+    drop(radio.try_take_for([9; 6]).unwrap());
+    drop(radio.try_take_for([4; 6]).unwrap());
     assert_eq!(radio.poll_ready_any(&mut context), Poll::Pending);
 }

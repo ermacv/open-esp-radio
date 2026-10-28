@@ -538,7 +538,7 @@ pub struct OwnedNetworkRunner<
 /// lets a radio adapter compose the software owner queue with its private SRAM
 /// allocator without depending on the queue's compile-time depth.
 pub trait OwnedTxFrameSource<'resources, M: RawMutex + 'resources>:
-    DestinationTxQueues<Frame = OwnedNetworkTxFrame<'resources, M>>
+    DestinationTxQueues<Frame = OwnedNetworkTxFrame<'resources, M>, Error = core::convert::Infallible>
 {
     fn interface(&self) -> NetworkInterfaceId;
     fn queue_len(&self) -> usize;
@@ -648,17 +648,21 @@ impl<'resources, M: RawMutex, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH:
     DestinationTxQueues for OwnedNetworkRunner<'resources, M, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>
 {
     type Frame = OwnedNetworkTxFrame<'resources, M>;
+    type Error = core::convert::Infallible;
 
-    fn next_head_after(&self, after: Option<[u8; 6]>) -> Option<([u8; 6], DestinationTxHead)> {
-        self.tx.next_head_after(after)
+    fn next_head_after(
+        &self,
+        after: Option<[u8; 6]>,
+    ) -> Result<Option<([u8; 6], DestinationTxHead)>, Self::Error> {
+        Ok(self.tx.next_head_after(after))
     }
 
-    fn head_for(&self, destination: [u8; 6]) -> Option<DestinationTxHead> {
-        self.tx.head_for(destination)
+    fn head_for(&self, destination: [u8; 6]) -> Result<Option<DestinationTxHead>, Self::Error> {
+        Ok(self.tx.head_for(destination))
     }
 
-    fn try_take_for(&self, destination: [u8; 6]) -> Option<Self::Frame> {
-        self.take_tx(Some(destination))
+    fn try_take_for(&self, destination: [u8; 6]) -> Result<Option<Self::Frame>, Self::Error> {
+        Ok(self.take_tx(Some(destination)))
     }
 
     fn poll_ready_for(
@@ -666,12 +670,14 @@ impl<'resources, M: RawMutex, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH:
         destination: [u8; 6],
         minimum: usize,
         context: &mut Context<'_>,
-    ) -> Poll<()> {
-        self.tx.poll_ready_for(destination, minimum, context)
+    ) -> Poll<Result<(), Self::Error>> {
+        self.tx
+            .poll_ready_for(destination, minimum, context)
+            .map(Ok)
     }
 
-    fn poll_ready_any(&self, context: &mut Context<'_>) -> Poll<()> {
-        self.tx.poll_ready_any(context)
+    fn poll_ready_any(&self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.tx.poll_ready_any(context).map(Ok)
     }
 }
 

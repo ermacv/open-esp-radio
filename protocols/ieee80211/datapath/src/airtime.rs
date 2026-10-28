@@ -27,9 +27,9 @@ struct Account<K> {
 }
 
 #[derive(Clone, Copy)]
-struct Pending {
+struct Pending<K> {
     id: u64,
-    account: usize,
+    key: K,
     budget: u32,
 }
 
@@ -144,6 +144,25 @@ pub enum AirtimeError {
     UnknownReservation,
     WrongScheduler,
     ArithmeticOverflow,
+    /// Eligible demand remained unfunded after checked round advancement.
+    UnfundedDemand {
+        cursor: usize,
+    },
+}
+
+fn funded_account<K>(
+    accounts: &mut [Option<Account<K>>],
+    cursor: usize,
+) -> Result<(usize, &mut Account<K>), AirtimeError> {
+    accounts
+        .iter_mut()
+        .enumerate()
+        .filter_map(|(index, slot)| slot.as_mut().map(|account| (index, account)))
+        .filter(|(_, account)| {
+            account.minimum != 0 && account.balance >= i64::from(account.minimum)
+        })
+        .min_by_key(|(index, _)| (*index < cursor, *index))
+        .ok_or(AirtimeError::UnfundedDemand { cursor })
 }
 
 /// Stable CPU metadata for one airtime ledger. No packet or DMA storage.
@@ -173,7 +192,7 @@ pub struct AirtimeStorage<K, const PEERS: usize, const RESERVATIONS: usize = 2> 
 
 struct State<K, const PEERS: usize, const RESERVATIONS: usize> {
     accounts: [Option<Account<K>>; PEERS],
-    pending: [Option<Pending>; RESERVATIONS],
+    pending: [Option<Pending<K>>; RESERVATIONS],
     quantum: NonZeroU32,
     cursor: usize,
     next_id: u64,
@@ -197,7 +216,14 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
     /// ```
     pub const fn new(quantum_micros: NonZeroU32) -> Self {
         const {
-            assert!(PEERS > 0 && RESERVATIONS > 0);
+            if PEERS == 0 || RESERVATIONS == 0 {
+                panic!("airtime storage needs peers and reservations");
+            }
+            // Each observation counts at most this many u32 budgets, so its
+            // u32 count and u64 sum are representable on every target.
+            if RESERVATIONS > u32::MAX as usize {
+                panic!("airtime observation reservation count must fit u32");
+            }
         }
         Self {
             identity: 0,
@@ -254,57 +280,59 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         &mut self,
         candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
     ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
-        let pending_index = self
+        let pending = self
             .state
             .pending
-            .iter()
-            .position(Option::is_none)
+            .iter_mut()
+            .find(|slot| slot.is_none())
             .ok_or(AirtimeError::ReservationCapacity)?;
-        // Keep candidate admission atomic. This bounded value-only copy owns
-        // no packets, does not allocate, and never crosses an await boundary.
+        // Admission is transactional: this bounded copy owns no packets.
         let mut accounts = self.state.accounts;
         for account in accounts.iter_mut().flatten() {
             account.minimum = 0;
         }
         for candidate in candidates {
-            let index = accounts
-                .iter()
-                .position(|a| a.is_some_and(|a| a.key == candidate.key))
-                .or_else(|| accounts.iter().position(Option::is_none))
-                .ok_or(AirtimeError::AccountCapacity)?;
-            let account = accounts[index].get_or_insert(Account {
-                key: candidate.key,
-                balance: 0,
-                minimum: 0,
-                retired: false,
-            });
-            if account.retired {
-                return Err(AirtimeError::RetiredKey);
+            if let Some(account) = accounts
+                .iter_mut()
+                .flatten()
+                .find(|a| a.key == candidate.key)
+            {
+                if account.retired {
+                    return Err(AirtimeError::RetiredKey);
+                }
+                account.minimum = account.minimum.max(candidate.minimum_micros.get());
+            } else {
+                let slot = accounts
+                    .iter_mut()
+                    .find(|slot| slot.is_none())
+                    .ok_or(AirtimeError::AccountCapacity)?;
+                *slot = Some(Account {
+                    key: candidate.key,
+                    balance: 0,
+                    minimum: candidate.minimum_micros.get(),
+                    retired: false,
+                });
             }
-            account.minimum = account.minimum.max(candidate.minimum_micros.get());
         }
         for account in accounts.iter_mut().flatten() {
             if account.minimum == 0 {
                 account.balance = account.balance.min(0);
             }
         }
-        let choose = |accounts: &[Option<Account<K>>; PEERS]| {
-            (0..PEERS)
-                .map(|offset| (self.state.cursor + offset) % PEERS)
-                .find(|&i| {
-                    accounts[i].is_some_and(|a| a.minimum != 0 && a.balance >= i64::from(a.minimum))
-                })
-        };
-        let selected = if let Some(index) = choose(&accounts) {
-            index
-        } else {
+        if !accounts
+            .iter()
+            .flatten()
+            .any(|a| a.minimum != 0 && a.balance >= i64::from(a.minimum))
+        {
             let quantum = i64::from(self.state.quantum.get());
             let mut rounds: Option<i64> = None;
             for account in accounts.iter().flatten().filter(|a| a.minimum != 0) {
-                let needed = i64::from(account.minimum)
+                let required = i64::from(account.minimum)
                     .checked_sub(account.balance)
+                    .and_then(|needed| needed.checked_sub(1))
+                    .and_then(|needed| needed.checked_div(quantum))
+                    .and_then(|rounds| rounds.checked_add(1))
                     .ok_or(AirtimeError::ArithmeticOverflow)?;
-                let required = (needed - 1) / quantum + 1;
                 rounds = Some(rounds.map_or(required, |old| old.min(required)));
             }
             let Some(rounds) = rounds else {
@@ -320,9 +348,8 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
                     .checked_add(credit)
                     .ok_or(AirtimeError::ArithmeticOverflow)?;
             }
-            choose(&accounts).expect("one eligible minimum was funded")
-        };
-        let account = accounts[selected].as_mut().expect("selected account");
+        }
+        let (selected, account) = funded_account(&mut accounts, self.state.cursor)?;
         let budget = u32::try_from(account.balance.min(i64::from(u32::MAX)))
             .ok()
             .and_then(NonZeroU32::new)
@@ -338,16 +365,25 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             id,
             budget,
         };
-        account.balance -= i64::from(budget.get());
+        account.balance = account
+            .balance
+            .checked_sub(i64::from(budget.get()))
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        let observed = *account;
+        // The cursor wraps at the bounded peer arena, rather than at usize::MAX.
+        let cursor = selected
+            .wrapping_add(1)
+            .checked_rem(PEERS)
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
         self.state.accounts = accounts;
-        self.state.pending[pending_index] = Some(Pending {
+        *pending = Some(Pending {
             id,
-            account: selected,
+            key: observed.key,
             budget: budget.get(),
         });
         self.state.next_id = id;
-        self.state.cursor = (selected + 1) % PEERS;
-        self.observe(selected, AirtimeAction::Granted, budget.get(), 0);
+        self.state.cursor = cursor;
+        self.observe(observed, AirtimeAction::Granted, budget.get(), 0);
         Ok(Some(reservation))
     }
 
@@ -391,22 +427,29 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         if reservation.origin != self.origin {
             return Err((AirtimeError::WrongScheduler, reservation));
         }
-        let Some(index) = self.state.pending.iter().position(|p| {
-            p.is_some_and(|p| {
+        let Some(slot) = self.state.pending.iter_mut().find(|slot| {
+            slot.as_ref().is_some_and(|p| {
                 p.id == reservation.id
                     && p.budget == reservation.budget.get()
-                    && self.state.accounts[p.account].is_some_and(|a| a.key == reservation.key)
+                    && p.key == reservation.key
             })
         }) else {
             return Err((AirtimeError::UnknownReservation, reservation));
         };
-        let pending = self.state.pending[index].expect("checked pending reservation");
-        let account = self.state.accounts[pending.account]
-            .as_mut()
-            .expect("pending pins account");
-        let Some(balance) = account
-            .balance
-            .checked_add(i64::from(pending.budget) - i64::from(charged))
+        let Some(account_slot) = self
+            .state
+            .accounts
+            .iter_mut()
+            .find(|a| a.as_ref().is_some_and(|a| a.key == reservation.key))
+        else {
+            return Err((AirtimeError::UnknownReservation, reservation));
+        };
+        let Some(account) = account_slot.as_mut() else {
+            return Err((AirtimeError::UnknownReservation, reservation));
+        };
+        let Some(balance) = i64::from(reservation.budget.get())
+            .checked_sub(i64::from(charged))
+            .and_then(|refund| account.balance.checked_add(refund))
         else {
             return Err((AirtimeError::ArithmeticOverflow, reservation));
         };
@@ -415,69 +458,55 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         } else {
             balance
         };
-        self.state.pending[index] = None;
-        self.observe(
-            pending.account,
-            if charged == 0 {
-                AirtimeAction::Cancelled
-            } else {
-                AirtimeAction::Settled
-            },
-            pending.budget,
-            charged,
-        );
-        let account = self.state.accounts[pending.account]
-            .as_ref()
-            .expect("pending pins account");
+        let observed = *account;
+        *slot = None;
         if account.retired
             && !self
                 .state
                 .pending
                 .iter()
                 .flatten()
-                .any(|p| p.account == pending.account)
+                .any(|p| p.key == account.key)
         {
-            self.state.accounts[pending.account] = None;
+            *account_slot = None;
         }
+        self.observe(
+            observed,
+            if charged == 0 {
+                AirtimeAction::Cancelled
+            } else {
+                AirtimeAction::Settled
+            },
+            reservation.budget.get(),
+            charged,
+        );
         Ok(())
     }
 
     /// End one radio association. Outstanding completions keep their old
     /// account pinned and cannot debit a newly associated generation's key.
     pub fn retire(&mut self, key: K) {
-        let Some(index) = self
-            .state
-            .accounts
-            .iter()
-            .position(|a| a.is_some_and(|a| a.key == key))
-        else {
-            return;
-        };
-        if self
-            .state
-            .pending
-            .iter()
-            .flatten()
-            .any(|p| p.account == index)
-        {
-            let account = self.state.accounts[index]
-                .as_mut()
-                .expect("checked account");
-            account.retired = true;
-            account.minimum = 0;
-        } else {
-            self.state.accounts[index] = None;
-        }
+        self.retire_where(|candidate| candidate == key);
     }
 
-    /// Retire matching generations without exposing account storage. Pending
-    /// tokens keep their old accounts pinned until cancellation or settlement.
+    /// Retire matching generations; pending tokens pin their old accounts.
     pub fn retire_where(&mut self, mut retired: impl FnMut(K) -> bool) {
-        for index in 0..PEERS {
-            if let Some(key) = self.state.accounts[index].map(|account| account.key)
-                && retired(key)
+        for slot in &mut self.state.accounts {
+            if let Some(account) = slot.as_mut()
+                && retired(account.key)
             {
-                self.retire(key);
+                if self
+                    .state
+                    .pending
+                    .iter()
+                    .flatten()
+                    .any(|p| p.key == account.key)
+                {
+                    account.retired = true;
+                    account.minimum = 0;
+                } else {
+                    *slot = None;
+                }
             }
         }
     }
@@ -494,4 +523,9 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects
+)]
 mod tests;

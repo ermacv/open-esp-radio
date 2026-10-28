@@ -50,7 +50,7 @@ fn retained_frames_share_admission_with_queued_frames() {
     device.register_waker(&Waker::from(wakes.clone()));
     device.transmit(packet(pool, 2)).unwrap();
     device.transmit(packet(pool, 4)).unwrap();
-    let retained = radio.try_take_for([2; 6]).unwrap();
+    let retained = radio.try_take_for([2; 6]).unwrap().unwrap();
     assert_eq!(radio.tx_queue_len(), 1);
     assert!(
         !device.can_transmit(),
@@ -105,7 +105,7 @@ fn stale_queue_disposal_returns_credit_without_revoking_retained_owners() {
     link.set_link_up(true);
     device.transmit(packet(pool, 2)).unwrap();
     device.transmit(packet(pool, 4)).unwrap();
-    let retained = radio.try_take_for([2; 6]).unwrap();
+    let retained = radio.try_take_for([2; 6]).unwrap().unwrap();
     link.set_link_up(false);
     link.set_link_up(true);
     assert!(radio.try_receive_tx().is_none());
