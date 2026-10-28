@@ -78,7 +78,7 @@ pub struct DetachedIeee802154Engine {
 
 /// Rejected placement returns both unchanged affine owners.
 pub struct PlacementRefusal<Ll> {
-    pub error: oer_esp32s31_hal::dma_address::ProjectionError,
+    pub error: oer_esp32s31_hal::memory::dma_address::ProjectionError,
     pub mac: Ll,
     pub buffers: Placed<Ieee802154EngineBuffers>,
 }

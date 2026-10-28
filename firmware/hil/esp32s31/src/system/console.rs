@@ -4,7 +4,7 @@
 //! pads.
 use oer_esp32s31_compose::Esp32s31;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use oer_esp32s31_hal::watchdog::{
+use oer_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, DeadlineBudget, MainWatchdog, Mwdt1Registers, RwdtRegisters,
 };
 use oer_hil_protocol::RequestIdentity;
@@ -17,14 +17,14 @@ use oer_hil_agent::base::{Either, PanicRequest, WatchdogRequest};
 /// The SoC deadline service on timer group 1's main watchdog, measured on
 /// the image clock.
 pub(crate) type DeadlineWatchdog =
-    oer_esp32s31_hal::watchdog::DeadlineWatchdog<oer_embassy_time::EmbassyClock>;
+    oer_esp32s31_hal::peripherals::watchdog::DeadlineWatchdog<oer_embassy_time::EmbassyClock>;
 
 /// Watchdog tests the console handed over, one at a time.
 static TESTS: Channel<CriticalSectionRawMutex, (RequestIdentity, WatchdogTestMode), 1> =
     Channel::new();
 
 /// The USB Serial/JTAG's pads.
-type Pads = oer_esp32s31_hal::usb_serial_jtag::UsbPads;
+type Pads = oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads;
 
 oer_espressif_executor::tasks! {
     /// The watchdog image's tasks.

@@ -44,7 +44,7 @@
 //! watchdog: [`software_reset`] returns [`AwaitWatchdog`] after the console's
 //! fatal note (if the block is free), and the path halts its masked hart
 //! until the RTC watchdog, which stage two arms when it takes its watchdogs
-//! ([`crate::watchdog::Watchdogs`]), resets the chip; no second owner of the
+//! ([`crate::peripherals::watchdog::Watchdogs`]), resets the chip; no second owner of the
 //! words is made.
 
 use core::{
@@ -546,7 +546,7 @@ pub fn software_reset(fatal: Fatal<'_>) -> AwaitWatchdog {
         },
         Err(reason) => {
             let _held_or_written =
-                crate::usb_serial_jtag::fatal_note(&Note::runtime_fail(RESET_UNPREPARED));
+                crate::peripherals::usb_serial_jtag::fatal_note(&Note::runtime_fail(RESET_UNPREPARED));
             AwaitWatchdog { reason }
         }
     }

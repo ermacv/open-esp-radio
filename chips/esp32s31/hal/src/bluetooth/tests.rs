@@ -313,7 +313,7 @@ fn a_scanner_starts_only_on_the_scanning_list_of_its_own_epoch() {
     let (mut task, _interrupts) = clocked.separate_interrupt_owner();
     let current = task.epoch;
     assert_ne!(ended, current, "a new task owner starts a new epoch");
-    let head = crate::dma_address::model_reference(0x2f00_1000);
+    let head = crate::memory::dma_address::model_reference(0x2f00_1000);
     let published = |scanning, epoch| RxMemoryListPublished {
         selector: BluetoothMemoryListSelector::One,
         head,

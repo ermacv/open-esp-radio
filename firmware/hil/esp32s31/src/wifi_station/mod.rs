@@ -27,7 +27,7 @@ use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::platform::FromCpu3Irq;
 use oer_esp32s31_hal::power::ChipClocks;
-use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RwdtRegisters};
+use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RwdtRegisters};
 use oer_esp32s31_ieee80211_driver::irq::WifiIrqPart;
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,

@@ -82,7 +82,7 @@ fn reset_retains_the_previous_upper_pointer_lane_and_opaque_event_lanes() {
     let mut initial = zero_link_state();
     initial.word_00 = BleLinkStateTxPath::from_bits(
         BleLinkStateTxPath::ZERO
-            .with_header(Some(crate::dma_address::model_reference(0x2f04_2000)))
+            .with_header(Some(crate::memory::dma_address::model_reference(0x2f04_2000)))
             .expect("previous bound cursor")
             .bits()
             | 0x6000_0000,

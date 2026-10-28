@@ -23,7 +23,7 @@ fn pool() -> LegacyAdvertisingPool<'static, 'static, 2> {
         .advertising(2, 2)
         .unwrap();
     LegacyAdvertisingPool::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")

@@ -5,7 +5,7 @@ use super::*;
 
 fn table() -> LeDeviceTable {
     LeDeviceTable::place::<crate::bluetooth::engine::HostDma<0x2f07_e508>>(
-        crate::dma_static::Placed::host(Box::leak(Box::new(LeDeviceTableStorage::zeroed()))),
+        crate::memory::dma_static::Placed::host(Box::leak(Box::new(LeDeviceTableStorage::zeroed()))),
     )
 }
 

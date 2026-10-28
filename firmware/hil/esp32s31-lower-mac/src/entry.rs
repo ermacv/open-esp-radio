@@ -36,7 +36,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
-    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio interrupt (P3): both Wi-Fi MAC banks and the doorbell.
@@ -99,7 +99,7 @@ pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
-    oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start(
+    oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start(
         oer_diagnostics::name!("lower-mac"),
     ));
     let Some(root) = Root::take() else {
@@ -256,7 +256,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 /// no one holds the block.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_path| {
-        let _note = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
+        let _note = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
         );
     })

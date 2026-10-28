@@ -4,7 +4,7 @@ use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use super::*;
 
-use oer_esp32s31_hal::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
+use oer_esp32s31_hal::memory::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
 
 /// A host pool, as if placed: its radio leases are the placed leases
 /// A-MPDU takes.
@@ -327,7 +327,7 @@ fn released_slot<const CAPACITY: usize, const DEPTH: usize>(
 
 /// Publish the committed HT aggregate, then complete and detach it the way
 /// the MAC reports a finished exchange.
-fn complete_and_detach<B: oer_esp32s31_hal::dma_static::PlacedBacking, const SLOTS: usize>(
+fn complete_and_detach<B: oer_esp32s31_hal::memory::dma_static::PlacedBacking, const SLOTS: usize>(
     owner: &mut RetainedDmaAmpduTx<'_, B, SLOTS>,
     cookie: TxCookie,
     rate: HtRate,

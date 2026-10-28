@@ -52,7 +52,7 @@ type Shared = Esp32s31Radio<
 type Actor = RadioSystem<Wifi, RcSlow, Shared, EmbassyClock>;
 type Arena = BluetoothArena<0, 0, 0, 0, 0, 0>;
 mod lifecycle;
-oer_esp32s31_hal::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.dtm";}
+oer_esp32s31_hal::memory::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.dtm";}
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
@@ -67,7 +67,7 @@ oer_espressif_executor::tasks! {
     pub(crate) AppTasks: Executor<Esp32s31, 0> {
         serve(
             console: host::Console,
-            pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+            pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
             rng: host::Rng,
             channel: bridge::FrontendChannel,
             power: TxPower,

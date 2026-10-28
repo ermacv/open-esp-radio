@@ -505,7 +505,7 @@ mod tests {
         let storage = std::boxed::Box::leak(std::boxed::Box::new(
             RxDmaStorage::<2, 16, 16, HostDma>::new(),
         ));
-        let placed = RxDmaStorage::place(crate::dma_static::Placed::host(storage)).unwrap();
+        let placed = RxDmaStorage::place(crate::memory::dma_static::Placed::host(storage)).unwrap();
         let storage = placed.storage();
         let base = placed.descriptor_base();
         let reserved = base + 2 * DESCRIPTOR_BYTES;

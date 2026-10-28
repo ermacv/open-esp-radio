@@ -1,5 +1,5 @@
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::usb_serial_jtag::{
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
@@ -11,11 +11,11 @@ pub(crate) struct EarlyUsb;
 
 impl Immediate for EarlyUsb {
     fn note(note: &oer_diagnostics::Note<'_>) -> bool {
-        oer_esp32s31_hal::usb_serial_jtag::early_note(note)
+        oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(note)
     }
 
     fn take_lost() -> u32 {
-        oer_esp32s31_hal::usb_serial_jtag::take_early_lost()
+        oer_esp32s31_hal::peripherals::usb_serial_jtag::take_early_lost()
     }
 }
 

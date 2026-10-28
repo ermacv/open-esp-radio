@@ -19,7 +19,7 @@ impl Immediate for EarlyUsb {
     }
 
     fn take_lost() -> u32 {
-        oer_esp32s31_hal::usb_serial_jtag::take_early_lost()
+        oer_esp32s31_hal::peripherals::usb_serial_jtag::take_early_lost()
     }
 }
 

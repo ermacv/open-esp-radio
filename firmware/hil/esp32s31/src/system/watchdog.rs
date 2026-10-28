@@ -1,6 +1,6 @@
 //! Destructive tests of the SoC deadline service, without a radio owner.
 use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_hal::watchdog::DeadlineLease;
+use oer_esp32s31_hal::peripherals::watchdog::DeadlineLease;
 /// Deliberately leave the real SoC service armed; no radio implementation is
 /// replaced. This verifies service cancellation, not an injected PHY failure.
 pub(super) async fn inject(

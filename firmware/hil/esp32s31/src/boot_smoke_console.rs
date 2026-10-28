@@ -13,14 +13,14 @@ use crate::boot_smoke_rearm::Measurement;
 pub(crate) struct BootSmokeConsole {
     usb: crate::usb::Console,
     /// The console's pads, kept so that nothing switches them off.
-    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
 }
 
 impl BootSmokeConsole {
     pub(crate) fn new(
         (usb, pads): (
             crate::usb::Console,
-            oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+            oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
         ),
     ) -> Self {
         Self { usb, _pads: pads }

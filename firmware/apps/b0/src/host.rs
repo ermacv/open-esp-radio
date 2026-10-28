@@ -37,7 +37,7 @@ impl Entropy for RandomValue {
 struct Io {
     console: Console,
     /// The console's pads, held so that nothing switches them off.
-    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     inbox: Inbox,
     rng: Rng,
     commands: Commands,
@@ -160,7 +160,7 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
 }
 pub async fn serve(
     console: Console,
-    pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     rng: Rng,
     channel: bridge::FrontendChannel,
     power: TxPower,

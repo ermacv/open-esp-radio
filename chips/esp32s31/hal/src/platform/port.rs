@@ -53,7 +53,7 @@ pub(crate) fn publish_debug_status(peripherals: DebugPeripherals) {
 impl port::EarlyText for Port {
     #[inline(always)]
     fn text(bytes: &[u8]) -> bool {
-        crate::usb_serial_jtag::early_text(bytes)
+        crate::peripherals::usb_serial_jtag::early_text(bytes)
     }
 }
 

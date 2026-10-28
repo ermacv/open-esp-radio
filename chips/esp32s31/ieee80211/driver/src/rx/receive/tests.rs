@@ -423,7 +423,7 @@ where
     let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, X, HostDma> =
         leak(bytemuck::Zeroable::zeroed());
     let (parts, stop, frames) =
-        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena), signals)
+        WifiRxArena::bind(oer_esp32s31_hal::memory::dma_static::Placed::host(arena), signals)
             .expect("a zeroed arena binds");
     let (rx, base) = (parts.rx(), parts.descriptor_base());
     let (requests, counters) = (parts.requests(), parts.counters());
@@ -1045,7 +1045,7 @@ fn cold_start_refuses_an_occupied_cell_without_opening_mac() {
     let host: &Host = Host::leaked();
     let arena: &'static mut HostStatic = leak(bytemuck::Zeroable::zeroed());
     let (parts, mut stop, _frames) = WifiRxArena::bind(
-        oer_esp32s31_hal::dma_static::Placed::host(arena),
+        oer_esp32s31_hal::memory::dma_static::Placed::host(arena),
         crate::rx::arena::WifiIrqSignals {
             mac: oer_espressif_interrupt_table::signal::host::signal().0,
             power: oer_espressif_interrupt_table::signal::host::signal().0,

@@ -85,7 +85,7 @@ impl<M: ControllerMemory> EngineResetTimerPending<M> {
 /// CPU ownership returns only after the matching controller reset succeeds.
 pub struct EngineShutDown<M: ControllerMemory> {
     pub clocked: bluetooth::ClockedOwner,
-    pub arena: crate::dma_static::Placed<M::Storage>,
+    pub arena: crate::memory::dma_static::Placed<M::Storage>,
     pub reset: bluetooth::BluetoothControllerReset,
     /// Pending sampled before LP quieting; returning the arena does not discard it.
     pub pending: bluetooth::BluetoothModemLpTimerPendingObservation,

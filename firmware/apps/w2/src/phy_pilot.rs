@@ -1,7 +1,7 @@
 //! Image binding of the SAR/PWDET pilot to the measured P2 line pair.
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::domain::transaction::{Fault, FaultReason, SarSetupFault, SarSetupStorage};
-use oer_esp32s31_hal::platform::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmParts};
+use oer_esp32s31_hal::peripherals::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmParts};
 use oer_esp32s31_phy::sar_pilot;
 use oer_espressif_executor::InterruptExecutor;
 use oer_espressif_interrupt_table::{

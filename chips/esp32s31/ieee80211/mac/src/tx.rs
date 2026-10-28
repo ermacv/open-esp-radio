@@ -3147,7 +3147,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     pub fn new_model() -> Result<Self, TxDmaStorageError> {
         let storage = Box::leak(Box::new(TxDmaStorage::new()));
         let dma = TxDmaStorage::pin::<oer_esp32s31_hal::ieee80211::dma::space::HostDma>(
-            oer_esp32s31_hal::dma_static::Placed::host(storage),
+            oer_esp32s31_hal::memory::dma_static::Placed::host(storage),
         )?;
         Ok(Self::from_dma(dma))
     }

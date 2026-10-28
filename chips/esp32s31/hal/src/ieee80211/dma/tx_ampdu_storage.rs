@@ -4,11 +4,11 @@
 //! External zero-copy aggregates receive prepare/start authority only through
 //! an owner which also retains every referenced [`StableDmaBacking`](oer_memory::StableDmaBacking) lease.
 
-use crate::dma_address::{PlacedRegion, PlacedSlots, PlacedTable};
+use crate::memory::dma_address::{PlacedRegion, PlacedSlots, PlacedTable};
 use crate::ieee80211::dma::space::DmaSpace;
 use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
 
-use crate::dma_static::{Placed, PlacedBacking};
+use crate::memory::dma_static::{Placed, PlacedBacking};
 use crate::types::MacTxQueueDetached;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;

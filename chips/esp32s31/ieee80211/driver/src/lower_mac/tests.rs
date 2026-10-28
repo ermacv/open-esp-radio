@@ -30,7 +30,7 @@ use oer_ieee80211_wire::{
     sequence::SequenceNumber,
 };
 
-use oer_esp32s31_hal::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
+use oer_esp32s31_hal::memory::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
 use oer_memory::{
     DmaIndexReturn, PinnedDmaTxPool, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
 };

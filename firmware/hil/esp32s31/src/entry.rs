@@ -37,8 +37,8 @@ use embassy_time::{Duration, Timer};
 use oer_esp32s31_hal::platform::{FromCpu0Irq, SystimerAlarm0};
 #[cfg(feature = "wifi-station")]
 use oer_esp32s31_hal::platform::{FromCpu2Irq, SystimerAlarm1};
-use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::Executor;
 
 #[cfg(feature = "wifi-station")]
@@ -63,7 +63,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     #[cfg(feature = "wifi-station")]
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
-    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     #[cfg(feature = "wifi-station")]
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<wifi_station::RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;

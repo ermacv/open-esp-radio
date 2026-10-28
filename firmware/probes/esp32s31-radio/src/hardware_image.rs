@@ -114,7 +114,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 }
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_| {
-        let _ = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
+        let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
         );
     })

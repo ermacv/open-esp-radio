@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::dma_static::PlacedTxLease;
+use oer_esp32s31_hal::memory::dma_static::PlacedTxLease;
 use oer_memory::{PinnedDmaTxRadioLease, StableDmaBacking};
 
 type Lease = PinnedDmaTxRadioLease<'static, 64, 0, 0>;

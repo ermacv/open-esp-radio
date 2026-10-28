@@ -46,7 +46,7 @@ pub(crate) fn report_previous() {
     if let Some(previous) = runtime::panic::take_previous::<oer_esp32s31_hal::platform::Port>() {
         let _ = runtime::diagnostics::emit_previous_panic(
             |bytes| {
-                if oer_esp32s31_hal::usb_serial_jtag::early_text(bytes) {
+                if oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes) {
                     Ok(())
                 } else {
                     Err(())
@@ -69,13 +69,13 @@ pub(crate) fn report_previous() {
     } else {
         oer_diagnostics::Note::fatal_panic(hart, phase, cause, pc, tval)
     };
-    let _ = oer_esp32s31_hal::usb_serial_jtag::early_note(&note);
+    let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(&note);
     use core::fmt::Write as _;
     let mut line = heapless::String::<80>::new();
     if writeln!(&mut line, "RXCHAIN previous kind={kind} phase={phase}").is_ok() {
-        let _ = oer_esp32s31_hal::usb_serial_jtag::early_text(line.as_bytes());
+        let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(line.as_bytes());
     }
-    let _ = oer_esp32s31_hal::usb_serial_jtag::early_text(
+    let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(
         b"OER-RESULT: fail rx-chain previous-fault\n",
     );
     runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_| {});

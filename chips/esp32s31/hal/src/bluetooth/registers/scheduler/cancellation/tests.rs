@@ -98,7 +98,7 @@ impl BluetoothSchedulerCancellationControl for Recorder {
 
 #[test]
 fn a_skip_request_is_published_observed_and_cleared_in_order() {
-    let address = crate::dma_address::model_reference(0x2f00_0080);
+    let address = crate::memory::dma_address::model_reference(0x2f00_0080);
     let request = BluetoothSchedulerSkipRequest::new(address, index(0));
     let mut recorder = Recorder::new();
 

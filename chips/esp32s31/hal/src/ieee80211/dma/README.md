@@ -80,7 +80,7 @@ These bounded 32-descriptor W1 observations do not prove general DMA quiescence.
 [`PinnedTxDmaStorage`](tx_storage.rs) permanently retains its allocation.
 Dropping the movable owner does not free or detach hardware-visible memory.
 External aggregate retention takes only `PlacedBacking` leases (a placed
-TX pool's, `oer_esp32s31_hal::dma_static`), whose addresses it publishes
+TX pool's, `oer_esp32s31_hal::memory::dma_static`), whose addresses it publishes
 without a window check, and stores them without automatic destruction.
 Only cancellation before publication or a proven detach releases them. Safe
 `forget` of an aggregate owner followed by destruction of its local retention

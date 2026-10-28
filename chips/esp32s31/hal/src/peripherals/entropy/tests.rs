@@ -1,15 +1,12 @@
-//! The platform owners over host memory and a stepping clock.
+//! The generator over host memory and a stepping clock.
 
 use core::cell::Cell;
 use std::{vec, vec::Vec};
 
-use oer_esp32s31_knowledge::reset_cause::ResetCause;
+use oer_esp32s31_pac::instances;
 use oer_time::{Clock, Instant};
 
-use super::{
-    EfuseRegisters, Entropy, EntropyRegisters, FactoryIdentity, Hart, Interface, READ_GAP,
-    ResetCauseRegisters, ResetCauses,
-};
+use super::{Entropy, EntropyRegisters, READ_GAP};
 
 /// A clock that advances one microsecond at every read and counts them.
 struct Stepping(Cell<u64>);
@@ -25,48 +22,6 @@ impl Clock for Stepping {
 /// Host memory of `bytes` bytes, each word `fill`.
 fn memory(bytes: usize, fill: u32) -> Vec<u32> {
     vec![fill; bytes.div_ceil(4)]
-}
-
-use oer_esp32s31_pac::instances;
-
-#[test]
-fn the_identity_derives_each_interface_address_from_the_factory_mac() {
-    let mut words = memory(instances::efuse::SIZE, 0x0011_2033);
-    let identity = FactoryIdentity::read(
-        EfuseRegisters::host(&mut words).expect("host memory holds the block"),
-    );
-    let base = identity.base_mac();
-    assert_eq!(base, [0x20, 0x33, 0x00, 0x11, 0x20, 0x33]);
-    assert_eq!(identity.mac_extension(), 0x0011);
-    assert_eq!(identity.address(Interface::Station), base);
-    assert_eq!(
-        identity.address(Interface::AccessPoint),
-        [0x22, 0x33, 0x00, 0x11, 0x20, 0x33]
-    );
-}
-
-#[test]
-fn reset_causes_decode_each_core_with_the_chip_table() {
-    let mut words = memory(instances::lp_aon_clkrst::SIZE, 0b111);
-    let causes = ResetCauses::read(
-        ResetCauseRegisters::host(&mut words).expect("host memory holds the block"),
-    );
-    assert_eq!(
-        causes.of(crate::platform::BOOT_HART),
-        ResetCause::CoreSoftware
-    );
-    assert_eq!(
-        causes.of(Hart::SECONDARIES[0].hart()),
-        ResetCause::CoreSoftware
-    );
-    let mut words = memory(instances::lp_aon_clkrst::SIZE, u32::MAX);
-    let causes = ResetCauses::read(
-        ResetCauseRegisters::host(&mut words).expect("host memory holds the block"),
-    );
-    assert_eq!(
-        causes.of(crate::platform::BOOT_HART),
-        ResetCause::Other(0x3f)
-    );
 }
 
 #[test]

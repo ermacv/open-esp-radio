@@ -3,7 +3,7 @@
 //! executor and its interrupt, which raises the endpoint's static signal.
 
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::usb_serial_jtag::{
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
@@ -27,7 +27,7 @@ pub(crate) fn interrupt(part: &mut ConsoleInterrupt) {
 
 /// Writes `note` before the console opens.
 pub(crate) fn early(note: &oer_diagnostics::Note<'_>) -> bool {
-    oer_esp32s31_hal::usb_serial_jtag::early_note(note)
+    oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(note)
 }
 
 /// Opens the console over the block the early writer retires: the router

@@ -54,7 +54,7 @@ pub enum ArenaError {
     Receive(LeRxChainPlaceError),
     SchedulerCapacity,
     EpochExhausted,
-    Placement(crate::dma_address::ProjectionError),
+    Placement(crate::memory::dma_address::ProjectionError),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -268,7 +268,7 @@ impl<
         let Some(installation) = EngineEpoch::allocate(&EPOCHS) else {
             return Err((ArenaError::EpochExhausted, clocked, placed));
         };
-        let projected = crate::dma_address::PlacementProjection::try_with_controller::<D, _, _>(
+        let projected = crate::memory::dma_address::PlacementProjection::try_with_controller::<D, _, _>(
             placed,
             |storage, projection| {
                 direction_finding_workspace::DirectionFindingWorkspaceBinding::new(

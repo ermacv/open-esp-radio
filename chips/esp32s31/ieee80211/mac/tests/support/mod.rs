@@ -1,7 +1,7 @@
 use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use crate::*;
-use oer_esp32s31_hal::dma_static::Placed;
+use oer_esp32s31_hal::memory::dma_static::Placed;
 pub(super) use oer_esp32s31_hal::ieee80211::dma::rx_dma::model::{
     RxWalkerModel, RxWalkerOperation as Walker,
 };

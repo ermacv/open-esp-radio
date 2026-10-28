@@ -18,7 +18,7 @@ const BUFFER_ADDRESS: u32 =
     HOST_ARENA_BASE + core::mem::offset_of!(TxDmaStorage<64>, buffer) as u32;
 
 fn storage() -> PinnedTxDmaStorage<64> {
-    TxDmaStorage::pin::<HostDma>(crate::dma_static::Placed::host(std::boxed::Box::leak(
+    TxDmaStorage::pin::<HostDma>(crate::memory::dma_static::Placed::host(std::boxed::Box::leak(
         std::boxed::Box::new(TxDmaStorage::new()),
     )))
     .unwrap()

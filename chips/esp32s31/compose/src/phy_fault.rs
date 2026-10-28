@@ -30,6 +30,6 @@ pub fn reset(fault: Fault) -> ! {
 }
 pub fn report_previous() {
     if let Some(mut record) = PHY_FAULT.try_lock() {
-        let _reported = record.report(oer_esp32s31_hal::usb_serial_jtag::early_text);
+        let _reported = record.report(oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text);
     }
 }

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::platform::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmProgram};
+use oer_esp32s31_hal::peripherals::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmProgram};
 
 pub fn program_only(program: &mut Timg0AlarmProgram) {
     #[cfg(ui_reject)]

@@ -5,7 +5,7 @@
 //! in the MAC backend. The split lets those safe upper layers pass an unforgeable memory
 //! capability instead of a bare descriptor address to the register boundary.
 
-use crate::dma_static::Placed;
+use crate::memory::dma_static::Placed;
 use core::{marker::PhantomPinned, pin::Pin};
 
 use crate::types::MacTxQueueDetached;
@@ -43,7 +43,7 @@ struct TxDmaBuffer<const BUFFER_SIZE: usize>([u8; BUFFER_SIZE]);
 
 /// Final allocation containing one ordinary TX descriptor and source buffer.
 ///
-/// Declare it with [`dma_static!`](crate::dma_static!) and consume the placed
+/// Declare it with [`dma_static!`](crate::memory::dma_static!) and consume the placed
 /// allocation through [`Self::pin`]. The returned owner is movable; this
 /// backing allocation is not.
 ///

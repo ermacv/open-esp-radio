@@ -2,7 +2,7 @@
 //! `descriptor`, which forbids `unsafe`: a host test makes its typed
 //! addresses through the HAL's placed source.
 
-use crate::dma_address;
+use crate::memory::dma_address;
 
 use crate::ieee80211::dma::descriptor::{RxDescriptor, TxDescriptor, rx_armed_word, tx_owned_word};
 

@@ -60,7 +60,7 @@ type Static = WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS, RadioExecutor>;
 /// The arena's DMA storage.
 pub type Storage = RxDmaStorage<COUNT, BUFFER, STORAGE>;
 
-oer_esp32s31_hal::dma_static! {
+oer_esp32s31_hal::memory::dma_static! {
     /// Placement: the receive epoch's arena, descriptors and buffers in the
     /// DMA window.
     static RX_ARENA: Static = zeroed in ".dma.bss.wifi_rx";

@@ -114,13 +114,13 @@ fn scheduler_run_event_clears_stale_source_before_enabling_it() {
 
 #[test]
 fn non_empty_head_cannot_alias_the_empty_scheduler_state() {
-    let empty_image = crate::dma_address::model_reference(0x2f00_0000);
+    let empty_image = crate::memory::dma_address::model_reference(0x2f00_0000);
     assert_eq!(
         BluetoothSchedulerHardwareListHead::from_address(empty_image),
         Err(BluetoothSchedulerHardwareListHeadError::EncodesEmptyHead)
     );
 
-    let item = crate::dma_address::model_reference(0x2f00_0004);
+    let item = crate::memory::dma_address::model_reference(0x2f00_0004);
     assert_eq!(
         BluetoothSchedulerHardwareListHead::from_address(item)
             .expect("non-empty controller address is a valid list head")
@@ -132,7 +132,7 @@ fn non_empty_head_cannot_alias_the_empty_scheduler_state() {
 #[test]
 fn descriptor_visibility_precedes_head_publication() {
     let index = BluetoothSchedulerHardwareListIndex::ZERO;
-    let reference = crate::dma_address::model_reference(0x2f00_0100);
+    let reference = crate::memory::dma_address::model_reference(0x2f00_0100);
     let head = BluetoothSchedulerHardwareListHead::from_address(reference)
         .expect("test item does not encode the empty head");
     let mut recorder = PublicationRecorder {
@@ -178,11 +178,11 @@ fn post_completion_head_observation_is_fenced_and_bounded() {
 #[test]
 fn head_retirement_distinguishes_empty_retained_and_changed_identity() {
     let expected = BluetoothSchedulerHardwareListHead::from_address(
-        crate::dma_address::model_reference(0x2f00_0100),
+        crate::memory::dma_address::model_reference(0x2f00_0100),
     )
     .expect("expected item is a nonempty head");
     let changed = BluetoothSchedulerHardwareListHead::from_address(
-        crate::dma_address::model_reference(0x2f00_0200),
+        crate::memory::dma_address::model_reference(0x2f00_0200),
     )
     .expect("changed item is a nonempty head");
 

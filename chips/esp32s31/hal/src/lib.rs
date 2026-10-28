@@ -8,18 +8,19 @@
 //! ESP32-S31 register transactions and affine radio ownership.
 //!
 //! [`root`] claims the chip once and splits the PAC's partitions by domain:
-//! the bootstrap's owners ([`boot`]), the platform ([`platform`], [`cores`],
-//! [`watchdog`], [`usb_serial_jtag`], [`executor`]) and the protocol-neutral
-//! radio root, which composes the radio partitions into exclusive protocol
-//! routes. [`domain`] holds the shared
-//! radio partitions and PHY state of concurrently running protocols, owned by
-//! value by the radio system. [`owner`] holds the running Wi-Fi MAC owner and
-//! grants bounded capabilities; [`ieee80211::client`] brings Wi-Fi up as a
-//! client of the radio domain.
+//! the bootstrap's owners ([`boot`]), the platform's chip bindings
+//! ([`platform`], [`cores`]), the ordinary peripheral blocks
+//! ([`peripherals`]) and the protocol-neutral radio root, which composes the
+//! radio partitions into exclusive protocol routes. [`domain`] holds the
+//! shared radio partitions and PHY state of concurrently running protocols,
+//! owned by value by the radio system. [`owner`] holds the running Wi-Fi MAC
+//! owner and grants bounded capabilities; [`ieee80211::client`] brings Wi-Fi
+//! up as a client of the radio domain.
 //! [`phy`], [`ieee80211`], [`bluetooth`] and [`ieee802154`] implement domain
-//! operations through those capabilities. [`types`] exposes value contracts
-//! without granting PAC access. Protocol policy and executor waits belong to
-//! their respective protocol and runtime crates.
+//! operations through those capabilities. [`memory`] holds the DMA memory
+//! core. [`types`] exposes value contracts without granting PAC access.
+//! Protocol policy and executor waits belong to their respective protocol
+//! and runtime crates.
 
 #[cfg(any(test, all(feature = "test-support", not(target_arch = "riscv32"))))]
 extern crate std;
@@ -61,9 +62,7 @@ pub mod ieee802154;
 /// The memory layouts the radio hardware reads and writes in RAM, from the
 /// PAC: the protocol layers above reach them through these types only.
 pub use oer_esp32s31_pac::layouts;
-pub mod dma_address;
-pub mod dma_static;
+pub mod memory;
+pub mod peripherals;
 pub mod phy;
 pub mod platform;
-pub mod usb_serial_jtag;
-pub mod watchdog;

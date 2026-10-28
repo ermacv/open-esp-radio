@@ -11,7 +11,7 @@ fn storage() -> &'static mut DirectionFindingWorkspaceStorage {
 fn placing_zeroed_storage_initializes_the_disabled_cte_workspace() {
     let owner = DirectionFindingWorkspaceStorage::place::<
         crate::bluetooth::engine::HostDma<0x2f00_1000>,
-    >(crate::dma_static::Placed::host(storage()))
+    >(crate::memory::dma_static::Placed::host(storage()))
     .expect("workspace projection");
 
     assert!(owner.is_disabled_baseline_initialized());
@@ -21,7 +21,7 @@ fn placing_zeroed_storage_initializes_the_disabled_cte_workspace() {
 fn a_controller_reset_restores_the_disabled_cte_workspace() {
     let mut owner = DirectionFindingWorkspaceStorage::place::<
         crate::bluetooth::engine::HostDma<0x2f00_1000>,
-    >(crate::dma_static::Placed::host(storage()))
+    >(crate::memory::dma_static::Placed::host(storage()))
     .expect("workspace projection");
     // Hardware state the finished epoch left behind.
     owner.emulate_hardware_clear();
@@ -37,11 +37,11 @@ fn a_controller_reset_restores_the_disabled_cte_workspace() {
 fn workspace_link_debug_does_not_identify_its_storage() {
     let first = DirectionFindingWorkspaceStorage::place::<
         crate::bluetooth::engine::HostDma<0x2f00_1000>,
-    >(crate::dma_static::Placed::host(storage()))
+    >(crate::memory::dma_static::Placed::host(storage()))
     .expect("workspace projection");
     let second = DirectionFindingWorkspaceStorage::place::<
         crate::bluetooth::engine::HostDma<0x2f00_2000>,
-    >(crate::dma_static::Placed::host(storage()))
+    >(crate::memory::dma_static::Placed::host(storage()))
     .expect("workspace projection");
     assert_ne!(first.link(), second.link());
     assert_eq!(
@@ -54,9 +54,9 @@ fn workspace_link_debug_does_not_identify_its_storage() {
 fn workspace_binding_refuses_another_allocations_placement() {
     let (_, placement) = crate::bluetooth::engine::Placement::<
         crate::bluetooth::engine::HostDma<0x2f00_1000>,
-    >::take(crate::dma_static::Placed::host(storage()));
+    >::take(crate::memory::dma_static::Placed::host(storage()));
     assert!(matches!(
         super::DirectionFindingWorkspaceBinding::new(storage(), placement.projection()),
-        Err(crate::dma_address::ProjectionError::OutsideAllocation)
+        Err(crate::memory::dma_address::ProjectionError::OutsideAllocation)
     ));
 }

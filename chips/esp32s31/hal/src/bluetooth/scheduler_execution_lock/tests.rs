@@ -53,7 +53,7 @@ impl Control for Model {
 
 fn request() -> BluetoothSchedulerExecutionLockRequest {
     BluetoothSchedulerExecutionLockRequest::new(
-        crate::dma_address::model_reference(0x2f00_1000),
+        crate::memory::dma_address::model_reference(0x2f00_1000),
         BluetoothSchedulerHardwareListIndex::new(0).expect("list zero"),
     )
 }

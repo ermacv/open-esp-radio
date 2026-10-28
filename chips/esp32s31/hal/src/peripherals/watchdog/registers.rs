@@ -7,7 +7,7 @@
 //! bit, and strobes only through the generated triggers.
 //!
 //! ```compile_fail,E0061
-//! # use oer_esp32s31_hal::watchdog::Mwdt1Registers;
+//! # use oer_esp32s31_hal::peripherals::watchdog::Mwdt1Registers;
 //! # use oer_espressif_watchdog::{WRITE_KEY, WriteProtected};
 //! fn raw_key(mut mwdt1: Mwdt1Registers) {
 //!     mwdt1.store_write_key(WRITE_KEY); // the key is stored only inside a session
@@ -18,7 +18,7 @@
 //! only stopped, never armed:
 //!
 //! ```compile_fail,E0277
-//! # use oer_esp32s31_hal::watchdog::Mwdt0Registers;
+//! # use oer_esp32s31_hal::peripherals::watchdog::Mwdt0Registers;
 //! # use oer_espressif_watchdog::{MainWatchdog, MicrosecondTick};
 //! fn arm(mwdt0: Mwdt0Registers, tick: MicrosecondTick) {
 //!     let _armable = MainWatchdog::new(mwdt0, tick);
@@ -47,7 +47,7 @@ mod tests;
 /// can reset the group and restore the watchdog's flash-boot enable.
 ///
 /// ```compile_fail,E0616
-/// # use oer_esp32s31_hal::watchdog::Mwdt0Registers;
+/// # use oer_esp32s31_hal::peripherals::watchdog::Mwdt0Registers;
 /// fn reset(mut watchdog: Mwdt0Registers) {
 ///     watchdog.clock.modify_timergrp0_ctrl0(|w| {
 ///         w.set_reg_timergrp0_rst_en(true);

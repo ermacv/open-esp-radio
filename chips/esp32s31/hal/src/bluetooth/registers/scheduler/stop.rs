@@ -212,12 +212,12 @@ mod tests {
         use super::super::BluetoothSchedulerHardwareListHeadRetirementDisposition as D;
         let expected =
             crate::bluetooth::registers::BluetoothSchedulerHardwareListHead::from_address(
-                crate::dma_address::model_reference(0x2f00_0400),
+                crate::memory::dma_address::model_reference(0x2f00_0400),
             )
             .unwrap();
         let foreign =
             crate::bluetooth::registers::BluetoothSchedulerHardwareListHead::from_address(
-                crate::dma_address::model_reference(0x2f00_0800),
+                crate::memory::dma_address::model_reference(0x2f00_0800),
             )
             .unwrap();
         let empty = crate::bluetooth::registers::BluetoothSchedulerHardwareListHead::empty();

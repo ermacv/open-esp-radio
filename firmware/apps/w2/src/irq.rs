@@ -21,7 +21,7 @@ pub type Arena = WifiRxArena<N, B, S, Q, RadioExecutor>;
 type Static = WifiRxStatic<N, B, S, Q, RadioExecutor>;
 pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 
-oer_esp32s31_hal::dma_static! {
+oer_esp32s31_hal::memory::dma_static! {
     pub static RX: Static = zeroed in ".dma.bss.wifi_rx";
     pub static TX_DMA: TxDmaStorage<TX> = zeroed in ".dma.bss.wifi_tx";
 }

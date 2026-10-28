@@ -5,7 +5,7 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154DmaAddresses, Ieee802154EngineBuffers, RX_BUFFER_COUNT,
 };
 
-crate::dma_static! {
+crate::memory::dma_static! {
     #[allow(unsafe_code, reason = "DMA storage is placed through the HAL macro")]
     static BUFFERS: Ieee802154EngineBuffers = zeroed in ".dma.bss.ieee802154";
 }
@@ -17,7 +17,7 @@ pub fn claim_buffers() -> Option<Placed<Ieee802154EngineBuffers>> {
 
 /// A refused projection retains the unchanged, uniquely placed storage.
 pub struct ProjectionRefusal {
-    pub error: crate::dma_address::ProjectionError,
+    pub error: crate::memory::dma_address::ProjectionError,
     pub buffers: Placed<Ieee802154EngineBuffers>,
 }
 
@@ -35,7 +35,7 @@ pub fn project(
     ),
     ProjectionRefusal,
 > {
-    let projected = crate::dma_address::PlacementProjection::try_with::<
+    let projected = crate::memory::dma_address::PlacementProjection::try_with::<
         crate::ieee80211::dma::space::NativeDma,
         _,
         _,

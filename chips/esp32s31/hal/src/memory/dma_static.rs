@@ -1,6 +1,6 @@
 //! Statics placed in the DMA window (`docs/hardware-memory.md`).
 //!
-//! [`dma_static!`](crate::dma_static!) declares a zero-initialised static in
+//! [`dma_static!`](crate::memory::dma_static!) declares a zero-initialised static in
 //! a `.dma.bss.<block>` section. The runtime's linker script gathers every
 //! such section into its `.dma.bss` output and asserts that the whole DMA
 //! range lies inside the DMA window and holds no address whose low DMA
@@ -44,7 +44,7 @@ impl<T: Zeroable> DmaStatic<T> {
     ///
     /// The value is a `static` in a `.dma.bss.<block>` section of a runtime
     /// image linked with the runtime's linker script: only
-    /// [`dma_static!`](crate::dma_static!) calls this.
+    /// [`dma_static!`](crate::memory::dma_static!) calls this.
     #[doc(hidden)]
     #[allow(unsafe_code, reason = "the caller promises the placement")]
     pub const unsafe fn placed() -> Self {
@@ -88,10 +88,10 @@ impl<T: 'static> Placed<T> {
     ) -> Option<(
         &'static mut T,
         oer_memory::StableDmaRange<'static>,
-        crate::dma_address::PlacementProjection,
+        crate::memory::dma_address::PlacementProjection,
     )> {
         let (storage, projection) =
-            crate::dma_address::PlacementProjection::take::<S, _>(self).ok()?;
+            crate::memory::dma_address::PlacementProjection::take::<S, _>(self).ok()?;
         let start = projection.address(storage).ok()?.get();
         // SAFETY: Placed owns this unique static allocation in the DMA window.
         // The returned storage owner must synchronize access for its complete
@@ -126,7 +126,7 @@ impl<A: 'static, B: 'static> Placed<(A, B)> {
     }
 }
 
-/// A transmit pool placed in the DMA window ([`dma_static!`](crate::dma_static!)):
+/// A transmit pool placed in the DMA window ([`dma_static!`](crate::memory::dma_static!)):
 /// the radio leases it issues are [`PlacedTxLease`]s, buffers the DMA
 /// hardware may read without a further address check.
 pub struct PlacedTxPool<
@@ -136,7 +136,7 @@ pub struct PlacedTxPool<
     const QUEUE_DEPTH: usize,
 > {
     handle: PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>,
-    regions: [crate::dma_address::PlacedRegion; QUEUE_DEPTH],
+    regions: [crate::memory::dma_address::PlacedRegion; QUEUE_DEPTH],
 }
 
 impl<
@@ -155,11 +155,11 @@ impl<
     ) -> Result<
         Self,
         (
-            crate::dma_address::ProjectionError,
+            crate::memory::dma_address::ProjectionError,
             Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
         ),
     > {
-        let (storage, regions) = crate::dma_address::PlacementProjection::pool_regions(placed)?;
+        let (storage, regions) = crate::memory::dma_address::PlacementProjection::pool_regions(placed)?;
         Ok(Self {
             handle: PinnedDmaTxPool::pin_static(storage),
             regions,
@@ -177,11 +177,11 @@ impl<
     ) -> Result<
         Self,
         (
-            crate::dma_address::ProjectionError,
+            crate::memory::dma_address::ProjectionError,
             Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
         ),
     > {
-        let (storage, regions) = crate::dma_address::PlacementProjection::pool_regions(placed)?;
+        let (storage, regions) = crate::memory::dma_address::PlacementProjection::pool_regions(placed)?;
         Ok(Self {
             handle: PinnedDmaTxPool::pin_static_with_dma_read_prepare(
                 storage,
@@ -210,12 +210,12 @@ impl<
         index: u8,
     ) -> Result<
         PlacedTxLease<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>>,
-        crate::dma_address::ProjectionError,
+        crate::memory::dma_address::ProjectionError,
     > {
         let region = *self
             .regions
             .get(usize::from(index))
-            .ok_or(crate::dma_address::ProjectionError::OutsideAllocation)?;
+            .ok_or(crate::memory::dma_address::ProjectionError::OutsideAllocation)?;
         Ok(PlacedTxLease {
             lease: self.handle.claim_radio(index),
             region: Ok(region),
@@ -232,7 +232,7 @@ impl<
 /// [`PlacedTxPool::claim_radio`] makes one on the chip.
 pub struct PlacedTxLease<L> {
     lease: L,
-    region: Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError>,
+    region: Result<crate::memory::dma_address::PlacedRegion, crate::memory::dma_address::ProjectionError>,
 }
 
 impl<L> PlacedTxLease<L> {
@@ -242,12 +242,12 @@ impl<L> PlacedTxLease<L> {
     where
         L: StableDmaBacking,
     {
-        let region = crate::dma_address::model_region(lease.stable_dma_region().len());
+        let region = crate::memory::dma_address::model_region(lease.stable_dma_region().len());
         Self { lease, region }
     }
 
     #[cfg(test)]
-    pub(crate) fn host_refused(lease: L, error: crate::dma_address::ProjectionError) -> Self {
+    pub(crate) fn host_refused(lease: L, error: crate::memory::dma_address::ProjectionError) -> Self {
         Self {
             lease,
             region: Err(error),
@@ -298,14 +298,14 @@ pub trait PlacedBacking: StableDmaBacking + sealed::Sealed {
     /// The region proved once at placement; this never samples the backing.
     fn dma_region(
         &self,
-    ) -> Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError>;
+    ) -> Result<crate::memory::dma_address::PlacedRegion, crate::memory::dma_address::ProjectionError>;
 }
 
 impl<L> sealed::Sealed for PlacedTxLease<L> {}
 impl<L: StableDmaBacking> PlacedBacking for PlacedTxLease<L> {
     fn dma_region(
         &self,
-    ) -> Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError> {
+    ) -> Result<crate::memory::dma_address::PlacedRegion, crate::memory::dma_address::ProjectionError> {
         self.region
     }
 }
@@ -313,7 +313,7 @@ impl<T, B: PlacedBacking> sealed::Sealed for TaggedStableDmaBacking<T, B> {}
 impl<T, B: PlacedBacking> PlacedBacking for TaggedStableDmaBacking<T, B> {
     fn dma_region(
         &self,
-    ) -> Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError> {
+    ) -> Result<crate::memory::dma_address::PlacedRegion, crate::memory::dma_address::ProjectionError> {
         core::ops::Deref::deref(self).dma_region()
     }
 }
@@ -326,17 +326,17 @@ impl<B: IndexedStableDmaLease + PlacedBacking, R: DmaIndexReturn> PlacedBacking
 {
     fn dma_region(
         &self,
-    ) -> Result<crate::dma_address::PlacedRegion, crate::dma_address::ProjectionError> {
+    ) -> Result<crate::memory::dma_address::PlacedRegion, crate::memory::dma_address::ProjectionError> {
         core::ops::Deref::deref(self).dma_region()
     }
 }
 
 /// Declare a zero-initialised static in the DMA window: a
-/// [`DmaStatic`](crate::dma_static::DmaStatic) in the `.dma.bss.<block>`
+/// [`DmaStatic`](crate::memory::dma_static::DmaStatic) in the `.dma.bss.<block>`
 /// section named.
 ///
 /// ```ignore
-/// oer_esp32s31_hal::dma_static! {
+/// oer_esp32s31_hal::memory::dma_static! {
 ///     /// The receive epoch's arena.
 ///     static RX_ARENA: Arena = zeroed in ".dma.bss.wifi_rx";
 /// }
@@ -350,17 +350,17 @@ macro_rules! dma_static {
         $($rest:tt)*
     ) => {
         const _: () = assert!(
-            $crate::dma_static::is_dma_section($section),
+            $crate::memory::dma_static::is_dma_section($section),
             "a DMA static lives in a `.dma.bss.<block>` section"
         );
         $(#[$meta])*
         #[unsafe(link_section = $section)]
-        $vis static $name: $crate::dma_static::DmaStatic<$ty> =
+        $vis static $name: $crate::memory::dma_static::DmaStatic<$ty> =
             // SAFETY: the static is in the `.dma.bss.<block>` section checked
             // above, which the runtime linker script places in `.dma.bss` and
             // asserts inside the DMA window.
-            unsafe { $crate::dma_static::DmaStatic::placed() };
-        $crate::dma_static! { $($rest)* }
+            unsafe { $crate::memory::dma_static::DmaStatic::placed() };
+        $crate::memory::dma_static! { $($rest)* }
     };
 }
 
@@ -407,7 +407,7 @@ mod tests {
     // crate's expansion of it is not linted.
     #[allow(unsafe_code, reason = "a DMA static's section placement")]
     fn a_placed_static_is_claimed_once() {
-        crate::dma_static! {
+        crate::memory::dma_static! {
             static CELL: [u32; 4] = zeroed in ".dma.bss.test";
         }
         let placed = CELL.take().unwrap();

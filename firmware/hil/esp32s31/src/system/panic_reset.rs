@@ -17,7 +17,7 @@ oer_espressif_executor::tasks! {
 
 /// The RTC watchdog the root armed.
 type RtcWatchdog =
-    oer_esp32s31_hal::watchdog::ArmedRtcWatchdog<oer_esp32s31_hal::watchdog::RwdtRegisters>;
+    oer_esp32s31_hal::peripherals::watchdog::ArmedRtcWatchdog<oer_esp32s31_hal::peripherals::watchdog::RwdtRegisters>;
 
 pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
     executor: crate::Executor<Esp32s31, 0>,
@@ -26,7 +26,7 @@ pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
     (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),
     (usb, _pads): (
         crate::transport::Usb,
-        oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+        oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     ),
     mut entropy: crate::Rng,
     watchdog: RtcWatchdog,

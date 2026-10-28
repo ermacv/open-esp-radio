@@ -70,7 +70,7 @@ impl BluetoothSchedulerLockModifyControl for Recorder {
 
 #[test]
 fn publication_uses_two_fresh_rmw_edges_before_request_and_fence() {
-    let address = crate::dma_address::model_reference(0x2f00_0040);
+    let address = crate::memory::dma_address::model_reference(0x2f00_0040);
     let index =
         BluetoothSchedulerHardwareListIndex::new(6).expect("test list index is representable");
     let request = BluetoothSchedulerLockModifyRequest::new(address, index);

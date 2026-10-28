@@ -21,7 +21,7 @@ use crate::bluetooth::DeviceTablePublication;
 use crate::layouts::*;
 
 use crate::bluetooth::engine::{ControllerDmaSpace, Placement};
-use crate::dma_static::Placed;
+use crate::memory::dma_static::Placed;
 
 /// Filter accept list entries the Controller keeps, as the S31 build's LE
 /// Read Filter Accept List Size reports.

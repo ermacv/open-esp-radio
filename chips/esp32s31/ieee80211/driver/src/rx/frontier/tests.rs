@@ -18,7 +18,7 @@ const BASE: u32 = oer_esp32s31_hal::ieee80211::dma::space::HOST_ARENA_BASE;
 
 /// A placed static host arena, as the product's is placed.
 fn leaked<const N: usize, const S: usize>() -> PlacedRxDma<N, BUFFER_SIZE, S, HostDma> {
-    let placed = ReceiveDmaStorage::place(oer_esp32s31_hal::dma_static::Placed::host(
+    let placed = ReceiveDmaStorage::place(oer_esp32s31_hal::memory::dma_static::Placed::host(
         std::boxed::Box::leak(std::boxed::Box::new(ReceiveDmaStorage::new())),
     ))
     .unwrap();

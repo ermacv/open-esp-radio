@@ -57,7 +57,7 @@ fn allocation() -> (
     &'static mut ([WifiTxDmaDescriptor; 2], [u8; 16]),
     super::PlacementProjection,
 ) {
-    let placed = crate::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new((
+    let placed = crate::memory::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new((
         [const { WifiTxDmaDescriptor::zeroed() }; 2],
         [0; 16],
     ))));
@@ -106,7 +106,7 @@ fn projections_refuse_misaligned_dma_addresses_and_width_overflow() {
         (BASE + 1, super::ProjectionError::Misaligned),
         (u32::MAX - 3, super::ProjectionError::AddressWidth),
     ] {
-        let placed = crate::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new(
+        let placed = crate::memory::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new(
             WifiTxDmaDescriptor::zeroed(),
         )));
         let (storage, projection) = super::PlacementProjection::for_test(placed, base);
@@ -118,7 +118,7 @@ fn projections_refuse_misaligned_dma_addresses_and_width_overflow() {
 fn refusing_a_projection_returns_the_exact_unchanged_placement() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new([7u32; 4]));
     let original = core::ptr::from_ref(storage).addr();
-    let placed = crate::dma_static::Placed::host(storage);
+    let placed = crate::memory::dma_static::Placed::host(storage);
     let result = super::PlacementProjection::try_with::<crate::ieee80211::dma::space::HostDma, _, _>(
         placed,
         |_, projection| projection.region(&[0; 128]),

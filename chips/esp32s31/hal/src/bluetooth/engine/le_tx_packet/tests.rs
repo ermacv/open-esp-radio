@@ -54,7 +54,7 @@ fn buffer_header_retains_the_bound_packet_and_its_role_capacity() {
 
     let (storage, placement) = crate::bluetooth::engine::Placement::<
         crate::bluetooth::engine::HostDma<0x2f00_0100>,
-    >::take(crate::dma_static::Placed::host(std::boxed::Box::leak(
+    >::take(crate::memory::dma_static::Placed::host(std::boxed::Box::leak(
         std::boxed::Box::new(LeTxPacketStorage::<DTM_ALLOCATION_BYTES>::zeroed()),
     )));
     let advertising =

@@ -133,7 +133,7 @@ pub(crate) fn report_previous() {
     let previous = RECORD.try_lock().and_then(|mut record| record.take());
     if let Some(previous) = previous {
         previous.report(|bytes| {
-            let _ = oer_esp32s31_hal::usb_serial_jtag::early_text(bytes);
+            let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes);
         });
     }
 }

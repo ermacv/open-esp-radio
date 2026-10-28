@@ -63,7 +63,7 @@ pub fn reset(raw: u32) -> ! {
 pub fn report_previous() {
     if let Some(raw) = WIFI_FAULT.try_lock().and_then(|mut record| record.take()) {
         report(raw, |bytes| {
-            let _written = oer_esp32s31_hal::usb_serial_jtag::early_text(bytes);
+            let _written = oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes);
         });
     }
 }

@@ -193,7 +193,7 @@ impl Root {
     ///
     /// Taking the watchdogs arms the RTC watchdog
     /// ([`Watchdogs::new`]): from here the image's executor must feed it
-    /// ([`ArmedRtcWatchdog::feed_every`](crate::watchdog::ArmedRtcWatchdog::feed_every)),
+    /// ([`ArmedRtcWatchdog::feed_every`](crate::peripherals::watchdog::ArmedRtcWatchdog::feed_every)),
     /// and a fatal path that cannot prepare the reset waits for it.
     ///
     /// # Errors

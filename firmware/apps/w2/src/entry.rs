@@ -12,8 +12,8 @@ use oer_esp32s31_hal::platform::{
 };
 use oer_esp32s31_hal::power::ChipClocks;
 use oer_esp32s31_hal::root::Root;
-use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_esp32s31_ieee80211_driver::irq::WifiIrqPart;
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,
@@ -43,7 +43,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
-    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio handler (P3): both MAC banks and the doorbell.
@@ -71,7 +71,7 @@ oer_espressif_executor::tasks! {
     AppTasks: Executor<Esp32s31, 0> {
         reporting(
             console: Console,
-            pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+            pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
             receiver: AffineSpscReceiver<'static, report::Report, 1>,
         ) = reporting;
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
@@ -250,7 +250,7 @@ async fn radio_actor(actor: &'static mut Actor) {
 }
 async fn reporting(
     mut console: Console,
-    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     receiver: AffineSpscReceiver<'static, report::Report, 1>,
 ) {
     let mut result = loop {

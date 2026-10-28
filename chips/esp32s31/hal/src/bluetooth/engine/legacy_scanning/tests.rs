@@ -22,7 +22,7 @@ fn pool() -> LegacyScanPool<'static, 'static, 1> {
     ));
     let numbers = SchedulerAllocationConfig::new(2, 3, 0).unwrap().scanning();
     LegacyScanPool::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")
@@ -31,7 +31,7 @@ fn pool() -> LegacyScanPool<'static, 'static, 1> {
 fn chain(class: RxMemoryListClass) -> LeRxChain<2> {
     let storage = Box::leak(Box::new(LeRxChainStorage::<2>::zeroed()));
     LeRxChain::place::<crate::bluetooth::engine::HostDma<0x2f00_8000>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         class,
     )
     .unwrap()

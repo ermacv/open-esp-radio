@@ -59,7 +59,7 @@ static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
 static DIRECT_READY: oer_memory::ClaimCell<
     Result<&'static mut DirectOutput, oer_diagnostics::Name<32>>,
 > = oer_memory::ClaimCell::new();
-oer_esp32s31_hal::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
+oer_esp32s31_hal::memory::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
 
 use crate::phy_pilot;
 
@@ -72,7 +72,7 @@ oer_espressif_interrupt_table::interrupt_table! {
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
     // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:
     // only P2 line17 before16 is measured on S31.
-    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
     radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
@@ -91,7 +91,7 @@ oer_espressif_executor::tasks! {
 }
 struct Boot {
     console: usb::Console,
-    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
     traffic: &'static mut traffic::Trace,
 }
@@ -225,7 +225,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 }
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_| {
-        let _ = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
+        let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
         );
     })
