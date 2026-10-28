@@ -230,3 +230,40 @@ fn a_higher_priority_notification_interrupting_registration_can_finish() {
     signal.wake();
     assert_eq!(count(&new), 2);
 }
+
+#[test]
+fn notification_takes_one_registration_and_releases_it_after_the_callback() {
+    struct Observe {
+        calls: AtomicUsize,
+        during: AtomicUsize,
+    }
+    impl Wake for Observe {
+        fn wake(self: Arc<Self>) {
+            self.wake_by_ref();
+        }
+        fn wake_by_ref(self: &Arc<Self>) {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            self.during
+                .store(Arc::strong_count(self), Ordering::Relaxed);
+        }
+    }
+    let signal = PriorityWaker::new();
+    let observer = Arc::new(Observe {
+        calls: AtomicUsize::new(0),
+        during: AtomicUsize::new(0),
+    });
+    let waker = Waker::from(observer.clone());
+    signal.wake();
+    signal.register(&waker);
+    assert_eq!(Arc::strong_count(&observer), 3);
+    signal.wake();
+    assert_eq!(observer.calls.load(Ordering::Relaxed), 1);
+    assert_eq!(observer.during.load(Ordering::Relaxed), 3);
+    assert_eq!(Arc::strong_count(&observer), 2);
+    signal.wake();
+    assert_eq!(observer.calls.load(Ordering::Relaxed), 1);
+    signal.register(&waker);
+    signal.wake();
+    assert_eq!(observer.calls.load(Ordering::Relaxed), 2);
+    assert_eq!(Arc::strong_count(&observer), 2);
+}

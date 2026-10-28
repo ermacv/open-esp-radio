@@ -90,9 +90,11 @@ advance the object offset; unsupported bit pieces stop subsequent offsets.
 A variable's own type takes precedence over its origin/specification chain;
 locations themselves are direct attributes. Globals retain their separate
 absolute-address/piece rules, signatures retain their own inheritance rule,
-and `noreturn` requires agreement of direct attributes on concrete
-subprograms. Sharing expression decoding and source-reference selection
-does not unify those interpretation policies. Retained facts and temporary
+and `noreturn` follows subprogram declaration/origin links only when the
+concrete entry omits the attribute, requiring agreement at each address.
+Present false or malformed flags, broken links and cycles do not prove noreturn.
+Sharing expression decoding and source-reference selection does not unify
+those interpretation policies. Retained facts and temporary
 range/piece storage use the caller's memory ledger; per-unit ranges and
 per-expression global pieces release their reservations when complete.
 

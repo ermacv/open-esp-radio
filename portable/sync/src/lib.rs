@@ -113,8 +113,15 @@ impl PriorityWaker {
 }
 struct Waking<'a>(&'a Slot);
 impl Waking<'_> {
+    // An async caller can otherwise merge these scopes with its other wakes.
+    #[inline(never)]
     fn fire(&self) {
-        self.0.waker.wake();
+        // Keep the fixed-slot Waker operations distinct in DWARF; consuming
+        // wake can merge into a callback with neither method scope nor location.
+        if let Some(waker) = self.0.waker.take() {
+            waker.wake_by_ref();
+            drop(waker);
+        }
     }
 }
 impl Drop for Waking<'_> {

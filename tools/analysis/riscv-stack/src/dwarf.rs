@@ -41,8 +41,9 @@ pub struct Dwarf {
     /// What the function entered at each address returns, where the DWARF
     /// states it.
     returns: BTreeMap<u32, Return>,
-    /// Every concrete subprogram entry at this address explicitly agrees
-    /// on DW_AT_noreturn=true. Missing or conflicting facts answer false.
+    /// Every concrete subprogram entry at this address agrees on
+    /// DW_AT_noreturn=true, directly or through its declaration/origin.
+    /// Missing or conflicting facts answer false.
     noreturn: BTreeMap<u32, bool>,
     /// Each named subprogram's path, by its offset in `.debug_info`.
     paths: BTreeMap<usize, String>,
@@ -144,7 +145,7 @@ pub(crate) fn reference(
 
 /// Select a source DIE identity, preferring a present abstract_origin to a
 /// specification. This does not inherit any attribute: each consumer keeps
-/// its own rules for following this reference (noreturn never follows it).
+/// its own rules for following this reference.
 pub(crate) fn origin_reference(unit: &Unit<'_>, entry: &Entry<'_>) -> Option<usize> {
     entry
         .attr_value(gimli::DW_AT_abstract_origin)
@@ -241,6 +242,7 @@ enum Link {
 /// origin and its unit.
 struct Subprogram {
     returns: Option<usize>,
+    noreturn: Option<bool>,
     origin: Link,
     unit: usize,
 }
@@ -263,7 +265,6 @@ struct Returns<'d> {
     concrete: Vec<(u32, usize)>,
     /// Whether each unit read so far describes any type.
     typed_units: Vec<bool>,
-    noreturn: BTreeMap<u32, bool>,
 }
 
 impl<'d> Returns<'d> {
@@ -337,6 +338,9 @@ impl<'d> Returns<'d> {
             };
             let subprogram = Subprogram {
                 returns,
+                noreturn: entry
+                    .attr_value(gimli::DW_AT_noreturn)
+                    .map(|value| value == gimli::AttributeValue::Flag(true)),
                 origin,
                 unit: unit_index,
             };
@@ -348,10 +352,6 @@ impl<'d> Returns<'d> {
             let Ok(low) = u32::try_from(low) else {
                 return Ok(());
             };
-            let noreturn =
-                entry.attr_value(gimli::DW_AT_noreturn) == Some(gimli::AttributeValue::Flag(true));
-            let proof = scratch.entry(&mut self.noreturn, low, || noreturn, control)?;
-            *proof &= noreturn;
             scratch.push(&mut self.concrete, (low, offset), control)?;
         }
         Ok(())
@@ -409,16 +409,37 @@ impl<'d> Returns<'d> {
         Ok(Return::Unknown)
     }
 
+    /// DWARF 5 sections 2.13.2 and 3.3.8 allow declaration/origin facts
+    /// to be omitted on a concrete subprogram. A present attribute wins;
+    /// false or malformed flags never fall through to an inherited true.
+    fn resolve_noreturn(&self, offset: usize, control: &mut dyn RunControl) -> Result<bool> {
+        let mut at = offset;
+        for _ in 0..=self.subprograms.len() {
+            control.checkpoint(1)?;
+            let Some(subprogram) = self.subprograms.get(&at) else {
+                return Ok(false);
+            };
+            if let Some(proof) = subprogram.noreturn {
+                return Ok(proof);
+            }
+            match subprogram.origin {
+                Link::To(next) => at = next,
+                Link::None | Link::Invalid => return Ok(false),
+            }
+        }
+        Ok(false)
+    }
+
     fn finish(
         self,
         out: &mut Dwarf,
         keep: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<()> {
-        for (&low, &proof) in &self.noreturn {
-            keep.insert(&mut out.noreturn, low, proof, control)?;
-        }
         for &(low, offset) in &self.concrete {
+            let proof = self.resolve_noreturn(offset, control)?;
+            let proof = proof && out.noreturn.get(&low).copied().unwrap_or(true);
+            keep.insert(&mut out.noreturn, low, proof, control)?;
             let returned = self.resolve(offset, keep, control)?;
             // Descriptions of one entry that disagree say nothing.
             let returned = match out.returns.get(&low) {

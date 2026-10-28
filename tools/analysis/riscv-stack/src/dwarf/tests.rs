@@ -402,7 +402,7 @@ fn local_types_follow_origins_and_specifications_without_inheriting_locations() 
 }
 
 #[test]
-fn noreturn_does_not_inherit_origins_or_specifications_and_conflicts_stay_false() {
+fn noreturn_inherits_origins_and_specifications_but_conflicts_stay_false() {
     let mut fixture = Fixture::new();
     let abstract_ = fixture.die(
         gimli::DW_TAG_subprogram,
@@ -430,10 +430,89 @@ fn noreturn_does_not_inherit_origins_or_specifications_and_conflicts_stay_false(
     let elf = fixture.finish();
     for mode in [DebugMetadata::Standard, DebugMetadata::TypedLocations] {
         let (dwarf, _) = read_fixture(&elf, mode);
-        for pc in [100, 120, 140] {
-            assert!(!dwarf.noreturn(Callee::Address(pc)));
+        for pc in [100, 120] {
+            assert!(dwarf.noreturn(Callee::Address(pc)));
         }
+        assert!(!dwarf.noreturn(Callee::Address(140)));
         assert!(dwarf.noreturn(Callee::Address(160)));
+    }
+}
+
+#[test]
+fn noreturn_uses_the_nearest_flag_and_rejects_broken_or_cyclic_inheritance() {
+    let mut fixture = Fixture::new();
+    let declaration = fixture.die(
+        gimli::DW_TAG_subprogram,
+        false,
+        &[flag(gimli::DW_AT_noreturn, true)],
+    );
+    let abstract_ = fixture.die(
+        gimli::DW_TAG_subprogram,
+        false,
+        &[reference_attr(gimli::DW_AT_specification, declaration)],
+    );
+    let cycle = fixture.info.len();
+    fixture.die(
+        gimli::DW_TAG_subprogram,
+        false,
+        &[reference_attr(gimli::DW_AT_abstract_origin, cycle)],
+    );
+    let wrong_tag = fixture.ty("not a subprogram");
+    for (pc, extra) in [
+        (
+            100,
+            vec![reference_attr(gimli::DW_AT_abstract_origin, abstract_)],
+        ),
+        (
+            120,
+            vec![
+                reference_attr(gimli::DW_AT_specification, declaration),
+                flag(gimli::DW_AT_noreturn, false),
+            ],
+        ),
+        (
+            140,
+            vec![
+                reference_attr(gimli::DW_AT_specification, declaration),
+                number(gimli::DW_AT_noreturn, gimli::DW_FORM_data4, 1),
+            ],
+        ),
+        (160, vec![reference_attr(gimli::DW_AT_specification, cycle)]),
+        (
+            180,
+            vec![reference_attr(gimli::DW_AT_specification, 0xffff)],
+        ),
+        (
+            200,
+            vec![reference_attr(gimli::DW_AT_specification, wrong_tag)],
+        ),
+        (
+            220,
+            vec![
+                reference_attr(gimli::DW_AT_abstract_origin, 0xffff),
+                reference_attr(gimli::DW_AT_specification, declaration),
+            ],
+        ),
+        (
+            240,
+            vec![
+                number(gimli::DW_AT_abstract_origin, gimli::DW_FORM_data4, 1),
+                reference_attr(gimli::DW_AT_specification, declaration),
+            ],
+        ),
+        (260, vec![]),
+    ] {
+        let mut attrs = range(pc, pc + 4).to_vec();
+        attrs.extend(extra);
+        fixture.die(gimli::DW_TAG_subprogram, false, &attrs);
+    }
+    let elf = fixture.finish();
+    for mode in [DebugMetadata::Standard, DebugMetadata::TypedLocations] {
+        let (dwarf, _) = read_fixture(&elf, mode);
+        assert!(dwarf.noreturn(Callee::Address(100)));
+        for pc in [120, 140, 160, 180, 200, 220, 240, 260] {
+            assert!(!dwarf.noreturn(Callee::Address(pc)), "PC {pc}");
+        }
     }
 }
 
