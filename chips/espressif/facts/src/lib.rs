@@ -164,6 +164,8 @@ pub struct Facts {
     pub revisions: Vec<String>,
     /// What the chip has.
     pub properties: Properties,
+    /// Explicit LP-fast startup policy for profiles that configure this root.
+    pub lp_fast_source: Option<LpFastSource>,
     /// Where the chip's images lie in flash: the image pipeline encodes
     /// for it, and every flash writes there. `None` for a chip that has no
     /// images yet.
@@ -210,6 +212,8 @@ struct Stated {
     espflash_chip: String,
     revisions: Vec<String>,
     properties: Properties,
+    #[serde(default)]
+    lp_fast_source: Option<LpFastSource>,
     #[serde(default)]
     flash: Option<StatedFlash>,
     #[serde(default)]
@@ -424,6 +428,7 @@ impl Facts {
             espflash_chip: stated.espflash_chip,
             revisions: stated.revisions,
             properties: stated.properties,
+            lp_fast_source: stated.lp_fast_source,
             flash,
             memory,
             interrupts: stated.interrupts,

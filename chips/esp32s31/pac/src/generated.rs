@@ -28,7 +28,9 @@ impl Hart {
     /// A fixed index admitted at monomorphization, even in runtime code.
     pub const fn constant<const ID: usize>() -> Self {
         const {
-            assert!(ID < HARTS, "the hart lies inside the chip geometry");
+            if ID >= HARTS {
+                panic!("the hart lies inside the chip geometry");
+            }
             match Self::new(ID as u32) {
                 Ok(hart) => hart,
                 Err(_) => panic!("invalid fixed hart"),
@@ -119181,7 +119183,7 @@ pub mod lp_ana {
 pub mod lp_aonclkrst {
     /// The `LP_AONCLKRST_ROOT_CLK_CONF` register.
     ///
-    /// Low-power root clock configuration. Only the RTC slow-clock source selector is published. The access states the radio's: the radio reads the slow-clock source, and esp-hal's clock tree alone writes the word.
+    /// Low-power root clock configuration. The bootstrap explicitly selects the LP-fast source; the radio observes the RTC slow-clock source and the full diagnostic image. Writes preserve all other fields.
     pub mod root_clk_conf {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -119211,6 +119213,43 @@ pub mod lp_aonclkrst {
         pub const FAST_CLK_SEL_MAX: u32 = 0x3;
         /// Positioned bits of `LP_AONCLKRST_FAST_CLK_SEL`.
         pub const FAST_CLK_SEL_MASK: u32 = 0xc000000;
+
+        /// The declared values of the `LP_AONCLKRST_FAST_CLK_SEL` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum FastClkSel {
+            /// Fast RC oscillator.
+            RcFast = 0x0,
+            /// Main crystal, without a divide by two.
+            Xtal = 0x1,
+        }
+
+        impl FastClkSel {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 26
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::RcFast),
+                    0x1 => Some(Self::Xtal),
+                    _ => None,
+                }
+            }
+        }
 
         /// Width of `LP_AONCLKRST_PLL80M_CLK_FORCE_ON` in bits.
         pub const PLL80M_CLK_FORCE_ON_WIDTH: u32 = 1;
@@ -119257,10 +119296,16 @@ pub mod lp_aonclkrst {
                 oer_mmio::Bits::truncate(self.0 >> 23)
             }
 
-            /// need_des
+            /// RTC fast-clock source. SOURCE: ESP_IDF_4D59230D_S31_RTC_FAST_CLOCK_SOURCE; codes two and three are invalid.
             #[inline]
             pub const fn fast_clk_sel(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+
+            /// The `LP_AONCLKRST_FAST_CLK_SEL` field as its declared value, if it is one.
+            #[inline]
+            pub const fn fast_clk_sel_variant(self) -> Option<FastClkSel> {
+                FastClkSel::from_bits((self.0 >> 26) & 0x3)
             }
 
             /// need_des
@@ -119304,10 +119349,16 @@ pub mod lp_aonclkrst {
                 oer_mmio::Bits::truncate(self.0 >> 23)
             }
 
-            /// need_des
+            /// RTC fast-clock source. SOURCE: ESP_IDF_4D59230D_S31_RTC_FAST_CLOCK_SOURCE; codes two and three are invalid.
             #[inline]
             pub const fn fast_clk_sel(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+
+            /// The `LP_AONCLKRST_FAST_CLK_SEL` field as its declared value, if it is one.
+            #[inline]
+            pub const fn fast_clk_sel_variant(&self) -> Option<FastClkSel> {
+                FastClkSel::from_bits((self.0 >> 26) & 0x3)
             }
 
             /// need_des
@@ -119343,8 +119394,8 @@ pub mod lp_aonclkrst {
 
             /// Set `LP_AONCLKRST_FAST_CLK_SEL`.
             #[inline]
-            pub fn set_fast_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & 0xf3ffffff) | (value.get() << 26);
+            pub fn set_fast_clk_sel(&mut self, value: FastClkSel) -> &mut Self {
+                self.0 = (self.0 & 0xf3ffffff) | (value.bits() << 26);
                 self
             }
 
@@ -121745,7 +121796,7 @@ pub mod lp_aonclkrst {
 
     /// The `LpAonRadioClock` part of `LP_AON_CLKRST`.
     ///
-    /// RTC slow-clock source used by modem power.
+    /// LP root clock word: bootstrap selects LP-fast before consumers start; runtime PHY observes the RTC slow-clock source and diagnostic image.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct LpAonRadioClock<P: oer_mmio::Placement = oer_mmio::Fixed<0x20701000>>(
         oer_mmio::Block<P, LpAonRadioClockWords>,

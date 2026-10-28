@@ -9,6 +9,13 @@ extends = ["../../espressif/platform/isa/rv32imafc.toml", "../../espressif/platf
 espflash-chip = "esp32s31"
 revisions = ["rev0"]
 
+# Current startup policy: keep the XTAL frequency used after the bootloader.
+# SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7
+# components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:968-1000
+# (supported RTC_FAST sources); components/soc/esp32s31/include/soc/clk_tree_defs.h:108
+# (XTAL default). RC_FAST needs a separate power/readiness policy.
+lp-fast-source = "xtal"
+
 # What the chip has: its radio bands, Bluetooth modes, IEEE 802.15.4 and
 # cores. Differences of address or layout belong in the register model.
 [properties]

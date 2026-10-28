@@ -138,6 +138,9 @@ pub enum ClockFailure {
     LivePllMismatch,
     /// The root or the dividers read back otherwise after the update.
     Readback,
+    /// LP-fast did not read back as the explicit startup policy. Codes are
+    /// preserved even when the observed selector has no hardware meaning.
+    LpFastReadback { expected: u32, observed: u32 },
 }
 
 impl ClockFailure {
@@ -147,6 +150,7 @@ impl ClockFailure {
             Self::UnknownRoot => "clock-root-unknown",
             Self::LivePllMismatch => "clock-live-pll",
             Self::Readback => "clock-readback",
+            Self::LpFastReadback { .. } => "lp-fast-readback",
         }
     }
 }

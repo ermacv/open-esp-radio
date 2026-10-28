@@ -298,11 +298,17 @@ struct BootFailureRecord(oer_espressif_boot::BootFailure);
 #[cfg(any(test, target_arch = "riscv32"))]
 impl BootFailureRecord {
     fn write(self, mut output: impl FnMut(&[u8])) {
-        use oer_espressif_boot::{BootFailure, FlashFailure, psram::PsramFailure};
+        use oer_espressif_boot::{BootFailure, ClockFailure, FlashFailure, psram::PsramFailure};
 
         output(b"OER_BOOT bootstrap=FAIL reason=");
         output(self.0.reason().as_bytes());
         match self.0 {
+            BootFailure::Clock(ClockFailure::LpFastReadback { expected, observed }) => {
+                output(b" expected=");
+                decimal(expected as usize, &mut output);
+                output(b" observed=");
+                decimal(observed as usize, &mut output);
+            }
             BootFailure::Psram(PsramFailure::DensityMismatch { found }) => {
                 output(b" found=");
                 decimal(found as usize, &mut output);

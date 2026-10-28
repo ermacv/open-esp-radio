@@ -73,6 +73,17 @@ returning the bundle and raising the same-level reply signal.
 
 ## Platform clocks
 
+The bootstrap's `boot::LpFastClock` explicitly selects the LP-fast root from
+`lp-fast-source` in the chip/profile facts before SoC initialization and LP
+consumers. The HAL build generates the typed PAC selection; the current
+profile selects XTAL. The existing `LpAonRadioClock` part moves into this
+bootstrap owner; runtime PHY receives its part through the separate runtime
+root and observes the slow source and diagnostic image. Selection preserves
+every other field of `ROOT_CLK_CONF`, waits the sourced 3 µs under the common
+boot deadline, and rejects readback disagreement as `ClockFailure::LpFastReadback`
+with both codes in the terminal boot report. RC_FAST is not a supported
+startup policy: its power/readiness and consumer timing policy is absent.
+
 `power::ChipClocks` is the one owner of the platform clock words the radio
 shares with the SoC (`MODEM_LPCON.CLK_CONF`, `HP_SYS_CLKRST.REF_160M_CTRL0`):
 `Root::into_runtime` installs it as `Runtime::clocks`, it counts the

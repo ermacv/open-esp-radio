@@ -1,6 +1,9 @@
 //! The clock owner: the CPU root and dividers, the CPU PLL and its power,
 //! the clock update, the flash clock, the memory PLL and the PSRAM's supply.
 
+mod lp_fast;
+pub use lp_fast::{LP_FAST_SOURCE, LpFastClock};
+
 use oer_espressif_boot::{
     Access, Busy,
     clock::{ClockUpdate, CpuClockRegisters, PllPower, PllRegisters},

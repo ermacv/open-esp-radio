@@ -2,6 +2,10 @@
 schema = 1
 
 [[sources]]
+id = "ESP_IDF_4D59230D_S31_RTC_FAST_CLOCK_SOURCE"
+description = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, https://github.com/espressif/esp-idf/blob/4d59230ddff16327812782151ef0afef202dc6d7/components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:968-1000. clk_ll_rtc_fast_set_src selects RC_FAST with code 0 and XTAL with code 1; clk_ll_rtc_fast_get_src returns invalid for the other two codes."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_S31_TSENS_STRUCT"
 description = "Official ESP-IDF commit 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d, https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/soc/esp32s31/register/soc/tsens_struct.h, sha256 f8db221ea3afe8c6022f599615d10afe0a1578fc3e6bc67e6c1cad474e4e6483. tsens_clk_conf_reg_t at line158 has clk_en bit0 and reserved_1 bits31:1. Pinned phy_tsens_read_init explicitly sets bits9/23, contradicting the reserved claim for those two bits; the remaining declared reserved lanes keep their source annotation."
 
