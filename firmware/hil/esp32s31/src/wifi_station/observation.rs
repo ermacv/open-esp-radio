@@ -11,7 +11,7 @@ pub static KEY_ID: AtomicU32 = AtomicU32::new(0);
 pub static GENERATION: AtomicU32 = AtomicU32::new(0);
 pub static GROUP_ARP: AtomicU32 = AtomicU32::new(0);
 
-pub fn group(attempt: super::Attempt, key_id: u8, replaced: bool) {
+fn group(attempt: super::Attempt, key_id: u8, replaced: bool) {
     KEY_ID.store(u32::from(key_id), Relaxed);
     GROUP_ARP.store(0, Relaxed);
     let generation = GENERATION.fetch_add(1, Relaxed).saturating_add(1);
@@ -43,65 +43,100 @@ pub fn counters() -> StationCounters {
     }
 }
 
-#[inline(never)]
-pub fn arp(
-    attempt: super::Attempt,
-    frame: oer_ieee80211_sta::data::ArpFrameObservation,
-) {
-    use owned_embassy_net::wire::{ArpHardware, ArpOperation, ArpPacket, EthernetProtocol};
-    let mut payload = frame.payload;
-    let Ok(packet) = ArpPacket::new_checked(&mut payload) else {
-        return;
-    };
-    if packet.hardware_type() != ArpHardware::Ethernet
-        || packet.protocol_type() != EthernetProtocol::Ipv4
-        || packet.hardware_len() != 6
-        || packet.protocol_len() != 4
-    {
-        return;
+/// The station's, data machine's and service's observer in this image: it
+/// turns the service's observations into the HIL station messages of the
+/// attempt. Only the station service task observes.
+#[derive(Clone, Copy)]
+pub struct StationObserver(pub super::Attempt);
+
+/// The addresses of the ARP MSDU whose MPDU identity the next ARP event
+/// carries: the service reports both back to back.
+static ARP_SENDER: AtomicU32 = AtomicU32::new(0);
+static ARP_TARGET: AtomicU32 = AtomicU32::new(0);
+static ARP_PENDING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+impl oer_trace::Observer for StationObserver {
+    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        use oer_ieee80211_instrumentation::{ArpOperation, Observation};
+        let operation = |operation| match operation {
+            ArpOperation::Request => 1,
+            ArpOperation::Reply => 2,
+        };
+        match Observation::of(&event) {
+            Some(Observation::RxFrameDropped(dropped)) => receive_drop(self.0, dropped.reason),
+            Some(Observation::GroupKeyInstalled(installed)) => {
+                group(self.0, installed.key_id, installed.replaced)
+            }
+            Some(Observation::ArpAddresses(addresses)) => {
+                ARP_SENDER.store(u32::from_be_bytes(addresses.sender), Relaxed);
+                ARP_TARGET.store(u32::from_be_bytes(addresses.target), Relaxed);
+                ARP_PENDING.store(true, Relaxed);
+            }
+            Some(Observation::ArpTransmitted(arp)) => self.arp(ArpFrame {
+                transmitted: true,
+                group_addressed: false,
+                operation: operation(arp.operation),
+                sequence: arp.sequence,
+                packet_number: arp.packet_number,
+                key_id: 0,
+            }),
+            Some(Observation::ArpReceived(arp)) => self.arp(ArpFrame {
+                transmitted: false,
+                group_addressed: arp.group_addressed,
+                operation: operation(arp.operation),
+                sequence: arp.sequence,
+                packet_number: arp.packet_number,
+                key_id: arp.key_id,
+            }),
+            _ => {}
+        }
     }
-    let operation = match packet.operation() {
-        ArpOperation::Request => 1,
-        ArpOperation::Reply => 2,
-        _ => return,
-    };
-    let (Ok(sender), Ok(target)) = (
-        packet.source_protocol_addr().try_into(),
-        packet.target_protocol_addr().try_into(),
-    ) else {
-        return;
-    };
-    super::emit(
-        attempt.request,
-        &oer_hil_protocol::wifi::StationArpFrame {
-            epoch: super::EPOCH.load(Relaxed),
-            generation: GENERATION.load(Relaxed),
-            transmitted: frame.transmitted,
-            group_addressed: frame.group_addressed,
-            operation,
-            sender,
-            target,
-            sequence: frame.sequence,
-            packet_number: frame.packet_number,
-            key_id: frame.key_id,
-        },
-    );
 }
 
-pub fn receive_drop(attempt: super::Attempt, reason: oer_ieee80211_sta::machine::StaRxError) {
+/// The public identity of an ARP MSDU's MPDU.
+struct ArpFrame {
+    transmitted: bool,
+    group_addressed: bool,
+    operation: u16,
+    sequence: u16,
+    packet_number: u64,
+    key_id: u8,
+}
+
+impl StationObserver {
+    #[inline(never)]
+    fn arp(self, frame: ArpFrame) {
+        if !ARP_PENDING.swap(false, Relaxed) {
+            return;
+        }
+        super::emit(
+            self.0.request,
+            &oer_hil_protocol::wifi::StationArpFrame {
+                epoch: super::EPOCH.load(Relaxed),
+                generation: GENERATION.load(Relaxed),
+                transmitted: frame.transmitted,
+                group_addressed: frame.group_addressed,
+                operation: frame.operation,
+                sender: ARP_SENDER.load(Relaxed).to_be_bytes(),
+                target: ARP_TARGET.load(Relaxed).to_be_bytes(),
+                sequence: frame.sequence,
+                packet_number: frame.packet_number,
+                key_id: frame.key_id,
+            },
+        );
+    }
+}
+
+fn receive_drop(attempt: super::Attempt, reason: oer_ieee80211_instrumentation::RxDrop) {
     use oer_hil_protocol::wifi::{StationReceiveDrop, StationReceiveDropReason as R};
-    use oer_ieee80211_rsn::supplicant::{
-        RsnConnectedProcessError as S, RsnConnectedSupplicantError as E,
-    };
-    use oer_ieee80211_sta::machine::StaRxError;
-    use oer_ieee80211_upper_mac::receive::RxDropReason as F;
+    use oer_ieee80211_instrumentation::{FrameDrop, RxDrop, SecurityDrop};
     let reason = match reason {
-        StaRxError::Frame(F::Integrity) => R::Integrity,
-        StaRxError::Frame(F::Replay) => R::Replay,
-        StaRxError::Frame(F::Protection) => R::Protection,
-        StaRxError::Security(S::Supplicant(E::InvalidMic)) => R::InvalidMic,
-        StaRxError::Security(S::Supplicant(E::StaleReplayCounter)) => R::StaleReplay,
-        StaRxError::Security(_) => R::Security,
+        RxDrop::Frame(FrameDrop::Integrity) => R::Integrity,
+        RxDrop::Frame(FrameDrop::Replay) => R::Replay,
+        RxDrop::Frame(FrameDrop::Protection) => R::Protection,
+        RxDrop::Security(SecurityDrop::InvalidMic) => R::InvalidMic,
+        RxDrop::Security(SecurityDrop::StaleReplay) => R::StaleReplay,
+        RxDrop::Security(SecurityDrop::Other) => R::Security,
         _ => return,
     };
     super::emit(

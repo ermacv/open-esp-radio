@@ -1,3 +1,10 @@
+// The image's station observations need the trace class its package
+// declares; `cargo fw` and `cargo hil` set the cfg.
+#[cfg(not(oer_trace))]
+compile_error!(
+    "the wifi-station class reports the station service's observations: build it with its declared trace class (RUSTFLAGS=\"--cfg oer_trace\")"
+);
+
 mod future;
 pub(crate) mod irq;
 mod network;

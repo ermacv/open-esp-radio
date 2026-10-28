@@ -26,6 +26,9 @@ fn every_event() -> Vec<Observation> {
             packet_number: 0xffff_ffff_ffff,
         }),
         Observation::EspNowPeersCleared(EspNowPeersCleared { count: 7 }),
+        Observation::RxFrameDropped(RxFrameDropped {
+            reason: RxDrop::Draining,
+        }),
     ];
     for code in 0..6 {
         events.push(Observation::DataMsduLost(DataMsduLost {
@@ -221,7 +224,8 @@ fn malformed_words_do_not_decode() {
     assert_eq!(DataMsduLost::decode([6, 0]), None);
     assert_eq!(DataMsduLost::decode([0, 1]), None);
     assert_eq!(RxFrameDropped::decode([0, 9]), None);
-    assert_eq!(RxFrameDropped::decode([2, 0]), None);
+    assert_eq!(RxFrameDropped::decode([2, 1]), None);
+    assert_eq!(RxFrameDropped::decode([3, 0]), None);
     assert_eq!(GroupKeyInstalled::decode([4, 0]), None);
     assert_eq!(GroupKeyInstalled::decode([0, 2]), None);
     assert_eq!(ArpTransmitted::decode([2 * 4096, 0]), None);

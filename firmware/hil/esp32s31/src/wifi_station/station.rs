@@ -236,10 +236,6 @@ struct Output<'a, 'id, Path: rp::PoolPath> {
 impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_, 'id, Path> {
     fn emit(&mut self, event: ServiceOutput<'id, Caps, Path>) {
         match event {
-            ServiceOutput::RxFrameDropped(reason) => {
-                super::observation::receive_drop(self.attempt, reason)
-            }
-            ServiceOutput::ArpFrame(frame) => super::observation::arp(self.attempt, frame),
             ServiceOutput::Notice(machine::StaNotice::Connected { .. }) => {
                 self.link.set(true);
                 self.attempt.publish(StationLinkState::Authorized);
@@ -256,16 +252,16 @@ impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_, 
                 self.ready.set(Some(refused.request));
                 self.retry.set(true);
             }
-            ServiceOutput::GroupKeyChanged { key_id, replaced } => {
-                super::observation::group(self.attempt, key_id.get(), replaced);
-            }
             _ => {}
         }
     }
 }
-type Service<'id, Id> = StationService<'id, StationComposition<Id>, Callbacks, Rates, 1>;
+/// The observer of the station, its data machine and its service.
+type Observed = super::observation::StationObserver;
+type Service<'id, Id> =
+    StationService<'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Completed<'p, 'id, Id> =
-    ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1>;
+    ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Io<'c, 'id, Id> =
     ServiceIo<'c, 'id, Caps, Output<'c, 'id, Child<Root<Id>, 8>>, 2, 8, 2, Child<Root<Id>, 8>>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p + 'c, Id: SlotIdentity + 'id> =
@@ -370,7 +366,7 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
         Duration::from_millis(100),
     )
     .view();
-    let service = StationService::<StationComposition<Id>, _, _, 1>::init_in_place(
+    let service = StationService::<StationComposition<Id>, _, _, 1, Observed>::init_in_place(
         service_storage,
         |station_storage| {
             let (station, granted) = Station::init_personal(
@@ -390,6 +386,7 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
                     listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
                     phy: PhyMode::Ht20,
                     callbacks: Callbacks(body.nonces),
+                    observer: super::observation::StationObserver(body.attempt),
                 },
                 body.password,
                 body.pmk,
@@ -414,12 +411,14 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
                 [t4, t5, t6, t7],
                 [b4, b5, b6, b7],
                 Backend::<Id>::TX_QUEUE_DEPTH,
+                super::observation::StationObserver(body.attempt),
             )
         },
         arbiter,
         Rates(EspressifRateSelection::<Caps>::new(), body.attempt),
         resources.terminal_access,
         receive,
+        super::observation::StationObserver(body.attempt),
     );
     let credits = credits.take().expect("station grants command credits");
     (service, credits)

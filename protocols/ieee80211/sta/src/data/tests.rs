@@ -1,8 +1,8 @@
 //! The data machine's encapsulation, tokens and admission.
 
 use super::*;
-use oer_ieee80211_instrumentation::DataLoss;
 use core::num::NonZeroU16;
+use oer_ieee80211_instrumentation::DataLoss;
 use oer_ieee80211_port::ResponseHeader;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_port::{
@@ -39,7 +39,10 @@ fn losses(observer: Observed, reason: oer_ieee80211_instrumentation::DataLoss) -
     let lost = oer_ieee80211_instrumentation::Observation::DataMsduLost(
         oer_ieee80211_instrumentation::DataMsduLost { reason },
     );
-    observer.observations().filter(|observation| *observation == lost).count() as u32
+    observer
+        .observations()
+        .filter(|observation| *observation == lost)
+        .count() as u32
 }
 
 fn tokens_lost(observer: Observed) -> u32 {
@@ -47,7 +50,10 @@ fn tokens_lost(observer: Observed) -> u32 {
     observer
         .observations()
         .filter(|observation| {
-            matches!(observation, oer_ieee80211_instrumentation::Observation::TokenLost(_))
+            matches!(
+                observation,
+                oer_ieee80211_instrumentation::Observation::TokenLost(_)
+            )
         })
         .count() as u32
 }
@@ -341,7 +347,10 @@ fn a_changed_link_refuses_data_without_reinterpreting_the_encoding_or_losing_res
                 reason,
             });
             assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-            assert_eq!(losses(data.observer, DataLoss::PreparationRefused), traced(1));
+            assert_eq!(
+                losses(data.observer, DataLoss::PreparationRefused),
+                traced(1)
+            );
             assert!(data.poll_action().is_none());
             assert_eq!(core::iter::from_fn(|| data.tickets.take()).count(), 2);
             assert_eq!(core::iter::from_fn(|| data.buffers.take()).count(), 2);
@@ -560,7 +569,10 @@ fn preparation_refusal_ends_only_its_msdu_without_a_radio_terminal_or_retry() {
     });
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
     assert_eq!(data.available(WmmAccessCategory::Video), capacity - 1);
-    assert_eq!(losses(data.observer, DataLoss::PreparationRefused), traced(1));
+    assert_eq!(
+        losses(data.observer, DataLoss::PreparationRefused),
+        traced(1)
+    );
     assert!(data.poll_action().is_none());
     data.returned(DataReturn::TxDone {
         context: accepted.context,
@@ -1039,8 +1051,8 @@ fn terminal_failures_retire_the_msdu_and_release_admission() {
             [1],
             [Buffer(std::vec![0; 1600])],
             core::num::NonZeroU8::new(8).unwrap(),
-        observer(),
-    );
+            observer(),
+        );
         let capacity = data.available(WmmAccessCategory::Voice);
         let mut replay = epoch();
         let mut link = qos_link(&(), &mut replay);
@@ -1061,8 +1073,14 @@ fn terminal_failures_retire_the_msdu_and_release_admission() {
             completion: outcome,
         });
         assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-        assert_eq!(losses(data.observer, DataLoss::Indeterminate), traced(indeterminate));
-        assert_eq!(losses(data.observer, DataLoss::ContentionLimited), traced(contention));
+        assert_eq!(
+            losses(data.observer, DataLoss::Indeterminate),
+            traced(indeterminate)
+        );
+        assert_eq!(
+            losses(data.observer, DataLoss::ContentionLimited),
+            traced(contention)
+        );
         assert_eq!(losses(data.observer, DataLoss::Expired), traced(expired));
         assert_eq!(tokens_lost(data.observer), 0);
         assert!(
@@ -1151,4 +1169,88 @@ fn received<'f, T: StaTokens>(
         Ok(parts) => parts.ether_type != EAPOL_ETHER_TYPE,
         Err(_) => true,
     }))
+}
+
+#[test]
+fn data_losses_arrive_in_the_order_they_happen() {
+    let mut data = machine();
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    for _ in 0..2 {
+        data.input(DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        })
+        .unwrap();
+    }
+    let first = transmit(&mut data);
+    let second = transmit(&mut data);
+    for (operation, completion) in [
+        (first, TxOutcome::Expired { msdus: 1 }),
+        (
+            second,
+            TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
+        ),
+    ] {
+        data.returned(DataReturn::TxDone {
+            context: operation.context,
+            ticket: operation.ticket,
+            buffer: operation.buffer,
+            completion,
+        });
+    }
+    data.input(DataInput {
+        msdu: msdu(6),
+        link: &mut link,
+    })
+    .unwrap();
+    data.leave();
+    let observed: Vec<_> = data.observer.observations().collect();
+    let lost = |reason| {
+        oer_ieee80211_instrumentation::Observation::DataMsduLost(
+            oer_ieee80211_instrumentation::DataMsduLost { reason },
+        )
+    };
+    if cfg!(oer_trace) {
+        assert_eq!(
+            observed,
+            [
+                lost(DataLoss::Expired),
+                lost(DataLoss::Indeterminate),
+                lost(DataLoss::LeftBehind),
+            ]
+        );
+    } else {
+        assert!(observed.is_empty());
+    }
+}
+
+#[test]
+fn the_noop_observer_adds_nothing_to_the_machines() {
+    // The machines' fields other than their observer.
+    #[allow(dead_code)]
+    struct Live<'id, D: StaDataTokens, K, const CAP: usize> {
+        tickets: Pool<D::Ticket>,
+        buffers: Pool<D::Buffer>,
+        owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
+        admission: Admissions,
+        next_order: u32,
+        link: Option<LinkEpoch<'id, D::EpochPath>>,
+    }
+    #[allow(dead_code)]
+    struct Retired<'id, D: StaDataTokens, K, const CAP: usize> {
+        tickets: Pool<D::Ticket>,
+        buffers: Pool<D::Buffer>,
+        owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
+        admission: Admissions,
+        next_order: u32,
+    }
+    assert_eq!(
+        core::mem::size_of::<StaData<'static, Data<'static>, Caps, 8, oer_trace::Noop>>(),
+        core::mem::size_of::<Live<'static, Data<'static>, Caps, 8>>()
+    );
+    assert_eq!(
+        core::mem::size_of::<RetiredData<'static, Data<'static>, Caps, 8, oer_trace::Noop>>(),
+        core::mem::size_of::<Retired<'static, Data<'static>, Caps, 8>>()
+    );
 }

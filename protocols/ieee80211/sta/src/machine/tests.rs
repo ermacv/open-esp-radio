@@ -319,6 +319,7 @@ enum Seen {
 struct Losses {
     tokens: core::cell::Cell<u32>,
     rsn: core::cell::Cell<u32>,
+    scan: core::cell::Cell<Option<oer_ieee80211_instrumentation::ScanBssObserved>>,
 }
 
 impl oer_trace::Observer for Losses {
@@ -327,6 +328,10 @@ impl oer_trace::Observer for Losses {
         let count = match Observation::of(&event) {
             Some(Observation::TokenLost(_)) => &self.tokens,
             Some(Observation::RsnInputDropped(_)) => &self.rsn,
+            Some(Observation::ScanBssObserved(observed)) => {
+                self.scan.set(Some(observed));
+                return;
+            }
             _ => return,
         };
         count.set(count.get() + 1);
@@ -1129,7 +1134,15 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
             ]
         );
         let now = at(13);
+        assert_eq!(world.station.config.observer.scan.get(), None);
         world.receive(now, &beacon());
+        // The beacon is the scan's first BSS, observed with the trace cfg.
+        assert_eq!(
+            world.station.config.observer.scan.get(),
+            cfg!(oer_trace).then_some(oer_ieee80211_instrumentation::ScanBssObserved {
+                outcome: oer_ieee80211_instrumentation::ScanOutcome::Inserted
+            })
+        );
         // The scan ends; the join leases channel 6 and authenticates.
         world.advance();
         assert_eq!(
@@ -3201,7 +3214,10 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
         assert!(world.station.poll_action(at(100)).is_none());
         assert_eq!(world.station.sequence, before);
         assert_eq!(world.station.poll_deadline(), Some(at(1100)));
-        world.station.tickets.put(held.pop().unwrap(), &oer_trace::Noop);
+        world
+            .station
+            .tickets
+            .put(held.pop().unwrap(), &oer_trace::Noop);
         let Some(StaAction::Transmit(transmit)) = world.station.poll_action(at(100)) else {
             panic!("returning credit resumes the first association request");
         };
@@ -4895,4 +4911,27 @@ fn an_overfull_returned_bank_reports_its_fault_and_keeps_owners_quarantined() {
         ));
         assert!(!world.station.keys.clear());
     });
+}
+
+#[test]
+fn the_noop_observer_adds_nothing_to_the_station_configuration() {
+    // The configuration's fields other than its observer.
+    #[allow(dead_code)]
+    struct Unobserved<K, C> {
+        address: oer_ieee80211_wire::address::OwnAddress,
+        ssid: heapless::Vec<u8, { oer_ieee80211_wire::management::MAX_SSID_LEN }>,
+        channels: heapless::Vec<SupportedChannel<K>, CHANNEL_CAPACITY>,
+        dwell: Duration,
+        skipped_absences: u8,
+        access_point_margin_db: u8,
+        supported_rates: [u8; 8],
+        association: &'static oer_ieee80211_wire::station::AssociationCapabilities,
+        listen_interval: StationListenInterval,
+        phy: PhyMode,
+        callbacks: C,
+    }
+    assert_eq!(
+        core::mem::size_of::<StaConfig<Caps, Callbacks, oer_trace::Noop>>(),
+        core::mem::size_of::<Unobserved<Caps, Callbacks>>()
+    );
 }

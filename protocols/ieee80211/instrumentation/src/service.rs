@@ -48,6 +48,9 @@ pub enum RxDrop {
     Frame(FrameDrop),
     /// The authenticated RSN protocol refused it.
     Security(SecurityDrop),
+    /// It arrived while the service drained its poisoned port: no receive
+    /// admission ran.
+    Draining,
 }
 
 /// The service dropped one received frame.
@@ -64,6 +67,7 @@ impl Event for RxFrameDropped {
         match self.reason {
             RxDrop::Frame(reason) => [0, reason.code()],
             RxDrop::Security(reason) => [1, reason.code()],
+            RxDrop::Draining => [2, 0],
         }
     }
 
@@ -71,6 +75,7 @@ impl Event for RxFrameDropped {
         let reason = match class {
             0 => RxDrop::Frame(FrameDrop::of_code(code)?),
             1 => RxDrop::Security(SecurityDrop::of_code(code)?),
+            2 if code == 0 => RxDrop::Draining,
             _ => return None,
         };
         Some(Self { reason })

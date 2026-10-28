@@ -63,6 +63,8 @@ wifi-station = [
     "dep:owned-embassy-net",
     "oer-espressif-executor/port-slots",
     "dep:oer-ieee80211-arbiter",
+    "dep:oer-ieee80211-instrumentation",
+    "dep:oer-trace",
 ]
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
@@ -92,6 +94,8 @@ oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", optional 
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"], optional = true }
 oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher", optional = true }
 oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn", optional = true }
+oer-ieee80211-instrumentation = { path = "../../../protocols/ieee80211/instrumentation", optional = true }
+oer-trace = { path = "../../../portable/trace", optional = true }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
@@ -130,3 +134,6 @@ bootstrap = { unnamed = 2 }
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# The wifi-station class reports the station service's observations; the
+# class is declared for the package, so every class builds with it.
+instrumentation = ["trace"]

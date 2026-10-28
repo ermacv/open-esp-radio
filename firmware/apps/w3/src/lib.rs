@@ -5,6 +5,9 @@
 
 pub mod beacon;
 pub mod bridge;
+// The station service's observations, counted only in the trace class.
+#[cfg(oer_trace)]
+pub mod collector;
 pub mod echo;
 pub mod icmp;
 pub mod observation;

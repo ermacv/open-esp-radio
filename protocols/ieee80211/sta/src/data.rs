@@ -988,7 +988,7 @@ fn sized<K: oer_ieee80211_port::Ieee80211Capabilities, C: oer_ieee80211_port::Tx
 
 mod arp;
 mod ethernet;
-pub use arp::ArpFrameObservation;
+pub use arp::{received_arp, transmitted_arp};
 pub use ethernet::{EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN, TxMsdu};
 
 #[cfg(test)]
