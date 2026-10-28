@@ -35,7 +35,7 @@ class Edits(unittest.TestCase):
             ("Edit", "/w/chips/esp32s31/vendor/facts/idf-function-signatures.toml", "cargo registers signatures"),
             ("Write", "chips/esp32s31/vendor/facts/idf-function-signatures.provenance.toml", "cargo registers signatures"),
             ("Edit", "/w/chips/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
-            ("Write", "chips/esp32c5/vendor/facts/names/libpp.toml", "re-deriving"),
+            ("Write", "chips/esp32s31/vendor/facts/names/libpp.toml", "re-deriving"),
             ("Write", "/w/chips/esp32s31/vendor/phy-baselines/4d59230d/wifi-cold.json", "phy-baseline generate"),
         ]:
             self.assert_blocked(tool, path, command)

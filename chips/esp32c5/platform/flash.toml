@@ -1,0 +1,32 @@
+# The flash map of the ESP32-C5 reference peer board: what the image bundle of
+# an ESP-IDF peer image needs from the chip. The chip has no profile and no
+# Rust code in this repository; `oer-image-build` reads this file for the
+# chip of a catalog image (`firmware/peers/esp32c5-*`) that has no profile.
+schema = 1
+# The ISA layer of the chip's hart; the bundle records its `rust-target`.
+isa = "rv32imac"
+espflash-chip = "esp32c5"
+
+# Where every image lies in flash. The bundle holds the bootloader and
+# partition table of the peer's own ESP-IDF build; `flasher_args.json` must
+# place them at these offsets. `application` and `otadata` are the partitions
+# of `partitions`.
+[flash]
+# SOURCE(esp32c5): ESP-IDF 4d59230d `components/esp_rom/esp32c5/esp_rom_caps.h:40`
+# (the ROM loads the second-stage bootloader from flash offset 0x2000).
+bootloader = 0x2000
+partition-table = 0x8000
+application = 0x10000
+otadata = 0xd000
+partitions = "chips/esp32c5/platform/partitions/applications.csv"
+# The application image's header: QIO at 80 MHz for the module's quad flash
+# (ESP-IDF's 120-MHz option also writes 80m and tunes at run time), 16 MiB
+# for the ESP32-C5-WROOM-1-N16R8 module; the ROM reads the bootloader in DIO.
+# SOURCE(esp32c5): ESP-IDF 4d59230d `components/spi_flash/esp32c5/Kconfig.flash_freq`
+# and `components/esptool_py/Kconfig.projbuild:47-60,75-82,104-109`.
+application-encoding = { mode = "qio", frequency-mhz = 80, size-mib = 16 }
+bootloader-mode = "dio"
+# How a written image starts: the writer leaves the ROM in download mode, and
+# a power-on reset (RTS without power control) starts the image; an RTS reset
+# out of download mode leaves the esp32c5's USB console silent (docs/hardware-errata.md).
+start = "power-on"

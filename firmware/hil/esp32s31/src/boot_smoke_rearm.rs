@@ -1,4 +1,4 @@
-//! Boot-smoke alarm checks; keep the S31 and C5 copies in step.
+//! Boot-smoke alarm checks.
 
 use core::{future::Future, future::poll_fn, pin::pin, task::Poll};
 

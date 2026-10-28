@@ -39,38 +39,71 @@ pub fn around(
         .flash
         .clone()
         .ok_or("the chip names no flash map")?;
-    // Given boot files are another build's: refuse what is not the chip's
-    // before anything is staged.
-    if let BootFiles::Given {
-        bootloader,
-        partition_table,
-    } = boot
-    {
-        let espflash = crate::encode::chip(&profile.facts.espflash_chip)?;
-        let read = |path: &Path| {
-            std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()))
-        };
-        crate::encode::require_chip_image(&read(bootloader)?, espflash)
-            .map_err(|error| format!("bootloader {}: {error}", bootloader.display()))?;
-        crate::encode::require_partition_table(&read(partition_table)?)
-            .map_err(|error| format!("partition table {}: {error}", partition_table.display()))?;
-    }
-    let staging = crate::exclusion::Staging::begin(output)?;
-    let mut bundle = ImageBundle::new(staging.directory(), &profile, flash);
-    std::fs::copy(application, bundle.application())?;
     match boot {
         BootFiles::Encode { elf } => {
+            let staging = crate::exclusion::Staging::begin(output)?;
+            let mut bundle = ImageBundle::new(staging.directory(), &profile, flash);
+            std::fs::copy(application, bundle.application())?;
             crate::staged::encode_boot_files(root, &profile, &std::fs::read(elf)?, &mut bundle)?;
+            staging.publish(bundle)
         }
         BootFiles::Given {
             bootloader,
             partition_table,
-        } => {
-            std::fs::copy(bootloader, bundle.bootloader())?;
-            std::fs::copy(partition_table, bundle.partitions())?;
-            bundle.boot = Boot::EspIdfBootloader;
-        }
+        } => esp_idf(
+            &EspIdfChip {
+                id: &profile.facts.id,
+                rust_target: &profile.facts.rust_target,
+                espflash_chip: &profile.facts.espflash_chip,
+                flash: &flash,
+            },
+            application,
+            bootloader,
+            partition_table,
+            output,
+        ),
     }
+}
+
+/// A chip as the boot files of a catalog ESP-IDF build need it: the chip's
+/// identity for the bundle and its flash map.
+pub struct EspIdfChip<'a> {
+    pub id: &'a str,
+    pub rust_target: &'a str,
+    /// The chip as `espflash` names it.
+    pub espflash_chip: &'a str,
+    pub flash: &'a oer_espressif_facts::FlashMap,
+}
+
+/// The bundle published in `output` of a catalog `application` with the
+/// bootloader and partition table of its own ESP-IDF build ([`Boot::EspIdfBootloader`]).
+pub fn esp_idf(
+    chip: &EspIdfChip<'_>,
+    application: &Path,
+    bootloader: &Path,
+    partition_table: &Path,
+    output: &Path,
+) -> Result<ImageBundle> {
+    // Given boot files are another build's: refuse what is not the chip's
+    // before anything is staged.
+    let espflash = crate::encode::chip(chip.espflash_chip)?;
+    let read =
+        |path: &Path| std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()));
+    crate::encode::require_chip_image(&read(bootloader)?, espflash)
+        .map_err(|error| format!("bootloader {}: {error}", bootloader.display()))?;
+    crate::encode::require_partition_table(&read(partition_table)?)
+        .map_err(|error| format!("partition table {}: {error}", partition_table.display()))?;
+    let staging = crate::exclusion::Staging::begin(output)?;
+    let mut bundle = ImageBundle::from_parts(
+        staging.directory(),
+        chip.id,
+        chip.rust_target,
+        Boot::EspIdfBootloader,
+        chip.flash.clone(),
+    );
+    std::fs::copy(application, bundle.application())?;
+    std::fs::copy(bootloader, bundle.bootloader())?;
+    std::fs::copy(partition_table, bundle.partitions())?;
     staging.publish(bundle)
 }
 

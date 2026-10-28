@@ -1,9 +1,0 @@
-# The module layer: ESP32-C5-WROOM-1-N16R8, with 16-MiB quad flash and 8-MiB
-# quad PSRAM (chips/esp32c5/board). Its boards (../boards/) extend it.
-schema = 2
-extends = "../rom-rev100.toml"
-
-[module]
-name = "ESP32-C5-WROOM-1-N16R8"
-flash = { size-mib = 16 }
-psram = { size-mib = 8 }

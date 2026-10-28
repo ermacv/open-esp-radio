@@ -2,7 +2,7 @@
 
 Source-only `no_std` radio stack in Rust for the Espressif ESP32-S31:
 Wi-Fi, Bluetooth LE and IEEE 802.15.4, without the vendor's radio binaries.
-The ESP32-C5 code lies in the tree outside the Cargo workspace and CI.
+The ESP32-C5 appears only as the stand's ESP-IDF peers; it has no Rust code.
 
 **Status.** Rebuilding. The protocol crates, the register model, PAC, HAL,
 PHY and the Wi-Fi driver's DMA and MAC layers are in place and tested on the

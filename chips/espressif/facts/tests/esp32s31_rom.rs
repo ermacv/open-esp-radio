@@ -49,8 +49,7 @@ fn scan(directory: &Path, declarations: &mut Declarations) {
             .expect("file name")
             .to_str()
             .expect("UTF-8 path");
-        if name.contains("esp32c5") || ["pac-raw", "vendor", "registers", "target"].contains(&name)
-        {
+        if ["pac-raw", "vendor", "registers", "target"].contains(&name) {
             continue;
         }
         if path.is_dir() {

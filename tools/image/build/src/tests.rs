@@ -241,6 +241,10 @@ pub(crate) fn repository() -> tempfile::TempDir {
     let root = directory.path();
     for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
         (
+            "chips/esp32c5/platform/flash.toml",
+            include_str!("../../../../chips/esp32c5/platform/flash.toml"),
+        ),
+        (
             "chips/esp32c5/platform/partitions/applications.csv",
             include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
         ),

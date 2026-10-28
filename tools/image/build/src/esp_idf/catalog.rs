@@ -161,21 +161,101 @@ pub fn bundle(
 ) -> Result<crate::bundle::ImageBundle> {
     let directory = idf::output(root, &entry.project(root)).join("build");
     only_boot_files(&directory)?;
-    let flash = crate::profile(root, &entry.chip)?
-        .facts
-        .flash
-        .ok_or_else(|| format!("{} names no flash map", entry.chip))?;
-    let (bootloader, partition_table) = super::flash_files(&directory, &flash)?;
-    crate::bundle::around(
-        root,
-        &entry.chip,
-        Path::new(&build.application),
-        crate::bundle::BootFiles::Given {
-            bootloader: &bootloader,
-            partition_table: &partition_table,
+    let chip = Chip::of(root, &entry.chip)?;
+    let (bootloader, partition_table) = super::flash_files(&directory, &chip.flash)?;
+    crate::around::esp_idf(
+        &crate::around::EspIdfChip {
+            id: &entry.chip,
+            rust_target: &chip.rust_target,
+            espflash_chip: &chip.espflash_chip,
+            flash: &chip.flash,
         },
+        Path::new(&build.application),
+        &bootloader,
+        &partition_table,
         output,
     )
+}
+
+/// The file of a peer chip's flash map, below the repository root.
+pub fn peer_flash_file(chip: &str) -> String {
+    format!("chips/{chip}/platform/flash.toml")
+}
+
+/// `chips/<chip>/platform/flash.toml`: what the image bundle of a chip
+/// without a profile, an ESP-IDF peer, needs from the chip.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+struct PeerFlash {
+    schema: u32,
+    /// The ISA layer (`chips/espressif/platform/isa/<isa>.toml`) whose
+    /// `rust-target` the bundle records.
+    isa: String,
+    espflash_chip: String,
+    flash: oer_espressif_facts::FlashMap,
+}
+
+/// The identity and flash map the bundle of a catalog image's chip records.
+struct Chip {
+    rust_target: String,
+    espflash_chip: String,
+    flash: oer_espressif_facts::FlashMap,
+}
+
+impl Chip {
+    /// `chip` of the tree at `root`: its profile when it has one, otherwise
+    /// its peer flash file. A chip with a profile and a flash file is
+    /// refused, so one chip has one source.
+    fn of(root: &Path, chip: &str) -> Result<Self> {
+        let file = root.join(peer_flash_file(chip));
+        let profiled = oer_chip_profile::supported(root)?
+            .iter()
+            .any(|supported| supported == chip);
+        if profiled {
+            if file.exists() {
+                return Err(format!(
+                    "{chip} has a chip profile and {}: one chip names its flash map once",
+                    peer_flash_file(chip)
+                )
+                .into());
+            }
+            let profile = crate::profile(root, chip)?;
+            return Ok(Self {
+                rust_target: profile.facts.rust_target,
+                espflash_chip: profile.facts.espflash_chip,
+                flash: profile
+                    .facts
+                    .flash
+                    .ok_or_else(|| format!("{chip} names no flash map"))?,
+            });
+        }
+        let text = std::fs::read_to_string(&file).map_err(|error| {
+            format!(
+                "{chip} has no chip profile and no {}: {error}",
+                peer_flash_file(chip)
+            )
+        })?;
+        let peer: PeerFlash =
+            toml::from_str(&text).map_err(|error| format!("{}: {error}", file.display()))?;
+        if peer.schema != 1 {
+            return Err(format!("{}: unsupported schema {}", file.display(), peer.schema).into());
+        }
+        let isa_file = root.join(format!("chips/espressif/platform/isa/{}.toml", peer.isa));
+        let isa_text = std::fs::read_to_string(&isa_file)
+            .map_err(|error| format!("{}: {error}", isa_file.display()))?;
+        let isa: toml::Table = toml::from_str(&isa_text)
+            .map_err(|error| format!("{}: {error}", isa_file.display()))?;
+        let rust_target = isa
+            .get("rust-target")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("the ISA layer {} names no rust-target", peer.isa))?
+            .to_owned();
+        Ok(Self {
+            rust_target,
+            espflash_chip: peer.espflash_chip,
+            flash: peer.flash,
+        })
+    }
 }
 
 /// Refuse a build whose `flasher_args.json` flashes more than the
@@ -268,6 +348,109 @@ mod tests {
         for image in ["ieee802154-peer", "vendor-calibration"] {
             assert!(entries.iter().any(|entry| entry.image == image), "{image}");
         }
+    }
+
+    /// The catalog entry `image` of the fixture tree and a finished ESP-IDF
+    /// build of it holding the files `flasher_args.json` names.
+    fn built_peer(root: &Path, image: &str) -> (Entry, idf::Build) {
+        let entries = entries(root).unwrap();
+        let entry = entry(&entries, image).unwrap();
+        let entry = Entry {
+            image: entry.image.clone(),
+            chip: entry.chip.clone(),
+            pins: entry.pins.clone(),
+            hold: None,
+            directory: entry.directory.clone(),
+        };
+        let build = idf::output(root, &entry.project(root)).join("build");
+        std::fs::create_dir_all(&build).unwrap();
+        let chip = crate::encode::chip(&entry.chip).unwrap();
+        let mut bootloader = vec![0; 24];
+        bootloader[0] = 0xe9;
+        bootloader[1] = 1;
+        bootloader[12..14].copy_from_slice(&chip.id().to_le_bytes());
+        std::fs::write(build.join("bootloader.bin"), &bootloader).unwrap();
+        let table = Chip::of(root, &entry.chip).unwrap().flash.partitions;
+        std::fs::write(
+            build.join("partition-table.bin"),
+            crate::encode::partition_table(&root.join(table)).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(build.join("app.bin"), b"application").unwrap();
+        std::fs::write(
+            build.join("flasher_args.json"),
+            r#"{
+                "flash_files": {"0x2000": "bootloader.bin", "0x8000": "partition-table.bin", "0x10000": "app.bin"},
+                "bootloader": {"offset": "0x2000", "file": "bootloader.bin"},
+                "partition-table": {"offset": "0x8000", "file": "partition-table.bin"},
+                "app": {"offset": "0x10000", "file": "app.bin"}
+            }"#,
+        )
+        .unwrap();
+        let idf_build = serde_json::from_value(serde_json::json!({
+            "chip": entry.chip,
+            "project": entry.project(root).name,
+            "idf_revision": "r",
+            "overrides": [],
+            "application": build.join("app.bin"),
+            "application_sha256": "00",
+            "elf": build.join("app.elf"),
+            "recipe": "r",
+        }))
+        .unwrap();
+        (entry, idf_build)
+    }
+
+    #[test]
+    fn a_peer_chip_without_a_profile_bundles_with_its_flash_file() {
+        let repository = crate::tests::repository();
+        let root = repository.path();
+        assert!(
+            !oer_chip_profile::supported(root)
+                .unwrap()
+                .contains(&"esp32c5".to_owned())
+        );
+        let (entry, build) = built_peer(root, "ble-dtm-peer");
+        let output = tempfile::tempdir().unwrap();
+        let bundle = bundle(root, &entry, &build, &output.path().join("bundle")).unwrap();
+        assert_eq!(bundle.chip, "esp32c5");
+        assert_eq!(bundle.boot, crate::Boot::EspIdfBootloader);
+        assert_eq!(bundle.rust_target, "riscv32imac-unknown-none-elf");
+        assert_eq!(bundle.flash.start, oer_espressif_facts::Start::PowerOn);
+        assert_eq!(
+            bundle
+                .segments()
+                .iter()
+                .map(|segment| segment.offset)
+                .collect::<Vec<_>>(),
+            [0x2000, 0x8000, 0x1_0000]
+        );
+        assert_eq!(
+            crate::bundle::ImageBundle::load(&output.path().join("bundle")).unwrap(),
+            bundle
+        );
+    }
+
+    #[test]
+    fn a_chip_names_its_flash_map_once() {
+        let repository = crate::tests::repository();
+        let root = repository.path();
+        // Neither a profile nor a flash file.
+        let error = Chip::of(root, "esp32x9").err().unwrap().to_string();
+        assert!(error.contains("no chip profile"), "{error}");
+        // Both a profile and a flash file.
+        let file = root.join(peer_flash_file("esp32s31"));
+        std::fs::write(&file, "schema = 1\n").unwrap();
+        let error = Chip::of(root, "esp32s31").err().unwrap().to_string();
+        assert!(error.contains("names its flash map once"), "{error}");
+        // A flash file with an unknown key or schema is refused.
+        let file = root.join(peer_flash_file("esp32c5"));
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(&file, text.replace("schema = 1", "schema = 2")).unwrap();
+        let error = Chip::of(root, "esp32c5").err().unwrap().to_string();
+        assert!(error.contains("unsupported schema 2"), "{error}");
+        std::fs::write(&file, format!("{text}extra = 1\n")).unwrap();
+        assert!(Chip::of(root, "esp32c5").is_err());
     }
 
     #[test]

@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Only build outputs, Git internals and the workspace excludes are skipped.
+/// Only build outputs and Git internals are skipped.
 const SKIPPED: [&str; 2] = ["target", ".git"];
 
 fn dependency_uses(name: &str, spec: &toml::Value, host: bool) -> usize {
@@ -51,34 +51,14 @@ fn manifest_uses(value: &toml::Value, host: bool) -> usize {
     count
 }
 
-/// The directories `[workspace] exclude` of the manifest at `root` names.
-fn excluded(root: &Path) -> Vec<PathBuf> {
-    let Ok(text) = std::fs::read_to_string(root.join("Cargo.toml")) else {
-        return Vec::new();
-    };
-    let manifest: toml::Value = toml::from_str(&text).expect("manifest parses");
-    manifest
-        .get("workspace")
-        .and_then(|workspace| workspace.get("exclude"))
-        .and_then(toml::Value::as_array)
-        .map(|paths| {
-            paths
-                .iter()
-                .filter_map(toml::Value::as_str)
-                .map(|path| root.join(path))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn visit(directory: &Path, excluded: &[PathBuf], files: &mut Vec<PathBuf>) {
+fn visit(directory: &Path, files: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(directory).expect("source tree is readable") {
         let path = entry.expect("directory entry is readable").path();
         let name = path.file_name().map(|name| name.to_string_lossy());
         let name = name.as_deref().unwrap_or("");
         if path.is_dir() {
-            if !SKIPPED.contains(&name) && !excluded.contains(&path) {
-                visit(&path, excluded, files);
+            if !SKIPPED.contains(&name) {
+                visit(&path, files);
             }
         } else if name == "Cargo.toml" {
             files.push(path);
@@ -89,7 +69,7 @@ fn visit(directory: &Path, excluded: &[PathBuf], files: &mut Vec<PathBuf>) {
 /// Uses per file below `root`, only files that have any.
 fn scan(root: &Path) -> BTreeMap<String, usize> {
     let mut files = Vec::new();
-    visit(root, &excluded(root), &mut files);
+    visit(root, &mut files);
     files
         .into_iter()
         .filter_map(|path| {
@@ -147,23 +127,6 @@ oer-espressif-boot = { path = "boot" }
     )
     .expect("manifest");
     assert_eq!(manifest_uses(&manifest, true), 0);
-}
-
-#[test]
-fn excluded_c5_manifests_are_not_scanned() {
-    let directory = tempfile::tempdir().expect("temporary directory");
-    std::fs::write(
-        directory.path().join("Cargo.toml"),
-        "[workspace]\nexclude = [\"c5\"]\n",
-    )
-    .expect("root manifest");
-    std::fs::create_dir(directory.path().join("c5")).expect("excluded directory");
-    std::fs::write(
-        directory.path().join("c5/Cargo.toml"),
-        "[dependencies]\nesp-hal = \"1\"\n",
-    )
-    .expect("excluded manifest");
-    assert!(scan(directory.path()).is_empty());
 }
 
 #[test]

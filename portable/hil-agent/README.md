@@ -3,9 +3,8 @@
 `oer-hil-agent` holds the HIL target logic that does not
 depend on the chip: the request intake (`base`), console serialization and
 the reset-retained post-mortem record. The
-[esp32s31 HIL agent](../../firmware/hil/esp32s31/README.md) and the
-[esp32c5 HIL agent](../../firmware/hil/esp32c5/TARGET.md) compose these modules with
-their executor and console. Host tests exercise the same compiled code the
+[esp32s31 HIL agent](../../firmware/hil/esp32s31/README.md) composes these modules with
+its executor and console. Host tests exercise the same compiled code the
 firmware links.
 
 | Feature | Modules |
