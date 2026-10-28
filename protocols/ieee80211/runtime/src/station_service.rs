@@ -2603,6 +2603,10 @@ impl<
 }
 
 /// What follows a station's action.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a station input owns its key-unwrap response by value; the service has no allocator"
+)]
 enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: usize> {
     Nothing,
     /// An arbiter's answer or a key, back to the station.

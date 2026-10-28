@@ -53,6 +53,10 @@ impl<E: KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>> KeyUnwrapSlot<E> {
     }
 
     /// Move `request` into the engine; a slot already running returns it.
+    #[expect(
+        clippy::result_large_err,
+        reason = "a refused request returns by value; the service has no allocator"
+    )]
     pub(super) fn start(
         &mut self,
         id: KeyUnwrapId,
