@@ -51,7 +51,7 @@ pub struct InterruptStacks {
     /// Each table entry's vector-slot symbol and the functions it calls
     /// itself (the handler, unless inlined into it).
     pub handlers: Vec<(u32, Vec<u32>)>,
-    /// Function names by address, for the report.
+    /// Function and unresolved-site names by address, for the report.
     names: BTreeMap<u32, String>,
     /// Own function frames, read from the analysis rather than a bound's
     /// critical path: a shorter path can still contain the largest frame.
@@ -651,12 +651,30 @@ impl InterruptStacks {
                     let _ = writeln!(out, "    {frame:>6} {}", name(*function));
                 }
                 for (site, reason) in &level.bound.unresolved {
-                    let _ = writeln!(out, "    unresolved {reason} at {site:#010x}");
+                    let _ = writeln!(
+                        out,
+                        "    unresolved {reason} at {site:#010x} in {}",
+                        name(*site)
+                    );
                 }
             }
         }
         out
     }
+}
+
+/// Reuse the stack report's containing-function lookup for unresolved sites,
+/// including exception paths; an unmapped address keeps its numeric label.
+fn report_names(image: &Image, harts: &[HartStack]) -> BTreeMap<u32, String> {
+    let mut names = image.names.clone();
+    for hart in harts {
+        for level in hart.levels.iter().chain([&hart.exception]) {
+            for &(site, _) in &level.bound.unresolved {
+                names.insert(site, image.function_at(site));
+            }
+        }
+    }
+    names
 }
 
 /// The names of the reviewed ROM summaries of `profile`'s chip; none for a
@@ -970,10 +988,10 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         expression_limited_functions: analysis.expression_limited_functions(),
         witness_memory_peak: memory.peak().max(image.resources.usage.peak_admitted_bytes),
         traps: image.traps.clone(),
+        names: report_names(image, &harts),
         harts,
         handlers,
         summaries: analysis.summaries.clone(),
-        names: names.clone(),
         frames: analysis
             .functions
             .iter()
@@ -1525,6 +1543,44 @@ mod tests {
         // The proven part alone must fit the usable stack with the margin.
         let over = u64::from(contract().irq_stack_usable_bytes(0).unwrap());
         assert!(partial(over).check(Required::Diagnostic).is_err());
+    }
+
+    #[test]
+    fn unresolved_irq_sites_name_the_owning_function_and_offset() {
+        use crate::stack::tests::{image, program};
+
+        let image = image(&program(false), &[]);
+        let root = image.symbol("indirect").unwrap();
+        let bound = image
+            .analysis
+            .bound_with(root, &image.resolutions, &mut ledger(), &mut || Ok(()))
+            .unwrap();
+        let &(site, reason) = bound.unresolved.first().unwrap();
+        let mut report = partial(bound.partial);
+        let mut level = report.harts[0].exception.clone();
+        level.level = 2;
+        level.bound = bound;
+        report.harts[0].levels.push(level);
+        // Also retain exception sites and addresses outside every function.
+        let unknown = 0xffff_fffc;
+        report.harts[0].exception.bound.unresolved = vec![(root, reason), (unknown, reason)];
+        report.names = report_names(&image, &report.harts);
+
+        let expected = format!("unresolved {reason} at {site:#010x} in indirect+0xc");
+        let text = report.render();
+        assert!(text.contains(&expected), "{text}");
+        assert!(
+            text.contains(&format!("at {root:#010x} in indirect\n")),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("at {unknown:#010x} in {unknown:#010x}")),
+            "{text}"
+        );
+        let error = report.check(Required::Product).unwrap_err().to_string();
+        assert!(error.contains(&expected), "{error}");
+        // A diagnostic image still reports its partial bound without promoting it.
+        assert!(!report.check(Required::Diagnostic).unwrap().is_empty());
     }
 
     #[test]

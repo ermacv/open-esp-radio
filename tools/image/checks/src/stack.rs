@@ -404,7 +404,7 @@ impl Image {
 
     /// The name of the function (of the image or a companion) that holds
     /// `address`.
-    fn function_at(&self, address: u32) -> String {
+    pub(crate) fn function_at(&self, address: u32) -> String {
         match self.containing(address) {
             Some((name, 0)) => name,
             Some((name, offset)) => format!("{name}+{offset:#x}"),
