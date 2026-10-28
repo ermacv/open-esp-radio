@@ -272,7 +272,12 @@ impl<const N: usize> Survey<N> {
         }
     }
 
-    /// The scan table the survey fills.
+    /// The scan table the survey fills; its tests read it, the image reads
+    /// [`Self::entries`].
+    #[cfg_attr(
+        target_arch = "riscv32",
+        expect(dead_code, reason = "the image reports through `entries`")
+    )]
     pub const fn table(&self) -> &ScanTable<N> {
         &self.table
     }

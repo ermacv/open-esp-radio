@@ -9,7 +9,7 @@ use oer_embassy_net::{
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{icmp, observation::Observations, report::Lease};
 use oer_hil_protocol::wifi::StationProbeFinished;
-use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
 use oer_time::{Clock, Duration, Timer};

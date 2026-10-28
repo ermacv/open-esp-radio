@@ -6,7 +6,7 @@ use core::{
     task::Poll,
 };
 use oer_embassy_net::{NoopRawMutex, OwnedNetworkRunner};
-use oer_ieee80211_runtime::station_service::{EthernetFrame, TxMsdu};
+use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
 use oer_time::{Clock, Duration, Timer};

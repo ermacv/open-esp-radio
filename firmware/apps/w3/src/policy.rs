@@ -32,7 +32,7 @@ mod tests {
     extern crate std;
     use self::std::boxed::Box;
     use oer_embassy_net::{NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources};
-    use oer_ieee80211_runtime::station_service::EthernetFrame;
+    use oer_ieee80211_sta::data::EthernetFrame;
     use oer_memory::WakingSpscQueue;
     use oer_ieee80211_wire::data::EthernetFrameParts;
     use xarxa_driver::{PacketPool, PacketPoolStorage};

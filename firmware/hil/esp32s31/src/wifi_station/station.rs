@@ -13,6 +13,7 @@ use oer_hil_protocol::wifi::{StationLinkState, StationServiceEnd};
 use oer_ieee80211_port::*;
 use oer_ieee80211_rsn::{Pmk, nonce::SNonceSource, sae::SaePassword};
 use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscQueue, WakingSpscSender};
 use oer_ieee80211_sta::{
     data::StaData,
