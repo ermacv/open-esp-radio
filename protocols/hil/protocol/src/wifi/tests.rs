@@ -205,6 +205,11 @@ fn event_round_trip<M: Message + Copy + PartialEq + core::fmt::Debug>(message: M
 #[test]
 fn link_events_preserve_epoch_and_typed_disconnect_reason() {
     let reasons = [
+        StationDisconnectReason::InvalidEapol(StationEapolParseError::Truncated),
+        StationDisconnectReason::InvalidEapol(StationEapolParseError::LengthMismatch),
+        StationDisconnectReason::InvalidEapol(StationEapolParseError::NotKeyPacket),
+        StationDisconnectReason::InvalidEapol(StationEapolParseError::NotRsnKeyDescriptor),
+        StationDisconnectReason::Sae(StationSaeFailure::Protocol(StationSaeError::Crypto)),
         StationDisconnectReason::LocalRequest,
         StationDisconnectReason::Peer {
             reason_code: 0xffff,

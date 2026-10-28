@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 use super::*;
 use crate::{EAPOL_KEY_PACKET_LEN, EapolKeyFrame, EapolKeyMessage, frames};
 
@@ -66,7 +72,7 @@ fn derives_known_ptk_and_builds_message_2() {
     };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context);
     assert_eq!(
-        ptk.bytes,
+        ptk.bytes.as_flattened(),
         [
             0x35, 0x07, 0x82, 0xa5, 0x49, 0x8c, 0x27, 0x32, 0x15, 0xbf, 0x37, 0x70, 0x79, 0xe3,
             0x65, 0x0f, 0x63, 0x13, 0xd9, 0x26, 0xdb, 0xe9, 0xed, 0x87, 0x53, 0xa6, 0x0f, 0x1b,

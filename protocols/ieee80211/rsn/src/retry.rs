@@ -123,7 +123,10 @@ impl RsnRetry {
             self.cancel();
             return Ok(RsnRetryAction::Exhausted);
         }
-        self.attempts_left -= 1;
+        self.attempts_left = self
+            .attempts_left
+            .checked_sub(1)
+            .ok_or(RsnRetryError::ZeroAttempts)?;
         // Even the last retransmission retains one response window. The next
         // alarm reports explicit exhaustion instead of silently leaving the
         // handshake pending forever after the retry budget is consumed.

@@ -83,7 +83,9 @@ fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
     assert_eq!(status, if h2e { 126 } else { 0 });
     let station = SaeCommitValues::parse(body, h2e).unwrap();
     let element = if h2e {
-        SaePasswordToken::derive(SSID, b"password", None).password_element(BSSID, LOCAL)
+        SaePasswordToken::derive(SSID, b"password", None)
+            .unwrap()
+            .password_element(BSSID, LOCAL)
     } else {
         SaePasswordElement::hunting_and_pecking(b"password", BSSID, LOCAL).unwrap()
     };
@@ -150,7 +152,7 @@ fn finish_handshake(
     )
     .unwrap();
     assert!(
-        message2.key_frame().verify_mic(&ptk),
+        message2.key_frame().unwrap().verify_mic(&ptk),
         "wire M2 must use the authenticated PMK"
     );
     let mut plain = advertisement[55..].to_vec();

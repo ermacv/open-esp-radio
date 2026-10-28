@@ -160,7 +160,13 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             };
         let akm = association_security.association.akm.akm();
         let resumed = if policy == ApSecurityPolicy::Wpa3Personal {
-            match self.resume_sae_pmk(peer, association_security.element.pmkids())? {
+            match self.resume_sae_pmk(
+                peer,
+                association_security
+                    .element
+                    .pmkids()
+                    .map_err(ApServiceError::InvalidAssociationSecurity)?,
+            )? {
                 Some(resumed) => Some(resumed),
                 None => {
                     return Ok(ApMlmeAction::AssociationResponse {

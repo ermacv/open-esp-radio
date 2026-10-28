@@ -29,7 +29,7 @@ impl RsnGtk {
             transmit,
             key: [0; RSN_GTK_LEN],
         };
-        gtk.key.copy_from_slice(key);
+        gtk.key = *key;
         gtk
     }
 
@@ -70,7 +70,7 @@ impl RsnIgtk {
             packet_number,
             key: [0; RSN_IGTK_LEN],
         };
-        igtk.key.copy_from_slice(key);
+        igtk.key = *key;
         Ok(igtk)
     }
 
@@ -97,8 +97,7 @@ pub struct RsnGroupKeys {
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct RsnPlainKeyData<const N: usize = RSN_PLAIN_KEY_DATA_CAPACITY> {
-    len: usize,
-    bytes: [u8; N],
+    bytes: heapless::Vec<u8, N>,
 }
 
 impl<const N: usize> RsnPlainKeyData<N> {
@@ -118,20 +117,26 @@ impl<const N: usize> RsnPlainKeyData<N> {
             .and_then(|len| len.checked_add(igtk_len))
             .ok_or(RsnFrameError::CapacityExceeded)?;
         let padding = if unpadded_len < 16 {
-            16_usize.saturating_sub(unpadded_len)
+            16_usize
+                .checked_sub(unpadded_len)
+                .ok_or(RsnFrameError::CapacityExceeded)?
         } else {
             unpadded_len.wrapping_neg() % 8
         };
         let len = unpadded_len
             .checked_add(padding)
             .ok_or(RsnFrameError::CapacityExceeded)?;
-        let mut bytes = [0; N];
+        let mut bytes = heapless::Vec::new();
+        bytes
+            .resize(len, 0)
+            .map_err(|_| RsnFrameError::CapacityExceeded)?;
         let (elements, rest) = bytes
-            .get_mut(..len)
-            .ok_or(RsnFrameError::CapacityExceeded)?
+            .as_mut_slice()
             .split_at_mut_checked(authenticator_elements.len())
             .ok_or(RsnFrameError::CapacityExceeded)?;
-        elements.copy_from_slice(authenticator_elements);
+        for (target, source) in elements.iter_mut().zip(authenticator_elements) {
+            *target = *source;
+        }
         let (gtk_kde, rest) = rest
             .split_first_chunk_mut::<GTK_KDE_LEN>()
             .ok_or(RsnFrameError::CapacityExceeded)?;
@@ -149,17 +154,11 @@ impl<const N: usize> RsnPlainKeyData<N> {
         if let Some(first) = padding_bytes.first_mut() {
             *first = VENDOR_ELEMENT_ID;
         }
-        Ok(Self { len, bytes })
+        Ok(Self { bytes })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        #[expect(
-            clippy::expect_used,
-            reason = "`build` checks `len <= N` when it copies; a longer length is a bug here"
-        )]
-        self.bytes
-            .get(..self.len)
-            .expect("the copied length fits the buffer")
+        self.bytes.as_slice()
     }
 }
 
@@ -168,8 +167,7 @@ const GTK_KDE_LEN: usize = 24;
 fn gtk_kde_bytes(gtk: &RsnGtk) -> [u8; GTK_KDE_LEN] {
     let [o0, o1, o2] = RSN_OUI;
     let mut kde = [0; GTK_KDE_LEN];
-    let (header, key) = kde.split_at_mut(8);
-    header.copy_from_slice(&[
+    let header = [
         VENDOR_ELEMENT_ID,
         (GTK_KDE_LEN - 2) as u8,
         o0,
@@ -178,8 +176,10 @@ fn gtk_kde_bytes(gtk: &RsnGtk) -> [u8; GTK_KDE_LEN] {
         GTK_KDE_TYPE,
         gtk.key_id.get() | u8::from(gtk.transmit) << 2,
         0,
-    ]);
-    key.copy_from_slice(gtk.key());
+    ];
+    for (target, source) in kde.iter_mut().zip(header.iter().chain(gtk.key())) {
+        *target = *source;
+    }
     kde
 }
 
@@ -187,8 +187,7 @@ fn igtk_kde_bytes(igtk: &RsnIgtk) -> [u8; IGTK_KDE_LEN] {
     let [o0, o1, o2] = RSN_OUI;
     let [id0, id1] = u16::from(igtk.key_id()).to_le_bytes();
     let mut kde = [0; IGTK_KDE_LEN];
-    let (header, rest) = kde.split_at_mut(8);
-    header.copy_from_slice(&[
+    let header = [
         VENDOR_ELEMENT_ID,
         (IGTK_KDE_LEN - 2) as u8,
         o0,
@@ -197,10 +196,15 @@ fn igtk_kde_bytes(igtk: &RsnIgtk) -> [u8; IGTK_KDE_LEN] {
         IGTK_KDE_TYPE,
         id0,
         id1,
-    ]);
-    let (packet_number, key) = rest.split_at_mut(RSN_IPN_LEN);
-    packet_number.copy_from_slice(&igtk.packet_number());
-    key.copy_from_slice(igtk.key());
+    ];
+    for (target, source) in kde.iter_mut().zip(
+        header
+            .iter()
+            .chain(igtk.packet_number().iter())
+            .chain(igtk.key()),
+    ) {
+        *target = *source;
+    }
     kde
 }
 
@@ -265,7 +269,11 @@ fn parse_key_data(
         let Some(&[_, length]) = remaining.first_chunk::<2>() else {
             return Err(RsnFrameError::MalformedKeyData);
         };
-        let Some((element, rest)) = remaining.split_at_checked(usize::from(length) + 2) else {
+        let Some((element, rest)) = remaining.split_at_checked(
+            usize::from(length)
+                .checked_add(2)
+                .ok_or(RsnFrameError::MalformedKeyData)?,
+        ) else {
             return Err(RsnFrameError::MalformedKeyData);
         };
         match (first, &context) {

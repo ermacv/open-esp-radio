@@ -31,7 +31,7 @@ fn frame(peer: [u8; 6], transaction: u16, status: u16, body: &[u8]) -> ApSaeFram
 fn responder() -> ApSaeResponder {
     ApSaeResponder::new(
         ACCESS_POINT,
-        ApSaeCredential::derive(SSID, SaePassword::new(PASSWORD).unwrap()),
+        ApSaeCredential::derive(SSID, SaePassword::new(PASSWORD).unwrap()).unwrap(),
     )
 }
 
@@ -45,7 +45,9 @@ struct Station {
 impl Station {
     fn new(station: [u8; 6], password: &[u8], h2e: bool) -> Self {
         let pwe = if h2e {
-            SaePasswordToken::derive(SSID, password, None).password_element(station, ACCESS_POINT)
+            SaePasswordToken::derive(SSID, password, None)
+                .unwrap()
+                .password_element(station, ACCESS_POINT)
         } else {
             SaePasswordElement::hunting_and_pecking(password, station, ACCESS_POINT).unwrap()
         };
@@ -414,5 +416,25 @@ fn processing_failure_keeps_both_the_commit_and_failure_reply_in_order() {
         ApSaeResult::Failed {
             status: AP_SAE_STATUS_UNSPECIFIED_FAILURE
         }
+    );
+}
+
+#[test]
+fn a_crypto_invariant_fault_keeps_the_cause_and_prepared_replies() {
+    let reply = ApSaeReply::new(
+        ACCESS_POINT,
+        1,
+        AP_SAE_STATUS_SUCCESS,
+        ReplyBody::Group([19, 0]),
+    );
+    let output = ApSaeOutput::reply(reply);
+    let fault = output.with_crypto_fault(SaeError::Crypto);
+    assert_eq!(
+        fault.result,
+        ApSaeResult::Fault(ApSaeFault::Crypto(SaeError::Crypto))
+    );
+    assert_eq!(
+        fault.replies().copied().collect::<std::vec::Vec<_>>(),
+        [reply]
     );
 }

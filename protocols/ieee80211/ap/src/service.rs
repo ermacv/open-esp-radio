@@ -343,6 +343,7 @@ pub enum ApMlmeAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApServiceError {
+    InvalidAssociationSecurity(oer_ieee80211_wire::security::rsn::RsnSyntaxError),
     UnknownPeer,
     /// The next identity would reuse the storage's exhausted u32 frontier.
     GenerationExhausted,

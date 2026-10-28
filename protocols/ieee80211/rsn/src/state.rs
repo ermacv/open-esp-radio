@@ -55,6 +55,7 @@ pub struct RsnTransmit {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnStateError {
+    InvalidFrame(crate::EapolParseError),
     WrongInterface,
     WrongPeer,
     UnsupportedDescriptorVersion,
@@ -73,6 +74,12 @@ pub enum RsnStateError {
     WrongPhase,
     StaleCompletion,
     RetainedFrameMismatch,
+}
+
+impl From<crate::EapolParseError> for RsnStateError {
+    fn from(error: crate::EapolParseError) -> Self {
+        Self::InvalidFrame(error)
+    }
 }
 
 impl RsnStateError {

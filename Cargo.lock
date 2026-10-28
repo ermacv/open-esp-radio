@@ -1276,6 +1276,7 @@ dependencies = [
  "hash32",
  "serde_core",
  "stable_deref_trait",
+ "zeroize",
 ]
 
 [[package]]
@@ -3046,6 +3047,7 @@ dependencies = [
  "chacha20",
  "cipher 0.5.2",
  "cmac",
+ "heapless",
  "hmac",
  "oer-ieee80211-cipher",
  "oer-ieee80211-wire",

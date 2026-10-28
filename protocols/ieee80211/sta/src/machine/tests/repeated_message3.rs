@@ -335,8 +335,8 @@ fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
                 panic!("disable must return both affine owners")
             };
             for (frame, counter) in [(message3.into_frame(), 4), (group.into_frame(), 5)] {
-                assert_eq!(frame.key_frame().replay_counter(), counter);
-                assert!(frame.key_frame().verify_mic(&ptk));
+                assert_eq!(frame.key_frame().unwrap().replay_counter(), counter);
+                assert!(frame.key_frame().unwrap().verify_mic(&ptk));
             }
         });
     }

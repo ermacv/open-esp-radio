@@ -71,6 +71,8 @@ pub enum StationDisconnectReason {
     Encode,
     /// The radio front end refused the station port.
     RadioFailure,
+    /// An owned EAPOL frame failed its retained parse invariant.
+    InvalidEapol(StationEapolParseError),
 }
 
 /// The cause an SAE exchange ended with.
@@ -110,6 +112,8 @@ pub enum StationSaeError {
     Reflection,
     InfiniteSecret,
     ConfirmMismatch,
+    /// An SAE field or curve conversion failed its mathematical invariant.
+    Crypto,
 }
 
 /// Why a required frame was refused before admission.
@@ -161,4 +165,13 @@ pub enum StationLeaveReason {
     Unservable,
     /// The port could not return to a channel, or it is poisoned.
     PortFailed,
+}
+
+/// The fixed EAPOL invariant refused by the RSN parser.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationEapolParseError {
+    Truncated,
+    LengthMismatch,
+    NotKeyPacket,
+    NotRsnKeyDescriptor,
 }

@@ -102,15 +102,20 @@ association (`oer_ieee80211_wire::security::AssociationSecurity`); this crate
 owns only their cryptography, each property an exhaustive match over the
 suite.
 
-The strict-lint contract requires boundary constructors to retain checked
-fixed-size fields as array references obtained with `split_first_chunk`.
-Variable-length envelopes must establish each boundary before those fields
-reach crypto and handshake transitions. Unvalidated external input retains
-type proofs or returns typed refusals. Production code denies `unwrap_used`,
-`expect_used`, `panic`, `unreachable` and `indexing_slicing`; unit tests use
-the `cfg(test)` exception. Narrow `#[expect(..., reason = "...")]` attributes
-document internal invariants, including fixed-size key layouts and HMAC
-constructors that accept every key length.
+The crate forbids unsafe code and denies the complete sans-IO panic lint
+catalogue. Fixed-size key blocks and validated borrowed fields retain their
+array types; owned variable-length bytes use zeroizing bounded vectors.
+Public frame/element views return their typed parse errors instead of relying
+on a successful earlier parse. All callers propagate or handle these errors.
+
+SAE field and point conversions retain `CtOption` validity through both H2E
+maps, inversions, square roots and constant-time coordinate selection. Only
+the final invariant validity is converted to `SaeError::Crypto` at the public
+operation boundary; intermediate values never cause a secret-dependent early
+return. Commit secrets retain validated scalar types. Point conversion uses
+`DecompressPoint` and checked field coordinates without the SEC1 tag parser.
+The comeback table selects and updates its slot with `ConditionallySelectable`.
+Tests retain local allowances for assertions and fixture construction.
 
 ## Known defects
 

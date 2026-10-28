@@ -141,7 +141,7 @@ impl RsnApState {
         frame: OwnedEapolFrame<N>,
     ) -> Result<RsnApAction<N>, RsnStateError> {
         self.validate_frame(&frame)?;
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if key.key_info().descriptor_version() != self.akm.key_descriptor_version() {
             return Err(RsnStateError::UnsupportedDescriptorVersion);
         }
@@ -156,7 +156,7 @@ impl RsnApState {
         &mut self,
         frame: OwnedEapolFrame<N>,
     ) -> Result<RsnApAction<N>, RsnStateError> {
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         let replay = key.replay_counter();
         let nonce = *key.nonce();
         if replay != self.message1_replay {
@@ -200,7 +200,7 @@ impl RsnApState {
         &mut self,
         frame: OwnedEapolFrame<N>,
     ) -> Result<RsnApAction<N>, RsnStateError> {
-        let replay = frame.key_frame().replay_counter();
+        let replay = frame.key_frame()?.replay_counter();
         if replay != self.message3_replay {
             return Err(RsnStateError::ReplayCounterMismatch);
         }
@@ -323,7 +323,7 @@ impl RsnApState {
         frame: &OwnedEapolFrame<N>,
     ) -> Result<(), RsnStateError> {
         self.validate_frame(frame)?;
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if key.message() != EapolKeyMessage::PairwiseMessage2
             || key.replay_counter() != self.message1_replay
             || key.nonce() != &self.supplicant_nonce
@@ -338,7 +338,7 @@ impl RsnApState {
         frame: &OwnedEapolFrame<N>,
     ) -> Result<(), RsnStateError> {
         self.validate_frame(frame)?;
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if key.message() != EapolKeyMessage::PairwiseMessage4
             || key.replay_counter() != self.message3_replay
         {
@@ -382,7 +382,11 @@ pub struct RsnApPeers<const P: usize> {
 
 impl<const P: usize> RsnApPeers<P> {
     pub fn new() -> Self {
-        assert!(P > 0);
+        const {
+            if P == 0 {
+                panic!("an AP peer table must have a slot");
+            }
+        }
         Self {
             peers: core::array::from_fn(|_| None),
         }

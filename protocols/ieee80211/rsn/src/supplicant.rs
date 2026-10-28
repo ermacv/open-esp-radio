@@ -112,6 +112,7 @@ impl RsnStaResponseDeadline {
 pub enum RsnStaSupplicantError {
     State(RsnStateError),
     Frame(RsnFrameError),
+    InvalidFrame(crate::EapolParseError),
     /// The station's own Association RSN element names no supported suite.
     Element(RsnElementError),
     MissingPtk,
@@ -127,7 +128,11 @@ impl RsnStaSupplicantError {
         match self {
             Self::State(error) => error.is_peer_input_rejection(),
             Self::InvalidMessage3Mic => true,
-            Self::Frame(_) | Self::Element(_) | Self::MissingPtk | Self::UnexpectedAction => false,
+            Self::InvalidFrame(_)
+            | Self::Frame(_)
+            | Self::Element(_)
+            | Self::MissingPtk
+            | Self::UnexpectedAction => false,
         }
     }
 }
@@ -150,6 +155,22 @@ impl<E> RsnStaProcessError<E> {
 impl<E> From<RsnStaSupplicantError> for RsnStaProcessError<E> {
     fn from(error: RsnStaSupplicantError) -> Self {
         Self::Supplicant(error)
+    }
+}
+
+impl From<crate::EapolParseError> for RsnStaSupplicantError {
+    fn from(error: crate::EapolParseError) -> Self {
+        Self::InvalidFrame(error)
+    }
+}
+impl<E> From<crate::EapolParseError> for RsnStaProcessError<E> {
+    fn from(error: crate::EapolParseError) -> Self {
+        Self::Supplicant(error.into())
+    }
+}
+impl From<RsnFrameError> for RsnStaSupplicantError {
+    fn from(error: RsnFrameError) -> Self {
+        Self::Frame(error)
     }
 }
 
@@ -230,6 +251,7 @@ impl RsnStaRetryInstall {
 pub struct RsnStaKeyDataRequest<const N: usize> {
     ticket: crate::state::RsnTicket,
     frame: crate::OwnedEapolFrame<N>,
+    replay_counter: u64,
     kek: RsnKeyEncryptionKey,
 }
 
@@ -240,12 +262,12 @@ impl<const N: usize> RsnStaKeyDataRequest<N> {
     }
 
     /// The wrapped Key Data field of Message 3.
-    pub fn wrapped_key_data(&self) -> &[u8] {
-        self.frame.key_frame().key_data()
+    pub fn wrapped_key_data(&self) -> Result<&[u8], crate::EapolParseError> {
+        Ok(self.frame.key_frame()?.key_data())
     }
 
     pub fn replay_counter(&self) -> u64 {
-        self.frame.key_frame().replay_counter()
+        self.replay_counter
     }
 }
 
@@ -282,12 +304,34 @@ pub enum RsnConnectedSupplicantError {
     StaleCompletion,
     InstallFailed,
     Frame(RsnFrameError),
+    InvalidFrame(crate::EapolParseError),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnConnectedProcessError<E> {
     Supplicant(RsnConnectedSupplicantError),
     KeyUnwrap(E),
+}
+
+impl From<crate::EapolParseError> for RsnConnectedSupplicantError {
+    fn from(error: crate::EapolParseError) -> Self {
+        Self::InvalidFrame(error)
+    }
+}
+impl<E> From<crate::EapolParseError> for RsnConnectedProcessError<E> {
+    fn from(error: crate::EapolParseError) -> Self {
+        Self::Supplicant(error.into())
+    }
+}
+impl From<RsnFrameError> for RsnConnectedSupplicantError {
+    fn from(error: RsnFrameError) -> Self {
+        Self::Frame(error)
+    }
+}
+impl<E> From<RsnFrameError> for RsnConnectedProcessError<E> {
+    fn from(error: RsnFrameError) -> Self {
+        Self::Supplicant(error.into())
+    }
 }
 
 /// Exact connected-state GTK publication ticket.
@@ -326,6 +370,7 @@ impl<const N: usize> RsnGroupKeyInstallRequest<N> {
 /// replay frontier. The KEK copy is cleared on drop.
 pub struct RsnGroupKeyDataRequest<const N: usize> {
     frame: crate::OwnedEapolFrame<N>,
+    replay_counter: u64,
     kek: RsnKeyEncryptionKey,
 }
 
@@ -336,17 +381,21 @@ impl<const N: usize> RsnGroupKeyDataRequest<N> {
     }
 
     /// The wrapped Key Data field of Group Message 1.
-    pub fn wrapped_key_data(&self) -> &[u8] {
-        self.frame.key_frame().key_data()
+    pub fn wrapped_key_data(&self) -> Result<&[u8], crate::EapolParseError> {
+        Ok(self.frame.key_frame()?.key_data())
     }
 
     pub fn replay_counter(&self) -> u64 {
-        self.frame.key_frame().replay_counter()
+        self.replay_counter
     }
     /// Return the authenticated frame when its exchange is disabled. Consuming
     /// the request also clears its private KEK copy.
     pub fn into_frame(self) -> crate::OwnedEapolFrame<N> {
-        let Self { frame, kek } = self;
+        let Self {
+            frame,
+            kek,
+            replay_counter: _,
+        } = self;
         drop(kek);
         frame
     }
@@ -470,7 +519,7 @@ impl RsnConnectedSupplicant {
         if frame.peer() != &self.authenticator {
             return Err(RsnConnectedSupplicantError::WrongPeer);
         }
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         self.completed_message3
             .validate_fields(self.key_confirmation.akm(), key)?;
         if !key.verify_mic_with_confirmation_key(&self.key_confirmation) {
@@ -516,7 +565,7 @@ impl RsnConnectedSupplicant {
         if frame.peer() != &self.authenticator {
             return Err(RsnConnectedSupplicantError::WrongPeer);
         }
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if key.key_info().descriptor_version()
             != self.key_confirmation.akm().key_descriptor_version()
         {
@@ -561,12 +610,13 @@ impl RsnConnectedSupplicant {
         &mut self,
         frame: crate::OwnedEapolFrame<N>,
     ) -> Result<RsnConnectedAction<N>, RsnConnectedSupplicantError> {
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if !key.key_info().encrypted_key_data() || key.key_data().is_empty() {
             return Err(RsnConnectedSupplicantError::MissingEncryptedKeyData);
         }
         Ok(RsnConnectedAction::UnwrapGroupKeyData(
             RsnGroupKeyDataRequest {
+                replay_counter: key.replay_counter(),
                 frame,
                 kek: RsnKeyEncryptionKey::copy_from(self.key_encryption.as_bytes()),
             },
@@ -583,9 +633,13 @@ impl RsnConnectedSupplicant {
         request: RsnGroupKeyDataRequest<N>,
         unwrapped: Result<RsnUnwrappedKeyData, E>,
     ) -> Result<RsnGroupKeyInstallRequest<N>, RsnConnectedProcessError<E>> {
-        let RsnGroupKeyDataRequest { frame, kek } = request;
+        let RsnGroupKeyDataRequest {
+            frame,
+            kek,
+            replay_counter: _,
+        } = request;
         drop(kek);
-        let replay_counter = frame.key_frame().replay_counter();
+        let replay_counter = frame.key_frame()?.replay_counter();
         if replay_counter <= self.replay_counter {
             return Err(RsnConnectedProcessError::Supplicant(
                 RsnConnectedSupplicantError::StaleCompletion,
@@ -599,15 +653,15 @@ impl RsnConnectedSupplicant {
         frame: &crate::OwnedEapolFrame<N>,
         unwrapped: Result<RsnUnwrappedKeyData, E>,
     ) -> Result<RsnGroupKeyInstallRequest<N>, RsnConnectedProcessError<E>> {
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         let replay_counter = key.replay_counter();
         let plain = unwrapped.map_err(RsnConnectedProcessError::KeyUnwrap)?;
         let (keys, commitment, response) = match key.message() {
             crate::EapolKeyMessage::PairwiseMessage3 => (
                 parse_gtk_key_data(
                     plain.as_bytes(),
-                    self.authenticator_security_ies.rsn_ie(),
-                    self.authenticator_security_ies.rsnxe(),
+                    self.authenticator_security_ies.rsn_ie()?,
+                    self.authenticator_security_ies.rsnxe()?,
                     self.management_protection,
                 ),
                 RsnCompletedKeyMessage::Pairwise(RsnCompletedMessage3::capture(key)),
@@ -697,7 +751,7 @@ impl RsnStaSupplicant {
             OwnedAssociationSecurityIes::try_copy_bytes(association_security_ies)
                 .map_err(RsnStaSupplicantError::Frame)?;
         // The station's own Association RSN element names the negotiated suite.
-        let own = validate_rsn_element(association_security_ies.rsn_ie())
+        let own = validate_rsn_element(association_security_ies.rsn_ie()?)
             .map_err(RsnStaSupplicantError::Element)?;
         let akm = own.akm();
         let management_protection = own.management_frame_protection().negotiated(
@@ -769,9 +823,9 @@ impl RsnStaSupplicant {
         // Authenticate a repeated M3 before changing its replay frontier;
         // exact-counter repeats must also match the retained authenticated M3.
         if self.state.phase() == RsnStaPhase::Completed
-            && frame.key_frame().message() == crate::EapolKeyMessage::PairwiseMessage3
+            && frame.key_frame()?.message() == crate::EapolKeyMessage::PairwiseMessage3
         {
-            let key = frame.key_frame();
+            let key = frame.key_frame()?;
             if !key.verify_mic(self.ptk()?) {
                 return Err(RsnStaSupplicantError::InvalidMessage3Mic);
             }
@@ -815,7 +869,7 @@ impl RsnStaSupplicant {
                 .build_transmit(transmit)
                 .map(RsnStaSupplicantAction::Ready),
             RsnStaAction::VerifyMessage3Mic { ticket, frame } => {
-                if !frame.key_frame().verify_mic(self.ptk()?) {
+                if !frame.key_frame()?.verify_mic(self.ptk()?) {
                     self.state
                         .complete_message3_mic::<N>(ticket, frame, false)
                         .map_err(RsnStaSupplicantError::State)?;
@@ -847,7 +901,12 @@ impl RsnStaSupplicant {
         request: RsnStaKeyDataRequest<N>,
         unwrapped: Result<RsnUnwrappedKeyData, E>,
     ) -> Result<RsnStaReady<N>, RsnStaProcessError<E>> {
-        let RsnStaKeyDataRequest { ticket, frame, kek } = request;
+        let RsnStaKeyDataRequest {
+            ticket,
+            replay_counter: _,
+            frame,
+            kek,
+        } = request;
         drop(kek);
         let unwrapped = match unwrapped {
             Ok(unwrapped) => unwrapped,
@@ -907,7 +966,12 @@ impl RsnStaSupplicant {
             RsnStaAction::DecryptMessage3KeyData { ticket, frame } => {
                 let kek = RsnKeyEncryptionKey::copy_from(self.ptk()?.kek());
                 Ok(RsnStaSupplicantAction::UnwrapKeyData(
-                    RsnStaKeyDataRequest { ticket, frame, kek },
+                    RsnStaKeyDataRequest {
+                        ticket,
+                        replay_counter: frame.key_frame()?.replay_counter(),
+                        frame,
+                        kek,
+                    },
                 ))
             }
             RsnStaAction::InstallKeys { ticket, frame } => self
@@ -923,7 +987,7 @@ impl RsnStaSupplicant {
         frame: crate::OwnedEapolFrame<N>,
         plain_key_data: Option<&[u8]>,
     ) -> Result<RsnStaReady<N>, RsnStaSupplicantError> {
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         let encrypted_key_data = key.key_info().encrypted_key_data();
         let replay_counter = key.replay_counter();
         let key_receive_sequence = *key.key_receive_sequence();
@@ -931,8 +995,8 @@ impl RsnStaSupplicant {
         let plain_key_data_len = plain_key_data.len();
         let RsnGroupKeys { gtk, igtk } = match parse_gtk_key_data(
             plain_key_data,
-            self.authenticator_security_ies.rsn_ie(),
-            self.authenticator_security_ies.rsnxe(),
+            self.authenticator_security_ies.rsn_ie()?,
+            self.authenticator_security_ies.rsnxe()?,
             self.management_protection,
         ) {
             Ok(keys) => keys,

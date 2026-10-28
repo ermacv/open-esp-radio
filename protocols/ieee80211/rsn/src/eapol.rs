@@ -137,9 +137,11 @@ pub struct EapolKeyFrame<'a> {
     fixed: &'a [u8; EAPOL_KEY_PACKET_LEN],
     key_data: &'a [u8],
     key_info: EapolKeyInfo,
+    fields: Fields<'a>,
 }
 
 /// The fixed EAPOL-Key fields, in wire order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Fields<'a> {
     key_length: [u8; 2],
     replay_counter: [u8; 8],
@@ -173,11 +175,14 @@ fn fields(fixed: &[u8; EAPOL_KEY_PACKET_LEN]) -> Option<Fields<'_>> {
 }
 
 /// A field split that cannot fail: [`fields`] covers exactly the fixed part.
-const FIELDS_COVER_THE_FIXED_PART: () = assert!(
-    7 + 2 + 8 + 32 + 16 + 8 + 8 + 16 + 2 == EAPOL_KEY_PACKET_LEN
+const FIELDS_COVER_THE_FIXED_PART: () = {
+    if !(7 + 2 + 8 + 32 + 16 + 8 + 8 + 16 + 2 == EAPOL_KEY_PACKET_LEN
         && EAPOL_KEY_MIC_START == 7 + 2 + 8 + 32 + 16 + 8 + 8
-        && EAPOL_KEY_MIC_END == EAPOL_KEY_MIC_START + 16
-);
+        && EAPOL_KEY_MIC_END == EAPOL_KEY_MIC_START + 16)
+    {
+        panic!("EAPOL fixed fields must cover the packet");
+    }
+};
 
 impl<'a> EapolKeyFrame<'a> {
     pub fn parse(bytes: &'a [u8]) -> Result<Self, EapolParseError> {
@@ -222,17 +227,8 @@ impl<'a> EapolKeyFrame<'a> {
             fixed,
             key_data,
             key_info: EapolKeyInfo(u16::from_be_bytes([info_high, info_low])),
+            fields: fields(fixed).ok_or(EapolParseError::Truncated)?,
         })
-    }
-
-    /// The fixed fields; `FIELDS_COVER_THE_FIXED_PART` proves the split
-    /// total.
-    fn fields(self) -> Fields<'a> {
-        #[expect(
-            clippy::expect_used,
-            reason = "FIELDS_COVER_THE_FIXED_PART proves the split total"
-        )]
-        fields(self.fixed).expect("the EAPOL-Key fields cover the fixed part")
     }
 
     pub const fn bytes(self) -> &'a [u8] {
@@ -240,7 +236,10 @@ impl<'a> EapolKeyFrame<'a> {
     }
 
     pub const fn protocol_version(self) -> u8 {
-        self.fixed[0]
+        {
+            let &[version, ..] = self.fixed;
+            version
+        }
     }
 
     pub const fn key_info(self) -> EapolKeyInfo {
@@ -252,31 +251,31 @@ impl<'a> EapolKeyFrame<'a> {
     }
 
     pub fn key_length(self) -> u16 {
-        u16::from_be_bytes(self.fields().key_length)
+        u16::from_be_bytes(self.fields.key_length)
     }
 
     pub fn replay_counter(self) -> u64 {
-        u64::from_be_bytes(self.fields().replay_counter)
+        u64::from_be_bytes(self.fields.replay_counter)
     }
 
     pub fn nonce(self) -> &'a [u8; 32] {
-        self.fields().nonce
+        self.fields.nonce
     }
 
     pub fn key_iv(self) -> &'a [u8; 16] {
-        self.fields().key_iv
+        self.fields.key_iv
     }
 
     pub fn mic(self) -> &'a [u8; 16] {
-        self.fields().mic
+        self.fields.mic
     }
 
     pub fn key_receive_sequence(self) -> &'a [u8; 8] {
-        self.fields().key_receive_sequence
+        self.fields.key_receive_sequence
     }
 
     pub fn key_identifier(self) -> &'a [u8; 8] {
-        self.fields().key_identifier
+        self.fields.key_identifier
     }
 
     pub const fn key_data(self) -> &'a [u8] {
@@ -311,8 +310,7 @@ impl<'a> EapolKeyFrame<'a> {
 pub struct OwnedEapolFrame<const N: usize = DEFAULT_EAPOL_FRAME_CAPACITY> {
     interface: RsnInterface,
     peer: [u8; 6],
-    len: usize,
-    bytes: [u8; N],
+    bytes: heapless::Vec<u8, N>,
 }
 
 impl<const N: usize> OwnedEapolFrame<N> {
@@ -322,15 +320,11 @@ impl<const N: usize> OwnedEapolFrame<N> {
         bytes: &[u8],
     ) -> Result<Self, EapolCopyError> {
         EapolKeyFrame::parse(bytes).map_err(EapolCopyError::Invalid)?;
-        let mut owned = [0; N];
-        owned
-            .get_mut(..bytes.len())
-            .ok_or(EapolCopyError::CapacityExceeded)?
-            .copy_from_slice(bytes);
+        let owned =
+            heapless::Vec::from_slice(bytes).map_err(|_| EapolCopyError::CapacityExceeded)?;
         Ok(Self {
             interface,
             peer,
-            len: bytes.len(),
             bytes: owned,
         })
     }
@@ -344,22 +338,11 @@ impl<const N: usize> OwnedEapolFrame<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        #[expect(
-            clippy::expect_used,
-            reason = "`try_copy` checks `len <= N` when it copies; a longer length is a bug here"
-        )]
-        self.bytes
-            .get(..self.len)
-            .expect("the copied length fits the buffer")
+        self.bytes.as_slice()
     }
 
-    /// The frame view of the bytes `try_copy` validated.
-    pub fn key_frame(&self) -> EapolKeyFrame<'_> {
-        #[expect(
-            clippy::expect_used,
-            reason = "`try_copy` parsed these exact bytes; a failing re-parse is a bug here"
-        )]
-        EapolKeyFrame::parse(self.as_bytes()).expect("owned EAPOL frame was validated on creation")
+    pub fn key_frame(&self) -> Result<EapolKeyFrame<'_>, EapolParseError> {
+        EapolKeyFrame::parse(self.as_bytes())
     }
 }
 

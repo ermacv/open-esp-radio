@@ -75,9 +75,9 @@ pub struct ApSaeCredential {
 impl ApSaeCredential {
     /// Derive the password token of `ssid`, as the vendor does when its
     /// access point starts.
-    pub fn derive(ssid: &[u8], password: SaePassword) -> Self {
-        let token = SaePasswordToken::derive(ssid, password.as_bytes(), None);
-        Self { password, token }
+    pub fn derive(ssid: &[u8], password: SaePassword) -> Result<Self, SaeError> {
+        let token = SaePasswordToken::derive(ssid, password.as_bytes(), None)?;
+        Ok(Self { password, token })
     }
 }
 
@@ -141,6 +141,8 @@ impl ApSaeReply {
 /// A responder invariant failure, retaining its source observations.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApSaeFault {
+    /// An RSN field or curve conversion failed its mathematical invariant.
+    Crypto(SaeError),
     MissingSession {
         slot: usize,
     },
@@ -199,6 +201,11 @@ impl ApSaeOutput {
             replies: [Some(reply), None],
             result: ApSaeResult::Continue,
         }
+    }
+
+    fn with_crypto_fault(mut self, error: SaeError) -> Self {
+        self.result = ApSaeResult::Fault(ApSaeFault::Crypto(error));
+        self
     }
 
     fn fault(fault: ApSaeFault) -> Self {
@@ -640,6 +647,7 @@ fn commit_step<R: ApSaeRandom>(
         let use_token = session.password_identifier || h2e;
         match draw_commit(local, peer, credential, use_token, random) {
             Ok(own) => session.own = Some(own),
+            Err(error @ SaeError::Crypto) => return output.with_crypto_fault(error),
             Err(_) => {
                 return ApSaeOutput::failure(
                     peer,
@@ -682,6 +690,7 @@ fn commit_step<R: ApSaeRandom>(
             session.keys = Some(keys);
             session.peer_commit = Some(peer_commit);
         }
+        Err(error @ SaeError::Crypto) => return output.with_crypto_fault(error),
         Err(_) => {
             return ApSaeOutput {
                 replies: [

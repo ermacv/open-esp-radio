@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 use super::*;
 
 fn key_packet(key_info: u16, replay_counter: u64) -> [u8; EAPOL_KEY_PACKET_LEN] {
@@ -44,4 +50,14 @@ fn rejects_ambiguous_lengths_and_non_rsn_descriptors() {
         EapolKeyFrame::parse(&packet),
         Err(EapolParseError::NotRsnKeyDescriptor)
     );
+}
+
+#[test]
+fn a_damaged_owned_frame_returns_the_parser_error_instead_of_panicking() {
+    let packet = key_packet(KEY_INFO_PAIRWISE | KEY_INFO_ACK | 2, 9);
+    let mut owned =
+        OwnedEapolFrame::<128>::try_copy(RsnInterface::Station, [1; 6], &packet).unwrap();
+    owned.bytes[1] = 0;
+    assert_eq!(owned.key_frame(), Err(EapolParseError::NotKeyPacket));
+    assert_eq!(owned.as_bytes().len(), packet.len());
 }

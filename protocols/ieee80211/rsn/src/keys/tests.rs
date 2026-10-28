@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 use super::*;
 
 fn key(peer: [u8; 6], value: u8) -> RsnKeyInstall {

@@ -112,7 +112,7 @@ impl RsnStaState {
         frame: OwnedEapolFrame<N>,
     ) -> Result<RsnStaAction<N>, RsnStateError> {
         self.validate_frame(&frame)?;
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if key.key_info().descriptor_version() != self.akm.key_descriptor_version() {
             return Err(RsnStateError::UnsupportedDescriptorVersion);
         }
@@ -132,7 +132,7 @@ impl RsnStaState {
         &mut self,
         frame: OwnedEapolFrame<N>,
     ) -> Result<RsnStaAction<N>, RsnStateError> {
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         let replay = key.replay_counter();
         let nonce = *key.nonce();
         if nonce.iter().all(|byte| *byte == 0) {
@@ -202,7 +202,7 @@ impl RsnStaState {
         frame: OwnedEapolFrame<N>,
     ) -> Result<RsnStaAction<N>, RsnStateError> {
         self.validate_message3_fields(&frame)?;
-        let replay = frame.key_frame().replay_counter();
+        let replay = frame.key_frame()?.replay_counter();
         match self.phase {
             RsnStaPhase::AwaitingMessage3 => {
                 if replay <= self.message1_replay {
@@ -287,7 +287,7 @@ impl RsnStaState {
             return Ok(RsnStaAction::None);
         }
 
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if key.key_info().encrypted_key_data() {
             if key.key_data().is_empty() {
                 return Err(RsnStateError::MissingEncryptedKeyData);
@@ -365,7 +365,7 @@ impl RsnStaState {
     ) -> Result<(), RsnStateError> {
         self.validate_frame(frame)?;
         self.validate_message3_fields(frame)?;
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if key.message() != EapolKeyMessage::PairwiseMessage3
             || key.replay_counter() != self.message3_replay
         {
@@ -378,7 +378,7 @@ impl RsnStaState {
         &self,
         frame: &OwnedEapolFrame<N>,
     ) -> Result<(), RsnStateError> {
-        let key = frame.key_frame();
+        let key = frame.key_frame()?;
         if key.key_info().raw() != pairwise_message3_key_info(self.akm) {
             return Err(RsnStateError::InvalidMessage3KeyInfo);
         }

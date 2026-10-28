@@ -1,16 +1,17 @@
 #![no_std]
 #![forbid(unsafe_code)]
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::indexing_slicing
-    )
+#![deny(
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
-#![deny(clippy::todo, clippy::unimplemented)]
 
 //! Allocation-free RSN (IEEE 802.11 robust security network) protocol
 //! primitives shared by WPA2 and WPA3 authentication suites.
@@ -37,6 +38,7 @@ pub mod element;
 pub mod frames;
 mod kdf;
 pub mod keys;
+mod mac;
 pub mod management_ccmp;
 pub mod nonce;
 pub mod retry;
@@ -70,6 +72,12 @@ pub enum RsnInterface {
 
 #[cfg(test)]
 mod key_schedule_tests {
+    #![allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects,
+        clippy::unreachable
+    )]
     #[test]
     fn aes_key_schedules_zeroize_on_drop() {
         fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>() {}

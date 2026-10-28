@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 //! Deterministic inputs for the "never panics on received bytes" tests.
 //!
 //! A xorshift generator draws random byte strings and mutations of real

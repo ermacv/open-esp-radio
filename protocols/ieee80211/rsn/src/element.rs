@@ -80,25 +80,22 @@ impl ValidatedRsnElement {
     }
 
     /// Whether the element's AKM list names `akm`.
-    pub fn lists_akm(&self, akm: Akm) -> bool {
-        self.element()
+    pub fn lists_akm(&self, akm: Akm) -> Result<bool, RsnSyntaxError> {
+        Ok(self
+            .element()?
             .akm_suites()
             .iter()
-            .any(|selector| Akm::from_suite_selector(selector) == Some(akm))
+            .any(|selector| Akm::from_suite_selector(selector) == Some(akm)))
     }
 
     /// The element `validate_rsn_element` parsed.
-    fn element(&self) -> RsnElement<'_> {
-        #[expect(
-            clippy::expect_used,
-            reason = "`validate_rsn_element` parsed these exact bytes; a failing re-parse is a bug here"
-        )]
-        RsnElement::parse(self.owned.as_bytes()).expect("a validated element parses again")
+    fn element(&self) -> Result<RsnElement<'_>, RsnSyntaxError> {
+        RsnElement::parse(self.owned.as_bytes())
     }
 
     /// The PMKIDs the element lists, in order.
-    pub fn pmkids(&self) -> impl Iterator<Item = [u8; RSN_PMKID_LEN]> + '_ {
-        self.element().pmkids()
+    pub fn pmkids(&self) -> Result<impl Iterator<Item = [u8; RSN_PMKID_LEN]> + '_, RsnSyntaxError> {
+        Ok(self.element()?.pmkids())
     }
 
     pub const fn management_frame_protection(&self) -> ManagementFrameProtection {

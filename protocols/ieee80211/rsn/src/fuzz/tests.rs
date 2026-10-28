@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 //! Every entry point that takes received bytes returns, on any input.
 //!
 //! Each test drives one entry point with [`QUICK`] inputs (random and
@@ -78,7 +84,10 @@ fn eapol(count: usize) {
         if let Ok(owned) =
             OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, [2, 0, 0, 0, 0, 1], bytes)
         {
-            let _ = (owned.as_bytes(), owned.key_frame().replay_counter());
+            let _ = (
+                owned.as_bytes(),
+                owned.key_frame().unwrap().replay_counter(),
+            );
         }
     });
 }
@@ -125,12 +134,12 @@ fn security_elements(count: usize) {
             let _ = ie.as_bytes();
         }
         if let Ok(ies) = OwnedAssociationSecurityIes::<128>::try_copy_bytes(bytes) {
-            let _ = (ies.as_bytes(), ies.rsn_ie(), ies.rsnxe());
+            let _ = (ies.as_bytes(), ies.rsn_ie().unwrap(), ies.rsnxe().unwrap());
         }
         if let Ok(element) = validate_rsn_element(bytes) {
             let _ = (
-                element.lists_akm(Akm::PskSha256),
-                element.pmkids().count(),
+                element.lists_akm(Akm::PskSha256).unwrap(),
+                element.pmkids().unwrap().count(),
                 element.management_frame_protection(),
             );
         }
@@ -333,7 +342,7 @@ fn constructors_refuse_what_the_views_rely_on() {
     );
     let owned =
         OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, station, &MESSAGE3).unwrap();
-    assert_eq!(owned.key_frame().bytes(), MESSAGE3.as_slice());
+    assert_eq!(owned.key_frame().unwrap().bytes(), MESSAGE3.as_slice());
 
     let mut long = Vec::from(RSN_IE);
     long[1] += 1;

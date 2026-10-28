@@ -58,7 +58,12 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         }
         let akm = match policy {
             ApSecurityPolicy::Open => return Err(ApAssociationSecurityError::InvalidElements),
-            ApSecurityPolicy::Wpa2Personal if rsn.lists_akm(Akm::Psk) && rsn.pmkid_count() == 0 => {
+            ApSecurityPolicy::Wpa2Personal
+                if rsn
+                    .lists_akm(Akm::Psk)
+                    .map_err(|_| ApAssociationSecurityError::InvalidElements)?
+                    && rsn.pmkid_count() == 0 =>
+            {
                 AssociationAkm::Psk
             }
             ApSecurityPolicy::Wpa2Personal => {
@@ -66,7 +71,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             }
             // The BSS advertises hash to element, so an exchange uses it
             // whenever the station's RSNXE announces it as well.
-            ApSecurityPolicy::Wpa3Personal if rsn.lists_akm(Akm::Sae) => {
+            ApSecurityPolicy::Wpa3Personal
+                if rsn
+                    .lists_akm(Akm::Sae)
+                    .map_err(|_| ApAssociationSecurityError::InvalidElements)? =>
+            {
                 AssociationAkm::Sae(if security.rsnxe.is_some_and(announces_sae_h2e) {
                     SaePwe::HashToElement
                 } else {
@@ -324,7 +333,10 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                         .pending_ptk
                         .as_ref()
                         .ok_or(ApWpa2Error::MissingPairwiseKey)?;
-                    message4.key_frame().verify_mic(ptk)
+                    message4
+                        .key_frame()
+                        .map_err(RsnStateError::from)?
+                        .verify_mic(ptk)
                 };
                 let action = self
                     .checked_peer_mut(peer)?
@@ -375,7 +387,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         let RsnApAction::VerifyMessage2Mic { ticket, message2 } = action else {
             return Err(ApWpa2Error::UnexpectedAction);
         };
-        let valid = message2.key_frame().verify_mic(&ptk);
+        let key_frame = message2.key_frame().map_err(RsnStateError::from)?;
+        let valid = key_frame.verify_mic(&ptk);
         // The association commitment is an authenticated semantic binding.
         // Do not let attacker-controlled Key Data decide peer teardown until
         // this exact M2 has passed its PTK-derived MIC.
@@ -386,7 +399,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 .as_ref()
                 .is_some_and(|binding| {
                     self.peer_pmk(peer)
-                        .is_ok_and(|pmk| binding.matches(pmk, message2.key_frame().key_data()))
+                        .is_ok_and(|pmk| binding.matches(pmk, key_frame.key_data()))
                 });
         let action = self
             .checked_peer_mut(peer)?

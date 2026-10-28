@@ -76,19 +76,30 @@ impl Pmk {
         let mut canonical = [0; 76];
         let (first_address, second_address) =
             ordered(&context.authenticator_address, &context.supplicant_address);
-        canonical[..6].copy_from_slice(first_address);
-        canonical[6..12].copy_from_slice(second_address);
+
         let (first_nonce, second_nonce) =
             ordered(&context.authenticator_nonce, &context.supplicant_nonce);
-        canonical[12..44].copy_from_slice(first_nonce);
-        canonical[44..76].copy_from_slice(second_nonce);
-        // Expand directly into its zeroizing owner. A separate return array
-        // would retain an unowned copy of the PTK, including the CCMP TK.
+        for (target, source) in canonical.iter_mut().zip(
+            first_address
+                .iter()
+                .chain(second_address)
+                .chain(first_nonce)
+                .chain(second_nonce),
+        ) {
+            *target = *source;
+        }
+        // Split the expansion into typed KCK, KEK and TK blocks, then erase
+        // the temporary expansion and canonical context before returning.
         let mut ptk = Ptk {
             akm,
-            bytes: [0; RSN_PTK_LEN],
+            bytes: [[0; 16]; 3],
         };
-        akm.expand_ptk(&self.0, &canonical, &mut ptk.bytes);
+        let mut expanded = [0; RSN_PTK_LEN];
+        akm.expand_ptk(&self.0, &canonical, &mut expanded);
+        for (target, source) in ptk.bytes.as_flattened_mut().iter_mut().zip(&expanded) {
+            *target = *source;
+        }
+        expanded.zeroize();
         canonical.zeroize();
         ptk
     }
@@ -109,13 +120,8 @@ impl Pmk {
         AssociationSecurityBinding(binding)
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "HMAC accepts every key length, including the fixed 32-byte PMK"
-    )]
     fn association_security_binding_mac(&self, association_security_ies: &[u8]) -> Hmac<Sha1> {
-        let mut mac = Hmac::<Sha1>::new_from_slice(&self.0)
-            .expect("WPA2 PMK length is always accepted by HMAC");
+        let mut mac = crate::mac::sha1(&self.0);
         mac.update(RSN_ASSOCIATION_SECURITY_BINDING_LABEL);
         mac.update(&(association_security_ies.len() as u64).to_be_bytes());
         mac.update(association_security_ies);
@@ -129,7 +135,7 @@ impl Pmk {
 pub struct Ptk {
     #[zeroize(skip)]
     akm: Akm,
-    bytes: [u8; RSN_PTK_LEN],
+    bytes: [[u8; 16]; 3],
 }
 
 /// Connected-state EAPOL authentication authority derived from one PTK.
@@ -158,41 +164,22 @@ impl Ptk {
         self.akm
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "KCK occupies the first 16 bytes of the fixed 48-byte PTK"
-    )]
     pub fn kck(&self) -> &[u8; RSN_KCK_LEN] {
-        self.bytes[..RSN_KCK_LEN]
-            .try_into()
-            .expect("KCK is the first 16 PTK bytes")
+        let [kck, _, _] = &self.bytes;
+        kck
     }
-
-    #[expect(
-        clippy::expect_used,
-        reason = "KEK occupies bytes 16 through 32 of the fixed 48-byte PTK"
-    )]
     pub fn kek(&self) -> &[u8; RSN_KEK_LEN] {
-        self.bytes[RSN_KCK_LEN..RSN_KCK_LEN + RSN_KEK_LEN]
-            .try_into()
-            .expect("KEK is PTK bytes 16..32")
+        let [_, kek, _] = &self.bytes;
+        kek
     }
-
-    #[expect(
-        clippy::expect_used,
-        reason = "CCMP TK occupies bytes 32 through 48 of the fixed 48-byte PTK"
-    )]
     pub fn temporal_key(&self) -> &[u8; 16] {
-        self.bytes[32..48]
-            .try_into()
-            .expect("CCMP temporal key is PTK bytes 32..48")
+        let [_, _, tk] = &self.bytes;
+        tk
     }
 
     pub(crate) fn into_connected_keys(mut self) -> (RsnKeyConfirmationKey, RsnKeyEncryptionKey) {
-        let mut kck = [0; RSN_KCK_LEN];
-        kck.copy_from_slice(self.kck());
-        let mut kek = [0; RSN_KEK_LEN];
-        kek.copy_from_slice(self.kek());
+        let kck = *self.kck();
+        let kek = *self.kek();
         // Do not retain a second software copy of the installed temporal key
         // until this value happens to leave scope.
         let akm = self.akm;

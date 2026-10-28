@@ -14,8 +14,7 @@ use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedRsnIe<const N: usize = RSN_IE_CAPACITY> {
-    len: usize,
-    bytes: [u8; N],
+    bytes: heapless::Vec<u8, N>,
 }
 
 impl<const N: usize> OwnedRsnIe<N> {
@@ -26,25 +25,13 @@ impl<const N: usize> OwnedRsnIe<N> {
         if id != RSN_ELEMENT_ID || usize::from(length) != body.len() {
             return Err(RsnFrameError::InvalidRsnIe);
         }
-        let mut owned = [0; N];
-        owned
-            .get_mut(..bytes.len())
-            .ok_or(RsnFrameError::CapacityExceeded)?
-            .copy_from_slice(bytes);
-        Ok(Self {
-            len: bytes.len(),
-            bytes: owned,
-        })
+        let bytes =
+            heapless::Vec::from_slice(bytes).map_err(|_| RsnFrameError::CapacityExceeded)?;
+        Ok(Self { bytes })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        #[expect(
-            clippy::expect_used,
-            reason = "`try_copy` checks `len <= N` when it copies; a longer length is a bug here"
-        )]
-        self.bytes
-            .get(..self.len)
-            .expect("the copied length fits the buffer")
+        self.bytes.as_slice()
     }
 }
 
@@ -55,8 +42,7 @@ impl<const N: usize> OwnedRsnIe<N> {
 /// when validating message 3 key data.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedAssociationSecurityIes<const N: usize = RSN_ASSOC_SECURITY_IES_CAPACITY> {
-    len: usize,
-    bytes: [u8; N],
+    bytes: heapless::Vec<u8, N>,
 }
 
 impl<const N: usize> OwnedAssociationSecurityIes<N> {
@@ -68,7 +54,11 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
         if id != RSN_ELEMENT_ID {
             return Err(RsnFrameError::InvalidRsnIe);
         }
-        let Some((rsn, rsnxe)) = bytes.split_at_checked(usize::from(length) + 2) else {
+        let Some((rsn, rsnxe)) = bytes.split_at_checked(
+            usize::from(length)
+                .checked_add(2)
+                .ok_or(RsnFrameError::InvalidRsnIe)?,
+        ) else {
             return Err(RsnFrameError::InvalidRsnIe);
         };
         let rsn = OwnedRsnIe::<RSN_IE_CAPACITY>::try_copy(rsn)?;
@@ -95,44 +85,55 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
         if len > N {
             return Err(RsnFrameError::CapacityExceeded);
         }
-        let mut bytes = [0; N];
-        let (rsn, rest) = bytes
-            .get_mut(..len)
-            .ok_or(RsnFrameError::CapacityExceeded)?
-            .split_at_mut(rsn_ie.as_bytes().len());
-        rsn.copy_from_slice(rsn_ie.as_bytes());
-        rest.copy_from_slice(rsnxe);
-        Ok(Self { len, bytes })
+        let mut bytes = heapless::Vec::from_slice(rsn_ie.as_bytes())
+            .map_err(|_| RsnFrameError::CapacityExceeded)?;
+        bytes
+            .extend_from_slice(rsnxe)
+            .map_err(|_| RsnFrameError::CapacityExceeded)?;
+        Ok(Self { bytes })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        #[expect(
-            clippy::expect_used,
-            reason = "`try_copy` checks `len <= N` when it copies; a longer length is a bug here"
-        )]
-        self.bytes
-            .get(..self.len)
-            .expect("the copied length fits the buffer")
+        self.bytes.as_slice()
     }
 
     /// The RSN element and the RSNXE after it.
-    fn split(&self) -> (&[u8], &[u8]) {
+    fn split(&self) -> Result<(&[u8], &[u8]), RsnFrameError> {
         let bytes = self.as_bytes();
-        #[expect(
-            clippy::expect_used,
-            reason = "`try_copy` starts the bytes with a whole RSN element; a short one is a bug here"
-        )]
+        let length = bytes.get(1).ok_or(RsnFrameError::InvalidRsnIe)?;
         bytes
-            .get(1)
-            .and_then(|&length| bytes.split_at_checked(usize::from(length) + 2))
-            .expect("the copied bytes start with a whole RSN element")
+            .split_at_checked(
+                usize::from(*length)
+                    .checked_add(2)
+                    .ok_or(RsnFrameError::InvalidRsnIe)?,
+            )
+            .ok_or(RsnFrameError::InvalidRsnIe)
     }
-
-    pub fn rsn_ie(&self) -> &[u8] {
-        self.split().0
+    pub fn rsn_ie(&self) -> Result<&[u8], RsnFrameError> {
+        Ok(self.split()?.0)
     }
+    pub fn rsnxe(&self) -> Result<&[u8], RsnFrameError> {
+        Ok(self.split()?.1)
+    }
+}
 
-    pub fn rsnxe(&self) -> &[u8] {
-        self.split().1
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects
+    )]
+    use super::*;
+
+    #[test]
+    fn damaged_association_envelopes_return_errors_for_both_views() {
+        for bytes in [&[][..], &[RSN_ELEMENT_ID][..], &[RSN_ELEMENT_ID, 255][..]] {
+            let owned = OwnedAssociationSecurityIes::<4> {
+                bytes: heapless::Vec::from_slice(bytes).unwrap(),
+            };
+            assert_eq!(owned.rsn_ie(), Err(RsnFrameError::InvalidRsnIe));
+            assert_eq!(owned.rsnxe(), Err(RsnFrameError::InvalidRsnIe));
+        }
     }
 }

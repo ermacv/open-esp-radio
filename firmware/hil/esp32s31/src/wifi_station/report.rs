@@ -19,7 +19,7 @@ use oer_esp32s31_radio_client::{
 use oer_hil_protocol::wifi::*;
 use oer_ieee80211_arbiter::{LeaveReason, Refusal};
 use oer_ieee80211_port::{LayoutError, PreparationError};
-use oer_ieee80211_rsn::sae::SaeError;
+use oer_ieee80211_rsn::{EapolParseError, sae::SaeError};
 use oer_ieee80211_runtime::station_service::{
     BackendContractViolation, ControlTerminal, PendingTerminal, ServiceFault, StationPort,
 };
@@ -34,6 +34,12 @@ pub fn disconnect(reason: StaDisconnectReason) -> StationDisconnectReason {
     use StaDisconnectReason as R;
     use StationDisconnectReason as W;
     match reason {
+        R::InvalidEapol(error) => W::InvalidEapol(match error {
+            EapolParseError::Truncated => StationEapolParseError::Truncated,
+            EapolParseError::LengthMismatch => StationEapolParseError::LengthMismatch,
+            EapolParseError::NotKeyPacket => StationEapolParseError::NotKeyPacket,
+            EapolParseError::NotRsnKeyDescriptor => StationEapolParseError::NotRsnKeyDescriptor,
+        }),
         R::TransmitRefused(refusal) => W::TransmitRefused(transmit(refusal)),
         R::Requested => W::LocalRequest,
         R::NotFound { partial } => W::NotFound { partial },
@@ -102,6 +108,7 @@ fn sae(failure: StaSaeFailure) -> StationSaeFailure {
         },
         StaSaeFailure::Rejected { status_code } => StationSaeFailure::Rejected { status_code },
         StaSaeFailure::Protocol(error) => StationSaeFailure::Protocol(match error {
+            SaeError::Crypto => StationSaeError::Crypto,
             SaeError::NoPasswordElement => StationSaeError::NoPasswordElement,
             SaeError::UnsuitableRandom => StationSaeError::UnsuitableRandom,
             SaeError::UnsupportedGroup(group) => StationSaeError::UnsupportedGroup(group),

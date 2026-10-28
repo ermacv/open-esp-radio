@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
 //! Recorded PSK-SHA256 Message 3 from hostapd on a hardware bench.
 //!
 //! hostapd v2.12-devel (OpenWrt `wpad-basic-mbedtls` 2025.08.26~ca266cc2) on

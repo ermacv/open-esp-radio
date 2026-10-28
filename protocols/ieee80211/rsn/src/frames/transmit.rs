@@ -8,8 +8,7 @@ pub struct RsnTxFrame<const N: usize = RSN_TX_EAPOL_CAPACITY> {
     interface: RsnInterface,
     peer: [u8; 6],
     retransmission: bool,
-    len: usize,
-    bytes: [u8; N],
+    bytes: heapless::Vec<u8, N>,
 }
 
 impl<const N: usize> RsnTxFrame<N> {
@@ -185,23 +184,38 @@ impl<const N: usize> RsnTxFrame<N> {
             return Err(RsnFrameError::CapacityExceeded);
         }
 
-        let mut bytes = [0; N];
-        bytes[0] = protocol_version;
-        bytes[1] = EAPOL_PACKET_TYPE_KEY;
-        bytes[2..4].copy_from_slice(&(body_len as u16).to_be_bytes());
-        bytes[4] = RSN_KEY_DESCRIPTOR_TYPE;
-        bytes[5..7].copy_from_slice(&key_info.to_be_bytes());
-        bytes[7..9].copy_from_slice(&key_length.to_be_bytes());
-        bytes[9..17].copy_from_slice(&replay_counter.to_be_bytes());
-        bytes[17..49].copy_from_slice(&nonce);
-        bytes[65..73].copy_from_slice(&key_rsc);
-        bytes[97..99].copy_from_slice(&(key_data.len() as u16).to_be_bytes());
-        bytes[EAPOL_KEY_PACKET_LEN..len].copy_from_slice(key_data);
+        let mut bytes = heapless::Vec::new();
+        bytes
+            .resize(len, 0)
+            .map_err(|_| RsnFrameError::CapacityExceeded)?;
+        let mut output = bytes.as_mut_slice();
+        for field in [
+            &[protocol_version, EAPOL_PACKET_TYPE_KEY][..],
+            &(body_len as u16).to_be_bytes(),
+            &[RSN_KEY_DESCRIPTOR_TYPE],
+            &key_info.to_be_bytes(),
+            &key_length.to_be_bytes(),
+            &replay_counter.to_be_bytes(),
+            &nonce,
+            &[0; 16],
+            &key_rsc,
+            &[0; 8],
+            &[0; RSN_MIC_LEN],
+            &(key_data.len() as u16).to_be_bytes(),
+            key_data,
+        ] {
+            let (front, tail) = output
+                .split_at_mut_checked(field.len())
+                .ok_or(RsnFrameError::CapacityExceeded)?;
+            for (target, source) in front.iter_mut().zip(field) {
+                *target = *source;
+            }
+            output = tail;
+        }
         Ok(Self {
             interface,
             peer,
             retransmission: false,
-            len,
             bytes,
         })
     }
@@ -222,15 +236,11 @@ impl<const N: usize> RsnTxFrame<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..self.len]
+        self.bytes.as_slice()
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "build validates the EAPOL layout and retains private bytes; authentication changes only the fixed MIC"
-    )]
-    pub fn key_frame(&self) -> EapolKeyFrame<'_> {
-        EapolKeyFrame::parse(self.as_bytes()).expect("RsnTxFrame is validated on construction")
+    pub fn key_frame(&self) -> Result<EapolKeyFrame<'_>, crate::EapolParseError> {
+        EapolKeyFrame::parse(self.as_bytes())
     }
 
     /// Authenticate a supplicant or authenticator action with the pairwise
@@ -262,7 +272,9 @@ impl<const N: usize> RsnTxFrame<N> {
     }
 
     fn set_mic(&mut self, mic: &[u8; RSN_MIC_LEN]) {
-        self.bytes[81..97].copy_from_slice(mic);
+        for (target, source) in self.bytes.iter_mut().skip(81).take(RSN_MIC_LEN).zip(mic) {
+            *target = *source;
+        }
     }
 }
 
@@ -322,8 +334,7 @@ pub fn build_ap_action_frame<const N: usize>(
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RsnEthernetFrame<const N: usize = RSN_TX_ETHERNET_CAPACITY> {
     interface: RsnInterface,
-    len: usize,
-    bytes: [u8; N],
+    bytes: heapless::Vec<u8, N>,
 }
 
 impl<const N: usize> RsnEthernetFrame<N> {
@@ -337,14 +348,19 @@ impl<const N: usize> RsnEthernetFrame<N> {
         if len > N {
             return Err(RsnFrameError::CapacityExceeded);
         }
-        let mut bytes = [0; N];
-        bytes[..6].copy_from_slice(eapol.peer());
-        bytes[6..12].copy_from_slice(&local);
-        bytes[12..14].copy_from_slice(&EAPOL_ETHERTYPE);
-        bytes[14..len].copy_from_slice(eapol.as_bytes());
+        let mut bytes = heapless::Vec::new();
+        for field in [
+            eapol.peer().as_slice(),
+            local.as_slice(),
+            EAPOL_ETHERTYPE.as_slice(),
+            eapol.as_bytes(),
+        ] {
+            bytes
+                .extend_from_slice(field)
+                .map_err(|_| RsnFrameError::CapacityExceeded)?;
+        }
         Ok(Self {
             interface: eapol.interface(),
-            len,
             bytes,
         })
     }
@@ -354,7 +370,7 @@ impl<const N: usize> RsnEthernetFrame<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..self.len]
+        self.bytes.as_slice()
     }
 }
 
