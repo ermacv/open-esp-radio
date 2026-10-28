@@ -1,13 +1,13 @@
 //! Diagnostic-only adapters. All data is copied under the operation's existing owner.
 use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_instrumentation::health::*;
+pub use oer_esp32s31_instrumentation_hil::store::Store;
+use oer_esp32s31_instrumentation_hil::*;
 use oer_esp32s31_phy::{
     PhyTargetObserver,
     tracking::observation::{Event, Operation},
 };
-pub use oer_esp32s31_instrumentation_hil::store::Store;
 use oer_hil_protocol::RequestIdentity;
-use oer_esp32s31_instrumentation_hil::*;
-use oer_esp32s31_instrumentation::health::*;
 use oer_time::Clock;
 
 pub use crate::services::HealthRequest as Request;

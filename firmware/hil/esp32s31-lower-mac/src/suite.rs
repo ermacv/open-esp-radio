@@ -42,7 +42,9 @@ use oer_esp32s31_ieee80211_mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
 use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
 use oer_hil_protocol::base::RejectReason;
-use oer_ieee80211_conformance_control::{CaseTrace, OutcomeTrace, Prepare, Prepared, outcome_trace};
+use oer_ieee80211_conformance_control::{
+    CaseTrace, OutcomeTrace, Prepare, Prepared, outcome_trace,
+};
 use oer_ieee80211_port::{
     conformance::{MpduState, catalog, outcomes},
     *,
@@ -112,8 +114,10 @@ type Caps = Esp32s31Caps<TX>;
 static SHARED: StaticCell<PortSharedStorage<TX>> = StaticCell::new();
 static STORAGE: StaticCell<PortStorage<Device, TX>> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
-static RETAINED: oer_espressif_staged_runtime::trace::Retained<256, 4, 33> = oer_espressif_staged_runtime::trace::Retained::new();
-static TRACE: oer_espressif_staged_runtime::trace::Trace = oer_espressif_staged_runtime::trace::Trace::new(&RETAINED);
+static RETAINED: oer_espressif_staged_runtime::trace::Retained<256, 4, 33> =
+    oer_espressif_staged_runtime::trace::Retained::new();
+static TRACE: oer_espressif_staged_runtime::trace::Trace =
+    oer_espressif_staged_runtime::trace::Trace::new(&RETAINED);
 oer_espressif_staged_runtime::trace_clock!(oer_embassy_time::now_micros);
 
 pub struct Boot {
@@ -360,21 +364,34 @@ pub async fn drive(boot: Boot, slot: Slot, channel: DriverChannel) {
                 let backend = Esp32s31Backend::new(parts)
                     .ok()
                     .expect("validated conformance port parts");
-                match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(slot.register(backend)) {
+                match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(
+                    slot.register(backend),
+                ) {
                     Ok(registered) => registered,
-                    Err(error) => { response.answer(Err(RejectReason::Internal)); drop(error); continue; }
+                    Err(error) => {
+                        response.answer(Err(RejectReason::Internal));
+                        drop(error);
+                        continue;
+                    }
                 }
             }
-            DriverRequest::Resume { joined, epoch } => match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(slot
-                .reinstall(joined, |stopped| {
-                    stopped
-                        .reinstall(epoch)
-                        .ok()
-                        .expect("Joined retains stopped DMA and a distinct epoch")
-                })) {
+            DriverRequest::Resume { joined, epoch } => {
+                match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(
+                    slot.reinstall(joined, |stopped| {
+                        stopped
+                            .reinstall(epoch)
+                            .ok()
+                            .expect("Joined retains stopped DMA and a distinct epoch")
+                    }),
+                ) {
                     Ok(registered) => registered,
-                    Err(error) => { response.answer(Err(RejectReason::Internal)); drop(error); continue; }
-                },
+                    Err(error) => {
+                        response.answer(Err(RejectReason::Internal));
+                        drop(error);
+                        continue;
+                    }
+                }
+            }
         };
         let (frontend, registration) = registered;
         response.answer(Ok(frontend));

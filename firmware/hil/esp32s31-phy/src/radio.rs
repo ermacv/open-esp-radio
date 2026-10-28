@@ -30,8 +30,8 @@ use oer_esp32s31_phy::{
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
     *,
 };
-use oer_hil_protocol::base::RejectReason;
 use oer_esp32s31_phy_probe::*;
+use oer_hil_protocol::base::RejectReason;
 use oer_time::{Clock, Timer};
 
 type Result<T> = core::result::Result<T, RejectReason>;
@@ -1145,8 +1145,8 @@ impl Radio {
         capture_rx: &mut Option<crate::cca_rx::Prepared>,
     ) -> Result<crate::health::Answer> {
         use crate::health::{self, Answer as A, Observer, Request};
+        use oer_esp32s31_instrumentation::health::*;
         use oer_esp32s31_instrumentation_hil::*;
-use oer_esp32s31_instrumentation::health::*;
         let result = match request {
             Request::Begin(config) => {
                 if self.cache.identity(self.identity).active_ticket.is_some() || self.poisoned {

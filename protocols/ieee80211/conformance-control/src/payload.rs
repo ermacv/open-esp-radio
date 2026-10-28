@@ -60,6 +60,10 @@ pub struct CaseTrace {
     pub trace: Trace,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "bounded no_std traces retain their inline capture storage without allocation"
+)]
 pub enum Trace {
     Outcome(OutcomeTrace),
     Ownership(OwnershipTrace),

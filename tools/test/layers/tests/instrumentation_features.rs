@@ -52,16 +52,6 @@ const KNOWN_INSTRUMENTATION_FEATURES: &[Deviation] = &[
         "radio-health",
         "PHY observations move to the observer (#848, instrumentation PHY stage)",
     ),
-    (
-        "protocols/hil/agent",
-        "health",
-        "health records move to the agent's trace capture service (#848, instrumentation I1)",
-    ),
-    (
-        "protocols/hil/protocol",
-        "health",
-        "health messages move to the agent's trace capture service (#848, instrumentation I1)",
-    ),
 ];
 
 fn root() -> PathBuf {

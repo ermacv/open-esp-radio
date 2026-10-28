@@ -13,10 +13,13 @@ mod radio;
 mod report;
 mod station;
 use crate::services::StationRequests as Requests;
-use oer_esp32s31_compose::Esp32s31;
 use crate::transport::CONSOLE;
+use oer_esp32s31_compose::Esp32s31;
 use oer_hil_protocol::RequestIdentity;
-use oer_ieee80211_control::{StationLink, StationLinkState, StationRole, StationServiceEnd, StationServiceEnded, StationStart, StopStation};
+use oer_ieee80211_control::{
+    StationLink, StationLinkState, StationRole, StationServiceEnd, StationServiceEnded,
+    StationStart, StopStation,
+};
 use oer_ieee80211_rsn::{PmkDerivation, nonce::SNonceSource, sae::SaePassword};
 use oer_time::Clock;
 
@@ -158,8 +161,12 @@ pub(crate) fn start(
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
@@ -346,49 +353,50 @@ async fn console_work(usb: crate::transport::Usb, boot: u64) {
         crate::services::STATION_KEYS,
         0,
         move |request, command: Requests| {
-        let reason = match command {
-            Requests::Counters(_) => {
-                emit(request, &observation::counters());
-                return;
-            }
-            Requests::Start(start) => {
-                if configured {
-                    Some(RejectReason::InvalidState)
-                } else if start.0.credentials.validate().is_err() {
-                    Some(RejectReason::InvalidConfiguration)
-                } else if STARTS.try_send((request, start.0)).is_err() {
-                    Some(RejectReason::Busy)
-                } else {
-                    configured = true;
-                    None
+            let reason = match command {
+                Requests::Counters(_) => {
+                    emit(request, &observation::counters());
+                    return;
                 }
-            }
-            Requests::Probe(probe) => {
-                if let Some(reason) = probe.refusal(role(configured, stopping)) {
-                    Some(reason)
-                } else if PROBES.try_send((request, probe)).is_err() {
-                    Some(RejectReason::Busy)
-                } else {
-                    None
+                Requests::Start(start) => {
+                    if configured {
+                        Some(RejectReason::InvalidState)
+                    } else if start.0.credentials.validate().is_err() {
+                        Some(RejectReason::InvalidConfiguration)
+                    } else if STARTS.try_send((request, start.0)).is_err() {
+                        Some(RejectReason::Busy)
+                    } else {
+                        configured = true;
+                        None
+                    }
                 }
-            }
-            Requests::Stop(_) => {
-                if let Some(reason) = StopStation::refusal(role(configured, stopping)) {
-                    Some(reason)
-                } else if STOPS.try_send(request).is_err() {
-                    Some(RejectReason::Busy)
-                } else {
-                    stopping = true;
-                    None
+                Requests::Probe(probe) => {
+                    if let Some(reason) = probe.refusal(role(configured, stopping)) {
+                        Some(reason)
+                    } else if PROBES.try_send((request, probe)).is_err() {
+                        Some(RejectReason::Busy)
+                    } else {
+                        None
+                    }
                 }
+                Requests::Stop(_) => {
+                    if let Some(reason) = StopStation::refusal(role(configured, stopping)) {
+                        Some(reason)
+                    } else if STOPS.try_send(request).is_err() {
+                        Some(RejectReason::Busy)
+                    } else {
+                        stopping = true;
+                        None
+                    }
+                }
+            };
+            if let Some(reason) = reason {
+                emit(request, &Rejected(reason));
+            } else {
+                emit(request, &Accepted);
             }
-        };
-        if let Some(reason) = reason {
-            emit(request, &Rejected(reason));
-        } else {
-            emit(request, &Accepted);
-        }
-    })
+        },
+    )
     .await
 }
 

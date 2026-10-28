@@ -157,7 +157,11 @@ async fn experiment<B: PlatformClockBackend, T>(
     // the finite ring supplied while the hardware receives the router's air.
     #[cfg(feature = "diagnostic-radio-health")]
     if let Some(store) = health.as_deref_mut() {
-        crate::health::cut(store, runtime, oer_esp32s31_instrumentation::health::Cut::Before);
+        crate::health::cut(
+            store,
+            runtime,
+            oer_esp32s31_instrumentation::health::Cut::Before,
+        );
     }
     let observed = sample(
         domain,
@@ -171,7 +175,11 @@ async fn experiment<B: PlatformClockBackend, T>(
     .await;
     #[cfg(feature = "diagnostic-radio-health")]
     if let Some(store) = health.as_deref_mut() {
-        crate::health::cut(store, runtime, oer_esp32s31_instrumentation::health::Cut::After);
+        crate::health::cut(
+            store,
+            runtime,
+            oer_esp32s31_instrumentation::health::Cut::After,
+        );
     }
 
     // As in the working receive teardown, close admission and prove the MAC
