@@ -30,11 +30,9 @@ use crate::{
         parse_group_gtk_key_data, parse_gtk_key_data,
     },
     management_ccmp::ManagementCcmpReceiver,
-    sae::{
-        SaeComebackTokens, SaeCommit, SaeCommitValues, SaePasswordElement, SaeReceivedCommit,
-        anti_clogging_token,
-    },
+    sae::{SaeComebackTokens, SaeCommit, SaePasswordElement, valid_peer_commit},
 };
+use oer_ieee80211_wire::sae::{SaeCommitValues, SaeReceivedCommit, anti_clogging_token};
 
 /// The captured Message 3's PTK and its decrypted key data.
 fn message3() -> (crate::Ptk, Vec<u8>) {
@@ -265,6 +263,7 @@ fn sae_parsers(count: usize) {
                 let _ = SaeCommitValues::parse(bytes, h2e);
                 if let Ok(commit) = SaeReceivedCommit::parse(bytes, h2e) {
                     let _ = commit.rejects_offered_group();
+                    let _ = valid_peer_commit(&commit.values);
                 }
                 let _ = anti_clogging_token(bytes, h2e);
             }

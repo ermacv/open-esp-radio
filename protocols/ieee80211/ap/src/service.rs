@@ -2,9 +2,9 @@
 
 use core::fmt;
 use oer_ieee80211_cipher::aes::SoftwareAesKeyWrapError;
+use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::security::spp::SppScope;
-use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 mod block_ack;
@@ -28,8 +28,8 @@ pub use crate::limits::{
 
 use oer_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObservation};
 
-use oer_ieee80211_rsn::pmksa::{Pmksa, PmksaCache};
 use crate::security_policy::ApSecurityPolicy;
+use oer_ieee80211_rsn::pmksa::{Pmksa, PmksaCache};
 use oer_ieee80211_rsn::{
     OwnedEapolFrame, Pmk, Ptk, PtkContext,
     authenticator::{RsnAuthenticator, RsnAuthenticatorError, RsnAuthenticatorStep},

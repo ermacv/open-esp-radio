@@ -20,8 +20,8 @@
 use core::ops::{Mul, Neg};
 use hmac::Mac;
 use oer_ieee80211_wire::sae::{
-    ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID, ELEMENT_ID_EXTENSION,
-    PASSWORD_IDENTIFIER_EXTENSION_ID, REJECTED_GROUPS_EXTENSION_ID,
+    SAE_ANTI_CLOGGING_TOKEN_LEN, SAE_CONFIRM_LEN, SAE_ELEMENT_LEN, SAE_PRIME_LEN, SaeBodyError,
+    SaeCommitValues, SaeConfirm,
 };
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use p256::{
@@ -40,20 +40,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::kdf::kdf_sha256;
 use oer_time::{Duration, Instant};
 
-/// The only SAE group the station offers: NIST P-256.
-pub const SAE_GROUP_P256: u16 = 19;
-/// Octets of one P-256 field element or scalar.
-pub const SAE_PRIME_LEN: usize = 32;
-/// An SAE Commit body of group 19 without an anti-clogging token or
-/// optional elements: group, scalar and element.
-pub const SAE_COMMIT_LEN: usize = 2 + SAE_PRIME_LEN + 2 * SAE_PRIME_LEN;
-/// An SAE Confirm body: send-confirm and the confirm HMAC.
-pub const SAE_CONFIRM_LEN: usize = 2 + 32;
 /// Octets of the KCK and of the PMK of group 19.
 pub const SAE_KEY_LEN: usize = 32;
-
-/// Octets of an anti-clogging token: its index and an HMAC-SHA256 tail.
-pub const SAE_ANTI_CLOGGING_TOKEN_LEN: usize = 32;
 
 /// The minimum hunting-and-pecking iterations of an ECC group.
 const MINIMUM_PWE_ITERATIONS: u8 = 40;
@@ -124,6 +112,15 @@ pub enum SaeError {
     InfiniteSecret,
     /// The peer's confirm does not verify.
     ConfirmMismatch,
+}
+
+impl From<SaeBodyError> for SaeError {
+    fn from(error: SaeBodyError) -> Self {
+        match error {
+            SaeBodyError::Malformed => Self::Malformed,
+            SaeBodyError::UnsupportedGroup(group) => Self::UnsupportedGroup(group),
+        }
+    }
 }
 
 /// The longest SAE password: the vendor station profile's password field
@@ -393,7 +390,7 @@ fn scalar_from(bytes: &[u8; SAE_PRIME_LEN]) -> Option<Scalar> {
     Option::from(Scalar::from_repr(FieldBytes::from(*bytes)))
 }
 
-fn element_bytes(element: &AffinePoint) -> Result<[u8; 2 * SAE_PRIME_LEN], SaeError> {
+fn element_bytes(element: &AffinePoint) -> Result<[u8; SAE_ELEMENT_LEN], SaeError> {
     let x = FieldElement::from_bytes(&element.x());
     let coordinates = x.and_then(|x| {
         curve_rhs(&x).sqrt().map(|y| {
@@ -402,7 +399,7 @@ fn element_bytes(element: &AffinePoint) -> Result<[u8; 2 * SAE_PRIME_LEN], SaeEr
                 &y,
                 element.y_is_odd().ct_eq(&y.is_odd()),
             );
-            let mut bytes = [0; 2 * SAE_PRIME_LEN];
+            let mut bytes = [0; SAE_ELEMENT_LEN];
             for (target, source) in bytes
                 .iter_mut()
                 .zip(x.to_bytes().iter().chain(y.to_bytes().iter()))
@@ -415,231 +412,18 @@ fn element_bytes(element: &AffinePoint) -> Result<[u8; 2 * SAE_PRIME_LEN], SaeEr
     if bool::from(element.is_identity()) {
         return Err(SaeError::InfiniteSecret);
     }
-    Option::<[u8; 2 * SAE_PRIME_LEN]>::from(coordinates).ok_or(SaeError::Crypto)
+    Option::<[u8; SAE_ELEMENT_LEN]>::from(coordinates).ok_or(SaeError::Crypto)
 }
 
-/// One peer's commit: its scalar and element.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SaeCommitValues {
-    pub scalar: [u8; SAE_PRIME_LEN],
-    pub element: [u8; 2 * SAE_PRIME_LEN],
-}
-
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
-impl SaeCommitValues {
-    /// Parse the access point's group-19 commit body. Hunting and pecking
-    /// admits nothing after the element. H2E admits a Rejected Groups
-    /// element that does not reject group 19, as the vendor's
-    /// `wpa3_check_sae_rejected_groups` does; a Password Identifier, which
-    /// this station never sends, is refused.
-    pub fn parse(body: &[u8], h2e: bool) -> Result<Self, SaeError> {
-        let Some((&[group_low, group_high], rest)) = body.split_first_chunk::<2>() else {
-            return Err(SaeError::Malformed);
-        };
-        let group = u16::from_le_bytes([group_low, group_high]);
-        if group != SAE_GROUP_P256 {
-            return Err(SaeError::UnsupportedGroup(group));
-        }
-        let Some((&scalar, rest)) = rest.split_first_chunk::<SAE_PRIME_LEN>() else {
-            return Err(SaeError::Malformed);
-        };
-        let Some((&element, mut rest)) = rest.split_first_chunk::<{ 2 * SAE_PRIME_LEN }>() else {
-            return Err(SaeError::Malformed);
-        };
-        while !rest.is_empty() {
-            if !h2e {
-                return Err(SaeError::Malformed);
-            }
-            let [ELEMENT_ID_EXTENSION, length, extension, ..] = *rest else {
-                return Err(SaeError::Malformed);
-            };
-            let Some((whole, tail)) = rest.split_at_checked(
-                usize::from(length)
-                    .checked_add(2)
-                    .ok_or(SaeError::Malformed)?,
-            ) else {
-                return Err(SaeError::Malformed);
-            };
-            let [_, _, _, value @ ..] = whole else {
-                return Err(SaeError::Malformed);
-            };
-            match extension {
-                REJECTED_GROUPS_EXTENSION_ID
-                    if value.len().is_multiple_of(2) && !contains_offered_group(value) => {}
-                _ => return Err(SaeError::Malformed),
-            }
-            rest = tail;
-        }
-        Ok(Self { scalar, element })
-    }
-
-    /// This station's commit body: group, the anti-clogging token of hunting
-    /// and pecking, scalar and element, then the token container of H2E, as
-    /// the vendor's `sae_write_commit` orders them. Returns the length.
-    pub fn encode(
-        &self,
-        token: Option<&[u8]>,
-        h2e: bool,
-        output: &mut [u8],
-    ) -> Result<usize, SaeError> {
-        let token = token.unwrap_or(&[]);
-        let container_length = if h2e && !token.is_empty() {
-            Some(
-                u8::try_from(token.len())
-                    .ok()
-                    .and_then(|length| length.checked_add(1))
-                    .ok_or(SaeError::Malformed)?,
-            )
-        } else {
-            None
-        };
-        let length = SAE_COMMIT_LEN
-            .checked_add(token.len())
-            .and_then(|length| length.checked_add(if container_length.is_some() { 3 } else { 0 }))
-            .ok_or(SaeError::Malformed)?;
-        let mut output = output.get_mut(..length).ok_or(SaeError::Malformed)?;
-        put(&mut output, &SAE_GROUP_P256.to_le_bytes())?;
-        if !h2e {
-            put(&mut output, token)?;
-        }
-        put(&mut output, &self.scalar)?;
-        put(&mut output, &self.element)?;
-        if let Some(container_length) = container_length {
-            put(
-                &mut output,
-                &[
-                    ELEMENT_ID_EXTENSION,
-                    container_length,
-                    ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID,
-                ],
-            )?;
-            put(&mut output, token)?;
-        }
-        Ok(length)
-    }
-}
-
-/// Write `bytes` at the front of `output` and advance past them.
-fn put(output: &mut &mut [u8], bytes: &[u8]) -> Result<(), SaeError> {
-    let (front, rest) = core::mem::take(output)
-        .split_at_mut_checked(bytes.len())
-        .ok_or(SaeError::Malformed)?;
-    for (target, source) in front.iter_mut().zip(bytes) {
-        *target = *source;
-    }
-    *output = rest;
-    Ok(())
-}
-
-/// Why an access point refuses a station's commit before any computation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SaeCommitRefusal {
-    /// A group other than 19: status 77.
-    UnsupportedGroup,
-    /// A truncated body, a scalar outside 1 < scalar < r, an element off the
-    /// curve or a malformed trailing element: status 1.
-    Unspecified,
-}
-
-/// A station's commit as the access point receives it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SaeReceivedCommit<'a> {
-    pub values: SaeCommitValues,
-    /// The anti-clogging token the station echoed.
-    pub token: Option<&'a [u8]>,
-    /// The station named a password identifier.
-    pub password_identifier: bool,
-    /// The Rejected Groups payload of an H2E commit: little-endian groups.
-    pub rejected_groups: Option<&'a [u8]>,
-}
-
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
-impl<'a> SaeReceivedCommit<'a> {
-    /// Parse a station's group-19 commit as the vendor's `sae_parse_commit`
-    /// does: under hunting and pecking, octets between the group and the
-    /// scalar and element are the anti-clogging token when at least 32;
-    /// under H2E, a Password Identifier, a Rejected Groups element and an
-    /// Anti-Clogging Token Container may follow the element. The scalar must
-    /// satisfy 1 < scalar < r and the element must be a curve point.
-    pub fn parse(body: &'a [u8], h2e: bool) -> Result<Self, SaeCommitRefusal> {
-        let [group_low, group_high, ref rest @ ..] = *body else {
-            return Err(SaeCommitRefusal::Unspecified);
-        };
-        if u16::from_le_bytes([group_low, group_high]) != SAE_GROUP_P256 {
-            return Err(SaeCommitRefusal::UnsupportedGroup);
-        }
-        let values_len = 3 * SAE_PRIME_LEN;
-        let mut token = None;
-        let mut rest = rest;
-        if !h2e
-            && let Some(extra) = rest.len().checked_sub(values_len)
-            && extra > 0
-            && extra >= SAE_ANTI_CLOGGING_TOKEN_LEN
-            && let Some((echoed, tail)) = rest.split_at_checked(extra)
-        {
-            token = Some(echoed);
-            rest = tail;
-        }
-        let Some((&scalar, rest)) = rest.split_first_chunk::<SAE_PRIME_LEN>() else {
-            return Err(SaeCommitRefusal::Unspecified);
-        };
-        let Some((&element, mut rest)) = rest.split_first_chunk::<{ 2 * SAE_PRIME_LEN }>() else {
-            return Err(SaeCommitRefusal::Unspecified);
-        };
-        let values = SaeCommitValues { scalar, element };
-        let scalar = scalar_from(&values.scalar).ok_or(SaeCommitRefusal::Unspecified)?;
-        if bool::from(scalar.is_zero() | scalar.ct_eq(&Scalar::ONE)) {
-            return Err(SaeCommitRefusal::Unspecified);
-        }
-        if peer_element(&values.element).is_none() {
-            return Err(SaeCommitRefusal::Unspecified);
-        }
-        let mut commit = Self {
-            values,
-            token,
-            password_identifier: false,
-            rejected_groups: None,
-        };
-        if let Some((_, tail)) = extension_element(rest, PASSWORD_IDENTIFIER_EXTENSION_ID, 1) {
-            commit.password_identifier = true;
-            rest = tail;
-        }
-        if h2e {
-            if let Some((value, tail)) = extension_element(rest, REJECTED_GROUPS_EXTENSION_ID, 2) {
-                if !value.len().is_multiple_of(2) {
-                    return Err(SaeCommitRefusal::Unspecified);
-                }
-                commit.rejected_groups = Some(value);
-                rest = tail;
-            }
-            if let Some((value, _)) =
-                extension_element(rest, ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID, 1)
-            {
-                commit.token = Some(value);
-            }
-        }
-        Ok(commit)
-    }
-
-    /// Whether the station rejected group 19, the only group this access
-    /// point offers.
-    pub fn rejects_offered_group(&self) -> bool {
-        self.rejected_groups.is_some_and(contains_offered_group)
-    }
+/// Whether a station's commit values are valid for an access point to
+/// process: a scalar with 1 < scalar < r and an element on the curve, as the
+/// vendor's `sae_parse_commit` requires.
+pub fn valid_peer_commit(values: &SaeCommitValues) -> bool {
+    let Some(scalar) = scalar_from(&values.scalar) else {
+        return false;
+    };
+    !bool::from(scalar.is_zero() | scalar.ct_eq(&Scalar::ONE))
+        && peer_element(&values.element).is_some()
 }
 
 /// Seconds an access point keeps one comeback-token key.
@@ -759,9 +543,6 @@ impl Default for SaeComebackTokens {
     }
 }
 
-/// The extension element `extension` at the start of `bytes`, whose length
-/// field is at least `minimum_length`, and the bytes after it; `None` when
-/// another element or nothing starts there.
 #[deny(
     clippy::indexing_slicing,
     clippy::unwrap_used,
@@ -770,75 +551,13 @@ impl Default for SaeComebackTokens {
     clippy::unreachable,
     clippy::arithmetic_side_effects
 )]
-fn extension_element(bytes: &[u8], extension: u8, minimum_length: u8) -> Option<(&[u8], &[u8])> {
-    let [ELEMENT_ID_EXTENSION, length, id, ..] = *bytes else {
-        return None;
-    };
-    if id != extension || length < minimum_length {
-        return None;
-    }
-    let (element, tail) = bytes.split_at_checked(usize::from(length).checked_add(2)?)?;
-    let [_, _, _, value @ ..] = element else {
-        return None;
-    };
-    Some((value, tail))
-}
-
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
-fn peer_element(element: &[u8; 2 * SAE_PRIME_LEN]) -> Option<AffinePoint> {
+fn peer_element(element: &[u8; SAE_ELEMENT_LEN]) -> Option<AffinePoint> {
     let (x, y) = element.split_first_chunk::<SAE_PRIME_LEN>()?;
     let y: &[u8; SAE_PRIME_LEN] = y.try_into().ok()?;
     let x = FieldElement::from_bytes(&FieldBytes::from(*x));
     let y = FieldElement::from_bytes(&FieldBytes::from(*y));
     Option::<ProjectivePoint>::from(x.and_then(|x| y.and_then(|y| point(&x, &y))))
         .map(|point| point.to_affine())
-}
-
-/// The anti-clogging token of a commit refused with status 76: after the
-/// group under hunting and pecking, inside its container element under H2E.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
-pub fn anti_clogging_token(body: &[u8], h2e: bool) -> Result<&[u8], SaeError> {
-    let rest = body.get(2..).ok_or(SaeError::Malformed)?;
-    if !h2e {
-        return Ok(rest);
-    }
-    let [
-        ELEMENT_ID_EXTENSION,
-        length,
-        ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID,
-        ..,
-    ] = *rest
-    else {
-        return Err(SaeError::Malformed);
-    };
-    if length == 0 {
-        return Err(SaeError::Malformed);
-    }
-    let Some((element, _)) = rest.split_at_checked(
-        usize::from(length)
-            .checked_add(2)
-            .ok_or(SaeError::Malformed)?,
-    ) else {
-        return Err(SaeError::Malformed);
-    };
-    let [_, _, _, token @ ..] = element else {
-        return Err(SaeError::Malformed);
-    };
-    Ok(token)
 }
 
 /// This station's commit and the secrets behind it.
@@ -994,40 +713,19 @@ impl SaeKeys {
 
     /// This station's confirm body.
     pub fn own_confirm(&self, send_confirm: u16) -> [u8; SAE_CONFIRM_LEN] {
-        const {
-            if SAE_CONFIRM_LEN != core::mem::size_of::<u16>() + 32 {
-                panic!("SAE confirm geometry");
-            }
+        SaeConfirm {
+            send_confirm,
+            confirm: &self.confirm(send_confirm, &self.own, &self.peer),
         }
-        let mut body = [0; SAE_CONFIRM_LEN];
-        for (target, source) in body.iter_mut().zip(
-            send_confirm
-                .to_le_bytes()
-                .iter()
-                .chain(self.confirm(send_confirm, &self.own, &self.peer).iter()),
-        ) {
-            *target = *source;
-        }
-        body
+        .encode()
     }
 
     /// Verify the peer's confirm body and return its send-confirm.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn verify_peer_confirm(&self, body: &[u8]) -> Result<u16, SaeError> {
-        if body.len() != SAE_CONFIRM_LEN {
-            return Err(SaeError::Malformed);
-        }
-        let Some((&[low, high], confirm)) = body.split_first_chunk::<2>() else {
-            return Err(SaeError::Malformed);
-        };
-        let send_confirm = u16::from_le_bytes([low, high]);
+        let SaeConfirm {
+            send_confirm,
+            confirm,
+        } = SaeConfirm::parse(body)?;
         let expected = self.confirm(send_confirm, &self.peer, &self.own);
         if bool::from(expected.ct_eq(confirm)) {
             Ok(send_confirm)
@@ -1062,14 +760,4 @@ impl core::fmt::Debug for SaeComebackTokens {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("SaeComebackTokens(<redacted>)")
     }
-}
-
-fn contains_offered_group(mut groups: &[u8]) -> bool {
-    while let Some((group, rest)) = groups.split_first_chunk::<2>() {
-        if *group == SAE_GROUP_P256.to_le_bytes() {
-            return true;
-        }
-        groups = rest;
-    }
-    false
 }

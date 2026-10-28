@@ -12,9 +12,7 @@
 use crate::ccm::MIC_LEN;
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
 use oer_ieee80211_wire::{
-    ccmp::{
-        CCMP_HEADER_LEN, Ccmp128Key, CcmpHeader, CcmpHeaderError, CcmpKeyId, CcmpPacketNumber,
-    },
+    ccmp::{CCMP_HEADER_LEN, Ccmp128Key, CcmpHeader, CcmpHeaderError, CcmpKeyId, CcmpPacketNumber},
     frame::DecodedHeader,
     security::Spp,
 };

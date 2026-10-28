@@ -1,9 +1,6 @@
 use super::*;
-use oer_ieee80211_rsn::{
-    Ptk, PtkContext,
-    frames::RsnTxFrame,
-    sae::{SaeCommitValues, SaeKeys},
-};
+use oer_ieee80211_rsn::{Ptk, PtkContext, frames::RsnTxFrame, sae::SaeKeys};
+use oer_ieee80211_wire::sae::SaeCommitValues;
 use oer_ieee80211_wire::security::rsn::{Akm, RsnElement};
 use std::vec;
 
@@ -91,7 +88,7 @@ fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
     };
     let peer = SaeCommit::new(&element, [0x40; 32], [0x41; 32]).unwrap();
     let keys = peer.process(station).unwrap();
-    let mut body = [0; oer_ieee80211_rsn::sae::SAE_COMMIT_LEN];
+    let mut body = [0; oer_ieee80211_wire::sae::SAE_COMMIT_LEN];
     let length = peer.values().encode(None, h2e, &mut body).unwrap();
     world.receive(at(now), &peer_authentication(1, status, &body[..length]));
     let (status, confirm) = outgoing_authentication(world.frames.last().unwrap(), 3, 2);

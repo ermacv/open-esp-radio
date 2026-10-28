@@ -1,7 +1,6 @@
 //! The data machine's encapsulation, tokens and admission.
 
 use super::*;
-use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use core::num::NonZeroU16;
 use oer_ieee80211_port::ResponseHeader;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
@@ -10,6 +9,7 @@ use oer_ieee80211_port::{
     PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, WidthSet,
 };
 use oer_ieee80211_port::{IndeterminateCause, WithdrawCause};
+use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use oer_ieee80211_wire::data::EthernetFrameParts;
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_ieee80211_wire::sequence::SequenceNumber;

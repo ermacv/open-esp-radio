@@ -35,17 +35,17 @@
 //! (`wpa3_process_rx_commit`, `wpa3_process_rx_confirm`).
 
 use crate::sae::{
-    SAE_ANTI_CLOGGING_TOKEN_LEN, SAE_COMMIT_LEN, SAE_CONFIRM_LEN, SAE_GROUP_P256, SAE_KEY_LEN,
-    SAE_PRIME_LEN, SaeComebackTokens, SaeCommit, SaeCommitRefusal, SaeCommitValues, SaeError,
-    SaeKeys, SaePassword, SaePasswordElement, SaePasswordToken, SaeReceivedCommit,
+    SAE_KEY_LEN, SaeComebackTokens, SaeCommit, SaeError, SaeKeys, SaePassword, SaePasswordElement,
+    SaePasswordToken, valid_peer_commit,
 };
 use oer_ieee80211_wire::sae::{
-    anti_clogging_token_container_header, finite_cyclic_group, send_confirm,
+    SAE_ANTI_CLOGGING_TOKEN_LEN, SAE_COMMIT_LEN, SAE_CONFIRM_LEN, SAE_GROUP_P256, SAE_PRIME_LEN,
+    SaeCommitRefusal, SaeCommitValues, SaeReceivedCommit, anti_clogging_token_container_header,
+    finite_cyclic_group, send_confirm,
 };
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::station::{SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION};
 use oer_ieee80211_wire::status::status_code;
-
 
 /// Sessions awaiting a Confirm, with queued Commits, beyond which a Commit
 /// must carry an anti-clogging token.
@@ -402,7 +402,13 @@ impl<const N: usize> ApSaeResponder<N> {
             }
         }
         let h2e = status == status_code::SAE_HASH_TO_ELEMENT;
-        let commit = match SaeReceivedCommit::parse(body, h2e) {
+        let commit = match SaeReceivedCommit::parse(body, h2e).and_then(|commit| {
+            if valid_peer_commit(&commit.values) {
+                Ok(commit)
+            } else {
+                Err(SaeCommitRefusal::Unspecified)
+            }
+        }) {
             Ok(commit) => commit,
             Err(SaeCommitRefusal::UnsupportedGroup) => {
                 return ApSaeOutput::failure(
@@ -684,7 +690,7 @@ fn commit_step_with(
         Err(error) => {
             return ApSaeOutput::fault(ApSaeFault::Crypto {
                 peer,
-                stage: ApSaeCryptoStage::Encode(error),
+                stage: ApSaeCryptoStage::Encode(SaeError::from(error)),
             });
         }
     };

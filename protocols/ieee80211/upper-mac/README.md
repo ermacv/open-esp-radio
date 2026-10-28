@@ -118,8 +118,13 @@ ADDBA, DELBA and the Compressed BlockAckReq and selects the QoS Data it
 reorders with the wire codecs; it calls the port only through the caller's
 `RxBlockAckPort` (install an agreement, end one, return a frame), which the
 runtime implements over its phase. A credit stays free to close a reorder
-gap, and a management Action whose reply would find no place waits retained. `ccmp` owns transmit PN allocation and receive replay frontiers;
-key material, headers and PN values are wire vocabulary. `duplicate` owns
+gap, and a management Action whose reply would find no place waits retained. `ccmp` owns transmit PN allocation and receive replay frontiers for every
+CCMP user: one strictly increasing `CcmpReplayFrontier` per lane, key or
+peer, borrowed by an admission candidate until commit, for the station's
+data, the access point's and the RSN receiver's protected management frames
+and ESP-NOW peers; key material, headers and PN values are wire vocabulary.
+`sequence` owns the transmit sequence spaces (`SequenceCounter`,
+`TxSequenceCounters`) of the station, the access point and ESP-NOW. `duplicate` owns
 receive duplicate history, `fragmentation` bounded MSDU reassembly and its
 reassembly refusals (`OpenDataReassemblyError`, over the wire's frame
 refusals), and `receive` the replay commit boundary. `ccmp`'s
@@ -149,7 +154,11 @@ through zero, and stale reports cannot move the window again.
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
 number and reserves its CCMP PN with the key's unique `ccmp::CcmpTxPacketNumber`.
 `ccmp::install_ccmp_pairwise_key` creates it only while installing new material
-through the port and retains it in `InstalledCcmpTxKey` with that backend key.
+through the port and retains it in `InstalledCcmpTxKey` with that backend key;
+`InstalledCcmpTxKey::install` does the same for a `SoftwareCcmpKey`, key
+material moved into its software owner (an ESP-NOW peer), and `replace_key`
+replaces that material without restarting its numbers. `number` hands out a
+fresh MPDU's port `NumberedKey`.
 The allocator has no public constructor or continuation/reset API.
 The backend formats that supplied PN at the first protected transmission;
 a retransmission sends the same MPDU and keeps both. `allocate_batch`

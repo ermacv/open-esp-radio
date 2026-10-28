@@ -234,8 +234,9 @@ impl RsnAuthenticator {
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
         let RsnMessage3Preparation { ticket, ptk } = preparation;
         let wrapped = software_aes128_key_wrap(ptk.kek(), key_data.as_bytes())?;
-        let RsnApAction::Transmit(transmit) =
-            self.state.complete_message3_preparation::<N>(ticket, true)?
+        let RsnApAction::Transmit(transmit) = self
+            .state
+            .complete_message3_preparation::<N>(ticket, true)?
         else {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };

@@ -252,7 +252,10 @@ fn replay_admits_only_numbers_above_the_frontier_and_cancel_keeps_it() {
     let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
     let peer = table.install(peer(2, 1)).unwrap();
     assert_eq!(
-        table.get(peer).unwrap().highest_authenticated_rx_packet_number,
+        table
+            .get(peer)
+            .unwrap()
+            .highest_authenticated_rx_packet_number,
         None
     );
     table
@@ -294,7 +297,10 @@ fn replay_admits_only_numbers_above_the_frontier_and_cancel_keeps_it() {
         Err(EspNowEncryptedPeerError::Replay { .. })
     ));
     assert_eq!(
-        table.get(peer).unwrap().highest_authenticated_rx_packet_number,
+        table
+            .get(peer)
+            .unwrap()
+            .highest_authenticated_rx_packet_number,
         Some(CCMP_PACKET_NUMBER_MAX)
     );
     let diagnostics = table.diagnostics();

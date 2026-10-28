@@ -7,7 +7,7 @@
 
 use super::*;
 
-use crate::sae::anti_clogging_token;
+use oer_ieee80211_wire::sae::anti_clogging_token;
 use oer_ieee80211_wire::status::status_code;
 
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 1];

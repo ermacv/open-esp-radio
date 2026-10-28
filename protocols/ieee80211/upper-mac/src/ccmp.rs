@@ -289,7 +289,10 @@ impl CcmpReplayFrontier {
 
     /// Check and advance at once, for a frame published as soon as it is
     /// authenticated.
-    pub fn commit_immediate(&mut self, packet_number: CcmpPacketNumber) -> Result<(), CcmpReplayed> {
+    pub fn commit_immediate(
+        &mut self,
+        packet_number: CcmpPacketNumber,
+    ) -> Result<(), CcmpReplayed> {
         self.prepare(packet_number)?.commit();
         Ok(())
     }
