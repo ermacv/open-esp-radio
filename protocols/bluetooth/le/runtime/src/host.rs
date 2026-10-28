@@ -1,11 +1,8 @@
 //! One-credit HCI service loop over a composition-owned transport and port.
 
 use oer_bluetooth_hci::{
-    HciCommandPacket, HciControllerResponse,
-    bt_hci::{
-        PacketKind,
-        cmd::{Cmd, Opcode, le::LeRand},
-    },
+    HardwareErrorEvent, HciCommandPacket, HciControllerResponse,
+    bt_hci::cmd::{Cmd, Opcode, le::LeRand},
 };
 use oer_bluetooth_le_controller::dtm::{
     Accepted, Entropy, Reset, Response, Service, SubmitError, Submitted,
@@ -70,16 +67,6 @@ pub enum Error<E, F> {
     Terminal(oer_bluetooth_le_controller::dtm::Fault),
 }
 
-struct FramingError;
-impl HciControllerResponse for FramingError {
-    fn kind(&self) -> PacketKind {
-        PacketKind::Event
-    }
-    fn as_bytes(&self) -> &[u8] {
-        &[0x10, 1, 0xff]
-    }
-}
-
 /// Serve commands in B0's order: read, optional latch/entropy, accept/consume,
 /// submit, physical latch, terminal, send, then release the command credit.
 /// Installation, disable/uninstall and failure policy remain in the image.
@@ -100,7 +87,9 @@ where
     }
     loop {
         if io.receive().await.map_err(Error::Transport)? == Received::Framing {
-            io.send(&FramingError).await.map_err(Error::Transport)?;
+            io.send(&HardwareErrorEvent::new(0xff))
+                .await
+                .map_err(Error::Transport)?;
             continue;
         }
         let (stopping, random) = {

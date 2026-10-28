@@ -7,10 +7,11 @@ pub(crate) type Console = crate::usb::Console;
 /// The host's entropy source.
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 use oer_bluetooth_hci::{
-    HciControllerResponse,
+    CommandCompleteStatusEvent, HardwareErrorEvent, HciControllerResponse,
+    VendorShutdownObservationEvent,
     bt_hci::{
-        PacketKind,
         cmd::{Opcode, OpcodeGroup},
+        param::Status,
     },
 };
 use oer_bluetooth_le_controller::dtm::{self, Entropy};
@@ -152,30 +153,12 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                 let stopped = tx::fail_stop(
                     || owner.fail_stop(),
                     &mut self.io.console,
-                    &HardwareError([0x10, 1, fault.reason_code()]),
+                    &HardwareErrorEvent::new(fault.reason_code()),
                 )
                 .await;
                 rp::Ended::fail_stop(stopped, Err(fault))
             }
         }
-    }
-}
-struct StopComplete;
-struct HardwareError([u8; 3]);
-impl HciControllerResponse for HardwareError {
-    fn kind(&self) -> PacketKind {
-        PacketKind::Event
-    }
-    fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-}
-impl HciControllerResponse for StopComplete {
-    fn kind(&self) -> PacketKind {
-        PacketKind::Event
-    }
-    fn as_bytes(&self) -> &[u8] {
-        &[0x0e, 4, 1, 0, 0xfc, 0]
     }
 }
 pub async fn serve(
@@ -207,7 +190,7 @@ pub async fn serve(
                 tx::fail_stop(
                     || (),
                     &mut io.console,
-                    &HardwareError([0x10, 1, fault.reason_code()]),
+                    &HardwareErrorEvent::new(fault.reason_code()),
                 )
                 .await;
                 core::future::pending::<()>().await;
@@ -237,7 +220,7 @@ pub async fn serve(
                 ..
             } => {
                 report_shutdown(&mut io, &reports).await;
-                let _ = io.send(&StopComplete).await;
+                let _ = io.send(&CommandCompleteStatusEvent::new(STOP, Status::SUCCESS)).await;
                 return;
             }
             _ => core::future::pending::<()>().await,
@@ -246,20 +229,19 @@ pub async fn serve(
 }
 
 async fn report_shutdown(io: &mut Io, reports: &bridge::StopReports) {
-    use oer_firmware_apps_b0::shutdown_observation::ShutdownObservation;
     let pending = match reports.try_receive() {
         Ok(pending) => pending,
         Err(_) => {
             tx::fail_stop(
                 || (),
                 &mut io.console,
-                &HardwareError([0x10, 1, Fault::Accounting.reason_code()]),
+                &HardwareErrorEvent::new(Fault::Accounting.reason_code()),
             )
             .await;
             oer_firmware_apps_b0::handoff::park_failure((), || ()).await
         }
     };
-    let report = ShutdownObservation::new(pending);
+    let report = VendorShutdownObservationEvent::new(pending);
     if io.send(&report).await.is_err() {
         oer_firmware_apps_b0::handoff::park_failure(report, || ()).await;
     }

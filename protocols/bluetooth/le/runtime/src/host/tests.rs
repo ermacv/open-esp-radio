@@ -10,7 +10,10 @@ use core::{
 };
 use oer_bluetooth_hci::{
     self as hci,
-    bt_hci::cmd::{OpcodeGroup, controller_baseband::Reset as HciReset},
+    bt_hci::{
+        PacketKind,
+        cmd::{OpcodeGroup, controller_baseband::Reset as HciReset},
+    },
 };
 use oer_bluetooth_le_controller::dtm::EntropyUnavailable;
 use oer_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};

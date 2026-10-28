@@ -73,9 +73,7 @@ impl<S: Read + Write> H4<S> {
         }
     }
     fn receive_event(&mut self, event: &[u8], opcode: u16) -> Result<Option<Vec<u8>>> {
-        if let Some(pending) =
-            oer_firmware_apps_b0::shutdown_observation::ShutdownObservation::from_h4(event)
-        {
+        if let Some(pending) = oer_firmware_apps_b0::shutdown_observation::pending_from_h4(event) {
             writeln!(
                 self.log,
                 "LP shutdown pending: +0x24={} +0x2c={}",

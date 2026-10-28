@@ -57,6 +57,8 @@ mod controller;
 
 pub use controller::random::{LeRandCommand, LeRandCommandCompleteEvent};
 mod encoding;
+mod events;
+pub use events::{CommandCompleteStatusEvent, HardwareErrorEvent, VendorShutdownObservationEvent};
 mod transport;
 mod wire;
 

@@ -560,12 +560,12 @@ its model and conformance case.
   command credit, pending commands, session leases and retained faulty terminals
   without IO. The LE runtime awaits capacity and terminals and runs the HCI
   service loop over composition-owned transport and port traits. Firmware owns
-  framing, HAL entropy, installation/shutdown and task spawning. Among
-  conflicting connections the one closest to its supervision timeout wins;
-  Host backpressure withholds acknowledgement
-  instead of dropping the link. Controller memory is generated layouts with a
-  HAL handover engine; no controller address reaches the driver. How much of
-  an interval a connection event may take is policy of the portable link
+  framing, HAL entropy, installation/shutdown and task spawning. The LL
+  exposes per-connection progression; arbitration between conflicting
+  connections and Host receive backpressure are not implemented. Controller
+  memory is generated layouts with a HAL handover engine; no controller
+  address reaches the driver. How much of an interval a connection event may
+  take is policy of the portable link
   layer, from timing allowances the backend reports. The permanently bound
   Bluetooth handler retains the modem LP timer's register owner and positional
   epoch while P2 processes the software queue. A value-only time snapshot goes

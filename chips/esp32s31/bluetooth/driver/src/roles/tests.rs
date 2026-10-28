@@ -86,6 +86,33 @@ fn advertising_pdu_policy_selects_the_host_address_and_rejects_unsupported_heade
 }
 
 #[test]
+fn advertising_address_decoding_preserves_all_header_and_truncation_decisions() {
+    use super::legacy_advertising_event_image::own_address_from_pdu;
+    for header in u8::MIN..=u8::MAX {
+        let pdu = [header, 6, 1, 2, 3, 4, 5, 6];
+        for length in 0..pdu.len() {
+            assert_eq!(
+                own_address_from_pdu(&pdu[..length]),
+                Err(LegacyAdvertisingPduError::MissingAdvertiserAddress)
+            );
+        }
+        let expected = match header {
+            0x02 => Ok(LegacyAdvertisingOwnAddress::Public),
+            0x42 => Ok(LegacyAdvertisingOwnAddress::Random([1, 2, 3, 4, 5, 6])),
+            0x12 | 0x22 | 0x32 | 0x52 | 0x62 | 0x72 | 0x82 | 0x92 | 0xa2 | 0xb2 | 0xc2 | 0xd2
+            | 0xe2 | 0xf2 => Err(LegacyAdvertisingPduError::UnsupportedHeaderFlags),
+            _ => Err(LegacyAdvertisingPduError::UnsupportedPduType),
+        };
+        assert_eq!(own_address_from_pdu(&pdu), expected);
+    }
+    // Packet extent validation belongs to prepare_packet, after address selection.
+    assert_eq!(
+        own_address_from_pdu(&[0x42, 0, 1, 2, 3, 4, 5, 6, 9]),
+        Ok(LegacyAdvertisingOwnAddress::Random([1, 2, 3, 4, 5, 6]))
+    );
+}
+
+#[test]
 fn scanner_policy_keeps_active_filter_and_start_choices_independent() {
     let power = LeTxPower::from_dbm(9).expect("provider level");
     for (scan_type, kind) in [

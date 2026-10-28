@@ -39,31 +39,6 @@ const FIRST_EVENT_GUARD_MICROS: u32 = 16;
 /// (`r_sym_ble_JqbtnypGd2wyQym9wmK4`) index by PHY; LE 1M is its first entry.
 pub const LE_1M_EVENT_MICROS: u32 = 1_074;
 
-/// SOURCE: pinned `libble_app.a[ble_3.o]` connection-event setup
-/// `r_sym_ble_rsCCyH2B22gdYkN4LOOJ`, which installs the link-state event span
-/// from the connection interval: the whole interval up to 7,499 us, otherwise
-/// the interval less 2,000 us plus the peripheral's window widening. Its
-/// third branch, for an exchange of maximum-length packets that does not fit
-/// the interval less 2,150 us, cannot occur on LE 1M above 7,499 us.
-const WHOLE_INTERVAL_SPAN_MICROS: u32 = 7_499;
-const LONG_INTERVAL_MARGIN_MICROS: u32 = 2_000;
-
-/// The Controller span of one connection event in microseconds.
-pub fn connection_event_span(
-    interval: RadioDuration<LeRadio>,
-    widening: RadioDuration<LeRadio>,
-) -> RadioDuration<LeRadio> {
-    if interval <= RadioDuration::from_micros(u64::from(WHOLE_INTERVAL_SPAN_MICROS)) {
-        return interval;
-    }
-    interval
-        .checked_sub(RadioDuration::from_micros(u64::from(
-            LONG_INTERVAL_MARGIN_MICROS,
-        )))
-        .and_then(|span| span.checked_add(widening))
-        .expect("a long interval exceeds its margin and a widening fits the epoch")
-}
-
 /// The connection allowances of a scheduler profile whose preparation lead
 /// is `preparation_lead_micros`, or `None` when the lead leaves no event
 /// time: it must lie below [`LE_1M_EVENT_MICROS`].
