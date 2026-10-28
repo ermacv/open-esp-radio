@@ -1612,3 +1612,418 @@ pub const NAME: &str = "async";
         [format!("{}: async", source.join("machine.rs").display())]
     );
 }
+
+/// A workspace package as the structure rules see it: its directory below the
+/// root, its name, whether it builds a program, and the packages of its
+/// normal dependencies (optional and target-specific ones included).
+struct Member {
+    path: String,
+    name: String,
+    executable: bool,
+    dependencies: BTreeSet<String>,
+}
+
+/// Whether the package has a binary target: `src/main.rs`, `src/bin/*` or a
+/// `[[bin]]` entry.
+fn has_binary(directory: &Path, manifest: &toml::Value) -> bool {
+    let autobins = manifest
+        .get("package")
+        .and_then(|package| package.get("autobins"))
+        .and_then(toml::Value::as_bool)
+        != Some(false);
+    let automatic = autobins
+        && (directory.join("src/main.rs").is_file()
+            || std::fs::read_dir(directory.join("src/bin"))
+                .is_ok_and(|mut entries| entries.next().is_some()));
+    automatic
+        || manifest
+            .get("bin")
+            .and_then(toml::Value::as_array)
+            .is_some_and(|bins| !bins.is_empty())
+}
+
+fn workspace_members() -> Vec<Member> {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"))
+        .get("workspace")
+        .cloned()
+        .unwrap_or_else(|| toml::Value::Table(toml::Table::new()));
+    packages(&root)
+        .into_iter()
+        .map(|(path, manifest)| Member {
+            executable: has_binary(&root.join(&path), &manifest),
+            name: manifest
+                .get("package")
+                .and_then(|package| package.get("name"))
+                .and_then(toml::Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            dependencies: normal_dependencies(&manifest, &workspace),
+            path,
+        })
+        .collect()
+}
+
+/// The members whose package name is not the one their path gives.
+fn name_violations(members: &[Member]) -> Vec<String> {
+    members
+        .iter()
+        .filter_map(|member| {
+            let expected = expected_name(&member.path, member.executable);
+            (member.name != expected).then(|| {
+                format!(
+                    "{}: named {}, expected {expected}",
+                    member.path, member.name
+                )
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn every_package_is_named_by_its_path() {
+    let members = workspace_members();
+    assert!(members.len() > 100, "the workspace members are read");
+    let violations = name_violations(&members);
+    assert!(
+        violations.is_empty(),
+        "package names off the path rule:\n{}",
+        violations.join("\n")
+    );
+}
+
+fn member(path: &str, name: &str, executable: bool, dependencies: &[&str]) -> Member {
+    Member {
+        path: path.to_owned(),
+        name: name.to_owned(),
+        executable,
+        dependencies: dependencies.iter().map(|name| (*name).to_owned()).collect(),
+    }
+}
+
+#[test]
+fn the_name_rule_tells_libraries_from_programs_by_their_binary_targets() {
+    let members = [
+        member("protocols/ieee80211/wire", "oer-ieee80211-wire", false, &[]),
+        member("protocols/ieee80211/sta", "oer-sta", false, &[]),
+        member("firmware/apps/w1", "oer-firmware-apps-w1", true, &[]),
+        member("firmware/apps/w2", "oer-apps-w2", true, &[]),
+        member("tools/image/build", "oer-image-build", false, &[]),
+        member("tools/image/cli", "oer-tool-image-cli", true, &[]),
+        member("tools/image/bundle", "oer-tool-image-bundle", false, &[]),
+        member("tools/pins", "oer-pins", true, &[]),
+    ];
+    assert_eq!(
+        name_violations(&members),
+        [
+            "protocols/ieee80211/sta: named oer-sta, expected oer-ieee80211-sta",
+            "firmware/apps/w2: named oer-apps-w2, expected oer-firmware-apps-w2",
+            "tools/image/bundle: named oer-tool-image-bundle, expected oer-image-bundle",
+            "tools/pins: named oer-pins, expected oer-tool-pins",
+        ]
+    );
+}
+
+#[test]
+fn a_binary_target_is_found_by_auto_discovery_and_by_manifest_entries() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let package = |name: &str, files: &[&str], extra: &str| {
+        let path = directory.path().join(name);
+        for file in files {
+            std::fs::create_dir_all(path.join(file).parent().expect("parent")).expect("directory");
+            std::fs::write(path.join(file), "").expect("file");
+        }
+        let manifest: toml::Value =
+            toml::from_str(&format!("[package]\nname = \"{name}\"\n{extra}")).expect("manifest");
+        has_binary(&path, &manifest)
+    };
+    assert!(!package("lib", &["src/lib.rs"], ""));
+    assert!(package("main", &["src/lib.rs", "src/main.rs"], ""));
+    assert!(package("bin-dir", &["src/lib.rs", "src/bin/tool.rs"], ""));
+    assert!(!package(
+        "manual",
+        &["src/main.rs", "src/bin/tool.rs"],
+        "autobins = false"
+    ));
+    assert!(package(
+        "listed",
+        &["src/lib.rs"],
+        "autobins = false\n[[bin]]\nname = \"x\"\npath = \"src/x.rs\""
+    ));
+}
+
+/// An edge a structure rule forbids, from the dependent's path to the
+/// dependency's path.
+type Edge = (String, String);
+
+/// The packages whose normal dependencies include a package that `forbids`
+/// them, as path edges.
+fn forbidden_edges(
+    members: &[Member],
+    forbids: impl Fn(&Member, &Member) -> bool,
+) -> BTreeSet<Edge> {
+    let by_name = members
+        .iter()
+        .map(|member| (member.name.as_str(), member))
+        .collect::<BTreeMap<_, _>>();
+    members
+        .iter()
+        .flat_map(|from| {
+            from.dependencies
+                .iter()
+                .filter_map(|name| by_name.get(name.as_str()))
+                .filter(|to| forbids(from, to))
+                .map(|to| (from.path.clone(), to.path.clone()))
+        })
+        .collect()
+}
+
+/// An edge the tree still has against a rule, with what removes it. The
+/// list of a rule only shrinks; `docs/repository-layout.md` states each entry.
+type Deviation = (&'static str, &'static str, &'static str);
+
+/// Compares the edges a rule finds with its known deviations: a new edge and
+/// an entry whose edge is gone both fail.
+fn deviation_differences(found: &BTreeSet<Edge>, known: &[Deviation]) -> Vec<String> {
+    let known_edges = known
+        .iter()
+        .map(|(from, to, _)| ((*from).to_owned(), (*to).to_owned()))
+        .collect::<BTreeSet<_>>();
+    let new = found
+        .difference(&known_edges)
+        .map(|(from, to)| format!("new: {from} -> {to}"));
+    let stale = known_edges
+        .difference(found)
+        .map(|(from, to)| format!("gone, drop the entry: {from} -> {to}"));
+    new.chain(stale).collect()
+}
+
+fn image_or_program(_: &Member, to: &Member) -> bool {
+    to.path.starts_with("firmware/") || (to.path.starts_with("tools/") && to.executable)
+}
+
+fn family_reaches_a_chip(from: &Member, to: &Member) -> bool {
+    from.path.starts_with("chips/espressif/")
+        && to.path.starts_with("chips/")
+        && !to.path.starts_with("chips/espressif/")
+}
+
+fn portable_reaches_a_protocol_or_a_chip(from: &Member, to: &Member) -> bool {
+    let embassy = from.path.starts_with("portable/embassy/");
+    from.path.starts_with("portable/")
+        && ((!embassy && to.path.starts_with("protocols/")) || to.path.starts_with("chips/"))
+}
+
+/// Nothing depends on an image or on a program of `tools/` (a package with a
+/// binary target) through a normal dependency.
+const NO_EDGE_ON_AN_IMAGE_OR_PROGRAM: &[Deviation] = &[
+    (
+        "firmware/hil/esp32s31",
+        "firmware/apps/w3",
+        "the IEEE 802.11 facade (#844)",
+    ),
+    (
+        "tools/hil/fixture",
+        "tools/lab/fixture-install",
+        "the fixture program/library split (#848)",
+    ),
+    (
+        "tools/hil/fixtures-bluetooth",
+        "tools/hil/fixture",
+        "the fixture program/library split (#848)",
+    ),
+    (
+        "tools/hil/lab",
+        "tools/hil/fixture",
+        "the fixture program/library split (#848)",
+    ),
+    (
+        "tools/hil/lab",
+        "tools/lab/fixture-install",
+        "the fixture program/library split (#848)",
+    ),
+    (
+        "tools/hil/net-traffic",
+        "tools/hil/fixture",
+        "the fixture program/library split (#848)",
+    ),
+    (
+        "tools/image/cli",
+        "tools/lab/fixture-install",
+        "the fixture program/library split (#848)",
+    ),
+    (
+        "tools/lab/cli",
+        "tools/lab/fixture-install",
+        "the fixture program/library split (#848)",
+    ),
+    (
+        "tools/analysis/cli",
+        "tools/pins",
+        "the pins program/library split (#848)",
+    ),
+    (
+        "tools/image/checks",
+        "tools/pins",
+        "the pins program/library split (#848)",
+    ),
+    (
+        "tools/image/esp-idf",
+        "tools/pins",
+        "the pins program/library split (#848)",
+    ),
+    (
+        "tools/registers/generate",
+        "tools/pins",
+        "the pins program/library split (#848)",
+    ),
+    (
+        "tools/vendor/cli",
+        "tools/pins",
+        "the pins program/library split (#848)",
+    ),
+    (
+        "tools/vendor/provenance",
+        "tools/pins",
+        "the pins program/library split (#848)",
+    ),
+    (
+        "tools/vendor/scenario",
+        "tools/pins",
+        "the pins program/library split (#848)",
+    ),
+];
+
+/// `chips/espressif` depends on no chip: it is the family below them.
+const FAMILY_BELOW_THE_CHIPS: &[Deviation] = &[
+    (
+        "chips/espressif/executor",
+        "chips/esp32s31/hal",
+        "the family platform contracts (#848, B1)",
+    ),
+    (
+        "chips/espressif/staged-bootstrap",
+        "chips/esp32s31/hal",
+        "the family platform contracts (#848, B1)",
+    ),
+    (
+        "chips/espressif/staged-runtime",
+        "chips/esp32s31/hal",
+        "the family platform contracts (#848, B1)",
+    ),
+];
+
+/// `portable` depends on no protocol and no chip; `portable/embassy` alone
+/// adapts protocol boundaries.
+const PORTABLE_BELOW_THE_PROTOCOLS: &[Deviation] = &[(
+    "portable/hil-agent",
+    "protocols/hil/protocol",
+    "the move of hil-agent to protocols/hil/agent (#848, B6)",
+)];
+
+#[test]
+fn no_normal_edge_reaches_an_image_or_a_program() {
+    let found = forbidden_edges(&workspace_members(), image_or_program);
+    let differences = deviation_differences(&found, NO_EDGE_ON_AN_IMAGE_OR_PROGRAM);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn the_espressif_family_depends_on_no_chip() {
+    let found = forbidden_edges(&workspace_members(), family_reaches_a_chip);
+    let differences = deviation_differences(&found, FAMILY_BELOW_THE_CHIPS);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn portable_depends_on_no_protocol_and_no_chip_except_the_embassy_adapters() {
+    let found = forbidden_edges(&workspace_members(), portable_reaches_a_protocol_or_a_chip);
+    let differences = deviation_differences(&found, PORTABLE_BELOW_THE_PROTOCOLS);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn the_edge_rules_see_optional_target_and_aliased_dependencies_and_judge_by_path() {
+    let manifest = |dependencies: &str| -> BTreeSet<String> {
+        let manifest: toml::Value = toml::from_str(dependencies).expect("manifest");
+        let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
+        normal_dependencies(&manifest, &workspace)
+    };
+    let members = [
+        member("chips/espressif/analog", "oer-espressif-analog", false, &[]),
+        Member {
+            dependencies: manifest(
+                r#"
+[dependencies]
+hal = { package = "oer-esp32s31-hal", version = "1", optional = true }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+app = { package = "oer-firmware-apps-w3", version = "1" }
+[dev-dependencies]
+tool = { package = "oer-tool-pins", version = "1" }
+"#,
+            ),
+            ..member(
+                "chips/espressif/executor",
+                "oer-espressif-executor",
+                false,
+                &[],
+            )
+        },
+        member("chips/esp32s31/hal", "oer-esp32s31-hal", false, &[]),
+        member("firmware/apps/w3", "oer-firmware-apps-w3", true, &[]),
+        member("tools/pins", "oer-tool-pins", true, &[]),
+        member("tools/image/build", "oer-image-build", false, &[]),
+        member(
+            "tools/image/checks",
+            "oer-image-checks",
+            false,
+            &["oer-tool-pins", "oer-image-build"],
+        ),
+        member(
+            "portable/time",
+            "oer-time",
+            false,
+            &["oer-ieee80211-wire", "oer-esp32s31-hal"],
+        ),
+        member(
+            "portable/embassy/net",
+            "oer-embassy-net",
+            false,
+            &["oer-ieee80211-wire", "oer-esp32s31-hal"],
+        ),
+        member("protocols/ieee80211/wire", "oer-ieee80211-wire", false, &[]),
+    ];
+    let edge = |from: &str, to: &str| (from.to_owned(), to.to_owned());
+    assert_eq!(
+        forbidden_edges(&members, image_or_program),
+        BTreeSet::from([
+            edge("chips/espressif/executor", "firmware/apps/w3"),
+            edge("tools/image/checks", "tools/pins"),
+        ])
+    );
+    assert_eq!(
+        forbidden_edges(&members, family_reaches_a_chip),
+        BTreeSet::from([edge("chips/espressif/executor", "chips/esp32s31/hal")])
+    );
+    assert_eq!(
+        forbidden_edges(&members, portable_reaches_a_protocol_or_a_chip),
+        BTreeSet::from([
+            edge("portable/time", "protocols/ieee80211/wire"),
+            edge("portable/time", "chips/esp32s31/hal"),
+            edge("portable/embassy/net", "chips/esp32s31/hal"),
+        ])
+    );
+}
+
+#[test]
+fn a_deviation_list_fails_on_a_new_edge_and_on_an_edge_that_is_gone() {
+    let edge = |from: &str, to: &str| (from.to_owned(), to.to_owned());
+    let known: &[Deviation] = &[("a", "b", "a decision"), ("c", "d", "a decision")];
+    assert!(
+        deviation_differences(&BTreeSet::from([edge("a", "b"), edge("c", "d")]), known).is_empty()
+    );
+    assert_eq!(
+        deviation_differences(&BTreeSet::from([edge("a", "b"), edge("e", "f")]), known),
+        ["new: e -> f", "gone, drop the entry: c -> d"]
+    );
+}

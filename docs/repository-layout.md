@@ -65,9 +65,14 @@ Dependency direction follows from the roots: a protocol or a portable crate
 knows no chip and no tool; chip backends build on protocol wire and port
 contracts and portable support; images and tools sit on top. Nothing depends
 on images or tools except through build, proc-macro and test dependencies
-(`tools/probe/macros`, `tools/test/ui-cases`). The layer tests check normal
-transitive dependencies, including optional and target-specific declarations:
-backends and reference models do not reach protocol cores or runtimes.
+(`tools/probe/macros`, `tools/test/ui-cases`): no package takes a normal
+dependency on a package of `firmware/` or on a program of `tools/` (a package
+with a binary target). `chips/espressif` is the family below the chips and
+depends on no `chips/<chip>` package. `portable` depends on no protocol and no
+chip; only `portable/embassy` adapts protocol boundaries. The layer tests check
+normal transitive dependencies, including optional and target-specific
+declarations: backends and reference models do not reach protocol cores or
+runtimes.
 
 Chip knowledge (tables, constants, pure functions about a chip) lives in
 `chips/`, beside the hardware access it describes; a host tool that needs a
@@ -131,7 +136,8 @@ its root: `firmware/apps/w1` is `oer-firmware-apps-w1`, `tools/image/cli` is
 with underscores. A program called by name (the image linker, a privileged
 helper) sets that name with `[[bin]] name`.
 
-`cargo test -p oer-test-layers` checks the names, the unsafe boundary
+`cargo test -p oer-test-layers` checks every package's name against its path,
+the edges of Dependencies, the unsafe boundary
 ([unsafe](unsafe.md)), protocol core/runtime isolation from backends and
 models through normal dependencies, the IEEE 802.11 layer table (the cipher,
 port, model and runtime dependencies) and its cores that never wait, and the
@@ -172,3 +178,23 @@ The tree does not yet follow these rules in these places:
 
 - `protocols/ieee80211/runtime` has a dev-dependency on
   `chips/espressif/ieee80211-policy`.
+- `firmware/hil/esp32s31` -> `firmware/apps/w3` (removed by the IEEE 802.11
+  facade, #844).
+- `tools/pins` is a library and a program: `tools/analysis/cli`,
+  `tools/image/checks`, `tools/image/esp-idf`, `tools/registers/generate`,
+  `tools/vendor/cli`, `tools/vendor/provenance` and `tools/vendor/scenario` ->
+  `tools/pins` (removed by the library/program split, #848).
+- `tools/lab/fixture-install` is a library and a program: `tools/hil/fixture`,
+  `tools/hil/lab`, `tools/image/cli` and `tools/lab/cli` ->
+  `tools/lab/fixture-install` (removed by the library/program split, #848).
+- `tools/hil/fixture` is a library and a program: `tools/hil/fixtures-bluetooth`,
+  `tools/hil/lab` and `tools/hil/net-traffic` -> `tools/hil/fixture` (removed by
+  the library/program split, #848).
+- `chips/espressif/executor`, `chips/espressif/staged-bootstrap` and
+  `chips/espressif/staged-runtime` -> `chips/esp32s31/hal` (optional, feature
+  `esp32s31`; removed by the family platform contracts, #848, B1).
+- `portable/hil-agent` -> `protocols/hil/protocol` (removed by the move of
+  hil-agent to `protocols/hil/agent`, #848, B6).
+
+The layer test lists each of these edges; an edge that is gone must leave the
+list, and the list gains no entry.
