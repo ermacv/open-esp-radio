@@ -32,6 +32,11 @@ its messages with `messages!`:
 - a property is a marker an image advertises among its image keys and never
   sends.
 
+`messages!` also emits the module's `KEYS`, the keys of all its messages. The
+protocol names no image: which keys an image reports follows from the
+services it mounts ([agent](../agent/README.md#image-keys)), and a host
+scenario family declares the keys it requires.
+
 A response may follow other messages about the same request: a replayed
 session publishes its evidence before `network::Finished`.
 A refusal is `base::Rejected` with its reason.

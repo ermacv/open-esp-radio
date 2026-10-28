@@ -43,23 +43,28 @@ oer_hil_agent::image_keys! {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use oer_hil_protocol::base::ImageKeySet;
+    use std::collections::BTreeSet;
 
-    fn same(new: ImageKeySet<'_>, features: &[&str]) {
-        let old =
-            oer_hil_protocol::feature_keys::image_keys(&|feature| features.contains(&feature));
-        assert_eq!(new.hello(0), old.as_set().hello(0), "{features:?}");
-        assert_eq!(new.page(0), old.as_set().page(0), "{features:?}");
-        assert_eq!(new.page(48), old.as_set().page(48), "{features:?}");
+    use super::*;
+    use oer_hil_agent::base::{Base, Service};
+    use oer_hil_protocol::base::ImageKeySet;
+    use oer_hil_protocol::{Key, Message, health, phy};
+
+    fn set(keys: ImageKeySet<'_>) -> BTreeSet<Key> {
+        keys.keys().iter().copied().collect()
     }
 
     #[test]
-    fn each_image_reports_the_keys_its_features_reported() {
-        same(PHY_KEYS, &["diagnostic-phy"]);
-        same(
-            RADIO_HEALTH_KEYS,
-            &["diagnostic-phy", "diagnostic-radio-health"],
-        );
+    fn each_image_reports_its_services_and_the_base_module() {
+        // The image never publishes the cache request topic.
+        let phy: BTreeSet<Key> = Base::KEYS
+            .iter()
+            .chain(phy::KEYS)
+            .copied()
+            .filter(|key| *key != phy::CalibrationCacheRequested::KEY)
+            .collect();
+        assert_eq!(set(PHY_KEYS), phy);
+        let health: BTreeSet<Key> = phy.iter().chain(health::KEYS).copied().collect();
+        assert_eq!(set(RADIO_HEALTH_KEYS), health);
     }
 }

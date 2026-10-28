@@ -58,28 +58,48 @@ oer_hil_agent::image_keys! {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use oer_hil_protocol::base::ImageKeySet;
+    use std::collections::BTreeSet;
 
-    fn old(features: &[&str]) -> oer_hil_protocol::feature_keys::ImageKeys {
-        oer_hil_protocol::feature_keys::image_keys(&|feature| features.contains(&feature))
+    use super::*;
+    use oer_hil_agent::base::{Base, Service};
+    use oer_hil_protocol::base::ImageKeySet;
+    use oer_hil_protocol::{Key, Message, base, network, system, wifi};
+
+    fn set(keys: ImageKeySet<'_>) -> BTreeSet<Key> {
+        keys.keys().iter().copied().collect()
     }
 
-    fn same(new: ImageKeySet<'_>, features: &[&str]) {
-        let old = old(features);
-        assert_eq!(new.hello(0), old.as_set().hello(0), "{features:?}");
-        assert_eq!(new.page(0), old.as_set().page(0), "{features:?}");
-        assert_eq!(new.page(48), old.as_set().page(48), "{features:?}");
+    fn expected(groups: &[&[Key]]) -> BTreeSet<Key> {
+        Base::KEYS
+            .iter()
+            .chain(groups.iter().copied().flatten())
+            .copied()
+            .collect()
+    }
+
+    const WATCHDOG: &[Key] = &[system::WatchdogTest::KEY, system::WatchdogArmed::KEY];
+    const PANIC: &[Key] = &[system::InjectPanic::KEY, system::PanicInjected::KEY];
+    const USB: &[Key] = &[system::DisableUsb::KEY, system::UsbDisabled::KEY];
+
+    #[test]
+    fn each_image_reports_its_services_and_the_base_module() {
+        assert_eq!(set(WATCHDOG_KEYS), expected(&[WATCHDOG, PANIC]));
+        assert_eq!(set(USB_JTAG_OFF_KEYS), expected(&[WATCHDOG, USB, PANIC]));
+        assert_eq!(set(PANIC_RESET_KEYS), expected(&[PANIC]));
+        assert_eq!(
+            set(STATION_KEYS),
+            expected(&[wifi::KEYS, &[base::Accepted::KEY, network::Ready::KEY],])
+        );
     }
 
     #[test]
-    fn each_image_reports_the_keys_its_features_reported() {
-        same(WATCHDOG_KEYS, &["system-watchdog", "panic-hook"]);
-        same(
-            USB_JTAG_OFF_KEYS,
-            &["system-watchdog", "usb-jtag-off", "panic-hook"],
-        );
-        same(PANIC_RESET_KEYS, &["system-panic-reset"]);
-        same(STATION_KEYS, &["wifi-station", "panic-hook"]);
+    fn a_response_two_endpoints_share_is_reported_once() {
+        let accepted = STATION_KEYS
+            .keys()
+            .iter()
+            .filter(|key| **key == base::Accepted::KEY)
+            .count();
+        assert_eq!(accepted, 1);
+        assert!(STATION_KEYS.keys().windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

@@ -716,7 +716,10 @@ the existing HAL owner.
 - **Stand.** HIL runs (`cargo hil`, `tools/hil`) start by hand when they answer
   a real question. Stand roles belong to firmware, not boards; the lab router
   is reprogrammed to each run's profile; the stand file holds no credentials
-  (each run generates and never logs them). A performance A/B is 5 of 5
+  (each run generates and never logs them). An image announces in its
+  `Hello` the keys of the HIL services it mounts, a set computed at compile
+  time from those services; the runner accepts a flashed image whose set holds
+  every key the scenario's family requires. A performance A/B is 5 of 5
   runs: a throughput regression above 5 %, a p95 latency regression above
   10 % or more CPU load for the same throughput blocks the change. Bisect on
   the stand is a manual `git bisect run` over one scenario.

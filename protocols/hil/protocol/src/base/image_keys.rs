@@ -45,14 +45,6 @@ pub enum ImageKeySetError {
     Order { previous: Key, current: Key },
 }
 
-impl<'a> From<&'a crate::feature_keys::ImageKeys> for ImageKeySet<'a> {
-    fn from(keys: &'a crate::feature_keys::ImageKeys) -> Self {
-        Self {
-            keys: keys.as_slice(),
-        }
-    }
-}
-
 impl<'a> ImageKeySet<'a> {
     /// Validates the strictly ascending keys and their representable wire count.
     pub const fn new(keys: &'a [Key]) -> Result<Self, ImageKeySetError> {
@@ -72,6 +64,11 @@ impl<'a> ImageKeySet<'a> {
             remaining = rest;
         }
         Ok(Self { keys })
+    }
+
+    /// The keys, ascending.
+    pub const fn keys(&self) -> &'a [Key] {
+        self.keys
     }
 
     pub fn contains(&self, key: crate::Key) -> bool {

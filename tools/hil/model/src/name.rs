@@ -222,8 +222,7 @@ names! {
     /// `oer-ieee80211-port::LowerMacPort`.
     ContractName: Path;
     /// A capability the HIL agent serves, by its `hil/protocol` module and
-    /// name, such as `conformance.lower-mac`; the image keys derive from
-    /// these through `oer_hil_protocol::feature_keys`.
+    /// name, such as `conformance.lower-mac`.
     CapabilityKey: Dotted;
 }
 

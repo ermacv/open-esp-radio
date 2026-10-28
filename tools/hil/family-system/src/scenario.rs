@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use oer_hil_model::schema::image::ImageClass;
+use oer_hil_protocol::{Key, Message};
 use oer_hil_scenario::workload::context::Context;
 use oer_hil_scenario::workload::{family::Workload, fixture::Fixtures};
 use oer_hil_scenario::{AirUse, Plan, ScenarioFamily};
@@ -49,6 +50,19 @@ impl ScenarioFamily for SystemScenario {
         })
     }
 
+    fn required_keys(&self) -> &'static [Key] {
+        use oer_hil_protocol::system;
+        const WATCHDOG: &[Key] = &[system::WatchdogTest::KEY, system::WatchdogArmed::KEY];
+        const PANIC: &[Key] = &[system::InjectPanic::KEY, system::PanicInjected::KEY];
+        const USB: &[Key] = &[system::DisableUsb::KEY, system::UsbDisabled::KEY];
+        match self {
+            Self::BootSmoke {} => &[],
+            Self::Watchdog {} => WATCHDOG,
+            Self::PanicReset {} => PANIC,
+            Self::StandRecovery {} => USB,
+        }
+    }
+
     /// The watchdog image enables no radio; the other system images carry
     /// the product's radios.
     fn air_use(&self) -> Vec<AirUse> {
@@ -91,6 +105,19 @@ mod tests {
             let scenario = parse(text);
             scenario.validate().unwrap();
             assert_eq!(scenario.plan(), Plan::target_only(image));
+        }
+    }
+
+    #[test]
+    fn each_workload_requires_the_service_it_drives() {
+        use oer_hil_protocol::system;
+        assert!(parse("kind = 'boot-smoke'").required_keys().is_empty());
+        for (text, endpoint) in [
+            ("kind = 'watchdog'", system::WatchdogTest::KEY),
+            ("kind = 'panic-reset'", system::InjectPanic::KEY),
+            ("kind = 'stand-recovery'", system::DisableUsb::KEY),
+        ] {
+            assert!(parse(text).required_keys().contains(&endpoint), "{text}");
         }
     }
 

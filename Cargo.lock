@@ -2873,7 +2873,6 @@ version = "0.1.0"
 dependencies = [
  "mio",
  "oer-diagnostics",
- "oer-hil-model",
  "oer-hil-protocol",
  "oer-lab-board",
  "oer-os-durable",

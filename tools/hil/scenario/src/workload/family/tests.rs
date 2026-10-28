@@ -23,6 +23,9 @@ impl ScenarioFamily for Quiet {
     fn plan(&self) -> Plan {
         Plan::target_only(ImageClass::SystemWatchdog)
     }
+    fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        &[]
+    }
     fn air_use(&self) -> Vec<AirUse> {
         Vec::new()
     }
@@ -53,6 +56,9 @@ impl ScenarioFamily for Radio {
             name: "radio-peer",
             reflash: "flash it",
         })
+    }
+    fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        &[]
     }
     fn air_use(&self) -> Vec<AirUse> {
         vec![AirUse::Ieee802154Channel(self.channel)]

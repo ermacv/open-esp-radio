@@ -34,9 +34,8 @@ impl ScenarioFamily for LowerMacScenario {
         }];
         plan
     }
-    fn served_by(&self, keys: &oer_hil_protocol::DeviceImageKeys) -> bool {
-        keys.has::<oer_hil_protocol::lower_mac::Prepare>()
-            && keys.has::<oer_hil_protocol::lower_mac::RunCase>()
+    fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        oer_hil_protocol::lower_mac::KEYS
     }
     fn air_use(&self) -> Vec<AirUse> {
         vec![AirUse::Band2G4]

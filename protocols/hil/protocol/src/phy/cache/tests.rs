@@ -236,32 +236,9 @@ fn every_cache_message_fits_existing_framing_with_maximum_pages_and_identifiers(
 }
 
 #[test]
-fn postcard_rejects_oversized_pages_and_only_diagnostic_phy_advertises_manual_cache() {
+fn postcard_rejects_oversized_pages() {
     // Serialize the Vec length as postcard does, then the oversized payload.
     let mut buffer = [0; 64];
     let encoded = postcard::to_slice(&(7u32, 0u16, &[0u8; 33][..]), &mut buffer).expect("fixture");
     assert!(postcard::from_bytes::<WriteCalibrationCachePage>(encoded).is_err());
-    for features in [
-        &[][..],
-        &["diagnostic-phy"][..],
-        &["diagnostic-lower-mac"][..],
-        &["system-watchdog"][..],
-    ] {
-        let keys = crate::feature_keys::image_keys(&|feature| features.contains(&feature));
-        use crate::Message;
-        for key in [
-            super::super::HostCalibrationCache::KEY,
-            StartCalibration::KEY,
-            GetCalibrationCacheIdentity::KEY,
-            WriteCalibrationCachePage::KEY,
-            CompleteCalibrationCache::KEY,
-            GetCalibrationStartStatus::KEY,
-            ReadCalibrationSnapshot::KEY,
-        ] {
-            assert_eq!(
-                keys.as_slice().contains(&key),
-                features.contains(&"diagnostic-phy")
-            );
-        }
-    }
 }

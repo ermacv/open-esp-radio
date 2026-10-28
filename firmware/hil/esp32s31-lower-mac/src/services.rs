@@ -15,12 +15,15 @@ oer_hil_agent::image_keys! {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
+    use oer_hil_agent::base::{Base, Service};
+    use oer_hil_protocol::{Key, lower_mac};
+
     #[test]
-    fn the_image_reports_the_keys_its_feature_reported() {
-        let old = oer_hil_protocol::feature_keys::image_keys(&|feature| {
-            feature == "diagnostic-lower-mac"
-        });
-        assert_eq!(super::KEYS.hello(0), old.as_set().hello(0));
-        assert_eq!(super::KEYS.page(0), old.as_set().page(0));
+    fn the_image_reports_its_service_and_the_base_module() {
+        let reported: BTreeSet<Key> = super::KEYS.keys().iter().copied().collect();
+        let expected: BTreeSet<Key> = Base::KEYS.iter().chain(lower_mac::KEYS).copied().collect();
+        assert_eq!(reported, expected);
     }
 }

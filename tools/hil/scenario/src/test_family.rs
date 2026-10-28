@@ -43,6 +43,9 @@ impl ScenarioFamily for TestFamily {
         Ok(())
     }
 
+    fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        &[]
+    }
     fn air_use(&self) -> Vec<AirUse> {
         match self {
             Self::System(TestWorkload::BootSmoke) => Vec::new(),

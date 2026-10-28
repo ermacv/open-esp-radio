@@ -21,6 +21,7 @@ oer-os-durable = { path = "../../os/durable" }
 
 [build-dependencies]
 oer-chip-profile = { path = "../../chip/profile" }
+toml = "1.1"
 
 [lints]
 workspace = true

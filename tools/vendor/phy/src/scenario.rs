@@ -149,26 +149,25 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
         }
         Plan::target_only(ImageClass::DiagnosticPhy)
     }
-    fn served_by(&self, keys: &oer_hil_protocol::DeviceImageKeys) -> bool {
-        if matches!(self, Self::HostCalibrationCache { .. }) {
-            return keys.has::<oer_hil_protocol::phy::HostCalibrationCache>()
-                && keys.has::<oer_hil_protocol::phy::StartCalibration>()
-                && keys.has::<oer_hil_protocol::phy::ReadCalibrationSnapshot>();
+    fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        use oer_hil_protocol::{Key, Message, health, phy};
+        const HOST_CACHE: &[Key] = &[
+            phy::HostCalibrationCache::KEY,
+            phy::StartCalibration::KEY,
+            phy::ReadCalibrationSnapshot::KEY,
+        ];
+        const HOLD: &[Key] = &[
+            phy::StartTrackingHold::KEY,
+            phy::GetTrackingHold::KEY,
+            phy::StopTrackingHold::KEY,
+        ];
+        const CAPTURE: &[Key] = &[phy::StartCalibration::KEY, phy::ReadAnalogImage::KEY];
+        match self {
+            Self::HostCalibrationCache { .. } => HOST_CACHE,
+            Self::RadioHealth { .. } => health::KEYS,
+            Self::TrackingHold { .. } | Self::TrackingHoldWifi { .. } => HOLD,
+            Self::RecordedCalibration { .. } | Self::VendorCalibration { .. } => CAPTURE,
         }
-        if matches!(self, Self::RadioHealth { .. }) {
-            return keys.has::<oer_hil_protocol::health::BeginHealth>()
-                && keys.has::<oer_hil_protocol::health::ReadHealthMeasurements>();
-        }
-        if matches!(
-            self,
-            Self::TrackingHold { .. } | Self::TrackingHoldWifi { .. }
-        ) {
-            return keys.has::<oer_hil_protocol::phy::StartTrackingHold>()
-                && keys.has::<oer_hil_protocol::phy::GetTrackingHold>()
-                && keys.has::<oer_hil_protocol::phy::StopTrackingHold>();
-        }
-        keys.has::<oer_hil_protocol::phy::StartCalibration>()
-            && keys.has::<oer_hil_protocol::phy::ReadAnalogImage>()
     }
     fn air_use(&self) -> Vec<AirUse> {
         vec![AirUse::Band2G4]
