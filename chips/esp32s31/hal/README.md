@@ -1,8 +1,22 @@
 # ESP32-S31 HAL
 
-Register logic over the thin PAC (docs/architecture.md, "Layers"): the
-reset root, sequences, polls, routing, clocks, power, resets and DMA
-engines.
+Owners and hardware atoms over the thin PAC (docs/architecture.md,
+"Layers"): the reset root and its partitions, typestate, register atoms,
+fixed sourced vendor write series, interrupt routing, implementations of the
+family drivers' register ports and of the platform contracts, and the DMA
+memory core. A sequence that waits, polls, retries or decides on a read value
+is driver code.
+
+Production files that wait, poll or run on deadlines are a per-file list
+with exact marker counts in `oer-test-layers`
+([layer tests](../../../tools/test/layers/README.md)): the Bluetooth
+controller engine, scheduler and modem timer, the boot policy and waits in
+`boot`, the Wi-Fi cold start in `ieee80211`, the PHY analog bus and delays in
+`phy`, and the entropy read gap in `platform.rs`. The list only shrinks; no
+new file joins it. The scan does not find driver code without such a marker:
+the radio domain's membership and first/last-client policy, the common radio
+power sequence and the IEEE 802.15.4 lifecycle policy are driver code that
+this crate still holds.
 
 For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the

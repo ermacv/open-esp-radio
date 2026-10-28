@@ -1,5 +1,6 @@
-//! Structural rules read from package manifests: names, the unsafe boundary
-//! and protocol core/runtime isolation from backends.
+//! Structural rules read from package manifests and sources: names, the
+//! unsafe boundary, layer roles and their dependencies, protocol core/runtime
+//! isolation from backends, and the HAL's atoms (`README.md`).
 
 use std::{
     collections::{BTreeMap, BTreeSet},
