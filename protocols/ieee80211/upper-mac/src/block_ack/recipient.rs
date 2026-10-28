@@ -3,8 +3,8 @@
 //! The integration supplies an existing bank token and retained-frame slots.
 //! This module allocates no frame backing and never reads a clock.
 
-use core::num::NonZeroU64;
 use super::{RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease};
+use core::num::NonZeroU64;
 use oer_ieee80211_wire::{
     block_ack::frame::{ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_addba_response},
     sequence::SequenceNumber,

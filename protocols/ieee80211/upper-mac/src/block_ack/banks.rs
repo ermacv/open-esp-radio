@@ -13,8 +13,7 @@ use super::{
     RxReorderMpdu, RxReorderRelease,
 };
 use oer_ieee80211_port::{
-    Ieee80211Capabilities, RxBuffer, RxCryptoStatus, RxEvidence, RxMetadata, SupportedBlockAck,
-    Tid,
+    Ieee80211Capabilities, RxBuffer, RxCryptoStatus, RxEvidence, RxMetadata, SupportedBlockAck, Tid,
 };
 use oer_ieee80211_wire::{
     address::Bssid,
@@ -63,10 +62,7 @@ pub trait RxBlockAckPort<T: RxBlockAckTypes> {
 }
 
 type Session<T> = RxBlockAckSession<<T as RxBlockAckTypes>::Running, WINDOW, WINDOW>;
-type Retained<T> = (
-    <T as RxBlockAckTypes>::Frame,
-    <T as RxBlockAckTypes>::Meta,
-);
+type Retained<T> = (<T as RxBlockAckTypes>::Frame, <T as RxBlockAckTypes>::Meta);
 
 struct Bank<T: RxBlockAckTypes> {
     free: Option<T::Slot>,

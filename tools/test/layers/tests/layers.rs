@@ -1255,8 +1255,14 @@ fn ieee80211_cipher_port_and_model_take_only_the_layers_below_them() {
 #[test]
 fn ieee80211_layer_table_rejects_cores_chips_and_a_cipher_on_the_port() {
     let paths = BTreeMap::from([
-        ("oer-ieee80211-wire".into(), "protocols/ieee80211/wire".into()),
-        ("oer-ieee80211-port".into(), "protocols/ieee80211/port".into()),
+        (
+            "oer-ieee80211-wire".into(),
+            "protocols/ieee80211/wire".into(),
+        ),
+        (
+            "oer-ieee80211-port".into(),
+            "protocols/ieee80211/port".into(),
+        ),
         (
             "oer-ieee80211-cipher".into(),
             "protocols/ieee80211/cipher".into(),
@@ -1309,7 +1315,9 @@ station = { package = "oer-ieee80211-sta", version = "1" }
 /// HALs, drivers and executor binding among them), an executor and Embassy
 /// time. It binds no executor and takes time from `oer-time`.
 fn below_the_ieee80211_runtime(paths: &BTreeMap<String, String>, name: &str) -> bool {
-    paths.get(name).is_some_and(|path| path.starts_with("chips/"))
+    paths
+        .get(name)
+        .is_some_and(|path| path.starts_with("chips/"))
         || ["embassy-time", "embassy-executor"].contains(&name)
 }
 
@@ -1444,12 +1452,7 @@ fn path_attribute(attribute: &TokenStream) -> Option<String> {
 
 /// Production tokens of one module body: items configured for tests are
 /// skipped; out-of-line production modules are followed from `directory`.
-fn production_waiting(
-    tokens: TokenStream,
-    directory: &Path,
-    file: &Path,
-    found: &mut Vec<String>,
-) {
+fn production_waiting(tokens: TokenStream, directory: &Path, file: &Path, found: &mut Vec<String>) {
     let tokens = tokens.into_iter().collect::<Vec<_>>();
     let mut index = 0;
     let mut attributes = Vec::new();
@@ -1540,7 +1543,9 @@ fn waiting_tokens(token: &TokenTree, file: &Path, found: &mut Vec<String>) {
 /// `name.rs` owns `name/`.
 fn production_file_waiting(file: &Path, found: &mut Vec<String>) {
     let source = std::fs::read_to_string(file).expect("module source");
-    let tokens = source.parse::<TokenStream>().expect("Rust module tokenizes");
+    let tokens = source
+        .parse::<TokenStream>()
+        .expect("Rust module tokenizes");
     let stem = file.file_stem().expect("module file").to_string_lossy();
     let parent = file.parent().expect("module directory");
     let directory = if ["lib", "mod", "main"].contains(&stem.as_ref()) {

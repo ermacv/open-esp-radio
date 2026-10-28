@@ -101,8 +101,8 @@ use oer_ieee80211_rsn::{
 };
 use oer_ieee80211_upper_mac::protection::HePacketPadding;
 use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_ieee80211_wire::qos::WmmAccessCategory;
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 use {
     crate::{
         scan::ScanTable,

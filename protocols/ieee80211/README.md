@@ -10,6 +10,8 @@ the portable runtime drives role services over that port.
 | `upper-mac/src/block_ack/session.rs` | One TX agreement, negotiation generation and alarms |
 | `upper-mac/src/block_ack/originator.rs` | Per-peer/TID TX agreements, shared Dialog Token sequence and negotiation retries |
 | `upper-mac/src/block_ack/reorder.rs` | One receive agreement's bounded reorder window and slot release |
+| `upper-mac/src/block_ack/recipient.rs` | One receive agreement's ADDBA negotiation, inactivity and reorder gap |
+| `upper-mac/src/block_ack/banks.rs` | An association's receive agreements: ADDBA, BlockAckReq, DELBA, retained frames and owed replies |
 | `wire/src/fragmentation/parsing.rs` | Fragment header/body validation and its frame refusals |
 | `upper-mac/src/fragmentation/reassembly.rs` | Bounded reassembly, slots, admission tokens and reassembly refusals |
 | `wire/src/ap/profile.rs` | Explicit AP advertisement values |
@@ -32,7 +34,10 @@ the portable runtime drives role services over that port.
 | `upper-mac/src/duplicate.rs` | Peer-scoped receive retry history |
 | `wire/src/qos.rs` | User priorities, access categories and the network header fields carrying traffic intent |
 | `upper-mac/src/qos.rs` | Ethernet traffic classification, DSCP mapping and admission downgrade |
-| `runtime/src/vif.rs` | Receive routing for one same-channel STA plus SoftAP pair |
+| `upper-mac/src/vif.rs` | Receive routing for one same-channel STA plus SoftAP pair |
+| `upper-mac/src/monitor.rs` | The frames a monitor keeps and the channels it visits |
+| `softmac/src/configuration.rs` | The requested owner topology against a backend's service description |
+| `sta/src/port.rs` | The station's tokens on a lower-MAC port and its numbered pairwise key |
 | `wire/src/channel.rs` | Validated 2.4/5 GHz channels and 20/40 MHz geometry |
 | `wire/src/channel_switch.rs` | Channel Switch Announcement parsing and encoding |
 | `wire/src/phy.rs` | Validated non-HT, HT and HE SU rates |
@@ -83,9 +88,11 @@ no core. [`upper-mac`](upper-mac/README.md) owns retry ladders, Retry bits,
 aggregate retry selection, the reading of a BlockAck, protection and the BSS
 basic rates, management budgets, the association PHY mode and the attempt
 planner. Its
-`block_ack/reorder.rs` owns receive reordering and `ccmp/replay.rs` checks
-receive replay; its packet-number allocator serves the backend, which
-numbers protected MPDUs below the port. Espressif policy parameters live in
+`block_ack/banks.rs` owns an association's receive agreements and reordering
+and `ccmp/replay.rs` checks receive replay. Its packet-number allocator is
+held by the station's pairwise key (`sta/src/port.rs`), which numbers each
+fresh protected MPDU before the port takes it; the backend encrypts with the
+supplied number. Espressif policy parameters live in
 [`oer-espressif-ieee80211-policy`](../../chips/espressif/ieee80211-policy/README.md).
 
 `softmac/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
@@ -94,9 +101,12 @@ state. Both use the wire codecs, the interface identities of
 `softmac/src/interface.rs` and the PHY requests of
 `softmac/src/extensions/espressif/phy.rs`.
 
-`runtime/src/configuration.rs` checks the requested Wi-Fi owner topology
-against a backend's service description; `runtime/src/monitor/policy.rs`
-selects the frames a monitor keeps and the channels it visits.
+The [`runtime`](runtime/README.md) is the asynchronous glue: it waits on
+port events, deadlines and commands, hands each input to the cores and
+carries out their actions through the port. It decides no protocol question
+and neither parses nor builds frames; it depends on neither `wire` nor
+`cipher`. The cores never wait. `cargo test -p oer-test-layers` checks both,
+and that `cipher`, `port` and `model` take only the layers below them.
 
 The [RSN crate](rsn/README.md) separates secret ownership and derivation
 (`crypto`), packet views and MIC handling (`eapol`), wire formats (`frames`)

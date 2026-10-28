@@ -247,8 +247,7 @@ impl Drop for MonitorInjectionPublicationLease<'_> {
 }
 
 /// Application-side non-blocking injection endpoint.
-pub struct MonitorInjectionHandle<'resources, const CAPACITY: usize, const FRAME_CAPACITY: usize>
-{
+pub struct MonitorInjectionHandle<'resources, const CAPACITY: usize, const FRAME_CAPACITY: usize> {
     requests: WakingSpscSender<'resources, QueuedMonitorInjection<FRAME_CAPACITY>, CAPACITY>,
     completions: WakingSpscReceiver<'resources, MonitorInjectionCompletion, CAPACITY>,
     generation: &'resources AtomicU32,

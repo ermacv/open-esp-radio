@@ -4525,8 +4525,8 @@ fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
 }
 
 mod deadlines;
-mod transmit;
 mod management;
+mod transmit;
 
 #[test]
 fn negotiated_spp_from_the_association_is_retained_by_the_ptk_owner() {

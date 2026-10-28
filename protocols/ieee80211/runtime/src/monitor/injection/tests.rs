@@ -156,7 +156,6 @@ fn an_active_payload_callback_can_publish_another_request_without_aliasing() {
     assert!(handle.try_receive().is_none());
 }
 
-
 #[test]
 fn a_binding_lent_at_that_instant_refuses_both_sides_without_waiting() {
     let mut resources = MonitorInjectionMailboxResources::<1, 32>::new();

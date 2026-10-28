@@ -14,7 +14,11 @@ impl RateSelection<RxMeta, ()> for TwoStages {
         oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep::ONE
     }
 
-    fn plan<R>(&self, frame: FrameRates, carried: impl Fn(PhyRate) -> Option<R>) -> Option<RetryPlan<R>> {
+    fn plan<R>(
+        &self,
+        frame: FrameRates,
+        carried: impl Fn(PhyRate) -> Option<R>,
+    ) -> Option<RetryPlan<R>> {
         self.0.borrow_mut().push(frame);
         let stage = |rate| {
             Some(RetryStage {

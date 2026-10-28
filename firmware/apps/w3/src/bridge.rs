@@ -7,8 +7,8 @@ use core::{
 };
 use oer_embassy_net::{NoopRawMutex, OwnedNetworkRunner};
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_time::{Clock, Duration, Timer};
 
 /// Aggregate whole-run work, including empty RX phases. The host computes

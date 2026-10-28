@@ -195,7 +195,7 @@ One received frame and the owner of its DMA buffer at each step:
    and counts refusals by reason. The application owns the lease.
 5. **P1.** The MPDU and `portable::rx_meta` on the configured channel go to
    `sta::receive::classify` and `observe_scan`; in W1 the acceptance
-   instrument `runtime::survey::Survey` calls them and tallies each BSS.
+   instrument `Survey` (`firmware/apps/w1/src/survey.rs`) calls them and tallies each BSS.
 6. **P1.** Dropping the held frame releases the lease and posts the
    RX-capacity fact; P2 rearms the buffer.
 

@@ -585,7 +585,8 @@ impl<'id, Id: SlotIdentity + 'id> CommandCredits<'id, Id> {
 /// The outer world's observations own no command permission.
 struct Application<'a, 'b, 'id, Id: SlotIdentity + 'id> {
     world: &'a World<'b>,
-    commands: Cell<Option<WakingSpscSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath<Id>>, 4>>>,
+    commands:
+        Cell<Option<WakingSpscSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath<Id>>, 4>>>,
     credits: RefCell<CommandCredits<'id, Id>>,
 }
 impl<'b, Id: SlotIdentity> core::ops::Deref for Application<'_, 'b, '_, Id> {

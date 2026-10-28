@@ -102,9 +102,8 @@ use oer_ieee80211_arbiter::{
 use oer_ieee80211_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InterfacePhase, KeyTypes, LowerMacBackend,
     LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome, PhaseTypes, PoolMpdu,
-    PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu, RxBuffer,
-    StationPhase, SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted,
-    TxMpdu, TxProtection, TxSource,
+    PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu, RxBuffer, StationPhase,
+    SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted, TxMpdu, TxProtection, TxSource,
 };
 use oer_ieee80211_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey};
 use oer_ieee80211_sta::{
@@ -381,7 +380,6 @@ use custody::{ContractFault, StepFailure};
 pub use custody::{
     QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedTx,
 };
-
 
 /// What the application asks of the service.
 #[derive(Debug, Eq, PartialEq)]
@@ -1850,7 +1848,9 @@ impl<
                     return Next::Failed(fault);
                 }
             }
-            self.pending.receive.tick(now, &mut PhaseBlockAcks::new(phase));
+            self.pending
+                .receive
+                .tick(now, &mut PhaseBlockAcks::new(phase));
             if let Some(owed) = self.pending.receive.next_reply()
                 && let Some(reply) =
                     RxBlockAckReply::from_body(owed.association, owed.bssid, owed.body)
@@ -2507,8 +2507,7 @@ impl<
             (TxContext::Data(context), StationTxBuffer::Large(buffer)) => {
                 if let ReturnedTx::Completed(completion) = &end {
                     let current = self.data.is_current(&context);
-                    self.rates
-                        .learn(now, FrameRates::Data, current, completion);
+                    self.rates.learn(now, FrameRates::Data, current, completion);
                 }
                 let input = match end {
                     ReturnedTx::Completed(completion) => DataReturn::TxDone {

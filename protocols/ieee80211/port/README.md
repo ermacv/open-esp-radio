@@ -368,9 +368,10 @@ PN with the installed key ID.
 | The attempt budget of a management frame | `oer-ieee80211-upper-mac` `management` |
 | The PHY mode of an association | `oer-ieee80211-upper-mac` `phy_mode`, chosen by `oer-ieee80211-sta` `association` |
 | Transmit packet-number allocation and receive replay | `oer-ieee80211-upper-mac` `ccmp` |
-| Receive Block Ack reordering | `oer-ieee80211-upper-mac` `block_ack::reorder` |
+| Receive Block Ack agreements and reordering | `oer-ieee80211-upper-mac` `block_ack::banks`, `block_ack::recipient`, `block_ack::reorder` |
 | The station's lifecycle, from its scan to its disconnect | `oer-ieee80211-sta` `machine` |
-| The Wi-Fi owner topology checked against a backend's service, and which frames a monitor keeps | `oer-ieee80211-runtime` `configuration`, `monitor::policy` |
+| The Wi-Fi owner topology checked against a backend's service | `oer-ieee80211-softmac` `configuration` |
+| Which frames a monitor keeps and the channels it visits | `oer-ieee80211-upper-mac` `monitor` |
 | Virtual-interface identities and ESP-NOW PHY requests | `oer-ieee80211-softmac` `interface`, `extensions::espressif::phy` |
 
 Limits, rate ladders and duration estimates in which implementations differ

@@ -33,8 +33,8 @@ mod tests {
     use self::std::boxed::Box;
     use oer_embassy_net::{NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources};
     use oer_ieee80211_sta::data::EthernetFrame;
-    use oer_memory::WakingSpscQueue;
     use oer_ieee80211_wire::data::EthernetFrameParts;
+    use oer_memory::WakingSpscQueue;
     use xarxa_driver::{PacketPool, PacketPoolStorage};
 
     #[test]

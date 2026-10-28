@@ -43,11 +43,8 @@ impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
     where
         'id: 'p,
         P: InterfacePhase<'p, 'id>,
-        InterfaceKeys<'p, 'id, P>: KeyTypes<
-                'id,
-                Association = K::Association,
-                PairwiseKey = K::PairwiseKey,
-            >,
+        InterfaceKeys<'p, 'id, P>:
+            KeyTypes<'id, Association = K::Association, PairwiseKey = K::PairwiseKey>,
     {
         Self {
             key: install_ccmp_pairwise_key(phase, &association, slot, peer, key, step),
@@ -189,4 +186,3 @@ where
         memory
     }
 }
-

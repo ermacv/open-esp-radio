@@ -132,7 +132,19 @@ Module map:
 - `data`: the connected station's data machine beside it: MSDUs into QoS or
   non-QoS Data MPDUs in its own tickets and buffers, under the pairwise key
   the station's `LinkView` lends, and the BSS's data MPDUs into MSDUs; no
-  A-MPDU, Block Ack, reorder, replay check or power save yet;
+  A-MPDU, Block Ack, reorder, replay check or power save yet. It owns the
+  network boundary's checked `EthernetFrame` and `TxMsdu`, the
+  `ArpFrameObservation` diagnostic of a protected ARP MSDU, and a data
+  attempt's protection exchange, power and coexistence class;
+- `port`: the station's and data machine's tokens on a lower-MAC port
+  (`PortStaTokens`, `PortDataTokens`) and the installed pairwise key
+  (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
+  CCMP packet-number allocator; a retransmission keeps its number;
+- the transmit decisions of a station frame travel with its action:
+  `StaRatePlan` selects its rate record and transmissions, `StaFrameClass`
+  its coexistence class, and `StaTransmit` its access category (Voice), its
+  protection exchange (none) and its calibrated power; the service carries
+  them into the port's attempt unchanged;
 - `join`: Open System and SAE authentication and Association state machines
   and their retry policy;
 - `association`: association capability selection from the scan record;
