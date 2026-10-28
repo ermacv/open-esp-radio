@@ -79,8 +79,8 @@ is an `ObservationContract` and depends on no owner. No other chip role
 except `Composition` and `Facade` reaches a protocol core or runtime by any
 normal path. HIL has `HilProtocol` (framing and message skeleton), `HilAgent` (the
 device library), `HilBinding` (the dictionary beside one facade) and
-`HilImage`, which composes the chip's composition, facades, bindings and the
-agent. HAL files whose production code waits are a per-file list in the
+`HilImage`, which composes the chip's composition, facades, observation
+collectors, bindings and the agent. HAL files whose production code waits are a per-file list in the
 layer tests that only shrinks; the HAL also still holds driver code without
 a waiting marker ([HAL](../chips/esp32s31/hal/README.md)).
 

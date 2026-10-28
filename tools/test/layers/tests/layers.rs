@@ -1066,12 +1066,13 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
             ) || (to == Role::Portable
                 && !["portable/time", "portable/time-virtual"].contains(&to_path))
         }
-        // An image composes: it declares its interrupt table, entry and tasks
-        // and never bypasses the facade.
+        // An image composes: it declares its interrupt table, entry, tasks
+        // and observation collectors and never bypasses the facade.
         Role::HilImage => matches!(
             to,
             Role::Composition
                 | Role::Facade
+                | Role::ObservationContract
                 | Role::HilBinding
                 | Role::HilAgent
                 | Role::HilProtocol
@@ -2957,6 +2958,11 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (Role::HilBinding, "protocols/ieee80211/hil", true),
             (Role::Platform, "chips/espressif/executor", true),
             (Role::EmbassyAdapter, "portable/embassy/net", true),
+            (
+                Role::ObservationContract,
+                "protocols/ieee80211/instrumentation",
+                true,
+            ),
             (Role::Hal, "chips/esp32s31/hal", false),
             (Role::Pac, "chips/esp32s31/pac", false),
             (Role::HardwareDriver, "chips/esp32s31/phy", false),
@@ -3095,14 +3101,14 @@ type Inclusion = (String, String);
 /// Each `#[path = "..."]` in the tokens of `file` that resolves into
 /// `firmware/` below `root`, at any nesting depth.
 fn firmware_paths(tokens: TokenStream, root: &Path, file: &Path, found: &mut BTreeSet<Inclusion>) {
-    let tokens = tokens.into_iter().collect::<Vec<_>>();
-    for (index, token) in tokens.iter().enumerate() {
+    let mut previous_hash = false;
+    for token in tokens {
+        let hash = matches!(&token, TokenTree::Punct(hash) if hash.as_char() == '#');
+        let after_hash = core::mem::replace(&mut previous_hash, hash);
         let TokenTree::Group(group) = token else {
             continue;
         };
-        let attribute = index > 0
-            && matches!(&tokens[index - 1], TokenTree::Punct(hash) if hash.as_char() == '#')
-            && group.delimiter() == Delimiter::Bracket;
+        let attribute = after_hash && group.delimiter() == Delimiter::Bracket;
         if let Some(path) = attribute.then(|| path_attribute(&group.stream())).flatten() {
             let mut resolved = PathBuf::new();
             for component in file.parent().unwrap_or(root).join(&path).components() {
@@ -3129,31 +3135,42 @@ fn firmware_paths(tokens: TokenStream, root: &Path, file: &Path, found: &mut BTr
     }
 }
 
-/// The inclusions of image sources in the Rust files below `directory`.
-fn firmware_inclusions(root: &Path, directory: &Path, found: &mut BTreeSet<Inclusion>) {
-    for entry in std::fs::read_dir(directory).expect("source tree") {
-        let path = entry.expect("source entry").path();
+/// The inclusions of image sources in the Rust files below `directory`; an
+/// unreadable entry or a file that does not tokenize is an error.
+fn firmware_inclusions(
+    root: &Path,
+    directory: &Path,
+    found: &mut BTreeSet<Inclusion>,
+) -> Result<(), String> {
+    let entries = std::fs::read_dir(directory)
+        .map_err(|error| format!("{}: {error}", directory.display()))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|error| format!("{}: {error}", directory.display()))?
+            .path();
         let name = path
             .file_name()
             .map(|name| name.to_string_lossy().into_owned());
         if path.is_dir() {
             if ![".git", "target"].contains(&name.as_deref().unwrap_or_default()) {
-                firmware_inclusions(root, &path, found);
+                firmware_inclusions(root, &path, found)?;
             }
             continue;
         }
         if path.extension().is_none_or(|extension| extension != "rs") {
             continue;
         }
-        let source = std::fs::read_to_string(&path).expect("Rust source");
+        let source = std::fs::read_to_string(&path)
+            .map_err(|error| format!("{}: {error}", path.display()))?;
         if !source.contains("firmware") {
             continue;
         }
         let tokens = source
             .parse::<TokenStream>()
-            .unwrap_or_else(|error| panic!("{} does not tokenize: {error}", path.display()));
+            .map_err(|error| format!("{} does not tokenize: {error}", path.display()))?;
         firmware_paths(tokens, root, &path, found);
     }
+    Ok(())
 }
 
 /// Image sources that a package outside `firmware/` includes through
@@ -3206,7 +3223,8 @@ fn no_package_outside_firmware_includes_an_image_source() {
     let root = root();
     let mut found = BTreeSet::new();
     for directory in ["protocols", "portable", "chips", "tools"] {
-        firmware_inclusions(&root, &root.join(directory), &mut found);
+        firmware_inclusions(&root, &root.join(directory), &mut found)
+            .expect("the sources are readable");
     }
     let differences = deviation_differences(&found, FIRMWARE_SOURCES_INCLUDED);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
@@ -3235,7 +3253,7 @@ const TEXT: &str = "#[path = \"../../../firmware/apps/w1/src/string.rs\"]";
     )
     .expect("source");
     let mut found = BTreeSet::new();
-    firmware_inclusions(root, &root.join("tools"), &mut found);
+    firmware_inclusions(root, &root.join("tools"), &mut found).expect("the sources are readable");
     let inclusion = |included: &str| {
         (
             "tools/example/tests/cases.rs".to_owned(),

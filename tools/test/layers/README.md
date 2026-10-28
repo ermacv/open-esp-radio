@@ -39,7 +39,7 @@ other `portable/` support, firmware images and tools.
 | `HilProtocol` | `protocols/hil/protocol` | portable |
 | `HilAgent` | `protocols/hil/agent` | HIL protocol, portable |
 | `HilBinding` | none yet | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/time{,-virtual}` |
-| `HilImage` | `firmware/hil/*` | composition, facades, HIL bindings, agent and protocol, platform, platform contracts, portable, Embassy adapters |
+| `HilImage` | `firmware/hil/*` | composition, facades, observation contracts, HIL bindings, agent and protocol, platform, platform contracts, portable, Embassy adapters |
 
 Roles outside this table keep their own rules. The backend rule holds for
 facts, PAC, HAL, drivers, adapters, service and client, platform, platform
