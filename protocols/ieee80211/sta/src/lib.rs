@@ -70,6 +70,7 @@ pub mod twt;
 pub mod association;
 pub mod data;
 pub mod epoch;
+pub mod port;
 
 pub mod sequence;
 

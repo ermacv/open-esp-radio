@@ -349,6 +349,19 @@ impl Admissions {
     }
 }
 
+impl<K: oer_ieee80211_port::Ieee80211Capabilities, C, A, Path: PoolPath>
+    DataTxContext<'_, K, C, A, Path>
+{
+    /// A data MPDU goes without an RTS/CTS or CTS-to-self exchange.
+    pub const PROTECTION: oer_ieee80211_port::Protection = oer_ieee80211_port::Protection::None;
+    /// A data MPDU goes at the port's calibrated power.
+    pub const POWER: oer_ieee80211_port::SupportedPower<K> =
+        crate::machine::calibrated_power::<K>();
+    /// A data MPDU takes the ordinary coexistence class of its access category.
+    pub const COEX_OPERATION: oer_ieee80211_port::TxOperation =
+        oer_ieee80211_port::TxOperation::Data;
+}
+
 impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
     /// The checked MPDU description selected when the bytes were encoded.
     pub const fn frame(&self) -> &oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K> {

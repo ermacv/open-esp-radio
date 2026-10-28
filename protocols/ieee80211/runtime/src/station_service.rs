@@ -92,7 +92,6 @@
 
 use core::marker::PhantomData;
 use oer_ieee80211_port::TxBufferMemory as _;
-use oer_ieee80211_port::association::{KEY_BANK_CAPACITY, KeyPool};
 use oer_ieee80211_sta::machine::TxRefusal;
 
 use core::future::{Future, poll_fn};
@@ -105,26 +104,22 @@ use oer_ieee80211_arbiter::{
 use oer_ieee80211_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InterfacePhase, KeyTypes, LowerMacBackend,
     LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome, PhaseTypes, PoolMpdu,
-    PoolSource, Protection, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu, RxBuffer,
-    StationPhase, SupportedChannel, SupportedPower, TxBufferClass, TxBufferPool, TxCompleted,
-    TxMpdu, TxPower, TxProtection, TxSource,
+    PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu, RxBuffer,
+    StationPhase, SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted,
+    TxMpdu, TxProtection, TxSource,
 };
+use oer_ieee80211_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey};
 use oer_ieee80211_sta::{
     data,
-    data::{
-        DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, Msdu, StaData,
-        StaDataTokens,
-    },
+    data::{DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, Msdu, StaData},
     machine::{
-        Peer, RxBlockAckReply, StaAction, StaCallbacks, StaCommandRefused, StaCommandTerminal, StaFrame,
-        StaFrameClass, StaInput, StaNotice, StaRatePlan, StaRequest, StaTokens, StaTransmit,
-        StaTxContext, Station,
+        Peer, RxBlockAckReply, StaAction, StaCallbacks, StaCommandRefused, StaCommandTerminal,
+        StaInput, StaNotice, StaRequest, StaTokens, StaTransmit, StaTxContext, Station,
     },
-    power_save::NULL_TRANSMISSIONS,
 };
 use oer_ieee80211_upper_mac::block_ack::RxDisposition;
 use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+use oer_ieee80211_wire::qos::WmmUserPriority;
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_radio_port::Slot;
 use oer_radio_port::{
@@ -307,136 +302,21 @@ pub struct ServiceCounters {
     pub rx_msdus_queue_full: oer_ieee80211_sta::Counter,
 }
 
-/// A marker of the install `'id` and two types.
-type Marker<'id, A, B> = PhantomData<fn(&'id ()) -> (A, B)>;
+/// A station frame's transmission on the port `B`.
+type StationTransmit<'id, B, const GROUPS: usize> = StaTransmit<
+    'id,
+    PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
+    <B as StationPort>::Caps,
+>;
 
-/// The station's tokens on a port of the phase types `Ty`, its frames in
-/// buffers of the class `S`.
-pub struct PortStaTokens<'id, Ty, S, const GROUPS: usize = 2>(Marker<'id, Ty, S>);
-
-/// The station PTK retains the unique association owner until its removal terminal.
-pub struct StationPairwiseKey<'id, K: KeyTypes<'id>> {
-    key: oer_ieee80211_upper_mac::ccmp::InstalledCcmpTxKey<K::PairwiseKey>,
-    association: K::Association,
-}
-
-impl<'id, Ty, S, const GROUPS: usize> StaTokens for PortStaTokens<'id, Ty, S, GROUPS>
-where
-    Ty: PhaseTypes<'id, TxBody = core::convert::Infallible> + TxBufferPool<'id, S>,
-    S: TxBufferClass,
-{
-    const PAIRWISE_SLOTS: usize =
-        <<Ty::StationKeys as KeyTypes<'id>>::Pool as KeyPool>::PAIRWISE_SLOTS;
-    const TOTAL_GROUP_SLOTS: usize =
-        <<Ty::StationKeys as KeyTypes<'id>>::Pool as KeyPool>::GROUP_SLOTS;
-    const GROUP_SLOTS: usize = GROUPS;
-    type Small = S;
-    type EpochPath = Ty::EpochPath;
-    type ConfigurationPath = Ty::StationCommandPath;
-    type GatePath = Ty::GatePath;
-    type Ticket = Slot<'id, Ty::TicketKind, Ty::TicketPath>;
-    type SmallBuffer = <Ty as TxBufferPool<'id, S>>::Buffer;
-    type Sent = <Ty as TxBufferPool<'id, S>>::Sent;
-    type AckEvidence = Ty::AckEvidence;
-    type AirDenied = Ty::AirDenied;
-
-    fn renew(mpdu: Self::Sent) -> Self::SmallBuffer {
-        let (memory, body) = <Ty as TxBufferPool<'id, S>>::renew(mpdu);
-        if let Some(body) = body {
-            match body {}
-        }
-        memory
-    }
-    type PairwiseSlot = <Ty::StationKeys as KeyTypes<'id>>::PairwiseSlot;
-    type GroupSlot = <Ty::StationKeys as KeyTypes<'id>>::GroupSlot;
-    type PairwiseKey = StationPairwiseKey<'id, Ty::StationKeys>;
-    type AssociationStart = <Ty::StationKeys as KeyTypes<'id>>::AssociationStart;
-    type Association = <Ty::StationKeys as KeyTypes<'id>>::Association;
-    type VacantKeyBank = <Ty::StationKeys as KeyTypes<'id>>::VacantKeyBank;
-    type VacantAssociation = <Ty::StationKeys as KeyTypes<'id>>::VacantAssociation;
-    fn begin_association(
-        start: Self::AssociationStart,
-        spp: oer_ieee80211_wire::security::Spp,
-    ) -> Self::Association {
-        Ty::StationKeys::begin_association(start, spp)
-    }
-    fn collect_key_bank(
-        parts: oer_ieee80211_port::association::KeyBankParts<
-            Self::PairwiseSlot,
-            Self::GroupSlot,
-            KEY_BANK_CAPACITY,
-        >,
-    ) -> Result<
-        Self::VacantKeyBank,
-        oer_ieee80211_port::association::KeyBankParts<
-            Self::PairwiseSlot,
-            Self::GroupSlot,
-            KEY_BANK_CAPACITY,
-        >,
-    > {
-        Ty::StationKeys::collect_key_bank(parts)
-    }
-    fn split_vacant(
-        vacant: Self::VacantAssociation,
-    ) -> (
-        Self::AssociationStart,
-        Self::PairwiseSlot,
-        oer_ieee80211_port::association::KeyBankParts<
-            Self::PairwiseSlot,
-            Self::GroupSlot,
-            KEY_BANK_CAPACITY,
-        >,
-    ) {
-        Ty::StationKeys::split_vacant(vacant)
-    }
-    fn end_association(
-        association: Self::Association,
-        bank: Self::VacantKeyBank,
-    ) -> (
-        Self::AssociationStart,
-        Self::PairwiseSlot,
-        oer_ieee80211_port::association::KeyBankParts<
-            Self::PairwiseSlot,
-            Self::GroupSlot,
-            KEY_BANK_CAPACITY,
-        >,
-    ) {
-        Ty::StationKeys::split_vacant(Ty::StationKeys::end_association(association, bank))
-    }
-    fn association(key: &Self::PairwiseKey) -> &Self::Association {
-        &key.association
-    }
-
-    type GroupKey = <Ty::StationKeys as KeyTypes<'id>>::GroupKey;
-    type GroupPermission = <Ty::StationKeys as KeyTypes<'id>>::GroupPermission;
-    type RxMeta = Ty::RxMeta;
-}
-
-/// The data machine's tokens on a port of the phase types `Ty`, its MPDUs
-/// in buffers of the class `L`.
-pub struct PortDataTokens<'id, Ty, L>(Marker<'id, Ty, L>);
-
-impl<'id, Ty, L> StaDataTokens for PortDataTokens<'id, Ty, L>
-where
-    Ty: PhaseTypes<'id, TxBody = core::convert::Infallible> + TxBufferPool<'id, L>,
-    L: TxBufferClass,
-{
-    type Class = L;
-    type EpochPath = Ty::EpochPath;
-    type Ticket = Slot<'id, Ty::TicketKind, Ty::TicketPath>;
-    type Buffer = <Ty as TxBufferPool<'id, L>>::Buffer;
-    type Sent = <Ty as TxBufferPool<'id, L>>::Sent;
-    type AckEvidence = Ty::AckEvidence;
-    type AirDenied = Ty::AirDenied;
-
-    fn renew(mpdu: Self::Sent) -> Self::Buffer {
-        let (memory, body) = <Ty as TxBufferPool<'id, L>>::renew(mpdu);
-        if let Some(body) = body {
-            match body {}
-        }
-        memory
-    }
-}
+/// A data MPDU's operation on the port `B`.
+type DataContext<'id, B> = DataTxContext<
+    'id,
+    <B as StationPort>::Caps,
+    <B as StationPort>::Large,
+    oer_ieee80211_sta::data::AcPermit,
+    <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::EpochPath,
+>;
 
 /// The metadata the port `B` gives a received frame.
 pub type PortRxMeta<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::RxMeta;
@@ -487,19 +367,6 @@ fn retain_after_event_end<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
         },
     };
     result.map_break(B::port_terminal)
-}
-
-/// The values the service's attempts take, which its port must offer:
-/// checked when the service's type is built, so a port without them builds
-/// no service.
-struct Levels<K>(PhantomData<fn() -> K>);
-
-impl<K: Ieee80211Capabilities> Levels<K> {
-    /// The calibrated power.
-    const POWER: SupportedPower<K> = match SupportedPower::new(TxPower::Calibrated) {
-        Some(power) => power,
-        None => panic!("a station's port sends at its calibrated power"),
-    };
 }
 
 mod admissions;
@@ -1185,7 +1052,7 @@ impl<
     ) -> Self {
         // The port's values, checked as the type is built.
         const {
-            let _power = Levels::<B::Caps>::POWER;
+            let _power = DataContext::<'id, B>::POWER;
             if B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
                 < <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY
             {
@@ -1233,7 +1100,7 @@ impl<
         receive: RxBlockAckView<'id, B::Types<'id>>,
     ) -> oer_memory::Placed<'s, Self> {
         const {
-            let _power = Levels::<B::Caps>::POWER;
+            let _power = DataContext::<'id, B>::POWER;
             if B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
                 < <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY
             {
@@ -2064,18 +1931,11 @@ impl<
                     let prepared = match (buffer, plan) {
                         (ReturnedMpdu::Fresh(mut buffer), Ok((protection, plan))) => {
                             let protection = match protection {
-                                DataProtection::Open => Ok(TxProtection::Open),
-                                DataProtection::Ccmp(key) => {
-                                    key.key.packet_numbers().allocate().map(|packet_number| {
-                                        TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
-                                            key: key.key.key(),
-                                            packet_number,
-                                        })
-                                    })
-                                }
+                                DataProtection::Open => Some(TxProtection::Open),
+                                DataProtection::Ccmp(key) => key.number().map(TxProtection::Ccmp),
                             };
                             match protection {
-                                Ok(protection) => {
+                                Some(protection) => {
                                     if let TxProtection::Ccmp(numbered) = &protection {
                                         arp_observation = buffer
                                             .bytes_mut()
@@ -2094,7 +1954,7 @@ impl<
                                         protection,
                                     })
                                 }
-                                Err(_) => Err((
+                                None => Err((
                                     TxRefusal::PacketNumberExhausted,
                                     <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase(buffer),
                                 )),
@@ -2135,9 +1995,9 @@ impl<
                                     ticket,
                                     source,
                                     access_category,
-                                    protection: Protection::None,
-                                    power: Levels::<B::Caps>::POWER,
-                                    coex_operation: oer_ieee80211_port::TxOperation::Data,
+                                    protection: DataContext::<'id, B>::PROTECTION,
+                                    power: DataContext::<'id, B>::POWER,
+                                    coex_operation: DataContext::<'id, B>::COEX_OPERATION,
                                 })
                                 .admit(),
                             );
@@ -2635,16 +2495,10 @@ impl<
     ) -> Result<(), ContractFault<'id, B>> {
         match (context, B::tx_buffer(buffer)) {
             (TxContext::Station(context), StationTxBuffer::Small(buffer)) => {
-                if self.station.is_current(&context)
-                    && let ReturnedTx::Completed(completion) = end
-                    && completion.rate_sample().is_some()
-                {
-                    let rates = if context.is_probe() {
-                        FrameRates::Probe
-                    } else {
-                        FrameRates::Control
-                    };
-                    self.rates.completed(now, rates, &completion);
+                if let ReturnedTx::Completed(completion) = &end {
+                    let current = self.station.is_current(&context);
+                    self.rates
+                        .learn(now, context.frame_rates(), current, completion);
                 }
                 let input = match end {
                     ReturnedTx::Completed(completion) => StaInput::TxDone {
@@ -2664,11 +2518,10 @@ impl<
                 Ok(())
             }
             (TxContext::Data(context), StationTxBuffer::Large(buffer)) => {
-                if self.data.is_current(&context)
-                    && let ReturnedTx::Completed(completion) = end
-                    && completion.rate_sample().is_some()
-                {
-                    self.rates.completed(now, FrameRates::Data, &completion);
+                if let ReturnedTx::Completed(completion) = &end {
+                    let current = self.data.is_current(&context);
+                    self.rates
+                        .learn(now, FrameRates::Data, current, completion);
                 }
                 let input = match end {
                     ReturnedTx::Completed(completion) => DataReturn::TxDone {
@@ -2790,27 +2643,10 @@ where
         class,
         plan,
     } = transmit;
-    let frame = {
-        let carried = |rate| phase.rate(rate);
-        match frame {
-            StaFrame::Individual(frame) => {
-                let plan = match plan {
-                    // A Null's retries are its plan's.
-                    StaRatePlan::Null => rates
-                        .plan(FrameRates::Control, carried)
-                        .map(|plan| plan.limit(NULL_TRANSMISSIONS)),
-                    StaRatePlan::Management | StaRatePlan::Group => {
-                        rates.plan(FrameRates::Control, carried)
-                    }
-                };
-                plan.map(|plan| ClassFrame::individual(frame, plan))
-            }
-            StaFrame::Group(frame) => rates
-                .plan(FrameRates::Probe, carried)
-                .map(|plan| ClassFrame::group(frame, plan.into_first().rate)),
-        }
-    };
-    let frame = match frame.ok_or(TxRefusal::NoRate) {
+    let frame = match frame
+        .rated(plan, rates, |rate| phase.rate(rate))
+        .ok_or(TxRefusal::NoRate)
+    {
         Ok(frame) => frame,
         Err(reason) => {
             return Ok(Follow::Refused {
@@ -2823,12 +2659,9 @@ where
     };
     let protection = match key {
         None => TxProtection::Open,
-        Some(key) => match key.key.packet_numbers().allocate() {
-            Ok(packet_number) => TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
-                key: key.key.key(),
-                packet_number,
-            }),
-            Err(_) => {
+        Some(key) => match key.number() {
+            Some(numbered) => TxProtection::Ccmp(numbered),
+            None => {
                 return Ok(Follow::Refused {
                     context: TxContext::Station(context),
                     ticket,
@@ -2854,10 +2687,6 @@ where
             });
         }
     };
-    let coex_operation = match class {
-        StaFrameClass::Connection(frame) => oer_ieee80211_port::TxOperation::Connection(frame),
-        StaFrameClass::Normal => oer_ieee80211_port::TxOperation::Data,
-    };
     let mut station = phase.station();
     admissions.insert(PendingTerminal::Transmit(ticket.index()));
     match station.submit(
@@ -2865,10 +2694,10 @@ where
             context: TxContext::Station(context),
             ticket,
             source,
-            access_category: WmmAccessCategory::Voice,
-            protection: Protection::None,
-            power: Levels::<B::Caps>::POWER,
-            coex_operation,
+            access_category: StationTransmit::<'id, B, GROUPS>::ACCESS_CATEGORY,
+            protection: StationTransmit::<'id, B, GROUPS>::PROTECTION,
+            power: StationTransmit::<'id, B, GROUPS>::POWER,
+            coex_operation: class.coex_operation(),
         })
         .admit(),
     ) {
@@ -2969,17 +2798,14 @@ where
             key,
         } => StaInput::PairwiseKeyInstalled {
             pending,
-            key: StationPairwiseKey {
-                key: oer_ieee80211_upper_mac::ccmp::install_ccmp_pairwise_key(
-                    &mut phase.station(),
-                    &association,
-                    slot,
-                    peer,
-                    key,
-                    rates.packet_number_step(),
-                ),
+            key: StationPairwiseKey::install(
+                &mut phase.station(),
                 association,
-            },
+                slot,
+                peer,
+                key,
+                rates.packet_number_step(),
+            ),
         },
         StaAction::InstallGroupKey {
             association,
@@ -3008,9 +2834,8 @@ where
             pending_actions
                 .admissions
                 .insert(PendingTerminal::Control(ControlTerminal::PairwiseRemoval));
-            phase
-                .station()
-                .remove_pairwise_key(key.association, key.key.into_key());
+            let (association, key) = key.into_parts();
+            phase.station().remove_pairwise_key(association, key);
             return Ok(Follow::Nothing);
         }
         StaAction::ReplaceGroupKey {

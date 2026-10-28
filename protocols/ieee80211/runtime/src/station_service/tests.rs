@@ -38,6 +38,7 @@ use {
 };
 
 use super::*;
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 use oer_memory::WakingSpscQueue;
 
 mod block_ack;

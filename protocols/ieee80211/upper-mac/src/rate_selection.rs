@@ -139,4 +139,20 @@ pub trait RateSelection<M: RxMetadata, A> {
     /// A frame for `frame` ended at `now` with `completion`: its
     /// transmissions, the rate of the last, whether it was acknowledged.
     fn completed<D>(&mut self, now: Instant, frame: FrameRates, completion: &SingleOutcome<A, D>);
+
+    /// Route one terminal's sample to the record of `frame`: only the
+    /// completion of a `current` link's frame that carries a rate sample
+    /// teaches the selection; a stale link's terminal or a frame that never
+    /// went teaches nothing.
+    fn learn<D>(
+        &mut self,
+        now: Instant,
+        frame: FrameRates,
+        current: bool,
+        completion: &SingleOutcome<A, D>,
+    ) {
+        if current && completion.rate_sample().is_some() {
+            self.completed(now, frame, completion);
+        }
+    }
 }
