@@ -253,6 +253,9 @@ release a secondary hart.
   above or below the budget produces a report with each site and its roots;
   image panic counts do not gate builds. Zero reachable panics remains the
   code goal: introduce no new runtime panics and remove existing ones.
+  Compiler `panic_const_async_fn_resumed` sites have a separate row outside
+  the budgets and target of 0, based on the executor's runtime `DONE` check
+  (not a type guarantee) and `.await` never polling a completed child again.
 - The w0, w1, w2, w3, b0, boot-smoke and radio-root images write diagnostic
   bytes directly, without `core::fmt` writer or argument dispatch. Host and
   test renderers may format values.

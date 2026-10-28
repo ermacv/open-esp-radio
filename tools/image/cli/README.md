@@ -90,6 +90,9 @@ reports under every policy: `build` prints runtime/bootstrap frame excesses
 and panic counts by layer and hardware context, with their sites. Missing or
 malformed panic-budget declarations remain configuration errors. The goal
 of zero runtime panics and the ban on new panic sites remain code rules.
+Compiler `panic_const_async_fn_resumed` sites have a separate row outside
+the budgets and target of 0, based on the executor's runtime `DONE` check
+(not a type guarantee) and `.await` never polling a completed child again.
 A reported check that does not pass prints as a warning containing
 `reported only`. Stand `run` builds report every check; `flash` writes an
 already built bundle.
