@@ -51,9 +51,11 @@ pub struct LeBand;
 
 impl oer_radio_regulatory::RadioChannel for LeBand {
     fn span(&self) -> oer_radio_regulatory::FrequencySpan {
-        match oer_radio_regulatory::FrequencySpan::new(2_400_000, 2_483_500) {
-            Some(span) => span,
-            None => unreachable!("the band is not empty"),
+        const {
+            match oer_radio_regulatory::FrequencySpan::new(2_400_000, 2_483_500) {
+                Some(span) => span,
+                None => panic!("the LE band must be non-empty"),
+            }
         }
     }
 
@@ -530,6 +532,7 @@ impl RadioTiming {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros)]
 mod tests {
     use super::{
         AdvertisingEvent, AdvertisingEventKind, AdvertisingSetId, ConnectionAllowances,
@@ -540,6 +543,15 @@ mod tests {
         RadioDuration,
     };
     use core::num::NonZeroU64;
+
+    #[test]
+    fn le_band_covers_the_same_hopping_span_and_channel_width() {
+        use oer_radio_regulatory::RadioChannel;
+        let span = super::LeBand.span();
+        assert_eq!(span.low_khz(), 2_400_000);
+        assert_eq!(span.high_khz(), 2_483_500);
+        assert_eq!(super::LeBand.bandwidth_khz(), 2_000);
+    }
 
     /// Only a connection event has a hard deadline.
     #[test]

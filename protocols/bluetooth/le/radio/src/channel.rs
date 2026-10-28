@@ -29,7 +29,11 @@ impl AdvertisingChannel {
     }
 
     const fn bit(self) -> u8 {
-        1 << (self.index() - 37)
+        match self {
+            Self::Channel37 => 0b001,
+            Self::Channel38 => 0b010,
+            Self::Channel39 => 0b100,
+        }
     }
 }
 
@@ -120,6 +124,7 @@ impl TestChannel {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros)]
 mod tests {
     use std::vec::Vec;
 
@@ -140,6 +145,40 @@ mod tests {
                 .collect::<Vec<_>>(),
             [AdvertisingChannel::Channel38]
         );
+    }
+
+    #[test]
+    fn every_channel_selection_preserves_membership_and_order() {
+        let channels = [
+            AdvertisingChannel::Channel37,
+            AdvertisingChannel::Channel38,
+            AdvertisingChannel::Channel39,
+        ];
+        for selected_37 in [false, true] {
+            for selected_38 in [false, true] {
+                for selected_39 in [false, true] {
+                    let selected = [selected_37, selected_38, selected_39];
+                    let expected: Vec<_> = channels
+                        .into_iter()
+                        .zip(selected)
+                        .filter_map(|(channel, present)| present.then_some(channel))
+                        .collect();
+                    let set = AdvertisingChannels::new(selected_37, selected_38, selected_39);
+                    if expected.is_empty() {
+                        assert_eq!(set, None);
+                    } else {
+                        let set = set.unwrap();
+                        assert_eq!(set.iter().collect::<Vec<_>>(), expected);
+                        assert_eq!(set.len(), expected.len());
+                        for (channel, present) in channels.into_iter().zip(selected) {
+                            assert_eq!(set.contains(channel), present);
+                            let single = AdvertisingChannels::single(channel);
+                            assert_eq!(single.iter().collect::<Vec<_>>(), [channel]);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

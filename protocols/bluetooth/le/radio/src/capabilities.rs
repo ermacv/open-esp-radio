@@ -191,4 +191,5 @@ impl LeCapabilities for NoCapabilities {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros)]
 mod tests;
