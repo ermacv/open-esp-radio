@@ -15,6 +15,7 @@ oer-radio-port = { path = "../../../radio/port" }
 oer-bluetooth-le-ll = { path = "../ll" }
 
 [dev-dependencies]
+oer-bluetooth-le-cipher = { path = "../cipher" }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-bluetooth-le-model = { path = "../model", features = ["test-support"] }
 oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }

@@ -237,8 +237,9 @@ Not derived
 -----------
 
 Test vectors from IEEE Std 802.11 Annex J, RFC 3394 and the Bluetooth Core
-sample data are facts and keep their citations. Linux mac80211 (GPL-2.0) is
-cited for behaviour only: protocols/ieee80211/rsn/src/ccmp_mpdu.rs and
+sample data are facts and keep their citations. Bluetooth encryption samples
+in protocols/bluetooth/le/cipher/src/tests.rs are from Core Vol 6 Part C.
+Linux mac80211 (GPL-2.0) is cited for behaviour only: protocols/ieee80211/rsn/src/ccmp_mpdu.rs and
 protocols/ieee80211/wire/src/data.rs implement the IEEE 802.11 rules
 independently.
 
