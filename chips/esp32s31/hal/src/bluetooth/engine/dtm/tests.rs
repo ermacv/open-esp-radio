@@ -145,9 +145,9 @@ fn a_foreign_rx_packet_is_refused_before_the_builder_runs() {
         let (graph, binding, _) = pool.shared(&instance).unwrap();
         let (storage, placement) = crate::bluetooth::engine::Placement::<
             crate::bluetooth::engine::HostDma<0x2f00_4000>,
-        >::take(crate::memory::dma_static::Placed::host(Box::leak(
-            Box::new(DtmStorage::zeroed()),
-        )));
+        >::take(crate::memory::dma_static::Placed::host(
+            Box::leak(Box::new(DtmStorage::zeroed())),
+        ));
         let foreign = super::codec::DtmBinding::new(storage, &placement, 0);
         let _ = binding;
         graph.rx_header.model_retarget_rx_packet(foreign.rx_packet);

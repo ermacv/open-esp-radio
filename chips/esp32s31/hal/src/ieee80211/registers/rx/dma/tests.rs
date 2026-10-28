@@ -1,7 +1,7 @@
 //! The RX walker's register operations over host memory: what each writes
 //! and what it keeps.
 
-use crate::{dma_address::model_reference, ieee80211::registers::HostWords};
+use crate::{ieee80211::registers::HostWords, memory::dma_address::model_reference};
 
 /// A memory pattern with every opaque field set, so a kept bit shows.
 const FILL: u32 = 0xa5a5_a5a5;

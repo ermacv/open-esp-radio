@@ -2,10 +2,14 @@
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
-    platform::{FactoryIdentity, FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1},
+    peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
+    peripherals::{
+        efuse::FactoryIdentity,
+        software_interrupt::{FromCpu0Irq, FromCpu2Irq},
+        system_timer::{SystimerAlarm0, SystimerAlarm1},
+    },
     power::ChipClocks,
     root::{RadioHardware, Root},
-    watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
 };
 use oer_esp32s31_phy::{PhyCalibrationIdentity, phy_get_rf_cal_version};
 use oer_espressif_executor::{Executor, InterruptExecutor};

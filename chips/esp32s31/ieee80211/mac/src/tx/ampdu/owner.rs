@@ -9,11 +9,11 @@ use alloc::boxed::Box;
 
 use core::{ops::Deref, pin::Pin};
 
-use oer_esp32s31_hal::memory::dma_static::PlacedBacking;
 use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
     AmpduDmaState, AmpduDmaStorage, AmpduDmaStorageError, PinnedAmpduDmaStorage, RetainedAmpduDma,
     RetainedAmpduDmaStorage,
 };
+use oer_esp32s31_hal::memory::dma_static::PlacedBacking;
 use oer_esp32s31_hal::types::{
     MacHeTxProgram, MacHtTxProgram, MacTxDetachOutcome, MacTxDetachReason,
 };

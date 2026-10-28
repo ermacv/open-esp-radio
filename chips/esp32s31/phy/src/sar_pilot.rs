@@ -9,7 +9,7 @@ use oer_esp32s31_hal::{
     domain::transaction::{
         FaultHandle, PhyHardware, PhyTransaction, SarAlarmWithoutBundle, SarTransferFault,
     },
-    platform::timg0_alarm::{InvalidDelay, Observation, Timg0AlarmInterrupt, Timg0AlarmProgram},
+    peripherals::timg0_alarm::{InvalidDelay, Observation, Timg0AlarmInterrupt, Timg0AlarmProgram},
 };
 use oer_espressif_interrupt_table::{
     Bound, Entry,

@@ -10,7 +10,7 @@ pub(crate) mod postmortem;
 mod watchdog;
 
 pub(super) fn boot_evidence() -> oer_hil_protocol::base::BootEvidence {
-    use oer_esp32s31_hal::platform::ResetCause as Cause;
+    use oer_esp32s31_hal::peripherals::reset_cause::ResetCause as Cause;
     use oer_hil_protocol::base::{BootEvidence, ResetReason};
     // The console serves boot evidence from core 0.
     let cause = RESET_CAUSES
@@ -56,13 +56,13 @@ static PLATFORM_PANIC: embassy_sync::once_lock::OnceLock<
 > = embassy_sync::once_lock::OnceLock::new();
 
 /// Why each HP core last left reset, read once at boot.
-static RESET_CAUSES: embassy_sync::once_lock::OnceLock<oer_esp32s31_hal::platform::ResetCauses> =
+static RESET_CAUSES: embassy_sync::once_lock::OnceLock<oer_esp32s31_hal::peripherals::reset_cause::ResetCauses> =
     embassy_sync::once_lock::OnceLock::new();
 
 /// Read the reset causes from their transferred owner; before the first boot
 /// evidence is served.
-pub(crate) fn read_reset_causes(registers: oer_esp32s31_hal::platform::ResetCauseRegisters) {
-    let _ = RESET_CAUSES.init(oer_esp32s31_hal::platform::ResetCauses::read(registers));
+pub(crate) fn read_reset_causes(registers: oer_esp32s31_hal::peripherals::reset_cause::ResetCauseRegisters) {
+    let _ = RESET_CAUSES.init(oer_esp32s31_hal::peripherals::reset_cause::ResetCauses::read(registers));
 }
 
 /// Take the previous boot's platform panic record; before the first boot

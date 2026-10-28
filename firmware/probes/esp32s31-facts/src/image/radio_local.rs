@@ -376,7 +376,7 @@ fn wifi_start(s: &mut Session<'_>, second: bool) {
 
 fn wifi_prepare(s: &mut Session<'_>) {
     prepare(s);
-    // SOURCE: HAL platform::system_timer::open_clock. The ROM leaves these
+    // SOURCE: HAL peripherals::system_timer::open_clock. The ROM leaves these
     // bus/function gates closed; bootstrap normally opens them before MAC use.
     s.generic.systimer_clock.modify_systimer_ctrl0(|w| {
         w.set_reg_systimer_apb_clk_en(true);

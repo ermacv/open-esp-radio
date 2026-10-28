@@ -23,7 +23,7 @@ pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
     executor: crate::Executor<Esp32s31, 0>,
     hart: &oer_espressif_staged_runtime::Hart<{ oer_espressif_staged_runtime::BOOT_HART }>,
     router: &mut oer_espressif_interrupt_table::Router<C>,
-    (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),
+    (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq),
     (usb, _pads): (
         crate::transport::Usb,
         oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,

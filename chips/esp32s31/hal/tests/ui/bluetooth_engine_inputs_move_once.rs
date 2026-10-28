@@ -2,7 +2,7 @@
 // ui-requires: bluetooth-engine
 use oer_esp32s31_hal::{
     bluetooth::{ClockedOwner, engine::*},
-    dma_static::Placed,
+    memory::dma_static::Placed,
 };
 
 pub fn install<'pool, 'epoch>(

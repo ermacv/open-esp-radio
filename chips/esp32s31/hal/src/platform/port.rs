@@ -12,11 +12,15 @@ use oer_memory::zeroed::ZeroedOnce;
 use oer_mmio::InterruptSource;
 
 use crate::cores;
-use crate::platform::{
-    FromCpu0, FromCpu0Irq, FromCpu1, FromCpu1Irq, FromCpu2, FromCpu2Irq, FromCpu3, FromCpu3Irq,
-    Hart, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2, SystimerComparators, SystimerCounter,
-    interrupt_controller, system_timer,
+use crate::peripherals::{
+    software_interrupt::{
+        FromCpu0, FromCpu0Irq, FromCpu1, FromCpu1Irq, FromCpu2, FromCpu2Irq, FromCpu3, FromCpu3Irq,
+    },
+    system_timer::{
+        self, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2, SystimerComparators, SystimerCounter,
+    },
 };
+use crate::platform::{Hart, interrupt_controller};
 
 /// The chip's implementation of the family platform contracts.
 pub struct Port;

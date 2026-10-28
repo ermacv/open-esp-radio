@@ -2,7 +2,7 @@
 // ui-requires: bluetooth-engine
 use oer_esp32s31_hal::{
     bluetooth::{BluetoothControllerReset, engine::{with_epoch, with_pool, DtmStorage, HostDma, SchedulerAllocationNumbers, SchedulerRolePoolStorage}},
-    dma_static::Placed,
+    memory::dma_static::Placed,
 };
 
 pub fn reset_pool(

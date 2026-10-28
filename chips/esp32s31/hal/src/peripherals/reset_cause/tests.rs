@@ -18,10 +18,7 @@ fn reset_causes_decode_each_core_with_the_chip_table() {
     let causes = ResetCauses::read(
         ResetCauseRegisters::host(&mut words).expect("host memory holds the block"),
     );
-    assert_eq!(
-        causes.of(BOOT_HART),
-        ResetCause::CoreSoftware
-    );
+    assert_eq!(causes.of(BOOT_HART), ResetCause::CoreSoftware);
     assert_eq!(
         causes.of(Hart::SECONDARIES[0].hart()),
         ResetCause::CoreSoftware
@@ -30,8 +27,5 @@ fn reset_causes_decode_each_core_with_the_chip_table() {
     let causes = ResetCauses::read(
         ResetCauseRegisters::host(&mut words).expect("host memory holds the block"),
     );
-    assert_eq!(
-        causes.of(BOOT_HART),
-        ResetCause::Other(0x3f)
-    );
+    assert_eq!(causes.of(BOOT_HART), ResetCause::Other(0x3f));
 }

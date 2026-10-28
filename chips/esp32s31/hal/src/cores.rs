@@ -545,8 +545,9 @@ pub fn software_reset(fatal: Fatal<'_>) -> AwaitWatchdog {
             core::hint::spin_loop();
         },
         Err(reason) => {
-            let _held_or_written =
-                crate::peripherals::usb_serial_jtag::fatal_note(&Note::runtime_fail(RESET_UNPREPARED));
+            let _held_or_written = crate::peripherals::usb_serial_jtag::fatal_note(
+                &Note::runtime_fail(RESET_UNPREPARED),
+            );
             AwaitWatchdog { reason }
         }
     }

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::{dma_static::Placed, layouts::DmaWindowAddress};
+use oer_esp32s31_hal::{memory::dma_static::Placed, layouts::DmaWindowAddress};
 use oer_esp32s31_ieee802154_driver::engine::Ieee802154Engine;
 use oer_espressif_ieee802154_engine::{
     ll::Ieee802154LowLevel,

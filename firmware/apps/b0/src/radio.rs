@@ -25,7 +25,7 @@ use oer_esp32s31_hal::{
         SchedulerAllocationConfig, with_epoch_async, with_pool_async,
     },
     bluetooth::{ClockedOwner, ColdOwner, InterruptSetupOwner},
-    dma_static::Placed,
+    memory::dma_static::Placed,
     domain::{BluetoothClient, CoexAbsent},
     power::ChipClocks,
     root::Root,
@@ -52,7 +52,7 @@ type Shared = Esp32s31Radio<
 type Actor = RadioSystem<Wifi, RcSlow, Shared, EmbassyClock>;
 type Arena = BluetoothArena<0, 0, 0, 0, 0, 0>;
 mod lifecycle;
-oer_esp32s31_hal::memory::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.dtm";}
+oer_esp32s31_hal::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.dtm";}
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
@@ -176,7 +176,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
     let Some(tokens) = Interrupts::take() else {
         crate::fail("interrupt-table")
     };
-    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(runtime.efuse);
+    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime.efuse);
     let base = factory.base_mac();
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),

@@ -77,15 +77,13 @@ impl Hooks for &Recorder {
 
 #[test]
 fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
-    let placed = oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
-        oer_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(RxDmaStorage::<
-            COUNT,
-            BUFFER,
-            BUFFER,
-            HostDma,
-        >::new()))),
-    )
-    .unwrap();
+    let placed =
+        oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
+            oer_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(
+                RxDmaStorage::<COUNT, BUFFER, BUFFER, HostDma>::new(),
+            ))),
+        )
+        .unwrap();
     let storage = placed.storage();
     let buffers = storage.buffer_addresses();
     let base = placed.descriptor_base();

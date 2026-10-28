@@ -36,7 +36,7 @@ const CAPACITY: usize = 1_664;
 const STORAGE_BYTES: usize = CAPACITY;
 type Storage = RxDmaStorage<COUNT, CAPACITY, STORAGE_BYTES>;
 
-oer_esp32s31_hal::memory::dma_static! {
+oer_esp32s31_hal::dma_static! {
     static STORAGE: Storage = zeroed in ".dma.bss.cca_rx";
 }
 

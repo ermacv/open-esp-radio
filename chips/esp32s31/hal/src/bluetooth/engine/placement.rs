@@ -3,8 +3,8 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 use crate::{
-    dma_static::Placed,
     layouts::{DmaLayout, DmaRef, DmaWindowAddress},
+    memory::dma_static::Placed,
 };
 use core::marker::PhantomData;
 
@@ -58,7 +58,9 @@ impl<S: ControllerDmaSpace> Placement<S> {
         (storage, geometry)
     }
 
-    pub(super) fn from_projection(projection: crate::memory::dma_address::PlacementProjection) -> Self {
+    pub(super) fn from_projection(
+        projection: crate::memory::dma_address::PlacementProjection,
+    ) -> Self {
         Self {
             projection,
             space: PhantomData,

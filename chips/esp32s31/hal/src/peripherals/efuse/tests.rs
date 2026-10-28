@@ -26,4 +26,3 @@ fn the_identity_derives_each_interface_address_from_the_factory_mac() {
         [0x22, 0x33, 0x00, 0x11, 0x20, 0x33]
     );
 }
-

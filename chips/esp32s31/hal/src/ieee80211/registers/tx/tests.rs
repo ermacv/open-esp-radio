@@ -2,7 +2,7 @@
 //! what it keeps, and what it refuses.
 
 use super::*;
-use crate::{dma_address::model_reference, ieee80211::registers::HostWords};
+use crate::{ieee80211::registers::HostWords, memory::dma_address::model_reference};
 
 /// A prepared chain of a host model: its head is recorded, never followed.
 struct ModelDma(DmaRef<WifiTxDmaDescriptor>);

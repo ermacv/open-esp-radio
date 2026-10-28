@@ -327,7 +327,10 @@ fn released_slot<const CAPACITY: usize, const DEPTH: usize>(
 
 /// Publish the committed HT aggregate, then complete and detach it the way
 /// the MAC reports a finished exchange.
-fn complete_and_detach<B: oer_esp32s31_hal::memory::dma_static::PlacedBacking, const SLOTS: usize>(
+fn complete_and_detach<
+    B: oer_esp32s31_hal::memory::dma_static::PlacedBacking,
+    const SLOTS: usize,
+>(
     owner: &mut RetainedDmaAmpduTx<'_, B, SLOTS>,
     cookie: TxCookie,
     rate: HtRate,

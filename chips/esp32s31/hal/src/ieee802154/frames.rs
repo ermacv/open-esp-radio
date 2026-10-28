@@ -1,11 +1,11 @@
 //! Permanently placed IEEE 802.15.4 DMA frames and their concrete projection.
 
-use crate::{dma_static::Placed, layouts::DmaWindowAddress};
+use crate::{layouts::DmaWindowAddress, memory::dma_static::Placed};
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154DmaAddresses, Ieee802154EngineBuffers, RX_BUFFER_COUNT,
 };
 
-crate::memory::dma_static! {
+crate::dma_static! {
     #[allow(unsafe_code, reason = "DMA storage is placed through the HAL macro")]
     static BUFFERS: Ieee802154EngineBuffers = zeroed in ".dma.bss.ieee802154";
 }

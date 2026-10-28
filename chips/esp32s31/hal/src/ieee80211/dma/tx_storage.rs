@@ -43,7 +43,7 @@ struct TxDmaBuffer<const BUFFER_SIZE: usize>([u8; BUFFER_SIZE]);
 
 /// Final allocation containing one ordinary TX descriptor and source buffer.
 ///
-/// Declare it with [`dma_static!`](crate::memory::dma_static!) and consume the placed
+/// Declare it with [`dma_static!`](crate::dma_static!) and consume the placed
 /// allocation through [`Self::pin`]. The returned owner is movable; this
 /// backing allocation is not.
 ///

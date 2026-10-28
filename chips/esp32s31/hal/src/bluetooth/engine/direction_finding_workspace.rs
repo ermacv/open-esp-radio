@@ -163,7 +163,8 @@ impl DirectionFindingWorkspaceStorage {
     /// Claim the linker-proven workspace and install its disabled-CTE baseline.
     pub(crate) fn place<S: ControllerDmaSpace>(
         placed: Placed<Self>,
-    ) -> Result<DirectionFindingWorkspaceCpuOwned, crate::memory::dma_address::ProjectionError> {
+    ) -> Result<DirectionFindingWorkspaceCpuOwned, crate::memory::dma_address::ProjectionError>
+    {
         let (storage, placement) = Placement::<S>::take(placed);
         let binding = DirectionFindingWorkspaceBinding::new(storage, placement.projection())?;
         Ok(Self::from_parts(storage, binding))

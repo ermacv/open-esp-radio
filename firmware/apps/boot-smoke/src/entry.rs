@@ -1,7 +1,7 @@
 use oer_esp32s31_compose::Esp32s31;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
-use oer_esp32s31_hal::platform::{FromCpu0Irq, SystimerAlarm0};
+use oer_esp32s31_hal::peripherals::{software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0};
 use oer_esp32s31_hal::root::Root;
 use oer_esp32s31_hal::peripherals::usb_serial_jtag;
 use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};

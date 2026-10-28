@@ -3644,9 +3644,9 @@ const HAL_SEQUENCES: &[(&str, usize)] = &[
     ("chips/esp32s31/hal/src/boot/soc.rs", 7),
     ("chips/esp32s31/hal/src/ieee80211/init.rs", 5),
     ("chips/esp32s31/hal/src/ieee80211/init/cold/handshake.rs", 8),
+    ("chips/esp32s31/hal/src/peripherals/entropy.rs", 2),
     ("chips/esp32s31/hal/src/phy/delay.rs", 1),
     ("chips/esp32s31/hal/src/phy/i2c.rs", 5),
-    ("chips/esp32s31/hal/src/platform.rs", 2),
 ];
 
 /// The change that moves the driver code out of each HAL module, by path
@@ -3664,8 +3664,11 @@ const HAL_SEQUENCE_REMOVAL: &[(&str, &str)] = &[
         "ieee80211",
         "Wi-Fi hardware engine out of the HAL (#844, #848)",
     ),
+    (
+        "peripherals/entropy.rs",
+        "the entropy read gap in a driver (#848)",
+    ),
     ("phy", "PHY analog bus and delays in the PHY driver (#848)"),
-    ("platform.rs", "the entropy read gap in a driver (#848)"),
 ];
 
 /// HAL files whose markers a review found to be atoms, not waits or
@@ -3676,6 +3679,16 @@ const HAL_MARKERS_IN_ATOMS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/cores.rs",
         4,
         "a terminal halt after the fatal path requested reset",
+    ),
+    (
+        "chips/esp32s31/hal/src/peripherals/system_timer.rs",
+        3,
+        "the SYSTIMER counter's `Clock::now` instant",
+    ),
+    (
+        "chips/esp32s31/hal/src/peripherals/watchdog.rs",
+        9,
+        "the family watchdog driver's deadline types over the HAL's register port",
     ),
     (
         "chips/esp32s31/hal/src/phy/prelude.rs",
@@ -3691,16 +3704,6 @@ const HAL_MARKERS_IN_ATOMS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/phy/sequence.rs",
         1,
         "the SDM deadline counter register, sampled",
-    ),
-    (
-        "chips/esp32s31/hal/src/platform/system_timer.rs",
-        3,
-        "the SYSTIMER counter's `Clock::now` instant",
-    ),
-    (
-        "chips/esp32s31/hal/src/watchdog.rs",
-        9,
-        "the family watchdog driver's deadline types over the HAL's register port",
     ),
 ];
 

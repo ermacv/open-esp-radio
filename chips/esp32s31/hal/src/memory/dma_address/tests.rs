@@ -57,10 +57,9 @@ fn allocation() -> (
     &'static mut ([WifiTxDmaDescriptor; 2], [u8; 16]),
     super::PlacementProjection,
 ) {
-    let placed = crate::memory::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new((
-        [const { WifiTxDmaDescriptor::zeroed() }; 2],
-        [0; 16],
-    ))));
+    let placed = crate::memory::dma_static::Placed::host(std::boxed::Box::leak(
+        std::boxed::Box::new(([const { WifiTxDmaDescriptor::zeroed() }; 2], [0; 16])),
+    ));
     let (storage, _, projection) = placed
         .into_dma_parts::<crate::ieee80211::dma::space::HostDma>()
         .expect("host allocation has a DMA range");
@@ -106,9 +105,9 @@ fn projections_refuse_misaligned_dma_addresses_and_width_overflow() {
         (BASE + 1, super::ProjectionError::Misaligned),
         (u32::MAX - 3, super::ProjectionError::AddressWidth),
     ] {
-        let placed = crate::memory::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new(
-            WifiTxDmaDescriptor::zeroed(),
-        )));
+        let placed = crate::memory::dma_static::Placed::host(std::boxed::Box::leak(
+            std::boxed::Box::new(WifiTxDmaDescriptor::zeroed()),
+        ));
         let (storage, projection) = super::PlacementProjection::for_test(placed, base);
         assert_eq!(projection.link(storage), Err(error));
     }

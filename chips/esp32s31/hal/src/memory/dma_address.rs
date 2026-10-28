@@ -78,7 +78,8 @@ impl PlacementProjection {
     /// Consume the only placement authority; callers cannot supply an address.
     pub(crate) fn take<S: crate::ieee80211::dma::space::DmaSpace, T>(
         placed: crate::memory::dma_static::Placed<T>,
-    ) -> Result<(&'static mut T, Self), (ProjectionError, crate::memory::dma_static::Placed<T>)> {
+    ) -> Result<(&'static mut T, Self), (ProjectionError, crate::memory::dma_static::Placed<T>)>
+    {
         let Some(base) = S::address(placed.as_ref(), core::ptr::from_ref(placed.as_ref())) else {
             return Err((ProjectionError::AddressWidth, placed));
         };
@@ -121,7 +122,8 @@ impl PlacementProjection {
     pub(crate) fn try_with_controller<S: crate::bluetooth::engine::ControllerDmaSpace, T, R>(
         placed: crate::memory::dma_static::Placed<T>,
         project: impl FnOnce(&T, &Self) -> Result<R, ProjectionError>,
-    ) -> Result<(&'static mut T, Self, R), (ProjectionError, crate::memory::dma_static::Placed<T>)> {
+    ) -> Result<(&'static mut T, Self, R), (ProjectionError, crate::memory::dma_static::Placed<T>)>
+    {
         let geometry = Self::controller_geometry::<S, T>(&placed);
         match project(placed.as_ref(), &geometry) {
             Ok(value) => Ok((placed.into_inner(), geometry, value)),

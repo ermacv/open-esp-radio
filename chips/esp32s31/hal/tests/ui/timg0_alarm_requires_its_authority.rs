@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::platform::{SystimerAlarm0, timg0_alarm::{Timg0AlarmProgram, Timg0AlarmInterrupt}};
+use oer_esp32s31_hal::peripherals::{system_timer::SystimerAlarm0, timg0_alarm::{Timg0AlarmProgram, Timg0AlarmInterrupt}};
 use oer_espressif_interrupt_table::Silent;
 use oer_time::Duration;
 

@@ -11,13 +11,15 @@ use oer_esp32s31_hal::{
             MacSlowClockCalibrationSource,
         },
     },
-    platform::{
-        FactoryIdentity, FromCpu0Irq, FromCpu2Irq, Interface, SystimerAlarm0, SystimerAlarm1,
+    peripherals::usb_serial_jtag::ConsoleInterrupt,
+    peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
+    peripherals::{
+        efuse::{FactoryIdentity, Interface},
+        software_interrupt::{FromCpu0Irq, FromCpu2Irq},
+        system_timer::{SystimerAlarm0, SystimerAlarm1},
     },
     power::ChipClocks,
     root::Root,
-    usb_serial_jtag::ConsoleInterrupt,
-    watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
 };
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
@@ -43,7 +45,7 @@ const FULL_PATTERN_NODES: [usize; 3] = [12, 20, 28];
 const WORDS: usize = BUFFER / 4;
 const _: () = assert!(BUFFER >= 4 && BUFFER.is_multiple_of(4) && COUNT <= u32::BITS as usize);
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
-type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
+type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<EmbassyClock>;
 type Backend = Esp32s31Radio<
     ChipClocks,
     oer_espressif_executor::Cooperative<Esp32s31, EmbassyClock>,
@@ -59,7 +61,7 @@ static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
 static DIRECT_READY: oer_memory::ClaimCell<
     Result<&'static mut DirectOutput, oer_diagnostics::Name<32>>,
 > = oer_memory::ClaimCell::new();
-oer_esp32s31_hal::memory::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
+oer_esp32s31_hal::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
 
 use crate::phy_pilot;
 

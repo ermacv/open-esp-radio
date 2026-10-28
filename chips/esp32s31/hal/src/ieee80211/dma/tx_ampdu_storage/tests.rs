@@ -5,16 +5,16 @@ use std::{boxed::Box, cell::Cell, rc::Rc};
 
 use super::*;
 
-use crate::memory::dma_static::PlacedTxLease;
 use crate::ieee80211::dma::space::{HOST_ARENA_BASE, HostDma};
+use crate::memory::dma_static::PlacedTxLease;
 
 /// The host address of every storage's first descriptor.
 const DESCRIPTOR_BASE: u32 = HOST_ARENA_BASE;
 
 fn storage() -> PinnedAmpduDmaStorage<4, 256> {
-    AmpduDmaStorage::pin::<HostDma>(crate::memory::dma_static::Placed::host(std::boxed::Box::leak(
-        std::boxed::Box::new(AmpduDmaStorage::new()),
-    )))
+    AmpduDmaStorage::pin::<HostDma>(crate::memory::dma_static::Placed::host(
+        std::boxed::Box::leak(std::boxed::Box::new(AmpduDmaStorage::new())),
+    ))
     .unwrap()
 }
 
@@ -127,9 +127,9 @@ impl HostBacking for TestBacking {
 }
 
 fn descriptor_only_storage() -> PinnedAmpduDmaStorage<2, 0> {
-    AmpduDmaStorage::pin::<HostDma>(crate::memory::dma_static::Placed::host(Box::leak(Box::new(
-        AmpduDmaStorage::new(),
-    ))))
+    AmpduDmaStorage::pin::<HostDma>(crate::memory::dma_static::Placed::host(Box::leak(
+        Box::new(AmpduDmaStorage::new()),
+    )))
     .unwrap()
 }
 
@@ -388,7 +388,9 @@ fn detach_proof_must_name_the_aggregate_head() {
 #[test]
 fn zero_slot_arena_is_rejected() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(AmpduDmaStorage::<0, 64>::new()));
-    assert!(AmpduDmaStorage::pin::<HostDma>(crate::memory::dma_static::Placed::host(storage)).is_err());
+    assert!(
+        AmpduDmaStorage::pin::<HostDma>(crate::memory::dma_static::Placed::host(storage)).is_err()
+    );
 }
 
 #[test]

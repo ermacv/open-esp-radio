@@ -81,7 +81,7 @@ fn the_environment_records_the_retained_btbb_transmit_power_table() {
 )]
 fn zeroed_phy_tables_are_initialized_before_the_environment_is_published() {
     use crate::layouts::*;
-    crate::memory::dma_static! {
+    crate::dma_static! {
         static PHY: BlePhyEngineStorage = zeroed in ".dma.bss.bluetooth";
     }
     let placed = PHY.take().expect("the PHY static is unclaimed");

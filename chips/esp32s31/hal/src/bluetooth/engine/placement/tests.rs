@@ -31,7 +31,7 @@ type BluetoothStatic = (
     reason = "the HAL DMA-static macro proves this test static placement"
 )]
 fn one_bluetooth_static_claims_and_initializes_every_owner_from_zero() {
-    crate::memory::dma_static! {
+    crate::dma_static! {
         static BLUETOOTH: BluetoothStatic = zeroed in ".dma.bss.bluetooth";
     }
     let (globals, roles) = BLUETOOTH.take().expect("one Bluetooth arena").split();

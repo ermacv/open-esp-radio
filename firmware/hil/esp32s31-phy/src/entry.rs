@@ -36,11 +36,11 @@ use core::future::poll_fn;
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
     ieee802154::mac::Ieee802154InterruptOwner,
-    platform::{FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1},
+    peripherals::{software_interrupt::{FromCpu0Irq, FromCpu2Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}},
     power::ChipClocks,
     root::Root,
-    usb_serial_jtag::ConsoleInterrupt,
-    watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
+    peripherals::usb_serial_jtag::ConsoleInterrupt,
+    peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
 };
 use oer_esp32s31_phy::{PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version};
 use oer_esp32s31_phy_probe::*;
@@ -135,7 +135,7 @@ static REQUESTS: embassy_sync::channel::Channel<
 > = embassy_sync::channel::Channel::new();
 
 /// The image's entropy owner.
-pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::EmbassyClock>;
+pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<oer_embassy_time::EmbassyClock>;
 
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
@@ -165,14 +165,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Ok(silent) = adopted.router().silent::<Ieee802154InterruptOwner>() else {
         fail(oer_diagnostics::name!("ieee802154-route"; 32));
     };
-    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(runtime.efuse);
+    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime.efuse);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: factory.base_mac(),
         mac_extension: factory.mac_extension(),
     };
-    let station = factory.address(oer_esp32s31_hal::platform::Interface::Station);
-    let access_point = factory.address(oer_esp32s31_hal::platform::Interface::AccessPoint);
+    let station = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::Station);
+    let access_point = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::AccessPoint);
     let (domain, partitions) = runtime
         .radio
         .split::<ChipClocks, _>(
@@ -233,7 +233,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(poster) = SLOT.claim() else {
         fail(oer_diagnostics::name!("requester"; 32));
     };
-    let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
+    let chip = transport::Chip(oer_esp32s31_hal::peripherals::reset_cause::ResetCauses::read(
         runtime.reset_cause,
     ));
     let Ok((usb, _pads)) = transport::open_usb(adopted.router(), interrupts.console_usb) else {

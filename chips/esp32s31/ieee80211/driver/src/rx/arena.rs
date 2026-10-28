@@ -14,11 +14,11 @@ use core::mem::MaybeUninit;
 use oer_espressif_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::{
-    dma_static::Placed,
     ieee80211::dma::{
         rx_storage::{PlacedRxDma, RxDmaStorage, RxDmaStorageError},
         space::{ChipDma, DmaSpace},
     },
+    memory::dma_static::Placed,
 };
 use oer_esp32s31_ieee80211_mac::{
     irq::consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
@@ -73,7 +73,7 @@ pub struct WifiRxArena<
 }
 
 /// The zeroed static of one receive epoch: the arena and the RX DMA
-/// storage, placed together ([`oer_esp32s31_hal::memory::dma_static!`]).
+/// storage, placed together ([`oer_esp32s31_hal::dma_static!`]).
 pub type WifiRxStatic<
     const COUNT: usize,
     const BUFFER: usize,
@@ -123,7 +123,7 @@ impl<
     /// travel in `signals`, whose task is the runner on their executor.
     ///
     /// The static is `placed` in the DMA window
-    /// ([`oer_esp32s31_hal::memory::dma_static!`]): the storage's descriptors and
+    /// ([`oer_esp32s31_hal::dma_static!`]): the storage's descriptors and
     /// buffers are published to the MAC by their own addresses.
     ///
     /// # Errors

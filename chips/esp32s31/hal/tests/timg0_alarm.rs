@@ -1,5 +1,6 @@
-use oer_esp32s31_hal::platform::{
-    FromCpu2Irq, interrupt_controller::facts::LINES, timg0_alarm::Timg0AlarmInterrupt,
+use oer_esp32s31_hal::{
+    peripherals::{software_interrupt::FromCpu2Irq, timg0_alarm::Timg0AlarmInterrupt},
+    platform::interrupt_controller::facts::LINES,
 };
 use oer_esp32s31_pac::Interrupt;
 use oer_espressif_interrupt_table::{Class, Entry};

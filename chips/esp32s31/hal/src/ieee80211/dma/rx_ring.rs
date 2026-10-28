@@ -19,7 +19,8 @@ use crate::ieee80211::dma::{
 
 /// Immutable descriptor-to-buffer address authority for one DMA lifecycle:
 /// per descriptor, the typed DMA address of its bound buffer.
-pub type RxDmaBufferAddresses<const COUNT: usize> = crate::memory::dma_address::PlacedAddresses<COUNT>;
+pub type RxDmaBufferAddresses<const COUNT: usize> =
+    crate::memory::dma_address::PlacedAddresses<COUNT>;
 
 fn rx_buffer_address_snapshot<const COUNT: usize>(
     binding: &RxDmaBufferAddresses<COUNT>,

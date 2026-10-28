@@ -34,9 +34,9 @@ use oer_diagnostics::Note;
 
 #[cfg(feature = "boot-smoke")]
 use embassy_time::{Duration, Timer};
-use oer_esp32s31_hal::platform::{FromCpu0Irq, SystimerAlarm0};
+use oer_esp32s31_hal::peripherals::{software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0};
 #[cfg(feature = "wifi-station")]
-use oer_esp32s31_hal::platform::{FromCpu2Irq, SystimerAlarm1};
+use oer_esp32s31_hal::peripherals::{software_interrupt::FromCpu2Irq, system_timer::SystimerAlarm1};
 use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
 use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::Executor;
@@ -172,7 +172,7 @@ fn panic_hook(
     feature = "system-panic-reset",
     feature = "wifi-station"
 ))]
-pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::EmbassyClock>;
+pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<oer_embassy_time::EmbassyClock>;
 
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 #[cfg(feature = "panic-hook")]
@@ -420,7 +420,7 @@ fn early(note: &Note<'_>) {
 fn fail(failure: fatal::Failure) -> ! {
     use oer_esp32s31_hal::{
         cores,
-        usb_serial_jtag::{FatalNote, fatal_note},
+        peripherals::usb_serial_jtag::{FatalNote, fatal_note},
     };
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|path| {
         if fatal_note(&Note::runtime_fail(failure.name())) == FatalNote::Written {

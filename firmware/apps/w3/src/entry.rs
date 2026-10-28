@@ -15,10 +15,7 @@ use oer_firmware_apps_w3::report;
 
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
-use oer_esp32s31_hal::platform::{
-    FactoryIdentity, FromCpu0Irq, FromCpu2Irq, FromCpu3Irq, Interface, SystimerAlarm0,
-    SystimerAlarm1,
-};
+use oer_esp32s31_hal::peripherals::{efuse::{FactoryIdentity, Interface}, software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}};
 use oer_esp32s31_hal::power::ChipClocks;
 use oer_esp32s31_hal::root::Root;
 use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
@@ -104,7 +101,7 @@ type Actor = RadioSystem<
 >;
 
 /// The image's entropy owner.
-pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
+pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<EmbassyClock>;
 
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);

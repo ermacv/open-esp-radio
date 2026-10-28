@@ -1,7 +1,7 @@
 // B0's statically placed radio tasks and owned USB console.
 use oer_esp32s31_compose::Esp32s31;
 use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_hal::platform::{FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1};
+use oer_esp32s31_hal::peripherals::{software_interrupt::{FromCpu0Irq, FromCpu2Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}};
 use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
 use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::{Executor, InterruptExecutor};

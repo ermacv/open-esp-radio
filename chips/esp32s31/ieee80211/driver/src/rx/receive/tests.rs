@@ -422,9 +422,11 @@ where
     let host = Host::leaked();
     let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, X, HostDma> =
         leak(bytemuck::Zeroable::zeroed());
-    let (parts, stop, frames) =
-        WifiRxArena::bind(oer_esp32s31_hal::memory::dma_static::Placed::host(arena), signals)
-            .expect("a zeroed arena binds");
+    let (parts, stop, frames) = WifiRxArena::bind(
+        oer_esp32s31_hal::memory::dma_static::Placed::host(arena),
+        signals,
+    )
+    .expect("a zeroed arena binds");
     let (rx, base) = (parts.rx(), parts.descriptor_base());
     let (requests, counters) = (parts.requests(), parts.counters());
     let clock: &'static VirtualClock = leak(VirtualClock::new());

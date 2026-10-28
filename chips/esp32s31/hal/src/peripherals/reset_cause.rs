@@ -4,7 +4,9 @@
 pub use oer_esp32s31_knowledge::reset_cause::ResetCause;
 use oer_mmio::{Fixed, Placement};
 
-use oer_esp32s31_pac::{instances, lp_aonclkrst::LpAonResetCause, ownership::ResetCausePeripherals};
+use oer_esp32s31_pac::{
+    instances, lp_aonclkrst::LpAonResetCause, ownership::ResetCausePeripherals,
+};
 
 use crate::platform::{HARTS, Hart};
 
