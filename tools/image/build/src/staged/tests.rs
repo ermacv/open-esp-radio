@@ -254,7 +254,7 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
         let mut cached = elf();
         // The existing RV32 fixture's ET_EXEC header and `.text` address.
         cached[16..18].copy_from_slice(&2_u16.to_le_bytes());
-        let address = profile.facts.memory.as_ref().unwrap().flash_xip.origin;
+        let address = profile.facts.memory.as_ref().unwrap().flash_xip.origin();
         cached[24..28].copy_from_slice(&address.to_le_bytes());
         let section_headers = u32::from_le_bytes(cached[32..36].try_into().unwrap()) as usize;
         let text_address = section_headers + 40 + 12;
@@ -373,10 +373,10 @@ fn loader_fixture(directory: &Path, profile: &oer_chip_profile::Profile, split: 
     };
     std::fs::write(&script, format!(
         "OUTPUT_ARCH(riscv)\nENTRY(_start)\nMEMORY {{ SRAM (rwx) : ORIGIN = {}, LENGTH = {}\n RODATA (r) : ORIGIN = {}, LENGTH = {}\n PSRAM (rw) : ORIGIN = {}, LENGTH = {}\n RETAINED (rw) : ORIGIN = {}, LENGTH = {} }}\n{body}\n",
-        memory.sram.origin, memory.sram.length,
-        memory.flash_xip.origin + staged.image_segment_header_bytes, memory.flash_xip.length - staged.image_segment_header_bytes,
-        memory.psram.unwrap().origin, memory.psram.unwrap().length,
-        memory.retained.unwrap().origin, memory.retained.unwrap().length,
+        memory.sram.origin(), memory.sram.length(),
+        memory.flash_xip.origin() + staged.image_segment_header_bytes, memory.flash_xip.length() - staged.image_segment_header_bytes,
+        memory.psram.unwrap().origin(), memory.psram.unwrap().length(),
+        memory.retained.unwrap().origin(), memory.retained.unwrap().length(),
     )).unwrap();
     let output = directory.join("loader.elf");
     let scripts =
@@ -397,7 +397,7 @@ fn loader_fixture(directory: &Path, profile: &oer_chip_profile::Profile, split: 
         ))
         .arg(format!(
             "--defsym=RETAINED_ORIGIN={}",
-            memory.retained.unwrap().origin
+            memory.retained.unwrap().origin()
         ))
         .arg(format!(
             "--defsym=SECOND_STAGE_LOADER_START={}",
@@ -455,7 +455,7 @@ fn the_loader_count_gate_rejects_one_and_three_mappings_without_executable_code(
         image[0] = 0xe9;
         image[1] = count;
         for index in 0..count {
-            image.extend((flash.origin + u32::from(index) * 16).to_le_bytes());
+            image.extend((flash.origin() + u32::from(index) * 16).to_le_bytes());
             image.extend(4_u32.to_le_bytes());
             image.extend([0; 4]);
         }

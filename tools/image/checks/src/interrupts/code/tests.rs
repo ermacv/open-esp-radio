@@ -21,7 +21,7 @@ fn transfer(site: u32, target: Option<u32>) -> Transfer {
 /// Used by the linker's compiler-driven relocation regression.
 pub(crate) fn same_level_handler_placement(handlers: [Function; 2]) -> CodePlacement {
     let mut stacks = partial(0);
-    let exception = stacks.contract.memory.sram.origin + 0x1000;
+    let exception = stacks.contract.memory.sram.origin() + 0x1000;
     let mut functions = BTreeMap::from([(exception, facts(exception, 4))]);
     for (index, handler) in handlers.iter().enumerate() {
         let mut value = facts(handler.address, handler.size);
@@ -98,13 +98,13 @@ pub(in crate::interrupts) fn fixture(
     let mut stacks = partial(0);
     stacks.harts[0].bytes = Some(0);
     let memory = &stacks.contract.memory;
-    let root = memory.sram.origin + 0x1000;
+    let root = memory.sram.origin() + 0x1000;
     let dequeue = root + 0x40;
     let exception = root + 0x80;
     let address = |location, offset| match location {
-        Location::Sram => memory.sram.origin + offset,
-        Location::Psram => memory.psram.unwrap().origin + offset,
-        Location::Flash => memory.flash_xip.origin + offset,
+        Location::Sram => memory.sram.origin() + offset,
+        Location::Psram => memory.psram.unwrap().origin() + offset,
+        Location::Flash => memory.flash_xip.origin() + offset,
         Location::Rom => 0x6000_0000 + offset,
         Location::Other => 0x1000 + offset,
     };
@@ -349,7 +349,7 @@ struct MultipleHandlers {
 impl MultipleHandlers {
     fn new() -> Self {
         let stacks = partial(0);
-        let exception = stacks.contract.memory.sram.origin + 0x1000;
+        let exception = stacks.contract.memory.sram.origin() + 0x1000;
         Self {
             stacks,
             analysis: Analysis {
@@ -461,7 +461,7 @@ fn forbidden_operation_in_a_non_worst_handler_is_reported() {
     let mut fixture = MultipleHandlers::new();
     let worst = fixture.exception + 0x100;
     let other = worst + 0x100;
-    let helper = fixture.stacks.contract.memory.psram.unwrap().origin + 0x2000;
+    let helper = fixture.stacks.contract.memory.psram.unwrap().origin() + 0x2000;
     let panic = worst + 0x200;
     fixture.function(worst, 256, &[]);
     fixture.function(other, 0, &[helper]);
@@ -515,7 +515,7 @@ fn a_non_worst_executor_root_keeps_its_task_side_after_the_poll_cut() {
     let executor = worst + 0x100;
     let dispatch = worst + 0x200;
     let shared = worst + 0x300;
-    let task = fixture.stacks.contract.memory.psram.unwrap().origin + 0x2000;
+    let task = fixture.stacks.contract.memory.psram.unwrap().origin() + 0x2000;
     let leaf = task + 0x100;
     fixture.function(worst, 256, &[]);
     fixture.function(executor, 0, &[dispatch, shared]);
@@ -549,7 +549,7 @@ fn every_hart_uses_its_own_complete_handler_roots() {
     let other0 = worst0 + 0x100;
     let worst1 = worst0 + 0x200;
     let other1 = worst0 + 0x300;
-    let helper0 = fixture.stacks.contract.memory.psram.unwrap().origin + 0x2000;
+    let helper0 = fixture.stacks.contract.memory.psram.unwrap().origin() + 0x2000;
     let helper1 = helper0 + 0x100;
     for root in [worst0, worst1] {
         fixture.function(root, 256, &[]);
@@ -592,7 +592,7 @@ fn cached_paths_start_at_either_root_and_choose_the_shortest_route() {
     let mut fixture = MultipleHandlers::new();
     let worst = fixture.exception + 0x100;
     let other = worst + 0x100;
-    let long = fixture.stacks.contract.memory.psram.unwrap().origin + 0x2000;
+    let long = fixture.stacks.contract.memory.psram.unwrap().origin() + 0x2000;
     let shared = long + 0x100;
     let exclusive = long + 0x200;
     fixture.function(worst, 256, &[long]);

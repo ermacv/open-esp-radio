@@ -26,10 +26,7 @@ fn profile(id: &str) -> Facts {
 }
 
 fn region(region: LayoutRegion) -> Region {
-    Region {
-        origin: region.origin(),
-        length: region.length(),
-    }
+    Region::new(region.origin(), region.length()).expect("valid layout region")
 }
 
 /// What differs between a chip's `chip.toml [memory]`, `[placement]` and
@@ -137,10 +134,28 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
             mutate(&mut profile);
             memory_mismatches(&profile, &layout)
         };
-        assert!(moved(&|p| p.memory.as_mut().unwrap().sram.length += 16).len() == 1);
-        assert!(moved(&|p| p.memory.as_mut().unwrap().flash_xip.origin += 16).len() == 1);
         assert!(
-            !moved(&|p| p.memory.as_mut().unwrap().psram.as_mut().unwrap().length += 16).is_empty()
+            moved(&|p| {
+                let r = &mut p.memory.as_mut().unwrap().sram;
+                *r = Region::new(r.origin(), r.length() + 16).unwrap();
+            })
+            .len()
+                == 1
+        );
+        assert!(
+            moved(&|p| {
+                let r = &mut p.memory.as_mut().unwrap().flash_xip;
+                *r = Region::new(r.origin() + 16, r.length()).unwrap();
+            })
+            .len()
+                == 1
+        );
+        assert!(
+            !moved(&|p| {
+                let r = p.memory.as_mut().unwrap().psram.as_mut().unwrap();
+                *r = Region::new(r.origin(), r.length() + 16).unwrap();
+            })
+            .is_empty()
         );
         assert!(moved(&|p| p.memory.as_mut().unwrap().runtime_psram = None).len() == 1);
         assert!(moved(&|p| p.memory.as_mut().unwrap().retained = None).len() == 1);

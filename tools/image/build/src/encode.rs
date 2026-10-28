@@ -300,7 +300,7 @@ pub(crate) fn mapped_segment_count(
         bytes
             .get(data_start..end)
             .ok_or("truncated ESP segment data")?;
-        if (flash.origin..flash.end()).contains(&address) {
+        if (flash.origin()..flash.end()).contains(&address) {
             if length == 0
                 || !flash.contains_range(u64::from(address), u64::from(address) + u64::from(length))
             {

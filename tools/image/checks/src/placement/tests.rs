@@ -60,13 +60,13 @@ fn an_entry_that_touches_the_interrupted_stack_first_is_refused() {
     assert!(error.to_string().contains("_runtime_irq_h0_l5"), "{error}");
 }
 
-const SRAM: Region = Region {
-    origin: 0x2f00_0000,
-    length: 0x1000,
+const SRAM: Region = match Region::new(0x2f00_0000, 0x1000) {
+    Ok(region) => region,
+    Err(_) => panic!("valid region"),
 };
-const ROM: Region = Region {
-    origin: 0x2f80_0000,
-    length: 0x1000,
+const ROM: Region = match Region::new(0x2f80_0000, 0x1000) {
+    Ok(region) => region,
+    Err(_) => panic!("valid region"),
 };
 
 #[test]
@@ -122,9 +122,9 @@ fn a_mangled_rust_symbol_is_found_by_its_demangled_name() {
     assert_eq!(by_demangled_name(&elf, "rust_begin_unwind"), None);
 }
 
-const FLASH: Region = Region {
-    origin: 0x40000000,
-    length: 0x20000,
+const FLASH: Region = match Region::new(0x40000000, 0x20000) {
+    Ok(region) => region,
+    Err(_) => panic!("valid region"),
 };
 
 /// Two objects model an entry calling an out-of-line dependency. The old
@@ -214,7 +214,8 @@ fn bootstrap_fixture(
 
     let memory = format!(
         "ENTRY(_start)\nMEMORY {{\n SRAM (rwx) : ORIGIN = {}, LENGTH = {}\n RODATA (r) : ORIGIN = 0x40000000, LENGTH = 64K\n ROTEXT (rx) : ORIGIN = 0x40010000, LENGTH = 64K\n PSRAM (rw) : ORIGIN = 0x50000000, LENGTH = 64K\n RETAINED (rw) : ORIGIN = 0x21000000, LENGTH = 256\n}}\n",
-        SRAM.origin, SRAM.length,
+        SRAM.origin(),
+        SRAM.length(),
     );
     let body = if shared {
         "INCLUDE bootstrap/sections.x"
@@ -242,7 +243,7 @@ fn bootstrap_fixture(
         ])
         .arg(format!(
             "--defsym=SECOND_STAGE_LOADER_START={}",
-            u64::from(SRAM.origin) + u64::from(SRAM.length)
+            u64::from(SRAM.origin()) + u64::from(SRAM.length())
         ))
         .arg(input)
         .arg(other)

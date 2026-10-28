@@ -169,8 +169,8 @@ fn data_elf() -> (Vec<u8>, InterruptStacks) {
     let mut writer = Object::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
     let text = writer.section_id(StandardSection::Text);
     writer.append_section_data(text, &[0; 32], 4);
-    let psram = u64::from(stacks.contract.memory.psram.unwrap().origin) + 0x100;
-    let sram = u64::from(stacks.contract.memory.sram.origin) + 0x100;
+    let psram = u64::from(stacks.contract.memory.psram.unwrap().origin()) + 0x100;
+    let sram = u64::from(stacks.contract.memory.sram.origin()) + 0x100;
     let object = symbol(&mut writer, "table", psram, 24, object::SymbolKind::Data);
     let alias = symbol(
         &mut writer,
@@ -260,10 +260,7 @@ fn cached_code_targets_are_not_counted_as_data() {
 
 #[test]
 fn sram_is_the_union_of_placed_ranges_below_the_rom_boundary() {
-    let region = Region {
-        origin: 0x1000,
-        length: 0x800,
-    };
+    let region = Region::new(0x1000, 0x800).expect("valid region");
     let ranges = [
         SramRange {
             name: "critical BSS".into(),
@@ -295,7 +292,7 @@ fn sram_is_the_union_of_placed_ranges_below_the_rom_boundary() {
     // already outside the contract's usable 0x800: do not subtract it again.
     assert_eq!(union_bytes(region, &ranges), 0x400);
     assert_eq!(
-        u64::from(region.length) - union_bytes(region, &ranges),
+        u64::from(region.length()) - union_bytes(region, &ranges),
         0x400
     );
     let clipped = [SramRange {
@@ -310,7 +307,7 @@ fn sram_is_the_union_of_placed_ranges_below_the_rom_boundary() {
 fn sram_inventory_reads_placement_symbols_sections_and_the_boundary_source() {
     let profile = Profile::tracked("esp32s31").unwrap();
     let region = profile.facts.memory.as_ref().unwrap().sram;
-    let base = u64::from(region.origin);
+    let base = u64::from(region.origin());
     let mut writer = Object::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
     let text = writer.section_id(StandardSection::Text);
     writer.append_section_data(text, &[0; 32], 4);
@@ -340,11 +337,11 @@ fn sram_inventory_reads_placement_symbols_sections_and_the_boundary_source() {
     let headers = u32::from_le_bytes(bytes[32..36].try_into().unwrap()) as usize;
     let width = u16::from_le_bytes(bytes[46..48].try_into().unwrap()) as usize;
     let at = headers + index * width + 12;
-    bytes[at..at + 4].copy_from_slice(&(region.origin + 0x700).to_le_bytes());
+    bytes[at..at + 4].copy_from_slice(&(region.origin() + 0x700).to_le_bytes());
     let elf = Elf::parse(&bytes).unwrap();
     let sram = Sram::of(&elf, &profile, region);
     assert_eq!(sram.placed, 0x520);
-    assert_eq!(sram.free(), u64::from(region.length) - 0x520);
+    assert_eq!(sram.free(), u64::from(region.length()) - 0x520);
     assert!(sram.ranges.iter().any(|range| range.name == ".text"));
     assert!(sram.source.contains("chips/esp32s31/platform/chip.toml"));
     assert!(sram.source.contains("[boot-chain] application-sram-end"));
@@ -363,10 +360,7 @@ fn summaries_and_full_report_headings_are_stable() {
         references: Vec::new(),
         objects: BTreeMap::new(),
         sram: Sram {
-            region: Region {
-                origin: 0x1000,
-                length: 2048,
-            },
+            region: Region::new(0x1000, 2048).expect("valid region"),
             source: "ROM top excluded by the contract".into(),
             ranges: Vec::new(),
             placed: 1024,

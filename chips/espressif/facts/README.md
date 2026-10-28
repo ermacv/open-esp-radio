@@ -65,6 +65,12 @@ the chip layer to the ISA and the family.
   `.bss`) inside the application's SRAM is refused. `[rom] revision` is one
   of the chip's `revisions`.
 
+`Region::new` admits only ranges whose exclusive end fits `u32`; deserialization
+uses the same check. The origin, length and cached end are private, so all range
+queries use a checked range. Invalid ranges return `RegionOverflow` with both
+input values. Stack capacity and vector generation return the existing `Error`
+for missing guards, invalid alignment or arithmetic overflow.
+
 ## Generated
 
 `generate` turns the facts into the sources a person writing them could get

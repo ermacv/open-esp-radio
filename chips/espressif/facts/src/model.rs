@@ -52,23 +52,102 @@ pub struct ResetCause {
     pub power_on: u32,
 }
 
-/// A contiguous address range.
+/// A contiguous address range whose exclusive end fits the address space.
+///
+/// Fields cannot be constructed or mutated without checking the exclusive end.
+/// ```compile_fail
+/// use oer_espressif_facts::Region;
+/// let mut region = Region::new(1, 1).unwrap();
+/// region.length = u32::MAX;
+/// ```
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "RegionFields", into = "RegionFields")]
 pub struct Region {
+    origin: u32,
+    length: u32,
+    end: u32,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RegionFields {
+    origin: u32,
+    length: u32,
+}
+
+/// A region's exclusive end cannot be represented as a u32 address.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RegionOverflow {
     pub origin: u32,
     pub length: u32,
 }
 
+impl core::fmt::Display for RegionOverflow {
+    fn fmt(&self, out: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            out,
+            "region at {:#010x} with length {:#x} ends past the address space",
+            self.origin, self.length
+        )
+    }
+}
+
+impl core::error::Error for RegionOverflow {}
+
+impl From<RegionOverflow> for crate::Error {
+    fn from(error: RegionOverflow) -> Self {
+        alloc::string::ToString::to_string(&error).into()
+    }
+}
+
+impl TryFrom<RegionFields> for Region {
+    type Error = RegionOverflow;
+
+    fn try_from(fields: RegionFields) -> core::result::Result<Self, Self::Error> {
+        Self::new(fields.origin, fields.length)
+    }
+}
+
+impl From<Region> for RegionFields {
+    fn from(region: Region) -> Self {
+        Self {
+            origin: region.origin,
+            length: region.length,
+        }
+    }
+}
+
 impl Region {
-    /// First address past the region.
+    /// Admit a range only when its exclusive end fits u32, including empty ranges.
+    pub const fn new(origin: u32, length: u32) -> core::result::Result<Self, RegionOverflow> {
+        match origin.checked_add(length) {
+            Some(end) => Ok(Self {
+                origin,
+                length,
+                end,
+            }),
+            None => Err(RegionOverflow { origin, length }),
+        }
+    }
+
+    /// The first address of the admitted range.
+    pub const fn origin(self) -> u32 {
+        self.origin
+    }
+
+    /// The admitted range length in bytes.
+    pub const fn length(self) -> u32 {
+        self.length
+    }
+
+    /// First address past the region, checked when the region was created.
     pub const fn end(self) -> u32 {
-        self.origin + self.length
+        self.end
     }
 
     /// Whether `start..end` is a (possibly empty) range inside this region.
     pub const fn contains_range(self, start: u64, end: u64) -> bool {
-        start >= self.origin as u64 && end >= start && end <= self.end() as u64
+        start >= self.origin as u64 && end >= start && end <= self.end as u64
     }
 }
 
@@ -213,20 +292,20 @@ impl Memory {
         }
         if self
             .psram
-            .is_some_and(|psram| self.sram.end() > psram.origin)
+            .is_some_and(|psram| self.sram.end() > psram.origin())
         {
             return Err("SRAM must lie below PSRAM".into());
         }
         if let Some(window) = self.cache_window {
             let inside = |region: Region| {
-                window.contains_range(u64::from(region.origin), u64::from(region.end()))
+                window.contains_range(u64::from(region.origin()), u64::from(region.end()))
             };
             if !inside(self.flash_xip) || self.psram.is_some_and(|psram| !inside(psram)) {
                 return Err("flash and PSRAM must lie in the shared cache window".into());
             }
             if self
                 .psram
-                .is_some_and(|psram| self.flash_xip.end() > psram.origin)
+                .is_some_and(|psram| self.flash_xip.end() > psram.origin())
             {
                 return Err("the flash half of the cache window must end below PSRAM".into());
             }
@@ -240,12 +319,12 @@ impl Memory {
             }
             if self
                 .retained
-                .is_none_or(|retained| chain.retained_reserved_tail > retained.length)
+                .is_none_or(|retained| chain.retained_reserved_tail > retained.length())
             {
                 return Err("the boot chain's retained tail needs the retained memory".into());
             }
         }
-        let mut below = self.internal_sram.origin;
+        let mut below = self.internal_sram.origin();
         for range in rom.map_or(&[][..], |rom| &rom.sram) {
             if range.start < below {
                 return Err(format!(
@@ -269,7 +348,7 @@ impl Memory {
             }
             if range.kept == Kept::Running
                 && range.start < self.sram.end()
-                && self.sram.origin < range.end
+                && self.sram.origin() < range.end
             {
                 return Err(format!(
                     "the ROM keeps `{}` {:#010x}..{:#010x} while an image runs, inside the \
@@ -277,7 +356,7 @@ impl Memory {
                     range.name,
                     range.start,
                     range.end,
-                    self.sram.origin,
+                    self.sram.origin(),
                     self.sram.end()
                 )
                 .into());
@@ -383,8 +462,22 @@ impl InterruptContract {
     }
 
     /// Maximum usable bytes; final checks read the actual allocation from ELF.
-    pub fn irq_stack_usable_bytes(&self, hart: u32) -> u32 {
-        self.irq_stack_bytes - self.irq_stack_guard_bytes[&hart]
+    pub fn irq_stack_usable_bytes(&self, hart: u32) -> Result<u32> {
+        let guard = self.irq_stack_guard(hart)?;
+        self.irq_stack_bytes.checked_sub(guard).ok_or_else(|| {
+            format!(
+                "hart {hart}'s interrupt guard {guard} exceeds its stack {}",
+                self.irq_stack_bytes
+            )
+            .into()
+        })
+    }
+
+    pub(crate) fn irq_stack_guard(&self, hart: u32) -> Result<u32> {
+        self.irq_stack_guard_bytes
+            .get(&hart)
+            .copied()
+            .ok_or_else(|| format!("no interrupt guard for hart {hart}").into())
     }
 
     /// The vector-entry lines of each hart: every line but line 0.
@@ -811,4 +904,48 @@ pub struct ModulePsram {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Board {
     pub name: String,
+}
+
+#[cfg(test)]
+mod region_tests {
+    use super::*;
+
+    #[test]
+    fn region_admission_checks_the_exclusive_end_and_retains_inputs() {
+        assert_eq!(
+            Region::new(u32::MAX, 1),
+            Err(RegionOverflow {
+                origin: u32::MAX,
+                length: 1
+            })
+        );
+        assert_eq!(
+            Region::new(1, u32::MAX),
+            Err(RegionOverflow {
+                origin: 1,
+                length: u32::MAX
+            })
+        );
+        for (origin, length) in [(0, 0), (u32::MAX, 0), (0, u32::MAX), (u32::MAX - 1, 1)] {
+            let region = Region::new(origin, length).unwrap();
+            assert_eq!((region.origin(), region.length()), (origin, length));
+            assert_eq!(
+                u64::from(region.end()),
+                u64::from(origin) + u64::from(length)
+            );
+            assert!(region.contains_range(u64::from(origin), u64::from(region.end())));
+            assert!(!region.contains_range(u64::from(origin), u64::from(region.end()) + 1));
+        }
+    }
+
+    #[test]
+    fn deserialization_cannot_bypass_region_admission_or_supply_a_cached_end() {
+        let error = toml::from_str::<Region>("origin = 4294967295\nlength = 1").unwrap_err();
+        assert!(alloc::string::ToString::to_string(&error).contains("ends past the address space"));
+        assert!(toml::from_str::<Region>("origin = 0\nlength = 1\nend = 0").is_err());
+        let region = Region::new(0x100, 0x200).unwrap();
+        let value = toml::Value::try_from(region).unwrap();
+        assert!(value.get("end").is_none());
+        assert_eq!(value.try_into::<Region>().unwrap(), region);
+    }
 }

@@ -6,7 +6,17 @@
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects
+    )
 )]
 //! Espressif eFuse values as pure logic over the fields the chip's eFuse
 //! controller presents in its read registers.
@@ -57,9 +67,9 @@ pub struct FactoryMac {
 impl FactoryMac {
     /// The factory (universally administered) MAC address.
     pub const fn base_mac(self) -> MacAddress {
-        let high = self.mac_1.to_be_bytes();
-        let low = self.mac_0.to_be_bytes();
-        [high[0], high[1], low[0], low[1], low[2], low[3]]
+        let [a, b] = self.mac_1.to_be_bytes();
+        let [c, d, e, f] = self.mac_0.to_be_bytes();
+        [a, b, c, d, e, f]
     }
 
     /// `MAC_EXT` as the integer value of its field.
@@ -104,11 +114,11 @@ impl Interface {
 pub const fn locally_administered(universal: MacAddress) -> MacAddress {
     const UNIVERSAL_LOCAL: u8 = 0x02;
     const FLIP_WHEN_LOCAL: u8 = 0x04;
-    let mut local = universal;
-    local[0] = if universal[0] & UNIVERSAL_LOCAL == 0 {
-        universal[0] | UNIVERSAL_LOCAL
+    let [first, b, c, d, e, f] = universal;
+    let first = if first & UNIVERSAL_LOCAL == 0 {
+        first | UNIVERSAL_LOCAL
     } else {
-        universal[0] ^ FLIP_WHEN_LOCAL
+        first ^ FLIP_WHEN_LOCAL
     };
-    local
+    [first, b, c, d, e, f]
 }

@@ -61,7 +61,7 @@ fn runtime(vectors: &str, chip: &Vectors) -> Vec<u8> {
             &format!("include_str!({path:?})"),
         );
     let layout = layout.replace("env!(\"OUT_DIR\")", &format!("{:?}", build.path()));
-    let tables = chip.vector_tables();
+    let tables = chip.vector_tables().expect("vector tables");
     let harts = chip.harts;
     let slots = chip.slots;
     let source = format!(
