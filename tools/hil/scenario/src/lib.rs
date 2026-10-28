@@ -111,10 +111,13 @@ pub trait ScenarioFamily: Clone + Debug + Eq + Serialize + DeserializeOwned {
     }
 
     /// The image keys a flashed image must report to run this scenario: the
-    /// endpoints and messages the family drives. The runner accepts an image
-    /// whose key set holds all of them; a scenario on the boot smoke image,
-    /// which speaks no protocol, requires none.
+    /// endpoints, messages and properties the family drives. The runner accepts
+    /// an image whose key set holds all of them and none of its forbidden keys.
+    /// A scenario on the boot smoke image, which speaks no protocol, requires none.
     fn required_keys(&self) -> &'static [oer_hil_protocol::Key];
+
+    /// The keys a flashed image must not report for this scenario.
+    fn forbidden_keys(&self) -> &'static [oer_hil_protocol::Key];
 
     /// The catalog image the reference peer board must carry, when the
     /// scenario uses the peer.

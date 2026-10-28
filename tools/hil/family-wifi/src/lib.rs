@@ -38,6 +38,9 @@ impl ScenarioFamily for WifiScenario {
         };
         plan
     }
+    fn forbidden_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        &[]
+    }
     fn air_use(&self) -> Vec<AirUse> {
         vec![AirUse::WifiLink]
     }

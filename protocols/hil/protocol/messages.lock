@@ -121,8 +121,10 @@ phy/hold/start 94c64378f7be62cc endpoint
 phy/hold/started 74936cb235e4a50e topic
 phy/hold/stop 545074692870df14 endpoint
 phy/hold/stopped 76c5b6b89328ab1a topic
+system/panic-hook 65d7eff2b42a4745 property
 system/panic/inject 4a8069a58696abc1 endpoint
 system/panic/injected 9f469405c60e21be topic
+system/usb-jtag-off b73c7c6b99ff8e8b property
 system/usb/disable 0341ab5f7efd972b endpoint
 system/usb/disabled 8571c744c847ea4b topic
 system/watchdog/armed ba82e77bc5b7470c topic

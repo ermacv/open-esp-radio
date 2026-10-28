@@ -28,6 +28,12 @@ Each image enables only the HIL protocol families it serves
 read only the shared core, `system` module included. `src/services.rs`
 declares the services each image mounts and its key set
 ([image keys](../../../protocols/hil/agent/README.md#image-keys)).
+The entry's `PanicHook` service announces `system/panic-hook` exactly when
+`panic-hook` installs the hook, including experiment feature selections.
+The USB-off service also announces `system/usb-jtag-off`. Watchdog scenarios
+require the hook property and forbid USB-off; panic-reset scenarios forbid
+both properties; stand-recovery requires USB-off. Boot smoke has no HIL
+protocol and announces no keys.
 
 ## Personal station
 

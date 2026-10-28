@@ -97,6 +97,7 @@ pub trait Erased: fmt::Debug + Send + Sync {
     fn validate(&self) -> Result<()>;
     fn plan(&self) -> Plan;
     fn required_keys(&self) -> &'static [Key];
+    fn forbidden_keys(&self) -> &'static [Key];
     fn peer_image(&self) -> Option<PeerImage>;
     fn air_use(&self) -> Vec<AirUse>;
     fn precondition(&self, lab: &LabConfig) -> Result<()>;
@@ -113,6 +114,9 @@ impl<T: Workload> Erased for T {
     }
     fn required_keys(&self) -> &'static [Key] {
         ScenarioFamily::required_keys(self)
+    }
+    fn forbidden_keys(&self) -> &'static [Key] {
+        ScenarioFamily::forbidden_keys(self)
     }
     fn peer_image(&self) -> Option<PeerImage> {
         ScenarioFamily::peer_image(self)
@@ -239,6 +243,9 @@ impl<R: Registry> ScenarioFamily for AnyFamily<R> {
     }
     fn required_keys(&self) -> &'static [Key] {
         self.table.required_keys()
+    }
+    fn forbidden_keys(&self) -> &'static [Key] {
+        self.table.forbidden_keys()
     }
     fn peer_image(&self) -> Option<PeerImage> {
         self.table.peer_image()

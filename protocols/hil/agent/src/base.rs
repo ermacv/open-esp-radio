@@ -391,6 +391,7 @@ requests! {
     pub enum UsbRequest (sessions = false) {
         Disable(oer_hil_protocol::system::DisableUsb),
     }
+    publishes [oer_hil_protocol::system::UsbJtagOff]
 }
 
 requests! {

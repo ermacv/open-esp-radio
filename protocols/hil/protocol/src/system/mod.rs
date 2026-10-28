@@ -8,6 +8,10 @@ mod payload;
 pub use payload::*;
 
 crate::messages! {
+    /// The image installs the HIL panic hook in its platform entry.
+    property PanicHook = "system/panic-hook";
+    /// The image mounts the USB Serial/JTAG-off diagnostic variant.
+    property UsbJtagOff = "system/usb-jtag-off";
     endpoint WatchdogTest = "system/watchdog/test" => WatchdogArmed;
     topic WatchdogArmed = "system/watchdog/armed";
     endpoint InjectPanic = "system/panic/inject" => crate::system::PanicInjected;

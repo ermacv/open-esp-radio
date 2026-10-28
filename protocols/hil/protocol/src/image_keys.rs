@@ -104,6 +104,24 @@ impl DeviceImageKeys {
         }
     }
 
+    /// No key of `forbidden` the image has; otherwise the error names the
+    /// paths of those it reports.
+    pub fn forbid_all(&self, forbidden: &[Key]) -> Result<(), String> {
+        let present: Vec<String> = forbidden
+            .iter()
+            .filter(|key| self.keys.contains(key))
+            .map(|key| path_of(*key))
+            .collect();
+        if present.is_empty() {
+            Ok(())
+        } else {
+            Err(alloc::format!(
+                "the image reports forbidden keys `{}`",
+                present.join("`, `")
+            ))
+        }
+    }
+
     pub fn keys(&self) -> &BTreeSet<Key> {
         &self.keys
     }
@@ -118,6 +136,23 @@ impl DeviceImageKeys {
 mod tests {
     use super::*;
     use crate::system::{DisableUsb, WatchdogTest};
+
+    #[test]
+    fn forbidden_keys_the_image_reports_are_named_by_their_paths() {
+        use crate::system::{PanicHook, UsbJtagOff};
+        let unknown = Key([7; 8]);
+        let image = DeviceImageKeys::of_keys([PanicHook::KEY, unknown]);
+        assert_eq!(image.forbid_all(&[]), Ok(()));
+        assert_eq!(image.forbid_all(&[UsbJtagOff::KEY]), Ok(()));
+        assert_eq!(
+            image.forbid_all(&[UsbJtagOff::KEY, PanicHook::KEY, unknown]),
+            Err(alloc::format!(
+                "the image reports forbidden keys `{}`, `{}`",
+                PanicHook::PATH,
+                unknown
+            ))
+        );
+    }
 
     #[test]
     fn a_required_key_the_image_lacks_is_named_by_its_path() {

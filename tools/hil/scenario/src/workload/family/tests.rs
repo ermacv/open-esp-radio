@@ -26,6 +26,10 @@ impl ScenarioFamily for Quiet {
     fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
         &[]
     }
+    fn forbidden_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        use oer_hil_protocol::Message;
+        &[oer_hil_protocol::system::PanicHook::KEY]
+    }
     fn air_use(&self) -> Vec<AirUse> {
         Vec::new()
     }
@@ -58,6 +62,9 @@ impl ScenarioFamily for Radio {
         })
     }
     fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        &[]
+    }
+    fn forbidden_keys(&self) -> &'static [oer_hil_protocol::Key] {
         &[]
     }
     fn air_use(&self) -> Vec<AirUse> {
@@ -98,6 +105,11 @@ fn a_document_dispatches_to_the_family_it_names() {
     assert_eq!(quiet.family.key(), "quiet");
     assert_eq!(quiet.family.air_use(), Vec::new());
     assert_eq!(quiet.family.peer_image(), None);
+    assert_eq!(
+        quiet.family.forbidden_keys(),
+        ScenarioFamily::forbidden_keys(&Quiet { boots: 2 })
+    );
+    assert!(radio.family.forbidden_keys().is_empty());
     assert_eq!(radio.family.air_use(), vec![AirUse::Ieee802154Channel(15)]);
     assert_eq!(radio.family.peer_image().unwrap().name, "radio-peer");
     let lab = oer_hil_lab::config::LabConfig::for_test();
