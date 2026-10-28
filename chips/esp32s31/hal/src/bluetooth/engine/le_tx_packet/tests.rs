@@ -2,6 +2,7 @@ use super::{
     BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES, LeTxBufferHeaderStorage, LeTxPacketAddress,
     LeTxPacketPrepareError, LeTxPacketStorage,
 };
+use crate::layouts::BleTxPacketPrefix;
 use bytemuck::Zeroable;
 
 #[test]
@@ -70,4 +71,50 @@ fn buffer_header_retains_the_bound_packet_and_its_role_capacity() {
     );
     assert!(header.retains_allocation_extent(advertising));
     assert!(!header.retains_allocation_extent(dtm));
+}
+
+#[test]
+fn controller_stores_are_observed_through_live_cpu_reads() {
+    let mut packet = LeTxPacketStorage::<32>::zeroed();
+    let length = packet
+        .prepare_encoded_pdu(&[0x42, 3, 1, 2, 3])
+        .expect("the encoded PDU fits the controller allocation");
+    let allocation = packet.prepared_allocation(length);
+
+    // A controller store while a CPU read of the same bytes is live: both
+    // borrows are shared and every access is volatile.
+    packet.model_controller_prefix_store(0xa5);
+    let observed: std::vec::Vec<u8> = allocation.collect();
+
+    assert!(
+        observed
+            .iter()
+            .take(BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES)
+            .all(|&byte| byte == 0xa5)
+    );
+    assert_eq!(&observed[BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES..], [1, 2, 3]);
+}
+
+#[test]
+fn cpu_preparation_preserves_opaque_prefix_ranges_written_by_the_controller() {
+    let mut packet = LeTxPacketStorage::<32>::zeroed();
+    packet.model_controller_prefix_store(0xa5);
+
+    let length = packet
+        .prepare_encoded_pdu(&[0x42, 3, 1, 2, 3])
+        .expect("the encoded PDU fits the controller allocation");
+
+    let image = packet.prefix();
+    let prefix = BleTxPacketPrefix::new(&image);
+    assert_eq!(prefix.byte_0000_opaque().bits(), 0xa5a5_a5a5);
+    assert_eq!(prefix.byte_0008_opaque().bits(), 0xa5a5_a5a5);
+    assert_eq!(prefix.byte_000c_opaque().bits(), 0xa5a5_a5a5);
+    assert_eq!(packet.pdu_header(), [0x42, 3]);
+    assert_eq!(
+        packet.prepared_pdu(length).collect::<std::vec::Vec<_>>(),
+        [0x42, 3, 1, 2, 3]
+    );
+
+    packet.clear();
+    assert!(packet.snapshot().iter().all(|&byte| byte == 0));
 }

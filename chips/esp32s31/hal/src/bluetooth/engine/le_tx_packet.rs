@@ -478,10 +478,11 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
         bytes
     }
 
-    /// Model a controller store into the allocation while the graph owns it.
+    /// Model controller stores of `value` into every prefix byte. Only a
+    /// shared borrow is needed: the bytes are hardware memory.
     #[cfg(test)]
-    pub(super) fn model_controller_write(&self, offset: usize, value: u8) {
-        if let Some(cell) = self.bytes.get(offset) {
+    pub(super) fn model_controller_prefix_store(&self, value: u8) {
+        for cell in self.bytes.iter().take(BleTxPacketPrefix::SIZE) {
             cell.set(value);
         }
     }
