@@ -142,7 +142,9 @@ mod usb_off {
             .publish_reliably(request.session_id, request.request_id, &UsbDisabled)
             .await;
         // The host must see the acknowledgement before the device leaves.
-        CONSOLE.written(sequence).await;
+        if let Err(fault) = CONSOLE.written(sequence).await {
+            crate::system::receiver_limit(fault);
+        }
         // Off its pads alone, the device stops answering but the host keeps
         // it enumerated: the D+ pull-up must go too for the host to see a
         // disconnect.
@@ -181,7 +183,9 @@ async fn test_watchdog(mut service: DeadlineWatchdog) {
                 .publish_reliably(request.session_id, request.request_id, &armed)
                 .await;
             // The host must see the acknowledgement before the reset.
-            CONSOLE.written(sequence).await;
+            if let Err(fault) = CONSOLE.written(sequence).await {
+                crate::system::receiver_limit(fault);
+            }
             super::watchdog::inject(mode, lease).await;
         }
     }

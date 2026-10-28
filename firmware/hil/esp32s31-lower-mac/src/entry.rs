@@ -260,7 +260,7 @@ async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let keys =
         oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-lower-mac");
     let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
-    transport::CONSOLE
+    let failure = transport::CONSOLE
         .run(usb, intake, &chip, |id, request: Request| {
             if REQUESTS.try_send((id, request)).is_err() {
                 transport::CONSOLE.publish(
@@ -271,6 +271,7 @@ async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
             }
         })
         .await;
+    transport::console_fault(failure.cause);
 }
 
 async fn dispatch(mut poster: Poster<Request, Answer>) {

@@ -279,7 +279,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-phy");
     let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
-    transport::CONSOLE
+    let failure = transport::CONSOLE
         .run(usb, intake, &chip, |id, request: WireRequest| {
             if REQUESTS.try_send((id, Request::Wire(request))).is_err() {
                 transport::CONSOLE.publish(
@@ -290,6 +290,7 @@ async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
             }
         })
         .await;
+    transport::console_fault(failure.cause);
 }
 #[cfg(not(feature = "diagnostic-radio-health"))]
 async fn dispatch(mut poster: Poster<Request, Answer>) {
@@ -356,7 +357,9 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
             }
         };
         if release {
-            transport::CONSOLE.written(sequence).await;
+            if let Err(fault) = transport::CONSOLE.written(sequence).await {
+                transport::receiver_limit(fault);
+            }
             let mut pending = poster.post(Request::Proceed);
             let (returned, _answer) = poll_fn(|cx| pending.poll_answer(cx)).await;
             poster = returned;

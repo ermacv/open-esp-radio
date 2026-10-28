@@ -68,3 +68,17 @@ pub(crate) fn post_mortem_checkpoints(first: u8) -> oer_hil_protocol::base::Post
         )
     })
 }
+
+/// Keep the terminal operation's owners in the caller frame until reset.
+pub(crate) fn receiver_limit(fault: oer_hil_agent::console::progress::ReceiverLimit) -> ! {
+    use oer_espressif_staged_runtime::panic::{FaultReason, reset_fault};
+    reset_fault(
+        FaultReason::HilReceiverLimit,
+        [
+            fault.sequence,
+            fault.next.unwrap_or(0),
+            fault.capacity as u32,
+            u32::from(fault.next.is_some()),
+        ],
+    )
+}

@@ -29,6 +29,8 @@ pub(crate) async fn panic_on_request() -> ! {
         .publish_reliably(request.session_id, request.request_id, &PanicInjected)
         .await;
     // The host must see the acknowledgement before the reset.
-    CONSOLE.written(sequence).await;
+    if let Err(fault) = CONSOLE.written(sequence).await {
+        crate::system::receiver_limit(fault);
+    }
     panic!("intentional HIL panic");
 }

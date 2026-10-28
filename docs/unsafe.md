@@ -45,8 +45,12 @@ Sans-IO code contains no `unsafe` and no runtime panic paths, including
 `panic!`, `unreachable!`, `todo!`, `unimplemented!`, assertions and debug
 assertions, `vendor_assert!`, `unwrap`/`expect`, indexing or slicing that can
 panic, arithmetic overflow or invalid division, and panicking core methods.
-Those paths return typed errors. Sans-IO crates do not depend on fatal,
-reset or retained-record owners and do not reset: reset belongs to the
+Those paths return typed errors. HIL completion receiver exhaustion is an
+impossible terminal-barrier state: the image retains the receiver-limit
+observations in the existing named-fault slot, keeps the operation's owners
+quarantined and resets through `fatal::reset_recording`, without executing the
+guarded action. Sans-IO crates do not depend on fatal, reset or retained-record
+owners and do not reset: reset belongs to the
 image or HAL owner. Compile-time checks use a const item or inline const
 of the form `const { if !cond { panic!("…") } }`; assertion macros are
 forbidden in these checks. Panics evaluated at compile time and test

@@ -6,7 +6,7 @@ pub(crate) async fn console(usb: transport::Usb, boot: u64, chip: transport::Chi
         feature == "diagnostic-phy" || feature == "diagnostic-radio-health"
     });
     let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
-    transport::CONSOLE
+    let failure = transport::CONSOLE
         .run(
             usb,
             intake,
@@ -30,6 +30,7 @@ pub(crate) async fn console(usb: transport::Usb, boot: u64, chip: transport::Chi
             },
         )
         .await;
+    transport::console_fault(failure.cause);
 }
 
 pub(crate) async fn dispatch(mut poster: Poster<Request, Answer>) {
@@ -107,7 +108,9 @@ pub(crate) async fn dispatch(mut poster: Poster<Request, Answer>) {
             }
         };
         if release {
-            transport::CONSOLE.written(sequence).await;
+            if let Err(fault) = transport::CONSOLE.written(sequence).await {
+                transport::receiver_limit(fault);
+            }
             let mut pending = poster.post(Request::Proceed);
             let (returned, _answer) = poll_fn(|cx| pending.poll_answer(cx)).await;
             poster = returned;

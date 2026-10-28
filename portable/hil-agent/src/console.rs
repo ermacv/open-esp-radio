@@ -32,6 +32,19 @@ use oer_hil_protocol::{DecodeCounters, FrameEncoder, Message, Outbound, RequestI
 
 use crate::base::{Answer, Intake, Platform, Request, Requests, Sent};
 
+/// A broken transport or overlapping access to the private decoder counters.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConsoleFault {
+    ReadLength { length: usize, capacity: usize },
+    CountersBorrowed { writing: bool },
+}
+
+/// The transport stays owned by the failure until the image records and resets.
+pub struct RunFault<E> {
+    pub cause: ConsoleFault,
+    pub endpoint: E,
+}
+
 /// Messages and notes written back to back before the task looks at the
 /// queues again.
 const DRAIN_BATCH: usize = 4;
@@ -177,8 +190,8 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
 
     /// Waits until the message with `sequence` has been written to the
     /// endpoint.
-    pub async fn written(&self, sequence: u32) {
-        self.written.wait_for(sequence).await;
+    pub async fn written(&self, sequence: u32) -> Result<(), progress::ReceiverLimit> {
+        self.written.wait_for(sequence).await
     }
 
     /// Writes `note` through the early writer while it owns the USB
@@ -227,10 +240,15 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         }
     }
 
-    /// The link's counters now, for evidence that records them.
-    pub fn link_health(&self) -> LinkHealth {
-        let received = self.received.lock(|received| *received.borrow());
-        crate::base::link_health(received, self.sent())
+    /// The link's counters now, or a fault if the private counters are borrowed.
+    pub fn link_health(&self) -> Result<LinkHealth, ConsoleFault> {
+        let received = self.received.lock(|received| {
+            received
+                .try_borrow()
+                .map(|received| *received)
+                .map_err(|_| ConsoleFault::CountersBorrowed { writing: false })
+        })?;
+        Ok(crate::base::link_health(received, self.sent()))
     }
 
     /// Publishes an answer of the base module for an image serving
@@ -257,14 +275,15 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
 
     /// Serves the endpoint until the chip resets: writes queued messages and
     /// notes, and hands each request of the image to `serve`, which must
-    /// not block; the base module's requests are answered here.
-    pub async fn run<C: Requests>(
+    /// not block; the base module's requests are answered here. A broken read
+    /// contract or counter borrow returns a fault retaining the endpoint.
+    pub async fn run<C: Requests, E: Read + Write>(
         &self,
-        mut endpoint: impl Read + Write,
+        mut endpoint: E,
         mut intake: Intake<'_>,
         platform: &impl Platform,
         mut serve: impl FnMut(RequestIdentity, C),
-    ) -> ! {
+    ) -> RunFault<E> {
         self.running.store(true, Ordering::Release);
         let image_keys = intake.image_keys();
         match Outbound::new(HELLO_SEQUENCE, 0, 0, &intake.hello()) {
@@ -288,19 +307,33 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             {
                 Either3::First(message) => self.write_message(&mut endpoint, &message).await,
                 Either3::Second(Ok(length)) => {
-                    intake.receive_each::<C>(
-                        &chunk[..length],
-                        self.sent(),
-                        |request| match request {
-                            Request::Answer(identity, answer) => {
-                                self.answer(identity, answer, image_keys, platform)
-                            }
-                            Request::Serve(identity, own) => serve(identity, own),
-                        },
-                    );
+                    let Some(bytes) = chunk.get(..length) else {
+                        return RunFault {
+                            cause: ConsoleFault::ReadLength {
+                                length,
+                                capacity: chunk.len(),
+                            },
+                            endpoint,
+                        };
+                    };
+                    intake.receive_each::<C>(bytes, self.sent(), |request| match request {
+                        Request::Answer(identity, answer) => {
+                            self.answer(identity, answer, image_keys, platform)
+                        }
+                        Request::Serve(identity, own) => serve(identity, own),
+                    });
                     let counters = intake.counters();
-                    self.received
-                        .lock(|received| *received.borrow_mut() = counters);
+                    let updated = self.received.lock(|received| {
+                        received
+                            .try_borrow_mut()
+                            .map(|mut received| *received = counters)
+                    });
+                    if updated.is_err() {
+                        return RunFault {
+                            cause: ConsoleFault::CountersBorrowed { writing: true },
+                            endpoint,
+                        };
+                    }
                 }
                 Either3::Second(Err(_)) => {}
                 Either3::Third(note) => self.write_note(&mut endpoint, &note).await,
@@ -363,15 +396,19 @@ impl NoteLine {
     /// does not fit is left empty, never half.
     fn encode(&mut self, note: &Note<'_>) {
         let written = emit_note(note, |bytes: &[u8]| {
-            let end = self.length + bytes.len();
+            let end = self.length.checked_add(bytes.len()).ok_or(())?;
             let slot = if end <= MAX_NOTE_LINE {
                 self.bytes.get_mut(self.length..end)
             } else {
                 None
             };
-            slot.map(|slot| slot.copy_from_slice(bytes))
-                .map(|()| self.length = end)
-                .ok_or(())
+            slot.map(|slot| {
+                slot.iter_mut()
+                    .zip(bytes)
+                    .for_each(|(to, from)| *to = *from)
+            })
+            .map(|()| self.length = end)
+            .ok_or(())
         });
         if written.is_err() {
             self.length = 0;

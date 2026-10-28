@@ -915,4 +915,27 @@ mod fault_tests {
         assert!(slot.named_fault().is_none());
         assert_eq!(core::mem::size_of::<Slot>(), 148);
     }
+    #[test]
+    fn hil_faults_retain_their_reason_and_exact_observations() {
+        for (reason, name) in [
+            (FaultReason::HilReceiverLimit, "HilReceiverLimit"),
+            (FaultReason::HilConsole, "HilConsole"),
+            (FaultReason::HilCheckpoint, "HilCheckpoint"),
+            (FaultReason::HilRateOverflow, "HilRateOverflow"),
+            (FaultReason::HilHealthCount, "HilHealthCount"),
+        ] {
+            let mut slot = Slot::EMPTY;
+            let observations = [u32::MAX, 0, 16, 1];
+            slot.record_named_fault(reason, observations);
+            assert_eq!(slot.named_fault(), Some((name, observations)));
+            assert_eq!(report_named_fault(&mut slot, |_, _| Err(())), Err(()));
+            assert_eq!(slot.named_fault(), Some((name, observations)));
+            report_named_fault(&mut slot, |kept, words| {
+                assert_eq!((kept, words), (name, observations));
+                Ok::<_, ()>(())
+            })
+            .unwrap();
+            assert_eq!(slot.named_fault(), None);
+        }
+    }
 }
