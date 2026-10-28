@@ -1,7 +1,14 @@
-//! Reset-scoped Host configuration and bootstrap command admission.
+//! Reset-scoped Host configuration and bootstrap command admission over the
+//! HCI bootstrap codecs.
 
-use super::*;
-use crate::HciBuildError;
+use oer_bluetooth_hci::bt_hci::param::{
+    BdAddr, ControllerToHostFlowControl, Error as HciError, EventMask, LeEventMask,
+};
+use oer_bluetooth_hci::{
+    BootstrapCommandCompleteEvent, HciBuildError, LeControllerBootstrapConfig,
+    OwnedBootstrapCommand, default_event_mask, default_le_event_mask,
+    le_controller_supported_commands,
+};
 
 /// HCI bootstrap lifecycle relative to the mandatory Reset command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,27 +114,33 @@ impl LeControllerBootstrap {
     ) -> Result<BootstrapCommandCompleteEvent, HciBuildError> {
         let opcode = command.opcode();
         if !command.is_reset() && self.phase == BootstrapPhase::AwaitingReset {
-            return Ok(command_error(opcode, HciError::CMD_DISALLOWED));
+            return Ok(BootstrapCommandCompleteEvent::error(
+                opcode,
+                HciError::CMD_DISALLOWED,
+            ));
         }
 
         Ok(match command {
             OwnedBootstrapCommand::Reset => {
                 self.reset_epoch()?;
-                command_success(opcode, &[])
+                BootstrapCommandCompleteEvent::success(opcode, &[])
             }
             OwnedBootstrapCommand::SetEventMask(mask) => {
                 self.event_mask = mask;
-                command_success(opcode, &[])
+                BootstrapCommandCompleteEvent::success(opcode, &[])
             }
             OwnedBootstrapCommand::SetControllerToHostFlowControl(mode) => {
                 if !matches!(
                     mode,
                     ControllerToHostFlowControl::Off | ControllerToHostFlowControl::AclOnSyncOff
                 ) {
-                    return Ok(command_error(opcode, HciError::UNSUPPORTED));
+                    return Ok(BootstrapCommandCompleteEvent::error(
+                        opcode,
+                        HciError::UNSUPPORTED,
+                    ));
                 }
                 self.controller_to_host_flow_control = mode;
-                command_success(opcode, &[])
+                BootstrapCommandCompleteEvent::success(opcode, &[])
             }
             OwnedBootstrapCommand::HostBufferSize {
                 acl_data_packet_length,
@@ -137,39 +150,39 @@ impl LeControllerBootstrap {
                     acl_data_packet_length: acl_data_packet_length.get(),
                     total_acl_data_packets: total_acl_data_packets.get(),
                 });
-                command_success(opcode, &[])
+                BootstrapCommandCompleteEvent::success(opcode, &[])
             }
-            OwnedBootstrapCommand::ReadBdAddr => command_success(
+            OwnedBootstrapCommand::ReadBdAddr => BootstrapCommandCompleteEvent::success(
                 opcode,
-                &self.config.public_address.hci_wire_address().into_inner(),
+                &self.config.public_address().hci_wire_address().into_inner(),
             ),
             OwnedBootstrapCommand::ReadLocalSupportedCommands => {
-                let mut commands = super::le_controller_supported_commands();
+                let mut commands = le_controller_supported_commands();
                 if has_random_source {
                     commands[27] |= 1 << 7; // LE Rand.
                 }
-                if self.config.filter_accept_list_size > 0 {
+                if self.config.filter_accept_list_size() > 0 {
                     // LE Clear, Add Device To and Remove Device From Filter
                     // Accept List.
                     commands[26] |= 1 << 7;
                     commands[27] |= (1 << 0) | (1 << 1);
                 }
-                command_success(opcode, &commands)
+                BootstrapCommandCompleteEvent::success(opcode, &commands)
             }
             OwnedBootstrapCommand::LeSetEventMask(mask) => {
                 self.le_event_mask = mask;
-                command_success(opcode, &[])
+                BootstrapCommandCompleteEvent::success(opcode, &[])
             }
             OwnedBootstrapCommand::LeReadBufferSize => {
-                let [low, high] = self.config.le_acl_data_packet_length.to_le_bytes();
-                let response = [low, high, self.config.total_num_le_acl_data_packets];
-                command_success(opcode, &response)
+                let [low, high] = self.config.le_acl_data_packet_length().to_le_bytes();
+                let response = [low, high, self.config.total_num_le_acl_data_packets()];
+                BootstrapCommandCompleteEvent::success(opcode, &response)
             }
             OwnedBootstrapCommand::LeReadLocalSupportedFeatures => {
                 // Bit 0 is LE Encryption, bit 3 is Peripheral-initiated Feature
                 // Exchange, bit 4 is LE Ping, bit 5 is LE Data Packet Length
                 // Extension and bit 14 is CSA #2.
-                command_success(
+                BootstrapCommandCompleteEvent::success(
                     opcode,
                     &[
                         (1 << 0) | (1 << 3) | (1 << 4) | (1 << 5),
@@ -185,10 +198,13 @@ impl LeControllerBootstrap {
             }
             OwnedBootstrapCommand::LeSetRandomAddress(address) => {
                 self.requested_random_address = Some(address);
-                command_success(opcode, &[])
+                BootstrapCommandCompleteEvent::success(opcode, &[])
             }
             OwnedBootstrapCommand::LeReadFilterAcceptListSize => {
-                command_success(opcode, &[self.config.filter_accept_list_size()])
+                BootstrapCommandCompleteEvent::success(
+                    opcode,
+                    &[self.config.filter_accept_list_size()],
+                )
             }
         })
     }
@@ -207,48 +223,5 @@ impl LeControllerBootstrap {
     }
 }
 
-/// The event mask after Reset, `0x0000_1FFF_FFFF_FFFF` (Core Vol 4 Part E
-/// 7.3.1): every event up to bit 44, without LE Meta.
-pub(crate) fn default_event_mask() -> Result<EventMask, HciBuildError> {
-    decode_reset_mask(&0x0000_1fff_ffff_ffff_u64.to_le_bytes())
-}
-
-/// The LE event mask after Reset, `0x1F` (Core Vol 4 Part E 7.8.1):
-/// connection complete, advertising report, connection update complete,
-/// remote features complete and LTK request.
-pub(crate) fn default_le_event_mask() -> Result<LeEventMask, HciBuildError> {
-    decode_reset_mask(&0x1f_u64.to_le_bytes())
-}
-
-fn decode_reset_mask<T: for<'a> FromHciBytes<'a>>(bytes: &[u8]) -> Result<T, HciBuildError> {
-    T::from_hci_bytes_complete(bytes).map_err(HciBuildError::InvalidResetEventMask)
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reset_mask_decode_reports_invalid_encoding_and_preserves_every_default_bit() {
-        assert_eq!(
-            decode_reset_mask::<EventMask>(&[0; 7]),
-            Err(HciBuildError::InvalidResetEventMask(
-                bt_hci::FromHciBytesError::InvalidSize
-            ))
-        );
-        assert_eq!(
-            decode_reset_mask::<LeEventMask>(&[0; 9]),
-            Err(HciBuildError::InvalidResetEventMask(
-                bt_hci::FromHciBytesError::InvalidSize
-            ))
-        );
-        assert_eq!(
-            default_event_mask().unwrap().into_inner(),
-            0x0000_1fff_ffff_ffff_u64.to_le_bytes()
-        );
-        assert_eq!(
-            default_le_event_mask().unwrap().into_inner(),
-            0x1f_u64.to_le_bytes()
-        );
-    }
-}
+mod tests;

@@ -1797,8 +1797,6 @@ name = "oer-bluetooth-le-controller"
 version = "0.1.0"
 dependencies = [
  "oer-bluetooth-hci",
- "oer-bluetooth-le-cipher",
- "oer-bluetooth-le-ll",
  "oer-bluetooth-le-model",
  "oer-bluetooth-le-port",
  "oer-bluetooth-le-wire",
@@ -1811,6 +1809,7 @@ name = "oer-bluetooth-le-ll"
 version = "0.1.0"
 dependencies = [
  "oer-bluetooth-le-cipher",
+ "oer-bluetooth-le-port",
  "oer-bluetooth-le-wire",
 ]
 

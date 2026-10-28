@@ -43,7 +43,8 @@ impl BluetoothPublicDeviceAddress {
         [byte_5, byte_4, byte_3, byte_2, byte_1, byte_0]
     }
 
-    pub(super) fn hci_wire_address(self) -> BdAddr {
+    /// The address as HCI carries `BD_ADDR`: least-significant octet first.
+    pub fn hci_wire_address(self) -> BdAddr {
         BdAddr::new(self.hci_wire_bytes())
     }
 }

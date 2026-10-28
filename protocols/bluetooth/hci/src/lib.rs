@@ -38,8 +38,11 @@
 //!   Disconnect, remote feature and version discovery or LTK reply values; a
 //!   malformed known command becomes its exact error response and any other
 //!   opcode an Unknown Command completion;
-//! - [`LeControllerBootstrap`] is the reset-scoped state of the software-only
-//!   bootstrap subset and reports the production command inventory;
+//! - [`BootstrapCommandCompleteEvent`] builds the bootstrap responses,
+//!   [`le_controller_supported_commands`] reports the production command
+//!   inventory and [`default_event_mask`] and [`default_le_event_mask`] are
+//!   the masks a Reset restores; the reset-scoped bootstrap state belongs to
+//!   the LE Controller;
 //! - LE event and ACL codecs build advertising reports, connection, update,
 //!   disconnection, feature, version and encryption events, Number Of
 //!   Completed Packets and fragmented Controller ACL packets.
@@ -82,8 +85,8 @@ pub enum HciBuildError {
 }
 pub use controller::bootstrap::{
     BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY, BluetoothPublicDeviceAddress, BootstrapCommand,
-    BootstrapCommandCompleteEvent, BootstrapConfigError, BootstrapHostBuffers, BootstrapPhase,
-    LeControllerBootstrap, LeControllerBootstrapConfig, OwnedBootstrapCommand,
+    BootstrapCommandCompleteEvent, BootstrapConfigError, LeControllerBootstrapConfig,
+    OwnedBootstrapCommand, default_event_mask, default_le_event_mask,
     le_controller_supported_commands,
 };
 pub use controller::classification::{

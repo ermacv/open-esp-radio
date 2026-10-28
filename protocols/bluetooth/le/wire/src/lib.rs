@@ -22,6 +22,7 @@ extern crate std;
 mod address;
 pub mod advertising;
 pub mod advertising_header;
+pub mod air_time;
 mod channel;
 pub mod connectable_advertising;
 pub mod connection;

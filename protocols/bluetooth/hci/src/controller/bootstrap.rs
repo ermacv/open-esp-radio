@@ -1,4 +1,5 @@
-//! Closed bootstrap configuration, command decoding and software epoch state.
+//! Closed bootstrap configuration, command decoding, responses and the
+//! event masks a Reset restores.
 
 use core::num::NonZeroU16;
 
@@ -25,16 +26,15 @@ use crate::HciCommandPacket;
 
 mod command;
 mod config;
+mod reset;
 mod response;
-pub(crate) mod state;
 
 pub(crate) use command::BootstrapCommandDecodeError;
 pub use command::{BootstrapCommand, OwnedBootstrapCommand, le_controller_supported_commands};
 pub use config::{BluetoothPublicDeviceAddress, BootstrapConfigError, LeControllerBootstrapConfig};
+pub use reset::{default_event_mask, default_le_event_mask};
 pub(crate) use response::invalid_parameters;
 pub use response::{BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY, BootstrapCommandCompleteEvent};
-use response::{command_error, command_success};
-pub use state::{BootstrapHostBuffers, BootstrapPhase, LeControllerBootstrap};
 
 #[cfg(test)]
 mod tests;

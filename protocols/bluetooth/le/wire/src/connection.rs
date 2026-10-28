@@ -1,6 +1,7 @@
 //! Legacy CONNECT_IND fields and validation (Core Vol 6 Part B 2.3.3.1).
 
 use crate::advertising_header::{ADVERTISING_HEADER_LENGTH, AdvertisingHeader, AdvertisingPduType};
+use crate::air_time::{LE_1M_MICROS_PER_OCTET, LE_1M_PACKET_OVERHEAD_OCTETS};
 use crate::{LeDeviceAddress, LeDeviceAddressKind};
 use core::num::{NonZeroU8, NonZeroU64};
 use oer_wire::Reader;
@@ -14,7 +15,7 @@ pub const LEGACY_CONNECT_IND_PAYLOAD_BYTES: usize = 34;
 /// Link Layer PDU and three-byte CRC. The chip backend adds this duration to
 /// the observed packet start before applying the transmit-window offset.
 pub const LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS: u32 =
-    (1 + 4 + LEGACY_CONNECT_IND_PDU_BYTES as u32 + 3) * 8;
+    (LE_1M_PACKET_OVERHEAD_OCTETS + LEGACY_CONNECT_IND_PDU_BYTES as u32) * LE_1M_MICROS_PER_OCTET;
 
 const ADVERTISING_ACCESS_ADDRESS: u32 = 0x8e89_bed6;
 
