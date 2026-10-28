@@ -1,0 +1,25 @@
+# The HIL wire of this revision.
+# The registry test prints the complete replacement when it differs.
+framing 2
+[modules]
+bluetooth base system
+[messages]
+bluetooth/dtm dd1a149b13f19aea property
+bluetooth/dtm/result 17a74c1cc443c957 topic
+bluetooth/dtm/run a0360c5cd980786a endpoint
+bluetooth/gatt 3baf52b29a3c1fdb property
+bluetooth/gatt/get 2b9030162a84d0ee endpoint
+bluetooth/gatt/state fedccde5556d064e topic
+bluetooth/hci 7f96e7fbcb5e2f2b property
+bluetooth/hci/exchange cf3f377fd51db876 endpoint
+bluetooth/hci/response 638f5bc4bfa0329b topic
+bluetooth/secure-gatt 60dd851aa141d13f property
+bluetooth/secure-gatt/confirm 6f01f85ff04bab22 endpoint
+bluetooth/secure-gatt/decision-recorded 6da4adf8780e060d topic
+bluetooth/secure-gatt/fail-next-bond-load 201d649f0d46600d endpoint
+bluetooth/secure-gatt/fail-reset-read 188ba3fa6c7e3873 endpoint
+bluetooth/secure-gatt/get f5579bf2e39fd802 endpoint
+bluetooth/secure-gatt/reset-read-gate 250714b9c2e59972 endpoint
+bluetooth/secure-gatt/restart 9893ab9bb04be571 endpoint
+bluetooth/secure-gatt/state 11fc2307ae9cffe5 topic
+bluetooth/trace d89efc9fa6f1b45c property

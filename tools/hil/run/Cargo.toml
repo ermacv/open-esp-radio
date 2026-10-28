@@ -9,6 +9,11 @@ publish = false
 description = "The HIL runner: its command line, a run of scenarios on the stand, and the image, flash and executor work it does"
 
 [dependencies]
+oer-hil-registry = { path = "../registry" }
+oer-esp32s31-instrumentation-hil = { path = "../../../chips/esp32s31/instrumentation-hil" }
+oer-esp32s31-phy-probe = { path = "../../../chips/esp32s31/phy-probe" }
+oer-ieee80211-conformance-control = { path = "../../../protocols/ieee80211/conformance-control" }
+oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }
 oer-hil-family-wifi = { path = "../family-wifi" }
 oer-hil-family-lower-mac = { path = "../family-lower-mac" }
 oer-vendor-phy-esp32s31 = { path = "../../vendor/phy-esp32s31" }

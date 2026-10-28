@@ -32,14 +32,28 @@ use crate::experiment::{
     launch::{self, Launch, launch_run},
 };
 
-/// The file naming a revision's HIL wire: revisions with equal locks speak
-/// the same protocol.
-const MESSAGES_LOCK: &str = "protocols/hil/protocol/messages.lock";
-
-/// The HIL wire of the tree at `root`, or `None` for a revision older than
-/// the keyed protocol, whose wire no lock names.
+/// The HIL wire of a source tree, assembled from every dictionary lock.
 pub(crate) fn messages_lock(root: &Path) -> Option<String> {
-    fs::read_to_string(root.join(MESSAGES_LOCK)).ok()
+    fn collect(directory: &Path, locks: &mut Vec<String>) -> Option<()> {
+        for entry in fs::read_dir(directory).ok()? {
+            let entry = entry.ok()?;
+            let kind = entry.file_type().ok()?;
+            if kind.is_dir() {
+                collect(&entry.path(), locks)?;
+            } else if entry.file_name() == "messages.lock" {
+                locks.push(fs::read_to_string(entry.path()).ok()?);
+            }
+        }
+        Some(())
+    }
+    let mut locks = Vec::new();
+    for domain in ["protocols", "chips"] {
+        collect(&root.join(domain), &mut locks)?;
+    }
+    if locks.is_empty() {
+        return None;
+    }
+    oer_hil_registry::merge_locks(locks.iter().map(String::as_str)).ok()
 }
 
 /// What one step showed, and the exit code `git bisect run` reads from it.
@@ -185,8 +199,8 @@ pub fn step(checkout: &Path, owner: &str, spec: &Spec) -> Result<(String, Step)>
     let step = if messages_lock(worktree.path()).as_deref() != Some(&current) {
         Ok(Step::Skip {
             why: String::from(
-                "it speaks another HIL wire than this checkout (its \
-                 protocols/hil/protocol/messages.lock differs)",
+                "it speaks another HIL wire than this checkout (\
+                 the composed HIL message locks differ)",
             ),
         })
     } else {
@@ -236,3 +250,34 @@ fn run_scenario(checkout: &Path, owner: &str, worktree: &Path, spec: &Spec) -> R
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+#[cfg(test)]
+mod message_lock_tests {
+    use super::messages_lock;
+    use std::fs;
+
+    #[test]
+    fn dictionary_moves_do_not_change_a_source_trees_wire() {
+        let root = tempfile::tempdir().unwrap();
+        let protocols = root.path().join("protocols");
+        let chips = root.path().join("chips");
+        fs::create_dir_all(&protocols).unwrap();
+        fs::create_dir_all(&chips).unwrap();
+        assert_eq!(messages_lock(root.path()), None);
+        for (path, lock) in oer_hil_registry::LOCKS {
+            let path = root.path().join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, lock).unwrap();
+        }
+        let split = messages_lock(root.path()).unwrap();
+        assert_eq!(split, oer_hil_registry::messages_lock().unwrap());
+        fs::remove_dir_all(&protocols).unwrap();
+        fs::remove_dir_all(&chips).unwrap();
+        fs::create_dir_all(&protocols).unwrap();
+        fs::create_dir_all(&chips).unwrap();
+        fs::write(protocols.join("messages.lock"), &split).unwrap();
+        assert_eq!(messages_lock(root.path()), Some(split));
+        fs::write(chips.join("messages.lock"), "incomplete").unwrap();
+        assert_eq!(messages_lock(root.path()), None);
+    }
+}

@@ -9,9 +9,9 @@ pub(crate) mod cache;
 pub(crate) fn full(
     context: &oer_hil_scenario::workload::context::Context<'_>,
     capture: &oer_hil_link::SerialCapture,
-    config: oer_hil_protocol::phy::PrepareCapture,
-) -> crate::Result<oer_hil_protocol::phy::CaptureReady> {
-    use oer_hil_protocol::phy::*;
+    config: oer_esp32s31_phy_probe::PrepareCapture,
+) -> crate::Result<oer_esp32s31_phy_probe::CaptureReady> {
+    use oer_esp32s31_phy_probe::*;
     let (_, started) = crate::cache::start(
         &crate::cache::Link::new(capture),
         &oer_hil_lab::calibration_cache::Store::host()?,

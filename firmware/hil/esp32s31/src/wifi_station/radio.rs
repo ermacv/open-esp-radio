@@ -182,12 +182,12 @@ pub async fn serve(channel: FrontendChannel, body: super::station::Body) {
         }
         Err(_) => {
             body.attempt
-                .publish(oer_hil_protocol::wifi::StationLinkState::Disconnected {
-                    reason: oer_hil_protocol::wifi::StationDisconnectReason::RadioFailure,
+                .publish(oer_ieee80211_control::StationLinkState::Disconnected {
+                    reason: oer_ieee80211_control::StationDisconnectReason::RadioFailure,
                 });
             super::end(
                 body.attempt,
-                oer_hil_protocol::wifi::StationServiceEnd::Unavailable,
+                oer_ieee80211_control::StationServiceEnd::Unavailable,
             );
         }
     }

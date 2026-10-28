@@ -9,9 +9,10 @@ publish = false
 description = "Hardware lower-MAC conformance compared with the reference model"
 
 [dependencies]
+oer-ieee80211-conformance-control = { path = "../../../protocols/ieee80211/conformance-control" }
 oer-hil-model = { path = "../model" }
 oer-hil-scenario = { path = "../scenario" }
-oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["lower-mac"] }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
 oer-hil-lab = { path = "../lab" }
 oer-lab-router = { path = "../../lab/router" }
 oer-os-durable = { path = "../../os/durable" }

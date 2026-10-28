@@ -1,0 +1,24 @@
+[package]
+name = "oer-hil-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Host composition of HIL domain dictionaries and image key discovery"
+
+[dependencies]
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
+oer-ieee80211-control = { path = "../../../protocols/ieee80211/control", features = ["registry"] }
+oer-network-control = { path = "../../../protocols/network-control", features = ["registry"] }
+oer-bluetooth-control = { path = "../../../protocols/bluetooth/control", features = ["registry"] }
+oer-ieee80211-conformance-control = { path = "../../../protocols/ieee80211/conformance-control", features = ["registry"] }
+oer-esp32s31-phy-probe = { path = "../../../chips/esp32s31/phy-probe", features = ["registry"] }
+oer-esp32s31-instrumentation-hil = { path = "../../../chips/esp32s31/instrumentation-hil", features = ["registry"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+postcard-schema = { version = "0.2.5", features = ["use-std"] }
+
+[lints]
+workspace = true

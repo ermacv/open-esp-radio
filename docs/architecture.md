@@ -135,6 +135,9 @@ existing local entries.
 | `oer-espressif-ieee802154-engine` | `chips/espressif/ieee802154-engine` |
 | `oer-espressif-ieee802154-mac-values` | `chips/espressif/ieee802154-mac-values` |
 | `oer-espressif-modem-clock` | `chips/espressif/modem-clock` |
+| `oer-esp32s31-instrumentation` | `chips/esp32s31/instrumentation` |
+| `oer-esp32s31-instrumentation-hil` | `chips/esp32s31/instrumentation-hil` |
+| `oer-esp32s31-phy-probe` | `chips/esp32s31/phy-probe` |
 
 The console `oer-espressif-usb-serial-jtag` depends transitively on mmio
 through `oer-espressif-interrupt-table`, which owns platform interrupt
@@ -774,6 +777,9 @@ the existing HAL owner.
   libraries; ELF is read only through `object`. Vendor register sequences
   are compared by hand with `tools/vendor`; a scenario prints its verdict and
   keeps nothing.
+
+HIL framing and lifecycle (`protocols/hil/protocol`) and its device agent depend on no radio dictionary. Domain message codecs live beside their owners; the host registry composes their descriptors and reviewed wire locks. Radio observation values live in `chips/esp32s31/instrumentation`; its sibling `instrumentation-hil` owns the existing bounded radio-health transport and capture store. PHY capture/hold/cache experiment codecs live in `chips/esp32s31/phy-probe`, and lower-MAC conformance codecs beside the port in `protocols/ieee80211/conformance-control`. These host-safe contracts contain no hardware implementation.
+
 
 ## Topic pages
 

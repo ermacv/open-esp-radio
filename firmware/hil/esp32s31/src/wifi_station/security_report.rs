@@ -1,5 +1,5 @@
 //! Portable security-cause conversions shared by the image and host regressions.
-use oer_hil_protocol::wifi::{StationEapolParseError, StationRsnFrameError, StationSaePwe};
+use oer_ieee80211_control::{StationEapolParseError, StationRsnFrameError, StationSaePwe};
 use oer_ieee80211_rsn::EapolParseError;
 use oer_ieee80211_wire::security::SaePwe;
 

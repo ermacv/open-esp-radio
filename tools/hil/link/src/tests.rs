@@ -31,7 +31,8 @@ use crate::{ProtocolHealth, command_response_matches};
 
 #[test]
 fn wifi_credentials_are_redacted_in_host_debug_and_persisted_protocol_records() {
-    use oer_hil_protocol::{Message, wifi::*};
+    use oer_hil_protocol::Message;
+    use oer_ieee80211_control::*;
     let command = StartStation(StationStart {
         credentials: NetworkCredentials::try_new(b"private-test-network", b"private-test-password")
             .unwrap(),

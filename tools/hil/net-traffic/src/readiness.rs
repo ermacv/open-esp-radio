@@ -8,7 +8,7 @@ use std::{
 };
 
 use oer_hil_link::{Result, SerialCapture};
-use oer_hil_protocol::network::{Direction, Transport, WifiNetworkInterface};
+use oer_network_control::{Direction, Transport, WifiNetworkInterface};
 
 const RX_PROBE_PAYLOAD: usize = 64;
 const RX_PROBE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -37,7 +37,7 @@ pub(crate) fn observed_service(
                 .iter()
                 .filter(|message| message.boot_id == boot_id)
                 .any(|message| match message.decode() {
-                    Some(oer_hil_protocol::network::ServiceReady(service)) => {
+                    Some(oer_network_control::ServiceReady(service)) => {
                         service.network_interface == network_interface
                             && service.transport == transport
                             && service.direction == direction
@@ -191,7 +191,7 @@ pub fn probe_udp_rx_ready_via(
             .wait_for_after(
                 event_start,
                 RX_PROBE_RESPONSE_TIMEOUT.min(deadline.saturating_duration_since(Instant::now())),
-                |message, oer_hil_protocol::network::ServiceReady(service)| {
+                |message, oer_network_control::ServiceReady(service)| {
                     message.boot_id == boot_id
                         && service.network_interface == network_interface
                         && service.transport == Transport::Udp

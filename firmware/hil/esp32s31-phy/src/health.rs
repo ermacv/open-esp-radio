@@ -4,8 +4,10 @@ use oer_esp32s31_phy::{
     PhyTargetObserver,
     tracking::observation::{Event, Operation},
 };
-pub use oer_hil_agent::health::Store;
-use oer_hil_protocol::{RequestIdentity, health::*};
+pub use oer_esp32s31_instrumentation_hil::store::Store;
+use oer_hil_protocol::RequestIdentity;
+use oer_esp32s31_instrumentation_hil::*;
+use oer_esp32s31_instrumentation::health::*;
 use oer_time::Clock;
 
 pub use crate::services::HealthRequest as Request;
@@ -446,7 +448,7 @@ pub(crate) mod startup;
 
 /// An impossible exact-count overflow keeps the recording owner's borrow
 /// alive through the image's retained reset.
-pub(crate) fn count_fault(fault: oer_hil_agent::health::CountOverflow) -> ! {
+pub(crate) fn count_fault(fault: oer_esp32s31_instrumentation_hil::store::CountOverflow) -> ! {
     oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
         oer_espressif_staged_runtime::panic::FaultReason::HilHealthCount,
         [

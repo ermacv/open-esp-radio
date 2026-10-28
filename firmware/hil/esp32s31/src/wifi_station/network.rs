@@ -8,7 +8,7 @@ use oer_embassy_net::{
 };
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{icmp, observation::Observations, report::Lease};
-use oer_hil_protocol::wifi::StationProbeFinished;
+use oer_ieee80211_control::StationProbeFinished;
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
@@ -128,10 +128,10 @@ fn running_future<'a>(
                                 crate::transport::CONSOLE.publish(
                             attempt.request.session_id,
                             attempt.request.request_id,
-                            &oer_hil_protocol::network::Ready(
-                                oer_hil_protocol::network::NetworkInfo {
+                            &oer_network_control::Ready(
+                                oer_network_control::NetworkInfo {
                                     network_interface:
-                                        oer_hil_protocol::network::WifiNetworkInterface::Station,
+                                        oer_network_control::WifiNetworkInterface::Station,
                                     address: lease.address.address().octets(),
                                     prefix_length: lease.address.prefix_len(),
                                     gateway: lease.router.map(|router| router.octets()),
@@ -179,7 +179,7 @@ async fn probes(
         reset_observations(observations, probe.identifier, lease);
         super::emit(
             request,
-            &oer_hil_protocol::wifi::StationProbeReady {
+            &oer_ieee80211_control::StationProbeReady {
                 epoch,
                 identifier: probe.identifier,
                 count: probe.count,

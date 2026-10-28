@@ -3,8 +3,8 @@ use crate::{
     Result,
     cache::{self, Link, StartRequest},
 };
+use oer_esp32s31_phy_probe::*;
 use oer_hil_lab::calibration_cache::{Provenance, Store};
-use oer_hil_protocol::phy::*;
 use oer_hil_scenario::workload::context::Context;
 use std::{
     path::Path,

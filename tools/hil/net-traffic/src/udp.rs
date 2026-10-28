@@ -45,7 +45,7 @@ pub fn kernel_drops(_socket: &UdpSocket) -> io::Result<Option<u32>> {
 /// A retry deadline is failure recovery, never an assumed readiness delay.
 pub fn confirm_reverse_flow(socket: &UdpSocket, timeout: std::time::Duration) -> crate::Result<()> {
     use oer_hil_link::transport::events::{EventPoll, deadline_after};
-    use oer_hil_protocol::network::UdpProbe;
+    use oer_network_control::UdpProbe;
     use std::{
         sync::atomic::{AtomicU64, Ordering},
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},

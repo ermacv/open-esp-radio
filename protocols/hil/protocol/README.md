@@ -1,86 +1,27 @@
 # HIL protocol
 
-Typed messages shared by the host runner and target firmware. Every message
-is its own type in one module, identified on the wire by a key: a hash of the
-message's path and of its postcard schema. [`messages.lock`](messages.lock)
-names the framing version, each module's dependencies (`[modules]`) and every
-message's path, key and kind (`[messages]`); its test keeps it equal to the
-source. Image keys, current-state admission and
-product qualification are separate contracts.
+`oer-hil-protocol` is the radio-independent message and frame skeleton: keys, `Message`/`Endpoint`, `messages!`, bounded framing, the envelope and optional asynchronous IO. `base` owns discovery, image-key pages, boot/post-mortem evidence, link health and request admission; `system` and `telemetry` own the current platform lifecycle and profile messages.
 
 - [Wire contract](wire.md): framing, version checks, discovery and boot identity.
-- [Wi-Fi station](wifi.md): run-time credentials and station link events.
-- [Calibration cache exchange](phy-cache.md): bounded opaque records and caller/native evidence.
 - [Platform diagnostics](diagnostics.md): watchdog, program-counter profile and stack measurements.
 
-Source types define the accepted wire layout; these references explain its
-meaning and limits. Host scenario execution belongs to the
-[runner](../../../tools/hil/run/HOST.md); firmware setup belongs to the
-[ESP32-S31 target](../../../firmware/hil/esp32s31/README.md).
+Each message's key hashes its path and postcard schema. A semantic change with the same schema requires a new path. `messages!` emits typed endpoints/topics/properties and their compile-time `KEYS`; `registry` additionally exposes descriptors and readable decoders for this crate. `async-io` enables `write_frame`. There are no radio-family features or dependencies.
 
-## Modules and messages
+Radio dictionaries are separate host/image crates beside their owners:
 
-A module is a path prefix and a directory: `base` (hello, image keys, boot
-status, post-mortem, link health, acceptance and refusal), `system`,
-`network`, `bluetooth` ([bluetooth.md](bluetooth.md): DTM, raw HCI and the
-GATT applications; its endpoints have no serving image until the BLE block)
-and `telemetry` (the program-counter profile). A module declares
-its messages with `messages!`:
+| Vocabulary | Owner |
+| --- | --- |
+| Wi-Fi station | `protocols/ieee80211/control` |
+| Network sessions and evidence | `protocols/network-control` |
+| Bluetooth | `protocols/bluetooth/control` |
+| Lower-MAC conformance | `protocols/ieee80211/conformance-control` |
+| PHY capture, hold and cache experiment | `chips/esp32s31/phy-probe` |
+| Radio observations | `chips/esp32s31/instrumentation` |
+| Radio-health HIL binding and store | `chips/esp32s31/instrumentation-hil` |
 
-- an endpoint is a request the device serves and names its one response;
-- a topic is a device message: a response or an unsolicited event;
-- a property is a marker an image advertises among its image keys and never
-  sends.
+Every message owner keeps its reviewed `messages.lock`; [the host registry](../../../tools/hil/registry/README.md) composes them and checks keys, paths, schemas and lock coverage. Domain crates depend on the framework, never the reverse. The locks describe wire dependencies by path prefix, independently of Rust package paths.
 
-`messages!` also emits the module's `KEYS`, the keys of all its messages. The
-protocol names no image: which keys an image reports follows from the
-services it mounts ([agent](../agent/README.md#image-keys)), and a host
-scenario family declares the keys it requires and forbids. Unrelated extra
-keys are accepted.
-
-`system::PanicHook` (`system/panic-hook`) marks an installed HIL panic hook;
-`system::UsbJtagOff` (`system/usb-jtag-off`) marks the USB-off variant.
-These properties are unit markers, never frames. Watchdog scenarios require
-the hook property and forbid the USB-off property. Panic-reset scenarios
-forbid both properties; stand-recovery requires the USB-off property.
-Each scenario also requires the endpoints and responses it uses.
-
-A response may follow other messages about the same request: a replayed
-session publishes its evidence before `network::Finished`.
-A refusal is `base::Rejected` with its reason.
-
-The crate root is the framework: `key.rs` (message identity and
-`messages!`), `framing.rs`, `io.rs` and `envelope.rs`. It names no module.
-Everything else lives in a module's directory, `src/<module>/`: its
-messages in `mod.rs` and every payload type they carry beside them, reached
-as `oer_hil_protocol::<module>::Type`. A module may use another module's
-payloads through `crate::<module>`; the lock's `[modules]` section lists each
-module with the modules it uses, the registry test derives that list from the
-sources and rejects a cycle. A runner that speaks a module needs the
-framework, `base`, that module and what it uses.
-
-A message's meaning is its path and its type. A change of meaning without a
-change of type takes a new path; units live in the types. A change of a
-message's schema changes its key, and the lock records the change for review.
-
-## Radio families
-
-The crate compiles its radio families behind features of the observer
-registry's family names: `network` (the `network` module's traffic sessions,
-their evidence, UDP probes and stream patterns). The shared core is
-always compiled: framing, the envelope, keys and image keys, the `base` and
-`system` modules, boot and post-mortem evidence and the program-counter
-profile. An image enables only the families it serves, so its
-build, and the evidence bound to its sources, reads only their files; a
-family that is off has no messages in the build. The host decodes every
-message: the `registry` feature enables every family and lists each
-message's path, key, kind, schema and readable decoder.
-
-Credential lengths are private bounded array variants, so SSID and passphrase
-access is infallible after creation or decoding. Each variant retains its
-entire inactive tail, preserving every fixed-width SSID wire byte. Explicit
-erasure zeroizes both the prefix and tail before resetting the length; the
-[credential storage contract](wifi.md#credential-storage) defines these rules.
+An image's advertised keys come from its mounted [services](../agent/README.md#image-keys). A family requires or forbids keys; unrelated extra keys remain accepted. `system::PanicHook` and `system::UsbJtagOff` describe the installed hook and USB-off variant, respectively. Properties are unit markers and never sent as frames. A refusal is `base::Rejected`; an endpoint has exactly one typed response, which may follow related events.
 
 ## Conformance trace header
 

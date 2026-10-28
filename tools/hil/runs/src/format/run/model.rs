@@ -400,7 +400,7 @@ pub struct RunnerProvenance {
     pub observer: Option<serde_json::Value>,
     pub package: String,
     pub version: String,
-    /// SHA-256 of the runner's `oer_hil_protocol::MESSAGES_LOCK`: runs
+    /// SHA-256 of the runner's `oer_hil_registry::messages_lock()`: runs
     /// whose runners share it spoke the same wire.
     pub messages_lock_sha256: String,
     pub host_os: String,

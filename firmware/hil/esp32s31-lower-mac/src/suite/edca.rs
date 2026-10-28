@@ -1,6 +1,6 @@
 //! VIF records and draws captured from the installed policy at publication.
 use super::*;
-use oer_hil_protocol::lower_mac::{EdcaDraw, EdcaHeader, EdcaTrace, Trace, edca_parameters};
+use oer_ieee80211_conformance_control::{EdcaDraw, EdcaHeader, EdcaTrace, Trace, edca_parameters};
 use oer_ieee80211_port::conformance::{
     Execution,
     edca::{self as contract, Case, Scenario},

@@ -45,11 +45,8 @@ use oer_esp32s31_hal::{
 use oer_esp32s31_phy::{PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version};
 use oer_espressif_executor::{Executor, InterruptExecutor};
 use oer_hil_agent::base::Intake;
-use oer_hil_protocol::{
-    RequestIdentity,
-    base::{RejectReason, Rejected},
-    phy::*,
-};
+use oer_hil_protocol::{RequestIdentity, base::RejectReason, base::Rejected};
+use oer_esp32s31_phy_probe::*;
 use oer_memory::{Doorbell, Poster, RequestSlot};
 use services::WireRequest;
 use static_cell::StaticCell;

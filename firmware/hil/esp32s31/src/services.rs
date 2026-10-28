@@ -23,22 +23,22 @@ oer_hil_agent::requests! {
     /// The station image's requests, the topics it publishes and its
     /// station property.
     pub enum StationRequests (sessions = false) {
-        Start(oer_hil_protocol::wifi::StartStation),
-        Probe(oer_hil_protocol::wifi::ProbeStation),
-        Counters(oer_hil_protocol::wifi::GetStationCounters),
-        Stop(oer_hil_protocol::wifi::StopStation)
+        Start(oer_ieee80211_control::StartStation),
+        Probe(oer_ieee80211_control::ProbeStation),
+        Counters(oer_ieee80211_control::GetStationCounters),
+        Stop(oer_ieee80211_control::StopStation)
     }
     publishes [
-        oer_hil_protocol::wifi::Station,
-        oer_hil_protocol::wifi::StationLink,
-        oer_hil_protocol::wifi::StationProbeFinished,
-        oer_hil_protocol::wifi::StationProbeReady,
-        oer_hil_protocol::wifi::StationGroupKey,
-        oer_hil_protocol::wifi::StationArpFrame,
-        oer_hil_protocol::wifi::StationReceiveDrop,
-        oer_hil_protocol::wifi::StationStopped,
-        oer_hil_protocol::wifi::StationServiceEnded,
-        oer_hil_protocol::network::Ready,
+        oer_ieee80211_control::Station,
+        oer_ieee80211_control::StationLink,
+        oer_ieee80211_control::StationProbeFinished,
+        oer_ieee80211_control::StationProbeReady,
+        oer_ieee80211_control::StationGroupKey,
+        oer_ieee80211_control::StationArpFrame,
+        oer_ieee80211_control::StationReceiveDrop,
+        oer_ieee80211_control::StationStopped,
+        oer_ieee80211_control::StationServiceEnded,
+        oer_network_control::Ready,
     ]
 }
 
@@ -73,7 +73,9 @@ mod tests {
     use super::*;
     use oer_hil_agent::base::{Base, Service};
     use oer_hil_protocol::base::ImageKeySet;
-    use oer_hil_protocol::{Key, Message, base, network, system, wifi};
+    use oer_hil_protocol::{Key, Message, base, system};
+    use oer_ieee80211_control as wifi;
+    use oer_network_control as network;
 
     fn set(keys: ImageKeySet<'_>) -> BTreeSet<Key> {
         keys.keys().iter().copied().collect()

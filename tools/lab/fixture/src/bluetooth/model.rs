@@ -2,7 +2,7 @@
 
 pub mod security_failure;
 
-use oer_hil_protocol::bluetooth::BluetoothPeripheralTermination;
+use oer_bluetooth_control::BluetoothPeripheralTermination;
 use serde::{Deserialize, Serialize};
 
 /// The privileged helper's connection-reset report schema.
@@ -413,17 +413,17 @@ impl ConnectionReset {
             && self.acl_sent
             && self.acl_echo_received
             && self.acl_payload_bytes
-                == Some(oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES as u16)
+                == Some(oer_bluetooth_control::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES as u16)
             && self.acl_echo_hci_packets
                 == Some(if encrypted {
                     11
                 } else {
-                    oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_ACL_LL_FRAGMENTS as u16
+                    oer_bluetooth_control::BLUETOOTH_PERIPHERAL_ACL_LL_FRAGMENTS as u16
                 })
             && self.acl_echo_after_micros.is_some()
             && self.connection_update_complete
             && self.updated_interval_millis
-                == Some(oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS)
+                == Some(oer_bluetooth_control::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS)
             && self.connection_update_after_micros.is_some()
             && self.channel_map_updated
             && self.channel_map_update_after_micros.is_some()
@@ -433,7 +433,7 @@ impl ConnectionReset {
                 == Some(if encrypted {
                     11
                 } else {
-                    oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_ACL_LL_FRAGMENTS as u16
+                    oer_bluetooth_control::BLUETOOTH_PERIPHERAL_ACL_LL_FRAGMENTS as u16
                 })
             && self.post_update_acl_echo_after_micros.is_some()
             && termination_complete
@@ -563,12 +563,12 @@ mod connection_reset_tests {
         report.acl_sent = true;
         report.acl_echo_received = true;
         report.acl_payload_bytes =
-            Some(oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES as u16);
+            Some(oer_bluetooth_control::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES as u16);
         report.acl_echo_hci_packets = Some(10);
         report.acl_echo_after_micros = Some(200);
         report.connection_update_complete = true;
         report.updated_interval_millis =
-            Some(oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS);
+            Some(oer_bluetooth_control::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS);
         report.connection_update_after_micros = Some(300);
         report.channel_map_updated = true;
         report.channel_map_update_after_micros = Some(400);
@@ -722,12 +722,12 @@ mod connection_reset_tests {
             report.acl_sent = true;
             report.acl_echo_received = true;
             report.acl_payload_bytes =
-                Some(oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES as u16);
+                Some(oer_bluetooth_control::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES as u16);
             report.acl_echo_hci_packets = Some(10);
             report.acl_echo_after_micros = Some(1);
             report.connection_update_complete = true;
             report.updated_interval_millis =
-                Some(oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS);
+                Some(oer_bluetooth_control::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS);
             report.connection_update_after_micros = Some(1);
             report.channel_map_updated = true;
             report.channel_map_update_after_micros = Some(1);
@@ -759,12 +759,12 @@ mod connection_reset_tests {
         report.acl_sent = true;
         report.acl_echo_received = true;
         report.acl_payload_bytes =
-            Some(oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES as u16);
+            Some(oer_bluetooth_control::BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES as u16);
         report.acl_echo_hci_packets = Some(10);
         report.acl_echo_after_micros = Some(1);
         report.connection_update_complete = true;
         report.updated_interval_millis =
-            Some(oer_hil_protocol::bluetooth::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS);
+            Some(oer_bluetooth_control::BLUETOOTH_PERIPHERAL_UPDATED_INTERVAL_MILLIS);
         report.connection_update_after_micros = Some(1);
         report.channel_map_updated = true;
         report.channel_map_update_after_micros = Some(1);

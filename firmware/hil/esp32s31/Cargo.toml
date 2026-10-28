@@ -33,11 +33,11 @@ system-panic-reset = [
 ]
 wifi-station = [
     "oer-esp32s31-compose/wifi-fault",
+    "dep:oer-network-control",
+    "dep:oer-ieee80211-control",
     "dep:oer-firmware-apps-w3",
     "panic-hook",
     "dep:oer-hil-protocol",
-    "oer-hil-protocol/wifi",
-    "oer-hil-protocol/network",
     "dep:embassy-sync",
     "dep:oer-hil-agent",
     "dep:embassy-futures",
@@ -68,6 +68,8 @@ wifi-station = [
 ]
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-network-control = { path = "../../../protocols/network-control", optional = true }
+oer-ieee80211-control = { path = "../../../protocols/ieee80211/control", optional = true }
 oer-firmware-apps-w3 = { path = "../../apps/w3", optional = true }
 oer-time = { path = "../../../portable/time" }
 oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter", optional = true }
@@ -116,8 +118,10 @@ oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 static_cell.workspace = true
 
 [dev-dependencies]
+oer-network-control = { path = "../../../protocols/network-control" }
+oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
-oer-hil-protocol = { workspace = true, features = ["wifi", "network"] }
+oer-hil-protocol = { workspace = true }
 oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 

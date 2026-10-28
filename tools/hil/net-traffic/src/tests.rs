@@ -1,8 +1,7 @@
-use oer_hil_protocol::{
-    network::Direction, network::Finished, network::FlowTransportEvidence, network::RadioEvidence,
-    network::ResultSummary, network::RxRadioEvidence, network::RxZeroCopyEvidence,
-    network::SessionLinkRequirements, network::SessionReady, network::TransportEvidence,
-    system::StackUsage, system::StackWatermark,
+use oer_hil_protocol::{system::StackUsage, system::StackWatermark};
+use oer_network_control::{
+    Direction, Finished, FlowTransportEvidence, RadioEvidence, ResultSummary, RxRadioEvidence,
+    RxZeroCopyEvidence, SessionLinkRequirements, SessionReady, TransportEvidence,
 };
 
 use crate::{
@@ -64,7 +63,7 @@ fn session_with_rx(rx: RxRadioEvidence) -> SessionEvidence {
         },
         finished: Finished {
             summary: ResultSummary {
-                verdict: oer_hil_protocol::network::SessionVerdict::Passed,
+                verdict: oer_network_control::SessionVerdict::Passed,
                 evidence_records: 4,
             },
             evidence_crc32c: 0,
@@ -296,7 +295,7 @@ fn bidirectional_readiness_covers_both_owned_data_planes() {
 
 #[test]
 fn tx_radio_requires_exact_balance_including_interval_boundary_owners() {
-    use oer_hil_protocol::{network::TxAggregateTimingEvidence, network::TxRadioEvidence};
+    use oer_network_control::{TxAggregateTimingEvidence, TxRadioEvidence};
     let check = |publications, pending_start, pending_end| {
         let mut session = session_with_rx(RxRadioEvidence::default());
         session.radio.as_mut().unwrap().tx = Some(TxRadioEvidence {

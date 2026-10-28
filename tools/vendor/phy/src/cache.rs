@@ -1,8 +1,9 @@
 //! Boot-scoped host cache exchange. The host never decodes a chip's record.
 use crate::Result;
+use oer_esp32s31_phy_probe::*;
 use oer_hil_lab::calibration_cache::{CacheKey, Loaded, Provenance, SnapshotDownload, Store};
 use oer_hil_link::SerialCapture;
-use oer_hil_protocol::{Endpoint, phy::*};
+use oer_hil_protocol::Endpoint;
 use std::time::{Duration, Instant};
 
 /// Typed HIL transport and monotonic deadline, replaceable without serial I/O in tests.

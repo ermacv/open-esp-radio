@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_hil_protocol::{network::fill_stream_pattern, network::stream_pattern_matches};
+use oer_network_control::{fill_stream_pattern, stream_pattern_matches};
 
 use crate::Result;
 

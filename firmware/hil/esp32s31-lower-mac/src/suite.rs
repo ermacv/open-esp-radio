@@ -41,10 +41,8 @@ use oer_esp32s31_ieee80211_driver::{
 use oer_esp32s31_ieee80211_mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
 use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
-use oer_hil_protocol::{
-    base::RejectReason,
-    lower_mac::{CaseTrace, OutcomeTrace, Prepare, Prepared, outcome_trace},
-};
+use oer_hil_protocol::base::RejectReason;
+use oer_ieee80211_conformance_control::{CaseTrace, OutcomeTrace, Prepare, Prepared, outcome_trace};
 use oer_ieee80211_port::{
     conformance::{MpduState, catalog, outcomes},
     *,
@@ -100,7 +98,7 @@ impl Slot {
 }
 
 /// Plain HIL output, retained outside futures while a case disables the port.
-struct TraceScratch(Option<oer_hil_protocol::lower_mac::Trace>);
+struct TraceScratch(Option<oer_ieee80211_conformance_control::Trace>);
 struct PendingTrace<'a>(&'a mut TraceScratch);
 impl Drop for PendingTrace<'_> {
     fn drop(&mut self) {
@@ -288,7 +286,7 @@ impl Server {
     }
     async fn exchange(
         &mut self,
-        key: oer_hil_protocol::lower_mac::RunCase,
+        key: oer_ieee80211_conformance_control::RunCase,
     ) -> Result<Answer, RejectReason> {
         let case = key.case().ok_or(RejectReason::InvalidConfiguration)?;
         if case.extension().is_some() {
@@ -594,7 +592,7 @@ struct Exchange<'a> {
     output: &'a mut TraceScratch,
 }
 impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange<'_> {
-    type Output = Result<oer_hil_protocol::lower_mac::Trace, &'static str>;
+    type Output = Result<oer_ieee80211_conformance_control::Trace, &'static str>;
     async fn run<'p, 'id>(
         self,
         owner: Owner<'p, 'id, Id, Backend<Id>, Disabled>,
@@ -655,11 +653,11 @@ async fn outcome<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
     case: catalog::Case,
-) -> Ended<Id, Backend<Id>, Result<oer_hil_protocol::lower_mac::Trace, &'static str>> {
+) -> Ended<Id, Backend<Id>, Result<oer_ieee80211_conformance_control::Trace, &'static str>> {
     let output = match case {
         catalog::Case::Outcome(case) => exchange(&mut owner.phase(), resources, peer, case)
             .await
-            .map(oer_hil_protocol::lower_mac::Trace::Outcome),
+            .map(oer_ieee80211_conformance_control::Trace::Outcome),
         _ => Err("fixture unavailable"),
     };
     let owner = match owner

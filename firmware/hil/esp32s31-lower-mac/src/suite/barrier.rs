@@ -1,6 +1,6 @@
 //! Real publications with their actual completion facts held by the image.
 use super::*;
-use oer_hil_protocol::lower_mac::{Trace, barrier_trace};
+use oer_ieee80211_conformance_control::{Trace, barrier_trace};
 use oer_ieee80211_port::conformance::{BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot};
 use oer_ieee80211_wire::{ccmp::Ccmp128Key, qos::WmmAccessCategory};
 type Frame = heapless::Vec<u8, 64>;

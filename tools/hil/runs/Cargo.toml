@@ -13,6 +13,7 @@ description = "The HIL run bundle: format, writer and seal, the one typed reader
 test-support = []
 
 [dependencies]
+oer-hil-registry = { path = "../registry" }
 oer-hil-model = { path = "../model" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 oer-os-durable = { path = "../../os/durable" }

@@ -1,5 +1,6 @@
 //! Hardware-free assembly and interpretation of frozen radio-health pages.
-use oer_hil_protocol::health::*;
+use oer_esp32s31_instrumentation::health::*;
+use oer_esp32s31_instrumentation_hil::*;
 use serde::{Deserialize, Serialize};
 
 type Result<T> = std::result::Result<T, &'static str>;

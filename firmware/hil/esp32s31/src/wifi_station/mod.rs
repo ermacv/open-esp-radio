@@ -15,13 +15,8 @@ mod station;
 use crate::services::StationRequests as Requests;
 use oer_esp32s31_compose::Esp32s31;
 use crate::transport::CONSOLE;
-use oer_hil_protocol::{
-    RequestIdentity,
-    wifi::{
-        StationLink, StationLinkState, StationRole, StationServiceEnd, StationServiceEnded,
-        StationStart, StopStation,
-    },
-};
+use oer_hil_protocol::RequestIdentity;
+use oer_ieee80211_control::{StationLink, StationLinkState, StationRole, StationServiceEnd, StationServiceEnded, StationStart, StopStation};
 use oer_ieee80211_rsn::{PmkDerivation, nonce::SNonceSource, sae::SaePassword};
 use oer_time::Clock;
 
@@ -328,7 +323,7 @@ type Controls<T> = embassy_sync::channel::Channel<
     T,
     1,
 >;
-static PROBES: Controls<(RequestIdentity, oer_hil_protocol::wifi::ProbeStation)> = Controls::new();
+static PROBES: Controls<(RequestIdentity, oer_ieee80211_control::ProbeStation)> = Controls::new();
 static STOPS: Controls<RequestIdentity> = Controls::new();
 type ConsoleWork = impl core::future::Future<Output = ()>;
 static CONSOLE_WORK: ConstStaticCell<StaticPlace<ConsoleWork>> =

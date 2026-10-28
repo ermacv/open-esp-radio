@@ -22,7 +22,8 @@ folders. This inventory corresponds to `cargo metadata --no-deps`.
 
 ```text
 chips/esp32s31/bluetooth/driver/
-chips/esp32s31/{board, compose, hal, knowledge, layout, pac, phy}/
+chips/esp32s31/{board, compose, hal, instrumentation, instrumentation-hil,
+    knowledge, layout, pac, phy, phy-probe}/
 chips/esp32s31/ieee80211/{driver, mac}/
 chips/esp32s31/ieee802154/driver/
 chips/esp32s31/radio/{client, system}/
@@ -37,20 +38,21 @@ firmware/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-
 portable/{cooperate, crypto, diagnostics, memory, mmio, riscv, sort, sync, time,
     time-virtual, trace, wire}/
 portable/embassy/{net, time}/
-protocols/bluetooth/hci/
+protocols/bluetooth/{control, hci}/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/hil/{agent, protocol}/
-protocols/ieee80211/{ap, arbiter, cipher, esp-now, model, port, rsn, runtime, sta,
+protocols/ieee80211/{ap, arbiter, cipher, conformance-control, control, esp-now,
+    instrumentation, model, port, rsn, runtime, sta,
     upper-mac, wire}/
 protocols/ieee802154/{mac, model, port, wire}/
-protocols/network/
+protocols/{network, network-control}/
 protocols/radio/{coex, port, regulatory}/
 tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
     blobray-domain, blobray-linker, blobray-riscv, blobray-verification, cli, elf,
     riscv-analysis, riscv-decode, riscv-lift, riscv-model, riscv-program, riscv-stack}/
 tools/chip/profile/
 tools/hil/{analysis, cli, executor, family-lower-mac, family-system, family-wifi,
-    fixture, fixtures-bluetooth, lab, link, model, net-traffic, observer, run, runner,
+    fixture, fixtures-bluetooth, lab, link, model, net-traffic, observer, registry, run, runner,
     runs, scenario}/
 tools/image/{build, bundle, checks, cli, compare, esp-idf, large-values, linker}/
 tools/lab/{arbiter, board, cli, fixture, fixture-install, model, router}/
@@ -128,8 +130,7 @@ named `hil` takes its role from the list.
   `protocols/radio/coex`; `chips/esp32s31/ieee80211/driver` depends on
   `chips/espressif/staged-runtime` for its trace recorder;
   `chips/esp32s31/ieee802154/driver` depends on `portable/mmio` for
-  `Placement`; `protocols/hil/protocol` depends on
-  `protocols/ieee80211/{port, wire}` for its Wi-Fi dictionaries; the three
+  `Placement`; the three
   HIL images depend directly on the HAL, drivers, chip adapters, the radio
   system, chip facts, family policy, protocol crates and `portable/riscv`
   instead of a facade.

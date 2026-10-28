@@ -36,14 +36,14 @@ pub enum PhyScenario<C: Comparison> {
     TrackingHold {
         ticks: u8,
         #[serde(default)]
-        policy: oer_hil_protocol::phy::HoldPolicy,
+        policy: oer_esp32s31_phy_probe::HoldPolicy,
         #[serde(default = "one_batch")]
         batches: u8,
     },
     TrackingHoldWifi {
         ticks: u8,
         #[serde(default)]
-        policy: oer_hil_protocol::phy::HoldPolicy,
+        policy: oer_esp32s31_phy_probe::HoldPolicy,
         #[serde(default = "one_batch")]
         batches: u8,
     },
@@ -102,12 +102,12 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
                 batches,
                 policy,
             } => {
-                let maximum_batches = if *policy == oer_hil_protocol::phy::HoldPolicy::Natural {
+                let maximum_batches = if *policy == oer_esp32s31_phy_probe::HoldPolicy::Natural {
                     40
                 } else {
                     20
                 };
-                return if (1..=oer_hil_protocol::phy::HOLD_TICKS as u8).contains(ticks)
+                return if (1..=oer_esp32s31_phy_probe::HOLD_TICKS as u8).contains(ticks)
                     && (1..=maximum_batches).contains(batches)
                 {
                     Ok(())
@@ -150,7 +150,9 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
         Plan::target_only(ImageClass::DiagnosticPhy)
     }
     fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
-        use oer_hil_protocol::{Key, Message, health, phy};
+        use oer_esp32s31_instrumentation_hil as health;
+        use oer_esp32s31_phy_probe as phy;
+        use oer_hil_protocol::{Key, Message};
         const HOST_CACHE: &[Key] = &[
             phy::HostCalibrationCache::KEY,
             phy::StartCalibration::KEY,
@@ -195,7 +197,7 @@ impl<C: Comparison> Workload for PhyScenario<C> {
                 peer_power_dbm,
             } => {
                 return crate::workload::health::run::<C>(
-                    oer_hil_protocol::health::BeginHealth {
+                    oer_esp32s31_instrumentation_hil::BeginHealth {
                         channel: *channel,
                         peer: *peer,
                         peer_rate_kbps: Some(*peer_rate_kbps),
@@ -350,7 +352,7 @@ mod tests {
     }
     #[test]
     fn natural_policy_and_batches_are_explicit_and_bounded() {
-        use oer_hil_protocol::phy::HoldPolicy;
+        use oer_esp32s31_phy_probe::HoldPolicy;
         let natural =
             parse("kind='tracking-hold-wifi'\nticks=16\npolicy='natural'\nbatches=20").unwrap();
         natural.validate().unwrap();

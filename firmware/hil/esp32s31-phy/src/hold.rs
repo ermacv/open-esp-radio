@@ -9,7 +9,8 @@ mod sar_tails;
 use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS;
-use oer_hil_protocol::{base::RejectReason, phy::*};
+use oer_hil_protocol::base::RejectReason;
+use oer_esp32s31_phy_probe::*;
 use oer_time::{Clock, Duration, Instant};
 
 pub struct Hold {

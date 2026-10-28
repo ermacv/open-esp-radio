@@ -1,6 +1,6 @@
 //! Actual GTK command progress, including terminals drained by disable.
 use super::*;
-use oer_hil_protocol::lower_mac::{Trace, group_trace};
+use oer_ieee80211_conformance_control::{Trace, group_trace};
 use oer_ieee80211_port::conformance::group_keys::{
     Completion, Mutation, Owners, ProgressCase, ProgressTrace, Timing,
 };

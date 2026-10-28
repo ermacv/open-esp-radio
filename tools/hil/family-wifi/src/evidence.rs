@@ -8,8 +8,8 @@ use std::net::Ipv4Addr;
 #[serde(deny_unknown_fields)]
 pub struct KeyEvidence {
     pub channel: u8,
-    pub prepared: oer_hil_protocol::lower_mac::Prepared,
-    pub hardware: Vec<oer_hil_protocol::lower_mac::CaseTrace>,
+    pub prepared: oer_ieee80211_conformance_control::Prepared,
+    pub hardware: Vec<oer_ieee80211_conformance_control::CaseTrace>,
 }
 impl KeyEvidence {
     pub(crate) fn complete(&self) -> bool {
@@ -171,7 +171,7 @@ pub struct Rekey {
 #[serde(deny_unknown_fields)]
 pub struct ArpObservation {
     pub received_us: u64,
-    pub frame: oer_hil_protocol::wifi::StationArpFrame,
+    pub frame: oer_ieee80211_control::StationArpFrame,
     /// Independently captured protected MPDU with this exact SN, PN and KeyID.
     pub air_us: Option<u64>,
 }

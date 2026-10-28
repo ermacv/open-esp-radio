@@ -8,9 +8,6 @@ repository.workspace = true
 publish = false
 description = "Chip-independent HIL target logic shared by the firmware runtime and its host tests"
 
-[features]
-health = ["oer-hil-protocol/health"]
-
 [dependencies]
 crc = "3.3.0"
 embassy-sync = "0.8.0"

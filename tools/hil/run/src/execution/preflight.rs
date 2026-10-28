@@ -8,7 +8,7 @@ use crate::{Result, fixture, scenario::Scenario};
 use oer_hil_lab::config::LabConfig;
 use oer_hil_link::SerialCapture;
 use oer_hil_model::schema::image::ImageClass;
-use oer_hil_protocol::DeviceImageKeys;
+use oer_hil_registry::DeviceImageKeys;
 use oer_hil_runs::format::run::Failure;
 
 pub(crate) fn scenario_failure(lab: &LabConfig, selected: &Scenario) -> Option<Failure> {
@@ -162,7 +162,10 @@ mod tests {
 
     #[test]
     fn every_image_class_selects_only_its_system_workload() {
-        use oer_hil_protocol::{health, lower_mac, phy, wifi};
+        use oer_esp32s31_instrumentation_hil as health;
+        use oer_esp32s31_phy_probe as phy;
+        use oer_ieee80211_conformance_control as lower_mac;
+        use oer_ieee80211_control as wifi;
         let panic = [system::InjectPanic::KEY, system::PanicInjected::KEY];
         let watchdog: Vec<Key> = panic
             .iter()

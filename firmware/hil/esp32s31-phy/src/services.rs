@@ -2,8 +2,8 @@
 //! union of the keys of those services and of the base module.
 
 #[cfg(any(test, feature = "diagnostic-radio-health"))]
-use oer_hil_protocol::health::*;
-use oer_hil_protocol::phy::*;
+use oer_esp32s31_instrumentation_hil::*;
+use oer_esp32s31_phy_probe::*;
 
 oer_hil_agent::requests! {
     /// The calibration cache, tracking hold and capture requests, and the
@@ -46,9 +46,11 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
+    use oer_esp32s31_instrumentation_hil as health;
+    use oer_esp32s31_phy_probe as phy;
     use oer_hil_agent::base::{Base, Service};
     use oer_hil_protocol::base::ImageKeySet;
-    use oer_hil_protocol::{Key, Message, health, phy};
+    use oer_hil_protocol::{Key, Message};
 
     fn set(keys: ImageKeySet<'_>) -> BTreeSet<Key> {
         keys.keys().iter().copied().collect()

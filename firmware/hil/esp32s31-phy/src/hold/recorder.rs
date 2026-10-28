@@ -1,5 +1,5 @@
 //! Image-local coarse boundaries; no clock reads for inner operation callbacks.
-use oer_hil_protocol::phy::{HoldInterval, HoldOperation, HoldSample};
+use oer_esp32s31_phy_probe::{HoldInterval, HoldOperation, HoldSample};
 
 pub struct Recorder {
     sample: HoldSample,

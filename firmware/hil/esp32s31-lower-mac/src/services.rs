@@ -1,7 +1,7 @@
 //! The HIL service the lower-MAC conformance image mounts, and the key set
 //! it reports: the union of the keys of that service and of the base module.
 
-use oer_hil_protocol::lower_mac::{Prepare, RunCase};
+use oer_ieee80211_conformance_control::{Prepare, RunCase};
 
 oer_hil_agent::requests! {
     /// The conformance suite's preparation and case requests.
@@ -18,7 +18,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use oer_hil_agent::base::{Base, Service};
-    use oer_hil_protocol::{Key, lower_mac};
+    use oer_hil_protocol::Key;
+    use oer_ieee80211_conformance_control as lower_mac;
 
     #[test]
     fn the_image_reports_its_service_and_the_base_module() {

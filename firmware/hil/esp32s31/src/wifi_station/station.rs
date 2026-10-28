@@ -9,7 +9,7 @@ use embassy_futures::select::{Either, select};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_hil_protocol::wifi::{StationLinkState, StationServiceEnd};
+use oer_ieee80211_control::{StationLinkState, StationServiceEnd};
 use oer_ieee80211_port::*;
 use oer_ieee80211_rsn::{Pmk, nonce::SNonceSource, sae::SaePassword};
 use oer_ieee80211_runtime::station_service::*;
@@ -500,7 +500,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let ended = oer_memory::match_placed!(end, ServiceEnd {
             Stopped(owner) => {
                 if let Some(request)=stopped.get() {
-                    super::emit(request,&oer_hil_protocol::wifi::StationStopped(super::observation::counters()));
+                    super::emit(request,&oer_ieee80211_control::StationStopped(super::observation::counters()));
                 }
                 rp::Ended::uninstall(owner.read(), (), ())
             },

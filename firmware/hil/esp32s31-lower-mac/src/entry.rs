@@ -24,11 +24,8 @@ use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_executor::{Doorbell, Executor, InterruptExecutor};
 use oer_hil_agent::base::Intake;
-use oer_hil_protocol::{
-    RequestIdentity,
-    base::{RejectReason, Rejected},
-    lower_mac::*,
-};
+use oer_hil_protocol::{RequestIdentity, base::RejectReason, base::Rejected};
+use oer_ieee80211_conformance_control::*;
 use oer_memory::{Doorbell as RequestDoorbell, Poster, RequestSlot};
 use static_cell::StaticCell;
 mod phy_pilot;

@@ -6,16 +6,12 @@
 use std::time::{Duration, Instant};
 
 use oer_hil_link::{Received, Result, SerialCapture, error::LinkError};
-use oer_hil_protocol::{
-    Endpoint, Message,
-    base::LinkHealth,
-    network::{
-        Direction, EvidenceRecord, Finished, FlowTransportEvidence, NetworkSchedulerEvidence,
-        RadioEvidence, RxDeliveryEvidence, RxZeroCopyEvidence, SESSION_FLOW_CAPACITY,
-        SessionConfig, SessionLinkRequirements, SessionReady, TransportEvidence,
-        TxAggregateTimingEvidence, evidence_crc32c,
-    },
-    system::StackUsage,
+use oer_hil_protocol::{Endpoint, Message, base::LinkHealth, system::StackUsage};
+use oer_network_control::{
+    Direction, EvidenceRecord, Finished, FlowTransportEvidence, NetworkSchedulerEvidence,
+    RadioEvidence, RxDeliveryEvidence, RxZeroCopyEvidence, SESSION_FLOW_CAPACITY, SessionConfig,
+    SessionLinkRequirements, SessionReady, TransportEvidence, TxAggregateTimingEvidence,
+    evidence_crc32c,
 };
 
 use crate::validation::validate_stack_usage;
@@ -60,10 +56,10 @@ pub trait NetworkSession {
     /// both UDP payload directions can be correlated to this lifecycle stage.
     fn start_identified_udp_session(
         &self,
-        build: impl FnOnce(oer_hil_protocol::network::UdpSessionPayloadIdentity) -> SessionConfig,
+        build: impl FnOnce(oer_network_control::UdpSessionPayloadIdentity) -> SessionConfig,
     ) -> Result<(
         SessionHandle,
-        oer_hil_protocol::network::UdpSessionPayloadIdentity,
+        oer_network_control::UdpSessionPayloadIdentity,
     )>;
 
     /// The complete typed evidence of `session`, within `timeout`.
@@ -85,16 +81,16 @@ impl NetworkSession for SerialCapture {
 
     fn start_identified_udp_session(
         &self,
-        build: impl FnOnce(oer_hil_protocol::network::UdpSessionPayloadIdentity) -> SessionConfig,
+        build: impl FnOnce(oer_network_control::UdpSessionPayloadIdentity) -> SessionConfig,
     ) -> Result<(
         SessionHandle,
-        oer_hil_protocol::network::UdpSessionPayloadIdentity,
+        oer_network_control::UdpSessionPayloadIdentity,
     )> {
         let boot_id = self
             .latest_boot_id()
             .ok_or("device omitted the current boot identity")?;
         let session_id = self.next_session_id();
-        let identity = oer_hil_protocol::network::UdpSessionPayloadIdentity::new(
+        let identity = oer_network_control::UdpSessionPayloadIdentity::new(
             boot_id.rotate_left(32).wrapping_add(session_id),
         );
         let session = start_session_with_id(self, session_id, build(identity))?;
@@ -114,7 +110,7 @@ impl NetworkSession for SerialCapture {
         let first_event = self.event_cursor();
         if let Err(reason) = self.call(
             session.session_id,
-            oer_hil_protocol::network::ReplayResult,
+            oer_network_control::ReplayResult,
             PROTOCOL_READY_TIMEOUT,
         )? {
             return Err(LinkError::protocol(format!(
@@ -141,7 +137,7 @@ impl NetworkSession for SerialCapture {
         expect_accepted(
             self,
             session.session_id,
-            oer_hil_protocol::network::AcknowledgeResult,
+            oer_network_control::AcknowledgeResult,
             "acknowledgement",
         )
     }
@@ -195,16 +191,11 @@ fn start_session_with_id(
     expect_accepted(
         capture,
         session_id,
-        oer_hil_protocol::network::Configure(config),
+        oer_network_control::Configure(config),
         "configuration",
     )?;
-    expect_accepted(capture, session_id, oer_hil_protocol::network::Arm, "arm")?;
-    expect_accepted(
-        capture,
-        session_id,
-        oer_hil_protocol::network::Start,
-        "start",
-    )?;
+    expect_accepted(capture, session_id, oer_network_control::Arm, "arm")?;
+    expect_accepted(capture, session_id, oer_network_control::Start, "start")?;
     let expected_directions: &[Direction] = match direction {
         Direction::Rx => &[Direction::Rx],
         Direction::Tx => &[Direction::Tx],
@@ -215,7 +206,7 @@ fn start_session_with_id(
             capture,
             handle,
             PROTOCOL_READY_TIMEOUT,
-            |_, reported: &oer_hil_protocol::network::SessionReady| {
+            |_, reported: &oer_network_control::SessionReady| {
                 session_ready_covers(direction, *reported, *expected, link_requirements)
             },
         )?
@@ -243,12 +234,12 @@ fn wait_for_session_event<M: Message>(
             && (message
                 .decode::<M>()
                 .is_some_and(|body| accept(message, &body))
-                || message.is::<oer_hil_protocol::network::Failed>())
+                || message.is::<oer_network_control::Failed>())
     })?;
     let Some(message) = found else {
         return Ok(None);
     };
-    if let Some(oer_hil_protocol::network::Failed(reason)) = message.decode() {
+    if let Some(oer_network_control::Failed(reason)) = message.decode() {
         return Err(format!("target session {} failed: {reason:?}", session.session_id).into());
     }
     let body = message.decode::<M>().expect("the accepted message decodes");
@@ -266,9 +257,9 @@ fn session_evidence<T>(
         capture,
         session,
         timeout,
-        |_, oer_hil_protocol::network::Evidence(record)| pick(*record).is_some(),
+        |_, oer_network_control::Evidence(record)| pick(*record).is_some(),
     )?
-    .and_then(|(_, oer_hil_protocol::network::Evidence(record))| pick(record)))
+    .and_then(|(_, oer_network_control::Evidence(record))| pick(record)))
 }
 
 fn wait_for_session(
@@ -330,7 +321,7 @@ fn wait_for_session(
         capture,
         session,
         remaining(),
-        |_, _: &oer_hil_protocol::network::Finished| true,
+        |_, _: &oer_network_control::Finished| true,
     )?
     .ok_or("device did not finish the structured HIL session")?;
     let radio = session_evidence(capture, session, Duration::ZERO, |record| match record {

@@ -1,7 +1,7 @@
 //! Public counters, independent of acceptance verdicts.
 use core::sync::atomic::{AtomicU32, Ordering::Relaxed};
 pub static DEPARTING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-use oer_hil_protocol::wifi::{StationCounters, StationGroupKey};
+use oer_ieee80211_control::{StationCounters, StationGroupKey};
 
 pub static TIMEOUTS: AtomicU32 = AtomicU32::new(0);
 pub static COLLISIONS: AtomicU32 = AtomicU32::new(0);
@@ -111,7 +111,7 @@ impl StationObserver {
         }
         super::emit(
             self.0.request,
-            &oer_hil_protocol::wifi::StationArpFrame {
+            &oer_ieee80211_control::StationArpFrame {
                 epoch: super::EPOCH.load(Relaxed),
                 generation: GENERATION.load(Relaxed),
                 transmitted: frame.transmitted,
@@ -128,7 +128,7 @@ impl StationObserver {
 }
 
 fn receive_drop(attempt: super::Attempt, reason: oer_ieee80211_instrumentation::RxDrop) {
-    use oer_hil_protocol::wifi::{StationReceiveDrop, StationReceiveDropReason as R};
+    use oer_ieee80211_control::{StationReceiveDrop, StationReceiveDropReason as R};
     use oer_ieee80211_instrumentation::{FrameDrop, RxDrop, SecurityDrop};
     let reason = match reason {
         RxDrop::Frame(FrameDrop::Integrity) => R::Integrity,
