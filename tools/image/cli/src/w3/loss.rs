@@ -29,13 +29,13 @@ pub fn account(console: &str, requests: usize, replies: usize) -> Result<Vec<Row
         number(console, "w3.echo ", "requests")?,
         number(console, "w3.stack ", "echo_requests")?,
         number(console, "w3.stack ", "echo_replies")?,
-        number(console, "w3.stack ", "echo_refused")?,
+        number(console, "w3.stack ", "echo_dropped")?,
         number(console, "w3.echo ", "replies")?,
         ap_replies,
     ])
 }
 fn stages(
-    [ap, bridge, stack, formed, refused, admitted, replies]: [u32; 7],
+    [ap, bridge, stack, formed, dropped, admitted, replies]: [u32; 7],
 ) -> Result<Vec<Row>, String> {
     let diff = |from: u32, to: u32| {
         from.checked_sub(to)
@@ -55,12 +55,12 @@ fn stages(
             frames: diff(stack, formed)?,
         },
         Row {
-            stage: "Xarxa driver TX refusal",
-            frames: refused,
+            stage: "Xarxa EchoReply retention overflow",
+            frames: dropped,
         },
         Row {
-            stage: "formed reply to service TX, excluding refusal",
-            frames: diff(diff(formed, refused)?, admitted)?,
+            stage: "formed reply to service TX, excluding retention overflow",
+            frames: diff(diff(formed, dropped)?, admitted)?,
         },
         Row {
             stage: "service TX to AP reply",
@@ -81,5 +81,17 @@ mod tests {
         assert!(stages([1, 2, 2, 2, 0, 2, 2]).is_err());
         assert!(stages([2, 2, 2, 2, 3, 0, 0]).is_err());
         assert!(account("", 10000, 3043).is_err());
+    }
+
+    #[test]
+    fn retried_refusals_are_not_losses_but_overflow_is_counted_once() {
+        let console = "w3.echo requests=10 replies=9\n\
+                       w3.stack echo_requests=10 echo_replies=10 echo_refused=23 echo_dropped=1";
+        let rows = account(console, 12, 9).unwrap();
+        assert_eq!(rows[0].frames, 2);
+        assert_eq!(rows[3].frames, 1);
+        assert_eq!(rows[4].frames, 0);
+        assert_eq!(rows.iter().map(|r| r.frames).sum::<u32>(), 3);
+        assert!(account(&console.replace(" echo_dropped=1", ""), 12, 9).is_err());
     }
 }

@@ -150,6 +150,7 @@ impl Report {
                 stack.tx_frames,
                 stack.tx_refused,
                 stack.icmpv4_echo_refused,
+                stack.icmpv4_echo_dropped,
             ))
             .await?;
         }
@@ -327,12 +328,13 @@ mod tests {
             tx_frames: 14,
             tx_refused: 3,
             icmpv4_echo_refused: 3,
+            icmpv4_echo_dropped: 1,
         });
         let text = text(&report);
         assert!(text.contains("w3.queue samples=1 sum=8 max=8 publisher_blocked=0 published=0"));
         assert!(text.contains("w3.echo requests=12 replies=9"));
         assert!(text.contains(
-            "w3.stack rx=13 echo_requests=12 echo_replies=12 tx=14 tx_refused=3 echo_refused=3"
+            "w3.stack rx=13 echo_requests=12 echo_replies=12 tx=14 tx_refused=3 echo_refused=3 echo_dropped=1"
         ));
         assert!(text.ends_with("OER-W3-END lines=12\r\nOER-RESULT: pass w3\r\n"));
     }

@@ -782,7 +782,8 @@ topics! {
          "publisher_blocked" publisher_blocked: dec, "published" published: dec);
     W3Stack = 117, w3_stack, "w3.stack"
         ("rx" rx: dec, "echo_requests" echo_requests: dec, "echo_replies" echo_replies: dec,
-         "tx" tx: dec, "tx_refused" tx_refused: dec, "echo_refused" echo_refused: dec);
+         "tx" tx: dec, "tx_refused" tx_refused: dec, "echo_refused" echo_refused: dec,
+         "echo_dropped" echo_dropped: dec);
     W3Echo = 118, w3_echo, "w3.echo"
         ("requests" requests: dec, "replies" replies: dec);
 

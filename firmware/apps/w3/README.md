@@ -46,7 +46,12 @@ size. `w3.echo` counts all router-to-station echo requests seen by the bridge
 and replies admitted to the service TX queue, independent of the version-1
 100-pair window. `w3.stack` snapshots whole-stack RX owners, validated IPv4
 echo requests, formed echo replies, raw-egress TX attempts/refusals and refused
-IPv4 echo replies. Counters saturate and never change admission or retry.
+IPv4 echo replies, including retries, and `echo_dropped` counts retention
+overflow. The pinned Xarxa fork holds up to eight refused IPv4 EchoReply owners
+per interface in arrival order until device TX credit returns. It reuses the
+incoming packet without allocation; overflow drops the newest reply and
+increments `echo_dropped`. Eight covers W3's existing eight-owner RX pool.
+Counters saturate; a temporary refusal is no longer a lost owner.
 Probe, bridge and loss diagnostics are typed notes like the
 version 1 report and do not format text on the target.
 
@@ -69,7 +74,7 @@ the standard observation decoder retains its strict row contract.
 The mode records its own load result and a loss table in `report.json`; the
 ordinary version-1 console block remains unchanged. Flood/recovery identities
 are separate from its 100-pair peer gate. All AP-initiated echoes, including
-warmup and recovery, are conserved across the bridge, stack, TX refusal,
+warmup and recovery, are conserved across the bridge, stack, retention overflow,
 service TX and AP reply boundaries; the flood is also counted independently
 by identifier. A mismatch refuses the accounting instead of assigning losses.
 The AP-to-bridge residual includes service queue-full and any earlier loss;

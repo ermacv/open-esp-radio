@@ -24,6 +24,12 @@ Git source and revision do.
   storage. A UDP or raw send blocked on the device wakes when its interface
   has room, one blocked on an empty pool when the pool has a buffer again;
   the stack never busy-retries a pool.
+- IPv4 EchoReplies refused by the device retain their packet owners in an
+  eight-entry FIFO per interface. Returned TX credit drains older replies
+  before new ingress; overflow drops the newest reply and increments
+  `Statistics::icmpv4_echo_dropped`. Refusal counters count attempts, including
+  retries, rather than lost owners. The retention bound holds with or without
+  allocation support and covers W3's eight-owner RX pool.
 - A UDP send completes when the stack hands the packet to the driver or
   queues it for neighbour resolution: API completion is not delivery on air.
 - TCP enters listen state on the first poll of `accept()`; a server must poll
