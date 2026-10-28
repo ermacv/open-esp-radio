@@ -28,9 +28,9 @@ use oer_esp32s31_ieee80211_mac::{
     },
 };
 use oer_ieee80211_port::{MacTxResult, MacTxStatus};
-use oer_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory};
 use oer_ieee80211_port::{ManagementTxPlan, VifRole};
 use oer_ieee80211_wire::frame::FrameControl;
+use oer_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory};
 
 use crate::tx::{WifiTxProgress, WifiTxWake, capped_power};
 

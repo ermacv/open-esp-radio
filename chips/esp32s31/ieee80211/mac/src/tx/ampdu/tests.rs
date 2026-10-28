@@ -1539,28 +1539,57 @@ fn basic_ht_assembly_rejects_he_bar_ampdu_and_bad_lengths_before_mutation() {
     );
 }
 
+use oer_ieee80211_upper_mac::block_ack::acknowledges;
+
 #[test]
 fn block_ack_bitmap_handles_sequence_wrap() {
     let ack = TxBlockAckBitmap::new(SequenceNumber::new(0x0ffe).unwrap(), 0b1101);
-    assert!(ack.acknowledges(SequenceNumber::new(0x0ffe).unwrap()));
-    assert!(!ack.acknowledges(SequenceNumber::new(0x0fff).unwrap()));
-    assert!(ack.acknowledges(SequenceNumber::new(0).unwrap()));
-    assert!(ack.acknowledges(SequenceNumber::new(1).unwrap()));
-    assert!(!ack.acknowledges(SequenceNumber::new(2).unwrap()));
+    assert!(acknowledges(
+        ack.report(),
+        SequenceNumber::new(0x0ffe).unwrap()
+    ));
+    assert!(!acknowledges(
+        ack.report(),
+        SequenceNumber::new(0x0fff).unwrap()
+    ));
+    assert!(acknowledges(ack.report(), SequenceNumber::new(0).unwrap()));
+    assert!(acknowledges(ack.report(), SequenceNumber::new(1).unwrap()));
+    assert!(!acknowledges(ack.report(), SequenceNumber::new(2).unwrap()));
 }
 
 #[test]
 fn block_ack_bitmap_accepts_only_bounded_sequences_left_of_an_advanced_ssn() {
     let ack = TxBlockAckBitmap::new(SequenceNumber::new(105).unwrap(), 0b1);
-    assert!(ack.acknowledges(SequenceNumber::new(105).unwrap()));
-    assert!(ack.acknowledges(SequenceNumber::new(104).unwrap()));
-    assert!(ack.acknowledges(SequenceNumber::new(100).unwrap()));
-    assert!(!ack.acknowledges(SequenceNumber::new(106).unwrap()));
-    assert!(!ack.acknowledges(SequenceNumber::new(40).unwrap()));
+    assert!(acknowledges(
+        ack.report(),
+        SequenceNumber::new(105).unwrap()
+    ));
+    assert!(acknowledges(
+        ack.report(),
+        SequenceNumber::new(104).unwrap()
+    ));
+    assert!(acknowledges(
+        ack.report(),
+        SequenceNumber::new(100).unwrap()
+    ));
+    assert!(!acknowledges(
+        ack.report(),
+        SequenceNumber::new(106).unwrap()
+    ));
+    assert!(!acknowledges(
+        ack.report(),
+        SequenceNumber::new(40).unwrap()
+    ));
 
     let wrapped = TxBlockAckBitmap::new(SequenceNumber::new(0).unwrap(), 0b1);
-    assert!(wrapped.acknowledges(SequenceNumber::new(0x0fff).unwrap()));
-    assert!(!wrapped.acknowledges(SequenceNumber::new(65).unwrap()));
+    assert!(acknowledges(
+        wrapped.report(),
+        SequenceNumber::new(0x0fff).unwrap()
+    ));
+    assert!(!acknowledges(
+        wrapped.report(),
+        SequenceNumber::new(65).unwrap()
+    ));
 }
 
 mod work;

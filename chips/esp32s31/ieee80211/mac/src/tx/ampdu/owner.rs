@@ -3,9 +3,9 @@
 #[cfg(any(test, feature = "test-support"))]
 extern crate alloc;
 
+use crate::tx_cost::TxContention;
 #[cfg(any(test, feature = "test-support"))]
 use alloc::boxed::Box;
-use crate::tx_cost::TxContention;
 
 use core::{ops::Deref, pin::Pin};
 

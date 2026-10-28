@@ -12,4 +12,3 @@ fn tx_plan_contains_protocol_policy_but_no_hardware_queue_encoding() {
     assert_eq!(plan.initial_rate, 7);
     assert_eq!(plan.publication_limit, 4);
 }
-

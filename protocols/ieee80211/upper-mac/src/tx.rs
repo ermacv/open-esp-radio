@@ -975,7 +975,7 @@ impl TxAttemptPlan {
 pub fn acknowledged_subframes(request: &AmpduRequest, report: BlockAckReport) -> u64 {
     let mut acknowledged = 0_u64;
     for index in 0..request.subframes {
-        if report.acknowledges(request.sequence(index)) {
+        if crate::block_ack::acknowledges(report, request.sequence(index)) {
             acknowledged |= 1 << index;
         }
     }

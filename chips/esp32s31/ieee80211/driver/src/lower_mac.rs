@@ -132,9 +132,11 @@ use oer_radio_port::{PoolPath, Root};
 use oer_time::Clock;
 
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
+use oer_esp32s31_ieee80211_mac::tsf_relation::TsfTimingError;
 use oer_ieee80211_port::TsfGeneration;
 use oer_ieee80211_wire::tsf::TsfInstant;
 
+use crate::ordinary_tx::MacTxPlan;
 use crate::station_tsf::{StationTsf, StationTsfHardware};
 use oer_esp32s31_ieee80211_mac::{
     MacInterface,
@@ -162,12 +164,11 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::he_txop_limit,
     },
 };
-use crate::ordinary_tx::MacTxPlan;
 use oer_ieee80211_port::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
     LowerMacCapabilities, PhyFormatSet, PhyRate, Protection, RateSupport, ReceiveFilter,
-    RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TsfTimingError, TxOperation,
-    TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
+    RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TxOperation, TxStatus, VifRole,
+    VifRoleSet, VifTsf, WidthSet,
 };
 use oer_ieee80211_wire::{
     ccmp::CCMP_HEADER_LEN,

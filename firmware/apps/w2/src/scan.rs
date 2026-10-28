@@ -452,9 +452,9 @@ fn begin_probe(
         return Err(oer_diagnostics::name!("probe-no-ir"; 32));
     }
     let management = if destination == BROADCAST_ADDRESS {
-        ManagementTxPlan::broadcast(rate)
+        oer_ieee80211_upper_mac::management::broadcast(rate)
     } else {
-        ManagementTxPlan::unicast(rate)
+        oer_ieee80211_upper_mac::management::unicast(rate)
     };
     let OrdinaryTxAccess::Idle(mut idle) = tx.access() else {
         return Err(oer_diagnostics::name!("tx-not-idle"; 32));

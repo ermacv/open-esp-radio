@@ -36,6 +36,7 @@ pub mod rx;
 mod sniffer;
 pub mod sta_ap_registers;
 mod sta_link_policy;
+pub mod tsf_relation;
 pub mod tx;
 /// Predicted cost of one transmission: PPDU timing, response and protection.
 pub mod tx_cost;

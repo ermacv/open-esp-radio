@@ -248,11 +248,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                             generation: oer_radio_port::GenerationSource::new(1).current(),
                         },
                         uncertainty: oer_ieee80211_port::Ieee80211Duration::from_micros(0),
-                        generation: oer_ieee80211_port::TsfRelation::new(
-                            1,
-                            oer_ieee80211_wire::tsf::TsfDuration::from_micros(0),
-                        )
-                        .generation(),
+                        generation: oer_radio_port::GenerationSource::new(1).current(),
                     },
                 },
                 BackendContractViolation::UnexpectedTsfSample,

@@ -1989,6 +1989,7 @@ dependencies = [
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
  "oer-ieee80211-port",
+ "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-port",

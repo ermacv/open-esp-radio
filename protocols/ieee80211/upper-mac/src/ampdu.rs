@@ -45,7 +45,7 @@ pub const fn all_subframes(count: u8) -> u64 {
 pub fn unacknowledged(sequences: &[SequenceNumber], report: Option<BlockAckReport>) -> u64 {
     let mut missing = 0_u64;
     for (index, sequence) in sequences.iter().take(64).enumerate() {
-        if !report.is_some_and(|report| report.acknowledges(*sequence)) {
+        if !report.is_some_and(|report| crate::block_ack::acknowledges(report, *sequence)) {
             missing |= 1_u64 << index;
         }
     }
@@ -369,7 +369,7 @@ impl AmpduRetryState {
         while index < self.current_subframes {
             let original_index = self.original_index(index);
             let sequence = self.first_sequence.wrapping_add(u16::from(original_index));
-            if report.is_some_and(|report| report.acknowledges(sequence)) {
+            if report.is_some_and(|report| crate::block_ack::acknowledges(report, sequence)) {
                 self.acknowledged = self.acknowledged.saturating_add(1);
             } else {
                 retry_mask |= 1_u64 << index;

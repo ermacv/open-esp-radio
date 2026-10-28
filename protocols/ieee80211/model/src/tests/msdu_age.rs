@@ -192,8 +192,14 @@ impl Work for Exercise {
             let delivered = subframes.next().unwrap();
             let missing = subframes.next().unwrap();
             let report = report.expect("the actual BlockAck reports the preceding delivery");
-            assert!(report.acknowledges(delivered.buffer.sequence()));
-            assert!(!report.acknowledges(missing.buffer.sequence()));
+            assert!(oer_ieee80211_upper_mac::block_ack::acknowledges(
+                report,
+                delivered.buffer.sequence()
+            ));
+            assert!(!oer_ieee80211_upper_mac::block_ack::acknowledges(
+                report,
+                missing.buffer.sequence()
+            ));
             assert_eq!(
                 originator.on_delivered(0, report.start_sequence, report.bitmap, PEER, STATION),
                 None

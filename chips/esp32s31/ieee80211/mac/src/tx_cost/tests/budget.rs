@@ -65,7 +65,10 @@ fn exchange_reserves_reply_and_protection_before_assigning_payload() {
                 cts: basic(),
             },
         ),
-        (TxResponse::Timeout { micros: 100 }, TxProtectionTiming::None),
+        (
+            TxResponse::Timeout { micros: 100 },
+            TxProtectionTiming::None,
+        ),
     ] {
         let bytes = TxCost::maximum_psdu_bytes(1000, Some(phy), 10, reply, protection)
             .unwrap()

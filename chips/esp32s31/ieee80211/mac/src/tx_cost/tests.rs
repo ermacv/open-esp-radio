@@ -72,7 +72,14 @@ fn ack_block_ack_protection_and_selected_contention_are_separate() {
 
 #[test]
 fn unknown_is_not_zero_and_overflow_cannot_reduce_cost() {
-    let unknown = TxCost::estimate(100, None, 10, TxResponse::Unknown, TxProtectionTiming::None, None);
+    let unknown = TxCost::estimate(
+        100,
+        None,
+        10,
+        TxResponse::Unknown,
+        TxProtectionTiming::None,
+        None,
+    );
     assert_eq!(unknown.ppdu_micros, None);
     assert_eq!(unknown.exchange_micros(), None);
     let overflow = TxCost {

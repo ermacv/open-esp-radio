@@ -1,7 +1,7 @@
 //! Mapping the published S31 PHY format to portable timing facts.
 use super::{HtChannelWidth, HtGuardInterval, HtRate, LegacyRate, TxPhyRate};
-use core::num::{NonZeroU16, NonZeroU32};
 use crate::tx_cost::{PpduTiming, TxCost, TxProtectionTiming, TxResponse};
+use core::num::{NonZeroU16, NonZeroU32};
 
 impl HtRate {
     /// Byte ceiling for one unprotected HT aggregate plus compressed BlockAck.

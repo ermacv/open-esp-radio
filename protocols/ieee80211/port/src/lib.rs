@@ -127,8 +127,8 @@ pub use capabilities::{
 pub use control::{ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{
     AmpduCapabilities, BeaconTimingCapabilities, MonitorCapabilities, TSF_DRIFT_PPM, TSF_RELATION,
-    TbttEvent, TsfArithmeticError, TsfGeneration, TsfProjectionError, TsfRelation, TsfSample,
-    TsfSetKind, TsfTimingError, TsfVifMismatch, VifTsf,
+    TbttEvent, TsfArithmeticError, TsfGeneration, TsfProjectionError, TsfSample, TsfVifMismatch,
+    VifTsf,
 };
 pub use oer_radio_port::{
     ClockInfo, ClockRelation, EventsLost, Generation, GenerationSource, Poisoned, PortResult,
