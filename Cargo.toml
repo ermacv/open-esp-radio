@@ -18,6 +18,7 @@ members = [
     "tools/hil/cli",
     "tools/lab/cli",
     "tools/hil/model",
+    "protocols/hil/agent",
     "protocols/hil/protocol",
     "tools/lab/board",
     "tools/hil/family-system",
@@ -38,7 +39,6 @@ members = [
     "tools/lab/fixture",
     "tools/lab/fixture-install",
     "tools/hil/fixtures-bluetooth",
-    "portable/hil-agent",
     "firmware/hil/esp32s31",
     "tools/hil/analysis",
     "tools/image/build",
@@ -174,6 +174,7 @@ default-members = [
     "tools/hil/cli",
     "tools/lab/cli",
     "tools/hil/model",
+    "protocols/hil/agent",
     "protocols/hil/protocol",
     "tools/lab/board",
     "tools/hil/family-system",
@@ -325,7 +326,7 @@ embassy-sync = "0.8.0"
 embassy-time = "0.5.1"
 oer-espressif-executor = { path = "chips/espressif/executor" }
 oer-hil-protocol = { path = "protocols/hil/protocol", default-features = false }
-oer-hil-agent = { path = "portable/hil-agent", default-features = false }
+oer-hil-agent = { path = "protocols/hil/agent", default-features = false }
 oer-espressif-staged-runtime = { path = "chips/espressif/staged-runtime" }
 critical-section = "1.2.0"
 

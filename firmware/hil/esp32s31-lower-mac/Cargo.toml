@@ -16,7 +16,7 @@ diagnostic-lower-mac = []
 sha2 = { version = "0.10", default-features = false }
 embassy-sync = "0.8.0"
 oer-trace = { path = "../../../portable/trace" }
-oer-hil-agent = { path = "../../../portable/hil-agent" }
+oer-hil-agent = { path = "../../../protocols/hil/agent" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["lower-mac", "async-io"] }
 oer-radio-port = { path = "../../../protocols/radio/port" }
 oer-espressif-coex = { path = "../../../chips/espressif/coex" }

@@ -15,10 +15,10 @@ health = ["oer-hil-protocol/health"]
 crc = "3.3.0"
 embassy-sync = "0.8.0"
 heapless = "0.9.3"
-oer-diagnostics = { path = "../diagnostics" }
-oer-memory = { path = "../memory" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
+oer-memory = { path = "../../../portable/memory" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
-oer-hil-protocol = { path = "../../protocols/hil/protocol", default-features = false, features = ["async-io"] }
+oer-hil-protocol = { path = "../protocol", default-features = false, features = ["async-io"] }
 embedded-io-async = "0.7.0"
 embassy-futures = "0.1.2"
 

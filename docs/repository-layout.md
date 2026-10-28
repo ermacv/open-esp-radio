@@ -27,13 +27,13 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   bluetooth/    HCI and LE wire formats, link layer, controller, port, runtime and model
   ieee802154/   IEEE 802.15.4 wire codecs, backend port, MAC core and host model
   network/      the network stack boundary
-  hil/          the HIL protocol, with the conformance trace header
+  hil/          the HIL protocol, with the conformance trace header, and the
+                agent core the HIL images run
 portable/   generic support no protocol or chip owns (no_std)
   time/ time-virtual/ memory/ sync/ trace/ wire/
   riscv/        architectural RISC-V constants and instructions
   embassy/      bindings to Embassy (time; net, with the radio TX datapath
                 contracts)
-  hil-agent/    the agent core the HIL images run
 chips/      everything about Espressif hardware
   espressif/    IP shared by Espressif chips: analog, modem
                 clock, coexistence, the 802.15.4 engine, Wi-Fi policy, the
@@ -190,8 +190,6 @@ The tree does not yet follow these rules in these places:
   `chips/esp32s31/hal` (optional, feature `esp32s31`; removed by the staged
   runtime over the platform port and the executor over a chip binding, #848,
   B1).
-- `portable/hil-agent` -> `protocols/hil/protocol` (removed by the move of
-  hil-agent to `protocols/hil/agent`, #848, B6).
 
 The layer test lists each of these edges; an edge that is gone must leave the
 list, and the list gains no entry.
