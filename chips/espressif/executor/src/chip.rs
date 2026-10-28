@@ -1,36 +1,26 @@
-//! Chip access for the executor: owned HAL blocks, source identities from
-//! the HAL's executor contract and architectural CSR instructions.
+//! Chip access for the executor: the blocks, source identities and reads of
+//! the HAL's platform port ([`ExecutorPlatform`]), the port's hart geometry
+//! and architectural CSR instructions.
 
-use crate::hardware::ExecutorPlatform;
 use crate::{Failure, Fault};
-use oer_esp32s31_hal::executor::Platform as Chip;
+use oer_esp32s31_hal::platform::Port as Chip;
+// The line blocks the executor and doorbell constructors take by name.
 pub(crate) use oer_esp32s31_hal::platform;
+use oer_espressif_platform_port::{ExecutorPlatform, Hart, SystemCounter};
 use oer_memory::{OnceValue, StaticRef};
 
 use crate::software_line::{SoftwareLine, serve};
-use platform::system_timer::counter;
 
-/// The HAL's executor contract: its source identities and its pending and
-/// debugger reads.
-impl ExecutorPlatform for Chip {
-    type Hart = platform::Hart;
-    const SOFTWARE_SOURCES: [u16; 4] = Chip::SOFTWARE_SOURCES;
-    const ALARM_SOURCES: [u16; 3] = Chip::ALARM_SOURCES;
-
-    fn debugger_connected(hart: Self::Hart) -> bool {
-        Chip::debugger_connected(hart)
-    }
-
-    fn is_pending(hart: Self::Hart, source: u16) -> bool {
-        Chip::is_pending(hart, source)
-    }
-}
+/// The port's counter owner.
+pub(crate) type Counter = <Chip as ExecutorPlatform>::Counter;
+/// The port's comparator owner.
+pub(crate) type Comparators = <Chip as ExecutorPlatform>::Comparators;
 
 /// The software interrupts an executor can own.
 pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = crate::task::EXECUTORS as usize;
 
-/// The system timer's ticks per microsecond, the HAL's.
-pub(crate) const TICKS_PER_MICROSECOND: u64 = platform::system_timer::TICKS_PER_MICROSECOND;
+/// The system timer's ticks per microsecond, the port's.
+pub(crate) const TICKS_PER_MICROSECOND: u64 = Chip::TICKS_PER_MICROSECOND;
 
 /// The core running the caller.
 #[inline(always)]
@@ -40,8 +30,8 @@ pub(crate) fn current_core() -> usize {
 
 /// Validate the architectural ID before selecting any per-hart state.
 #[inline(always)]
-pub(crate) fn current_hart() -> platform::Hart {
-    match platform::Hart::new(oer_riscv::hart_id() as u32) {
+pub(crate) fn current_hart() -> Hart {
+    match Hart::new(oer_riscv::hart_id() as u32) {
         Ok(hart) => hart,
         Err(_fault) => {
             // The existing fatal path retains InvalidHart's full raw ID;
@@ -72,22 +62,21 @@ pub(crate) fn interrupt_level() -> u8 {
 
 /// The shared counter latch every context reads, published once by the time
 /// driver's handoff.
-static COUNTER: StaticRef<platform::SystimerCounter> = StaticRef::new();
-static COUNTER_STORAGE: static_cell::StaticCell<platform::SystimerCounter> =
-    static_cell::StaticCell::new();
+static COUNTER: StaticRef<Counter> = StaticRef::new();
+static COUNTER_STORAGE: static_cell::StaticCell<Counter> = static_cell::StaticCell::new();
 
 /// Publish the counter latch, from the system timer's handoff, once its
-/// latch has settled within its bound ([`counter::check`]).
+/// latch has settled within its bound ([`SystemCounter::check`]).
 ///
 /// # Errors
 /// A latch that does not settle returns the complete timer to its caller.
 pub(crate) fn install_counter(
     systimer: crate::systimer::SystemTimer,
-) -> Result<platform::SystimerComparators, Failure<crate::systimer::SystemTimer>> {
+) -> Result<Comparators, Failure<crate::systimer::SystemTimer>> {
     if COUNTER.get().is_some() {
         Fault::CounterPublished.reset();
     }
-    if counter::check(&systimer.counter).is_err() {
+    if systimer.counter.check().is_err() {
         return Err(Failure::new(Fault::CounterLatchStuck, systimer));
     }
     let storage = match COUNTER_STORAGE.try_uninit() {
@@ -107,7 +96,7 @@ pub(crate) fn install_counter(
 #[inline(never)]
 pub(crate) fn now() -> u64 {
     COUNTER.get().map_or(0, |counter| {
-        counter::read(counter).unwrap_or_else(|unverified| unverified.floor) / TICKS_PER_MICROSECOND
+        counter.read().unwrap_or_else(|unverified| unverified.floor) / TICKS_PER_MICROSECOND
     })
 }
 
@@ -134,10 +123,10 @@ pub(crate) fn wait_for_interrupt() {
 /// One software interrupt line: its typed block, lent to every context.
 #[derive(Clone, Copy)]
 pub(crate) enum Line {
-    Zero(&'static platform::FromCpu0),
-    One(&'static platform::FromCpu1),
-    Two(&'static platform::FromCpu2),
-    Three(&'static platform::FromCpu3),
+    Zero(&'static <Chip as ExecutorPlatform>::Line0),
+    One(&'static <Chip as ExecutorPlatform>::Line1),
+    Two(&'static <Chip as ExecutorPlatform>::Line2),
+    Three(&'static <Chip as ExecutorPlatform>::Line3),
 }
 
 impl SoftwareLine for Line {
@@ -163,10 +152,11 @@ impl SoftwareLine for Line {
 
 macro_rules! own_line {
     ($number:literal, $variant:ident, $block:ident, $take:ident, $storage:ident) => {
-        static $storage: static_cell::StaticCell<platform::$block> = static_cell::StaticCell::new();
+        static $storage: static_cell::StaticCell<<Chip as ExecutorPlatform>::$block> =
+            static_cell::StaticCell::new();
 
         /// Publish a line moved from the single reset root, once.
-        pub(crate) fn $take(block: platform::$block) -> Line {
+        pub(crate) fn $take(block: <Chip as ExecutorPlatform>::$block) -> Line {
             let storage = match $storage.try_uninit() {
                 Some(storage) => storage,
                 None => Fault::LinePublished { executor: $number }.reset(),
@@ -176,10 +166,10 @@ macro_rules! own_line {
     };
 }
 
-own_line!(0, Zero, FromCpu0, own_line_0, LINE0);
-own_line!(1, One, FromCpu1, own_line_1, LINE1);
-own_line!(2, Two, FromCpu2, own_line_2, LINE2);
-own_line!(3, Three, FromCpu3, own_line_3, LINE3);
+own_line!(0, Zero, Line0, own_line_0, LINE0);
+own_line!(1, One, Line1, own_line_1, LINE1);
+own_line!(2, Two, Line2, own_line_2, LINE2);
+own_line!(3, Three, Line3, own_line_3, LINE3);
 
 // Each executor's line, published once for wakers; only the line's handler
 // lowers it. Boot lowers the line before it is published.

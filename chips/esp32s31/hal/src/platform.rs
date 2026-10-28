@@ -23,17 +23,19 @@ use oer_time::settle::{Settle, SettleLimit, settle};
 
 pub use core_control::{CoreControlRegisters, Uart0ClockRegisters};
 pub use interrupt_controller::{Hart1Interrupts, InterruptBlocks, InterruptController};
+pub use port::Port;
 pub use software_interrupt::{
     FromCpu0, FromCpu0Irq, FromCpu1, FromCpu1Irq, FromCpu2, FromCpu2Irq, FromCpu3, FromCpu3Irq,
     SoftwareInterrupts,
 };
 pub use system_timer::{
-    Comparator, SystemTimer, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2, SystimerComparators,
+    SystemTimer, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2, SystimerComparators,
     SystimerCounter,
 };
 
 pub mod core_control;
 pub mod interrupt_controller;
+pub(crate) mod port;
 pub mod software_interrupt;
 pub mod system_timer;
 #[cfg(test)]

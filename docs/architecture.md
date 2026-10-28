@@ -42,7 +42,7 @@ application          credentials, network stack (embassy-net), sockets
                      routing, clocks, power, resets, DMA engines
   PAC                the exact hardware model, generated: blocks, field
                      accessors, value domains, DMA pointers, ownership parts
-platform             Espressif staged boot, interrupt table, panic record, linker layout
+platform             Espressif platform port, staged boot, interrupt table, panic record, linker layout
 ```
 
 Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
@@ -90,6 +90,11 @@ through `oer-espressif-interrupt-table`, which owns platform interrupt
 bindings below the unsafe boundary. Staged-layout owns an unsafe memory/ABI
 contract;
 staged-bootstrap, staged-runtime and executor depend on the platform.
+`oer-espressif-platform-port` holds the family's platform contracts (the
+early console writer and the executor's sources, reads and owned blocks)
+and the hart geometry of the chip its HAL selects; the chip's HAL implements
+the contracts on its own types, and the staged bootstrap reaches the chip
+only through them.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-time::deadline` contains only the deadline policy,
@@ -345,8 +350,9 @@ release a secondary hart.
   Its own traps, vectors, checked exits and the image's `critical-section`
   run on the typed interrupt controller. Each table entry moves its part
   through `Router::bind`; the executor receives owned software lines and
-  timer blocks. Source identities come from the HAL's `ExecutorPlatform`
-  contract, and architectural CSR access and waits from `oer-riscv`.
+  timer blocks. Source identities come from the platform port's
+  `ExecutorPlatform` contract, which the HAL's `Port` implements, and
+  architectural CSR access and waits from `oer-riscv`.
   `embassy-sync`, `embassy-futures`, `embassy-net` and `embassy-time` stay;
   tasks run on the static executor (`chips/espressif/executor`), in static
   slots, polled by direct calls, with one waker vtable whose data names the
@@ -355,7 +361,8 @@ release a secondary hart.
   `chips/esp32s31/platform/chip.toml` is the sole HP-hart cardinality;
   `boot-hart` is required and names primary initialization. Facts derive the
   host core count, vector geometry and the PAC's checked `Hart`,
-  `SecondaryHart` and `HARTS`. Per-hart register and instance families take
+  `SecondaryHart` and `HARTS`; the platform port renders the same identities
+  for the family, and the HAL's port type-checks only while both counts agree. Per-hart register and instance families take
   their counts from that list. Secondary boot-word labels also derive from
   its explicit boot role. Typed indices connect their geometry to HAL reads
   and writes. Fixed indices

@@ -9,10 +9,9 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_hal::executor::Platform;
 use oer_esp32s31_hal::ieee80211::dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
 use oer_esp32s31_hal::owner::{MacInterruptRegisters, MacPowerInterruptRegisters, RadioAccess};
-use oer_esp32s31_hal::platform::FromCpu2Irq;
+use oer_esp32s31_hal::platform::{FromCpu2Irq, interrupt_controller};
 use oer_esp32s31_ieee80211_driver::{
     irq::{
         DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, WifiIrqRequests,
@@ -109,8 +108,8 @@ pub fn on_wifi(part: &mut WifiPart) {
     let hart = oer_esp32s31_hal::platform::Hart::constant::<
         { <crate::WifiToken as oer_espressif_interrupt_table::Entry>::HART as usize },
     >();
-    let mac = Platform::is_pending(hart, MacInterruptRegisters::SOURCE);
-    let power = Platform::is_pending(hart, MacPowerInterruptRegisters::SOURCE);
+    let mac = interrupt_controller::is_pending(hart, MacInterruptRegisters::SOURCE);
+    let power = interrupt_controller::is_pending(hart, MacPowerInterruptRegisters::SOURCE);
     if mac {
         let _latched =
             MAC_LATCH.compare_exchange(0, measure::stamp(), Ordering::AcqRel, Ordering::Relaxed);

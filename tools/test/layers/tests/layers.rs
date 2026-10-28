@@ -325,6 +325,17 @@ fn root_policy_is_an_unconditional_inner_attribute() {
 }
 
 fn normal_dependencies(manifest: &toml::Value, workspace: &toml::Value) -> BTreeSet<String> {
+    scoped_dependencies(manifest, workspace, "dependencies")
+}
+
+/// The packages of a manifest's `table` (`dependencies` or
+/// `build-dependencies`), including optional, target-specific, aliased and
+/// inherited entries.
+fn scoped_dependencies(
+    manifest: &toml::Value,
+    workspace: &toml::Value,
+    table: &str,
+) -> BTreeSet<String> {
     let targets = manifest
         .get("target")
         .and_then(toml::Value::as_table)
@@ -332,7 +343,7 @@ fn normal_dependencies(manifest: &toml::Value, workspace: &toml::Value) -> BTree
         .flat_map(|targets| targets.values());
     core::iter::once(manifest)
         .chain(targets)
-        .filter_map(|scope| scope.get("dependencies").and_then(toml::Value::as_table))
+        .filter_map(|scope| scope.get(table).and_then(toml::Value::as_table))
         .flat_map(|dependencies| dependencies.iter())
         .map(|(alias, spec)| {
             let spec = if spec.get("workspace").and_then(toml::Value::as_bool) == Some(true) {
@@ -1621,6 +1632,7 @@ struct Member {
     name: String,
     executable: bool,
     dependencies: BTreeSet<String>,
+    build_dependencies: BTreeSet<String>,
 }
 
 /// Whether the package has a binary target: `src/main.rs`, `src/bin/*` or a
@@ -1659,6 +1671,7 @@ fn workspace_members() -> Vec<Member> {
                 .unwrap_or_default()
                 .to_owned(),
             dependencies: normal_dependencies(&manifest, &workspace),
+            build_dependencies: scoped_dependencies(&manifest, &workspace, "build-dependencies"),
             path,
         })
         .collect()
@@ -1698,6 +1711,7 @@ fn member(path: &str, name: &str, executable: bool, dependencies: &[&str]) -> Me
         name: name.to_owned(),
         executable,
         dependencies: dependencies.iter().map(|name| (*name).to_owned()).collect(),
+        build_dependencies: BTreeSet::new(),
     }
 }
 
@@ -1798,6 +1812,19 @@ fn deviation_differences(found: &BTreeSet<Edge>, known: &[Deviation]) -> Vec<Str
     new.chain(stale).collect()
 }
 
+/// The members with their build dependencies counted as edges too: a build
+/// script that names a package carries its knowledge as well.
+fn with_build_edges(members: Vec<Member>) -> Vec<Member> {
+    members
+        .into_iter()
+        .map(|mut member| {
+            let build = std::mem::take(&mut member.build_dependencies);
+            member.dependencies.extend(build);
+            member
+        })
+        .collect()
+}
+
 fn image_or_program(_: &Member, to: &Member) -> bool {
     to.path.starts_with("firmware/") || (to.path.starts_with("tools/") && to.executable)
 }
@@ -1822,22 +1849,18 @@ const NO_EDGE_ON_AN_IMAGE_OR_PROGRAM: &[Deviation] = &[(
     "the IEEE 802.11 facade (#844)",
 )];
 
-/// `chips/espressif` depends on no chip: it is the family below them.
+/// `chips/espressif` depends on no chip, through a normal or a build
+/// dependency: it is the family below them.
 const FAMILY_BELOW_THE_CHIPS: &[Deviation] = &[
     (
         "chips/espressif/executor",
         "chips/esp32s31/hal",
-        "the family platform contracts (#848, B1)",
-    ),
-    (
-        "chips/espressif/staged-bootstrap",
-        "chips/esp32s31/hal",
-        "the family platform contracts (#848, B1)",
+        "the executor over a chip binding (#848, B1)",
     ),
     (
         "chips/espressif/staged-runtime",
         "chips/esp32s31/hal",
-        "the family platform contracts (#848, B1)",
+        "the staged runtime over the platform port (#848, B1)",
     ),
 ];
 
@@ -1858,7 +1881,10 @@ fn no_normal_edge_reaches_an_image_or_a_program() {
 
 #[test]
 fn the_espressif_family_depends_on_no_chip() {
-    let found = forbidden_edges(&workspace_members(), family_reaches_a_chip);
+    let found = forbidden_edges(
+        &with_build_edges(workspace_members()),
+        family_reaches_a_chip,
+    );
     let differences = deviation_differences(&found, FAMILY_BELOW_THE_CHIPS);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
 }
@@ -1940,6 +1966,53 @@ tool = { package = "oer-tool-pins", version = "1" }
             edge("portable/time", "chips/esp32s31/hal"),
             edge("portable/embassy/net", "chips/esp32s31/hal"),
         ])
+    );
+}
+
+#[test]
+fn the_family_rule_sees_build_dependencies_and_ignores_dev_dependencies() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+port = { package = "oer-espressif-platform-port", version = "1" }
+[build-dependencies]
+facts = { package = "oer-espressif-facts", version = "1" }
+[target.'cfg(unix)'.build-dependencies]
+layout = { package = "oer-esp32s31-layout", version = "1", optional = true }
+[dev-dependencies]
+hal = { package = "oer-esp32s31-hal", version = "1" }
+"#,
+    )
+    .expect("manifest");
+    let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
+    let members = vec![
+        Member {
+            dependencies: normal_dependencies(&manifest, &workspace),
+            build_dependencies: scoped_dependencies(&manifest, &workspace, "build-dependencies"),
+            ..member(
+                "chips/espressif/staged-runtime",
+                "oer-espressif-staged-runtime",
+                false,
+                &[],
+            )
+        },
+        member(
+            "chips/espressif/platform-port",
+            "oer-espressif-platform-port",
+            false,
+            &[],
+        ),
+        member("chips/espressif/facts", "oer-espressif-facts", false, &[]),
+        member("chips/esp32s31/layout", "oer-esp32s31-layout", false, &[]),
+        member("chips/esp32s31/hal", "oer-esp32s31-hal", false, &[]),
+    ];
+    assert!(forbidden_edges(&members, family_reaches_a_chip).is_empty());
+    assert_eq!(
+        forbidden_edges(&with_build_edges(members), family_reaches_a_chip),
+        BTreeSet::from([(
+            "chips/espressif/staged-runtime".to_owned(),
+            "chips/esp32s31/layout".to_owned()
+        )])
     );
 }
 

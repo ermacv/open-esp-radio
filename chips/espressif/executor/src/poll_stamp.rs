@@ -4,10 +4,7 @@
 #[cfg(test)]
 pub(crate) mod tests;
 
-#[cfg(feature = "chip")]
-use crate::chip::platform::HARTS;
-#[cfg(not(feature = "chip"))]
-use oer_esp32s31_hal::platform::HARTS;
+use oer_espressif_platform_port::HARTS;
 
 // The low bits identify every fact-defined hart and one unassigned sentinel.
 // The existing core-assignment word also carries a wrapping poll timestamp.

@@ -1,22 +1,23 @@
 //! The executor's system timer: the comparator owner, which the time
-//! driver's writer executor holds, over the HAL's typed SYSTIMER parts, and
-//! the shared counter latch published for [`crate::chip`]'s clock. Each
+//! driver's writer executor holds, over the platform port's comparators,
+//! and the shared counter latch published for [`crate::chip`]'s clock. Each
 //! comparator's alarm part stays with its interrupt table entry's handler.
 
-use crate::chip::platform;
+use crate::chip::{Comparators as Owner, Counter};
+use oer_espressif_platform_port::Comparators as _;
 
-pub use platform::{Comparator, system_timer::AlarmPart};
+pub use oer_espressif_platform_port::{AlarmPart, Comparator};
 
 /// The running timer's comparator and counter owners, moved from the reset
 /// root; the alarm parts go to their table entries.
 pub struct SystemTimer {
-    pub comparators: platform::SystimerComparators,
-    pub counter: platform::SystimerCounter,
+    pub comparators: Owner,
+    pub counter: Counter,
 }
 
 /// The sole writer of comparator configuration, held by the writer executor.
 pub struct ComparatorWriter {
-    timer: platform::SystimerComparators,
+    timer: Owner,
 }
 
 impl ComparatorWriter {

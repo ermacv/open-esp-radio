@@ -34,6 +34,8 @@ oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-v
 oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
 oer-espressif-usb-serial-jtag = { path = "../../espressif/usb-serial-jtag" }
+# The HAL implements the family platform contracts and selects its chip.
+oer-espressif-platform-port = { path = "../../espressif/platform-port", features = ["esp32s31"] }
 
 [build-dependencies]
 oer-espressif-facts = { path = "../../espressif/facts" }

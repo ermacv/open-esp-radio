@@ -1960,6 +1960,7 @@ dependencies = [
  "oer-espressif-ieee802154-mac-values",
  "oer-espressif-interrupt-table",
  "oer-espressif-modem-clock",
+ "oer-espressif-platform-port",
  "oer-espressif-usb-serial-jtag",
  "oer-espressif-watchdog",
  "oer-memory",
@@ -2156,6 +2157,7 @@ dependencies = [
  "oer-cooperate",
  "oer-esp32s31-hal",
  "oer-espressif-interrupt-table",
+ "oer-espressif-platform-port",
  "oer-espressif-staged-runtime",
  "oer-memory",
  "oer-mmio",
@@ -2244,8 +2246,8 @@ name = "oer-espressif-staged-bootstrap"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-esp32s31-hal",
  "oer-espressif-boot",
+ "oer-espressif-platform-port",
  "oer-espressif-staged-layout",
  "oer-memory",
  "oer-riscv",
