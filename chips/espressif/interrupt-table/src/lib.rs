@@ -653,6 +653,7 @@ pub mod __private {
     use crate::{Binding, Class, Lines};
 
     pub use oer_memory::{HandlerCell, link_fn};
+    pub use oer_riscv::clic;
     pub use static_cell::StaticCell;
 
     /// A type-specific handler/cell mapping. No conversion between entries.
@@ -1027,7 +1028,7 @@ macro_rules! __fake_controller {
             },
             Line {
                 line: u8,
-                state: ::oer_riscv::clic::LineState,
+                state: $crate::__private::clic::LineState,
             },
         }
 
@@ -1035,7 +1036,7 @@ macro_rules! __fake_controller {
         pub struct FakeController {
             pub hart: u8,
             pub routes: [Option<u8>; 8],
-            pub lines: [::oer_riscv::clic::LineState; 48],
+            pub lines: [$crate::__private::clic::LineState; 48],
             pub writes: ::std::vec::Vec<Write>,
         }
 
@@ -1046,8 +1047,8 @@ macro_rules! __fake_controller {
                 Self {
                     hart,
                     routes: [Some(20); 8],
-                    lines: [::oer_riscv::clic::LineState::vectored(
-                        ::oer_riscv::clic::Control::level::<1, 3>(),
+                    lines: [$crate::__private::clic::LineState::vectored(
+                        $crate::__private::clic::Control::level::<1, 3>(),
                     ); 48],
                     writes: ::std::vec::Vec::new(),
                 }
@@ -1057,8 +1058,8 @@ macro_rules! __fake_controller {
         impl $crate::Controller for FakeController {
             const SOURCES: u16 = 8;
             const LINES: u8 = 48;
-            const LEVEL_BITS: ::oer_riscv::clic::LevelBits =
-                ::oer_riscv::clic::LevelBits::constant::<3>();
+            const LEVEL_BITS: $crate::__private::clic::LevelBits =
+                $crate::__private::clic::LevelBits::constant::<3>();
             fn hart(&self) -> u8 {
                 self.hart
             }
@@ -1090,7 +1091,7 @@ macro_rules! __fake_controller {
             fn set_line(
                 &mut self,
                 line: u8,
-                state: ::oer_riscv::clic::LineState,
+                state: $crate::__private::clic::LineState,
             ) -> Result<(), $crate::Error> {
                 *self
                     .lines
@@ -1099,7 +1100,7 @@ macro_rules! __fake_controller {
                 self.writes.push(Write::Line { line, state });
                 Ok(())
             }
-            fn line(&self, line: u8) -> ::oer_riscv::clic::LineState {
+            fn line(&self, line: u8) -> $crate::__private::clic::LineState {
                 self.lines[usize::from(line)]
             }
         }

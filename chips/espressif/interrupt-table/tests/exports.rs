@@ -6,7 +6,7 @@ use std::{fs, path::Path, process::Command};
 // Both the policy and the ABI are checked through an external expansion:
 // callers can forbid unsafe, but a direct constructor still needs a lint waiver.
 #[test]
-fn safe_table_exports_keep_their_abi_and_only_the_macro_may_construct_tokens() {
+fn safe_table_exports_resolve_transitive_paths_and_restrict_token_construction() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let scratch_root = Path::new(env!("CARGO_TARGET_TMPDIR"));
     fs::create_dir_all(scratch_root).unwrap();
@@ -15,6 +15,8 @@ fn safe_table_exports_keep_their_abi_and_only_the_macro_may_construct_tokens() {
         .join("../../../portable/memory")
         .canonicalize()
         .unwrap();
+    // Macro expansions must resolve oer-riscv through interrupt-table, without
+    // requiring the consumer to declare that transitive dependency.
     fs::write(
         scratch.path().join("Cargo.toml"),
         format!(
@@ -79,6 +81,7 @@ dependencies = ["oer-espressif-interrupt-table", "oer-memory"]
     let source = r#"#![forbid(unsafe_code)]
 #![deny(clippy::disallowed_methods)]
 oer_espressif_interrupt_table::__fake_parts!();
+oer_espressif_interrupt_table::__fake_controller!();
 pub fn on_timer(_: &mut TimerIrq) {}
 pub fn on_radio(_: &mut RadioIrq) {}
 oer_espressif_interrupt_table::interrupt_table! {
