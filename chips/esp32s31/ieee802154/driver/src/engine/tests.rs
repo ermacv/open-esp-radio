@@ -201,3 +201,51 @@ fn successful_service_returns_the_same_placed_owner_for_the_next_entry() {
     };
     assert_eq!(quarantine._owners.model_transmit_address().get(), tx);
 }
+
+#[test]
+fn a_fault_after_dispatch_retains_the_same_dma_owner_and_actual_progress() {
+    use oer_espressif_ieee802154_engine::engine::{Ieee802154State, fault::ServiceError};
+    let (mut engine, _, tx) = model();
+    engine.enable();
+    engine.mac_init();
+    engine.update_pib(&mut Environment, |pib| pib.set_promiscuous(false));
+    engine
+        .transmit(
+            &mut Environment,
+            &[
+                12, 0x61, 0x98, 1, 0x34, 0x12, 0x78, 0x56, 0x78, 0x56, 0xaa, 0, 0,
+            ],
+            false,
+        )
+        .unwrap();
+    engine.model_ll().events = Ieee802154Event::TxDone.mask().with(Ieee802154Event::RxDone);
+    let mut quarantined = match engine.isr(&mut Environment) {
+        Ok(_) => panic!("incompatible RX_DONE must quarantine after TX_DONE"),
+        Err(fault) => fault,
+    };
+    let Fault::Service {
+        entry_state,
+        state,
+        reason,
+        progress,
+        ..
+    } = quarantined.fault()
+    else {
+        panic!("service fault");
+    };
+    assert_eq!(entry_state, Ieee802154State::Tx);
+    assert_eq!(state, Ieee802154State::RxAck);
+    assert_eq!(reason, ServiceError::EventState(Ieee802154Event::RxDone));
+    assert!(progress.acknowledged);
+    assert_eq!(progress.completed, Ieee802154Event::TxDone.mask());
+    assert_eq!(quarantined._owners.model_transmit_address().get(), tx);
+    assert_eq!(
+        quarantined
+            ._owners
+            .inner
+            .model_ll()
+            .tx_address
+            .map(DmaWindowAddress::get),
+        Some(tx)
+    );
+}

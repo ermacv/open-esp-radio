@@ -14,7 +14,36 @@ enum MultipanContext {
 }
 
 impl Ieee802154MultipanIndex {
+    /// Select the element for this validated identity without a runtime bounds check.
+    pub const fn select<T>(self, values: &[T; 4]) -> &T {
+        let [v0, v1, v2, v3] = values;
+        match self.0 {
+            MultipanContext::Context0 => v0,
+            MultipanContext::Context1 => v1,
+            MultipanContext::Context2 => v2,
+            MultipanContext::Context3 => v3,
+        }
+    }
+
+    /// Select the element for this validated identity without a runtime bounds check.
+    pub const fn select_mut<T>(self, values: &mut [T; 4]) -> &mut T {
+        let [v0, v1, v2, v3] = values;
+        match self.0 {
+            MultipanContext::Context0 => v0,
+            MultipanContext::Context1 => v1,
+            MultipanContext::Context2 => v2,
+            MultipanContext::Context3 => v3,
+        }
+    }
+
     pub const COUNT: u8 = 4;
+    /// Every supported PAN context, in numeric order.
+    pub const ALL: [Self; 4] = [
+        Self::CONTEXT0,
+        Self::CONTEXT1,
+        Self::CONTEXT2,
+        Self::CONTEXT3,
+    ];
     pub const CONTEXT0: Self = Self(MultipanContext::Context0);
     pub const CONTEXT1: Self = Self(MultipanContext::Context1);
     pub const CONTEXT2: Self = Self(MultipanContext::Context2);

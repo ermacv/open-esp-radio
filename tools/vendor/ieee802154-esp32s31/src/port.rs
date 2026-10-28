@@ -919,7 +919,9 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             }
             Step::SetPendingMode(mode) => {
                 let mode = pending_mode_of(mode).ok_or("pending mode outside the vendor enum")?;
-                engine.set_pending_mode(&mut ll, &mut env, Ieee802154MultipanIndex::CONTEXT0, mode);
+                engine
+                    .set_pending_mode(&mut ll, &mut env, Ieee802154MultipanIndex::CONTEXT0, mode)
+                    .map_err(|error| format!("engine API input: {error:?}"))?;
             }
             Step::AddPendingAddress { address, short } => {
                 let address = if short {
@@ -1000,37 +1002,51 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             }
             #[cfg(feature = "multipan")]
             Step::SetMultipanPanId { index, panid } => {
-                engine.set_multipan_panid(&mut ll, interface(index)?, panid);
+                engine
+                    .set_multipan_panid(&mut ll, interface(index)?, panid)
+                    .map_err(|error| format!("engine API input: {error:?}"))?;
             }
             #[cfg(feature = "multipan")]
             Step::SetMultipanShortAddress { index, address } => {
-                engine.set_multipan_short_address(&mut ll, interface(index)?, address);
+                engine
+                    .set_multipan_short_address(&mut ll, interface(index)?, address)
+                    .map_err(|error| format!("engine API input: {error:?}"))?;
             }
             #[cfg(feature = "multipan")]
             Step::SetMultipanExtendedAddress { index, address } => {
-                engine.set_multipan_extended_address(&mut ll, interface(index)?, address);
+                engine
+                    .set_multipan_extended_address(&mut ll, interface(index)?, address)
+                    .map_err(|error| format!("engine API input: {error:?}"))?;
             }
             #[cfg(feature = "multipan")]
-            Step::SetMultipanEnable(mask) => {
-                engine.set_multipan_enable(&mut ll, enable_state(mask))
-            }
+            Step::SetMultipanEnable(mask) => engine
+                .set_multipan_enable(&mut ll, enable_state(mask))
+                .map_err(|error| format!("engine API input: {error:?}"))?,
             #[cfg(feature = "multipan")]
             Step::MultipanReceive(index) => {
-                engine.multipan_receive(&mut ll, &mut env, interface(index)?);
+                engine
+                    .multipan_receive(&mut ll, &mut env, interface(index)?)
+                    .map_err(|error| format!("engine API input: {error:?}"))?;
             }
             #[cfg(feature = "multipan")]
             Step::MultipanSleep(index) => {
-                engine.multipan_sleep(&mut ll, &mut env, interface(index)?);
+                engine
+                    .multipan_sleep(&mut ll, &mut env, interface(index)?)
+                    .map_err(|error| format!("engine API input: {error:?}"))?;
             }
             #[cfg(feature = "multipan")]
             Step::MultipanRxWhenIdle { index, enable } => {
-                engine.multipan_set_rx_when_idle(interface(index)?, enable);
+                engine
+                    .multipan_set_rx_when_idle(interface(index)?, enable)
+                    .map_err(|error| format!("engine API input: {error:?}"))?;
             }
             #[cfg(feature = "multipan")]
             Step::MultipanSetPendingMode { index, mode } => {
                 let mode = pending_mode_of(mode).ok_or("pending mode outside the vendor enum")?;
                 let index = interface(index)?;
-                engine.set_pending_mode(&mut ll, &mut env, index, mode);
+                engine
+                    .set_pending_mode(&mut ll, &mut env, index, mode)
+                    .map_err(|error| format!("engine API input: {error:?}"))?;
             }
             #[cfg(feature = "multipan")]
             Step::MultipanAddPendingAddress {
@@ -1043,7 +1059,10 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
                 } else {
                     FrameAddress::Extended(address[..8].try_into().map_err(|_| "extended address")?)
                 };
-                let _ = engine.pending_table_for(interface(index)?).add(address);
+                let _ = engine
+                    .pending_table_for(interface(index)?)
+                    .map_err(|error| format!("engine API input: {error:?}"))?
+                    .add(address);
             }
             Step::Input(name, value) => {
                 shared

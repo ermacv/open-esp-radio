@@ -114,7 +114,7 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
         env: &mut E,
         index: Ieee802154MultipanIndex,
         mode: oer_ieee802154_port::AutoPendingMode,
-    ) {
+    ) -> Result<(), MultipanError> {
         self.engine.set_pending_mode(&mut self.ll, env, index, mode)
     }
 
@@ -127,28 +127,39 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     pub fn pending_table_for(
         &mut self,
         index: Ieee802154MultipanIndex,
-    ) -> &mut PendingTable<PENDING_TABLE_SIZE> {
+    ) -> Result<&mut PendingTable<PENDING_TABLE_SIZE>, MultipanError> {
         self.engine.pending_table_for(index)
     }
 
     /// [`Ieee802154Engine::set_multipan_panid`], using this owner's MAC.
-    pub fn set_multipan_panid(&mut self, index: Ieee802154MultipanIndex, panid: u16) {
+    pub fn set_multipan_panid(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        panid: u16,
+    ) -> Result<(), MultipanError> {
         self.engine.set_multipan_panid(&mut self.ll, index, panid)
     }
 
     /// [`Ieee802154Engine::multipan_panid`], using this owner's MAC.
-    pub fn multipan_panid(&mut self, index: Ieee802154MultipanIndex) -> u16 {
+    pub fn multipan_panid(&mut self, index: Ieee802154MultipanIndex) -> Result<u16, MultipanError> {
         self.engine.multipan_panid(&mut self.ll, index)
     }
 
     /// [`Ieee802154Engine::set_multipan_short_address`], using this owner's MAC.
-    pub fn set_multipan_short_address(&mut self, index: Ieee802154MultipanIndex, address: u16) {
+    pub fn set_multipan_short_address(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        address: u16,
+    ) -> Result<(), MultipanError> {
         self.engine
             .set_multipan_short_address(&mut self.ll, index, address)
     }
 
     /// [`Ieee802154Engine::multipan_short_address`], using this owner's MAC.
-    pub fn multipan_short_address(&mut self, index: Ieee802154MultipanIndex) -> u16 {
+    pub fn multipan_short_address(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<u16, MultipanError> {
         self.engine.multipan_short_address(&mut self.ll, index)
     }
 
@@ -157,18 +168,24 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
         &mut self,
         index: Ieee802154MultipanIndex,
         address: [u8; 8],
-    ) {
+    ) -> Result<(), MultipanError> {
         self.engine
             .set_multipan_extended_address(&mut self.ll, index, address)
     }
 
     /// [`Ieee802154Engine::multipan_extended_address`], using this owner's MAC.
-    pub fn multipan_extended_address(&mut self, index: Ieee802154MultipanIndex) -> [u8; 8] {
+    pub fn multipan_extended_address(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<[u8; 8], MultipanError> {
         self.engine.multipan_extended_address(&mut self.ll, index)
     }
 
     /// [`Ieee802154Engine::set_multipan_enable`], using this owner's MAC.
-    pub fn set_multipan_enable(&mut self, enable: Ieee802154MultipanEnableState) {
+    pub fn set_multipan_enable(
+        &mut self,
+        enable: Ieee802154MultipanEnableState,
+    ) -> Result<(), MultipanError> {
         self.engine.set_multipan_enable(&mut self.ll, enable)
     }
 
@@ -178,7 +195,11 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     }
 
     /// [`Ieee802154Engine::multipan_receive`], using this owner's MAC.
-    pub fn multipan_receive<E>(&mut self, env: &mut E, index: Ieee802154MultipanIndex)
+    pub fn multipan_receive<E>(
+        &mut self,
+        env: &mut E,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<(), MultipanError>
     where
         E: Ieee802154Environment + ?Sized,
     {
@@ -186,7 +207,11 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     }
 
     /// [`Ieee802154Engine::multipan_sleep`], using this owner's MAC.
-    pub fn multipan_sleep<E>(&mut self, env: &mut E, index: Ieee802154MultipanIndex)
+    pub fn multipan_sleep<E>(
+        &mut self,
+        env: &mut E,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<(), MultipanError>
     where
         E: Ieee802154Environment + ?Sized,
     {
@@ -194,7 +219,11 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     }
 
     /// [`Ieee802154Engine::multipan_set_rx_when_idle`], using this owner's MAC.
-    pub fn multipan_set_rx_when_idle(&mut self, index: Ieee802154MultipanIndex, enable: bool) {
+    pub fn multipan_set_rx_when_idle(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        enable: bool,
+    ) -> Result<(), MultipanError> {
         self.engine.multipan_set_rx_when_idle(index, enable)
     }
 
@@ -399,7 +428,8 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     /// [`Ieee802154Engine::isr`], borrowing this owner's MAC.
     ///
     /// # Errors
-    /// Unsupported events return the complete observation and entry state.
+    /// Unsupported events return the complete observation and entry state;
+    /// service invariants also retain the completed dispatch prefix.
     /// No owner is consumed; the chip driver controls terminal custody.
     pub fn service<E>(&mut self, env: &mut E) -> Result<(), Fault>
     where

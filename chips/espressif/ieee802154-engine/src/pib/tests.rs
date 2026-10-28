@@ -150,7 +150,9 @@ fn defaults_hold_a_threshold_of_the_kconfig_range() {
 #[test]
 fn provider_levels_are_published_as_the_port_levels() {
     assert_eq!(
-        crate::capabilities::portable_tx_power_levels(levels()).levels_dbm(),
+        crate::capabilities::portable_tx_power_levels(levels())
+            .unwrap()
+            .levels_dbm(),
         &LEVELS
     );
 }

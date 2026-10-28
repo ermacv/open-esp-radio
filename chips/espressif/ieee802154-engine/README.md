@@ -150,9 +150,26 @@ owner's `service(&mut self, env) -> Result<(), Fault>` borrows its MAC and
 returns the original observations without consuming owners or deciding terminal
 policy. The engine has no quarantine, retained codec or reset entry.
 The S31 driver's consuming `isr` holds the MAC and placed DMA storage in its own
-absorbing `Quarantined` value. The PHY HIL image owns the 12-byte
+absorbing `Quarantined` value. The PHY HIL image owns the 44-byte
 versioned/checksummed codec, retained storage and `fatal::reset_recording` call;
 it reports the original fault at the next boot and retains it on console refusal.
+Supported event samples retain the vendor dispatch order. An incompatible state,
+unclassified abort, invalid receive channel or diagnostic-counter overflow returns
+`Fault::Service` at its original check. The fault retains the entry and current
+state, both sampled abort classifications, the acknowledged sample, completed
+events and current helper stage. Statistics overflow retains the original total,
+increment and already-drained counter prefix; an overflowing hardware counter is
+not cleared. A coexistence notification already delivered before a later failure
+is recorded in progress. Owners keep all completed work and never replay it.
+
+Invalid Multi-PAN indices and enable states return `MultipanError` before
+configuration writes or operation changes. Transmit counter overflow returns
+`Ieee802154FrameImageError::Statistics` before publishing a new frame or reporting
+a deferred transmission. ACK selection and the successful accessor order are
+unchanged. Finite receive, channel and PAN identities select fixed array elements
+without unchecked indexing. Timer0 holds only an ACK-timeout callback; timer1 holds
+receive-window callbacks.
+
 SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`,
 [PR #689](https://github.com/ermacv/open-esp-radio/pull/689): masking hides
 timer0/timer1 status while retaining pending; a positive sample captured

@@ -42,3 +42,23 @@ fn every_multipan_update_changes_only_the_selected_context() {
         }
     }
 }
+
+#[test]
+fn finite_pan_identity_selects_only_its_own_table_entry() {
+    for raw in 0..Index::COUNT {
+        let index = Index::new(raw).unwrap();
+        let mut values = [10, 20, 30, 40];
+        assert_eq!(*index.select(&values), 10 * (usize::from(raw) + 1));
+        *index.select_mut(&mut values) = 99;
+        for (position, value) in values.into_iter().enumerate() {
+            assert_eq!(
+                value,
+                if position == usize::from(raw) {
+                    99
+                } else {
+                    10 * (position + 1)
+                }
+            );
+        }
+    }
+}

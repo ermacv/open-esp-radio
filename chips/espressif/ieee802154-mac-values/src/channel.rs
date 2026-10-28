@@ -50,6 +50,86 @@ impl Ieee802154ChannelError {
 }
 
 impl Ieee802154Channel {
+    /// Select the element for this validated identity without a runtime bounds check.
+    pub const fn select<T>(self, values: &[T; 16]) -> &T {
+        let [
+            v0,
+            v1,
+            v2,
+            v3,
+            v4,
+            v5,
+            v6,
+            v7,
+            v8,
+            v9,
+            v10,
+            v11,
+            v12,
+            v13,
+            v14,
+            v15,
+        ] = values;
+        match self.0 {
+            ChannelNumber::Channel11 => v0,
+            ChannelNumber::Channel12 => v1,
+            ChannelNumber::Channel13 => v2,
+            ChannelNumber::Channel14 => v3,
+            ChannelNumber::Channel15 => v4,
+            ChannelNumber::Channel16 => v5,
+            ChannelNumber::Channel17 => v6,
+            ChannelNumber::Channel18 => v7,
+            ChannelNumber::Channel19 => v8,
+            ChannelNumber::Channel20 => v9,
+            ChannelNumber::Channel21 => v10,
+            ChannelNumber::Channel22 => v11,
+            ChannelNumber::Channel23 => v12,
+            ChannelNumber::Channel24 => v13,
+            ChannelNumber::Channel25 => v14,
+            ChannelNumber::Channel26 => v15,
+        }
+    }
+
+    /// Select the element for this validated identity without a runtime bounds check.
+    pub const fn select_mut<T>(self, values: &mut [T; 16]) -> &mut T {
+        let [
+            v0,
+            v1,
+            v2,
+            v3,
+            v4,
+            v5,
+            v6,
+            v7,
+            v8,
+            v9,
+            v10,
+            v11,
+            v12,
+            v13,
+            v14,
+            v15,
+        ] = values;
+        match self.0 {
+            ChannelNumber::Channel11 => v0,
+            ChannelNumber::Channel12 => v1,
+            ChannelNumber::Channel13 => v2,
+            ChannelNumber::Channel14 => v3,
+            ChannelNumber::Channel15 => v4,
+            ChannelNumber::Channel16 => v5,
+            ChannelNumber::Channel17 => v6,
+            ChannelNumber::Channel18 => v7,
+            ChannelNumber::Channel19 => v8,
+            ChannelNumber::Channel20 => v9,
+            ChannelNumber::Channel21 => v10,
+            ChannelNumber::Channel22 => v11,
+            ChannelNumber::Channel23 => v12,
+            ChannelNumber::Channel24 => v13,
+            ChannelNumber::Channel25 => v14,
+            ChannelNumber::Channel26 => v15,
+        }
+    }
+
     /// Check and construct one channel in the inclusive range 11 through 26.
     pub const fn new(channel: u8) -> Result<Self, Ieee802154ChannelError> {
         match channel {
@@ -250,6 +330,20 @@ mod tests {
             assert_eq!(channel.span().low_khz(), center_khz - 1000);
             assert_eq!(channel.span().high_khz(), center_khz + 1000);
             assert_eq!(channel.span().width_khz(), 2000);
+        }
+    }
+
+    #[test]
+    fn every_channel_selects_its_own_power_table_entry() {
+        for raw in IEEE802154_MIN_CHANNEL..=IEEE802154_MAX_CHANNEL {
+            let channel = Ieee802154Channel::new(raw).unwrap();
+            let mut powers = core::array::from_fn::<_, 16, _>(|index| index as i8);
+            let selected = usize::from(raw - IEEE802154_MIN_CHANNEL);
+            assert_eq!(*channel.select(&powers), selected as i8);
+            *channel.select_mut(&mut powers) = -99;
+            for (index, value) in powers.into_iter().enumerate() {
+                assert_eq!(value, if index == selected { -99 } else { index as i8 });
+            }
         }
     }
 }

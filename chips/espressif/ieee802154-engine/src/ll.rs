@@ -282,7 +282,18 @@ pub fn set_txrx_pti<Ll: Ieee802154LowLevel + ?Sized>(
 }
 
 #[cfg(any(test, feature = "test-support"))]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "explicit test-support register model"
+)]
 pub mod model;
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable,
+    reason = "test assertions and reference fixtures"
+)]
 mod tests;

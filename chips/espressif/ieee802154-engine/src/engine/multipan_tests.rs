@@ -129,11 +129,11 @@ impl Bench {
     fn with_identities(interfaces: Option<u8>) -> Self {
         let mut bench = Self::new(interfaces);
         let (engine, hw) = (&mut bench.engine, &mut bench.hw);
-        engine.set_multipan_panid(hw, IF0, 0x1234);
-        engine.set_multipan_short_address(hw, IF0, 0x0001);
+        engine.set_multipan_panid(hw, IF0, 0x1234).unwrap();
+        engine.set_multipan_short_address(hw, IF0, 0x0001).unwrap();
         if interfaces.is_some_and(|count| count > 1) {
-            engine.set_multipan_panid(hw, IF1, 0xabcd);
-            engine.set_multipan_short_address(hw, IF1, 0x1111);
+            engine.set_multipan_panid(hw, IF1, 0xabcd).unwrap();
+            engine.set_multipan_short_address(hw, IF1, 0x1111).unwrap();
         }
         bench
     }
@@ -200,6 +200,7 @@ fn the_pending_bit_follows_the_addressed_interface() {
     bench
         .engine
         .pending_table_for(IF1)
+        .unwrap()
         .add(FrameAddress::Short([0x78, 0x56]))
         .unwrap();
     bench
@@ -234,16 +235,16 @@ fn interfaces_sleep_individually_and_the_last_sleeps_the_radio() {
     let mut bench = Bench::new(Some(2));
     bench.hw.multipan_enable = Ieee802154MultipanEnableState::NONE;
     let (engine, hw, env) = (&mut bench.engine, &mut bench.hw, &mut bench.env);
-    engine.multipan_receive(hw, env, IF0);
-    engine.multipan_receive(hw, env, IF1);
+    engine.multipan_receive(hw, env, IF0).unwrap();
+    engine.multipan_receive(hw, env, IF1).unwrap();
     assert_eq!(
         hw.multipan_enable,
         Ieee802154MultipanEnableState::NONE.with(IF0).with(IF1)
     );
     assert_eq!(engine.state(), Ieee802154State::Rx);
-    engine.multipan_sleep(hw, env, IF0);
+    engine.multipan_sleep(hw, env, IF0).unwrap();
     assert_eq!(engine.state(), Ieee802154State::Rx);
-    engine.multipan_sleep(hw, env, IF1);
+    engine.multipan_sleep(hw, env, IF1).unwrap();
     assert_eq!(hw.multipan_enable, Ieee802154MultipanEnableState::NONE);
     assert_eq!(engine.state(), Ieee802154State::Sleep);
 }
@@ -251,21 +252,26 @@ fn interfaces_sleep_individually_and_the_last_sleeps_the_radio() {
 #[test]
 fn receive_when_idle_holds_while_any_interface_asks() {
     let mut bench = Bench::new(Some(2));
-    bench.engine.multipan_set_rx_when_idle(IF0, true);
-    bench.engine.multipan_set_rx_when_idle(IF1, true);
-    bench.engine.multipan_set_rx_when_idle(IF0, false);
+    bench.engine.multipan_set_rx_when_idle(IF0, true).unwrap();
+    bench.engine.multipan_set_rx_when_idle(IF1, true).unwrap();
+    bench.engine.multipan_set_rx_when_idle(IF0, false).unwrap();
     assert!(bench.engine.pib().rx_when_idle());
-    bench.engine.multipan_set_rx_when_idle(IF1, false);
+    bench.engine.multipan_set_rx_when_idle(IF1, false).unwrap();
     assert!(!bench.engine.pib().rx_when_idle());
 }
 
 #[test]
-#[should_panic(expected = "IEEE802154_ASSERT")]
 fn an_interface_beyond_the_configuration_is_rejected() {
     let mut bench = Bench::new(Some(2));
-    bench
-        .engine
-        .set_multipan_panid(&mut bench.hw, Ieee802154MultipanIndex::CONTEXT2, 1);
+    assert_eq!(
+        bench
+            .engine
+            .set_multipan_panid(&mut bench.hw, Ieee802154MultipanIndex::CONTEXT2, 1),
+        Err(super::MultipanError::Interface {
+            index: Ieee802154MultipanIndex::CONTEXT2,
+            count: 2
+        })
+    );
 }
 
 /// Every backend-owned setting is restored even if the MAC register model
@@ -274,9 +280,15 @@ fn an_interface_beyond_the_configuration_is_rejected() {
 fn settings_survive_disable_enable_and_complete_register_loss() {
     let mut bench = Bench::with_identities(Some(2));
     let (engine, hw, env) = (&mut bench.engine, &mut bench.hw, &mut bench.env);
-    engine.set_multipan_extended_address(hw, IF0, [1; 8]);
-    engine.set_multipan_extended_address(hw, IF1, [2; 8]);
-    engine.set_multipan_enable(hw, Ieee802154MultipanEnableState::NONE.with(IF1));
+    engine
+        .set_multipan_extended_address(hw, IF0, [1; 8])
+        .unwrap();
+    engine
+        .set_multipan_extended_address(hw, IF1, [2; 8])
+        .unwrap();
+    engine
+        .set_multipan_enable(hw, Ieee802154MultipanEnableState::NONE.with(IF1))
+        .unwrap();
     engine.set_ack_timeout(
         hw,
         Ieee802154AckTimeout::from_microseconds(200).expect("bounded timeout"),
@@ -295,9 +307,10 @@ fn settings_survive_disable_enable_and_complete_register_loss() {
         pib.set_enhanced_ack_tx(false);
         pib.set_pending_mode(IF1, AutoPendingMode::Enhanced);
     });
-    engine.multipan_set_rx_when_idle(IF1, true);
+    engine.multipan_set_rx_when_idle(IF1, true).unwrap();
     engine
         .pending_table_for(IF1)
+        .unwrap()
         .add(FrameAddress::Short([0x78, 0x56]))
         .expect("room");
     engine.receive(hw, env);
@@ -337,24 +350,30 @@ fn settings_survive_disable_enable_and_complete_register_loss() {
             .operation(oer_ieee802154_port::RadioOperation::Idle)
             .value()
     );
-    engine.multipan_set_rx_when_idle(IF1, false);
+    engine.multipan_set_rx_when_idle(IF1, false).unwrap();
     assert!(!engine.pib().rx_when_idle());
     assert!(
         engine
             .pending_table_for(IF1)
+            .unwrap()
             .contains(FrameAddress::Short([0x78, 0x56]))
     );
 }
 
 #[test]
-#[should_panic(expected = "IEEE802154_ASSERT")]
 fn pending_mode_checks_the_configured_interface_count() {
     let mut bench = Bench::new(Some(2));
-    bench.engine.set_pending_mode(
-        &mut bench.hw,
-        &mut bench.env,
-        Ieee802154MultipanIndex::CONTEXT2,
-        AutoPendingMode::Enable,
+    assert_eq!(
+        bench.engine.set_pending_mode(
+            &mut bench.hw,
+            &mut bench.env,
+            Ieee802154MultipanIndex::CONTEXT2,
+            AutoPendingMode::Enable
+        ),
+        Err(super::MultipanError::Interface {
+            index: Ieee802154MultipanIndex::CONTEXT2,
+            count: 2
+        })
     );
 }
 
@@ -367,4 +386,37 @@ fn malformed_destination_never_matches_an_interface() {
     let mut image = data_to(0xabcd, [0x11, 0x11]);
     image[0] = 7; // destination extends into the footer despite allocated bytes.
     assert_eq!(bench.receive(&image).mpf_index, None);
+}
+
+#[test]
+fn foreign_enable_state_is_refused_before_receive_or_sleep_writes() {
+    for sleeping in [false, true] {
+        let mut bench = Bench::new(Some(2));
+        let observed = Ieee802154MultipanEnableState::NONE.with(Ieee802154MultipanIndex::CONTEXT3);
+        bench.hw.multipan_enable = observed;
+        let command = bench.hw.command;
+        let state = bench.engine.state();
+        let result = if sleeping {
+            bench
+                .engine
+                .multipan_sleep(&mut bench.hw, &mut bench.env, IF0)
+        } else {
+            bench
+                .engine
+                .multipan_receive(&mut bench.hw, &mut bench.env, IF0)
+        };
+        let enable = if sleeping {
+            observed
+        } else {
+            observed.with(IF0)
+        };
+        assert_eq!(
+            result,
+            Err(super::MultipanError::Enable { enable, count: 2 })
+        );
+        assert_eq!(bench.hw.multipan_enable, observed);
+        assert_eq!(bench.hw.command, command);
+        assert_eq!(bench.engine.state(), state);
+        assert!(bench.env.0.is_empty());
+    }
 }

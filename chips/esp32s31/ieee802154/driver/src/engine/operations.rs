@@ -4,7 +4,7 @@ use oer_espressif_ieee802154_engine::{
     coex::Ieee802154Coexistence,
     engine::{
         Ieee802154Environment, Ieee802154FrameImageError, Ieee802154RxSlot,
-        Ieee802154SecurityFrameError, Ieee802154SlotError, PENDING_TABLE_SIZE,
+        Ieee802154SecurityFrameError, Ieee802154SlotError, MultipanError, PENDING_TABLE_SIZE,
     },
     pib::Ieee802154Pib,
 };
@@ -38,7 +38,7 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         env: &mut E,
         index: Ieee802154MultipanIndex,
         mode: AutoPendingMode,
-    ) {
+    ) -> Result<(), MultipanError> {
         self.inner.set_pending_mode(env, index, mode)
     }
 
@@ -51,27 +51,38 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
     pub fn pending_table_for(
         &mut self,
         index: Ieee802154MultipanIndex,
-    ) -> &mut PendingTable<PENDING_TABLE_SIZE> {
+    ) -> Result<&mut PendingTable<PENDING_TABLE_SIZE>, MultipanError> {
         self.inner.pending_table_for(index)
     }
 
     /// [`SharedEngine::set_multipan_panid`], using this owner's MAC.
-    pub fn set_multipan_panid(&mut self, index: Ieee802154MultipanIndex, panid: u16) {
+    pub fn set_multipan_panid(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        panid: u16,
+    ) -> Result<(), MultipanError> {
         self.inner.set_multipan_panid(index, panid)
     }
 
     /// [`SharedEngine::multipan_panid`], using this owner's MAC.
-    pub fn multipan_panid(&mut self, index: Ieee802154MultipanIndex) -> u16 {
+    pub fn multipan_panid(&mut self, index: Ieee802154MultipanIndex) -> Result<u16, MultipanError> {
         self.inner.multipan_panid(index)
     }
 
     /// [`SharedEngine::set_multipan_short_address`], using this owner's MAC.
-    pub fn set_multipan_short_address(&mut self, index: Ieee802154MultipanIndex, address: u16) {
+    pub fn set_multipan_short_address(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        address: u16,
+    ) -> Result<(), MultipanError> {
         self.inner.set_multipan_short_address(index, address)
     }
 
     /// [`SharedEngine::multipan_short_address`], using this owner's MAC.
-    pub fn multipan_short_address(&mut self, index: Ieee802154MultipanIndex) -> u16 {
+    pub fn multipan_short_address(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<u16, MultipanError> {
         self.inner.multipan_short_address(index)
     }
 
@@ -80,17 +91,23 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         &mut self,
         index: Ieee802154MultipanIndex,
         address: [u8; 8],
-    ) {
+    ) -> Result<(), MultipanError> {
         self.inner.set_multipan_extended_address(index, address)
     }
 
     /// [`SharedEngine::multipan_extended_address`], using this owner's MAC.
-    pub fn multipan_extended_address(&mut self, index: Ieee802154MultipanIndex) -> [u8; 8] {
+    pub fn multipan_extended_address(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<[u8; 8], MultipanError> {
         self.inner.multipan_extended_address(index)
     }
 
     /// [`SharedEngine::set_multipan_enable`], using this owner's MAC.
-    pub fn set_multipan_enable(&mut self, enable: Ieee802154MultipanEnableState) {
+    pub fn set_multipan_enable(
+        &mut self,
+        enable: Ieee802154MultipanEnableState,
+    ) -> Result<(), MultipanError> {
         self.inner.set_multipan_enable(enable)
     }
 
@@ -100,7 +117,11 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
     }
 
     /// [`SharedEngine::multipan_receive`], using this owner's MAC.
-    pub fn multipan_receive<E>(&mut self, env: &mut E, index: Ieee802154MultipanIndex)
+    pub fn multipan_receive<E>(
+        &mut self,
+        env: &mut E,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<(), MultipanError>
     where
         E: Ieee802154Environment + ?Sized,
     {
@@ -108,7 +129,11 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
     }
 
     /// [`SharedEngine::multipan_sleep`], using this owner's MAC.
-    pub fn multipan_sleep<E>(&mut self, env: &mut E, index: Ieee802154MultipanIndex)
+    pub fn multipan_sleep<E>(
+        &mut self,
+        env: &mut E,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<(), MultipanError>
     where
         E: Ieee802154Environment + ?Sized,
     {
@@ -116,7 +141,11 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
     }
 
     /// [`SharedEngine::multipan_set_rx_when_idle`], using this owner's MAC.
-    pub fn multipan_set_rx_when_idle(&mut self, index: Ieee802154MultipanIndex, enable: bool) {
+    pub fn multipan_set_rx_when_idle(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        enable: bool,
+    ) -> Result<(), MultipanError> {
         self.inner.multipan_set_rx_when_idle(index, enable)
     }
 
