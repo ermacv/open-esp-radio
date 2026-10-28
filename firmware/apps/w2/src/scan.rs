@@ -38,7 +38,7 @@ use oer_esp32s31_radio_client::{
 };
 use oer_espressif_interrupt_table::Bound;
 use oer_ieee80211_upper_mac::protection::BasicRates;
-use oer_ieee80211_port::{Band, ManagementTxPlan};
+use oer_ieee80211_port::Band;
 use oer_ieee80211_upper_mac::rate_selection::management_rate;
 use oer_ieee80211_wire::{
     channel::{WifiChannel, WifiChannelWidth},
@@ -60,7 +60,10 @@ use {
         tx::{LegacyRate, TxPhyRate, TxSlot, runtime::WifiTxRuntimePolicy},
     },
 };
-use {oer_ieee80211_port::MacTxPlan, oer_ieee80211_wire::address::IndividualAddress};
+use {
+    oer_esp32s31_ieee80211_driver::ordinary_tx::MacTxPlan,
+    oer_ieee80211_wire::address::IndividualAddress,
+};
 
 type Rx = ReceiveSession<N, B, S, Q, crate::irq::RadioExecutor, Bound<crate::WifiToken>>;
 type Frames = FrameReceiver<'static, Q, B, crate::irq::RadioExecutor>;

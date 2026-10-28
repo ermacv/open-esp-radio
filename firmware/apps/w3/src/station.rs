@@ -23,6 +23,8 @@ use oer_ieee80211_sta::{
     machine::{self, StaConfig, Station, StationResources},
 };
 use oer_ieee80211_upper_mac::{
+    phy_mode::PhyMode,
+    protection::HePacketPadding,
     rate_control::RatePeer,
     rate_selection::{FrameRates, RateSelection},
 };
@@ -251,8 +253,8 @@ impl machine::StaCallbacks for Callbacks {
     fn nonce(&mut self) -> [u8; 32] {
         [0; 32]
     }
-    fn he_packet_padding(&self, _: &[u8]) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
-        oer_ieee80211_upper_mac::protection::HePacketPadding::None
+    fn he_packet_padding(&self, _: &[u8]) -> HePacketPadding {
+        HePacketPadding::None
     }
 }
 
