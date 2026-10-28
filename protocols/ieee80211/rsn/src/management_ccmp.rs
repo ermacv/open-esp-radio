@@ -33,6 +33,7 @@
 )]
 
 use oer_ieee80211_cipher::management_ccmp::{ManagementCcmpError, ManagementCcmpFrame};
+use oer_ieee80211_upper_mac::ccmp::CcmpReplayFrontier;
 use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -52,10 +53,13 @@ impl From<ManagementCcmpError> for ManagementCcmpReceiveError {
     }
 }
 
+/// The temporal key erases itself on drop; the packet-number frontier is
+/// no secret.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct ManagementCcmpReceiver {
     temporal_key: Ccmp128Key,
-    last_packet_number: u64,
+    #[zeroize(skip)]
+    replay: CcmpReplayFrontier,
 }
 
 impl ManagementCcmpReceiver {
@@ -64,26 +68,25 @@ impl ManagementCcmpReceiver {
     pub fn new(temporal_key: Ccmp128Key) -> Self {
         Self {
             temporal_key,
-            last_packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO.value(),
+            replay: CcmpReplayFrontier::default(),
         }
     }
 
     /// Decrypt one received protected management frame in place and return
     /// its plaintext body. A frame that does not verify leaves the replay
-    /// state unchanged. MIC failure erases tentative plaintext through the
+    /// frontier unchanged. MIC failure erases tentative plaintext through the
     /// shared `oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation` transform; this wrapper only owns replay.
     pub fn open<'a>(
         &mut self,
         frame: &'a mut [u8],
     ) -> Result<&'a [u8], ManagementCcmpReceiveError> {
         let frame = ManagementCcmpFrame::parse(frame)?;
-        let packet_number = frame.packet_number();
-        if packet_number <= self.last_packet_number {
-            return Err(ManagementCcmpReceiveError::Replay);
-        }
-
+        let candidate = self
+            .replay
+            .prepare(frame.packet_number())
+            .map_err(|_| ManagementCcmpReceiveError::Replay)?;
         let body = frame.open(&self.temporal_key)?;
-        self.last_packet_number = packet_number;
+        candidate.commit();
         Ok(body)
     }
 }

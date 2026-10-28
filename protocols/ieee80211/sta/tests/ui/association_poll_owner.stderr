@@ -1,7 +1,7 @@
 error[E0382]: use of moved value: `runtime`
  --> tests/ui/association_poll_owner.rs:9:18
   |
-6 | pub fn poll(runtime: StaAssociationRuntime, now: Instant, sequence: &mut StaSequenceCounter) {
+6 | pub fn poll(runtime: StaAssociationRuntime, now: Instant, sequence: &mut SequenceCounter) {
   |             ------- move occurs because `runtime` has type `StaAssociationRuntime`, which does not implement the `Copy` trait
 7 |     let _outcome = runtime.poll(now, sequence);
   |                            ------------------- `runtime` moved due to this method call
@@ -12,5 +12,5 @@ error[E0382]: use of moved value: `runtime`
 note: `StaAssociationRuntime::poll` takes ownership of the receiver `self`, which moves `runtime`
  --> src/join/association.rs
   |
-  |     pub fn poll(mut self, now: Instant, sequence: &mut StaSequenceCounter) -> StaAssociationPoll {
+  |     pub fn poll(mut self, now: Instant, sequence: &mut SequenceCounter) -> StaAssociationPoll {
   |                     ^^^^

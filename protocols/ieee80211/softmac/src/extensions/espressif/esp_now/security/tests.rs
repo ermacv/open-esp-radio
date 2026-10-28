@@ -1,6 +1,7 @@
 use super::*;
 use crate::interface::{VifId, VirtualInterface};
 use oer_ieee80211_port::VifRole;
+use oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
 use oer_ieee80211_wire::channel::ChannelWidth;
 
 fn channel() -> WifiChannel {
@@ -166,8 +167,10 @@ fn encrypted_replacement_preserves_packet_number_spaces_and_old_key() {
     let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
     let first = table.install(peer(2, 1)).unwrap();
     assert_eq!(table.allocate_tx_packet_number(first), Ok(pn(1)));
-    let replay = table.prepare_rx_replay(first, pn(50)).unwrap();
-    table.commit_authenticated_rx(replay).unwrap();
+    table
+        .prepare_rx_replay(first, pn(50))
+        .unwrap()
+        .commit_authenticated();
     let replacement = table.replace(first, peer(2, 2)).unwrap();
     assert_eq!(replacement.replaced.lmk().expose_secret(), &[1; 16]);
     assert_eq!(
@@ -177,7 +180,7 @@ fn encrypted_replacement_preserves_packet_number_spaces_and_old_key() {
     assert_eq!(table.allocate_tx_packet_number(replacement.peer), Ok(pn(2)));
     assert!(matches!(
         table.prepare_rx_replay(replacement.peer, pn(50)),
-        Err(EspNowEncryptedPeerError::ReplayDuplicate { .. })
+        Err(EspNowEncryptedPeerError::Replay { .. })
     ));
     let (error, proposed) = table.replace(first, peer(2, 3)).unwrap_err().into_parts();
     assert_eq!(error, EspNowEncryptedPeerError::Stale(first));
@@ -224,62 +227,80 @@ fn invalid_or_vacant_encrypted_slots_refuse_without_consuming_secrets() {
 }
 
 #[test]
-fn invalid_and_exhausted_tx_numbers_return_error_without_advancing() {
-    let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
-    let peer = table.install(peer(2, 1)).unwrap();
-    for last in [
-        ESP_NOW_PACKET_NUMBER_MAX,
-        ESP_NOW_PACKET_NUMBER_MAX + 1,
-        u64::MAX,
-    ] {
-        table.state_mut(peer).unwrap().last_tx_packet_number = last;
-        assert_eq!(
-            table.allocate_tx_packet_number(peer),
-            Err(EspNowEncryptedPeerError::TxPacketNumberExhausted(peer))
-        );
-        assert_eq!(table.get(peer).unwrap().last_tx_packet_number, last);
-    }
-    table.state_mut(peer).unwrap().last_tx_packet_number = ESP_NOW_PACKET_NUMBER_MAX - 1;
+fn stale_peers_refuse_numbers_and_each_peer_numbers_from_one() {
+    let mut table = EspNowEncryptedPeerTable::<2>::new(channel());
+    let first = table.install(peer(2, 1)).unwrap();
+    let second = table.install(peer(3, 2)).unwrap();
+    assert_eq!(table.allocate_tx_packet_number(first), Ok(pn(1)));
+    assert_eq!(table.allocate_tx_packet_number(first), Ok(pn(2)));
+    assert_eq!(table.allocate_tx_packet_number(second), Ok(pn(1)));
+    let removed = table.remove(first).unwrap();
     assert_eq!(
-        table.allocate_tx_packet_number(peer),
-        Ok(pn(ESP_NOW_PACKET_NUMBER_MAX))
+        table.allocate_tx_packet_number(first),
+        Err(EspNowEncryptedPeerError::Stale(first))
     );
-    assert_eq!(
-        table.allocate_tx_packet_number(peer),
-        Err(EspNowEncryptedPeerError::TxPacketNumberExhausted(peer))
-    );
-    assert_eq!(table.diagnostics().tx_packet_numbers_allocated, 1);
-    assert_eq!(table.diagnostics().tx_packet_number_exhaustions, 4);
+    // Restoring a removed peer continues its numbers.
+    let restored = table.restore_removed(removed).unwrap();
+    assert_eq!(table.allocate_tx_packet_number(restored), Ok(pn(3)));
+    assert_eq!(table.get(restored).unwrap().last_tx_packet_number, 3);
+    assert_eq!(table.diagnostics().tx_packet_numbers_allocated, 4);
+    assert_eq!(table.diagnostics().tx_packet_number_exhaustions, 0);
 }
 
 #[test]
-fn replay_distances_cover_window_edges_and_full_packet_number_range() {
+fn replay_admits_only_numbers_above_the_frontier_and_cancel_keeps_it() {
     let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
     let peer = table.install(peer(2, 1)).unwrap();
-    let first = table.prepare_rx_replay(peer, pn(1)).unwrap();
-    table.commit_authenticated_rx(first).unwrap();
-    let edge = table.prepare_rx_replay(peer, pn(64)).unwrap();
-    table.commit_authenticated_rx(edge).unwrap();
+    assert_eq!(
+        table.get(peer).unwrap().highest_authenticated_rx_packet_number,
+        None
+    );
+    table
+        .prepare_rx_replay(peer, pn(1))
+        .unwrap()
+        .commit_authenticated();
+    // A repeated number is refused.
+    assert_eq!(
+        table.prepare_rx_replay(peer, pn(1)).unwrap_err(),
+        EspNowEncryptedPeerError::Replay {
+            peer,
+            packet_number: pn(1),
+            highest: CcmpPacketNumber::new(1).unwrap(),
+        }
+    );
+    table
+        .prepare_rx_replay(peer, pn(64))
+        .unwrap()
+        .commit_authenticated();
+    // An earlier, never seen number is refused too: the frontier is strict.
     assert!(matches!(
-        table.prepare_rx_replay(peer, pn(1)),
-        Err(EspNowEncryptedPeerError::ReplayDuplicate { .. })
+        table.prepare_rx_replay(peer, pn(2)),
+        Err(EspNowEncryptedPeerError::Replay { .. })
     ));
-    let next = table.prepare_rx_replay(peer, pn(65)).unwrap();
-    table.commit_authenticated_rx(next).unwrap();
+    // A dropped candidate does not advance the frontier.
+    let cancelled = table.prepare_rx_replay(peer, pn(100)).unwrap();
+    assert_eq!(cancelled.packet_number(), pn(100));
+    drop(cancelled);
+    table
+        .prepare_rx_replay(peer, pn(65))
+        .unwrap()
+        .commit_authenticated();
+    table
+        .prepare_rx_replay(peer, pn(CCMP_PACKET_NUMBER_MAX))
+        .unwrap()
+        .commit_authenticated();
     assert!(matches!(
-        table.prepare_rx_replay(peer, pn(1)),
-        Err(EspNowEncryptedPeerError::ReplayTooOld { .. })
+        table.prepare_rx_replay(peer, pn(CCMP_PACKET_NUMBER_MAX)),
+        Err(EspNowEncryptedPeerError::Replay { .. })
     ));
-    let unseen = table.prepare_rx_replay(peer, pn(2)).unwrap();
-    table.commit_authenticated_rx(unseen).unwrap();
-    let far = table
-        .prepare_rx_replay(peer, pn(ESP_NOW_PACKET_NUMBER_MAX))
-        .unwrap();
-    table.commit_authenticated_rx(far).unwrap();
-    assert!(matches!(
-        table.prepare_rx_replay(peer, pn(65)),
-        Err(EspNowEncryptedPeerError::ReplayTooOld { .. })
-    ));
+    assert_eq!(
+        table.get(peer).unwrap().highest_authenticated_rx_packet_number,
+        Some(CCMP_PACKET_NUMBER_MAX)
+    );
+    let diagnostics = table.diagnostics();
+    assert_eq!(diagnostics.replay_candidates, 5);
+    assert_eq!(diagnostics.authenticated_replay_commits, 4);
+    assert_eq!(diagnostics.replays, 3);
 }
 
 #[test]

@@ -1232,14 +1232,13 @@ fn bounded_peer_table_has_an_explicit_memory_ceiling() {
     // Each peer's TX Block Ack originator keeps, beside its session, its
     // negotiation's deadline, the next attempt's due time, its attempts,
     // retry interval and Dialog Token policy: the per-peer price of offers
-    // that are retried. Management protection adds one eight-byte activation
-    // and replay word plus six Message-3 IPN snapshot bytes per slot.
-    // The arrays add 216 bytes including host alignment padding.
+    // that are retried. Management protection adds one optional sixteen-byte
+    // replay frontier plus six Message-3 IPN snapshot bytes per slot.
     // Each TX BlockAck session also retains two eight-byte originator-window
     // masks, for acknowledged and expired MPDUs. These add 16 bytes per
     // session; table alignment determines the final storage size.
     assert!(
-        core::mem::size_of::<AccessPointPeerStorage>() <= 7_848,
+        core::mem::size_of::<AccessPointPeerStorage>() <= 7_968,
         "peer storage size {}",
         core::mem::size_of::<AccessPointPeerStorage>()
     );

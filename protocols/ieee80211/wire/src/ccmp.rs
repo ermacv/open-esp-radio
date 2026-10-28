@@ -62,6 +62,13 @@ impl CcmpPacketNumber {
     }
 }
 
+/// An ESP-NOW packet number is a nonzero CCMP packet number.
+impl From<crate::extensions::espressif::esp_now::EspNowCcmpPacketNumber> for CcmpPacketNumber {
+    fn from(packet_number: crate::extensions::espressif::esp_now::EspNowCcmpPacketNumber) -> Self {
+        Self(packet_number.value())
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CcmpReceiveSequenceError {
     HighBitsSet,

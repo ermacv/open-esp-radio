@@ -1,5 +1,72 @@
 use super::*;
 
+fn pn(value: u64) -> CcmpPacketNumber {
+    CcmpPacketNumber::new(value).unwrap()
+}
+
+#[test]
+fn a_frontier_refuses_a_repeat_and_a_rollback_without_moving() {
+    let mut frontier = CcmpReplayFrontier::default();
+    // A frontier starts at zero, which no frame carries.
+    assert_eq!(
+        frontier.commit_immediate(CcmpPacketNumber::ZERO),
+        Err(CcmpReplayed {
+            packet_number: CcmpPacketNumber::ZERO,
+            highest: CcmpPacketNumber::ZERO,
+        })
+    );
+    frontier.commit_immediate(pn(5)).unwrap();
+    // The same number again.
+    assert_eq!(
+        frontier.commit_immediate(pn(5)),
+        Err(CcmpReplayed {
+            packet_number: pn(5),
+            highest: pn(5),
+        })
+    );
+    // An earlier number.
+    assert_eq!(
+        frontier.prepare(pn(4)).unwrap_err(),
+        CcmpReplayed {
+            packet_number: pn(4),
+            highest: pn(5),
+        }
+    );
+    assert_eq!(frontier.highest(), pn(5));
+    // A gap is admitted; the frontier moves to the admitted number.
+    frontier.commit_immediate(pn(9)).unwrap();
+    assert_eq!(frontier.highest(), pn(9));
+    let top = pn(CCMP_PACKET_NUMBER_MAX);
+    frontier.commit_immediate(top).unwrap();
+    assert!(frontier.commit_immediate(top).is_err());
+}
+
+#[test]
+fn a_new_key_epoch_starts_its_own_frontier_from_its_receive_sequence() {
+    let mut old = CcmpReplayFrontier::new(pn(100));
+    old.commit_immediate(pn(200)).unwrap();
+    // The new key's frontier starts from its RSC, below the old one's.
+    let mut new = CcmpReplayFrontier::new(pn(10));
+    new.commit_immediate(pn(11)).unwrap();
+    assert!(new.commit_immediate(pn(11)).is_err());
+    // Neither epoch moves the other.
+    assert_eq!(old.highest(), pn(200));
+    assert!(old.commit_immediate(pn(150)).is_err());
+    let lanes = CcmpRxReplayState::from_receive_sequence([10, 0, 0, 0, 0, 0, 0, 0]).unwrap();
+    assert_eq!(lanes.highest(CcmpReplayLane::NonQos), Some(pn(10)));
+    assert_eq!(lanes.highest(CcmpReplayLane::Tid(15)), Some(pn(10)));
+}
+
+#[test]
+fn a_dropped_frontier_candidate_does_not_advance_it() {
+    let mut frontier = CcmpReplayFrontier::new(pn(1));
+    let candidate = frontier.prepare(pn(3)).unwrap();
+    assert_eq!(candidate.packet_number(), pn(3));
+    drop(candidate);
+    frontier.commit_immediate(pn(2)).unwrap();
+    assert_eq!(frontier.highest(), pn(2));
+}
+
 #[test]
 fn replay_admission_borrows_one_owner_and_cancel_does_not_advance_it() {
     let initial = CcmpPacketNumber::new(7).unwrap();
