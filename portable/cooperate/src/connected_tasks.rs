@@ -370,4 +370,9 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
 mod tests;

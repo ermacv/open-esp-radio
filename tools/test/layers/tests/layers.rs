@@ -1179,14 +1179,9 @@ model = { package = "oer-ieee80211-model", version = "1" }
 fn workspace_package_paths() -> BTreeMap<String, String> {
     packages(&root())
         .into_iter()
-        .map(|(path, manifest)| {
-            (
-                manifest["package"]["name"]
-                    .as_str()
-                    .expect("name")
-                    .to_owned(),
-                path,
-            )
+        .filter_map(|(path, manifest)| {
+            let name = manifest.get("package")?.get("name")?.as_str()?;
+            Some((name.to_owned(), path))
         })
         .collect()
 }
@@ -1542,12 +1537,15 @@ fn waiting_tokens(token: &TokenTree, file: &Path, found: &mut Vec<String>) {
 /// A module file: `lib.rs` and `mod.rs` own their directory; another file
 /// `name.rs` owns `name/`.
 fn production_file_waiting(file: &Path, found: &mut Vec<String>) {
-    let source = std::fs::read_to_string(file).expect("module source");
-    let tokens = source
-        .parse::<TokenStream>()
-        .expect("Rust module tokenizes");
-    let stem = file.file_stem().expect("module file").to_string_lossy();
-    let parent = file.parent().expect("module directory");
+    let tokens = std::fs::read_to_string(file)
+        .ok()
+        .and_then(|source| source.parse::<TokenStream>().ok());
+    let (Some(tokens), Some(stem), Some(parent)) = (tokens, file.file_stem(), file.parent()) else {
+        // A module the scan cannot read is reported, never skipped.
+        found.push(format!("{}: unreadable module", file.display()));
+        return;
+    };
+    let stem = stem.to_string_lossy();
     let directory = if ["lib", "mod", "main"].contains(&stem.as_ref()) {
         parent.to_path_buf()
     } else {

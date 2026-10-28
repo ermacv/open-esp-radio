@@ -382,4 +382,5 @@ impl fmt::Display for WifiConfigError {
 impl core::error::Error for WifiConfigError {}
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros)]
 mod tests;

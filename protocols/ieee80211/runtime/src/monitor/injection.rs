@@ -120,12 +120,6 @@ struct QueuedMonitorInjection<const FRAME_CAPACITY: usize> {
     bytes: [u8; FRAME_CAPACITY],
 }
 
-/// A request whose terminal found the completion queue full, returned whole.
-type Unpublished<const FRAME_CAPACITY: usize> = (
-    QueuedMonitorInjection<FRAME_CAPACITY>,
-    MonitorInjectionMailboxInvariantError,
-);
-
 /// Static request/completion queues and the active dwell's binding.
 ///
 /// `outstanding` counts queued, active and completed-but-unread tickets.  It
@@ -526,8 +520,8 @@ impl<const CAPACITY: usize, const FRAME_CAPACITY: usize>
                 return Ok(None);
             };
             if active != Some(queued.binding) {
-                if let Err((queued, error)) = self.publish_queued(
-                    queued,
+                if let Err(error) = self.publish_queued(
+                    &queued,
                     MonitorInjectionTerminal::Cancelled(
                         MonitorInjectionCancelReason::StaleChannelBinding,
                     ),
@@ -570,7 +564,7 @@ impl<const CAPACITY: usize, const FRAME_CAPACITY: usize>
             .take()
             .ok_or(MonitorInjectionMailboxInvariantError::MissingPayloadSlot)?;
         let ticket = active.ticket;
-        if let Err((active, error)) = self.publish_queued(active, terminal) {
+        if let Err(error) = self.publish_queued(&active, terminal) {
             self.active = Some(active);
             return Err(error);
         }
@@ -609,8 +603,8 @@ impl<const CAPACITY: usize, const FRAME_CAPACITY: usize>
     ) -> Result<u32, MonitorInjectionMailboxInvariantError> {
         let mut cancelled = 0_u32;
         while let Some(queued) = self.requests.try_receive() {
-            if let Err((queued, error)) =
-                self.publish_queued(queued, MonitorInjectionTerminal::Cancelled(reason))
+            if let Err(error) =
+                self.publish_queued(&queued, MonitorInjectionTerminal::Cancelled(reason))
             {
                 self.active = Some(queued);
                 return Err(error);
@@ -620,6 +614,10 @@ impl<const CAPACITY: usize, const FRAME_CAPACITY: usize>
         Ok(cancelled)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "a refused shutdown returns the owner with its active request"
+    )]
     pub fn shutdown(
         mut self,
     ) -> Result<MonitorInjectionMailboxShutdown, (Self, MonitorInjectionMailboxInvariantError)>
@@ -646,23 +644,22 @@ impl<const CAPACITY: usize, const FRAME_CAPACITY: usize>
         })
     }
 
-    /// Publish the request's terminal; a full completion queue returns the
-    /// request unchanged.
+    /// Publish the request's terminal; on a full completion queue the
+    /// caller keeps the request.
     fn publish_queued(
         &self,
-        queued: QueuedMonitorInjection<FRAME_CAPACITY>,
+        queued: &QueuedMonitorInjection<FRAME_CAPACITY>,
         terminal: MonitorInjectionTerminal,
-    ) -> Result<(), Unpublished<FRAME_CAPACITY>> {
+    ) -> Result<(), MonitorInjectionMailboxInvariantError> {
         match self.completions.try_send(MonitorInjectionCompletion {
             ticket: queued.ticket,
             binding: queued.binding,
             terminal,
         }) {
             Ok(()) => Ok(()),
-            Err(AffineSpscTrySendError(_)) => Err((
-                queued,
-                MonitorInjectionMailboxInvariantError::CompletionQueueFull,
-            )),
+            Err(AffineSpscTrySendError(_)) => {
+                Err(MonitorInjectionMailboxInvariantError::CompletionQueueFull)
+            }
         }
     }
 }
