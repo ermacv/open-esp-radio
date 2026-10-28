@@ -8,6 +8,8 @@ Cross-cutting documents. A component's own details live beside it, in its
   [CLAUDE.md](../CLAUDE.md) before any task.
 - [Radio ports](radio-ports.md): the principles every radio port follows.
 - [Time](time.md): clocks, stamps, alarms and their domains.
+- [Execution notifications](execution-wakes.md): executor contexts, signals,
+  wakers and the reviewed raw-waker inventory.
 - [Network](network.md): the network stack and the Wi-Fi egress boundary.
 - [Source policy](source-policy.md): what may enter the repository and how a
   recovered value records its source.
