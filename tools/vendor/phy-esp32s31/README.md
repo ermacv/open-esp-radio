@@ -36,6 +36,10 @@ Capture uses public PHY snapshots/getters, without verification hooks.
 `registers.rs` derives both images from the published model: the readable
 RadioPhyPeripherals partition and the native analog-I2C capture image. Production reads
 only vendor-readable MMIO indices, and each published analog byte once.
+MMIO wire indices concatenate ownership-policy parts, then ascending offsets
+inside each part; vendor requests use absolute addresses. Offline checks decode
+authenticated native protocol pages through that same policy order rather than
+trusting host-written address labels. Missing words remain incomplete.
 Resetting reads remain recorded as unreadable; missing vendor-readable
 production data never counts as a match.
 

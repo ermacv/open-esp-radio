@@ -19,6 +19,7 @@ diagnostic-radio-health = ["diagnostic-phy", "oer-hil-protocol/health", "oer-hil
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-memory = { path = "../../../portable/memory" }
+oer-riscv = { path = "../../../portable/riscv" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 heapless = { version = "0.9.3", features = ["serde"] }
 embassy-sync = "0.8.0"

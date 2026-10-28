@@ -19,6 +19,7 @@ macro_rules! capture_observer {
 mod cache;
 mod cca_checkpoint;
 mod cca_rx;
+mod completion;
 mod hold;
 mod ieee802154;
 mod projection;
@@ -54,6 +55,7 @@ use static_cell::StaticCell;
 // engine (`ieee802154::poll`), with the router's proof that no line
 // receives it.
 mod phy_pilot;
+mod pilot_timing;
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
@@ -185,9 +187,22 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ConcurrentPhy::new(),
         oer_espressif_staged_runtime::phy_fault::identity(),
     );
+    // RNG's inter-read settle needs an advancing clock before executor startup.
+    let timer = runtime.system_timer;
+    oer_espressif_executor::init::<2, _, _>(
+        oer_espressif_executor::systimer::SystemTimer {
+            comparators: timer.comparators,
+            counter: timer.counter,
+        },
+        adopted.router(),
+        interrupts.radio_alarm,
+        timer.alarm0,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let mut rng = Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
-    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
+    let (phy_pilot, pilot_timing) =
+        crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
     let radio = radio::Radio::place(
         RADIO.uninit(),
         domain,
@@ -200,20 +215,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         access_point,
         rng,
         phy_pilot,
+        pilot_timing,
     );
     #[cfg(feature = "diagnostic-radio-health")]
     radio.set_health_boot(boot);
-    let timer = runtime.system_timer;
-    oer_espressif_executor::init::<2, _, _>(
-        oer_espressif_executor::systimer::SystemTimer {
-            comparators: timer.comparators,
-            counter: timer.counter,
-        },
-        adopted.router(),
-        interrupts.radio_alarm,
-        timer.alarm0,
-    )
-    .unwrap_or_else(|failure| failure.reset());
     oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
         .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
@@ -376,7 +381,7 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
         radio.expire_cache();
         if radio.registration_pending() {
             let mut registration = core::pin::pin!(radio.service_registration());
-            poll_fn(|cx| radio::poll_registration(registration.as_mut(), cx)).await;
+            poll_fn(|cx| radio::poll_operation(registration.as_mut(), cx)).await;
             continue;
         }
         if let Some(deadline) = radio.deadline() {
@@ -408,9 +413,18 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
                     response.answer(Answer::Proceeded);
                 }
                 Request::Wire(request) => {
-                    let result = radio.request(request, &mut capture_rx).await;
-                    radio.request_finished(&result);
-                    response.answer(result.unwrap_or_else(Answer::Rejected));
+                    // Request/response scratch must not remain on the stack
+                    // while an unrelated registration or hold is polled.
+                    let mut operation = core::pin::pin!(async {
+                        let result = {
+                            let mut request =
+                                core::pin::pin!(radio.request(request, &mut capture_rx));
+                            request.as_mut().await
+                        };
+                        radio.request_finished(&result);
+                        response.answer(result.unwrap_or_else(Answer::Rejected));
+                    });
+                    poll_fn(|cx| radio::poll_operation(operation.as_mut(), cx)).await;
                 }
             }
         }

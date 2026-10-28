@@ -26,6 +26,7 @@ use oer_esp32s31_hal::{
 };
 use oer_esp32s31_phy::{
     concurrent::{ConcurrentAcquire, ConcurrentPhy, PhyClientAccess, phy_ready},
+    executor::boundary::Boundary,
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
     *,
 };
@@ -36,6 +37,7 @@ type Result<T> = core::result::Result<T, RejectReason>;
 
 pub struct Radio {
     phy_pilot: crate::phy_pilot::Client,
+    pilot_timing: crate::pilot_timing::Reader,
     domain: Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
     radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     clocks: ChipClocks,
@@ -78,6 +80,7 @@ impl Radio {
         access_point: [u8; 6],
         rng: Rng,
         phy_pilot: crate::phy_pilot::Client,
+        pilot_timing: crate::pilot_timing::Reader,
     ) -> &'storage mut Self {
         let radio_fault = domain.fault_handle();
         place_diagnostic_radio!(
@@ -101,6 +104,7 @@ impl Radio {
                 access_point: access_point,
                 rng: rng,
                 phy_pilot: phy_pilot,
+                pilot_timing: pilot_timing,
                 ready: None,
                 projection: [0; projection::WORDS],
                 poisoned: false,
@@ -267,7 +271,10 @@ impl Radio {
                 let current = self.current(epoch)?;
                 let next = epoch.checked_add(1).ok_or(RejectReason::InvalidState)?;
                 self.ready = None;
-                self.exit_capture(current.radio).await?;
+                {
+                    let mut exit = core::pin::pin!(self.exit_capture(current.radio));
+                    exit.as_mut().await?;
+                }
                 if !require_radio(self.domain.as_ref(), self.radio_fault)
                     .attachment()
                     .rf_closed()
@@ -275,14 +282,23 @@ impl Radio {
                     return Err(RejectReason::Internal);
                 }
                 {
-                    let (domain, result) = wake_concurrent_rf::<_, RomShortDelay>(
-                        &crate::PHY_CLOCK,
-                        require_radio(self.domain.take(), self.radio_fault),
-                        &self.clocks,
+                    let domain = require_radio(self.domain.take(), self.radio_fault);
+                    let clocks = &self.clocks;
+                    let mut wake =
+                        core::pin::pin!(crate::completion::construct(|| wake_concurrent_rf::<
+                            _,
+                            RomShortDelay,
+                        >(
+                            &crate::PHY_CLOCK,
+                            domain,
+                            clocks,
+                        )));
+                    crate::completion::run(
+                        wake.as_mut(),
+                        &mut self.domain,
+                        crate::completion::restore,
                     )
-                    .await;
-                    self.domain = Some(domain);
-                    result
+                    .await
                 }
                 .map_err(|_| RejectReason::Internal)?;
                 crate::sar2_checkpoint::observe(
@@ -295,7 +311,10 @@ impl Radio {
                     channel: current.channel,
                     radio: current.radio,
                 };
-                self.enter_capture(config).await?;
+                {
+                    let mut enter = core::pin::pin!(self.enter_capture(config));
+                    enter.as_mut().await?;
+                }
                 if config.radio == CaptureRadio::Wifi {
                     self.prepare_capture_rx(capture_rx).await?;
                 }
@@ -332,7 +351,10 @@ impl Radio {
                 } else {
                     Ok(())
                 };
-                let closed = self.exit_capture(current.radio).await;
+                let closed = {
+                    let mut exit = core::pin::pin!(self.exit_capture(current.radio));
+                    exit.as_mut().await
+                };
                 report_capture_stop(
                     &observed,
                     &closed,
@@ -419,7 +441,11 @@ impl Radio {
 
     /// Once started, the native registration future runs to its terminal result.
     pub async fn service_registration(&mut self) {
-        if let Err(_reason) = self.register().await {
+        let result = {
+            let mut registration = core::pin::pin!(self.register());
+            registration.as_mut().await
+        };
+        if let Err(_reason) = result {
             self.poisoned = true;
             self.ready = None;
             self.cache.fail();
@@ -436,20 +462,27 @@ impl Radio {
         // Consume the native result before awaiting diagnostics: its failure
         // variant retains the complete registration transition.
         let outcome = {
-            let (domain, result) = register_concurrent_phy::<_, (), RomShortDelay, _>(
-                &crate::PHY_CLOCK,
-                require_radio(self.domain.take(), self.radio_fault),
-                &mut (),
-                &self.clocks,
-                registration_config,
-                capture_observer!(self),
-            )
-            .await;
-            self.domain = Some(domain);
-            result
-        }
-        .map(|registration| registration.outcome())
-        .map_err(|_| RejectReason::Internal);
+            let mut platform = ();
+            let domain = require_radio(self.domain.take(), self.radio_fault);
+            let clocks = &self.clocks;
+            let observer = capture_observer!(self);
+            let mut registration =
+                core::pin::pin!(crate::completion::construct(|| register_concurrent_phy::<
+                    _,
+                    (),
+                    RomShortDelay,
+                    _,
+                >(
+                    &crate::PHY_CLOCK,
+                    domain,
+                    &mut platform,
+                    clocks,
+                    registration_config,
+                    observer,
+                )));
+            crate::completion::run(registration.as_mut(), &mut self.domain, finish_registration)
+                .await
+        };
         let outcome = match outcome {
             Ok(outcome) => outcome,
             Err(_) => {
@@ -514,7 +547,10 @@ impl Radio {
                 }
             })
             .await;
-        self.enter_capture(config).await?;
+        {
+            let mut enter = core::pin::pin!(self.enter_capture(config));
+            enter.as_mut().await?;
+        }
         let lifecycle = match config.radio {
             CaptureRadio::Wifi => CaptureLifecycle::Cold,
             CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154,
@@ -588,18 +624,40 @@ impl Radio {
             &mut uart,
         );
         observer.metrics = Some(&metrics);
+        crate::phy_pilot::begin_timing();
         let (domain, tracked) = {
             let mut port = ();
-            let mut future = core::pin::pin!(track_concurrent_phy::<_, (), RomShortDelay, _>(
-                require_radio(self.domain.take(), self.radio_fault),
-                &mut port,
+            let domain = require_radio(self.domain.take(), self.radio_fault);
+            let pilot = &mut self.phy_pilot;
+            let observer = &mut observer;
+            let mut future =
+                core::pin::pin!(crate::completion::construct(|| track_concurrent_phy::<
+                    _,
+                    (),
+                    RomShortDelay,
+                    _,
+                >(
+                    domain,
+                    &mut port,
+                    &crate::PHY_CLOCK,
+                    observer,
+                    pilot,
+                )));
+            crate::hold::metrics::observe(
+                Boundary::new(future.as_mut()),
                 &crate::PHY_CLOCK,
-                &mut observer,
-                &mut self.phy_pilot,
-            ));
-            crate::hold::metrics::observe(future.as_mut(), &crate::PHY_CLOCK, &metrics).await
+                &metrics,
+            )
+            .await
         };
         self.domain = Some(domain);
+        let pilot_lost = crate::phy_pilot::end_timing();
+        crate::pilot_timing::report(
+            &self.pilot_timing,
+            hold.samples.len() as u32 + 1,
+            pilot_lost,
+        )
+        .await;
         let (committed, failed) = match tracked {
             Ok(ConcurrentTrackingTick::NotDue) => return,
             Ok(ConcurrentTrackingTick::Tracked(outcome)) => {
@@ -687,29 +745,34 @@ impl Radio {
 
     async fn enter_capture(&mut self, config: PrepareCapture) -> Result<()> {
         match config.radio {
-            CaptureRadio::Wifi => self.enter(config.channel).await,
+            CaptureRadio::Wifi => {
+                let mut enter = core::pin::pin!(self.enter(config.channel));
+                Boundary::new(enter.as_mut()).await
+            }
             CaptureRadio::Ieee802154 { power_dbm } => {
-                self.ieee802154
-                    .enter(
-                        &mut self.phy_pilot,
-                        &mut self.domain,
-                        self.radio_fault,
-                        &self.clocks,
-                        config.channel,
-                        power_dbm,
-                    )
-                    .await
+                let mut enter = core::pin::pin!(self.ieee802154.enter(
+                    &mut self.phy_pilot,
+                    &mut self.domain,
+                    self.radio_fault,
+                    &self.clocks,
+                    config.channel,
+                    power_dbm,
+                ));
+                Boundary::new(enter.as_mut()).await
             }
         }
     }
 
     async fn exit_capture(&mut self, radio: CaptureRadio) -> Result<()> {
         match radio {
-            CaptureRadio::Wifi => self.exit().await,
+            CaptureRadio::Wifi => {
+                let mut exit = core::pin::pin!(self.exit());
+                Boundary::new(exit.as_mut()).await
+            }
             CaptureRadio::Ieee802154 { .. } => {
-                self.ieee802154
-                    .exit(&mut self.domain, self.radio_fault)
-                    .await
+                let mut exit =
+                    core::pin::pin!(self.ieee802154.exit(&mut self.domain, self.radio_fault));
+                Boundary::new(exit.as_mut()).await
             }
         }
     }
@@ -750,16 +813,29 @@ impl Radio {
         self.member = Some(joined.membership);
         if due {
             {
-                let (domain, result) = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-                    &crate::PHY_CLOCK,
-                    require_radio(self.domain.take(), self.radio_fault),
-                    &mut (),
-                    capture_observer!(self),
-                    &mut self.phy_pilot,
+                let mut platform = ();
+                let domain = require_radio(self.domain.take(), self.radio_fault);
+                let observer = capture_observer!(self);
+                let pilot = &mut self.phy_pilot;
+                let mut maintain =
+                    core::pin::pin!(crate::completion::construct(|| maintain_concurrent_phy::<
+                        _,
+                        (),
+                        RomShortDelay,
+                        _,
+                    >(
+                        &crate::PHY_CLOCK,
+                        domain,
+                        &mut platform,
+                        observer,
+                        pilot,
+                    )));
+                crate::completion::run(
+                    maintain.as_mut(),
+                    &mut self.domain,
+                    crate::completion::restore,
                 )
-                .await;
-                self.domain = Some(domain);
-                result
+                .await
             }
             .map_err(|_| RejectReason::Internal)?;
         }
@@ -915,14 +991,20 @@ impl Radio {
         )
         .await?;
         {
-            let (domain, result) = close_concurrent_rf::<_, (), RomShortDelay>(
-                &crate::PHY_CLOCK,
-                require_radio(self.domain.take(), self.radio_fault),
-                &mut (),
-            )
-            .await;
-            self.domain = Some(domain);
-            result
+            let mut platform = ();
+            let domain = require_radio(self.domain.take(), self.radio_fault);
+            let mut close =
+                core::pin::pin!(crate::completion::construct(|| close_concurrent_rf::<
+                    _,
+                    (),
+                    RomShortDelay,
+                >(
+                    &crate::PHY_CLOCK,
+                    domain,
+                    &mut platform,
+                )));
+            crate::completion::run(close.as_mut(), &mut self.domain, crate::completion::restore)
+                .await
         }
         .map_err(|_| RejectReason::Internal)?;
         Ok(())
@@ -959,9 +1041,30 @@ impl Radio {
     }
 }
 
-/// Keep the registration poll's scratch frame off unrelated request paths.
+// Collapse the large registration result in its retained return place before
+// diagnostics or radio bring-up; failed transitions are still dropped there.
 #[inline(never)]
-pub fn poll_registration<F: core::future::Future>(
+fn finish_registration(
+    destination: &mut Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
+    returned: oer_memory::Placed<
+        '_,
+        (
+            RadioDomain<ChipClocks, ConcurrentPhy>,
+            core::result::Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+        ),
+    >,
+) -> Result<PhyRegisterOutcome> {
+    let (domain, result) = returned.split();
+    *destination = Some(domain.read());
+    match &*result {
+        Ok(registration) => Ok(registration.outcome()),
+        Err(_) => Err(RejectReason::Internal),
+    }
+}
+
+/// Keep operation scratch frames off unrelated branches of the radio task.
+#[inline(never)]
+pub fn poll_operation<F: core::future::Future>(
     future: core::pin::Pin<&mut F>,
     context: &mut core::task::Context<'_>,
 ) -> core::task::Poll<F::Output> {

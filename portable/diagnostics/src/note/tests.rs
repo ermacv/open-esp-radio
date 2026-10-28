@@ -70,6 +70,15 @@ fn a_typed_constructor_keeps_each_value_in_its_field() {
 }
 
 #[test]
+fn pilot_service_reports_corrected_cycles_and_the_measured_cost_separately() {
+    let note = Note::pilot_service(2, 19, 31, u64::from(u32::MAX) + 7, 23);
+    assert_eq!(note.words(), [2, 19, 31, 0, 6, 1, 23, 0]);
+    assert_eq!(decode(&encode(&note)), Ok(note));
+    let window = Note::pilot_window(2, 19, 3, 160_000_000, 4096);
+    assert_eq!(decode(&encode(&window)), Ok(window));
+}
+
+#[test]
 fn an_unknown_topic_or_a_wrong_count_is_an_error_not_a_note() {
     let known = encode(&Note::rearm(1, 2, 3));
     let mut unknown = known.clone();

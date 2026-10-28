@@ -92,6 +92,19 @@ waits and a finite observation budget. Register indices come from the published
 model, never arbitrary host addresses; the host requests only MMIO indices the
 reference could read at the same lifecycle point.
 
+Startup publishes the executor's system counter before drawing the boot identity.
+The RNG's inter-read settle uses that advancing clock even before executors start.
+
+The P2 owner pins large child futures and awaits references to their retained
+storage. Owned registration, maintenance and RF results are polled into parent
+storage; a separate completion frame returns domain custody and inspects the
+registration result in place before diagnostics or capture bring-up.
+Future construction and request handling have separate non-inlined frames, so
+their scratch does not remain live beneath calibration or tracking polls.
+Owned PHY polls use the existing PHY `Boundary` around pinned references, so
+each operation's scratch stays in its own poll frame. MAC event polling has
+its own frame as well.
+
 The image uses existing staged boot and chip placement/stack policies. It has
 no retained diagnostic post-mortem store; base boot evidence retains the actual
 reset reason code. Build audit reports state unresolved stack-call sites.
@@ -130,6 +143,25 @@ Callbacks buffer aggregate engine and gain diagnostics. Per-command RFPLL
 tracing is disabled in this quiet observer to keep its cost out of the polls. All formatting and
 UART, including failure reports, follow root return; the same observer is used
 in both policy modes. A started PHY future is driven to completion.
+
+Each hold root opens an image-only TIMG0 service timing window. The image reads
+`oer-riscv::cycle64` on handler entry and around the public `Interrupt::service`
+call, then measures an empty pair after the call. A fixed 4096-entry SPSC queue
+retains four 64-bit values per event (128 KiB); overflow preserves earlier
+samples and increments a saturating loss counter. The task drains it after root
+return, never borrowing the handler cell. `pilot-service` notes report both
+intervals minus that event's empty-pair cost, saturating unresolved intervals
+at zero, and retain that cost. `pilot-window` reports events, losses, capacity
+and CPU Hz. SOURCE: the staged S31 bootstrap selects `CpuProfile::Mhz160`;
+the profile derives PLL/divider rates from the sourced HAL clock description.
+
+Entry-to-call excludes the interrupt vector/prologue. Service duration includes
+acknowledgement, custody transfer, the SAR machine advance, and rearm/reply; it
+does not isolate the private SAR atom or terminal readiness. Those boundaries
+are inside the production PHY and have no image observation API. Alarm-to-IRQ
+cannot be read here: the IRQ owner holds only RAW/ST/CLR; the separate program
+owner inside the PHY bundle holds counter/alarm registers. No production PHY
+hooks or additional register access are introduced.
 
 Stop retires the hold id and restores the saved policy; StopCapture then closes
 RF. Overflow, reversed time, failed/missing/duplicate edges, incomplete branches,

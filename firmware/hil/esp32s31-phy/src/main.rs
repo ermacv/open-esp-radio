@@ -5,5 +5,26 @@
 include!("entry.rs");
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod cache;
+#[cfg(all(test, not(target_arch = "riscv32")))]
+mod completion;
+#[cfg(all(test, not(target_arch = "riscv32")))]
+mod pilot_timing;
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn boot_entropy_reads_follow_clock_publication() {
+        // The target entry cannot execute on the host. Its linear startup
+        // must publish the clock before RNG's second read waits on that clock.
+        let entry = include_str!("entry.rs");
+        let publish = entry
+            .find("oer_espressif_executor::init::<2")
+            .expect("the image publishes its system counter");
+        let sample = entry
+            .find("rng.random()")
+            .expect("the boot identity draws entropy");
+        assert!(publish < sample, "an unpublished clock stalls boot entropy");
+    }
+}

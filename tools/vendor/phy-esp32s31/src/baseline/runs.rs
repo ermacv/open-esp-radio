@@ -228,7 +228,12 @@ fn production_series(repetition: &Value, observations: &Value, captures: usize) 
     Ok(())
 }
 
-pub fn production(root: &Path, label: &str, channel: u8) -> Result<(Images, Vec<ProductionBoot>)> {
+pub fn production(
+    root: &Path,
+    label: &str,
+    channel: u8,
+    registers: &[oer_vendor_phy::calibration_capture::space::Register],
+) -> Result<(Images, Vec<ProductionBoot>)> {
     manifest(root, label)?;
     let suite = read(&root.join("suite.json"))?;
     let mut captures = vec![];
@@ -277,16 +282,121 @@ pub fn production(root: &Path, label: &str, channel: u8) -> Result<(Images, Vec<
                 {
                     return Err("production capture differs from its observation".into());
                 }
-                captures.push(serde_json::from_slice(&bytes)?);
+                let mut capture: ProductionBoot = serde_json::from_slice(&bytes)?;
+                // The authenticated wire pages carry native indices. Reconstruct
+                // their identities instead of trusting a host's address labels.
+                let protocol = attached(
+                    root,
+                    rep,
+                    &format!("{directory}/production-{i:03}/protocol.jsonl"),
+                )?;
+                let epoch = ready
+                    .get("epoch")
+                    .and_then(Value::as_u64)
+                    .ok_or("missing epoch")?;
+                let readings = register_pages(&protocol, epoch, registers)?;
+                let mut wire_values = readings.values.values().copied().collect::<Vec<_>>();
+                let mut captured_values = capture
+                    .registers
+                    .values
+                    .values()
+                    .copied()
+                    .collect::<Vec<_>>();
+                wire_values.sort_unstable();
+                captured_values.sort_unstable();
+                if wire_values != captured_values || !capture.registers.unreadable.is_empty() {
+                    return Err("wire/capture register values differ".into());
+                }
+                capture.registers = readings;
+                captures.push(capture);
             }
         }
     }
     Ok((identity.ok_or("no production image identity")?, captures))
 }
 
+/// Decode every native page through the policy-ordered image, including sparse
+/// captures. Coverage remains the reference check's responsibility; no absent
+/// value is reconstructed from a different word or from vendor bounds.
+fn register_pages(
+    protocol: &[u8],
+    epoch: u64,
+    image: &[oer_vendor_phy::calibration_capture::space::Register],
+) -> Result<Readings> {
+    let mut readings = Readings::default();
+    for line in protocol
+        .split(|b| *b == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        let record: Value = serde_json::from_slice(line)?;
+        if record.get("record").and_then(Value::as_str) != Some("target-event")
+            || record.pointer("/message/path").and_then(Value::as_str)
+                != Some("phy/capture/registers")
+        {
+            continue;
+        }
+        let body = record
+            .pointer("/message/body")
+            .ok_or("missing register page")?;
+        if body.get("epoch").and_then(Value::as_u64) != Some(epoch)
+            || body.get("total").and_then(Value::as_u64) != Some(image.len() as u64)
+        {
+            return Err("register page epoch or native image differs".into());
+        }
+        let first = usize::try_from(
+            body.get("first")
+                .and_then(Value::as_u64)
+                .ok_or("missing page index")?,
+        )?;
+        let values = array(body, "values")?;
+        if values.is_empty() {
+            return Err("empty register page".into());
+        }
+        for (offset, value) in values.iter().enumerate() {
+            let index = first.checked_add(offset).ok_or("register page overflow")?;
+            let register = image
+                .get(index)
+                .ok_or("register page outside native image")?;
+            let value = u32::try_from(value.as_u64().ok_or("invalid register value")?)?;
+            if readings.values.insert(register.address, value).is_some() {
+                return Err("duplicate register page word".into());
+            }
+        }
+    }
+    if readings.values.is_empty() {
+        return Err("no authenticated native register pages".into());
+    }
+    Ok(readings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn sparse_wire_pages_use_native_indices_and_never_fill_missing_words() {
+        use oer_vendor_phy::calibration_capture::space::Register;
+        let image = [
+            Register {
+                name: "policy-first".into(),
+                address: 80,
+                mask: u32::MAX,
+            },
+            Register {
+                name: "address-first".into(),
+                address: 4,
+                mask: u32::MAX,
+            },
+        ];
+        let line = br#"{"record":"target-event","message":{"path":"phy/capture/registers","body":{"epoch":3,"first":0,"total":2,"values":[29]}}}"#;
+        let readings = register_pages(line, 3, &image).unwrap();
+        assert_eq!(readings.values, [(80, 29)].into());
+        assert!(!readings.values.contains_key(&4));
+        assert!(register_pages(line, 4, &image).is_err());
+        assert!(register_pages(line, 3, &image[..1]).is_err());
+        let duplicate = [line.as_slice(), b"\n", line.as_slice()].concat();
+        assert!(register_pages(&duplicate, 3, &image).is_err());
+        assert!(register_pages(b"", 3, &image).is_err());
+    }
     #[test]
     fn partial_production_series_cannot_become_a_match_from_the_completed_prefix() {
         let mut rep = serde_json::json!({"outcome":"failed"});
