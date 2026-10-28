@@ -353,3 +353,136 @@ fn empty_capacity_and_zero_waiters_need_no_special_case() {
         assert!(seats.is_empty());
     });
 }
+
+#[test]
+fn fifo_order_survives_the_ticket_counter_wrap() {
+    with_pool::<1, 3, _>(|pool, mut seats| {
+        pool.next.set(u32::MAX - 2);
+        conformance::permits_serve_takers_in_arrival_order(pool, &mut seats, []);
+        assert_eq!(pool.available(), 1);
+        assert_eq!(pool.waiting(), 0);
+    });
+}
+
+#[test]
+fn repoll_replaces_the_wake_target_without_losing_the_place() {
+    with_pool::<1, 2, _>(|pool, [mut a, mut b]| {
+        let held = take_now(pool, &mut a);
+        let old = Arc::new(Count::default());
+        let new = Arc::new(Count::default());
+        let old_waker = Waker::from(old.clone());
+        let new_waker = Waker::from(new.clone());
+        let mut take = pin!(pool.take(&mut b));
+        for waker in [&old_waker, &new_waker] {
+            assert!(
+                take.as_mut()
+                    .poll(&mut Context::from_waker(waker))
+                    .is_pending()
+            );
+        }
+        assert_eq!(pool.waiting(), 1);
+        pool.release(held);
+        assert_eq!((old.wakes(), new.wakes()), (0, 1));
+        let Poll::Ready(permit) = poll_once(take.as_mut()) else {
+            panic!("the repolled leader keeps its place");
+        };
+        pool.release(permit);
+        assert_eq!(pool.available(), 1);
+        assert_eq!(pool.waiting(), 0);
+    });
+}
+
+#[test]
+fn every_permit_and_seat_in_the_largest_pool_retains_its_capacity() {
+    with_pool::<256, 256, _>(|pool, mut seats| {
+        let held: std::vec::Vec<_> = seats.iter_mut().map(|seat| take_now(pool, seat)).collect();
+        assert_eq!(pool.available(), 0);
+        let mut waiting: std::vec::Vec<_> = seats
+            .iter_mut()
+            .rev()
+            .map(|seat| Box::pin(pool.take(seat)))
+            .collect();
+        for take in &mut waiting {
+            assert!(poll_once(take.as_mut()).is_pending());
+        }
+        assert_eq!(pool.waiting(), 256);
+        for (permit, take) in held.into_iter().rev().zip(waiting.iter_mut()) {
+            pool.release(permit);
+            let Poll::Ready(returned) = poll_once(take.as_mut()) else {
+                panic!("every seat is served in arrival order");
+            };
+            pool.release(returned);
+        }
+        assert_eq!(pool.available(), 256);
+        assert_eq!(pool.waiting(), 0);
+    });
+}
+
+#[test]
+fn a_wake_callback_can_repoll_and_replace_its_waker() {
+    with_pool::<1, 2, _>(|pool, [mut a, mut b]| {
+        let held = take_now(pool, &mut a);
+        let old = Arc::new(Count::default());
+        let new = Arc::new(Count::default());
+        let old_waker = Waker::from(old.clone());
+        let new_waker = Waker::from(new.clone());
+        let mut take = Box::pin(pool.take(&mut b));
+        assert!(
+            take.as_mut()
+                .poll(&mut Context::from_waker(&old_waker))
+                .is_pending()
+        );
+        // Invoke the same callback boundary as wake_leader, with a scoped
+        // closure so reentry needs neither an unsafe RawWaker nor global state.
+        let slot = pool
+            .line
+            .iter()
+            .find(|slot| slot.ticket.get().is_some())
+            .unwrap();
+        slot.wake(|waker| {
+            assert_eq!(pool.waiting(), 1, "the leader remains observable");
+            assert!(
+                take.as_mut()
+                    .poll(&mut Context::from_waker(&new_waker))
+                    .is_pending()
+            );
+            waker.wake_by_ref();
+        });
+        pool.release(held);
+        assert_eq!((old.wakes(), new.wakes()), (1, 1));
+        let Poll::Ready(permit) = poll_once(take.as_mut()) else {
+            panic!("the callback's new waker retains the waiter's place");
+        };
+        pool.release(permit);
+    });
+}
+
+#[test]
+fn a_wake_callback_can_cancel_its_take_without_restoring_a_stale_waker() {
+    with_pool::<1, 2, _>(|pool, [mut a, mut b]| {
+        let held = take_now(pool, &mut a);
+        let count = Arc::new(Count::default());
+        let waker = Waker::from(count.clone());
+        let mut take = Box::pin(pool.take(&mut b));
+        assert!(
+            take.as_mut()
+                .poll(&mut Context::from_waker(&waker))
+                .is_pending()
+        );
+        let slot = pool
+            .line
+            .iter()
+            .find(|slot| slot.ticket.get().is_some())
+            .unwrap();
+        slot.wake(|waker| {
+            drop(take);
+            assert_eq!(pool.waiting(), 0);
+            waker.wake_by_ref();
+        });
+        pool.release(held);
+        assert_eq!(count.wakes(), 1, "a departed waiter is not woken again");
+        assert_eq!(Arc::strong_count(&count), 2, "the queue released its waker");
+        let permit = take_now(pool, &mut b);
+        pool.release(permit);
+    });
+}

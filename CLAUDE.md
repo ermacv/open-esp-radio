@@ -9,11 +9,13 @@ system these rules serve.
 ## Code
 
 - **Ask, never fall back.** When a choice changes a shared crate, drops data,
-  adds a fallback, leaves work unfinished, changes memory use or on-hardware
+  adds a fallback, leaves work unfinished, changes on-hardware
   behavior, or departs from a contract shape already accepted, explain it,
   recommend an option and ask before writing code. Decide small, local,
   reversible details (a name, a variant, a test shape) yourself and state
-  each in one line of the PR; batch the real questions.
+  each in one line of the PR; batch the real questions. Memory changes are
+  reported in the PR, not approval gates; shared-contract changes needed to
+  return typed errors follow the same rule, with every caller migrated.
 - **Keep your word.** A departure from the plan you stated goes into the PR
   as your own decision. Before calling something unused, grep its field and
   method accesses, not only its type name.

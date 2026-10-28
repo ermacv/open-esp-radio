@@ -29,6 +29,10 @@ any terminal, so it cannot be built.
   takers are the same seats (one per transmit queue) each take it. Their permit paths stay distinct while the shared waiter path identifies those seats. A
   take that leaked without its drop (`mem::forget`) loses its place to its
   seat's next take.
+- Permits and waiter state live in separate `Cell` slots. A waiter's ticket
+  stays visible while its waker callback runs; callbacks run without a queue
+  borrow, and a newer waker or a departed ticket takes precedence over restoring
+  the callback's old waker. Internal memory layout is not a fixed-size contract.
 - The pool is `!Sync`. It lives in the port body's task, and nothing outside
   that task reaches it.
 

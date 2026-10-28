@@ -8,7 +8,9 @@ crate implements `RadioChannel` for its own channel type and receives a
 - `RegulatoryDomain` is a validated, sorted, disjoint list of `Rule`s for one
   `Country`. The generated tables in `generated.rs` are a subset of
   `wireless-regdb` (see the repository `NOTICE`), produced by
-  `tools/regulatory/generate`.
+  `tools/regulatory/generate`. Frequency bounds are const parameters checked
+  at monomorphization; country and rule-order checks run in const initializers,
+  so none of the generated validation has a runtime panic path.
 - `RegulatoryDomain::permit` is the only way to make a `Permitted<C>`. Every
   tune, install, scan and transmission of the three radios takes one.
 - A channel in a rule marked NO-IR is permitted for listening only

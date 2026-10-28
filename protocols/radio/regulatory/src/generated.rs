@@ -5,45 +5,45 @@
 
 use crate::{Country, FrequencySpan, RegulatoryDomain, Rule, RuleFlags};
 
-const fn rule(
-    low_khz: u32,
-    high_khz: u32,
+const fn rule<const LOW: u32, const HIGH: u32>(
     max_bandwidth_khz: u32,
     max_eirp_mbm: i32,
     flags: RuleFlags,
 ) -> Rule {
-    match FrequencySpan::new(low_khz, high_khz) {
-        Some(span) => Rule::new(span, max_bandwidth_khz, max_eirp_mbm, flags),
-        None => panic!("generated rule has an empty span"),
+    const {
+        if LOW >= HIGH {
+            panic!("generated rule has an empty span");
+        }
     }
-}
-
-const fn domain(code: [u8; 2], rules: &'static [Rule]) -> RegulatoryDomain {
-    let country = match Country::new(code) {
-        Ok(country) => country,
-        Err(_) => panic!("generated country code is invalid"),
-    };
-    match RegulatoryDomain::new(country, rules) {
-        Ok(domain) => domain,
-        Err(_) => panic!("generated rules overlap"),
-    }
+    Rule::new(
+        FrequencySpan {
+            low_khz: LOW,
+            high_khz: HIGH,
+        },
+        max_bandwidth_khz,
+        max_eirp_mbm,
+        flags,
+    )
 }
 
 const DE: &[Rule] = &[
-    rule(2_400_000, 2_483_500, 40_000, 2000, RuleFlags::NONE),
-    rule(5_150_000, 5_250_000, 80_000, 2301, RuleFlags::NO_OUTDOOR),
-    rule(
-        5_250_000,
-        5_350_000,
-        80_000,
-        2000,
-        RuleFlags::DFS.union(RuleFlags::NO_OUTDOOR),
-    ),
-    rule(5_470_000, 5_725_000, 160_000, 2699, RuleFlags::DFS),
-    rule(5_725_000, 5_875_000, 80_000, 1398, RuleFlags::NONE),
-    rule(5_945_000, 6_425_000, 320_000, 2300, RuleFlags::NO_OUTDOOR),
-    rule(57_000_000, 66_000_000, 2_160_000, 4000, RuleFlags::NONE),
+    rule::<2_400_000, 2_483_500>(40_000, 2000, RuleFlags::NONE),
+    rule::<5_150_000, 5_250_000>(80_000, 2301, RuleFlags::NO_OUTDOOR),
+    rule::<5_250_000, 5_350_000>(80_000, 2000, RuleFlags::DFS.union(RuleFlags::NO_OUTDOOR)),
+    rule::<5_470_000, 5_725_000>(160_000, 2699, RuleFlags::DFS),
+    rule::<5_725_000, 5_875_000>(80_000, 1398, RuleFlags::NONE),
+    rule::<5_945_000, 6_425_000>(320_000, 2300, RuleFlags::NO_OUTDOOR),
+    rule::<57_000_000, 66_000_000>(2_160_000, 4000, RuleFlags::NONE),
 ];
 
 /// The generated domains, by country.
-pub const DOMAINS: &[RegulatoryDomain] = &[domain(*b"DE", DE)];
+pub const DOMAINS: &[RegulatoryDomain] = &[const {
+    if Country::new(*b"DE").is_err() {
+        panic!("generated country code is invalid");
+    }
+    let country = Country(*b"DE");
+    if RegulatoryDomain::new(country, DE).is_err() {
+        panic!("generated rules overlap");
+    }
+    RegulatoryDomain { country, rules: DE }
+}];
