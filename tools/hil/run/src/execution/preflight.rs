@@ -110,16 +110,17 @@ fn image_keys_of(lab: &LabConfig, directory: &Path) -> Result<DeviceImageKeys> {
     capture.finish_with(image_keys)
 }
 
-/// Accept a flashed image only when it reports every key the scenario's
-/// family requires. What the image serves is its own report; the host
-/// derives no expected set from the class's features, so an experiment's
+/// Accept a flashed image only when it reports every required key and no
+/// forbidden key of the scenario's family. What the image serves is its own
+/// report; the host derives no expected set from the class's features, so an experiment's
 /// image with a feature delta passes when it still serves the scenario.
 fn check_flashed_image_keys(selected: &Scenario, image_keys: &DeviceImageKeys) -> Result<()> {
     image_keys
         .require_all(selected.family.required_keys())
-        .map_err(|missing| {
+        .and_then(|()| image_keys.forbid_all(selected.family.forbidden_keys()))
+        .map_err(|mismatch| {
             format!(
-                "flashed `{}` image does not serve scenario `{}`: {missing}",
+                "flashed `{}` image does not serve scenario `{}`: {mismatch}",
                 selected.image().id(),
                 selected.id()
             )
@@ -153,10 +154,104 @@ mod tests {
         let keys = [
             system::WatchdogTest::KEY,
             system::WatchdogArmed::KEY,
-            system::DisableUsb::KEY,
-            system::UsbDisabled::KEY,
+            system::PanicHook::KEY,
+            Key([7; 8]),
         ];
         check_flashed_image_keys(&watchdog, &image(&keys)).unwrap();
+    }
+
+    #[test]
+    fn every_image_class_selects_only_its_system_workload() {
+        use oer_hil_protocol::{health, lower_mac, phy, wifi};
+        let panic = [system::InjectPanic::KEY, system::PanicInjected::KEY];
+        let watchdog: Vec<Key> = panic
+            .iter()
+            .copied()
+            .chain([
+                system::WatchdogTest::KEY,
+                system::WatchdogArmed::KEY,
+                system::PanicHook::KEY,
+            ])
+            .collect();
+        let usb: Vec<Key> = watchdog
+            .iter()
+            .copied()
+            .chain([
+                system::DisableUsb::KEY,
+                system::UsbDisabled::KEY,
+                system::UsbJtagOff::KEY,
+            ])
+            .collect();
+        for class in ImageClass::ALL {
+            let (keys, expected): (&[Key], Option<&str>) = match class {
+                ImageClass::SystemWatchdog => (&watchdog, Some("watchdog")),
+                ImageClass::SystemPanicReset => (&panic, Some("panic-reset")),
+                ImageClass::DiagnosticUsbJtagOff => (&usb, Some("stand-recovery")),
+                ImageClass::BootSmoke => (&[], None),
+                ImageClass::WifiStation => (wifi::KEYS, None),
+                ImageClass::DiagnosticPhy => (phy::KEYS, None),
+                ImageClass::DiagnosticRadioHealth => (health::KEYS, None),
+                ImageClass::DiagnosticLowerMac => (lower_mac::KEYS, None),
+            };
+            let accepted: Vec<&str> = ["watchdog", "panic-reset", "stand-recovery"]
+                .into_iter()
+                .filter(|kind| check_flashed_image_keys(&scenario(kind), &image(keys)).is_ok())
+                .collect();
+            assert_eq!(
+                accepted,
+                expected.into_iter().collect::<Vec<_>>(),
+                "{class:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn properties_are_checked_independently_of_endpoints() {
+        for (kind, keys, path) in [
+            (
+                "watchdog",
+                vec![system::WatchdogTest::KEY, system::WatchdogArmed::KEY],
+                system::PanicHook::PATH,
+            ),
+            (
+                "panic-reset",
+                vec![
+                    system::InjectPanic::KEY,
+                    system::PanicInjected::KEY,
+                    system::PanicHook::KEY,
+                ],
+                system::PanicHook::PATH,
+            ),
+            (
+                "watchdog",
+                vec![
+                    system::WatchdogTest::KEY,
+                    system::WatchdogArmed::KEY,
+                    system::PanicHook::KEY,
+                    system::UsbJtagOff::KEY,
+                ],
+                system::UsbJtagOff::PATH,
+            ),
+            (
+                "panic-reset",
+                vec![
+                    system::InjectPanic::KEY,
+                    system::PanicInjected::KEY,
+                    system::UsbJtagOff::KEY,
+                ],
+                system::UsbJtagOff::PATH,
+            ),
+            (
+                "stand-recovery",
+                vec![system::DisableUsb::KEY, system::UsbDisabled::KEY],
+                system::UsbJtagOff::PATH,
+            ),
+        ] {
+            let error = check_flashed_image_keys(&scenario(kind), &image(&keys))
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(path), "{kind}: {error}");
+        }
     }
 
     #[test]

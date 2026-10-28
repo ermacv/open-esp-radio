@@ -52,14 +52,31 @@ impl ScenarioFamily for SystemScenario {
 
     fn required_keys(&self) -> &'static [Key] {
         use oer_hil_protocol::system;
-        const WATCHDOG: &[Key] = &[system::WatchdogTest::KEY, system::WatchdogArmed::KEY];
+        const WATCHDOG: &[Key] = &[
+            system::WatchdogTest::KEY,
+            system::WatchdogArmed::KEY,
+            system::PanicHook::KEY,
+        ];
         const PANIC: &[Key] = &[system::InjectPanic::KEY, system::PanicInjected::KEY];
-        const USB: &[Key] = &[system::DisableUsb::KEY, system::UsbDisabled::KEY];
+        const USB: &[Key] = &[
+            system::DisableUsb::KEY,
+            system::UsbDisabled::KEY,
+            system::UsbJtagOff::KEY,
+        ];
         match self {
             Self::BootSmoke {} => &[],
             Self::Watchdog {} => WATCHDOG,
             Self::PanicReset {} => PANIC,
             Self::StandRecovery {} => USB,
+        }
+    }
+
+    fn forbidden_keys(&self) -> &'static [Key] {
+        use oer_hil_protocol::system;
+        match self {
+            Self::Watchdog {} => &[system::UsbJtagOff::KEY],
+            Self::PanicReset {} => &[system::PanicHook::KEY, system::UsbJtagOff::KEY],
+            Self::BootSmoke {} | Self::StandRecovery {} => &[],
         }
     }
 

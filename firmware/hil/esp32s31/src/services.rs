@@ -8,6 +8,16 @@ use oer_hil_agent::base::UsbRequest;
 #[cfg(any(test, feature = "system-watchdog"))]
 use oer_hil_agent::base::WatchdogRequest;
 
+/// The image entry's optional HIL panic hook, independent of its requests.
+pub(crate) struct PanicHook;
+
+impl oer_hil_agent::base::Service for PanicHook {
+    const KEYS: &'static [oer_hil_protocol::Key] = &[
+        #[cfg(feature = "panic-hook")]
+        <oer_hil_protocol::system::PanicHook as oer_hil_protocol::Message>::KEY,
+    ];
+}
+
 #[cfg(any(test, feature = "wifi-station"))]
 oer_hil_agent::requests! {
     /// The station image's requests, the topics it publishes and its
@@ -34,26 +44,26 @@ oer_hil_agent::requests! {
 
 #[cfg(any(test, all(feature = "system-watchdog", not(feature = "usb-jtag-off"))))]
 oer_hil_agent::image_keys! {
-    /// The watchdog image: watchdog tests and the panic hook's injection.
-    pub(crate) WATCHDOG_KEYS = [WatchdogRequest, PanicRequest]
+    /// The watchdog image: watchdog tests, requested reset and panic hook.
+    pub(crate) WATCHDOG_KEYS = [WatchdogRequest, PanicRequest, PanicHook]
 }
 
 #[cfg(any(test, feature = "usb-jtag-off"))]
 oer_hil_agent::image_keys! {
     /// The watchdog image that also switches its USB Serial/JTAG off.
-    pub(crate) USB_JTAG_OFF_KEYS = [WatchdogRequest, UsbRequest, PanicRequest]
+    pub(crate) USB_JTAG_OFF_KEYS = [WatchdogRequest, UsbRequest, PanicRequest, PanicHook]
 }
 
 #[cfg(any(test, feature = "system-panic-reset"))]
 oer_hil_agent::image_keys! {
-    /// The panic-reset image: injection through the product panic entry.
-    pub(crate) PANIC_RESET_KEYS = [PanicRequest]
+    /// The panic-reset image: explicit reset through the product retained path.
+    pub(crate) PANIC_RESET_KEYS = [PanicRequest, PanicHook]
 }
 
 #[cfg(any(test, feature = "wifi-station"))]
 oer_hil_agent::image_keys! {
     /// The station image.
-    pub(crate) STATION_KEYS = [StationRequests]
+    pub(crate) STATION_KEYS = [StationRequests, PanicHook]
 }
 
 #[cfg(test)]
@@ -73,13 +83,34 @@ mod tests {
         Base::KEYS
             .iter()
             .chain(groups.iter().copied().flatten())
+            .chain(PanicHook::KEYS)
             .copied()
             .collect()
     }
 
     const WATCHDOG: &[Key] = &[system::WatchdogTest::KEY, system::WatchdogArmed::KEY];
     const PANIC: &[Key] = &[system::InjectPanic::KEY, system::PanicInjected::KEY];
-    const USB: &[Key] = &[system::DisableUsb::KEY, system::UsbDisabled::KEY];
+    const USB: &[Key] = &[
+        system::DisableUsb::KEY,
+        system::UsbDisabled::KEY,
+        system::UsbJtagOff::KEY,
+    ];
+
+    #[test]
+    fn properties_follow_the_installed_hook_and_usb_variant() {
+        for (keys, usb_off) in [
+            (WATCHDOG_KEYS, false),
+            (USB_JTAG_OFF_KEYS, true),
+            (PANIC_RESET_KEYS, false),
+            (STATION_KEYS, false),
+        ] {
+            assert_eq!(
+                keys.contains(system::PanicHook::KEY),
+                cfg!(feature = "panic-hook")
+            );
+            assert_eq!(keys.contains(system::UsbJtagOff::KEY), usb_off);
+        }
+    }
 
     #[test]
     fn each_image_reports_its_services_and_the_base_module() {

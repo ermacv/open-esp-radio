@@ -37,6 +37,9 @@ impl ScenarioFamily for LowerMacScenario {
     fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
         oer_hil_protocol::lower_mac::KEYS
     }
+    fn forbidden_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        &[]
+    }
     fn air_use(&self) -> Vec<AirUse> {
         vec![AirUse::Band2G4]
     }

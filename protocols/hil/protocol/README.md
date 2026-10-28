@@ -35,7 +35,15 @@ its messages with `messages!`:
 `messages!` also emits the module's `KEYS`, the keys of all its messages. The
 protocol names no image: which keys an image reports follows from the
 services it mounts ([agent](../agent/README.md#image-keys)), and a host
-scenario family declares the keys it requires.
+scenario family declares the keys it requires and forbids. Unrelated extra
+keys are accepted.
+
+`system::PanicHook` (`system/panic-hook`) marks an installed HIL panic hook;
+`system::UsbJtagOff` (`system/usb-jtag-off`) marks the USB-off variant.
+These properties are unit markers, never frames. Watchdog scenarios require
+the hook property and forbid the USB-off property. Panic-reset scenarios
+forbid both properties; stand-recovery requires the USB-off property.
+Each scenario also requires the endpoints and responses it uses.
 
 A response may follow other messages about the same request: a replayed
 session publishes its evidence before `network::Finished`.

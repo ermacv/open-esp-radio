@@ -190,6 +190,24 @@ fn a_service_reports_its_endpoints_their_responses_and_what_it_publishes() {
 }
 
 #[test]
+fn only_the_usb_service_advertises_the_usb_variant() {
+    use oer_hil_protocol::system::{PanicHook, UsbJtagOff};
+    assert!(UsbRequest::KEYS.contains(&UsbJtagOff::KEY));
+    for keys in [Base::KEYS, WatchdogRequest::KEYS, PanicRequest::KEYS] {
+        assert!(!keys.contains(&UsbJtagOff::KEY));
+    }
+    for keys in [
+        Base::KEYS,
+        UsbRequest::KEYS,
+        WatchdogRequest::KEYS,
+        PanicRequest::KEYS,
+    ] {
+        // Request support alone says nothing about the image entry's hook.
+        assert!(!keys.contains(&PanicHook::KEY));
+    }
+}
+
+#[test]
 fn an_image_reports_the_base_module_and_each_shared_key_once() {
     use oer_hil_protocol::system::{PanicInjected, WatchdogArmed};
     let mut expected: Vec<Key> = Base::KEYS.to_vec();

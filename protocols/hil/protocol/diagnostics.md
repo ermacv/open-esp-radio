@@ -11,11 +11,14 @@ ran on the interrupt stack and the interrupted PC, and the end of its file
 path, line and column.
 
 `system::InjectPanic` is served by the panic-reset image and the system
-watchdog image: the image acknowledges with `PanicInjected` and panics in
-thread context, the entry records the panic and resets the chip through
-the staged runtime's fatal reset (the chip HAL's `cores::software_reset`),
-and the next boot reports a software
-reset and the record. The panic-reset image's panic entry has no HIL hook;
+watchdog image: the image acknowledges with `PanicInjected`, waits until
+the acknowledgement is written and requests a reset through the staged
+runtime's retained `HilRequested` path. The next boot reports the request's
+identity. This request does not invoke the panic hook.
+
+The `system::PanicHook` property reports whether the image entry installs
+the HIL panic hook. The panic-reset image has no hook; the watchdog and
+USB-off images and the Wi-Fi station image have it. For an actual panic,
 the watchdog image's hook also records the panic as the post-mortem fault
 (`BootEvidence::post_mortem`) and, on the ESP32-S31, the fatal machine
 state, which the next boot reports through the ROM as typed notes
@@ -23,13 +26,15 @@ state, which the next boot reports through the ROM as typed notes
 `OPEN_RADIO_HIL runtime=PANIC boot=previous …`.
 
 `system::DisableUsb` is served only by the `diagnostic-usb-jtag-off` image
-(the system watchdog image with the agent's `usb-jtag-off` feature): it
+(the system watchdog image with the image's `usb-jtag-off` feature): it
 acknowledges with `UsbDisabled`, then drops the USB Serial/JTAG's D+ and D-
 pull-ups and takes it off its pads. Off its pads alone, the device stops
 answering but the host keeps it enumerated; without the pull-up the host sees
 it disconnect. Only a reset of the chip brings it back. The host arms
 `SerialCapture::expect_detach` before the request, so the end of the stream
 that follows closes the capture without a failure.
+The USB service also announces `system::UsbJtagOff`, so the host distinguishes
+this variant from the ordinary watchdog image by a property key.
 
 `system::WatchdogTest` is served only by the dedicated watchdog image.
 The dedicated radio-free image's one-second engineering budget exercises completion, a synchronous

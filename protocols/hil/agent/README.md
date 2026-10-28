@@ -14,14 +14,20 @@ firmware links.
 
 ## Image keys
 
-A service is a `requests!` declaration: its enum decodes the endpoints it
-serves, and its `Service::KEYS` holds each endpoint's key, the key of that
+A request service is a `requests!` declaration: its enum decodes the
+endpoints it serves, and its `Service::KEYS` holds each endpoint's key, the key of that
 endpoint's response and the keys of the topics and properties in its
 `publishes [...]` list. `image_keys!` declares an image's `ImageKeySet` from
 the `Base` service (the intake's own module) and the services the image
 mounts. The set is sorted, deduplicated (a response two endpoints share
 counts once) and checked against the wire bound at compile time; the intake
 announces it in `Hello` and pages it out.
+
+An image component with no requests can implement `Service` for its
+properties alone. The ESP32-S31 image's `PanicHook` service reports
+`system::PanicHook` under the same `panic-hook` configuration as its entry.
+It is separate from `PanicRequest`: serving `InjectPanic` does not imply a
+hook. `UsbRequest` includes `system::UsbJtagOff` in its published properties.
 
 Terminal completion waits are bounded to sixteen receivers. Exhaustion returns
 `ReceiverLimit` with the requested sequence, last published position and capacity.
