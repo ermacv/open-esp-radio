@@ -505,8 +505,9 @@ mod thread_signals {
     use super::*;
     use crate::context::Running;
     use oer_espressif_interrupt_table::signal::{
-        ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList,
+        ContextToken, ForeignTask, IrqSignal, SignalExecutor,
     };
+    use oer_memory::signal::SignalList;
 
     pub(super) struct TestThread;
 

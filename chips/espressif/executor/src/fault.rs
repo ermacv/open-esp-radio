@@ -1,8 +1,9 @@
 //! Executor failures retain their observations and quarantine every owner.
 
 use core::mem::ManuallyDrop;
-use oer_espressif_interrupt_table::{Error, LineState};
+use oer_espressif_interrupt_table::Error;
 use oer_espressif_staged_runtime::panic::FaultReason;
+use oer_riscv::clic::LineState;
 
 /// Source observations of an executor or time-driver invariant failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -182,7 +183,7 @@ fn line(state: LineState) -> u32 {
     u32::from(state.enabled)
         | (u32::from(state.vectored) << 1)
         | ((state.trigger as u32) << 2)
-        | (u32::from(state.control) << 8)
+        | (u32::from(state.control.bits()) << 8)
 }
 
 fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {

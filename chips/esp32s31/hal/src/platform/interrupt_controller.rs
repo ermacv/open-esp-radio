@@ -20,8 +20,9 @@ use oer_esp32s31_pac::{
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
     ownership::InterruptMatrixPeripherals,
 };
-use oer_espressif_interrupt_table::{Controller, Error, LineState, Trigger};
+use oer_espressif_interrupt_table::{Controller, Error};
 use oer_memory::{ClaimCell, zeroed::ZeroedOnce};
+use oer_riscv::clic::{Control, LevelBits, LineState, Trigger};
 
 use crate::cores::{StopTheWorld, key};
 use oer_mmio::{Bits, Fixed, Index, Placement};
@@ -202,7 +203,7 @@ impl<M: Placement, C: Placement> InterruptView<'_, M, C> {
                 enabled: word.ie(),
                 vectored: word.attr_shv(),
                 trigger: trigger_of(word.attr_trig()),
-                control: word.ctl(),
+                control: Control::from_bits(word.ctl()),
             },
         })
     }
@@ -283,7 +284,7 @@ const fn trigger_of(bits: Bits<2>) -> Trigger {
 impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
     const SOURCES: u16 = interrupt_core::route::COUNT as u16;
     const LINES: u8 = clic::ctrl::COUNT as u8;
-    const LEVEL_BITS: u8 = facts::LEVEL_BITS;
+    const LEVEL_BITS: LevelBits = LevelBits::constant::<{ facts::LEVEL_BITS }>();
 
     fn hart(&self) -> u8 {
         crate::platform::BOOT_HART.get() as u8
@@ -370,7 +371,7 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
         self.clic.modify_ctrl(index, |word| {
             word.set_attr_shv(state.vectored)
                 .set_attr_trig(trigger_bits(state.trigger))
-                .set_ctl(state.control);
+                .set_ctl(state.control.bits());
         });
         if state.enabled {
             self.clic.modify_ctrl(index, |word| {
@@ -389,7 +390,7 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
             enabled: word.ie(),
             vectored: word.attr_shv(),
             trigger: trigger_of(word.attr_trig()),
-            control: word.ctl(),
+            control: Control::from_bits(word.ctl()),
         }
     }
 }

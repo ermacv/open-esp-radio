@@ -1,7 +1,8 @@
 //! Binding failures keep ownership and source observations distinct.
 use core::mem::ManuallyDrop;
 
-use crate::{Entry, Error, LineState};
+use crate::{Entry, Error};
+use oer_riscv::clic::LineState;
 
 /// Numeric operation identity, safe to capture without reading cached text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -142,7 +143,7 @@ fn line(state: LineState) -> u32 {
     u32::from(state.enabled)
         | (u32::from(state.vectored) << 1)
         | ((state.trigger as u32) << 2)
-        | (u32::from(state.control) << 8)
+        | (u32::from(state.control.bits()) << 8)
 }
 
 // Software diagnostic encoding, independent of any register layout. Each

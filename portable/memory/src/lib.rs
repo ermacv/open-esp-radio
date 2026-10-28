@@ -25,6 +25,8 @@
 //! [`ContextCell`] lends executor-owned state with a private [`ContextProof`]
 //! or checked [`Entered`] proof of an [`ExecutionContext`], refusing nested
 //! access without consuming payload. Host contexts keep cells !Send/!Sync.
+//! [`signal`] owns the coalesced fact word, task cell and intrusive list;
+//! scheduling and interrupt policy stay with its callers.
 //! [`RequestSlot`] carries one request at a time from a client to a server
 //! and its answer back, without a lock. [`retained`] holds records in memory
 //! that survives a reset, one holder at a time.
@@ -55,6 +57,7 @@ pub mod retained;
 mod return_bank;
 mod rx_external_handoff;
 mod rx_handoff;
+pub mod signal;
 mod static_place;
 mod static_ref;
 mod volatile;
@@ -76,7 +79,7 @@ pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use context_cell::{ContextCell, ContextProof};
 pub use dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};
 pub use dma_bytes::DmaBytes;
-#[cfg(feature = "host-context")]
+#[cfg(any(test, feature = "host-context"))]
 pub use execution_context::HostContext;
 pub use execution_context::{Entered, ExecutionContext, Never};
 pub use handler_cell::{HandlerCell, Installed};

@@ -2210,6 +2210,7 @@ dependencies = [
  "oer-espressif-interrupt-table",
  "oer-memory",
  "oer-mmio",
+ "oer-riscv",
  "oer-test-ui-cases",
  "static_cell",
  "tempfile",

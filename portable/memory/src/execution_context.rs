@@ -57,9 +57,9 @@ unsafe impl ExecutionContext for Never {
 /// The constructing thread's local execution, for host signal owners.
 /// Cells using this context are !Send and !Sync; only their atomic raisers
 /// may cross threads. This context supplies no globally shareable proof.
-#[cfg(feature = "host-context")]
+#[cfg(any(test, feature = "host-context"))]
 pub enum HostContext {}
-#[cfg(feature = "host-context")]
+#[cfg(any(test, feature = "host-context"))]
 #[allow(
     unsafe_code,
     reason = "non-shareable cells stay on their creating thread"
@@ -77,7 +77,6 @@ unsafe impl ExecutionContext for HostContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "host-context")]
     use crate::ContextCell;
     #[test]
     fn unavailable_context_cannot_be_entered() {
@@ -85,7 +84,6 @@ mod tests {
     }
     // context_cell tests exercise checked entry and refusal after exit;
     // this host case also exercises the host-specific local sharing marker.
-    #[cfg(feature = "host-context")]
     #[test]
     fn nested_access_retains_payload_until_the_outer_borrow_ends() {
         let proof = Entered::<HostContext>::enter().expect("local context");

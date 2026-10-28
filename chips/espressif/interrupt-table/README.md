@@ -1,8 +1,9 @@
 # oer-espressif-interrupt-table
 
-Espressif interrupt-matrix bindings, CLIC encodings and vector ABI, including
-the symbols consumed by the staged runtime. Chip crates and firmware use
-this crate directly.
+Espressif interrupt-matrix bindings and vector ABI, including the symbols
+consumed by the staged runtime. Architectural CLIC line values come directly
+from `oer_riscv::clic`; chip facts select geometry and MNLBITS. Chip crates
+and firmware use this crate directly.
 
 Each image's static table of its interrupt bindings, declared once per image
 with `interrupt_table!` (a chip's platform wraps it with its CPU lines, such
@@ -96,8 +97,8 @@ gives the CLIC three level bits):
 - `Router::bind` consumes an entry's token and its part, moves the part where
   only the entry's handler reaches it, writes the entry's line (enabled,
   hardware-vectored, positive-level-triggered, its level in the control
-  byte, `line_control`) and only then routes each of the part's sources to
-  it, and returns
+  byte, `oer_riscv::clic::Control`) and only then routes each of the part's
+  sources to it, and returns
   `Bound<Entry>`, carrying `LEVEL`, `HART` and `CONTEXT` from that entry, the proof a driver takes before it enables the peripheral's
   interrupt; an entry of another hart or one the table lacks comes back with
   its token and part, and an entry outside the controller fails to compile;
@@ -159,14 +160,16 @@ cargo test -p oer-espressif-interrupt-table
 
 Signal memory admission belongs to `oer_memory::ExecutionContext`.
 `SignalExecutor` is safe and names its context; `Entered<Context>` checks
-both entry and every `ContextCell` access. Signal cores and lists carry that
-context type, so one context's token cannot access another's state.
+both entry and every `ContextCell` access.
+`oer_memory::signal::{SignalCore, SignalList}` own the task cell, atomic facts
+and intrusive links and carry that context type, so one context's token
+cannot access another's state.
 
 With `host-signal`, `host::signal()` and `host::deferred_signal()` return
 `(owner, raiser)`. The owner is a local `&'static IrqSignal` that is !Send
 and !Sync: only its creating thread takes, polls or services payload.
-The `Raiser` is Send + Sync and contains only the atomic pending-word
-reference. Its `raise` coalesces facts without servicing payload or invoking
+The `oer_memory::signal::Raiser` is Send + Sync and contains only the atomic
+pending-word reference. Its `raise` coalesces facts without servicing payload or invoking
 a waker; the owner services them explicitly. Raising through the local
 `Host` owner retains immediate local service; `Deferred` waits for a take
 or service. No transferable handle exposes the owner or context proof.

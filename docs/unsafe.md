@@ -119,7 +119,8 @@ C5 code lies outside the workspace and its checks:
 | Bootstrap and probe images | `firmware/bootstrap/`, `firmware/probes/` |
 
 `oer-espressif-interrupt-table` owns the Espressif interrupt matrix contract,
-CLIC encodings, vector ABI and staged-runtime symbols. Its narrow unsafe
+vector ABI and staged-runtime symbols. CLIC line encodings live in
+`oer-riscv::clic`, independent of chip geometry. Its narrow unsafe
 contracts cover the existing vector/table/exemption slot names and ABI
 types; signal execution proofs belong to `oer-memory`. Every safe `Entry` implementation carries
 `EntryProof<Self>`; root Clippy policy restricts both proof and token
@@ -639,8 +640,10 @@ marker distinguishes a globally exclusive context from each constructing
 thread's local context. `Entered<X>` has a private constructor, checks
 `X::running()` at entry and rechecks it before every cell access. It is
 !Send/!Sync; retaining it never extends admission beyond its context.
-`ContextCell<T, P: ContextProof>` holds executor-owned signal state, signal
-list links and timer slots. A private unchecked owner proof or a checked
+`oer-memory::signal` owns the signal task cell, pending facts and intrusive
+list, with no Espressif or CLIC dependency. Its service callback runs after
+releasing the cell borrow. `ContextCell<T, P: ContextProof>` holds that state
+and timer slots. A private unchecked owner proof or a checked
 `Entered<X>` confines each access, including across preemption and cores.
 Only a `Sync` sharing marker and a `Send` payload permit sharing the cell;
 its move restrictions also include the proof and sharing marker. Host

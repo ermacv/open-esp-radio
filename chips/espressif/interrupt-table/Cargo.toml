@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Each image's static table of interrupt bindings: source from the part's type, CPU line, level, hart and handler per entry; the router that writes routes and lines"
 
 [dependencies]
+oer-riscv = { path = "../../../portable/riscv" }
 oer-memory = { path = "../../../portable/memory" }
 oer-mmio = { path = "../../../portable/mmio" }
 static_cell = "2.1.1"

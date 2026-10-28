@@ -79,7 +79,9 @@ opaque address tables live in `chips/espressif/ieee802154-mac-values`; HAL
 alone allocates and projects the placed storage.
 
 `chips/espressif/interrupt-table` owns the Espressif interrupt matrix,
-CLIC encodings, vector ABI and staged-runtime symbols. Its package is
+vector ABI and staged-runtime symbols. `portable/riscv::clic` owns architectural
+CLIC line values; chip facts select geometry and MNLBITS. `portable/memory::signal`
+owns the portable signal cells, atomic facts and intrusive lists. Its package is
 `oer-espressif-interrupt-table`; its consumers are chip crates and firmware.
 
 ## A protocol: wire, port, cores, backends

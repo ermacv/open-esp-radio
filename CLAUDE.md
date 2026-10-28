@@ -26,7 +26,9 @@ system these rules serve.
   host tools. The PAC's single `take()` claims the chip; the HAL's
   `Root::take` splits it through `into_bootstrap` or `into_runtime`.
   Only these owned partitions grant register access. C5 stays outside the
-  workspace.
+  workspace. C5 never blocks S31 work: migrate mechanically obvious uses
+  of changed APIs without building C5, leave its infrastructure alone and
+  report any remaining C5 migration in the PR. Do not preserve an API for C5.
 - **Compile time first.** Every check that can run at compile time runs there.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.
