@@ -203,7 +203,6 @@ fn unknown_reservation_is_returned_without_charging_any_account() {
 }
 
 mod ownership;
-mod queues;
 
 #[test]
 fn bulk_retirement_keeps_in_flight_old_generation_until_settled() {

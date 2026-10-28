@@ -11,6 +11,7 @@ plans and reports leave as values, and nothing waits.
 | Module | Decides | Inputs |
 | --- | --- | --- |
 | `retry` | Whether an MPDU is sent again, whether that attempt sets the Retry bit, the counter a frame's class advances (`FrameClass`), the ladder step of its failures (`ladder_step`) and the rate of each attempt; a backend drawing its own contention derives the window's reset or doubling from that `RetryDecision` | `TxStatus`, `RetryCounters`, `RetryLimits`, a `RateLadder` |
+| `airtime` | Which eligible radio peer receives the next bounded exchange grant, accounting for reservations, retries, cancellation and association retirement | Generic peer keys, minimum exchange costs, modelled terminal charges |
 | `aggregate` | How many queued frames one A-MPDU carries: the agreement's window, the port's capabilities, the recipient's Maximum A-MPDU Length and Minimum MPDU Start Spacing, and the TXOP limit with its BlockAck | `AmpduLimits` |
 | `ampdu` | Which subframes of an A-MPDU the next attempt resends after its BlockAck, republication after a failed protection exchange, the BlockAckReq after repeated failures, individual retries, aging and the end of the exchange | `BlockAckReport`, `AmpduRetryPolicy` |
 | `rate_control` | The first rate of a peer's MPDUs and A-MPDUs, one controller per peer (a station's access point, each station of an access point), learning from each exchange, starting from the `LinkMetric` (signal over the noise floor, required) of the frame that made the link | `RatePeer`, `TxReport` outcomes |
@@ -53,6 +54,17 @@ the result in `management::unicast` (at most seven attempts) or
 `management::broadcast` (one), a port `ManagementTxPlan` that keeps that rate
 for every attempt. `BasicRates` reads the wire's Supported Rates codec
 (`oer_ieee80211_wire::rates`), as `NegotiatedLegacyRates` does.
+
+`airtime::AirtimeStorage` owns a bounded, allocation-free deficit ledger.
+Its scheduler reserves credit before publication; unpublished work may be
+cancelled, while published work retains an affine completion owner until the
+caller supplies its modelled charge. Keys include the association generation,
+not a transport flow. Idle peers lose positive surplus but retain debt;
+retired accounts remain pinned until their outstanding work is settled.
+The module accepts generic receipts and has no chip, ESP-NOW or packet-storage
+dependency. It has no production consumer. Its unit tests and compile-fail
+doc-tests live here; integration tests with chip work receipts, cost estimates
+and network TX queues live in the S31 MAC package.
 
 ## Parameters and profiles
 

@@ -1,5 +1,4 @@
 use super::*;
-use crate::tx_work::MacTxWork;
 use core::cell::Cell;
 
 #[test]
@@ -77,26 +76,4 @@ fn dropping_unsettled_work_or_reborrowing_storage_cannot_refund_it() {
         scheduler.reserve([candidate(1, 100)]),
         Err(AirtimeError::ReservationCapacity)
     ));
-}
-
-#[test]
-fn unknown_receipt_keeps_the_reservation_until_an_explicit_charge_is_supplied() {
-    let mut storage = AirtimeStorage::<_, 1, 1>::new(us(1000));
-    let mut scheduler = storage.scheduler();
-    let reservation = scheduler.reserve([candidate(1, 100)]).unwrap().unwrap();
-    let mut receipt = MacTxWork::new();
-    receipt.record(1000, 1, None);
-    let completion = reservation.published().completed(receipt);
-    assert_eq!(completion.key(), 1);
-    assert_eq!(completion.reserved_micros(), us(1000));
-    assert!(completion.work().estimated_exchange_micros(0).is_none());
-    assert!(matches!(
-        scheduler.reserve([]),
-        Err(AirtimeError::ReservationCapacity)
-    ));
-    assert_eq!(scheduler.balance_micros(1), Some(0));
-    // Synthetic caller policy for this ownership test, not a PHY estimate.
-    let retained = scheduler.settle(completion, us(1700)).unwrap();
-    assert_eq!(retained, receipt);
-    assert_eq!(scheduler.balance_micros(1), Some(-700));
 }

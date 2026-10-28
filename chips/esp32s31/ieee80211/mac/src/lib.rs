@@ -19,7 +19,13 @@ pub use oer_esp32s31_hal::types::{
     MacInterface, MacPti, MacRoleReceivePolicy, MacStaApReceivePlan, MacStaPolicyMode,
 };
 
-pub mod airtime;
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects
+)]
+mod airtime_tests;
 pub mod ap_policy;
 pub mod ap_tsf;
 pub mod capabilities;
