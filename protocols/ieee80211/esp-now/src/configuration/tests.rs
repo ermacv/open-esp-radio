@@ -1,8 +1,12 @@
 use super::*;
+use oer_ieee80211_arbiter::configuration::{
+    WifiAccessPointConfig, WifiConfig, WifiMonitorConfig, WifiStationConfig,
+};
 use oer_ieee80211_port::{
     MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
+    MacServiceCapabilities,
 };
-use oer_ieee80211_wire::address::IndividualAddressError;
+use oer_ieee80211_wire::address::IndividualAddress;
 
 const fn capabilities(interfaces: MacInterfaceCapabilities) -> MacServiceCapabilities {
     MacServiceCapabilities {
@@ -55,125 +59,29 @@ fn address(last: u8) -> IndividualAddress {
 }
 
 #[test]
-fn rejects_unspecified_and_multicast_addresses() {
-    assert_eq!(
-        IndividualAddress::for_interface([0; 6]),
-        Err(IndividualAddressError::Unspecified)
-    );
-    assert_eq!(
-        IndividualAddress::for_interface([1, 0, 0, 0, 0, 1]),
-        Err(IndividualAddressError::Multicast)
-    );
-}
-
-#[test]
-fn a_general_zero_address_cannot_enter_either_interface_plan() {
-    let zero = IndividualAddress::new([0; 6]).unwrap();
-    for config in [
-        WifiConfig::station(WifiStationConfig::new(zero)),
-        WifiConfig::access_point(WifiAccessPointConfig::new(zero)),
-    ] {
-        assert_eq!(
-            config.validate(capabilities(ALL_INTERFACES)),
-            Err(WifiConfigError::UnspecifiedInterfaceAddress)
-        );
-    }
-}
-
-#[test]
-fn assigns_distinct_vifs_to_station_and_ap_on_one_channel_context() {
-    let plan = WifiConfig::station_access_point(
-        WifiStationConfig::new(address(1)),
-        WifiAccessPointConfig::new(address(2)),
-    )
-    .with_monitor(WifiMonitorConfig::normalized())
-    .validate(capabilities(ALL_INTERFACES))
-    .unwrap();
-
-    let station = plan.station().unwrap();
-    let access_point = plan.access_point().unwrap();
-    assert_eq!(station.interface.id, VifId::PRIMARY);
-    assert_eq!(access_point.interface.id, VifId::new(1));
-    assert_eq!(station.channel_context, access_point.channel_context);
-    assert_eq!(
-        plan.monitor_channel_context(),
-        Some(ChannelContextId::PRIMARY)
-    );
-    assert!(plan.standalone_monitor().is_none());
-}
-
-#[test]
-fn standalone_monitor_plan_proves_exclusive_rx_ownership() {
-    let plan = WifiConfig::monitor(WifiMonitorConfig::normalized())
+fn standalone_esp_now_preserves_the_checked_station_binding() {
+    let plan = WifiConfig::station(WifiStationConfig::new(address(1)))
         .validate(capabilities(ALL_INTERFACES))
-        .unwrap()
-        .standalone_monitor()
         .unwrap();
-    assert_eq!(plan.monitor(), WifiMonitorConfig::normalized());
-    assert_eq!(plan.channel_context(), ChannelContextId::PRIMARY);
+    let standalone = WifiStandaloneEspNowPlan::new(plan).unwrap();
+    assert_eq!(Some(standalone.station()), plan.station());
+    assert_eq!(standalone.channel_context(), ChannelContextId::PRIMARY);
 }
 
 #[test]
-fn rejects_roles_and_taps_not_owned_by_the_complete_service() {
-    let station_only = MacInterfaceCapabilities {
-        station_interfaces: 1,
-        access_point_interfaces: 0,
-        simultaneous_station_access_point: false,
-        standalone_monitor: false,
-        monitor_with_interfaces: false,
-        raw_monitor_tap: false,
-        normalized_monitor_tap: false,
-        protocol_validated_monitor_tap: false,
-    };
-    assert_eq!(
-        WifiConfig::access_point(WifiAccessPointConfig::new(address(2)))
-            .validate(capabilities(station_only)),
-        Err(WifiConfigError::UnsupportedAccessPoint)
-    );
-    assert_eq!(
-        WifiConfig::station(WifiStationConfig::new(address(1)))
-            .with_monitor(WifiMonitorConfig::normalized())
-            .validate(capabilities(station_only)),
-        Err(WifiConfigError::UnsupportedMonitorTap(
-            MonitorTapPoint::Normalized
-        ))
-    );
-}
-
-#[test]
-fn rejects_duplicate_station_and_ap_addresses() {
-    let shared = address(1);
-    assert_eq!(
-        WifiConfig::station_access_point(
-            WifiStationConfig::new(shared),
-            WifiAccessPointConfig::new(shared),
-        )
-        .validate(capabilities(ALL_INTERFACES)),
-        Err(WifiConfigError::DuplicateInterfaceAddress)
-    );
-}
-
-#[test]
-fn distinguishes_standalone_monitor_from_concurrent_interface_tap() {
-    let standalone_only = MacInterfaceCapabilities {
-        station_interfaces: 1,
-        access_point_interfaces: 0,
-        simultaneous_station_access_point: false,
-        standalone_monitor: true,
-        monitor_with_interfaces: false,
-        raw_monitor_tap: false,
-        normalized_monitor_tap: true,
-        protocol_validated_monitor_tap: false,
-    };
-    assert!(
-        WifiConfig::monitor(WifiMonitorConfig::normalized())
-            .validate(capabilities(standalone_only))
-            .is_ok()
-    );
-    assert_eq!(
-        WifiConfig::station(WifiStationConfig::new(address(1)))
-            .with_monitor(WifiMonitorConfig::normalized())
-            .validate(capabilities(standalone_only)),
-        Err(WifiConfigError::UnsupportedMonitorWithInterfaces)
-    );
+fn standalone_esp_now_refuses_every_topology_with_an_ap_or_monitor() {
+    let station = WifiStationConfig::new(address(1));
+    let access_point = WifiAccessPointConfig::new(address(2));
+    let monitor = WifiMonitorConfig::normalized();
+    for config in [
+        WifiConfig::access_point(access_point),
+        WifiConfig::monitor(monitor),
+        WifiConfig::station_access_point(station, access_point),
+        WifiConfig::station(station).with_monitor(monitor),
+        WifiConfig::access_point(access_point).with_monitor(monitor),
+        WifiConfig::station_access_point(station, access_point).with_monitor(monitor),
+    ] {
+        let plan = config.validate(capabilities(ALL_INTERFACES)).unwrap();
+        assert!(WifiStandaloneEspNowPlan::new(plan).is_none());
+    }
 }

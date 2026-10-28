@@ -20,7 +20,7 @@ use {
     },
 };
 
-use crate::interface::BoundVirtualInterface;
+use oer_ieee80211_arbiter::interface::BoundVirtualInterface;
 use oer_ieee80211_port::{ChannelContextId, VifRole};
 
 /// Default source-owned peer storage. The const-generic table remains usable

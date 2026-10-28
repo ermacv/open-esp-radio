@@ -1,5 +1,5 @@
 use super::*;
-use crate::interface::{VifId, VirtualInterface};
+use oer_ieee80211_arbiter::interface::{VifId, VirtualInterface};
 use oer_ieee80211_port::VifRole;
 use oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
 use oer_ieee80211_wire::channel::ChannelWidth;

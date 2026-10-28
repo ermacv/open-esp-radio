@@ -3021,6 +3021,7 @@ name = "oer-ieee80211-arbiter"
 version = "0.1.0"
 dependencies = [
  "oer-ieee80211-port",
+ "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-radio-port",
  "oer-radio-regulatory",
@@ -3046,6 +3047,7 @@ dependencies = [
 name = "oer-ieee80211-esp-now"
 version = "0.1.0"
 dependencies = [
+ "oer-ieee80211-arbiter",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
