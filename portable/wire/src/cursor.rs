@@ -47,11 +47,13 @@ impl<'a> Reader<'a> {
     /// with the protocol; bit copying belongs to the cursor.
     pub fn bits<const WIDTH: usize>(&self, bit_offset: usize) -> Result<u64, Error> {
         const {
-            assert!(WIDTH > 0 && WIDTH <= 64);
+            if !(WIDTH > 0 && WIDTH <= 64) {
+                panic!("wire bit span must contain 1 to 64 bits");
+            }
         }
         let required = bit_offset
             .checked_add(WIDTH)
-            .map(|end| end.div_ceil(8))
+            .and_then(|end| (end / 8).checked_add(usize::from(end % 8 != 0)))
             .ok_or(Error::Truncated {
                 required: usize::MAX,
                 remaining: self.bytes.len(),
@@ -125,10 +127,14 @@ impl<'a> Writer<'a> {
             .written
             .checked_add(input.len())
             .ok_or(Error::LengthOverflow)?;
-        let bytes = core::mem::take(&mut self.bytes);
-        let (output, rest) = bytes.split_at_mut(input.len());
-        output.copy_from_slice(input);
-        self.bytes = rest;
+        // Admission above proves that zip consumes every input byte. Poll the
+        // input first so its end cannot consume an extra destination byte;
+        // the output iterator retains exactly the unwritten suffix.
+        let mut output = core::mem::take(&mut self.bytes).iter_mut();
+        for (source, destination) in input.iter().zip(output.by_ref()) {
+            *destination = *source;
+        }
+        self.bytes = output.into_slice();
         self.written = written;
         Ok(())
     }

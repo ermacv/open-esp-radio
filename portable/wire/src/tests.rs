@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+
 use crate::{Error, Reader, Writer};
 
 crate::bitfield! {
@@ -109,6 +111,60 @@ fn cursors_do_not_advance_or_write_on_failure() {
     assert_eq!(bytes, [0x12, 0x34, 9, 0x78, 0x56]);
 }
 
+#[test]
+fn writer_empty_exact_and_refused_writes_retain_the_unwritten_suffix() {
+    let mut bytes = [0xa5; 3];
+    let mut writer = Writer::new(&mut bytes);
+    assert_eq!(writer.write(&[]), Ok(()));
+    assert_eq!((writer.written(), writer.remaining()), (0, 3));
+    assert_eq!(writer.write(&[1]), Ok(()));
+    assert_eq!(
+        writer.write(&[2, 3, 4]),
+        Err(Error::Truncated {
+            required: 3,
+            remaining: 2,
+        })
+    );
+    assert_eq!((writer.written(), writer.remaining()), (1, 2));
+    assert_eq!(writer.write(&[]), Ok(()));
+    assert_eq!((writer.written(), writer.remaining()), (1, 2));
+    assert_eq!(writer.write(&[2, 3]), Ok(()));
+    assert_eq!((writer.written(), writer.remaining()), (3, 0));
+    assert_eq!(writer.write(&[]), Ok(()));
+    assert_eq!(
+        writer.write(&[4]),
+        Err(Error::Truncated {
+            required: 1,
+            remaining: 0,
+        })
+    );
+    assert_eq!((writer.written(), writer.remaining()), (3, 0));
+    assert_eq!(bytes, [1, 2, 3]);
+
+    let mut empty = [];
+    let mut writer = Writer::new(&mut empty);
+    assert_eq!(writer.write(&[]), Ok(()));
+    assert_eq!((writer.written(), writer.remaining()), (0, 0));
+}
+
+#[test]
+fn refused_write_preserves_previously_written_and_unwritten_bytes() {
+    let mut bytes = [0xa5; 4];
+    {
+        let mut writer = Writer::new(&mut bytes);
+        writer.write(&[1]).unwrap();
+        assert_eq!(
+            writer.write(&[2, 3, 4, 5]),
+            Err(Error::Truncated {
+                required: 4,
+                remaining: 3,
+            })
+        );
+        assert_eq!((writer.written(), writer.remaining()), (1, 3));
+    }
+    assert_eq!(bytes, [1, 0xa5, 0xa5, 0xa5]);
+}
+
 crate::bitfield! {
     struct Span[9] (little) {
         value, with_value: u64 = 7..71;
@@ -141,6 +197,21 @@ fn bit_spans_reject_truncation_and_overflow_without_moving() {
         Err(Error::Truncated {
             required: 1,
             remaining: 0
+        })
+    );
+    assert_eq!(Reader::new(&[0x80]).bits::<1>(7), Ok(1));
+    assert_eq!(
+        Reader::new(&bytes).bits::<1>(usize::MAX - 1),
+        Err(Error::Truncated {
+            required: usize::MAX / 8 + 1,
+            remaining: bytes.len(),
+        })
+    );
+    assert_eq!(
+        Reader::new(&bytes).bits::<1>(usize::MAX),
+        Err(Error::Truncated {
+            required: usize::MAX,
+            remaining: bytes.len(),
         })
     );
 }
@@ -258,4 +329,32 @@ fn full_width_and_unaligned_getters_retain_proofs_without_truncation() {
         assert_eq!(changed.to_bytes()[0] & 0x80, 0x80);
         assert_eq!(changed.to_bytes()[8] & 0x7f, 0x25);
     }
+}
+
+crate::bitfield! {
+    struct PaddedLittle[12] (little) { value, with_value: (u64) = 15..79; }
+}
+crate::bitfield! {
+    struct PaddedBig[12] (big) { value, with_value: (u64) = 15..79; }
+}
+
+#[test]
+fn const_fields_skip_whole_octets_and_preserve_surrounding_data() {
+    const VALUE: crate::U64<64> = crate::U64::constant::<0x0123_4567_89ab_cdef>();
+    const LITTLE: PaddedLittle = PaddedLittle::from_bytes([0xa5; 12]).with_value(VALUE);
+    const BIG: PaddedBig = PaddedBig::from_bytes([0xa5; 12]).with_value(VALUE);
+    const DECODED: [u64; 2] = [LITTLE.value().get(), BIG.value().get()];
+
+    assert_eq!(DECODED, [VALUE.get(); 2]);
+    assert_eq!(LITTLE.value(), VALUE);
+    assert_eq!(BIG.value(), VALUE);
+    // The field is the low 64 bits shifted by 15, retaining both partial
+    // boundary octets and the untouched octets outside the field.
+    let expected = [
+        0xa5, 0xa5, 0xf7, 0xe6, 0xd5, 0xc4, 0xb3, 0xa2, 0x91, 0x80, 0xa5, 0xa5,
+    ];
+    assert_eq!(LITTLE.to_bytes(), expected);
+    let mut big = expected;
+    big.reverse();
+    assert_eq!(BIG.to_bytes(), big);
 }

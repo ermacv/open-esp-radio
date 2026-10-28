@@ -22,5 +22,9 @@ The crate has no dependencies, allocation, unsafe code or protocol knowledge.
 See the crate documentation for declaration syntax.
 
 The crate denies unwrap, expect, panic, unreachable, todo, unimplemented,
-indexing/slicing and arithmetic-side-effect Clippy lints. Fixed array geometry
-is checked in const blocks; dynamic cursor lengths use checked arithmetic.
+indexing/slicing, arithmetic-side-effect, disallowed-method and disallowed-macro
+Clippy lints. Its local Clippy configuration includes the common bans and the
+complete sans-IO catalogue. Fixed array geometry is checked with const-only
+panics; dynamic cursor lengths use checked arithmetic. Field access traverses
+the admitted array with non-panicking splits; writing consumes an input-first
+iterator pair and retains the exact unwritten suffix.
