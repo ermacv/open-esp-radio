@@ -8,7 +8,21 @@ use oer_memory::OnceValue;
 mod record;
 pub use record::FaultRecord;
 #[cfg(target_arch = "riscv32")]
-oer_memory::link_fn! { declare fn __oer_phy_transaction_fault(fault: Fault) -> !; }
+oer_memory::link_fn! { declare PhyFaultSlot => fn __oer_phy_transaction_fault(fault: Fault) -> !; }
+
+/// The HAL-owned PHY fault reporter's exact foreign ABI contract.
+#[doc(hidden)]
+pub enum PhyFaultSlot {}
+#[allow(unsafe_code, reason = "the HAL owns its PHY fault reporter ABI")]
+// SAFETY: this HAL reserves the sole Rust function symbol for `fn(Fault) -> !`.
+// Its foreign declaration and exported reporter both check this exact slot;
+// callers have no precondition, and the linker rejects duplicate definitions.
+unsafe impl oer_memory::LinkSlot for PhyFaultSlot {
+    type Value = fn(Fault) -> !;
+    const NAME: oer_memory::SlotName =
+        oer_memory::SlotName(&[oer_memory::NamePart::Text("__oer_phy_transaction_fault")]);
+    const KIND: oer_memory::SlotKind = oer_memory::SlotKind::Function;
+}
 
 /// The admitted operation whose owners must remain quarantined on cancellation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,7 +40,7 @@ pub enum Operation {
 macro_rules! phy_fault_reporter {
     ($report:path) => {
         $crate::domain::transaction::__link_fn! {
-            define fn __oer_phy_transaction_fault(fault: $crate::domain::transaction::Fault) -> ! = $report;
+            define $crate::domain::transaction::PhyFaultSlot => fn __oer_phy_transaction_fault(fault: $crate::domain::transaction::Fault) -> ! = $report;
         }
     };
 }

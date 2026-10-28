@@ -1,4 +1,6 @@
 disallowed-methods = [
+    { path = "oer_espressif_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
+    { path = "oer_espressif_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
     "slice::split_at",
     "slice::split_at_mut",
     "slice::copy_from_slice",

@@ -16,7 +16,7 @@ oer-bluetooth-le-radio = { path = "../radio" }
 
 [dev-dependencies]
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
-oer-bluetooth-le-model = { path = "../model" }
+oer-bluetooth-le-model = { path = "../model", features = ["test-support"] }
 oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
 oer-time = { path = "../../../../portable/time" }

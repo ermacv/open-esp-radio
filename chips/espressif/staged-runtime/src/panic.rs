@@ -901,6 +901,11 @@ mod fault_tests {
     #[test]
     fn hil_faults_retain_their_reason_and_exact_observations() {
         for (reason, name) in [
+            (FaultReason::RouteWrongClass, "RouteWrongClass"),
+            (
+                FaultReason::RouteHandlerCellMismatch,
+                "RouteHandlerCellMismatch",
+            ),
             (FaultReason::HilReceiverLimit, "HilReceiverLimit"),
             (FaultReason::HilConsole, "HilConsole"),
             (FaultReason::HilCheckpoint, "HilCheckpoint"),

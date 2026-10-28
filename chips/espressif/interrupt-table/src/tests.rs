@@ -91,10 +91,7 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
 // The only test that takes the tokens and binds: both are once per image.
 #[test]
 fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
-    // SAFETY: the test table defines this safe C ABI handler.
-    unsafe extern "C" {
-        safe fn __oer_interrupt_h0_l16();
-    }
+    let timer_handler = INTERRUPT_TABLE[0].handler.unwrap();
     let tokens = Interrupts::take().unwrap();
     assert!(Interrupts::take().is_none());
 
@@ -102,8 +99,11 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     // writes nothing.
     let mut zero = fake_router(0);
     let before = zero.controller.writes.len();
-    let crate::BindError::Refused { error, token, part } =
-        zero.bind(tokens.radio, RadioIrq).unwrap_err()
+    let crate::BindError::Refused {
+        error,
+        token,
+        part: radio_part,
+    } = zero.bind(tokens.radio, RadioIrq).unwrap_err()
     else {
         panic!("a foreign hart is a pre-admission refusal");
     };
@@ -117,11 +117,80 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     );
     assert_eq!(zero.controller.writes.len(), before);
 
+    // A table cannot reinterpret a token's class or route it to a handler
+    // that reads another cell. Both refusals precede placement and writes.
+    let original = &INTERRUPT_TABLE[0];
+    let table = |class, handler| {
+        std::boxed::Box::leak(std::boxed::Box::new([crate::Binding {
+            source: original.source,
+            line: original.line,
+            level: original.level,
+            hart: original.hart,
+            class,
+            handler: Some(handler),
+        }])) as &'static crate::Table
+    };
+    let mut wrong_class = Router::install(
+        FakeController::new(0),
+        table(crate::Class::Executor, timer_handler),
+    )
+    .unwrap();
+    let before_class = wrong_class.controller.writes.len();
+    let crate::BindError::Refused {
+        error,
+        token: timer,
+        part,
+    } = wrong_class
+        .bind(tokens.timer, TimerIrq::default())
+        .unwrap_err()
+    else {
+        panic!("class mismatch must return the unchanged owners");
+    };
+    assert_eq!(
+        error,
+        Error::WrongClass {
+            source: 3,
+            table: crate::Class::Executor,
+            entry: crate::Class::Hardware
+        }
+    );
+    assert_eq!(wrong_class.controller.writes.len(), before_class);
+    assert!(
+        wrong_class
+            .controller
+            .lines
+            .iter()
+            .all(|line| !line.enabled)
+    );
+
+    static OTHER_CELL: oer_memory::HandlerCell<TimerIrq> = oer_memory::HandlerCell::new();
+    extern "C" fn other_cell_handler() {
+        let _ = OTHER_CELL.with(on_timer);
+    }
+    let mut wrong_cell = Router::install(
+        FakeController::new(0),
+        table(TimerToken::CLASS, other_cell_handler as extern "C" fn()),
+    )
+    .unwrap();
+    let before_cell = wrong_cell.controller.writes.len();
+    let crate::BindError::Refused {
+        error,
+        token: timer,
+        part,
+    } = wrong_cell.bind(timer, part).unwrap_err()
+    else {
+        panic!("cell mismatch must return the unchanged owners");
+    };
+    assert_eq!(error, Error::HandlerCellMismatch { source: 3 });
+    assert_eq!(wrong_cell.controller.writes.len(), before_cell);
+    assert!(wrong_cell.controller.lines.iter().all(|line| !line.enabled));
+    assert!(OTHER_CELL.with(|_| ()).is_none());
+
     // Before its binding the timer's handler finds no part and runs nothing.
     assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
-    __oer_interrupt_h0_l16();
+    timer_handler();
 
-    let _bound: crate::Bound<TimerToken> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
+    let _bound: crate::Bound<TimerToken> = zero.bind(timer, part).unwrap();
     assert_eq!(crate::Bound::<TimerToken>::SOURCE, 3);
     assert_eq!(
         zero.controller.writes[before..],
@@ -141,8 +210,8 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         <TimerToken as Entry>::cell().with(|part| part.handled),
         Some(0)
     );
-    __oer_interrupt_h0_l16();
-    __oer_interrupt_h0_l16();
+    timer_handler();
+    timer_handler();
     // Each call of the line's symbol ran the entry's handler on the bound
     // part once.
     assert_eq!(
@@ -152,10 +221,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
 
     // The pair's entry writes its line once, then routes both sources to
     // it; its line's symbol runs its handler on the bound part.
-    // SAFETY: the test table defines this safe C ABI handler.
-    unsafe extern "C" {
-        safe fn __oer_interrupt_h0_l18();
-    }
+    let pair_handler = INTERRUPT_TABLE[2].handler.unwrap();
     let before = zero.controller.writes.len();
     let _bound: crate::Bound<PairToken> = zero.bind(tokens.pair, PairIrq::default()).unwrap();
     assert_eq!(
@@ -176,14 +242,26 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         ]
     );
     zero.verify().unwrap();
-    __oer_interrupt_h0_l18();
+    pair_handler();
     assert_eq!(
         <PairToken as Entry>::cell().with(|part| part.handled),
         Some(1)
     );
 
+    // Bypassing the once gate cannot replace a bound part or write a route.
+    #[allow(clippy::disallowed_methods, reason = "regression for a forged token")]
+    let forged = TimerToken(crate::__private::Unique::new());
+    let before = zero.controller.writes.len();
+    let crate::BindError::Fault(fault) = zero.bind(forged, TimerIrq::default()).unwrap_err() else {
+        panic!("a duplicate token must retain its part in quarantine");
+    };
+    assert_eq!(fault.fault.kind, crate::BindFaultKind::StorageClaimed);
+    assert_eq!(zero.controller.writes.len(), before);
+    timer_handler();
+    assert_eq!(TimerToken::cell().with(|part| part.handled), Some(3));
+
     let mut one = fake_router(1);
-    let _bound = one.bind(token, part).unwrap();
+    let _bound = one.bind(token, radio_part).unwrap();
     assert_eq!(one.controller.routes[5], Some(17));
     assert_eq!(one.controller.lines[17], LineState::bound(2, 3));
     one.verify().unwrap();

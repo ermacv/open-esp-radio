@@ -37,8 +37,15 @@ twice fails to compile. For each entry the macro defines:
   calls: it lends the bound part to the handler and runs nothing before the
   part is bound, never panicking;
 - a token type, neither `Copy` nor `Clone`, which `Interrupts::take` hands out
-  once per image; `Entry` is an `unsafe` trait and the token's constructor an
-  `unsafe fn`: only the macro creates a token;
+  once per image; `Entry` and the private token constructor are safe. The
+  mandatory `EntryProof<Self>` binds its vector handler to the cell that
+  handler reads. Root Clippy rules forbid direct `Unique::new` and
+  `EntryProof::new` calls; only the macro's constructor statements allow them.
+  Another entry's proof does not type-check. This is a lint policy: an
+  explicit waiver can still supply false scheduling metadata to compile-time
+  context checks. `Router::bind` checks source, line, level, hart, class and
+  handler/cell identity before placement or controller writes. Mismatches
+  return typed refusals; claimed storage yields `StorageClaimed` in quarantine;
 - for an `Exempt(VIOLATION, "reason")` entry, the reason's bytes exported as
   `__OER_INTERRUPT_EXEMPT_` followed by the handler's symbol, for the image
   gate's report;
@@ -67,6 +74,13 @@ The table is `INTERRUPT_TABLE`, a slice of `#[repr(C)]` `Binding`s exported
 as `__OER_INTERRUPT_TABLE` for the tools that read the image: source `u16` at
 0, line at 2, level at 3, class at 4, hart at 5 (`u8` each), the handler's
 word at 8, 12 bytes on the chip.
+The table, handler and exemption symbols are exported through
+`oer-memory::link_fn!`, which owns the export attributes. This crate's unsafe
+`LinkSlot` declarations reserve the table slice, vector function and exemption
+byte-array types and names. Safe exports must match the declared slot's
+name, kind and complete type, including function ABI. Each handler is a
+safe associated C ABI function of its token, so the table uses its address
+directly without a separate foreign declaration.
 
 `Router` is the one writer of a hart's routes and lines, over the chip's
 `Controller` (the hart's interrupt-matrix bank and CLIC; each chip HAL's

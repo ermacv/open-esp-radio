@@ -208,6 +208,18 @@ fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {
             FaultReason::RouteWrongHart,
             [executor, source.into(), hart.into(), current.into()],
         ),
+        Error::WrongClass {
+            source,
+            table,
+            entry,
+        } => (
+            FaultReason::RouteWrongClass,
+            [executor, source.into(), table as u32, entry as u32],
+        ),
+        Error::HandlerCellMismatch { source } => (
+            FaultReason::RouteHandlerCellMismatch,
+            [executor, source.into(), 0, 0],
+        ),
         Error::NotInTable { source } => (
             FaultReason::RouteNotInTable,
             [executor, source.into(), 0, 0],
@@ -284,6 +296,25 @@ mod tests {
         assert_eq!(
             fault.diagnostic(),
             (FaultReason::ExecutorClaimed, [2, 0xfedc_ba98, 0, 0])
+        );
+    }
+
+    #[test]
+    fn binding_identity_refusals_keep_their_typed_reason_and_classes() {
+        assert_eq!(
+            route_diagnostic(
+                3,
+                Error::WrongClass {
+                    source: 5,
+                    table: oer_espressif_interrupt_table::Class::Hardware,
+                    entry: oer_espressif_interrupt_table::Class::Executor,
+                }
+            ),
+            (FaultReason::RouteWrongClass, [3, 5, 0, 1])
+        );
+        assert_eq!(
+            route_diagnostic(3, Error::HandlerCellMismatch { source: 5 }),
+            (FaultReason::RouteHandlerCellMismatch, [3, 5, 0, 0])
         );
     }
 }

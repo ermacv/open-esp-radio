@@ -150,16 +150,20 @@ pub const fn line_control(level: u8, level_bits: u8) -> u8 {
 
 /// The token of one table entry: the only way to bind its part.
 ///
-/// # Safety
-///
-/// Only [`interrupt_table!`] implements it: the image's table lists each
+/// [`interrupt_table!`] implements it: the image's table lists each
 /// of the part's sources with `LINE`, `LEVEL` and `HART`, the entry's handler
 /// reaches its part through `cell` alone, and the type has one value.
-#[allow(
-    unsafe_code,
-    reason = "a token is the unique capability to bind its entry; forging one needs unsafe"
-)]
-pub unsafe trait Entry {
+/// Every implementation supplies `EntryProof<Self>`. Root Clippy policy
+/// restricts both proof and token constructors to the macro; a proof of
+/// another entry does not type-check. An explicit lint waiver can still lie
+/// about scheduling metadata, which compile-time context checks trust.
+/// [`Router::bind`] checks table metadata, class and the proof's handler/cell
+/// identity before placement. Storage and handler cells enforce memory safety
+/// independently of token origin; claimed storage is refused in quarantine.
+pub trait Entry: Sized {
+    /// Type-specific declaration proof, issued only by the table macro.
+    #[doc(hidden)]
+    const PROOF: __private::EntryProof<Self>;
     /// The interrupt part the entry's handler holds.
     type Part: InterruptSources + Send + 'static;
     const LINE: u8;
@@ -456,12 +460,14 @@ macro_rules! interrupt_table {
             pub struct $token($crate::__private::Unique);
 
             $(#[cfg($cfg)])*
-            // SAFETY: the table below lists this part's source with this
-            // line, level and hart; the handler below reaches the part only
-            // through `cell`, and `Interrupts::take` creates this token's one
-            // value.
-            unsafe impl $crate::Entry for $token {
+            impl $crate::Entry for $token {
                 type Part = $part;
+                const PROOF: $crate::__private::EntryProof<Self> = {
+                    static CELL: $crate::__private::HandlerCell<$part> = $crate::__private::HandlerCell::new();
+                    #[allow(clippy::disallowed_methods, reason = "the table owns its handler and cell mapping")]
+                    let proof = $crate::__private::EntryProof::new(Self::__handler, &CELL);
+                    proof
+                };
                 const LINE: u8 = $line;
                 const LEVEL: u8 = contexts::$context;
                 const HART: u8 = $hart;
@@ -472,17 +478,19 @@ macro_rules! interrupt_table {
                     &STORAGE
                 }
                 fn cell() -> &'static $crate::__private::HandlerCell<$part> {
-                    static CELL: $crate::__private::HandlerCell<$part> =
-                        $crate::__private::HandlerCell::new();
-                    &CELL
+                    Self::PROOF.cell()
                 }
             }
 
             $(#[cfg($cfg)])*
             const _: () = {
-                $crate::__interrupt_handler!($handler_attributes, $token, $handler, $hart, $line);
                 $crate::__exemption!($hart, $line $(, $reason)?);
             };
+
+            $(#[cfg($cfg)])*
+            impl $token {
+                $crate::__interrupt_handler!($handler_attributes, $token, $handler, $hart, $line);
+            }
         )*
 
         /// Every entry of the table, as its rules and its image layout
@@ -505,15 +513,7 @@ macro_rules! interrupt_table {
                     hart: $hart,
                     handler: {
                         #[cfg(all($($cfg),*))]
-                        let handler = ::core::option::Option::Some({
-                            // SAFETY: `__interrupt_handler!` defines this exact C ABI
-                            // symbol without a memory-safety precondition on the caller.
-                            unsafe extern "C" {
-                                #[link_name = concat!("__oer_interrupt_h", $hart, "_l", $line)]
-                                safe fn handler();
-                            }
-                            handler as extern "C" fn()
-                        });
+                        let handler = ::core::option::Option::Some($token::__handler as extern "C" fn());
                         #[cfg(not(all($($cfg),*)))]
                         let handler = ::core::option::Option::None;
                         handler
@@ -540,8 +540,14 @@ macro_rules! interrupt_table {
                     return ::core::option::Option::None;
                 }
                 ::core::option::Option::Some(Self {
-                    // SAFETY: `TAKEN` admits this once per image.
-                    $($(#[cfg($cfg)])* $field: $token(unsafe { $crate::__private::Unique::new() }),)*
+                    $($(#[cfg($cfg)])* $field: $token({
+                        #[allow(
+                            clippy::disallowed_methods,
+                            reason = "the table's once gate admits one token per entry and image"
+                        )]
+                        let unique = $crate::__private::Unique::new();
+                        unique
+                    }),)*
                 })
             }
         }
@@ -551,12 +557,14 @@ macro_rules! interrupt_table {
         static __OER_BINDINGS: [$crate::Binding; $crate::__private::count(__OER_DECLARED)] =
             $crate::__private::bindings(__OER_DECLARED);
 
-        /// The image's interrupt table. `#[used]` keeps the exported slice
-        /// in the image: reads of an immutable static are folded into their
-        /// uses, which would leave the tools no symbol to find it by.
-        #[used]
-        #[unsafe(export_name = "__OER_INTERRUPT_TABLE")]
-        pub static INTERRUPT_TABLE: &[$crate::Binding] = &__OER_BINDINGS;
+        $crate::__private::link_fn! {
+            table $crate::__private::InterruptTableSlot =>
+            /// The image's interrupt table. `#[used]` keeps the exported slice
+            /// in the image: reads of an immutable static are folded into their
+            /// uses, which would leave the tools no symbol to find it by.
+            #[used]
+            pub static INTERRUPT_TABLE: &[$crate::Binding] = &__OER_BINDINGS;
+        }
     };
 }
 
@@ -609,11 +617,13 @@ macro_rules! interrupt_sources {
 #[macro_export]
 macro_rules! __interrupt_handler {
     ([$(#[$attribute:meta])*], $token:ident, $handler:path, $hart:literal, $line:literal) => {
-        $(#[$attribute])*
-        #[unsafe(export_name = concat!("__oer_interrupt_h", $hart, "_l", $line))]
-        extern "C" fn handler() {
-            let handler: fn(&mut <$token as $crate::Entry>::Part) = $handler;
-            let _ = <$token as $crate::Entry>::cell().with(handler);
+        $crate::__private::link_fn! {
+            interrupt $crate::__private::InterruptHandlerSlot<$hart, $line>, hart $hart, line $line =>
+            $(#[$attribute])*
+            extern "C" fn __handler() {
+                let handler: fn(&mut <$token as $crate::Entry>::Part) = $handler;
+                let _ = <$token as $crate::Entry>::PROOF.cell().with(handler);
+            }
         }
     };
 }
@@ -626,9 +636,11 @@ macro_rules! __exemption {
     ($hart:literal, $line:literal) => {};
     ($hart:literal, $line:literal, $reason:literal) => {
         const REASON: &str = $reason;
-        #[used]
-        #[unsafe(export_name = concat!("__OER_INTERRUPT_EXEMPT___oer_interrupt_h", $hart, "_l", $line))]
-        static EXEMPTION: [u8; REASON.len()] = $crate::__private::bytes(REASON);
+        $crate::__private::link_fn! {
+            exemption $crate::__private::ExemptionSlot<$hart, $line, { REASON.len() }>, hart $hart, line $line =>
+            #[used]
+            static EXEMPTION: [u8; REASON.len()] = $crate::__private::bytes(REASON);
+        }
     };
 }
 
@@ -654,8 +666,81 @@ macro_rules! __class {
 pub mod __private {
     use crate::{Binding, Class, Lines};
 
-    pub use oer_memory::HandlerCell;
+    pub use oer_memory::{HandlerCell, link_fn};
     pub use static_cell::StaticCell;
+
+    /// A type-specific handler/cell mapping. No conversion between entries.
+    pub struct EntryProof<E: crate::Entry> {
+        handler: extern "C" fn(),
+        cell: &'static HandlerCell<E::Part>,
+        _entry: core::marker::PhantomData<fn(E) -> E>,
+    }
+    impl<E: crate::Entry> EntryProof<E> {
+        /// Construction is restricted to the table macro by root Clippy policy.
+        pub const fn new(handler: extern "C" fn(), cell: &'static HandlerCell<E::Part>) -> Self {
+            Self {
+                handler,
+                cell,
+                _entry: core::marker::PhantomData,
+            }
+        }
+        pub fn handler(&self) -> extern "C" fn() {
+            self.handler
+        }
+        pub fn cell(&self) -> &'static HandlerCell<E::Part> {
+            self.cell
+        }
+    }
+
+    pub enum InterruptTableSlot {}
+    #[allow(
+        unsafe_code,
+        reason = "the interrupt table owns its existing table ABI"
+    )]
+    // SAFETY: the sole table symbol is an immutable slice of Binding with
+    // the repr(C) layout checked above; its export checks this exact type.
+    unsafe impl oer_memory::LinkSlot for InterruptTableSlot {
+        type Value = &'static [Binding];
+        const NAME: oer_memory::SlotName =
+            oer_memory::SlotName(&[oer_memory::NamePart::Text("__OER_INTERRUPT_TABLE")]);
+        const KIND: oer_memory::SlotKind = oer_memory::SlotKind::Static;
+    }
+    pub enum InterruptHandlerSlot<const H: u8, const L: u8> {}
+    #[allow(
+        unsafe_code,
+        reason = "the interrupt table owns its existing vector ABI"
+    )]
+    // SAFETY: each hart/line names one safe C fn() vector handler. The table
+    // macro emits it once, and the export checks both indices and signature.
+    unsafe impl<const H: u8, const L: u8> oer_memory::LinkSlot for InterruptHandlerSlot<H, L> {
+        type Value = extern "C" fn();
+        const NAME: oer_memory::SlotName = oer_memory::SlotName(&[
+            oer_memory::NamePart::Text("__oer_interrupt_h"),
+            oer_memory::NamePart::Decimal(H),
+            oer_memory::NamePart::Text("_l"),
+            oer_memory::NamePart::Decimal(L),
+        ]);
+        const KIND: oer_memory::SlotKind = oer_memory::SlotKind::Function;
+    }
+    pub enum ExemptionSlot<const H: u8, const L: u8, const N: usize> {}
+    #[allow(
+        unsafe_code,
+        reason = "the interrupt table owns its existing exemption ABI"
+    )]
+    // SAFETY: each reason symbol is immutable bytes for its hart/line, of
+    // exactly N bytes. Its export checks the complete name and array type.
+    unsafe impl<const H: u8, const L: u8, const N: usize> oer_memory::LinkSlot
+        for ExemptionSlot<H, L, N>
+    {
+        type Value = [u8; N];
+        const NAME: oer_memory::SlotName = oer_memory::SlotName(&[
+            oer_memory::NamePart::Text("__OER_INTERRUPT_EXEMPT___oer_interrupt_h"),
+            oer_memory::NamePart::Decimal(H),
+            oer_memory::NamePart::Text("_l"),
+            oer_memory::NamePart::Decimal(L),
+        ]);
+        const KIND: oer_memory::SlotKind = oer_memory::SlotKind::Static;
+    }
 
     /// One entry as the table's rules and its image layout see it.
     pub struct Declared {
@@ -882,13 +967,11 @@ pub mod __private {
     pub struct Unique(());
 
     impl Unique {
-        /// # Safety
-        ///
         /// Only [`interrupt_table!`](crate::interrupt_table) creates a token,
-        /// once per entry and image.
+        /// once per entry and image. The root Clippy configuration forbids
+        /// direct calls outside that macro's once gate.
         #[doc(hidden)]
-        #[allow(unsafe_code, reason = "only the table's macro creates a token")]
-        pub const unsafe fn new() -> Self {
+        pub const fn new() -> Self {
             Self(())
         }
     }
@@ -1072,8 +1155,4 @@ macro_rules! __fake_table {
 extern crate std;
 
 #[cfg(test)]
-#[allow(
-    unsafe_code,
-    reason = "the tests' fake controller declares an interrupt table"
-)]
 mod tests;
