@@ -117,6 +117,9 @@ pub enum EndpointSplitError {
 }
 
 /// Wake a displaced registration only after shared state has been restored.
+// Keep this Waker proof boundary independent of network-poll inlining.
+// The stack analyzer must still resolve each wake/drop callback inside it.
+#[inline(never)]
 fn wake_replaced(previous: Option<Waker>, current: &Waker) {
     if let Some(previous) = previous
         && !previous.will_wake(current)

@@ -8,6 +8,12 @@ The pinned Xarxa fork keeps packet-pool Waker registration in a separate
 typed Waker call scopes for the proven stack analysis without changing the
 register-then-recheck notification protocol.
 
+Displaced TX registrations likewise wake or drop their previous Waker in the
+private, never-inlined `wake_replaced` helper. This keeps their stack-analysis
+boundary separate from the enclosing network poll. In the W3 composition,
+the helper's two indirect tail exits still lack a complete Waker proof;
+the separate boundary alone does not prove its stack bound.
+
 RX frames are copied into the endpoint's packet pool before publication.
 The adapter accepts packet-pool owners and forbids unsafe code; it does not
 adopt detached DMA storage.
