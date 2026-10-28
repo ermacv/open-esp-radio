@@ -45,7 +45,7 @@ publications (`published`). Its mean is `sum / samples`, not the mean batch
 size. `w3.echo` counts all router-to-station echo requests seen by the bridge
 and replies admitted to the service TX queue, independent of the version-1
 100-pair window. `w3.stack` snapshots whole-stack RX owners, validated IPv4
-echo requests, formed echo replies, TX attempts, TX refusals and refused
+echo requests, formed echo replies, raw-egress TX attempts/refusals and refused
 IPv4 echo replies. Counters saturate and never change admission or retry.
 Probe, bridge and loss diagnostics are typed notes like the
 version 1 report and do not format text on the target.
