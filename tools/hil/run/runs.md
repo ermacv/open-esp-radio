@@ -278,7 +278,7 @@ ordinary run of the store; the step keeps no record of its own. Its exit
 status is what `git bisect run` reads: 0 when S passed, 1 when it failed,
 125 when this runner cannot judge the revision (its image does not compile
 or does not link, told apart from the run's archived build log, or its
-`protocols/hil/protocol/messages.lock` differs from this checkout's), and 128
+composed owner message locks differ from this checkout's), and 128
 when the run judged nothing for another reason (blocked, broken,
 interrupted, a quarantined board), which stops the search, since its next
 steps would meet the same stand.

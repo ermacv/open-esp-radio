@@ -1,6 +1,4 @@
-use oer_hil_protocol::{
-    DecodeError, Envelope, FrameDecoder, FrameEncoder, MAX_WIRE_FRAME_BYTES, WireKind,
-};
+use oer_hil_protocol::{DecodeError, Envelope, FrameDecoder, FrameEncoder};
 /// Feeds `bytes` and returns the last complete frame as message `M`.
 fn receive<M: oer_hil_protocol::Message>(
     decoder: &mut FrameDecoder,
