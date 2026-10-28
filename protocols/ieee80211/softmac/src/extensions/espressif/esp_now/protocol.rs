@@ -43,14 +43,12 @@ struct EspNowRxPeerSlot {
         EspNowPhyMode,
     )>,
     history: [Option<EspNowRxFingerprint>; ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY],
-    next_history: usize,
 }
 
 impl EspNowRxPeerSlot {
     const EMPTY: Self = Self {
         peer: None,
         history: [None; ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY],
-        next_history: 0,
     };
 
     /// Remember `fingerprint` in place of the oldest entry.
@@ -63,11 +61,12 @@ impl EspNowRxPeerSlot {
         clippy::arithmetic_side_effects
     )]
     fn remember(&mut self, fingerprint: EspNowRxFingerprint) {
-        if let Some(entry) = self.history.get_mut(self.next_history) {
-            *entry = Some(fingerprint);
+        // Newest first: moving the displaced entry along the fixed array
+        // evicts exactly the oldest fingerprint without a separate cursor.
+        let mut incoming = Some(fingerprint);
+        for entry in &mut self.history {
+            core::mem::swap(entry, &mut incoming);
         }
-        self.next_history =
-            self.next_history.wrapping_add(1) % ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY;
     }
 }
 
@@ -356,39 +355,40 @@ impl<const N: usize> EspNowPeerTable<N> {
             | EspNowPeerChannelPolicy::StandaloneFixed(_) => {}
         }
 
-        let mut reusable = None;
-        let mut exhausted_slot = false;
-        for (index, slot) in self.slots.iter().enumerate() {
-            if slot
-                .config
+        if self.slots.iter().any(|slot| {
+            slot.config
                 .is_some_and(|peer| peer.destination == config.destination)
-            {
-                return Err(EspNowPeerTableError::Duplicate(config.destination));
-            }
-            if slot.config.is_none() && reusable.is_none() {
-                if slot.generation == u32::MAX {
-                    exhausted_slot = true;
-                } else {
-                    reusable = Some(index);
-                }
-            }
+        }) {
+            return Err(EspNowPeerTableError::Duplicate(config.destination));
         }
-
-        let Some(index) = reusable else {
-            return Err(if exhausted_slot && self.length < N {
+        let Some((index, slot)) = self
+            .slots
+            .iter_mut()
+            .enumerate()
+            .find(|(_, slot)| slot.config.is_none() && slot.generation < u32::MAX)
+        else {
+            return Err(if self.slots.iter().any(|slot| slot.config.is_none()) {
                 EspNowPeerTableError::GenerationExhausted
             } else {
                 EspNowPeerTableError::Full
             });
         };
-        let slot = &mut self.slots[index];
-        slot.generation += 1;
+        let generation = slot
+            .generation
+            .checked_add(1)
+            .ok_or(EspNowPeerTableError::GenerationExhausted)?;
+        let length = self
+            .length
+            .checked_add(1)
+            .filter(|length| *length <= N)
+            .ok_or(EspNowPeerTableError::InvalidCount {
+                count: self.length,
+                capacity: N,
+            })?;
+        slot.generation = generation;
         slot.config = Some(config);
-        self.length += 1;
-        Ok(EspNowPeerId {
-            index,
-            generation: slot.generation,
-        })
+        self.length = length;
+        Ok(EspNowPeerId { index, generation })
     }
 
     pub fn get(&self, peer: EspNowPeerId) -> Result<EspNowPeerConfig, EspNowPeerTableError> {
@@ -422,35 +422,40 @@ impl<const N: usize> EspNowPeerTable<N> {
         if slot.generation != peer.generation {
             return Err(EspNowPeerTableError::Stale(peer));
         }
-        let Some(config) = slot.config.take() else {
+        let Some(config) = slot.config else {
             return Err(EspNowPeerTableError::Stale(peer));
         };
-        self.length -= 1;
+        let length = self
+            .length
+            .checked_sub(1)
+            .filter(|length| *length < N)
+            .ok_or(EspNowPeerTableError::InvalidCount {
+                count: self.length,
+                capacity: N,
+            })?;
+        slot.config = None;
+        self.length = length;
         Ok(config)
     }
 
     pub const fn iter(&self) -> EspNowPeers<'_, N> {
-        EspNowPeers {
-            table: self,
-            next: 0,
-        }
+        EspNowPeers { slots: &self.slots }
     }
 }
 
 /// Borrowed iterator over occupied peer slots.
 pub struct EspNowPeers<'table, const N: usize> {
-    table: &'table EspNowPeerTable<N>,
-    next: usize,
+    // Always a suffix of the original N slots; only next() shortens it.
+    slots: &'table [EspNowPeerSlot],
 }
 
 impl<const N: usize> Iterator for EspNowPeers<'_, N> {
     type Item = (EspNowPeerId, EspNowPeerConfig);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.next < N {
-            let index = self.next;
-            self.next += 1;
-            let slot = self.table.slots[index];
+        while let Some((slot, remaining)) = self.slots.split_first() {
+            let index = N.abs_diff(self.slots.len());
+            self.slots = remaining;
             if let Some(config) = slot.config {
                 return Some((
                     EspNowPeerId {
@@ -465,13 +470,17 @@ impl<const N: usize> Iterator for EspNowPeers<'_, N> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, Some(N.saturating_sub(self.next)))
+        (0, Some(self.slots.len()))
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EspNowPeerTableError {
     Full,
+    InvalidCount {
+        count: usize,
+        capacity: usize,
+    },
     Duplicate(EspNowDestination),
     ChannelMismatch {
         peer: WifiChannel,
@@ -486,6 +495,10 @@ impl fmt::Display for EspNowPeerTableError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Full => formatter.write_str("the ESP-NOW peer table is full"),
+            Self::InvalidCount { count, capacity } => write!(
+                formatter,
+                "ESP-NOW peer count {count} is inconsistent with capacity {capacity}"
+            ),
             Self::Duplicate(destination) => {
                 write!(
                     formatter,
@@ -562,8 +575,10 @@ impl<const N: usize> EspNowProtocol<N> {
         validate_active_binding(self.config, active_station, active_channel)?;
 
         let mut slots = [EspNowRxPeerSlot::EMPTY; N];
-        let mut peer_count = 0;
-        for (peer, config) in self.peers.iter() {
+        for ((index, peer_slot), rx_slot) in self.peers.slots.iter().enumerate().zip(&mut slots) {
+            let Some(config) = peer_slot.config else {
+                continue;
+            };
             if !config.channel_policy().is_home_channel() {
                 // Standalone fixed-channel peers grant TX authority only. The
                 // normal receive epoch is deliberately rebuilt on home.
@@ -573,13 +588,16 @@ impl<const N: usize> EspNowProtocol<N> {
                 // A broadcast entry grants only broadcast TX authority.
                 continue;
             };
-            slots[peer.index] = EspNowRxPeerSlot {
+            let peer = EspNowPeerId {
+                index,
+                generation: peer_slot.generation,
+            };
+            *rx_slot = EspNowRxPeerSlot {
                 peer: Some((peer, address, config.capability, config.phy_mode)),
                 history: [None; ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY],
-                next_history: 0,
             };
-            peer_count += 1;
         }
+        let peer_count = slots.iter().filter(|slot| slot.peer.is_some()).count();
         Ok(EspNowRxEpoch {
             config: self.config,
             slots,
@@ -597,8 +615,7 @@ impl<const N: usize> EspNowProtocol<N> {
         if epoch.config != self.config {
             return false;
         }
-        let mut peer_count = 0;
-        for (index, peer_slot) in self.peers.slots.iter().enumerate() {
+        for ((index, peer_slot), rx_slot) in self.peers.slots.iter().enumerate().zip(&epoch.slots) {
             let expected = match peer_slot.config {
                 Some(EspNowPeerConfig {
                     destination: EspNowDestination::Unicast(address),
@@ -606,25 +623,27 @@ impl<const N: usize> EspNowProtocol<N> {
                     capability,
                     phy_mode,
                     ..
-                }) => {
-                    peer_count += 1;
-                    Some((
-                        EspNowPeerId {
-                            index,
-                            generation: peer_slot.generation,
-                        },
-                        address,
-                        capability,
-                        phy_mode,
-                    ))
-                }
+                }) => Some((
+                    EspNowPeerId {
+                        index,
+                        generation: peer_slot.generation,
+                    },
+                    address,
+                    capability,
+                    phy_mode,
+                )),
                 Some(_) | None => None,
             };
-            if epoch.slots[index].peer != expected {
+            if rx_slot.peer != expected {
                 return false;
             }
         }
-        epoch.peer_count == peer_count
+        epoch.peer_count
+            == epoch
+                .slots
+                .iter()
+                .filter(|slot| slot.peer.is_some())
+                .count()
     }
 
     /// Resolve a peer, validate the payload, then consume one shared station
@@ -929,16 +948,13 @@ impl<const N: usize> EspNowRxEpoch<N> {
     /// Clear duplicate state before the surrounding normal-RX owner is
     /// returned to a lifecycle composition root.
     pub fn reset_duplicate_history(&mut self) -> usize {
-        let mut cleared = 0;
-        for slot in &mut self.slots {
-            for fingerprint in &mut slot.history {
-                if fingerprint.take().is_some() {
-                    cleared += 1;
-                }
-            }
-            slot.next_history = 0;
-        }
-        cleared
+        // Each counted fingerprint occupies storage in this array, so the
+        // count is bounded by the array's byte size.
+        self.slots
+            .iter_mut()
+            .flat_map(|slot| &mut slot.history)
+            .filter_map(Option::take)
+            .count()
     }
 }
 
@@ -1397,3 +1413,7 @@ impl fmt::Display for EspNowV2ReceiveError {
 }
 
 impl core::error::Error for EspNowV2ReceiveError {}
+
+#[cfg(test)]
+#[allow(clippy::disallowed_macros)]
+mod tests;

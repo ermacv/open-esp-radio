@@ -34,8 +34,14 @@ impl<const N: usize> EspNowV2Reassembly<N> {
         self.length == 0
     }
 
-    pub fn payload(&self) -> &[u8] {
-        &self.bytes[..self.length]
+    /// Borrow the retained datagram, reporting an inconsistent retained length.
+    pub fn payload(&self) -> Result<&[u8], EspNowV2WireError> {
+        self.bytes
+            .get(..self.length)
+            .ok_or(EspNowV2WireError::ReassemblyCapacityTooSmall {
+                required: self.length,
+                capacity: N,
+            })
     }
 
     pub fn reassemble(&mut self, action: EspNowV2Action<'_>) -> Result<&[u8], EspNowV2WireError> {
@@ -47,7 +53,7 @@ impl<const N: usize> EspNowV2Reassembly<N> {
         }
         let length = action.copy_payload(&mut self.bytes)?;
         self.length = length;
-        Ok(&self.bytes[..length])
+        self.payload()
     }
 
     pub fn clear(&mut self) {
@@ -59,5 +65,50 @@ impl<const N: usize> EspNowV2Reassembly<N> {
 impl<const N: usize> Default for EspNowV2Reassembly<N> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::disallowed_macros)]
+mod tests {
+    use super::*;
+    use oer_ieee80211_wire::extensions::espressif::esp_now::EspNowRandomValue;
+
+    #[test]
+    fn invalid_retained_length_returns_error_instead_of_panicking() {
+        let buffer = EspNowV2Reassembly::<2> {
+            bytes: [7, 8],
+            length: usize::MAX,
+        };
+        assert_eq!(
+            buffer.payload(),
+            Err(EspNowV2WireError::ReassemblyCapacityTooSmall {
+                required: usize::MAX,
+                capacity: 2,
+            })
+        );
+    }
+
+    #[test]
+    fn capacity_refusal_preserves_payload_and_clear_handles_empty_storage() {
+        let action = EspNowV2Action::new(EspNowRandomValue::new([1; 4]), &[7, 8]).unwrap();
+        let mut buffer = EspNowV2Reassembly::<2>::new();
+        assert_eq!(buffer.reassemble(action), Ok([7, 8].as_slice()));
+        let larger = EspNowV2Action::new(EspNowRandomValue::new([1; 4]), &[3; 3]).unwrap();
+        assert_eq!(
+            buffer.reassemble(larger),
+            Err(EspNowV2WireError::ReassemblyCapacityTooSmall {
+                required: 3,
+                capacity: 2,
+            })
+        );
+        assert_eq!(buffer.payload(), Ok([7, 8].as_slice()));
+        buffer.clear();
+        assert_eq!(buffer.payload(), Ok([].as_slice()));
+        let empty = EspNowV2Action::new(EspNowRandomValue::new([1; 4]), &[]).unwrap();
+        assert_eq!(
+            EspNowV2Reassembly::<0>::new().reassemble(empty),
+            Ok([].as_slice())
+        );
     }
 }
