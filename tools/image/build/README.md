@@ -7,6 +7,37 @@ classes (`oer-hil-run`, through `cargo hil image build`, the runner and
 checks or encodes one. Every image builds with the `firmware` profile against
 the workspace's one `Cargo.lock` (`--locked`).
 
+## Code-generation preconditions
+
+The compiler setup in `src/compiler.rs` pins the conditions required by the
+[DWARF Waker-slot proof](../../analysis/riscv-stack/README.md#code-generation-preconditions)
+for every Rust image build, including bootstrap and probes:
+
+- `-Zmerge-functions=disabled` keeps distinct function origins from becoming
+  one function with only one surviving DWARF description.
+- `-Cllvm-args=-enable-machine-outliner=never` disables machine outlining
+  explicitly, independently of optimization level, CPU and target features.
+  The pinned RISC-V target's `+m,+a,+c,+f` features need no outlining exception.
+- `pick-merged-source-locations` must not be set, even explicitly to false.
+- No `--icf` option may reach LLD, including `--icf=none`; its default is off.
+
+The pinned stable toolchain accepts the unstable MergeFunctions flag through
+this setup's image-only `RUSTC_BOOTSTRAP=1`, alongside the existing stack-size,
+move-limit and shared-generics flags. A compiler-driven test checks that two
+identical callback wrappers with different source traits keep distinct code.
+
+Cargo's encoded rustflags take precedence over ordinary `RUSTFLAGS`. The
+setup reads the effective input, appends the required flags, validates the
+whole argument list, and passes it as `CARGO_ENCODED_RUSTFLAGS`; probe cfgs
+extend the same list. Argument boundaries are retained, including spaces in
+LLVM options and linker paths. Conflicting settings return a typed
+`oer_image_checks::codegen::CodegenPrecondition`, even if a later flag would
+override them. Explicit passes that re-enable merging or outlining are also
+refused. The [image linker](../linker/README.md) checks the actual expanded
+link command, including build-script options and nested response files.
+These checks are unconditional; selecting reported image gates does not
+relax them.
+
 ## Contract
 
 An `ImageSpec` names the purpose (`Flash` or `Analysis`), the tree

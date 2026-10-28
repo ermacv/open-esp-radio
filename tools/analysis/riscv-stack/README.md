@@ -16,6 +16,33 @@ address uses, checked address words and `.LJTI*` labels, parsed once) and its fr
 and DWARF through [`oer-analysis-elf`](../elf/README.md), whose RV32 relocation
 table decides which relocation is an address word or a control transfer.
 
+## Code-generation preconditions
+
+The Waker rule in `src/wakers.rs` selects a vtable slot from the innermost
+DWARF scope at the unresolved call, or at every reaching target load when
+the call's scope has ended. That scope must retain the identity of the
+operation that produced the instruction. The image pipeline fixes these
+conditions in its [compiler setup](../../image/build/README.md#code-generation-preconditions):
+
+| Condition | Why the scope proof needs it |
+| --- | --- |
+| `-Zmerge-functions=disabled` | LLVM MergeFunctions can merge identical bodies from different source functions and discard one DWARF origin. |
+| `-Cllvm-args=-enable-machine-outliner=never` | Machine outlining creates functions without the original instruction scopes; the disable applies regardless of RISC-V features or optimization level. |
+| `pick-merged-source-locations` absent | Picking one merged origin can assign both wake and drop paths to `Waker::wake`, incorrectly excluding the drop slot. |
+| LLD `--icf` absent (default off) | Identical code folding can put different symbols and source origins at the same machine bytes. |
+
+The pipeline validates its complete rustc flags, including Cargo's encoded
+form, and the linker validates its expanded arguments. Violations are typed
+build errors. This is a precondition of the proof, not a property the analyzer
+can recover from arbitrary ELF bytes: other producers must establish it too.
+LLVM's debug-location correctness, complete vtable/relocation evidence and
+the unsafe-memory invariants below remain trusted boundaries. A lost or
+broadened scope does not itself establish a Waker method; the existing
+scope/load checks still have to identify the slot. Prebuilt compiler-runtime
+code retains its separate [coverage boundary](../../../docs/unsafe.md).
+
+## Analysis facts
+
 `taken_addresses`, task-spawn ownership and the shared callback audit
 read the common address-use index. Their projections preserve distinct
 rules: `taken_addresses` excludes direct section targets and clears the

@@ -77,6 +77,13 @@ Compiler `panic_const_async_fn_resumed` sites have a separate row outside
 the budgets and target of 0, based on the executor's runtime `DONE` check
 (not a type guarantee) and `.await` never polling a completed child again.
 
+The stack analyzer's DWARF Waker-slot proof also requires the image
+pipeline's [code-generation preconditions](../tools/analysis/riscv-stack/README.md#code-generation-preconditions):
+MergeFunctions and machine outlining are disabled, merged source locations
+are not picked from a single origin, and linker ICF is off. The build
+validates the effective compiler flags and expanded linker arguments;
+missing scope identity is not repaired by a trusted frame size.
+
 Compiler-runtime coverage reviews explain missing frame metadata only; they
 supply no trusted frame size or callee bound. A frame without metadata needs
 complete local control flow and a known entry-relative stack pointer.
