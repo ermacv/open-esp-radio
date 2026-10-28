@@ -191,7 +191,7 @@ macro_rules! channel_table {
             let mut slot = 0;
             let mut wifi_count = 0;
             while let Some((entry, remaining)) = entries.split_first() {
-                assert!(entry.index as usize == slot);
+                if !(entry.index as usize == slot) { panic!("channel index disagrees with its table slot"); };
                 slot += 1;
 
                 // Independent rule admission: IEEE Std 802.11-2020 Table
@@ -221,7 +221,7 @@ macro_rules! channel_table {
                         }
                     }
                 };
-                assert!(valid);
+                if !(valid) { panic!("channel violates IEEE channel geometry"); };
                 let primary = match entry.band {
                     Band::Ghz2_4 if entry.number == 14 => 2_484,
                     Band::Ghz2_4 => 2_407 + 5 * entry.number as u16,
@@ -233,22 +233,22 @@ macro_rules! channel_table {
                     ChannelWidth::Mhz40Below => primary - 10,
                 };
                 let half_khz = entry.width.bandwidth_mhz() as u32 * 500;
-                assert!(entry.primary_mhz == primary && entry.center_mhz == center);
-                assert!(entry.span.low_khz() == center as u32 * 1_000 - half_khz);
-                assert!(entry.span.high_khz() == center as u32 * 1_000 + half_khz);
+                if !(entry.primary_mhz == primary && entry.center_mhz == center) { panic!("channel frequencies disagree with its geometry"); };
+                if !(entry.span.low_khz() == center as u32 * 1_000 - half_khz) { panic!("channel lower edge disagrees with its center"); };
+                if !(entry.span.high_khz() == center as u32 * 1_000 + half_khz) { panic!("channel upper edge disagrees with its center"); };
                 let mut others = remaining;
                 while let Some((other, tail)) = others.split_first() {
-                    assert!(entry.band as u8 != other.band as u8
+                    if !(entry.band as u8 != other.band as u8
                         || entry.number != other.number
-                        || entry.width as u8 != other.width as u8);
+                        || entry.width as u8 != other.width as u8) { panic!("duplicate channel geometry"); };
                     others = tail;
                 }
                 entries = remaining;
             }
             // Valid, unique rows of these rule-derived cardinalities cover
             // every geometry: 32 in 2.4 GHz and 56 in 5 GHz.
-            assert!(wifi_count == 14 + 9 + 9);
-            assert!(CHANNELS.len() == 14 + 9 + 9 + 2 * (8 + 12 + 8));
+            if !(wifi_count == 14 + 9 + 9) { panic!("incomplete 2.4 GHz channel table"); };
+            if !(CHANNELS.len() == 14 + 9 + 9 + 2 * (8 + 12 + 8)) { panic!("incomplete channel table"); };
         };
     };
 }

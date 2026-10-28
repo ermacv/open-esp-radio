@@ -14,7 +14,8 @@ pub const fn empty_delimiters(psdu_bytes: u32, minimum_subframe_bytes: u32) -> O
     let Some(complete) = (rounded & !3).checked_add(4) else {
         return None;
     };
-    Some(minimum_subframe_bytes.saturating_sub(complete).div_ceil(4))
+    let missing = minimum_subframe_bytes.saturating_sub(complete);
+    (missing / 4).checked_add((missing % 4 != 0) as u32)
 }
 
 /// Length after appending a PSDU. `previous` is the previous final PSDU's

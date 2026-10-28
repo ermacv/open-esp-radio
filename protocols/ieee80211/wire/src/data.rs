@@ -193,7 +193,9 @@ fn write_ethernet(
         .ok_or(too_small)?;
     let (output_payload, _) = rest.split_at_mut_checked(payload.len()).ok_or(too_small)?;
     *output_header = header;
-    output_payload.copy_from_slice(payload);
+    oer_wire::Writer::new(output_payload)
+        .write(payload)
+        .map_err(|_| too_small)?;
     Ok(required)
 }
 

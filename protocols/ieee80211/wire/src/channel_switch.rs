@@ -142,7 +142,7 @@ impl ChannelSwitch {
                 self.channel_number,
                 self.count,
             ];
-            out.get_mut(..element.len())?.copy_from_slice(&element);
+            oer_wire::Writer::new(out).write(&element).ok()?;
             return Some(element.len());
         }
         let announcement = [
@@ -171,15 +171,15 @@ impl ChannelSwitch {
             }
         };
         let (written, _) = out.split_at_mut_checked(elements.len())?;
-        written.copy_from_slice(elements);
+        oer_wire::Writer::new(written).write(elements).ok()?;
         Some(elements.len())
     }
 
     /// The Channel Switch Announcement action frame body: category, action
     /// and the elements; its length, or `None` when `out` is too short.
     pub fn encode_action(self, out: &mut [u8]) -> Option<usize> {
-        let (head, rest) = out.split_at_mut_checked(2)?;
-        head.copy_from_slice(&[SPECTRUM_MANAGEMENT_CATEGORY, CHANNEL_SWITCH_ACTION]);
+        let (head, rest) = out.split_first_chunk_mut::<2>()?;
+        *head = [SPECTRUM_MANAGEMENT_CATEGORY, CHANNEL_SWITCH_ACTION];
         head.len().checked_add(self.encode_elements(rest)?)
     }
 }

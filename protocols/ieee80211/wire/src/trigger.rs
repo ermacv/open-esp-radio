@@ -430,7 +430,7 @@ macro_rules! dbm_values {
         match $value.get() {
             $($code => Self::Dbm(const {
                 let dbm = ($code as i16 - $offset) * $scale;
-                assert!(dbm >= i8::MIN as i16 && dbm <= i8::MAX as i16);
+                if !(dbm >= i8::MIN as i16 && dbm <= i8::MAX as i16) { panic!("invalid fixed wire geometry"); };
                 dbm as i8
             }),)+
             _ => $last,

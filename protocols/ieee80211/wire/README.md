@@ -6,10 +6,13 @@ with standard-clause sources; bounded readers and writers handle byte streams.
 Mutable exchange state belongs to upper-mac, station
 and SoftMAC cores.
 
-Production code denies `unwrap_used`, `expect_used`, `panic`, `unreachable`
-and `indexing_slicing`; unit tests use the `cfg(test)` exception. Narrow
-`#[expect(..., reason = "...")]` attributes document validated internal
-invariants. Shared `test-support` library builds retain the production policy.
+Production code forbids unsafe and denies every sans-IO panic lint, including
+`disallowed_methods` and `disallowed_macros`. Its local Clippy configuration
+retains the common workspace bans and the complete sans-IO catalogue. Tests
+may assert; shared `test-support` builds keep the production code's policy.
+Fixed fields retain array widths through compile-time offset admission.
+Counted RSN lists retain complete borrowed byte spans and yield fixed arrays;
+in-place moves admit both ranges before changing any byte.
 
 ## Known defects
 

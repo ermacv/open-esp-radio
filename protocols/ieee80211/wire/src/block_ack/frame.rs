@@ -55,9 +55,12 @@ pub fn encode_addba_request(
     body[0] = BLOCK_ACK_CATEGORY;
     body[1] = ADDBA_REQUEST_ACTION;
     body[2] = dialog_token;
-    body[3..5].copy_from_slice(&parameters.to_bytes());
-    body[5..7].copy_from_slice(&timeout_tu.to_le_bytes());
-    body[7..9].copy_from_slice(&starting_sequence.sequence_control().to_le_bytes());
+    crate::encoding::write_array::<3, _, _>(&mut body, &parameters.to_bytes());
+    crate::encoding::write_array::<5, _, _>(&mut body, &timeout_tu.to_le_bytes());
+    crate::encoding::write_array::<7, _, _>(
+        &mut body,
+        &starting_sequence.sequence_control().to_le_bytes(),
+    );
     Ok(body)
 }
 
@@ -162,13 +165,16 @@ pub fn encode_block_ack_request(
     starting_sequence: SequenceNumber,
 ) -> [u8; BLOCK_ACK_REQUEST_LEN] {
     let mut frame = [0_u8; BLOCK_ACK_REQUEST_LEN];
-    frame[..2].copy_from_slice(&0x0084_u16.to_le_bytes());
-    frame[4..10].copy_from_slice(&receiver);
-    frame[10..16].copy_from_slice(&transmitter);
+    crate::encoding::write_array::<0, _, _>(&mut frame, &0x0084_u16.to_le_bytes());
+    crate::encoding::write_array::<4, _, _>(&mut frame, &receiver);
+    crate::encoding::write_array::<10, _, _>(&mut frame, &transmitter);
     let tid = QosControl::from_bytes([tid, 0]).tid();
     let control = crate::trigger::BarControlFields::from_bytes([4, 0]).with_tid(tid);
-    frame[16..18].copy_from_slice(&control.to_bytes());
-    frame[18..20].copy_from_slice(&starting_sequence.sequence_control().to_le_bytes());
+    crate::encoding::write_array::<16, _, _>(&mut frame, &control.to_bytes());
+    crate::encoding::write_array::<18, _, _>(
+        &mut frame,
+        &starting_sequence.sequence_control().to_le_bytes(),
+    );
     frame
 }
 
@@ -210,7 +216,7 @@ pub fn write_successful_addba_response(
         .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
         .with_window(window)
         .map_err(|_| RxAddbaResponseError::InvalidWindow(window))?;
-    body[5..7].copy_from_slice(&parameters.to_bytes());
+    crate::encoding::write_array::<5, _, _>(body, &parameters.to_bytes());
     Ok(())
 }
 
@@ -242,7 +248,7 @@ pub fn write_declined_addba_response(
     body[0] = BLOCK_ACK_CATEGORY;
     body[1] = ADDBA_RESPONSE_ACTION;
     body[2] = dialog_token;
-    body[3..5].copy_from_slice(&ADDBA_STATUS_REQUEST_DECLINED.to_le_bytes());
+    crate::encoding::write_array::<3, _, _>(body, &ADDBA_STATUS_REQUEST_DECLINED.to_le_bytes());
     let parameters = AddbaParameters::from_bytes([0; 2])
         .with_amsdu(false)
         .with_immediate(true)
@@ -250,7 +256,7 @@ pub fn write_declined_addba_response(
         .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
         .with_window(requested_window)
         .map_err(|_| RxAddbaResponseError::InvalidWindow(requested_window))?;
-    body[5..7].copy_from_slice(&parameters.to_bytes());
+    crate::encoding::write_array::<5, _, _>(body, &parameters.to_bytes());
     Ok(())
 }
 

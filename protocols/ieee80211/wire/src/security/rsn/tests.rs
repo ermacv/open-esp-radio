@@ -80,6 +80,34 @@ fn complete_optional_tail_is_exposed_without_policy() {
 }
 
 #[test]
+fn counted_views_preserve_every_entry_and_refuse_partial_pmkids() {
+    for count in 0..=14_u16 {
+        let (prefix, length) = base_body(&[SAE, PSK]);
+        let mut body = prefix[..length].to_vec();
+        body.extend_from_slice(&0_u16.to_le_bytes());
+        body.extend_from_slice(&count.to_le_bytes());
+        let expected: std::vec::Vec<_> = (0..count)
+            .map(|index| [index as u8; RSN_PMKID_LEN])
+            .collect();
+        body.extend(expected.iter().flatten());
+        let mut bytes = std::vec![RSN_ELEMENT_ID, body.len() as u8];
+        bytes.extend_from_slice(&body);
+        let parsed = RsnElement::parse(&bytes).unwrap();
+        assert_eq!(parsed.pmkid_count(), Some(count));
+        assert!(parsed.pmkids().eq(expected.iter().copied()));
+        assert_eq!(parsed.akm_suites().len(), 2);
+        assert!(parsed.akm_suites().iter().eq([SAE, PSK]));
+        if count != 0 {
+            for missing in 1..RSN_PMKID_LEN {
+                let mut short = bytes[..bytes.len() - missing].to_vec();
+                short[1] -= missing as u8;
+                assert_eq!(RsnElement::parse(&short), Err(RsnSyntaxError::Malformed));
+            }
+        }
+    }
+}
+
+#[test]
 fn empty_suite_lists_are_syntactically_valid() {
     let mut body = [0; 10];
     body[..2].copy_from_slice(&RSN_VERSION.to_le_bytes());

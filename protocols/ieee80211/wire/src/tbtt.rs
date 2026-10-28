@@ -22,7 +22,16 @@ pub const fn next_tbtt(send_tick: Instant, interval: Duration, now: Instant) -> 
     let steps = if elapsed == 0 {
         1
     } else {
-        elapsed.div_ceil(interval)
+        let Some(previous) = elapsed.checked_sub(1) else {
+            return None;
+        };
+        let Some(complete) = previous.checked_div(interval) else {
+            return None;
+        };
+        let Some(steps) = complete.checked_add(1) else {
+            return None;
+        };
+        steps
     };
     match steps.checked_mul(interval) {
         Some(advance) => send_tick.checked_add(Duration::from_micros(advance)),

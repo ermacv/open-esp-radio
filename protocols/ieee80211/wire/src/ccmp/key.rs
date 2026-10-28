@@ -22,7 +22,7 @@ impl Ccmp128Key {
     /// must itself have a zeroizing owner (PTK, GTK or a derivation buffer).
     pub fn new(bytes: &[u8; 16]) -> Self {
         let mut key = Self { bytes: [0; 16] };
-        key.bytes.copy_from_slice(bytes);
+        crate::encoding::write_array::<0, _, _>(&mut key.bytes, bytes);
         key
     }
 

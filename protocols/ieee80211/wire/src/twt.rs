@@ -391,10 +391,19 @@ impl IndividualTwtSetup {
         body[3] = TWT_ELEMENT_ID;
         body[4] = INDIVIDUAL_TWT_ELEMENT_BODY_LEN;
         body[5] = self.control.encode();
-        body[6..8].copy_from_slice(&self.parameters.encode_request_type()?.to_le_bytes());
-        body[8..16].copy_from_slice(&self.parameters.target_wake_time_tsf.to_le_bytes());
+        crate::encoding::write_array::<6, _, _>(
+            &mut body,
+            &self.parameters.encode_request_type()?.to_le_bytes(),
+        );
+        crate::encoding::write_array::<8, _, _>(
+            &mut body,
+            &self.parameters.target_wake_time_tsf.to_le_bytes(),
+        );
         body[16] = self.parameters.nominal_minimum_wake_duration;
-        body[17..19].copy_from_slice(&self.parameters.wake_interval_mantissa.to_le_bytes());
+        crate::encoding::write_array::<17, _, _>(
+            &mut body,
+            &self.parameters.wake_interval_mantissa.to_le_bytes(),
+        );
         body[19] = self.parameters.twt_channel;
         *target = body;
         Ok(INDIVIDUAL_TWT_SETUP_BODY_LEN)

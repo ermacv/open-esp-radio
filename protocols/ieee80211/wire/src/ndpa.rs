@@ -273,8 +273,11 @@ impl HeNdpaEncoding<'_> {
         for (out, byte) in head.iter_mut().zip(header.into_iter().flatten()) {
             *out = *byte;
         }
-        for (chunk, station) in body.chunks_exact_mut(HE_STA_INFO_SIZE).zip(self.stations) {
-            chunk.copy_from_slice(&station.encode()?.to_le_bytes());
+        let mut writer = oer_wire::Writer::new(body);
+        for station in self.stations {
+            writer
+                .write(&station.encode()?.to_le_bytes())
+                .map_err(|_| HeNdpaEncodingError::OutputTooShort)?;
         }
         Ok(length)
     }

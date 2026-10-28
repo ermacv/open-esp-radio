@@ -90,11 +90,14 @@ impl StaNullDataFrame {
             } else {
                 0
             };
-        frame[0..2].copy_from_slice(&frame_control.to_le_bytes());
-        frame[4..10].copy_from_slice(&self.bssid.get());
-        frame[10..16].copy_from_slice(&self.station_address.get());
-        frame[16..22].copy_from_slice(&self.bssid.get());
-        frame[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<0, _, _>(frame, &frame_control.to_le_bytes());
+        crate::encoding::write_array::<4, _, _>(frame, &self.bssid.get());
+        crate::encoding::write_array::<10, _, _>(frame, &self.station_address.get());
+        crate::encoding::write_array::<16, _, _>(frame, &self.bssid.get());
+        crate::encoding::write_array::<22, _, _>(
+            frame,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         Ok(STA_NULL_DATA_FRAME_LEN)
     }
 }

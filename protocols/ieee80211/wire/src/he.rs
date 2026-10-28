@@ -587,7 +587,9 @@ impl<'a> He20MuSigBNonMimoUsers<'a> {
         let remaining = bit_length
             .checked_sub(HE20_MU_SIG_B_COMMON_BITS)
             .ok_or(He20MuSigBNonMimoStreamError::BitLengthBeforeFirstUser)?;
-        let required_bytes = usize::from(bit_length).div_ceil(8);
+        // bit_length is u16: its rounded byte count fits usize.
+        let required_bytes = (usize::from(bit_length) / 8)
+            .saturating_add(usize::from(!bit_length.is_multiple_of(8)));
         if complete_bytes.len() < required_bytes {
             return Err(He20MuSigBNonMimoStreamError::CompleteBytesTooShort);
         }
@@ -776,7 +778,9 @@ impl<'a> He20MuSigBMimoUsers<'a> {
         if user_count == 0 || user_count > HE20_MU_SIG_B_MIMO_MAX_USERS {
             return Err(He20MuSigBMimoStreamError::UserCountOutOfRange);
         }
-        let required_bytes = usize::from(bit_length).div_ceil(8);
+        // bit_length is u16: its rounded byte count fits usize.
+        let required_bytes = (usize::from(bit_length) / 8)
+            .saturating_add(usize::from(!bit_length.is_multiple_of(8)));
         if complete_bytes.len() < required_bytes {
             return Err(He20MuSigBMimoStreamError::CompleteBytesTooShort);
         }

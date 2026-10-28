@@ -425,21 +425,27 @@ impl HeRate {
                     HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => {
                         const {
                             let kbps = $numerator * 1_000_000 / ($denominator * 13_600);
-                            assert!(kbps <= u32::MAX as u64);
+                            if !(kbps <= u32::MAX as u64) {
+                                panic!("invalid fixed wire geometry");
+                            };
                             kbps as u32
                         }
                     }
                     HeGiLtf::Ltf2xGi1600Ns => {
                         const {
                             let kbps = $numerator * 1_000_000 / ($denominator * 14_400);
-                            assert!(kbps <= u32::MAX as u64);
+                            if !(kbps <= u32::MAX as u64) {
+                                panic!("invalid fixed wire geometry");
+                            };
                             kbps as u32
                         }
                     }
                     HeGiLtf::Ltf4xGi3200Ns => {
                         const {
                             let kbps = $numerator * 1_000_000 / ($denominator * 16_000);
-                            assert!(kbps <= u32::MAX as u64);
+                            if !(kbps <= u32::MAX as u64) {
+                                panic!("invalid fixed wire geometry");
+                            };
                             kbps as u32
                         }
                     }

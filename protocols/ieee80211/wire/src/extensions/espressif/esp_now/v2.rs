@@ -126,7 +126,22 @@ impl<'payload> Iterator for EspNowV2Elements<'payload> {
         let element = match self.source {
             EspNowV2ElementSource::Contiguous(remaining) => {
                 let body_length = remaining.len().min(ESP_NOW_V2_MAX_ELEMENT_PAYLOAD_LEN);
-                let (payload, tail) = remaining.split_at(body_length);
+                // The retained immutable payload proves body_length <= len;
+                // consuming its iterator keeps both sides without a fallible split.
+                let mut tail = remaining.iter();
+                let mut payload = remaining.iter();
+                if body_length != 0 {
+                    tail.nth(body_length.saturating_sub(1));
+                }
+                if body_length < remaining.len() {
+                    payload.nth_back(
+                        remaining
+                            .len()
+                            .saturating_sub(body_length)
+                            .saturating_sub(1),
+                    );
+                }
+                let (payload, tail) = (payload.as_slice(), tail.as_slice());
                 self.source = EspNowV2ElementSource::Contiguous(tail);
                 EspNowV2Element { payload, more_data }
             }
@@ -164,7 +179,9 @@ impl core::iter::FusedIterator for EspNowV2Elements<'_> {}
 
 // The admitted wire maximum proves both retained lengths fit in u16.
 const _: () = {
-    assert!(ESP_NOW_V2_MAX_MPDU_LEN <= u16::MAX as usize);
+    if !(ESP_NOW_V2_MAX_MPDU_LEN <= u16::MAX as usize) {
+        panic!("invalid fixed wire geometry");
+    };
 };
 
 /// Strictly validated ESP-NOW v2 vendor Action body.
@@ -280,7 +297,9 @@ impl<'payload> EspNowV2Action<'payload> {
             let (target, tail) = core::mem::take(&mut rest)
                 .split_at_mut_checked(element.payload.len())
                 .ok_or(too_small)?;
-            target.copy_from_slice(element.payload);
+            oer_wire::Writer::new(target)
+                .write(element.payload)
+                .map_err(|_| too_small)?;
             rest = tail;
             copied = copied.checked_add(element.payload.len()).ok_or(too_small)?;
         }
@@ -497,7 +516,10 @@ const fn element_count_for_payload(payload_length: usize) -> usize {
     if payload_length == 0 {
         1
     } else {
-        payload_length.div_ceil(ESP_NOW_V2_MAX_ELEMENT_PAYLOAD_LEN)
+        // A nonempty payload contributes one first element and one more
+        // for each complete width in the remaining bytes. The quotient
+        // cannot reach usize::MAX, so neither named bound can saturate.
+        (payload_length.saturating_sub(1) / ESP_NOW_V2_MAX_ELEMENT_PAYLOAD_LEN).saturating_add(1)
     }
 }
 

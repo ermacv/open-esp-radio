@@ -67,3 +67,11 @@ fn rejects_zero_interval_and_the_end_of_time() {
     assert_eq!(tbtt(0, 0, 0), None);
     assert_eq!(tbtt(u64::MAX - 1, 10, u64::MAX), None);
 }
+
+#[test]
+fn ceiling_division_preserves_the_last_representable_tick() {
+    assert_eq!(tbtt(0, 1, u64::MAX), Some(u64::MAX));
+    assert_eq!(tbtt(0, u64::MAX, u64::MAX), Some(u64::MAX));
+    assert_eq!(tbtt(0, 2, u64::MAX), None);
+    assert_eq!(tbtt(0, 2, u64::MAX - 1), Some(u64::MAX - 1));
+}
