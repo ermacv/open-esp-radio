@@ -425,6 +425,6 @@ impl ControllerEventCells<oer_espressif_interrupt_table::signal::host::Deferred>
     /// they wait for an executor the interrupt preempted.
     pub(crate) fn host() -> Self {
         use oer_espressif_interrupt_table::signal::host::deferred_signal;
-        Self::new(deferred_signal(), deferred_signal())
+        Self::new(deferred_signal().0, deferred_signal().0)
     }
 }

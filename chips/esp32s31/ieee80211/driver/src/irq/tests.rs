@@ -70,11 +70,11 @@ fn parts() -> (
     PowerIrqConsumer<'static, Host>,
 ) {
     let (mac, irq) = leak(IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal(),
+        oer_espressif_interrupt_table::signal::host::signal().0,
     ))
     .split();
     let (power, power_consumer) = leak(PowerIrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal(),
+        oer_espressif_interrupt_table::signal::host::signal().0,
     ))
     .split();
     let parts = WifiIrqLineParts {
@@ -453,10 +453,10 @@ fn install_clears_stale_requests_and_refuses_a_second_line() {
 }
 
 #[test]
-fn the_chip_part_and_line_can_live_in_static_cells() {
+fn the_chip_part_and_line_with_a_shareable_context_can_live_in_static_cells() {
     fn sync<T: Sync>() {}
     fn send<T: Send>() {}
-    sync::<HandlerCell<WifiIrqLine<Host>>>();
+    sync::<HandlerCell<WifiIrqLine<oer_espressif_interrupt_table::signal::host::Foreign>>>();
     send::<WifiIrqPart<Lower>>();
 }
 

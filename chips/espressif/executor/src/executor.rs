@@ -7,7 +7,7 @@ use oer_espressif_interrupt_table::{
     signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList},
 };
 use oer_espressif_staged_runtime::Hart;
-use oer_memory::OnceValue;
+use oer_memory::{ExecutionContext, OnceValue};
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 use crate::chip::{
@@ -242,6 +242,7 @@ impl<const SWI: u8> Executor<SWI> {
         init: impl FnOnce(&Spawner<T>),
     ) -> Result<core::convert::Infallible, Failure<oer_espressif_interrupt_table::BindError<W>>>
     where
+        Self: SignalExecutor,
         T: Tasks<Mode = Thread>,
         W: Entry,
         W::Part: oer_espressif_interrupt_table::InterruptSource,
@@ -279,18 +280,6 @@ impl<const SWI: u8> Executor<SWI> {
     }
 }
 
-/// The signals each executor services before its poll round; only that
-/// executor's context touches its list.
-static SIGNAL_LISTS: [SignalList<TaskId>; SOFTWARE_INTERRUPT_COUNT] =
-    [const { SignalList::new() }; SOFTWARE_INTERRUPT_COUNT];
-
-/// Pend the interrupt-mode executor `SWI` for a raised signal: raise its
-/// software interrupt, whose handler services the signal and polls. It
-/// wakes no task itself.
-fn pend_signal<const SWI: u8>(_: &'static IrqSignal<InterruptExecutor<SWI>>) {
-    raise_interrupt(SWI);
-}
-
 /// Whether the caller runs in the interrupt-mode executor `SWI`'s context:
 /// its handler's poll on this core, not a hardware interrupt preempting it.
 fn signal_context<const SWI: u8>() -> bool {
@@ -311,34 +300,14 @@ pub struct InterruptExecutor<const SWI: u8> {
 }
 
 #[allow(unsafe_code, reason = "the executor's signal context contract")]
-// SAFETY: `signal_context::<SWI>` is true only while this executor's
-// handler polls (`as_running`), at the level it entered at: a hardware
-// interrupt that preempts it runs at a higher level and is refused
-// (`running`), and the handler never reenters itself on its core;
-// `pend_signal::<SWI>` raises that handler's interrupt, which services
-// `SIGNAL_LISTS[SWI]` before it polls (`interrupt_handler`). `current`
-// names a task only for the waker of the task this executor polls now
-// (`CURRENT[SWI]`, set around each poll); `wake` marks the task ready in
-// this executor's mask, which the poll that follows takes, never polling it
-// in place.
-unsafe impl<const SWI: u8> SignalExecutor for InterruptExecutor<SWI> {
-    type Task = TaskId;
-    const SOURCE: u16 = software_interrupt_source(SWI);
-    const INTERRUPT_MODE: bool = true;
-    fn pend(signal: &'static IrqSignal<Self>) {
-        pend_signal::<SWI>(signal);
-    }
+// SAFETY: signal_context is true only during this executor's polling
+// handler on its claimed hart. running() excludes preempting higher-level
+// handlers and other harts; the handler cannot reenter itself. Each concrete
+// SWI type therefore admits one non-concurrent memory context.
+unsafe impl<const SWI: u8> ExecutionContext for InterruptExecutor<SWI> {
+    type Sharing = ();
     fn running() -> bool {
         signal_context::<SWI>()
-    }
-    fn list() -> &'static SignalList<TaskId> {
-        &SIGNAL_LISTS[usize::from(SWI)]
-    }
-    fn current(cx: &Context<'_>, _: &ContextToken) -> Result<TaskId, ForeignTask> {
-        crate::task::signal_current(&CURRENT[usize::from(SWI)], SWI, cx)
-    }
-    fn wake(task: TaskId, _: &ContextToken) {
-        crate::task::signal_wake(task);
     }
 }
 
@@ -352,33 +321,14 @@ fn thread_context<const SWI: u8>() -> bool {
 }
 
 #[allow(unsafe_code, reason = "the executor's signal context contract")]
-// SAFETY: `thread_context::<SWI>` is true only while this executor's run
-// loop runs as its context (`as_running`), at the level it entered at: one
-// context on one core. An interrupt that preempts it runs at a higher level
-// and is refused (`running`); a preempting executor enters its own context. `pend` marks the executor's work and wakes its core,
-// and the loop services `SIGNAL_LISTS[SWI]` before each poll round. A
-// software interrupt serves one executor, so this list is no interrupt
-// executor's. `current` names a task only for the waker of the task this
-// executor polls now; `wake` marks the task ready in this executor's mask,
-// which the round that follows takes, never polling it in place.
-unsafe impl<const SWI: u8> SignalExecutor for Executor<SWI> {
-    type Task = TaskId;
-    const SOURCE: u16 = software_interrupt_source(SWI);
-    const INTERRUPT_MODE: bool = false;
-    fn pend(_: &'static IrqSignal<Self>) {
-        pend(SWI);
-    }
+// SAFETY: thread_context is true only in this executor's run loop on
+// its claimed hart. running() excludes preempting handlers, other executors
+// and other harts. One owned software line starts this one non-concurrent
+// polling context; no scheduling assumption supplies its memory exclusion.
+unsafe impl<const SWI: u8> ExecutionContext for Executor<SWI> {
+    type Sharing = ();
     fn running() -> bool {
         thread_context::<SWI>()
-    }
-    fn list() -> &'static SignalList<TaskId> {
-        &SIGNAL_LISTS[usize::from(SWI)]
-    }
-    fn current(cx: &Context<'_>, _: &ContextToken) -> Result<TaskId, ForeignTask> {
-        crate::task::signal_current(&CURRENT[usize::from(SWI)], SWI, cx)
-    }
-    fn wake(task: TaskId, _: &ContextToken) {
-        crate::task::signal_wake(task);
     }
 }
 
@@ -433,6 +383,50 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
 
 macro_rules! impl_executor_constructors {
     ($number:literal, $block:ident, $take:ident) => {
+        impl SignalExecutor for InterruptExecutor<$number> {
+            type Task = TaskId;
+            type Context = Self;
+            const SOURCE: u16 = software_interrupt_source($number);
+            const INTERRUPT_MODE: bool = true;
+            fn pend(_: &'static IrqSignal<Self>) {
+                raise_interrupt($number);
+            }
+            fn list() -> &'static SignalList<TaskId, Self::Context> {
+                static LIST: SignalList<TaskId, InterruptExecutor<$number>> = SignalList::new();
+                &LIST
+            }
+            fn current(
+                cx: &Context<'_>,
+                _: &ContextToken<Self::Context>,
+            ) -> Result<TaskId, ForeignTask> {
+                crate::task::signal_current(&CURRENT[usize::from($number)], $number, cx)
+            }
+            fn wake(task: TaskId, _: &ContextToken<Self::Context>) {
+                crate::task::signal_wake(task);
+            }
+        }
+        impl SignalExecutor for Executor<$number> {
+            type Task = TaskId;
+            type Context = Self;
+            const SOURCE: u16 = software_interrupt_source($number);
+            const INTERRUPT_MODE: bool = false;
+            fn pend(_: &'static IrqSignal<Self>) {
+                pend($number);
+            }
+            fn list() -> &'static SignalList<TaskId, Self::Context> {
+                static LIST: SignalList<TaskId, Executor<$number>> = SignalList::new();
+                &LIST
+            }
+            fn current(
+                cx: &Context<'_>,
+                _: &ContextToken<Self::Context>,
+            ) -> Result<TaskId, ForeignTask> {
+                crate::task::signal_current(&CURRENT[usize::from($number)], $number, cx)
+            }
+            fn wake(task: TaskId, _: &ContextToken<Self::Context>) {
+                crate::task::signal_wake(task);
+            }
+        }
         impl Executor<$number> {
             /// The executor on software interrupt line `SWI`: it consumes
             /// the line's typed block from the reset root.

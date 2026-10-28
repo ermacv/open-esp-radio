@@ -152,3 +152,10 @@ and invalid wake indices are named faults. No task, handler, comparator or
 line owner is released on their terminal path. Four diagnostic words and the
 reason reuse the runtime's retained panic slot; the next boot prints them,
 retaining the record if console output is refused.
+
+`SignalExecutor` is a safe scheduling contract. Each executor's
+`ExecutionContext` implementation proves exclusive execution on its claimed
+hart, excluding preempting handlers. Checked `Entered` proofs admit its
+signal cells; each software line and executor mode has its own typed static
+signal list. Signal task handles are `Send` values, while mutable payload
+access remains confined to the receiving execution context.

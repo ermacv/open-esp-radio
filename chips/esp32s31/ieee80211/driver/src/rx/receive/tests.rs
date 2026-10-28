@@ -383,8 +383,8 @@ where
 fn host_signals()
 -> crate::rx::arena::WifiIrqSignals<oer_espressif_interrupt_table::signal::host::Host> {
     crate::rx::arena::WifiIrqSignals {
-        mac: oer_espressif_interrupt_table::signal::host::signal(),
-        power: oer_espressif_interrupt_table::signal::host::signal(),
+        mac: oer_espressif_interrupt_table::signal::host::signal().0,
+        power: oer_espressif_interrupt_table::signal::host::signal().0,
     }
 }
 
@@ -1047,8 +1047,8 @@ fn cold_start_refuses_an_occupied_cell_without_opening_mac() {
     let (parts, mut stop, _frames) = WifiRxArena::bind(
         oer_esp32s31_hal::dma_static::Placed::host(arena),
         crate::rx::arena::WifiIrqSignals {
-            mac: oer_espressif_interrupt_table::signal::host::signal(),
-            power: oer_espressif_interrupt_table::signal::host::signal(),
+            mac: oer_espressif_interrupt_table::signal::host::signal().0,
+            power: oer_espressif_interrupt_table::signal::host::signal().0,
         },
     )
     .unwrap();

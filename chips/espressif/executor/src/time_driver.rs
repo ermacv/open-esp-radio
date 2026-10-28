@@ -73,7 +73,12 @@ struct SlotContext(PhantomData<*mut ()>);
 // the selected slot. Each executor runs on one core and never concurrently
 // with itself; preempting contexts cannot obtain that slot's proof. Slot is
 // const-initialized and retained for the image's lifetime.
-unsafe impl ContextProof for SlotContext {}
+unsafe impl ContextProof for SlotContext {
+    type Sharing = ();
+    fn is_current(&self) -> bool {
+        true
+    }
+}
 
 static SLOTS: [ContextCell<Slot, SlotContext>; SOFTWARE_INTERRUPT_COUNT] = [const {
     ContextCell::new(Slot {

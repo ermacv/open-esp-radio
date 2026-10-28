@@ -1,0 +1,11 @@
+error[E0200]: the trait `ExecutionContext` requires an `unsafe impl` declaration
+ --> tests/ui/execution_context_requires_unsafe.rs:9:1
+  |
+9 | impl ExecutionContext for Forged { // ui-error: E0200
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: the trait `ExecutionContext` enforces invariants that the compiler can't check. Review the trait documentation and make sure this implementation upholds those invariants before adding the `unsafe` keyword
+help: add `unsafe` to this trait implementation
+  |
+9 | unsafe impl ExecutionContext for Forged { // ui-error: E0200
+  | ++++++

@@ -28,7 +28,7 @@ fn backend(lists: &[u8]) -> Backend {
 
 fn wake(class: SchedulerWorkerWakeClass) -> crate::interrupt::SchedulerWakeBatch {
     let cell =
-        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal());
+        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal().0);
     let _publication = cell.publish_class_for_test(class);
     cell.take()
         .expect("the host executor's context")
@@ -132,7 +132,7 @@ fn stopped_capture_borrows_only_the_engine_and_refuses_before_mmio_without_its_r
 fn an_overflow_only_batch_grants_no_finished_list_transfer() {
     use crate::interrupt::PrimaryInterruptCapture;
     let cell =
-        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal());
+        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal().0);
     cell.publish_from_interrupt(PrimaryInterruptCapture::controller_time_overflow_for_test())
         .unwrap();
     let batch = cell.take().unwrap().unwrap().classify().unwrap();

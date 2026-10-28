@@ -1,0 +1,38 @@
+error[E0277]: `*mut ()` cannot be shared between threads safely
+ --> tests/ui/deferred_owner_cannot_cross_threads.rs:6:38
+  |
+6 |       let _worker = std::thread::spawn(move || { // ui-error: E0277
+  |  ___________________------------------_^
+  | |                   |
+  | |                   required by a bound introduced by this call
+7 | |         let _ = signal.take();
+8 | |         signal.service();
+9 | |     });
+  | |_____^ `*mut ()` cannot be shared between threads safely
+  |
+  = help: the trait `Sync` is not implemented for `*mut ()`
+  = note: required for `oer_memory::context_cell::ContextCell<signal::Owned<HostTask, oer_memory::execution_context::HostContext>, oer_memory::execution_context::Entered<oer_memory::execution_context::HostContext>>` to implement `Sync`
+note: required because it appears within the type `signal::SignalCore<HostTask, oer_memory::execution_context::HostContext>`
+ --> src/signal.rs
+  |
+  | struct SignalCore<T: 'static, X: ExecutionContext> {
+  |        ^^^^^^^^^^
+note: required because it appears within the type `IrqSignal<Deferred>`
+ --> src/signal.rs
+  |
+  | pub struct IrqSignal<E: SignalExecutor> {
+  |            ^^^^^^^^^
+  = note: required for `&IrqSignal<Deferred>` to implement `Send`
+note: required because it's used within this closure
+ --> tests/ui/deferred_owner_cannot_cross_threads.rs:6:38
+  |
+6 |     let _worker = std::thread::spawn(move || { // ui-error: E0277
+  |                                      ^^^^^^^
+note: required by a bound in `spawn`
+ --> $RUST/std/src/thread/functions.rs
+  |
+  | pub fn spawn<F, T>(f: F) -> JoinHandle<T>
+  |        ----- required by a bound in this function
+...
+  |     F: Send + 'static,
+  |        ^^^^ required by this bound in `spawn`

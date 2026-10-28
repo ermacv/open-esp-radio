@@ -12,24 +12,24 @@ use super::*;
 #[cfg(oer_debug_control)]
 #[test]
 fn held_facts_survive_service_and_unrelated_wakes_until_release() {
-    let signal = host::deferred_signal();
+    let signal = host::deferred_signal().0;
     let (counting, waker) = counting(None);
     let mut cx = Context::from_waker(&waker);
     assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
     signal.debug_hold(0b10, true);
     signal.raise(0b10);
     signal.service();
-    assert_eq!(counting.wakes.get(), 0);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 0);
     assert_eq!(signal.has_pending(), Ok(false));
     assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
     signal.raise(0b01);
     signal.service();
-    assert_eq!(counting.wakes.get(), 1);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 1);
     assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b01)));
     assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
     signal.debug_hold(0b10, false);
     signal.service();
-    assert_eq!(counting.wakes.get(), 2);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 2);
     assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b10)));
     assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
 }
@@ -53,29 +53,36 @@ std::thread_local! {
 
 enum TestExecutor {}
 std::thread_local! {
-    static LIST: &'static SignalList<host::HostTask> = Box::leak(Box::new(SignalList::new()));
+    static LIST: &'static SignalList<host::HostTask, TestExecutor> = Box::leak(Box::new(SignalList::new()));
 }
 #[allow(unsafe_code, reason = "the test executor's contract")]
 // SAFETY: the test thread alone touches its leaked signals and list;
 // the pend counts, and the test plays its executor's handler.
-unsafe impl SignalExecutor for TestExecutor {
+unsafe impl oer_memory::ExecutionContext for TestExecutor {
+    type Sharing = *mut ();
+    fn running() -> bool {
+        RUNNING.with(Cell::get)
+    }
+}
+impl SignalExecutor for TestExecutor {
+    type Context = Self;
     type Task = host::HostTask;
     const SOURCE: u16 = 5;
     const INTERRUPT_MODE: bool = true;
     fn pend(_: &'static IrqSignal<Self>) {
         PENDS.with(|pends| pends.set(pends.get() + 1));
     }
-    fn running() -> bool {
-        RUNNING.with(Cell::get)
-    }
-    fn list() -> &'static SignalList<host::HostTask> {
+    fn list() -> &'static SignalList<host::HostTask, Self::Context> {
         LIST_READS.with(|reads| reads.set(reads.get() + 1));
         LIST.with(|list| *list)
     }
-    fn current(cx: &Context<'_>, _: &ContextToken) -> Result<host::HostTask, ForeignTask> {
+    fn current(
+        cx: &Context<'_>,
+        _: &ContextToken<Self::Context>,
+    ) -> Result<host::HostTask, ForeignTask> {
         Ok(host::HostTask::of(cx))
     }
-    fn wake(task: host::HostTask, _: &ContextToken) {
+    fn wake(task: host::HostTask, _: &ContextToken<Self::Context>) {
         task.wake();
     }
 }
@@ -120,7 +127,7 @@ fn borrowed_list_refuses_registration_without_publishing_a_partial_link() {
     let token = context::<TestExecutor>().expect("the test context is running");
     signal.raise(0b10);
     assert_eq!(
-        list.head.with(&CellContext(PhantomData), |_| {
+        list.head.with(&token.0, |_| {
             assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Err(ForeignContext)));
             assert_eq!(
                 signal.poll_pending(&mut cx),
@@ -165,17 +172,9 @@ fn nested_list_service_retains_both_the_borrowed_and_unvisited_signals() {
 
 /// A waker that counts its wakes and runs `on_wake` in them.
 struct Counting {
-    wakes: Cell<u32>,
-    on_wake: Option<&'static IrqSignal<TestExecutor>>,
+    wakes: AtomicU32,
+    on_wake: Option<&'static AtomicU32>,
 }
-
-// The tests wake on their one thread only.
-#[allow(unsafe_code, reason = "a single-threaded test waker")]
-// SAFETY: every test touches its waker from its one thread.
-unsafe impl Send for Counting {}
-#[allow(unsafe_code, reason = "a single-threaded test waker")]
-// SAFETY: as `Send`.
-unsafe impl Sync for Counting {}
 
 impl Wake for Counting {
     fn wake(self: Arc<Self>) {
@@ -183,18 +182,18 @@ impl Wake for Counting {
     }
 
     fn wake_by_ref(self: &Arc<Self>) {
-        self.wakes.set(self.wakes.get() + 1);
+        self.wakes.fetch_add(1, Ordering::Relaxed);
         // A fact raised while the executor walks its signals.
         if let Some(signal) = self.on_wake {
-            signal.raise(0b100);
+            signal.fetch_or(0b100, Ordering::Release);
         }
     }
 }
 
 fn counting(on_wake: Option<&'static IrqSignal<TestExecutor>>) -> (Arc<Counting>, Waker) {
     let counting = Arc::new(Counting {
-        wakes: Cell::new(0),
-        on_wake,
+        wakes: AtomicU32::new(0),
+        on_wake: on_wake.map(|signal| &signal.core.pending),
     });
     (counting.clone(), Waker::from(counting))
 }
@@ -213,12 +212,12 @@ fn raised_facts_coalesce_into_one_pend_and_one_wake() {
     assert_eq!(pends() - before, 2);
     assert_eq!(signal.has_pending(), Ok(true));
     service::<TestExecutor>();
-    assert_eq!(counting.wakes.get(), 1);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 1);
     assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b11)));
     assert_eq!(signal.has_pending(), Ok(false));
     // Without facts the executor wakes nobody.
     service::<TestExecutor>();
-    assert_eq!(counting.wakes.get(), 1);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 1);
 }
 
 #[test]
@@ -229,11 +228,11 @@ fn a_fact_raised_while_the_executor_walks_its_signals_is_not_lost() {
     assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
     signal.raise(0b01);
     let before = pends();
-    // The wake raises another fact: it lands in the swapped word, is new
-    // and pends the executor again.
+    // The test waker publishes another atomic fact without accessing payload.
+    // It lands in the swapped word and the owning task takes it below.
     service::<TestExecutor>();
-    assert_eq!(counting.wakes.get(), 1);
-    assert_eq!(pends() - before, 1);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 1);
+    assert_eq!(pends() - before, 0);
     assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b101)));
 }
 
@@ -256,7 +255,13 @@ fn the_executor_wakes_every_signal_its_tasks_polled() {
     first.raise(1);
     second.raise(1);
     service::<TestExecutor>();
-    assert_eq!((one.wakes.get(), two.wakes.get()), (1, 1));
+    assert_eq!(
+        (
+            one.wakes.load(Ordering::Relaxed),
+            two.wakes.load(Ordering::Relaxed)
+        ),
+        (1, 1)
+    );
 }
 
 #[test]
@@ -272,20 +277,20 @@ fn outside_its_executor_a_signal_only_raises() {
     assert_eq!(signal.take(), Err(ForeignContext));
     service::<TestExecutor>();
     RUNNING.with(|running| running.set(true));
-    assert_eq!(counting.wakes.get(), 0);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 0);
     // The fact waited for the executor's context.
     assert_eq!(signal.take(), Ok(1));
 }
 
 #[test]
 fn the_host_executor_wakes_at_the_raise() {
-    let signal = host::signal();
+    let signal = host::signal().0;
     let (counting, waker) = counting(None);
     let mut wait = pin!(signal.wait());
     let mut cx = Context::from_waker(&waker);
     assert!(wait.as_mut().poll(&mut cx).is_pending());
     signal.raise(0b1);
-    assert_eq!(counting.wakes.get(), 1);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 1);
     assert_eq!(wait.as_mut().poll(&mut cx), Poll::Ready(Ok(0b1)));
 }
 
@@ -297,7 +302,7 @@ fn a_pending_poll_leaves_the_facts_for_the_take() {
     assert_eq!(signal.poll_pending(&mut cx), Poll::Pending);
     signal.raise(0b10);
     service::<TestExecutor>();
-    assert_eq!(counting.wakes.get(), 1);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 1);
     // Ready until the task takes the fact, however often it polls.
     assert_eq!(signal.poll_pending(&mut cx), Poll::Ready(Ok(())));
     assert_eq!(signal.poll_pending(&mut cx), Poll::Ready(Ok(())));
@@ -325,10 +330,10 @@ fn service_outside_the_context_neither_reads_the_list_nor_consumes_facts() {
     RUNNING.with(|running| running.set(false));
     service::<TestExecutor>();
     assert_eq!(LIST_READS.with(Cell::get), before);
-    assert_eq!(counting.wakes.get(), 0);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 0);
     RUNNING.with(|running| running.set(true));
     service::<TestExecutor>();
-    assert_eq!(counting.wakes.get(), 1);
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 1);
     assert_eq!(signal.take(), Ok(0b101));
 }
 
@@ -353,7 +358,13 @@ fn two_signals_share_the_executor_list_and_one_service_traversal() {
     let before = LIST_READS.with(Cell::get);
     service::<TestExecutor>();
     assert_eq!(LIST_READS.with(Cell::get) - before, 1);
-    assert_eq!((one.wakes.get(), two.wakes.get()), (1, 1));
+    assert_eq!(
+        (
+            one.wakes.load(Ordering::Relaxed),
+            two.wakes.load(Ordering::Relaxed)
+        ),
+        (1, 1)
+    );
     assert_eq!((first.take(), second.take()), (Ok(1), Ok(2)));
 }
 
@@ -378,28 +389,35 @@ fn each_new_fact_pends_once_and_duplicates_do_not_pend() {
 #[test]
 fn list_pending_observation_preserves_undelivered_and_delivered_facts() {
     enum ObserveExecutor {}
-    std::thread_local! {static OBSERVE_LIST: &'static SignalList<host::HostTask>=Box::leak(Box::new(SignalList::new()));}
+    std::thread_local! {static OBSERVE_LIST: &'static SignalList<host::HostTask, ObserveExecutor>=Box::leak(Box::new(SignalList::new()));}
     #[allow(
         unsafe_code,
         reason = "fixture owns its signal list on this test thread"
     )]
     // SAFETY: only this test thread accesses its fixture list and signals;
     // pend never polls, and running is true only in this test's context.
-    unsafe impl SignalExecutor for ObserveExecutor {
+    unsafe impl oer_memory::ExecutionContext for ObserveExecutor {
+        type Sharing = *mut ();
+        fn running() -> bool {
+            true
+        }
+    }
+    impl SignalExecutor for ObserveExecutor {
+        type Context = Self;
         type Task = host::HostTask;
         const SOURCE: u16 = 5;
         const INTERRUPT_MODE: bool = true;
         fn pend(_: &'static IrqSignal<Self>) {}
-        fn running() -> bool {
-            true
-        }
-        fn list() -> &'static SignalList<host::HostTask> {
+        fn list() -> &'static SignalList<host::HostTask, Self::Context> {
             OBSERVE_LIST.with(|list| *list)
         }
-        fn current(cx: &Context<'_>, _: &ContextToken) -> Result<host::HostTask, ForeignTask> {
+        fn current(
+            cx: &Context<'_>,
+            _: &ContextToken<Self::Context>,
+        ) -> Result<host::HostTask, ForeignTask> {
             Ok(host::HostTask::of(cx))
         }
-        fn wake(task: host::HostTask, _: &ContextToken) {
+        fn wake(task: host::HostTask, _: &ContextToken<Self::Context>) {
             task.wake();
         }
     }
@@ -419,7 +437,7 @@ fn list_pending_observation_preserves_undelivered_and_delivered_facts() {
 fn a_waker_of_no_task_is_refused_without_registering() {
     enum Refusing {}
     std::thread_local! {
-        static REFUSING_LIST: &'static SignalList<host::HostTask> = Box::leak(Box::new(SignalList::new()));
+        static REFUSING_LIST: &'static SignalList<host::HostTask, Refusing> = Box::leak(Box::new(SignalList::new()));
         static WAKES: Cell<u32> = const { Cell::new(0) };
     }
     #[allow(
@@ -428,21 +446,28 @@ fn a_waker_of_no_task_is_refused_without_registering() {
     )]
     // SAFETY: only this test thread accesses its fixture list and signals;
     // `current` refuses every waker, so no task is ever registered.
-    unsafe impl SignalExecutor for Refusing {
+    unsafe impl oer_memory::ExecutionContext for Refusing {
+        type Sharing = *mut ();
+        fn running() -> bool {
+            true
+        }
+    }
+    impl SignalExecutor for Refusing {
+        type Context = Self;
         type Task = host::HostTask;
         const SOURCE: u16 = 5;
         const INTERRUPT_MODE: bool = true;
         fn pend(_: &'static IrqSignal<Self>) {}
-        fn running() -> bool {
-            true
-        }
-        fn list() -> &'static SignalList<host::HostTask> {
+        fn list() -> &'static SignalList<host::HostTask, Self::Context> {
             REFUSING_LIST.with(|list| *list)
         }
-        fn current(_: &Context<'_>, _: &ContextToken) -> Result<host::HostTask, ForeignTask> {
+        fn current(
+            _: &Context<'_>,
+            _: &ContextToken<Self::Context>,
+        ) -> Result<host::HostTask, ForeignTask> {
             Err(ForeignTask)
         }
-        fn wake(_: host::HostTask, _: &ContextToken) {
+        fn wake(_: host::HostTask, _: &ContextToken<Self::Context>) {
             WAKES.with(|wakes| wakes.set(wakes.get() + 1));
         }
     }
@@ -479,5 +504,50 @@ fn a_new_task_replaces_the_registered_one() {
     );
     signal.raise(1);
     service::<TestExecutor>();
-    assert_eq!((first.wakes.get(), second.wakes.get()), (0, 1));
+    assert_eq!(
+        (
+            first.wakes.load(Ordering::Relaxed),
+            second.wakes.load(Ordering::Relaxed)
+        ),
+        (0, 1)
+    );
+}
+
+#[test]
+fn cross_thread_raiser_publishes_without_accessing_or_waking_payload() {
+    let (signal, raiser) = host::signal();
+    fn transferable<T: Send + Sync>(_: T) {}
+    transferable(raiser);
+    let (counting, waker) = counting(None);
+    let mut cx = Context::from_waker(&waker);
+    assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
+    std::thread::spawn(move || {
+        assert!(raiser.raise(0b01));
+        assert!(!raiser.raise(0b01));
+        assert!(raiser.raise(0b10));
+    })
+    .join()
+    .expect("raising thread");
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 0);
+    assert_eq!(signal.has_pending(), Ok(true));
+    signal.service();
+    assert_eq!(counting.wakes.load(Ordering::Relaxed), 1);
+    assert_eq!(signal.take(), Ok(0b11));
+    assert_eq!(signal.take(), Ok(0));
+}
+
+#[test]
+fn deferred_owners_keep_independent_payloads_while_raisers_cross_threads() {
+    let (first, first_raiser) = host::deferred_signal();
+    let (second, second_raiser) = host::deferred_signal();
+    std::thread::spawn(move || {
+        first_raiser.raise(1);
+        second_raiser.raise(2);
+    })
+    .join()
+    .expect("raising thread");
+    assert_eq!(first.take(), Ok(1));
+    assert_eq!(second.take(), Ok(2));
+    assert_eq!(first.take(), Ok(0));
+    assert_eq!(second.take(), Ok(0));
 }

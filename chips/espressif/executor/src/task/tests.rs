@@ -517,7 +517,7 @@ mod thread_signals {
         static RUNNING: &'static Running = Box::leak(Box::new(Running::new()));
         /// The interrupt level the test thread runs at now.
         static LEVEL: Cell<u8> = const { Cell::new(THREAD) };
-        static LIST: &'static SignalList<TaskId> = Box::leak(Box::new(SignalList::new()));
+        static LIST: &'static SignalList<TaskId, TestThread> = Box::leak(Box::new(SignalList::new()));
         pub(super) static CURRENT: &'static Current = Box::leak(Box::new(Current::new()));
     }
 
@@ -535,30 +535,39 @@ mod thread_signals {
     // true only inside `run_round`, at the level it entered at, which
     // services the list before polling; a preempting `interrupt` runs at
     // another level.
-    unsafe impl SignalExecutor for TestThread {
+    unsafe impl oer_memory::ExecutionContext for TestThread {
+        type Sharing = *mut ();
+        fn running() -> bool {
+            RUNNING.with(|running| running.at(LEVEL.with(Cell::get))) == EXECUTOR
+        }
+    }
+    impl SignalExecutor for TestThread {
+        type Context = Self;
         type Task = TaskId;
         const SOURCE: u16 = 5;
         const INTERRUPT_MODE: bool = true;
         fn pend(_: &'static IrqSignal<Self>) {
             pend(EXECUTOR);
         }
-        fn running() -> bool {
-            RUNNING.with(|running| running.at(LEVEL.with(Cell::get))) == EXECUTOR
-        }
-        fn list() -> &'static SignalList<TaskId> {
+        fn list() -> &'static SignalList<TaskId, TestThread> {
             LIST.with(|list| *list)
         }
-        fn current(cx: &Context<'_>, _: &ContextToken) -> Result<TaskId, ForeignTask> {
+        fn current(
+            cx: &Context<'_>,
+            _: &ContextToken<Self::Context>,
+        ) -> Result<TaskId, ForeignTask> {
             CURRENT.with(|current| signal_current(current, EXECUTOR, cx))
         }
-        fn wake(task: TaskId, _: &ContextToken) {
+        fn wake(task: TaskId, _: &ContextToken<Self::Context>) {
             signal_wake(task);
         }
     }
 
-    pub(super) static SIGNAL: IrqSignal<TestThread> = IrqSignal::for_host_test();
-    /// [`Preempted`]'s signal: each test owns its signal.
-    pub(super) static PREEMPTED_SIGNAL: IrqSignal<TestThread> = IrqSignal::for_host_test();
+    std::thread_local! {
+        pub(super) static SIGNAL: &'static IrqSignal<TestThread> = Box::leak(Box::new(IrqSignal::for_host_test()));
+        /// Preempted's signal: each test owns its thread-local signal.
+        pub(super) static PREEMPTED_SIGNAL: &'static IrqSignal<TestThread> = Box::leak(Box::new(IrqSignal::for_host_test()));
+    }
 
     /// One run of the executor's loop: its signals, then a poll round.
     pub(super) fn run_round<T: Tasks>() -> bool {
@@ -576,7 +585,7 @@ mod thread_signals {
     impl Future for Waits {
         type Output = ();
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-            if let Poll::Ready(Ok(facts)) = SIGNAL.poll_take(cx) {
+            if let Poll::Ready(Ok(facts)) = SIGNAL.with(|signal| signal.poll_take(cx)) {
                 self.0.fetch_or(facts, Ordering::Relaxed);
             }
             Poll::Pending
@@ -603,9 +612,12 @@ mod thread_signals {
     impl Future for Preempted {
         type Output = ();
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-            let own = PREEMPTED_SIGNAL.poll_take(cx);
+            let own = PREEMPTED_SIGNAL.with(|signal| signal.poll_take(cx));
             let (take, poll_take) = interrupt(self.level, || {
-                (PREEMPTED_SIGNAL.take(), PREEMPTED_SIGNAL.poll_take(cx))
+                (
+                    PREEMPTED_SIGNAL.with(|signal| signal.take()),
+                    PREEMPTED_SIGNAL.with(|signal| signal.poll_take(cx)),
+                )
             });
             *self.seized.borrow_mut() = Seized {
                 own: Some(own),
@@ -631,7 +643,7 @@ fn a_signal_raised_for_a_thread_executor_task_wakes_it() {
     assert_eq!(taken.load(Ordering::Relaxed), 0);
     // An interrupt raises a fact: the executor is pended, not the task run.
     let before = pends(EXECUTOR);
-    assert!(SIGNAL.raise(0b10));
+    assert!(SIGNAL.with(|signal| signal.raise(0b10)));
     assert_eq!(pends(EXECUTOR), before + 1);
     assert_eq!(taken.load(Ordering::Relaxed), 0);
     // The executor's next run services the signal, which wakes the task.
@@ -666,7 +678,7 @@ fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_sign
     }
     // A fact raised now reaches the task in its own context, untouched by
     // the interrupt that preempts it again.
-    assert!(PREEMPTED_SIGNAL.raise(0b1));
+    assert!(PREEMPTED_SIGNAL.with(|signal| signal.raise(0b1)));
     assert!(!run_round::<Set>());
     let seized = seized.borrow();
     assert_eq!(seized.own, Some(Poll::Ready(Ok(0b1))));

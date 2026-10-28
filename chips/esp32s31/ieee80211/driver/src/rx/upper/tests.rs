@@ -37,7 +37,7 @@ fn ends(
     counters: &'static WifiRxCounters,
 ) -> RxFrameEnds<'static, SLOTS, BUFFER, oer_espressif_interrupt_table::signal::host::Host> {
     let (publisher, _consumer) = leak(IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal(),
+        oer_espressif_interrupt_table::signal::host::signal().0,
     ))
     .split();
     let publisher: &'static IrqPublisher<

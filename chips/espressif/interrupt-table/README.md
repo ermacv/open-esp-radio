@@ -156,3 +156,17 @@ associated scheduling constants in generic const expressions in a signature.
 ```console
 cargo test -p oer-espressif-interrupt-table
 ```
+
+Signal memory admission belongs to `oer_memory::ExecutionContext`.
+`SignalExecutor` is safe and names its context; `Entered<Context>` checks
+both entry and every `ContextCell` access. Signal cores and lists carry that
+context type, so one context's token cannot access another's state.
+
+With `host-signal`, `host::signal()` and `host::deferred_signal()` return
+`(owner, raiser)`. The owner is a local `&'static IrqSignal` that is !Send
+and !Sync: only its creating thread takes, polls or services payload.
+The `Raiser` is Send + Sync and contains only the atomic pending-word
+reference. Its `raise` coalesces facts without servicing payload or invoking
+a waker; the owner services them explicitly. Raising through the local
+`Host` owner retains immediate local service; `Deferred` waits for a take
+or service. No transferable handle exposes the owner or context proof.
