@@ -56,6 +56,9 @@ system these rules serve.
   `forbid(unsafe_code)`. Other callers retain the no-growth rule.
   Context-local mutable payloads use `oer-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
+  A hardware state is impossible only with a `SOURCE:` proof from the register
+  model, a document, a probe or exhaustive value enumeration. Without such
+  proof it returns a handled typed error, not a hardware fault.
   An impossible state returns a named fault retaining its source observations;
   its owners stay quarantined, then the image calls safe `fatal::reset_recording`
   to retain the reason for the next boot to print. A watchdog is not this mechanism.

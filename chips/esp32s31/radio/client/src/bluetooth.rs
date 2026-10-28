@@ -202,7 +202,7 @@ pub fn claim() -> Option<(
     ends(&BLUETOOTH)
 }
 
-static BLUETOOTH: crate::ClientSlot<Bluetooth> = crate::RequestSlot::new(&crate::DOORBELL, BIT);
+static BLUETOOTH: crate::ClientSlot<Bluetooth> = crate::ClientSlot::new(&crate::DOORBELL, BIT);
 
 fn ends(
     slot: &'static crate::ClientSlot<Bluetooth>,
@@ -210,25 +210,21 @@ fn ends(
     crate::ClientInbox<Bluetooth>,
     crate::MembershipCell<Bluetooth>,
 )> {
-    let poster = slot.claim()?;
-    Some((
-        crate::ClientInbox { slot },
-        crate::MembershipCell { poster },
-    ))
+    let cell = slot.claim()?;
+    Some((crate::ClientInbox { slot }, cell))
 }
 
 #[cfg(any(test, feature = "test-support"))]
 pub fn claim_for_host_test(
     doorbell: &'static crate::Doorbell,
-) -> (
+) -> Option<(
     crate::ClientInbox<Bluetooth>,
     crate::MembershipCell<Bluetooth>,
-) {
+)> {
     extern crate std;
     ends(std::boxed::Box::leak(std::boxed::Box::new(
-        crate::RequestSlot::new(doorbell, BIT),
+        crate::ClientSlot::new(doorbell, BIT),
     )))
-    .expect("a fresh Bluetooth cell has its poster")
 }
 
 #[cfg(test)]

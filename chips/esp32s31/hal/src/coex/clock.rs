@@ -7,7 +7,7 @@
 use oer_espressif_coex::{CoexClockHardware, CoexClockSelector, CoexError, CoexTimerClock};
 
 use crate::{
-    coex::CoexTimerBank,
+    coex::CoexClockPort,
     ieee80211::mac::WifiMacColdHal,
     types::{CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource},
 };
@@ -44,7 +44,7 @@ impl CoexClockHardware for WifiMacColdHal<'_> {
     }
 }
 
-impl CoexClockHardware for CoexTimerBank<'_> {
+impl<P: crate::phy::registers::RadioPlacement> CoexClockHardware for CoexClockPort<'_, P> {
     fn sample(&mut self) -> Result<CoexTimerClock, CoexError> {
         timer_clock(self.sample_low_power_clock(), true)
     }

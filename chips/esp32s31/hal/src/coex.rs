@@ -1,7 +1,7 @@
 //! Shared coexistence mechanism owned by the radio domain.
 //!
 //! The radio domain keeps the coexistence priority table ([`CoexPtiTable`])
-//! and lends the timer bank ([`CoexTimerBank`]). Both are
+//! and lends the timer bank ([`CoexPolicyTimerBank`]). Both are
 //! mechanism: which event requests which timer, and when, is the coexistence
 //! driver's policy, and every protocol programs its own MAC PTI registers from
 //! the values read here. A timer write or a PTI value does not report RF
@@ -13,7 +13,6 @@
 
 use crate::modem::{
     CoexTimerBankRegisters, CoexTimerRegister, CoexistenceLowPowerClockObservation,
-    SharedRadioRegisters,
     values::{CoexTimerClientValue, CoexTimerPtiValue},
 };
 
@@ -173,13 +172,25 @@ impl CoexPolicyTimer {
 ///
 /// Every method is one finite register transaction. A write does not report
 /// RF admission or grant revocation.
-pub struct CoexTimerBank<'registers> {
-    registers: &'registers mut SharedRadioRegisters,
+pub struct CoexPolicyTimerBank<
+    'registers,
+    P: oer_mmio::Placement = oer_mmio::Fixed<{ oer_esp32s31_pac::instances::coex::BASE }>,
+> {
+    registers: CoexTimerBankRegisters<'registers, P>,
+    pti: &'registers CoexPtiTable,
 }
 
-impl<'registers> CoexTimerBank<'registers> {
-    pub(crate) fn from_owned(registers: &'registers mut SharedRadioRegisters) -> Self {
-        Self { registers }
+impl<'registers, P: oer_mmio::Placement> CoexPolicyTimerBank<'registers, P> {
+    pub(crate) fn new(
+        registers: CoexTimerBankRegisters<'registers, P>,
+        pti: &'registers CoexPtiTable,
+    ) -> Self {
+        Self { registers, pti }
+    }
+
+    /// The domain's current priority; the domain cannot change it during this loan.
+    pub fn pti(&self, event: CoexEventId) -> CoexPti {
+        self.pti.pti(event)
     }
 
     /// Publish the client and PTI request fields of one timer.
@@ -189,40 +200,52 @@ impl<'registers> CoexTimerBank<'registers> {
         client: CoexTimerClientValue,
         pti: CoexTimerPtiValue,
     ) {
-        self.registers
-            .configure_coex_timer(timer.register(), client, pti);
+        self.registers.configure(timer.register(), client, pti);
     }
 
     /// Publish one already converted primary target tick image.
     pub fn set_primary_target(&mut self, timer: CoexPolicyTimer, tick_image: u32) {
         self.registers
-            .set_coex_timer_primary_target(timer.register(), tick_image);
+            .set_primary_target(timer.register(), tick_image);
     }
 
     /// Publish one already converted secondary target tick image.
     pub fn set_secondary_target(&mut self, timer: CoexPolicyTimer, tick_image: u32) {
         self.registers
-            .set_coex_timer_secondary_target(timer.register(), tick_image);
+            .set_secondary_target(timer.register(), tick_image);
     }
 
     pub fn enable(&mut self, timer: CoexPolicyTimer) {
-        self.registers.enable_coex_timer(timer.register());
+        self.registers.enable(timer.register());
     }
 
     pub fn disable(&mut self, timer: CoexPolicyTimer) {
-        self.registers.disable_coex_timer(timer.register());
+        self.registers.disable(timer.register());
     }
 
     pub fn force(&mut self, timer: CoexPolicyTimer) {
-        self.registers.force_coex_timer(timer.register());
+        self.registers.force(timer.register());
     }
 
     pub fn unforce(&mut self, timer: CoexPolicyTimer) {
-        self.registers.unforce_coex_timer(timer.register());
+        self.registers.unforce(timer.register());
+    }
+}
+
+/// Exclusive clock configuration and fresh observations, disjoint from the policy timers.
+pub struct CoexClockPort<
+    'registers,
+    P: crate::phy::registers::RadioPlacement = crate::phy::registers::ChipPlacement,
+> {
+    registers: &'registers mut crate::phy::RadioPhyRegisters<P>,
+}
+
+impl<'registers, P: crate::phy::registers::RadioPlacement> CoexClockPort<'registers, P> {
+    pub(crate) fn new(registers: &'registers mut crate::phy::RadioPhyRegisters<P>) -> Self {
+        Self { registers }
     }
 
-    /// Select the clock the coexistence timers count, as complete
-    /// `coex_hw_timer_freq_set` does.
+    /// Select the clock the coexistence timers count.
     pub fn configure_timer_clock(
         &mut self,
         source: crate::types::CoexTimerClockSource,
@@ -232,9 +255,7 @@ impl<'registers> CoexTimerBank<'registers> {
             .configure_coexistence_timer_clock(source, divider_minus_one);
     }
 
-    /// Sample the shared coexistence low-power clock selection once.
-    ///
-    /// Each call performs fresh reads; `None` reports an unreviewed encoding.
+    /// Read the clock selection afresh on every call; an unreviewed encoding is absent.
     pub fn sample_low_power_clock(&mut self) -> Option<CoexistenceLowPowerClockObservation> {
         self.registers.sample_coexistence_low_power_clock()
     }

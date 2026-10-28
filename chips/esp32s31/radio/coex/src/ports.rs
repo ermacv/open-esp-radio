@@ -8,10 +8,8 @@
 
 use oer_esp32s31_hal::power::PlatformClockBackend;
 
-use core::cell::RefCell;
-
 use oer_esp32s31_hal::{
-    coex::{CoexPolicyTimer, timer_clock},
+    coex::{CoexClockPort, CoexPolicyTimer, CoexPolicyTimerBank, timer_clock},
     domain::RadioDomain,
     types::{
         CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
@@ -34,74 +32,41 @@ const fn bank_timer(index: CoexTimerIndex) -> CoexPolicyTimer {
     }
 }
 
-/// The timer and clock ports of one radio domain, shared by the two port
-/// handles of a single transaction.
-pub struct CoexDomainPorts<'radio, B: PlatformClockBackend, T> {
-    radio: RefCell<&'radio mut RadioDomain<B, T>>,
+/// The disjoint timer and clock owners of one radio-domain loan.
+pub struct CoexDomainPorts<'radio> {
+    timer: CoexDomainTimer<'radio>,
+    clock: CoexDomainClock<'radio>,
+}
+
+/// Exclusive access to the policy timers and the borrowed priority table.
+pub struct CoexDomainTimer<'radio> {
+    bank: CoexPolicyTimerBank<'radio>,
+}
+
+/// Exclusive clock access; each sample reads the current hardware fields.
+pub struct CoexDomainClock<'radio> {
+    port: CoexClockPort<'radio>,
     real_chip: bool,
 }
 
-/// The timer port of [`CoexDomainPorts`].
-pub struct CoexDomainTimer<'ports, 'radio, B: PlatformClockBackend, T> {
-    ports: &'ports CoexDomainPorts<'radio, B, T>,
+/// A public clock selection refused before any register write.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TimerClockError {
+    InvalidDivisor {
+        selector: CoexClockSelector,
+        divisor: u32,
+    },
 }
 
-/// The clock port of [`CoexDomainPorts`].
-pub struct CoexDomainClock<'ports, 'radio, B: PlatformClockBackend, T> {
-    ports: &'ports CoexDomainPorts<'radio, B, T>,
+struct TimerClockConfig {
+    source: CoexTimerClockSource,
+    divider: CoexTimerClockDividerMinusOne,
 }
 
-impl<'radio, B: PlatformClockBackend, T> CoexDomainPorts<'radio, B, T> {
-    /// Lend the domain's coexistence resources for one transaction.
-    pub fn new(radio: &'radio mut RadioDomain<B, T>) -> Self {
-        Self {
-            radio: RefCell::new(radio),
-            real_chip: true,
-        }
-    }
-
-    /// The timer and clock port handles.
-    pub fn ports(
-        &self,
-    ) -> (
-        CoexDomainTimer<'_, 'radio, B, T>,
-        CoexDomainClock<'_, 'radio, B, T>,
-    ) {
-        (
-            CoexDomainTimer { ports: self },
-            CoexDomainClock { ports: self },
-        )
-    }
-
-    /// Select the clock the policy timers count, as `coex_core_pre_init`
-    /// does before any request: the crystal divided by 50 on silicon, and
-    /// selector 8 undivided otherwise. Without a selected clock no request
-    /// can convert its duration.
-    ///
-    /// SOURCE: complete pinned `libcoexist.a[coexist_core.o]::
-    /// coex_core_pre_init`.
-    pub fn configure_timer_clock(&self) {
-        let (selector, divisor) = if self.real_chip {
-            (CoexClockSelector::Selector4, 50)
-        } else {
-            (CoexClockSelector::Selector8, 1)
-        };
-        assert!(
-            self.set_timer_clock(selector, divisor),
-            "the vendor timer clock is an accepted selection"
-        );
-    }
-
-    /// Program the timer clock `selector` divided by `divisor`, as
-    /// `coex_hw_timer_freq_set` does: a divisor the selector does not accept
-    /// changes nothing and returns `false`; otherwise the selector replaces
-    /// the low nibble, then the divisor minus one the divider field.
-    ///
-    /// SOURCE: complete pinned `libcoexist.a[coexist_hw.o]::
-    /// coex_hw_timer_freq_set`.
-    pub fn set_timer_clock(&self, selector: CoexClockSelector, divisor: u32) -> bool {
+impl TimerClockConfig {
+    const fn new(selector: CoexClockSelector, divisor: u32) -> Result<Self, TimerClockError> {
         if !selector.accepts_divisor(divisor) {
-            return false;
+            return Err(TimerClockError::InvalidDivisor { selector, divisor });
         }
         let source = match selector {
             CoexClockSelector::Selector1 => CoexTimerClockSource::Selector1,
@@ -109,33 +74,83 @@ impl<'radio, B: PlatformClockBackend, T> CoexDomainPorts<'radio, B, T> {
             CoexClockSelector::Selector4 => CoexTimerClockSource::Selector4,
             CoexClockSelector::Selector8 => CoexTimerClockSource::Selector8,
         };
-        // The divider field keeps the low twelve bits of the divisor minus one.
-        let divider_minus_one = CoexTimerClockDividerMinusOne::new((divisor - 1) & 0x0fff)
-            .expect("twelve bits fit the divider field");
-        self.with_bank(|bank| bank.configure_timer_clock(source, divider_minus_one));
-        true
-    }
-
-    fn with_bank(&self, operation: impl FnOnce(&mut oer_esp32s31_hal::coex::CoexTimerBank<'_>)) {
-        operation(&mut self.radio.borrow_mut().coex_timer_bank());
+        // SOURCE: complete pinned coex_hw_timer_freq_set keeps the field's low bits.
+        // The selector check above rejects zero; wrapping_sub names this encoding arithmetic.
+        let divider = CoexTimerClockDividerMinusOne::from_bits(oer_mmio::Bits::truncate(
+            divisor.wrapping_sub(1),
+        ));
+        Ok(Self { source, divider })
     }
 }
 
-impl<B: PlatformClockBackend, T> CoexClockHardware for CoexDomainClock<'_, '_, B, T> {
+impl<'radio> CoexDomainPorts<'radio> {
+    /// Lend the domain's coexistence resources for one transaction.
+    pub fn new<B: PlatformClockBackend, T>(radio: &'radio mut RadioDomain<B, T>) -> Self {
+        let (bank, port) = radio.coex_ports();
+        Self {
+            timer: CoexDomainTimer { bank },
+            clock: CoexDomainClock {
+                port,
+                real_chip: true,
+            },
+        }
+    }
+
+    /// Borrow both disjoint ports exclusively; no runtime borrow guard is needed.
+    pub fn ports(&mut self) -> (&mut CoexDomainTimer<'radio>, &mut CoexDomainClock<'radio>) {
+        (&mut self.timer, &mut self.clock)
+    }
+
+    /// Select the reviewed initial clock before policy requests.
+    ///
+    /// SOURCE: complete pinned libcoexist.a[coexist_core.o]::coex_core_pre_init.
+    pub fn configure_timer_clock(&mut self) {
+        let config = if self.clock.real_chip {
+            const {
+                match TimerClockConfig::new(CoexClockSelector::Selector4, 50) {
+                    Ok(config) => config,
+                    Err(_) => panic!("the silicon clock selection is valid"),
+                }
+            }
+        } else {
+            const {
+                match TimerClockConfig::new(CoexClockSelector::Selector8, 1) {
+                    Ok(config) => config,
+                    Err(_) => panic!("the FPGA clock selection is valid"),
+                }
+            }
+        };
+        self.clock
+            .port
+            .configure_timer_clock(config.source, config.divider);
+    }
+
+    /// Program the selected clock and the low field bits of divisor minus one.
+    /// Invalid input is returned before any write.
+    ///
+    /// SOURCE: complete pinned libcoexist.a[coexist_hw.o]::coex_hw_timer_freq_set.
+    pub fn set_timer_clock(
+        &mut self,
+        selector: CoexClockSelector,
+        divisor: u32,
+    ) -> Result<(), TimerClockError> {
+        let config = TimerClockConfig::new(selector, divisor)?;
+        self.clock
+            .port
+            .configure_timer_clock(config.source, config.divider);
+        Ok(())
+    }
+}
+
+impl CoexClockHardware for CoexDomainClock<'_> {
     fn sample(&mut self) -> Result<CoexTimerClock, CoexError> {
-        let observation = self
-            .ports
-            .radio
-            .borrow_mut()
-            .coex_timer_bank()
-            .sample_low_power_clock();
-        timer_clock(observation, self.ports.real_chip)
+        timer_clock(self.port.sample_low_power_clock(), self.real_chip)
     }
 }
 
-impl<B: PlatformClockBackend, T> CoexTimerHardware for CoexDomainTimer<'_, '_, B, T> {
+impl CoexTimerHardware for CoexDomainTimer<'_> {
     fn pti(&mut self, event: CoexEventId) -> CoexPti {
-        self.ports.radio.borrow().coex_pti(event)
+        self.bank.pti(event)
     }
 
     fn configure_request(
@@ -147,8 +162,7 @@ impl<B: PlatformClockBackend, T> CoexTimerHardware for CoexDomainTimer<'_, '_, B
         let client = CoexTimerClientValue::new(u32::from(client.timer_client_value()))
             .ok_or(CoexError::Hardware)?;
         let pti = CoexTimerPtiValue::new(u32::from(pti.value())).ok_or(CoexError::Hardware)?;
-        self.ports
-            .with_bank(|bank| bank.configure(bank_timer(index), client, pti));
+        self.bank.configure(bank_timer(index), client, pti);
         Ok(())
     }
 
@@ -157,8 +171,7 @@ impl<B: PlatformClockBackend, T> CoexTimerHardware for CoexDomainTimer<'_, '_, B
         index: CoexTimerIndex,
         tick_image: u32,
     ) -> Result<(), CoexError> {
-        self.ports
-            .with_bank(|bank| bank.set_primary_target(bank_timer(index), tick_image));
+        self.bank.set_primary_target(bank_timer(index), tick_image);
         Ok(())
     }
 
@@ -167,28 +180,31 @@ impl<B: PlatformClockBackend, T> CoexTimerHardware for CoexDomainTimer<'_, '_, B
         index: CoexTimerIndex,
         tick_image: u32,
     ) -> Result<(), CoexError> {
-        self.ports
-            .with_bank(|bank| bank.set_secondary_target(bank_timer(index), tick_image));
+        self.bank
+            .set_secondary_target(bank_timer(index), tick_image);
         Ok(())
     }
 
     fn enable(&mut self, index: CoexTimerIndex) -> Result<(), CoexError> {
-        self.ports.with_bank(|bank| bank.enable(bank_timer(index)));
+        self.bank.enable(bank_timer(index));
         Ok(())
     }
 
     fn disable(&mut self, index: CoexTimerIndex) -> Result<(), CoexError> {
-        self.ports.with_bank(|bank| bank.disable(bank_timer(index)));
+        self.bank.disable(bank_timer(index));
         Ok(())
     }
 
     fn force(&mut self, index: CoexTimerIndex) -> Result<(), CoexError> {
-        self.ports.with_bank(|bank| bank.force(bank_timer(index)));
+        self.bank.force(bank_timer(index));
         Ok(())
     }
 
     fn unforce(&mut self, index: CoexTimerIndex) -> Result<(), CoexError> {
-        self.ports.with_bank(|bank| bank.unforce(bank_timer(index)));
+        self.bank.unforce(bank_timer(index));
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -114,8 +114,9 @@ fn multi<F: Future<Output = ()>>(
     model: &Model,
     client: impl FnOnce(ClientCells, oer_esp32s31_radio_client::MembershipCell<Bluetooth>) -> F,
 ) {
-    let (end, cells) = claim_for_host_test();
-    let (inbox, ble) = bluetooth::claim_for_host_test(end.doorbell);
+    let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
+    let (inbox, ble) =
+        bluetooth::claim_for_host_test(end.doorbell).expect("fresh Bluetooth client cell");
     let mut actor = RadioSystem::new(
         end,
         model.clone(),
@@ -356,8 +357,9 @@ fn runtime_handover_waits_for_the_entered_tracking_transaction() {
         ble_available: true,
         ..Script::default()
     });
-    let (end, _) = claim_for_host_test();
-    let (inbox, ble) = bluetooth::claim_for_host_test(end.doorbell);
+    let (end, _) = claim_for_host_test().expect("fresh radio client cells");
+    let (inbox, ble) =
+        bluetooth::claim_for_host_test(end.doorbell).expect("fresh Bluetooth client cell");
     let mut actor = RadioSystem::new(
         end,
         model.clone(),
@@ -401,8 +403,9 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
         ble_available: true,
         ..Script::default()
     });
-    let (end, _) = claim_for_host_test();
-    let (inbox, ble) = bluetooth::claim_for_host_test(end.doorbell);
+    let (end, _) = claim_for_host_test().expect("fresh radio client cells");
+    let (inbox, ble) =
+        bluetooth::claim_for_host_test(end.doorbell).expect("fresh Bluetooth client cell");
     let mut actor = RadioSystem::new(
         end,
         model.clone(),
@@ -451,9 +454,11 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
 #[test]
 fn an_abandoned_attachment_loan_cannot_open_a_second_seat() {
     let model = model(Script::default());
-    let (end, _) = claim_for_host_test();
-    let (one, _) = bluetooth::claim_for_host_test(end.doorbell);
-    let (two, _) = bluetooth::claim_for_host_test(end.doorbell);
+    let (end, _) = claim_for_host_test().expect("fresh radio client cells");
+    let (one, _) =
+        bluetooth::claim_for_host_test(end.doorbell).expect("fresh Bluetooth client cell");
+    let (two, _) =
+        bluetooth::claim_for_host_test(end.doorbell).expect("fresh Bluetooth client cell");
     let mut actor = RadioSystem::new(
         end,
         model.clone(),
@@ -482,8 +487,9 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
         fail_prepare: true,
         ..Script::default()
     });
-    let (end, _) = claim_for_host_test();
-    let (inbox, ble) = bluetooth::claim_for_host_test(end.doorbell);
+    let (end, _) = claim_for_host_test().expect("fresh radio client cells");
+    let (inbox, ble) =
+        bluetooth::claim_for_host_test(end.doorbell).expect("fresh Bluetooth client cell");
     let mut actor = RadioSystem::new(
         end,
         model.clone(),

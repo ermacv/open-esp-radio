@@ -126,14 +126,16 @@ mod tests {
     use super::*;
     #[test]
     fn first_open_epoch_is_zero_and_only_a_later_reopen_advances_it() {
-        let (end, _) = oer_esp32s31_radio_client::claim_for_host_test();
+        let (end, _) =
+            oer_esp32s31_radio_client::claim_for_host_test().expect("fresh radio client cells");
         let mut core = ActorCore::new(end.mint);
         let zero = core.prepared(true);
         assert_eq!(core.prepared(true), zero);
         let next = core.prepared(false);
         assert_ne!(next, zero);
         assert_eq!(core.prepared(true), next);
-        let (end, _) = oer_esp32s31_radio_client::claim_for_host_test();
+        let (end, _) =
+            oer_esp32s31_radio_client::claim_for_host_test().expect("fresh radio client cells");
         let mut fresh = ActorCore::new(end.mint);
         assert_eq!(fresh.prepared(false), zero);
     }

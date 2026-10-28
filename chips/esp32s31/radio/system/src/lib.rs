@@ -43,9 +43,9 @@ use core::{convert::Infallible, future::poll_fn};
 use embassy_futures::select::{Either, select};
 use oer_esp32s31_phy::executor::boundary::Boundary;
 use oer_esp32s31_radio_client::{
-    ActorEnd, Answer, Client, ClientInbox, DomainHealth, Doorbell, Failed, Failure, Joined,
-    Leaving, Left, LpClock, LpSource, MemberMint, PhyPreparation, Poison, PoisonCause,
-    PoisonOrigin, Request, RfEpoch, TrackedMember, wifi::Wifi,
+    ActorEnd, Client, ClientInbox, DomainHealth, Doorbell, Failed, Failure, Joined, Leaving, Left,
+    LpClock, LpSource, MemberMint, PhyPreparation, Poison, PoisonCause, PoisonOrigin, Request,
+    RfEpoch, TrackedMember, wifi::Wifi,
 };
 
 /// A hardware transaction failed after it started: the PHY domain is
@@ -157,9 +157,8 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
     /// Serve the cells for the rest of the program, borrowing the actor's storage.
     pub async fn run(&mut self) -> Infallible {
         loop {
-            while let Some((request, responder)) = self.inbox.take() {
-                let answer = self.serve(request).await;
-                responder.answer(answer);
+            while let Some(request) = self.inbox.take() {
+                self.serve(request).await;
             }
             let deadline = (self.core.tracking_active())
                 .then(|| self.backend.tracking_deadline())
@@ -206,20 +205,20 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
         }
     }
 
-    async fn serve<Q: Client>(&mut self, request: Request<Q>) -> Answer<Q>
+    async fn serve<Q: Client>(&mut self, request: Request<Q>)
     where
         B: ClientBackend<Q, S>,
     {
         match request {
-            Request::Join(join) => {
+            Request::Join(join, responder) => {
                 if let Some(poison) = self.core.poisoned() {
-                    return Answer::Join(Err(Failed {
+                    return responder.answer(Err(Failed {
                         returned: Q::join_returned(join),
                         cause: Failure::Poisoned(poison),
                     }));
                 }
                 if !self.backend.admits(&join) {
-                    return Answer::Join(Err(Failed {
+                    return responder.answer(Err(Failed {
                         returned: Q::join_returned(join),
                         cause: Failure::Refused,
                     }));
@@ -231,7 +230,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                             origin: PoisonOrigin::Prepare,
                             cause,
                         });
-                        return Answer::Join(Err(Failed {
+                        return responder.answer(Err(Failed {
                             returned: Q::join_returned(join),
                             cause: Failure::Poisoned(poison),
                         }));
@@ -240,7 +239,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                 let epoch = self
                     .core
                     .prepared(matches!(phy, PhyPreparation::AlreadyOpen));
-                Answer::Join(
+                responder.answer(
                     match Boundary::new(self.backend.enter(join, phy, &self.lp)).await {
                         Ok(payload) => {
                             self.core.joined();
@@ -262,14 +261,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                     },
                 )
             }
-            Request::Track(member, track) => {
+            Request::Track(member, track, responder) => {
                 if let Some(poison) = self.core.poisoned() {
-                    return Answer::Track(Err(Failed {
+                    return responder.answer(Err(Failed {
                         returned: (member, Q::track_returned(track)),
                         cause: Failure::Poisoned(poison),
                     }));
                 }
-                Answer::Track(match Boundary::new(self.backend.track(track)).await {
+                responder.answer(match Boundary::new(self.backend.track(track)).await {
                     Ok(payload) => {
                         self.core.tracked();
                         Ok(TrackedMember {
@@ -286,14 +285,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                     }
                 })
             }
-            Request::Retune(member, retune) => {
+            Request::Retune(member, retune, responder) => {
                 if let Some(poison) = self.core.poisoned() {
-                    return Answer::Retune(Err(Failed {
+                    return responder.answer(Err(Failed {
                         returned: (member, Q::retune_returned(retune)),
                         cause: Failure::Poisoned(poison),
                     }));
                 }
-                Answer::Retune(match Boundary::new(self.backend.retune(retune)).await {
+                responder.answer(match Boundary::new(self.backend.retune(retune)).await {
                     Ok(payload) => Ok(oer_esp32s31_radio_client::RetunedMember { member, payload }),
                     Err(Failed { returned, cause }) => {
                         self.core.failed(cause);
@@ -304,14 +303,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                     }
                 })
             }
-            Request::Leave(member, leave) => {
+            Request::Leave(member, leave, responder) => {
                 self.core.leaving(matches!(member, Leaving::Tracked(_)));
                 self.core.mint.retire(member);
                 let (payload, exit) = Boundary::new(self.backend.exit(leave)).await;
                 if matches!(self.core.exited(exit), Action::CloseRf) {
                     Boundary::new(self.close_rf()).await;
                 }
-                Answer::Leave(Left {
+                responder.answer(Left {
                     payload,
                     domain: self.core.health(),
                 })

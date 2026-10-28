@@ -1,13 +1,26 @@
-#![no_std]
-#![forbid(unsafe_code)]
 #![deny(
     clippy::unwrap_used,
+    clippy::expect_used,
     clippy::panic,
+    clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects,
+        clippy::unreachable
+    )
+)]
+#![no_std]
+#![forbid(unsafe_code)]
 
 //! The client contract of the ESP32-S31 radio system.
 //!
@@ -22,7 +35,8 @@
 //!   claimed once with the actor's end by [`claim`], which returns `None` on a
 //!   second call. Posting consumes the cell token and the answer returns it,
 //!   so a cell holds at most one request. The protocol is lock-free: two
-//!   atomic wakers and a CAS on the cell's state (`oer_memory::RequestSlot`). Dropping a
+//!   atomic wakers per operation and a CAS on each typed slot's state
+//!   (`oer_memory::RequestSlot`). Dropping a
 //!   [`Pending`] future loses nothing: the answer stays in the cell for the
 //!   next poll of the same `Pending`.
 //! - **Membership.** `join` answers [`Member<K, Untracked>`](Member) and the
@@ -70,8 +84,13 @@ pub const ACTOR_STEP_BOUND: oer_time::Duration = oer_time::Duration::from_micros
 mod sealed {
     pub trait Sealed {}
 
-    pub trait AnswerPart<K: super::Client>: Sized {
-        fn extract(answer: super::Answer<K>) -> Self;
+    pub trait Reply<K: super::Client>: Send + Sized + 'static {
+        type Request: Send + 'static;
+        type Idle;
+        fn reunite(
+            poster: super::Poster<Self::Request, Self>,
+            idle: Self::Idle,
+        ) -> super::MembershipCell<K>;
     }
 }
 
@@ -105,20 +124,56 @@ pub trait Client: sealed::Sealed + Sized + 'static {
     fn retune_returned(retune: Self::Retune) -> Self::RetuneReturned;
 }
 
-/// A request in a client's cell.
+/// A taken request carries a responder that accepts only its own answer type.
+///
+/// A join responder cannot publish a different operation's answer:
+/// ```compile_fail,E0308
+/// use oer_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
+/// fn wrong<K: Client>(request: Request<K>, answer: Left<K>) {
+///     if let Request::Join(_, responder) = request { responder.answer(answer); }
+/// }
+/// ```
+///
+/// A track responder cannot publish a different operation's answer:
+/// ```compile_fail,E0308
+/// use oer_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
+/// fn wrong<K: Client>(request: Request<K>, answer: JoinAnswer<K>) {
+///     if let Request::Track(_, _, responder) = request { responder.answer(answer); }
+/// }
+/// ```
+///
+/// A retune responder cannot publish a different operation's answer:
+/// ```compile_fail,E0308
+/// use oer_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
+/// fn wrong<K: Client>(request: Request<K>, answer: JoinAnswer<K>) {
+///     if let Request::Retune(_, _, responder) = request { responder.answer(answer); }
+/// }
+/// ```
+///
+/// A leave responder cannot publish a different operation's answer:
+/// ```compile_fail,E0308
+/// use oer_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
+/// fn wrong<K: Client>(request: Request<K>, answer: JoinAnswer<K>) {
+///     if let Request::Leave(_, _, responder) = request { responder.answer(answer); }
+/// }
+/// ```
 pub enum Request<K: Client> {
-    Join(K::Join),
-    Track(Member<K, Untracked>, K::Track),
-    Retune(Member<K, Tracked>, K::Retune),
-    Leave(Leaving<K>, K::Leave),
-}
-
-/// An answer in a client's cell.
-pub enum Answer<K: Client> {
-    Join(JoinAnswer<K>),
-    Track(TrackAnswer<K>),
-    Retune(RetuneAnswer<K>),
-    Leave(Left<K>),
+    Join(K::Join, Responder<'static, K::Join, JoinAnswer<K>>),
+    Track(
+        Member<K, Untracked>,
+        K::Track,
+        Responder<'static, (Member<K, Untracked>, K::Track), TrackAnswer<K>>,
+    ),
+    Retune(
+        Member<K, Tracked>,
+        K::Retune,
+        Responder<'static, (Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
+    ),
+    Leave(
+        Leaving<K>,
+        K::Leave,
+        Responder<'static, (Leaving<K>, K::Leave), Left<K>>,
+    ),
 }
 
 /// How `join` prepared the PHY domain.
@@ -209,48 +264,50 @@ pub struct Left<K: Client> {
     pub domain: DomainHealth,
 }
 
-impl<K: Client> sealed::AnswerPart<K> for JoinAnswer<K> {
-    fn extract(answer: Answer<K>) -> Self {
-        match answer {
-            Answer::Join(answer) => answer,
-            _ => unreachable!("the actor answers a join with a join answer"),
+// The idle posters stay inside Pending, so even though each operation has a
+// typed slot, the client can post only one request across all four slots.
+struct ClientSlot<K: Client> {
+    join: RequestSlot<K::Join, JoinAnswer<K>>,
+    track: RequestSlot<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
+    retune: RequestSlot<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
+    leave: RequestSlot<(Leaving<K>, K::Leave), Left<K>>,
+}
+
+impl<K: Client> ClientSlot<K> {
+    const fn new(doorbell: &'static Doorbell, bit: u32) -> Self {
+        Self {
+            join: RequestSlot::new(doorbell, bit),
+            track: RequestSlot::new(doorbell, bit),
+            retune: RequestSlot::new(doorbell, bit),
+            leave: RequestSlot::new(doorbell, bit),
         }
+    }
+
+    fn claim(&'static self) -> Option<MembershipCell<K>> {
+        Some(MembershipCell {
+            join: self.join.claim()?,
+            track: self.track.claim()?,
+            retune: self.retune.claim()?,
+            leave: self.leave.claim()?,
+        })
     }
 }
 
-impl<K: Client> sealed::AnswerPart<K> for TrackAnswer<K> {
-    fn extract(answer: Answer<K>) -> Self {
-        match answer {
-            Answer::Track(answer) => answer,
-            _ => unreachable!("the actor answers a track with a track answer"),
-        }
-    }
-}
-
-impl<K: Client> sealed::AnswerPart<K> for RetuneAnswer<K> {
-    fn extract(answer: Answer<K>) -> Self {
-        match answer {
-            Answer::Retune(answer) => answer,
-            _ => unreachable!("the actor answers a retune with a retune answer"),
-        }
-    }
-}
-
-impl<K: Client> sealed::AnswerPart<K> for Left<K> {
-    fn extract(answer: Answer<K>) -> Self {
-        match answer {
-            Answer::Leave(answer) => answer,
-            _ => unreachable!("the actor answers a leave with a leave answer"),
-        }
-    }
-}
-
-type ClientSlot<K> = RequestSlot<Request<K>, Answer<K>>;
-
-/// A client's one cell to the actor.
+/// A client's unique authority to post one request to the actor.
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_radio_client::{Client, MembershipCell};
+/// fn twice<K: Client>(cell: MembershipCell<K>, one: K::Join, two: K::Join) {
+///     let _first = cell.join(one);
+///     let _second = cell.join(two);
+/// }
+/// ```
 #[must_use = "the cell is the client's only way to the actor"]
 pub struct MembershipCell<K: Client> {
-    poster: Poster<Request<K>, Answer<K>>,
+    join: Poster<K::Join, JoinAnswer<K>>,
+    track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
+    retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
+    leave: Poster<(Leaving<K>, K::Leave), Left<K>>,
 }
 
 impl<K: Client> core::fmt::Debug for MembershipCell<K> {
@@ -262,7 +319,7 @@ impl<K: Client> core::fmt::Debug for MembershipCell<K> {
 impl<K: Client> MembershipCell<K> {
     /// Join the PHY domain: register it, or wake closed RF, and enter `K`.
     pub fn join(self, join: K::Join) -> Pending<K, JoinAnswer<K>> {
-        Pending::new(self.poster.post(Request::Join(join)))
+        Pending::new(self.join.post(join), (self.track, self.retune, self.leave))
     }
 
     /// Run the member's initial tracking.
@@ -271,7 +328,10 @@ impl<K: Client> MembershipCell<K> {
         member: Member<K, Untracked>,
         track: K::Track,
     ) -> Pending<K, TrackAnswer<K>> {
-        Pending::new(self.poster.post(Request::Track(member, track)))
+        Pending::new(
+            self.track.post((member, track)),
+            (self.join, self.retune, self.leave),
+        )
     }
 
     /// Retune a tracked client while its DMA and interrupt routes are stopped.
@@ -280,49 +340,86 @@ impl<K: Client> MembershipCell<K> {
         member: Member<K, Tracked>,
         retune: K::Retune,
     ) -> Pending<K, RetuneAnswer<K>> {
-        Pending::new(self.poster.post(Request::Retune(member, retune)))
+        Pending::new(
+            self.retune.post((member, retune)),
+            (self.join, self.track, self.leave),
+        )
     }
 
     /// Leave the PHY domain; the last member's leave closes RF.
     pub fn leave(self, member: Leaving<K>, leave: K::Leave) -> Pending<K, Left<K>> {
-        Pending::new(self.poster.post(Request::Leave(member, leave)))
+        Pending::new(
+            self.leave.post((member, leave)),
+            (self.join, self.track, self.retune),
+        )
     }
 }
 
-/// A posted request: a future of its answer and the returned cell.
-///
-/// Polling it through `&mut` and dropping that future loses nothing: the
-/// answer stays in the cell. After it gave its answer it stays pending.
+macro_rules! reply {
+    ($answer:ty, $request:ty, $active:ident, $($idle:ident: $idle_type:ty),+) => {
+        impl<K: Client> sealed::Reply<K> for $answer {
+            type Request = $request;
+            type Idle = ($($idle_type,)+);
+            fn reunite($active: Poster<Self::Request, Self>, ($($idle,)+): Self::Idle) -> MembershipCell<K> {
+                MembershipCell { $active, $($idle,)+ }
+            }
+        }
+    };
+}
+reply!(JoinAnswer<K>, K::Join, join,
+    track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
+    retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
+    leave: Poster<(Leaving<K>, K::Leave), Left<K>>);
+reply!(TrackAnswer<K>, (Member<K, Untracked>, K::Track), track,
+    join: Poster<K::Join, JoinAnswer<K>>,
+    retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
+    leave: Poster<(Leaving<K>, K::Leave), Left<K>>);
+reply!(RetuneAnswer<K>, (Member<K, Tracked>, K::Retune), retune,
+    join: Poster<K::Join, JoinAnswer<K>>,
+    track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
+    leave: Poster<(Leaving<K>, K::Leave), Left<K>>);
+reply!(Left<K>, (Leaving<K>, K::Leave), leave,
+    join: Poster<K::Join, JoinAnswer<K>>,
+    track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
+    retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>);
+
+/// A posted request: a future of its typed answer and the returned cell.
+/// A spent future stays pending and cannot consume a later request's answer.
 #[must_use = "the cell returns only with the answer"]
-pub struct Pending<K: Client, O: sealed::AnswerPart<K>> {
-    awaiting: Awaiting<Request<K>, Answer<K>>,
-    output: PhantomData<fn() -> O>,
+pub struct Pending<K: Client, O: sealed::Reply<K>> {
+    state: Option<(Awaiting<O::Request, O>, O::Idle)>,
+    client: PhantomData<fn() -> K>,
 }
 
-impl<K: Client, O: sealed::AnswerPart<K>> Pending<K, O> {
-    fn new(awaiting: Awaiting<Request<K>, Answer<K>>) -> Self {
+impl<K: Client, O: sealed::Reply<K>> Pending<K, O> {
+    fn new(awaiting: Awaiting<O::Request, O>, idle: O::Idle) -> Self {
         Self {
-            awaiting,
-            output: PhantomData,
+            state: Some((awaiting, idle)),
+            client: PhantomData,
         }
     }
 }
 
-impl<K: Client, O: sealed::AnswerPart<K>> Future for Pending<K, O> {
+impl<K: Client, O: sealed::Reply<K>> Future for Pending<K, O> {
     type Output = (MembershipCell<K>, O);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let (poster, answer) = core::task::ready!(self.awaiting.poll_answer(cx));
-        Poll::Ready((MembershipCell { poster }, O::extract(answer)))
+        let Some((mut awaiting, idle)) = self.state.take() else {
+            return Poll::Pending;
+        };
+        match awaiting.poll_answer(cx) {
+            Poll::Ready((poster, answer)) => Poll::Ready((O::reunite(poster, idle), answer)),
+            Poll::Pending => {
+                self.state = Some((awaiting, idle));
+                Poll::Pending
+            }
+        }
     }
 }
 
-impl<K: Client, O: sealed::AnswerPart<K>> Unpin for Pending<K, O> {}
+impl<K: Client, O: sealed::Reply<K>> Unpin for Pending<K, O> {}
 
-/// A taken request and the duty to answer it.
-pub type Taken<K> = (Request<K>, Responder<'static, Request<K>, Answer<K>>);
-
-/// The actor's end of one client's cell.
+/// The actor's end of one client's typed slots.
 pub struct ClientInbox<K: Client> {
     slot: &'static ClientSlot<K>,
 }
@@ -330,12 +427,24 @@ pub struct ClientInbox<K: Client> {
 impl<K: Client> ClientInbox<K> {
     /// The doorbell bit this client rings.
     pub const fn bit(&self) -> u32 {
-        self.slot.bit()
+        self.slot.join.bit()
     }
 
-    /// The posted request and the duty to answer it, if one is posted.
-    pub fn take(&self) -> Option<Taken<K>> {
-        self.slot.take_request()
+    /// Take the posted request together with its matching responder.
+    pub fn take(&self) -> Option<Request<K>> {
+        if let Some((join, responder)) = self.slot.join.take_request() {
+            return Some(Request::Join(join, responder));
+        }
+        if let Some(((member, track), responder)) = self.slot.track.take_request() {
+            return Some(Request::Track(member, track, responder));
+        }
+        if let Some(((member, retune), responder)) = self.slot.retune.take_request() {
+            return Some(Request::Retune(member, retune, responder));
+        }
+        self.slot
+            .leave
+            .take_request()
+            .map(|((member, leave), responder)| Request::Leave(member, leave, responder))
     }
 }
 
@@ -352,7 +461,7 @@ pub struct ClientCells {
 }
 
 static DOORBELL: Doorbell = Doorbell::new();
-static WIFI: ClientSlot<wifi::Wifi> = RequestSlot::new(&DOORBELL, wifi::BIT);
+static WIFI: ClientSlot<wifi::Wifi> = ClientSlot::new(&DOORBELL, wifi::BIT);
 
 /// The actor's end and the clients' cells, once per image; `None` after the
 /// first call.
@@ -365,27 +474,25 @@ fn ends(
     doorbell: &'static Doorbell,
     wifi: &'static ClientSlot<wifi::Wifi>,
 ) -> Option<(ActorEnd, ClientCells)> {
-    let poster = wifi.claim()?;
+    let cell = wifi.claim()?;
     Some((
         ActorEnd {
             doorbell,
             wifi: ClientInbox { slot: wifi },
             mint: MemberMint::new(),
         },
-        ClientCells {
-            wifi: MembershipCell { poster },
-        },
+        ClientCells { wifi: cell },
     ))
 }
 
 /// Fresh ends in leaked backing, for one host test; the static claim stays
 /// with the image.
 #[cfg(any(test, feature = "test-support"))]
-pub fn claim_for_host_test() -> (ActorEnd, ClientCells) {
+pub fn claim_for_host_test() -> Option<(ActorEnd, ClientCells)> {
     extern crate std;
     let doorbell: &'static Doorbell = std::boxed::Box::leak(std::boxed::Box::new(Doorbell::new()));
-    let wifi = std::boxed::Box::leak(std::boxed::Box::new(RequestSlot::new(doorbell, wifi::BIT)));
-    ends(doorbell, wifi).expect("a fresh slot has its poster")
+    let wifi = std::boxed::Box::leak(std::boxed::Box::new(ClientSlot::new(doorbell, wifi::BIT)));
+    ends(doorbell, wifi)
 }
 
 #[cfg(test)]
