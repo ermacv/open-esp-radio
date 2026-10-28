@@ -89,7 +89,8 @@ fn running_future<'a>(
         let (device, radio) =
             ENDPOINT
                 .init_with(Endpoint::new)
-                .split(NetworkInterfaceId::new(0), address, receive);
+                .split(NetworkInterfaceId::new(0), address, receive)
+                .unwrap_or_else(|_| crate::fail(crate::fatal::Failure::RootInitialization));
         let (stack, mut runner) = Stack::new(STACK.init_with(StackStorage::new), seed, general);
         runner.set_poll_budget(owned_embassy_net::PollBudget::new(4, 8));
         let iface = stack

@@ -104,10 +104,17 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         let receive = RX_POOL
             .init_with(|| PacketPool::new(RX_STORAGE.take()))
             .allocator();
-        let (device, radio) =
-            ENDPOINT
-                .init_with(Endpoint::new)
-                .split(NetworkInterfaceId::new(0), address, receive);
+        let (device, radio) = ENDPOINT
+            .init_with(Endpoint::new)
+            .split(NetworkInterfaceId::new(0), address, receive)
+            .unwrap_or_else(|error| match error {
+                oer_embassy_net::EndpointSplitError::AlreadySplit => {
+                    crate::fail("network-endpoint-already-split")
+                }
+                oer_embassy_net::EndpointSplitError::RxWaiterUnavailable => {
+                    crate::fail("network-rx-waiter-unavailable")
+                }
+            });
         let (stack, mut runner) = Stack::new(STACK.init_with(StackStorage::new), seed, general);
         runner.set_poll_budget(owned_embassy_net::PollBudget::new(4, 8));
         let iface = stack

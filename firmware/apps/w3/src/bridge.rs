@@ -199,7 +199,9 @@ mod tests {
         let clock = VirtualClock::<8>::new();
         let pool = allocator::<1>();
         let mut endpoint = OwnedEndpointResources::<NoopRawMutex, 8, 4>::new();
-        let (mut device, radio) = endpoint.split(NetworkInterfaceId::new(0), [2; 6], pool);
+        let (mut device, radio) = endpoint
+            .split(NetworkInterfaceId::new(0), [2; 6], pool)
+            .expect("endpoint split");
         radio.link_controller().set_link_up(true);
         // A native echo reply can retain the sole RX owner in the TX queue.
         radio.try_send_rx(&[2; 15]).unwrap();
@@ -265,8 +267,9 @@ mod tests {
     fn a_full_input_batch_keeps_owners_queued_when_only_one_rx_owner_is_free() {
         let clock = VirtualClock::<8>::new();
         let mut endpoint = OwnedEndpointResources::<NoopRawMutex, 8, 4>::new();
-        let (mut device, radio) =
-            endpoint.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+        let (mut device, radio) = endpoint
+            .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+            .expect("endpoint split");
         radio.link_controller().set_link_up(true);
         let general = allocator::<1>();
         let mut packet = general.try_alloc().unwrap();
@@ -301,7 +304,9 @@ mod tests {
         let clock = VirtualClock::<8>::new();
         let pool = allocator::<RX>();
         let mut endpoint = OwnedEndpointResources::<NoopRawMutex, RX, 4>::new();
-        let (mut device, radio) = endpoint.split(NetworkInterfaceId::new(0), [2; 6], pool);
+        let (mut device, radio) = endpoint
+            .split(NetworkInterfaceId::new(0), [2; 6], pool)
+            .expect("endpoint split");
         radio.link_controller().set_link_up(true);
         let general = allocator::<1>();
         let mut packet = general.try_alloc().unwrap();
@@ -369,8 +374,9 @@ mod tests {
         const TX: usize = 4;
         let clock = VirtualClock::<8>::new();
         let mut endpoint = OwnedEndpointResources::<NoopRawMutex, RX, TX>::new();
-        let (mut device, radio) =
-            endpoint.split(NetworkInterfaceId::new(0), [2; 6], allocator::<RX>());
+        let (mut device, radio) = endpoint
+            .split(NetworkInterfaceId::new(0), [2; 6], allocator::<RX>())
+            .expect("endpoint split");
         radio.link_controller().set_link_up(true);
         let general = allocator::<{ TX + 1 }>();
         let mut input = MsduQueue::<EthernetFrame, RX>::new();
@@ -442,7 +448,9 @@ mod tests {
         let pool = allocator::<1>();
         let general = allocator::<1>();
         let mut endpoint = OwnedEndpointResources::<NoopRawMutex, 1, 1>::new();
-        let (mut device, radio) = endpoint.split(NetworkInterfaceId::new(0), [2; 6], pool);
+        let (mut device, radio) = endpoint
+            .split(NetworkInterfaceId::new(0), [2; 6], pool)
+            .expect("endpoint split");
         radio.link_controller().set_link_up(true);
         let packet = |marker| {
             let mut p = general.try_alloc().unwrap();

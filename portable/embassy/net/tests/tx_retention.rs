@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+
 //! Admission follows the software owner, including time retained by the radio.
 
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -40,7 +42,9 @@ fn retained_frames_share_admission_with_queued_frames() {
     let pool = allocator::<4>();
     // Resources deliberately remain borrowed, rather than requiring static placement.
     let mut resources = OwnedEndpointResources::<CriticalSectionRawMutex, 1, 2>::new();
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     let wakes = Arc::new(Wakes::default());
     device.register_waker(&Waker::from(wakes.clone()));
@@ -73,7 +77,9 @@ fn retained_frames_share_admission_with_queued_frames() {
 fn empty_ingress_remains_full_until_radio_owner_is_released_on_another_thread() {
     let pool = allocator::<2>();
     let mut resources = OwnedEndpointResources::<CriticalSectionRawMutex, 1, 1>::new();
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     device.transmit(packet(pool, 2)).unwrap();
     let retained = radio.try_receive_tx().unwrap();
@@ -92,7 +98,9 @@ fn empty_ingress_remains_full_until_radio_owner_is_released_on_another_thread() 
 fn stale_queue_disposal_returns_credit_without_revoking_retained_owners() {
     let pool = allocator::<3>();
     let mut resources = OwnedEndpointResources::<CriticalSectionRawMutex, 1, 2>::new();
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     let link = radio.link_controller();
     link.set_link_up(true);
     device.transmit(packet(pool, 2)).unwrap();
@@ -128,7 +136,9 @@ fn admission_notification_observes_the_already_returned_packet_pool_slot() {
     }
     let pool = allocator::<1>();
     let mut resources = OwnedEndpointResources::<CriticalSectionRawMutex, 1, 1>::new();
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     device.transmit(packet(pool, 2)).unwrap();
     let wake = Arc::new(PoolWake(pool, AtomicUsize::new(0)));

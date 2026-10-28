@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+
 //! Force a producer handoff between radio queue operations without timing races.
 
 use embassy_sync::blocking_mutex::raw::{NoopRawMutex, RawMutex};
@@ -61,7 +63,9 @@ fn packet(allocator: PacketBufAllocator) -> PacketBuf {
 fn producer_filling_budget_during_radio_handoff_waits_for_owner_release() {
     let general = allocator();
     let resources = Box::leak(Box::new(OwnedEndpointResources::<HandoffMutex, 1, 2>::new()));
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     let wakes = Arc::new(Wakes::default());
     device.register_waker(&Waker::from(Arc::clone(&wakes)));
@@ -93,7 +97,9 @@ fn producer_filling_budget_during_radio_handoff_waits_for_owner_release() {
 fn capacity_wake_is_one_full_to_available_edge_and_tracks_the_current_task() {
     let general = allocator();
     let resources = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 2>::new()));
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     let previous = Arc::new(Wakes::default());
     let current = Arc::new(Wakes::default());

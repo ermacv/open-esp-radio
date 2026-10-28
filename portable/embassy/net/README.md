@@ -12,14 +12,38 @@ RX frames are copied into the endpoint's packet pool before publication.
 The adapter accepts packet-pool owners and forbids unsafe code; it does not
 adopt detached DMA storage.
 
+## Initialization and TX state
+
+Queue depths are nonzero compile-time parameters. `split` returns
+`EndpointSplitError::AlreadySplit` for resources that already lent their owners,
+or `RxWaiterUnavailable` when another consumer owns the RX pool waiter. A
+refused waiter claim leaves the endpoint available for a later attempt.
+
+TX metadata and admission state use `Cell<State>` inside the existing raw
+mutex. Each synchronous `with_state` closure takes the state into its local
+`state`, updates it, and restores it before leaving the mutex. Waker cloning,
+waking and destruction happen outside that closure. This lets a wake callback
+inspect or drain the restored queue, or immediately spend a returned credit.
+Each dequeued frame retains its unique admission credit until destruction;
+packet destruction precedes the capacity wake.
+
+For `riscv32imafc-unknown-none-elf`, both current image compositions (W3 and
+HIL `wifi-station`) use RX depth 8 and TX depth 4. `tx_queue::State<4>` is
+436 bytes; `tx_budget::State` is 12 bytes. Their synchronous local values live
+on the P1 `station_task` stack while its network/bridge or stack poll calls TX
+methods. They are not retained across an await. Permanent state remains in
+`ENDPOINT`; taking it requires an O(TX depth) temporary. These are type sizes,
+not full frame sizes or stack bounds: compiler moves/inlining may change the
+actual frames. CI reports memory use and enforces the images' stack proofs.
+
 ## Known defects
 
 - **Contract: the RX capability is copyable.** `owned.rs::OwnedRxPublisher`
   derives `Clone` and `Copy` ("Copyable RX-only capability"), so any number
   of copies can publish into the endpoint's RX queue, against one owner per
   resource.
-- **Contract: queues and wakers lock through a blocking mutex.** The RX and TX
-  channels (`embassy_sync` `Sender`/`Receiver`) and `OwnedLinkState`'s
+- **Contract: queues and wakers lock through a blocking mutex.** The RX
+  channel (`embassy_sync` `Sender`/`Receiver`), TX metadata and `OwnedLinkState`'s
   `GenericAtomicWaker<M>` lock a blocking `Mutex<M: RawMutex>`; the
   composition picks `M`. W3 uses `NoopRawMutex` and polls the network and
   station users on P1; tests also use `NoopRawMutex`. With
