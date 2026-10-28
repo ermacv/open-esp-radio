@@ -1,0 +1,23 @@
+[package]
+name = "oer-bluetooth-le-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Executor-independent Bluetooth LE HCI and DTM service runtime"
+
+[dependencies]
+oer-bluetooth-le-controller = { path = "../controller" }
+oer-bluetooth-le-port = { path = "../port" }
+oer-bluetooth-hci = { path = "../../hci" }
+oer-radio-port = { path = "../../../radio/port" }
+
+[dev-dependencies]
+oer-bluetooth-le-model = { path = "../model", features = ["test-support"] }
+oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
+oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
+oer-time = { path = "../../../../portable/time" }
+
+[lints]
+workspace = true

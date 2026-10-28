@@ -1841,6 +1841,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-bluetooth-le-runtime"
+version = "0.1.0"
+dependencies = [
+ "oer-bluetooth-hci",
+ "oer-bluetooth-le-controller",
+ "oer-bluetooth-le-model",
+ "oer-bluetooth-le-port",
+ "oer-radio-port",
+ "oer-radio-regulatory",
+ "oer-time",
+]
+
+[[package]]
 name = "oer-bluetooth-le-wire"
 version = "0.1.0"
 dependencies = [
@@ -2280,6 +2293,7 @@ dependencies = [
  "oer-bluetooth-hci",
  "oer-bluetooth-le-controller",
  "oer-bluetooth-le-port",
+ "oer-bluetooth-le-runtime",
  "oer-bluetooth-le-wire",
  "oer-embassy-time",
  "oer-esp32s31-bluetooth-driver",

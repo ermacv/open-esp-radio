@@ -21,11 +21,11 @@ use oer_bluetooth_hci::{
 };
 use oer_bluetooth_le_port::{
     self as port, Admitted, Command, Completion, DtmCommand, Event, EventResult, Idle,
-    LeCapabilities, LeOperationId, LePhase, Receive, Request, ReturnedSession, Running, Session,
-    Supported, TestPhy, Transmit, TxPower,
+    LeCapabilities, LeOperationId, Receive, Request, ReturnedSession, Running, Session, Supported,
+    TestPhy, Transmit, TxPower,
 };
 use oer_bluetooth_le_wire::{TestChannel, TestPayloadType};
-use oer_radio_port::{Child, CorrelationIds, PoolPath, PortContext, Seat};
+use oer_radio_port::{Child, CorrelationIds, Permit, PoolPath, PortContext, Seat};
 
 /// Entropy supplied by the composition, never synthesized from a timer.
 pub trait Entropy {
@@ -149,6 +149,8 @@ pub enum SubmissionConfiguration {
 /// A submission failure retains the service's command and session observations.
 #[derive(Debug)]
 pub enum SubmitError<F> {
+    /// No unadmitted command can consume this reservation or receipt.
+    NoCommand,
     /// An earlier fault stopped the service; no further request was submitted.
     Poisoned,
     /// The backend retained the request in quarantine.
@@ -161,6 +163,14 @@ pub enum SubmitError<F> {
         configuration: Option<SubmissionConfiguration>,
         session: SubmissionSession,
     },
+}
+
+/// The next synchronous submission action. The seat stays in the core while waiting.
+pub enum Submission<'s, 'p, P: PoolPath> {
+    /// The runtime must reserve capacity with this seat.
+    Capacity(&'s mut Seat<'p, port::CommandCapacity, Child<P, 0>>),
+    /// No new reservation or submission is needed.
+    Done(Submitted),
 }
 
 /// Durable state of a one-credit HCI endpoint for a single DTM session.
@@ -204,6 +214,11 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
     /// Inspect the retained response across transport backpressure.
     pub fn response(&self) -> Option<&Response> {
         self.response.as_ref()
+    }
+
+    /// Inspect a faulty terminal retained with its actual returned owners.
+    pub fn retained_terminal(&self) -> Option<&port::Terminal<'p, P, ()>> {
+        self.retained.as_ref()
     }
 
     /// Release the single command credit after successful transport delivery.
@@ -328,24 +343,38 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
         Accepted::Response
     }
 
-    /// Reserve capacity and synchronously submit. Cancellation before admission
-    /// retains the original command and lease here; after admission this is a no-op.
-    pub async fn submit<F>(
-        &mut self,
-        phase: &impl LePhase<'p, P, (), Caps = C, Fault = F>,
-    ) -> Result<Submitted, SubmitError<F>> {
+    /// Inspect durable state before waiting; an admitted command is never resubmitted.
+    pub fn submission<F>(&mut self) -> Result<Submission<'_, 'p, P>, SubmitError<F>> {
         if self.faulted {
             return Err(SubmitError::Poisoned);
         }
-        let Some(pending) = self.pending.as_mut() else {
-            return Ok(Submitted::Response);
-        };
-        if pending.admitted.is_some() {
-            return Ok(Submitted::AwaitTerminal);
+        match &self.pending {
+            None => Ok(Submission::Done(Submitted::Response)),
+            Some(pending) if pending.admitted.is_some() => {
+                Ok(Submission::Done(Submitted::AwaitTerminal))
+            }
+            Some(_) => Ok(Submission::Capacity(&mut self.seat)),
         }
-        // Borrow the command through the wait: cancellation cannot consume it.
-        let capacity = phase.take(&mut self.seat).await;
-        let opcode = pending.command.kind().opcode();
+    }
+
+    /// Build an owned request from an already obtained reservation. A refusal
+    /// returns that reservation for release and retains the source state.
+    pub fn request<F>(
+        &mut self,
+        capacity: Permit<'p, port::CommandCapacity, Child<P, 0>>,
+    ) -> Result<
+        Request<'p, P, (), C>,
+        (
+            Permit<'p, port::CommandCapacity, Child<P, 0>>,
+            SubmitError<F>,
+        ),
+    > {
+        if self.faulted {
+            return Err((capacity, SubmitError::Poisoned));
+        }
+        let Some(pending) = self.pending.as_mut().filter(|p| p.admitted.is_none()) else {
+            return Err((capacity, SubmitError::NoCommand));
+        };
         let command = match (self.lease.take(), pending.config.take()) {
             (Some(Lease::Idle(session)), Some(Config::Receive(config))) => {
                 DtmCommand::Receive(session, config)
@@ -371,31 +400,46 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                 self.lease = lease;
                 pending.config = config;
                 self.faulted = true;
-                phase.release(capacity);
-                return Err(error);
+                return Err((capacity, error));
             }
         };
         let expected = Admitted {
             id: self.ids.next::<LeOperationId>(),
             epoch: self.epoch,
         };
-        let request = Request {
+        pending.admitted = Some(expected);
+        Ok(Request {
             id: expected.id,
             capacity,
             command: Command::DirectTest(command),
             context: PortContext::new(()),
+        })
+    }
+
+    /// Apply synchronous backend admission. Return any unused capacity for the
+    /// runtime to release before its next wait.
+    pub fn submitted<F>(
+        &mut self,
+        result: port::Submission<'p, P, (), C, F>,
+    ) -> (
+        Option<Permit<'p, port::CommandCapacity, Child<P, 0>>>,
+        Result<Submitted, SubmitError<F>>,
+    ) {
+        let Some(pending) = self.pending.as_mut() else {
+            self.faulted = true;
+            return (None, Err(SubmitError::NoCommand));
         };
-        match phase.submit(request) {
+        let opcode = pending.command.kind().opcode();
+        match result {
             Ok(Ok(admitted)) => {
-                pending.admitted = Some(expected);
-                if admitted != expected {
+                if Some(admitted) != pending.admitted {
                     self.faulted = true;
-                    return Err(SubmitError::Receipt);
+                    return (None, Err(SubmitError::Receipt));
                 }
-                Ok(Submitted::AwaitTerminal)
+                (None, Ok(Submitted::AwaitTerminal))
             }
             Ok(Err(refused)) => {
-                phase.release(refused.request.capacity);
+                let capacity = refused.request.capacity;
                 let Command::DirectTest(command) = refused.request.command;
                 self.lease = Some(match command {
                     DtmCommand::Receive(session, _) | DtmCommand::Transmit(session, _) => {
@@ -405,32 +449,38 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                 });
                 self.pending = None;
                 self.response = Some(status(opcode, Some(HciError::CMD_DISALLOWED)));
-                Ok(Submitted::Response)
+                (Some(capacity), Ok(Submitted::Response))
             }
             Err(fault) => {
                 self.pending = None;
                 self.faulted = true;
                 self.response = Some(status(opcode, Some(HciError::HARDWARE_FAILURE)));
-                Err(SubmitError::Backend(fault))
+                (None, Err(SubmitError::Backend(fault)))
             }
         }
     }
 
-    /// Await only the already admitted command's terminal. Dropping this wait
-    /// preserves its token and the backend's ownership; a later call resumes it.
-    pub async fn complete<F>(
-        &mut self,
-        phase: &mut impl LePhase<'p, P, (), Caps = C, Fault = F>,
-    ) -> Result<(), Fault> {
+    /// Validate durable state before the runtime waits for an event.
+    pub fn completion(&self) -> Result<Admitted, Fault> {
         if self.faulted {
             return Err(Fault::Poisoned);
         }
-        let receipt = self
-            .pending
+        self.pending
             .as_ref()
             .and_then(|p| p.admitted)
-            .ok_or(Fault::NoCommand)?;
-        let event = match phase.next_event().await {
+            .ok_or(Fault::NoCommand)
+    }
+
+    /// Apply an already received terminal or stream failure without doing IO.
+    pub fn complete_with<F>(
+        &mut self,
+        event: Result<
+            Result<Event<'p, P, ()>, oer_radio_port::EventsLost>,
+            oer_radio_port::EventEnd<F>,
+        >,
+    ) -> Result<(), Fault> {
+        let receipt = self.completion()?;
+        let event = match event {
             Ok(Ok(Event::Terminal(terminal))) => terminal,
             _ => {
                 self.faulted = true;

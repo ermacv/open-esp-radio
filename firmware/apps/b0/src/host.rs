@@ -10,15 +10,16 @@ use oer_bluetooth_hci::{
     HciControllerResponse,
     bt_hci::{
         PacketKind,
-        cmd::{Cmd, Opcode, OpcodeGroup, le::LeRand},
+        cmd::{Opcode, OpcodeGroup},
     },
 };
-use oer_bluetooth_le_controller::dtm::{self, Accepted, Entropy};
+use oer_bluetooth_le_controller::dtm::{self, Entropy};
 use oer_bluetooth_le_port::TxPower;
+use oer_bluetooth_le_runtime::host::{self, Disposition, Transport};
 use oer_esp32s31_bluetooth_driver::port::{DtmCaps, Fault};
 use oer_firmware_apps_b0::{
     h4::Commands,
-    rx::{self, Inbox, Received},
+    rx::{self, Inbox},
     tx,
 };
 use oer_radio_port as rp;
@@ -44,8 +45,10 @@ struct Io {
     commands: Commands,
     entropy: RandomValue,
 }
-impl Io {
-    async fn receive(&mut self) -> Result<Received, Fault> {
+impl Transport for Io {
+    type Error = Fault;
+    type Entropy = RandomValue;
+    async fn receive(&mut self) -> Result<host::Received, Fault> {
         rx::receive(
             &mut self.console,
             &mut self.inbox,
@@ -53,7 +56,17 @@ impl Io {
             &EmbassyClock,
         )
         .await
+        .map(|received| match received {
+            rx::Received::Command => host::Received::Command,
+            rx::Received::Framing => host::Received::Framing,
+        })
         .map_err(|_| Fault::Hardware)
+    }
+    fn command(&mut self) -> Result<(oer_bluetooth_hci::HciCommandPacket<'_>, &mut RandomValue), Fault> {
+        Ok((self.commands.packet().map_err(|_| Fault::Hardware)?, &mut self.entropy))
+    }
+    fn consume(&mut self) -> Result<(), Fault> {
+        self.commands.consume().map_err(|_| Fault::Accounting)
     }
     async fn entropy(&mut self) -> Result<(), Fault> {
         self.entropy.0 = None;
@@ -77,17 +90,13 @@ impl Io {
             .map_err(|_| Fault::Hardware)
     }
 }
-enum Disposition {
-    Reset(Reset),
-    Stop,
-}
 struct Body<'a> {
     io: &'a mut Io,
     reset: Option<Reset>,
     power: TxPower,
 }
 impl rp::PortBody<Id, Backend> for Body<'_> {
-    type Output = Result<Disposition, Fault>;
+    type Output = Result<Disposition<rp::Root<Id>>, Fault>;
     async fn run<'a, 'p>(
         self,
         owner: rp::Owner<'a, 'p, Id, Backend, rp::Disabled>,
@@ -112,76 +121,14 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
         };
         let mut service =
             dtm::Service::<_, DtmCaps>::new(resources.session, seat, Some(self.power));
-        let outcome = async {
-            if let Some(response) = reset {
-                self.io.send(&response).await?;
-            }
-            loop {
-                if matches!(self.io.receive().await?, Received::Framing) {
-                    self.io.send(&HardwareError([0x10, 1, 0xff])).await?;
-                    continue;
-                }
-                let (stop, random) = {
-                    let packet = self.io.commands.packet().map_err(|_| Fault::Hardware)?;
-                    (
-                        packet.opcode() == STOP && packet.parameters().is_empty(),
-                        packet.opcode() == LeRand::OPCODE && packet.parameters().is_empty(),
-                    )
-                };
-                if stop {
-                    self.io.commands.consume().map_err(|_| Fault::Accounting)?;
-                    return Ok(Disposition::Stop);
-                }
-                if random {
-                    match owner.now().await {
-                        Ok(Ok(_)) => {}
-                        Err(poisoned) => return Err(poisoned.cause),
-                        Ok(Err(_)) => return Err(Fault::ClockBusy),
-                    }
-                    self.io.entropy().await?;
-                }
-                let accepted = service
-                    .accept(
-                        self.io.commands.packet().map_err(|_| Fault::Hardware)?,
-                        &mut self.io.entropy,
-                    )
-                    .map_err(|_| Fault::Accounting)?;
-                self.io.commands.consume().map_err(|_| Fault::Accounting)?;
-                match accepted {
-                    Accepted::Reset(reset) => return Ok(Disposition::Reset(reset)),
-                    Accepted::Response => {}
-                    Accepted::Port => {
-                        let submitted = {
-                            let phase = owner.phase();
-                            service.submit(&*phase).await.map_err(|error| match error {
-                                dtm::SubmitError::Backend(poisoned) => poisoned.cause,
-                                dtm::SubmitError::Poisoned
-                                | dtm::SubmitError::Receipt
-                                | dtm::SubmitError::InvalidState { .. } => Fault::Accounting,
-                            })?
-                        };
-                        if submitted == dtm::Submitted::AwaitTerminal {
-                            // Exercise the independent physical latch before
-                            // removing this command's mandatory terminal.
-                            match owner.now().await {
-                                Ok(Ok(_)) => {}
-                                Err(poisoned) => return Err(poisoned.cause),
-                                Ok(Err(_)) => return Err(Fault::ClockBusy),
-                            }
-                            let mut phase = owner.phase();
-                            service
-                                .complete(&mut *phase)
-                                .await
-                                .map_err(|_| Fault::Hardware)?;
-                        }
-                    }
-                }
-                let response = service.response().ok_or(Fault::Accounting)?;
-                self.io.send(response).await?;
-                let _ = service.take_response();
-            }
-        }
-        .await;
+        let outcome = host::serve(&mut owner, &mut service, self.io, reset, STOP)
+            .await
+            .map_err(|error| match error {
+                host::Error::Transport(fault) | host::Error::Backend(fault) => fault,
+                host::Error::ClockBusy => Fault::ClockBusy,
+                host::Error::Accounting => Fault::Accounting,
+                host::Error::Terminal(_) => Fault::Hardware,
+            });
         match outcome {
             Ok(disposition) => {
                 let mut sink = |_| ControlFlow::Continue(());
