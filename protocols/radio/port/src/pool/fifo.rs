@@ -1,28 +1,12 @@
-#![no_std]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![deny(
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
-
 //! An allocation-free, first-in, first-out pool of a radio port install's
-//! permits ([`oer_radio_port::PermitPool`]).
+//! permits ([`PermitPool`]).
 //!
 //! A backend keeps a [`FifoPermitPool`] in its held part of the install
 //! (`PortBackend::Held`) and fills it with permits its `resources` mint
-//! ([`Permits`](oer_radio_port::Permits)), so every permit in
+//! ([`Permits`](crate::Permits)), so every permit in
 //! it is real capacity of that install. Its line holds a place for each
 //! seat of its kind: the backend mints them with the pool's [`Line`]
-//! ([`Permits`](oer_radio_port::Permits)) and hands each taker its
+//! ([`Permits`](crate::Permits)) and hands each taker its
 //! seat. Takers wait in arrival order, never refused:
 //!
 //! - a taker takes its seat's place in the line at its first poll, and is
@@ -56,7 +40,7 @@
 //! holds a place for exactly the seats minted with it:
 //!
 //! ```compile_fail
-//! # use oer_radio_permit_pool::FifoPermitPool;
+//! # use oer_radio_port::FifoPermitPool;
 //! # use oer_radio_port::{Line, PermitSupply};
 //! fn mix<'a, 'b, K>(supply: PermitSupply<'a, K, 1>, line: Line<'b, K, 2>) -> FifoPermitPool<'b, K, 1, 2> {
 //!     FifoPermitPool::new(supply, line)
@@ -64,7 +48,7 @@
 //! ```
 //!
 //! ```compile_fail,E0308
-//! # use oer_radio_permit_pool::FifoPermitPool;
+//! # use oer_radio_port::FifoPermitPool;
 //! # use oer_radio_port::{Line, PermitSupply};
 //! fn short<'id, K>(supply: PermitSupply<'id, K, 1>, line: Line<'id, K, 2>) -> FifoPermitPool<'id, K, 1, 1> {
 //!     FifoPermitPool::new(supply, line)
@@ -75,7 +59,7 @@
 //! line of its seats:
 //!
 //! ```
-//! # use oer_radio_permit_pool::FifoPermitPool;
+//! # use oer_radio_port::FifoPermitPool;
 //! # use oer_radio_port::{Line, PermitSupply};
 //! fn fill<'id, K>(supply: PermitSupply<'id, K, 1>, line: Line<'id, K, 2>) -> FifoPermitPool<'id, K, 1, 2> {
 //!     FifoPermitPool::new(supply, line)
@@ -85,7 +69,7 @@
 //! The pool is not `Sync`, so no other task shares it:
 //!
 //! ```compile_fail,E0277
-//! # use oer_radio_permit_pool::FifoPermitPool;
+//! # use oer_radio_port::FifoPermitPool;
 //! fn shared<T: Sync>() {}
 //! fn check<'id, K>() {
 //!     shared::<FifoPermitPool<'id, K, 1, 2>>();
@@ -93,7 +77,7 @@
 //! ```
 //!
 //! ```
-//! # use oer_radio_permit_pool::FifoPermitPool;
+//! # use oer_radio_port::FifoPermitPool;
 //! fn owned<T>() {}
 //! fn check<'id, K>() {
 //!     owned::<FifoPermitPool<'id, K, 1, 2>>();
@@ -103,10 +87,12 @@
 use core::{
     cell::Cell,
     future::{Future, poll_fn},
+    pin::Pin,
     task::{Context, Poll, Waker},
 };
 
-use oer_radio_port::{Line, Permit, PermitPool, PermitSupply, PoolPath, Root, Seat};
+use super::{BodyLoan, Line, Permit, PermitPool, PermitSupply, PoolPath, Root, Seat};
+use crate::{LocalId, SlotOwner};
 
 /// A first-in, first-out pool of `PERMITS` permits of one install,
 /// counting for `K`, with a line of a place for each of its `SEATS` seats.
@@ -115,7 +101,7 @@ pub struct FifoPermitPool<
     K,
     const PERMITS: usize,
     const SEATS: usize,
-    Pool: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Pool: PoolPath = Root<LocalId<'id>>,
     Waiters: PoolPath = Pool,
 > {
     /// The permits not held, at most `PERMITS`.
@@ -159,12 +145,12 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
     FifoPermitPool<'id, K, PERMITS, SEATS, Pool, Waiters>
 {
     /// A pool of `permits`, every one free, whose line holds a place for
-    /// each seat [`Permits`](oer_radio_port::Permits) made with
+    /// each seat [`Permits`](crate::Permits) made with
     /// `line`. A line with seats requires at least one permit: a zero-capacity
     /// waiter would have no operation whose terminal could ever wake it.
     ///
     /// ```compile_fail,E0080
-    /// use oer_radio_permit_pool::FifoPermitPool;
+    /// use oer_radio_port::FifoPermitPool;
     /// use oer_radio_port::{Mint, Permits};
     /// fn build(mint: Mint<'static, Permits<(), 0, 1>>) {
     ///     let tokens = mint.into_pools();
@@ -174,7 +160,7 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
     /// ```
     ///
     /// ```
-    /// use oer_radio_permit_pool::FifoPermitPool;
+    /// use oer_radio_port::FifoPermitPool;
     /// use oer_radio_port::{Mint, Permits};
     /// fn build(mint: Mint<'static, Permits<(), 1, 1>>) {
     ///     let tokens = mint.into_pools();
@@ -246,11 +232,11 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
         }
     }
 
-    /// Give up this line's seat, held with `ticket`.
-    fn leave(&self, seat: &Seat<'id, K, Waiters>, ticket: u32) {
+    /// Give up the place of the seat numbered `seat`, held with `ticket`.
+    fn leave(&self, seat: u8, ticket: u32) {
         let led = self.leader() == Some(ticket);
         // Line's sealed waiter path proves exactly one matching slot exists.
-        for slot in self.line.iter().skip(usize::from(seat.index())).take(1) {
+        for slot in self.line.iter().skip(usize::from(seat)).take(1) {
             if slot.ticket.get() == Some(ticket) {
                 slot.ticket.set(None);
                 drop(slot.waker.take());
@@ -261,11 +247,12 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
         }
     }
 
-    /// One poll of this line's taker, holding `ticket`, or none yet.
+    /// One poll of the taker on the seat numbered `seat`, holding `ticket`,
+    /// or none yet.
     fn poll_take(
         &self,
         context: &mut Context<'_>,
-        seat: &Seat<'id, K, Waiters>,
+        seat: u8,
         ticket: &mut Option<u32>,
     ) -> Poll<Permit<'id, K, Pool>> {
         let waker = context.waker().clone();
@@ -281,7 +268,7 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
         for (slot, waker) in self
             .line
             .iter()
-            .skip(usize::from(seat.index()))
+            .skip(usize::from(seat))
             .zip(core::iter::once(waker))
         {
             let held = slot.ticket.replace(Some(mine));
@@ -307,40 +294,12 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
         self.leave(seat, mine);
         Poll::Ready(permit)
     }
-}
 
-/// A taker's place in a [`FifoPermitPool`]'s line, given up when its future
-/// drops before it is served.
-struct Place<
-    'p,
-    'id,
-    K,
-    const PERMITS: usize,
-    const SEATS: usize,
-    Pool: PoolPath,
-    Waiters: PoolPath,
-> {
-    pool: &'p FifoPermitPool<'id, K, PERMITS, SEATS, Pool, Waiters>,
-    seat: &'p mut Seat<'id, K, Waiters>,
-    ticket: Option<u32>,
-}
-
-impl<K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: PoolPath> Drop
-    for Place<'_, '_, K, PERMITS, SEATS, Pool, Waiters>
-{
-    fn drop(&mut self) {
-        if let Some(ticket) = self.ticket.take() {
-            self.pool.leave(self.seat, ticket);
-        }
-    }
-}
-
-impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: PoolPath>
-    PermitPool<'id, K, Pool, Waiters> for FifoPermitPool<'id, K, PERMITS, SEATS, Pool, Waiters>
-{
-    fn take<'a>(
+    /// The take of `seat`, whose brand `'s` is this pool's own or a body
+    /// loan of it.
+    fn taking<'a, 's>(
         &'a self,
-        seat: &'a mut Seat<'id, K, Waiters>,
+        seat: &'a mut Seat<'s, K, Waiters>,
     ) -> impl Future<Output = Permit<'id, K, Pool>> + 'a {
         // The line's nominal path admits only its own seats. `Permits`
         // numbers every seat below SEATS, so this index is in bounds.
@@ -354,8 +313,70 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
             // whole place moves into the future, so dropping the future
             // drops it.
             let place = &mut place;
-            self.poll_take(context, place.seat, &mut place.ticket)
+            self.poll_take(context, place.seat.index(), &mut place.ticket)
         })
+    }
+}
+
+impl<K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: PoolPath>
+    FifoPermitPool<'static, K, PERMITS, SEATS, Pool, Waiters>
+{
+    /// Take a permit with a seat of a body loan `'p` of this owned pool,
+    /// in the same arrival order as [`PermitPool::take`], and lend the
+    /// served permit with that loan. A backend that keeps the pool in owned
+    /// state serves its body's takers through it and returns their permits
+    /// through [`BodyLoan::reclaim_permit`] and [`PermitPool::release`].
+    pub fn take_loaned<'a, 'p, S: SlotOwner<Pool::Identity>>(
+        &'a self,
+        seat: &'a mut Seat<'p, K, Waiters>,
+        loan: BodyLoan<'p, Pool::Identity, S>,
+    ) -> impl Future<Output = Permit<'p, K, Pool>>
+    where
+        Waiters: PoolPath<Identity = Pool::Identity>,
+    {
+        let mut taking = self.taking(seat);
+        poll_fn(move |context| {
+            Pin::new(&mut taking)
+                .poll(context)
+                .map(|permit| loan.lend_permit(permit))
+        })
+    }
+}
+/// A taker's place in a [`FifoPermitPool`]'s line, given up when its future
+/// drops before it is served.
+struct Place<
+    'p,
+    'id,
+    's,
+    K,
+    const PERMITS: usize,
+    const SEATS: usize,
+    Pool: PoolPath,
+    Waiters: PoolPath,
+> {
+    pool: &'p FifoPermitPool<'id, K, PERMITS, SEATS, Pool, Waiters>,
+    seat: &'p mut Seat<'s, K, Waiters>,
+    ticket: Option<u32>,
+}
+
+impl<K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: PoolPath> Drop
+    for Place<'_, '_, '_, K, PERMITS, SEATS, Pool, Waiters>
+{
+    fn drop(&mut self) {
+        if let Some(ticket) = self.ticket.take() {
+            self.pool.leave(self.seat.index(), ticket);
+        }
+    }
+}
+
+impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: PoolPath>
+    PermitPool<'id, K, Pool, Waiters> for FifoPermitPool<'id, K, PERMITS, SEATS, Pool, Waiters>
+{
+    fn take<'a>(
+        &'a self,
+        seat: &'a mut Seat<'id, K, Waiters>,
+    ) -> impl Future<Output = Permit<'id, K, Pool>> + 'a {
+        self.taking(seat)
     }
 
     fn release(&self, permit: Permit<'id, K, Pool>) {

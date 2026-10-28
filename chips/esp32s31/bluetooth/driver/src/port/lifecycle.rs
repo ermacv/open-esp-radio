@@ -34,14 +34,13 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
         Id: 's;
     fn prepare_queues(&mut self, q: &mut Self::Queues, mint: Mint<'static, Self::Pools, Id>) {
         let (capacity, [session]) = mint.into_pools();
-        let [credit] = capacity.supply.into_permits();
         let d = self
             .device
             .as_mut()
             .expect("initial device retained until retirement");
         q.shared = Shared::new();
         q.resources = Some((capacity.seats, OwnedSession::new(session, d.epoch())));
-        q.credits = Some(Pool::new(credit));
+        q.credits = Some(FifoPermitPool::new(capacity.supply, capacity.line));
         q.outstanding.set(None);
         q.timer = Some(d.timer());
         q.clock = Some(d.clock());

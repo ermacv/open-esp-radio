@@ -45,7 +45,6 @@ extern crate alloc;
 extern crate std;
 
 mod air;
-mod capacity;
 /// Executable reference fixture for the portable suite.
 #[cfg(feature = "test-support")]
 pub mod conformance;

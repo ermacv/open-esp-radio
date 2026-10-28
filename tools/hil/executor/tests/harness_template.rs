@@ -27,7 +27,9 @@ use oer_hil_model::{
     Composition, Conformance, ContractName, Estimate, Factor, Instance, Resources, ScenarioId,
     Spec, StandProfile, Subject, TargetCapabilities, Verdict, Wait, WaitError, name,
 };
-use oer_hil_protocol::trace_header::{Clock, ClockDomain, Restart, RunHeaderError, TraceHeader, check_run};
+use oer_hil_protocol::trace_header::{
+    Clock, ClockDomain, Restart, RunHeaderError, TraceHeader, check_run,
+};
 use port::{BoundField, Bounds, CEILINGS, Case, S31_BOUNDS, Trace, Violation, verify};
 use serde::{Deserialize, Serialize};
 

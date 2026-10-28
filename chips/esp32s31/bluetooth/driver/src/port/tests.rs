@@ -377,11 +377,13 @@ fn cancelled_fifo_leader_does_not_block_the_next_original_seat() {
             .ok()
             .expect("fresh capacity fixture");
         let p = front.ports();
+        let (mut seats, session) = p.resources.take().expect("unlent resources");
         let pool = &*p.credits;
-        let first = pool.take(0).await;
+        let [s0, s1, s2] = &mut seats;
+        let first = pool.take(s0).await;
         {
-            let mut cancelled = std::boxed::Box::pin(pool.take(1));
-            let mut next = std::boxed::Box::pin(pool.take(2));
+            let mut cancelled = std::boxed::Box::pin(pool.take(s1));
+            let mut next = std::boxed::Box::pin(pool.take(s2));
             let mut cx = Context::from_waker(Waker::noop());
             assert!(cancelled.as_mut().poll(&mut cx).is_pending());
             assert!(next.as_mut().poll(&mut cx).is_pending());
@@ -392,8 +394,11 @@ fn cancelled_fifo_leader_does_not_block_the_next_original_seat() {
             };
             pool.release(credit);
         }
-        let returned = pool.take(1).await;
+        let returned = pool.take(s1).await;
         pool.release(returned);
+        // The production credit pool meets the shared permit pool rule.
+        oer_radio_port::conformance::permits_serve_takers_in_arrival_order(pool, &mut seats, []);
+        *p.resources = Some((seats, session));
         drop(front);
         drop(registration);
         slot.end_model_world();

@@ -27,18 +27,25 @@ use core::{
 /// none of them. A seat outlives each take it lends itself to: once served,
 /// and once its take was dropped, it waits again. `held` are the other
 /// permits, taken by the caller, at most eight; the seats stay with the
-/// caller.
+/// caller. The pool's permit and waiter paths are its own; a backend runs
+/// the rule over its production pool type.
 ///
 /// # Panics
 ///
 /// The pool serves a later taker first, or none at all.
-pub fn permits_serve_takers_in_arrival_order<'id, K, P: crate::PermitPool<'id, K>>(
+pub fn permits_serve_takers_in_arrival_order<
+    'id,
+    K,
+    Pool: crate::PoolPath,
+    Waiters: crate::PoolPath,
+    P: crate::PermitPool<'id, K, Pool, Waiters>,
+>(
     pool: &P,
-    seats: &mut [crate::Seat<'id, K>; 3],
-    held: impl IntoIterator<Item = crate::Permit<'id, K>>,
+    seats: &mut [crate::Seat<'id, K, Waiters>; 3],
+    held: impl IntoIterator<Item = crate::Permit<'id, K, Pool>>,
 ) {
     let mut context = Context::from_waker(Waker::noop());
-    let held: alloc_free::Held<'id, K> = alloc_free::Held::new(held);
+    let held: alloc_free::Held<'id, K, Pool> = alloc_free::Held::new(held);
     // The earliest taker sits on the last seat, so arrival order is not the
     // seats' order.
     let [later, latest, early] = seats;
@@ -103,12 +110,12 @@ mod alloc_free {
     /// At most this many permits held aside.
     const HELD: usize = 8;
 
-    pub struct Held<'id, K> {
-        permits: [Option<crate::Permit<'id, K>>; HELD],
+    pub struct Held<'id, K, Pool: crate::PoolPath> {
+        permits: [Option<crate::Permit<'id, K, Pool>>; HELD],
     }
 
-    impl<'id, K> Held<'id, K> {
-        pub fn new(held: impl IntoIterator<Item = crate::Permit<'id, K>>) -> Self {
+    impl<'id, K, Pool: crate::PoolPath> Held<'id, K, Pool> {
+        pub fn new(held: impl IntoIterator<Item = crate::Permit<'id, K, Pool>>) -> Self {
             let mut permits = [const { None }; HELD];
             let mut held = held.into_iter();
             for place in &mut permits {
@@ -121,7 +128,13 @@ mod alloc_free {
             Self { permits }
         }
 
-        pub fn release_into<P: crate::PermitPool<'id, K>>(self, pool: &P) {
+        pub fn release_into<
+            Waiters: crate::PoolPath,
+            P: crate::PermitPool<'id, K, Pool, Waiters>,
+        >(
+            self,
+            pool: &P,
+        ) {
             for permit in self.permits.into_iter().flatten() {
                 pool.release(permit);
             }

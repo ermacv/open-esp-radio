@@ -10,6 +10,7 @@ capacity tokens, errors and clock relations shared by radio ports.
 | `Joined`, `SlotStopped`, `SlotQuarantined` | Ordinary reuse authority, a registration-specific P2 stop proof and a quarantine response without extraction or reuse |
 | `SlotIdentity`, `LocalId`, `StaticId`, `Root<Id>` | Closed invariant identities independent of body loans. A type alone grants neither placement nor reuse authority |
 | `Mint`, `PoolSet`, `PoolPath`, `Slots`, `Permits`, `Slot`, `Permit`, `PermitSupply`, `Seat`, `Line` | Complete affine capacity issuance and component paths. No capacity token is Clone, Copy or Default |
+| `FifoPermitPool` | The allocation-free first-in, first-out `PermitPool` every backend keeps ([FIFO permit pool](#fifo-permit-pool)) |
 | `PortResult`, `Poisoned` | Commands and clock calls return `Result<Result<T, Refusal>, Poisoned<Fault>>`. The inner `Err` is a typed refusal (nothing changed); the outer one carries the backend's cause, which portable code passes on without interpreting it |
 | `EventEnd<Fault>` | `next_event` alone returns `Result<Result<Event, EventsLost>, EventEnd<Fault>>`. `Drained { cause }` promises that every terminal of admitted work was delivered. A missing terminal violates the contract and can be detected by the body. `Quarantined { cause }` leaves undelivered owners in the slot's permanent quarantine. The end contains only its cause, no owners or affine proofs, and every subsequent call returns the same variant and cause |
 | `EventsLost` | Events were dropped. Reported once, in place of the first dropped event; events before it precede the gap and events after it follow it. A backend reserves at admission the slot of every terminal event and of data its protocol promises to deliver (acknowledged Bluetooth LE connection data), so the gap holds only data the protocol does not promise (received frames, advertising reports) and the consumer continues |
@@ -20,8 +21,53 @@ capacity tokens, errors and clock relations shared by radio ports.
 
 The `conformance` module (the `test-support` feature) holds the rule every
 permit pool meets, `permits_serve_takers_in_arrival_order`: its pool's
-owner (a backend's held part, a runtime) calls it with the pool, three
-seats of its line and at most eight permits it holds aside.
+owner (a backend's held part) calls it with the pool, three seats of its
+line and at most eight permits it holds aside, over the pool's own permit
+and waiter paths.
+
+## FIFO permit pool
+
+`pool::FifoPermitPool<'id, K, PERMITS, SEATS, Pool, Waiters>` consumes the
+indivisible `PermitSupply` of one component of the installation layout and
+serves its takers first in, first out. Its line holds a place for each of the
+`SEATS` seats `Permits` made with the `Line<'id, K, SEATS, Waiters>` the pool
+is built with, and each taker waits with its own seat. A backend keeps it in
+its held part of the install, so the permits of submitted work come back to it
+before their terminal events are handed out. A backend that keeps the pool in
+owned `'static` state serves its body's loaned seats with `take_loaned`, which
+lends the served permit with the same `BodyLoan`.
+
+A line with any seats requires nonzero permit capacity, checked when its
+constructor is instantiated. Zero permits and zero seats remain a valid empty
+component. A zero-capacity line with live waiters cannot promise progress from
+any terminal, so it cannot be built.
+
+- A taker takes its seat's place in the line at its first poll and is served
+  once it leads and a permit is free. A taker whose future drops gives up its
+  place, and its seat stays with it.
+- A released permit wakes the leader. A served taker that leaves a permit free
+  wakes the next leader.
+- Each permit returns to its own numbered place. The indivisible supply and
+  its sealed component path prove both the index bound and that no other
+  outstanding permit occupies that place; returning capacity needs no search
+  for an empty slot.
+- The line has a place for every seat, so it is never full and arrival order
+  holds for every taker. A `Line` is a copyable receipt: several pools whose
+  takers are the same seats (one per transmit queue) each take it. Their
+  permit paths stay distinct while the shared waiter path identifies those
+  seats. A take that leaked without its drop (`mem::forget`) loses its place
+  to its seat's next take.
+- Permits and waiter state live in separate `Cell` slots. A waiter's ticket
+  stays visible while its waker callback runs; callbacks run without a queue
+  borrow, and a newer waker or a departed ticket takes precedence over
+  restoring the callback's old waker. Internal memory layout is not a
+  fixed-size contract.
+- The pool is `!Sync`. It lives in the port body's task, and nothing outside
+  that task reaches it.
+
+Its tests run the shared rule on a pool of one permit and on a pool with a
+permit held aside, and check arrival order across every seat, a dropped and a
+leaked take, and the wakes of the leader and the next leader.
 
 ## Component authority and cost
 
@@ -47,7 +93,7 @@ occupy no runtime storage and use no registry or claim latch.
 | Wi-Fi | Gate and issuer, TX and Block Ack tickets, buffer/key pools, station connection source and its contexts | Zero additional bytes; indices remain `u8`, the epoch remains a `u64` | The phase accepts its associated gate path; terminals retain the submitted slots and connection context |
 | Bluetooth LE | The backend's declared layout; the port test backend has a standalone slot component, production layouts without pools use `()` | Empty layout and Mint remain zero sized | Consuming issuance introduces no waits or cancellation state |
 | IEEE 802.15.4 | Nested interface/configuration/pending-table paths and the separate radio-operation path | Zero additional bytes; each slot/permit/seat remains one byte | Configured and pending-entry owners retain their slot; operation guards release only to their source pool |
-| FIFO runtime | Independent permit and waiter paths; opaque initial supply | No registry, allocation or new synchronization; line receipt remains zero sized | The whole supply constructs one pool; cancelled takes release their queue place and keep the borrowed seat |
+| FIFO pool | Independent permit and waiter paths; opaque initial supply | No registry, allocation or new synchronization; line receipt remains zero sized | The whole supply constructs one pool; cancelled takes release their queue place and keep the borrowed seat |
 
 Contract misuses and their positive twins live in `tests/ui/` and the
 consumers' corresponding directories; each misuse must fail to compile on

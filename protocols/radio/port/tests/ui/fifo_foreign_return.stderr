@@ -1,5 +1,5 @@
 error[E0308]: mismatched types
-  --> tests/ui/foreign_return.rs:14:15
+  --> tests/ui/fifo_foreign_return.rs:14:15
    |
 14 |     a.release(permit); // ui-error: E0308
    |       ------- ^^^^^^ expected `0`, found `1`
@@ -9,7 +9,7 @@ error[E0308]: mismatched types
    = note: expected struct `Permit<'_, Kind, oer_radio_port::Child<Root<LocalId<'id>>, 0>>`
               found struct `Permit<'id, Kind, oer_radio_port::Child<Root<LocalId<'id>>, 1>>`
 note: method defined here
-  --> $WORKSPACE/protocols/radio/port/src/pool.rs
+  --> src/pool.rs
    |
    |     fn release(&self, permit: Permit<'id, Kind, Pool>);
    |        ^^^^^^^

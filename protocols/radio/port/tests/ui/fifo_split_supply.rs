@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_permit_pool::FifoPermitPool;
+use oer_radio_port::FifoPermitPool;
 use oer_radio_port::{Mint, Permits};
 
 pub enum Kind {}

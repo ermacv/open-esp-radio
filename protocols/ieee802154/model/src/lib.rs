@@ -30,8 +30,8 @@
 //! [`run_port`](oer_radio_port::run_port), and a [`ModelHandle`] that plays
 //! the air and the world: it ends operations and receive windows, delivers
 //! received frames, refuses the next enable or poisons the backend. Its held
-//! part of the install keeps the operation permit in a [`ModelPermitPool`],
-//! a first-in, first-out pool, and the body's resources give each
+//! part of the install keeps the operation permit in a
+//! [`FifoPermitPool`](oer_radio_port::FifoPermitPool), and the body's resources give each
 //! interface its seat in the pool's line.
 //!
 //! Its tokens have no value outside it: no caller mints a configured
@@ -58,13 +58,13 @@ use oer_radio_port::{
     PortBackend, PortPhase, SlotBodyOwner, SlotIdentity, SlotOwner, SlotRetire, SlotStopped,
     SlotWakes,
 };
-use oer_radio_port::{Child, EventsLost, Mint, Poisoned, PortResult, Root, Seat, Slot};
+use oer_radio_port::{
+    Child, EventsLost, FifoPermitPool, Mint, Poisoned, PortResult, Root, Seat, Slot,
+};
 
 use oer_ieee802154_wire::{Channel, Frame, FrameError};
 
-mod capacity;
 mod storage;
-pub use capacity::ModelPermitPool;
 use storage::Local;
 
 use oer_ieee802154_port::{
@@ -86,6 +86,11 @@ use oer_ieee802154_port::{
 
 /// Interfaces of the model: two PANs.
 pub const MODEL_INTERFACES: usize = 2;
+
+/// The FIFO pool of the radio's one operation permit, with a seat per
+/// interface.
+type OperationPool<Id> =
+    FifoPermitPool<'static, Operation, 1, MODEL_INTERFACES, Child<Root<Id>, 2>>;
 /// Pending-table slots of each address size and interface.
 pub const MODEL_PENDING_SLOTS: usize = 2;
 /// Received frames the model queues before it reports a loss.
@@ -628,17 +633,13 @@ impl<Id: SlotIdentity> OwnedModel<Id> {
 
 /// The model's held part of the install: the operation permit.
 pub struct ModelHeld<Id: SlotIdentity> {
-    permits: OperationPermits<
-        'static,
-        ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
-        Child<Root<Id>, 2>,
-    >,
+    permits: OperationPermits<'static, OperationPool<Id>, Child<Root<Id>, 2>>,
 }
 
 type LentPermits<'p, Id> = oer_ieee802154_port::owner::LentWorkPermits<
     'p,
     Operation,
-    ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+    OperationPool<Id>,
     Child<Root<Id>, 2>,
     OwnedModel<Id>,
 >;
@@ -914,7 +915,7 @@ impl<Id: SlotIdentity> Ieee802154Events for ModelEvents<'_, '_, Id> {
 pub struct ModelClients<'a, 'id, Id: SlotIdentity> {
     shared: &'a Shared,
     held: &'a LentPermits<'id, Id>,
-    pool: &'a ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+    pool: &'a OperationPool<Id>,
     loan: BodyLoan<'id, Id, OwnedModel<Id>>,
 }
 
@@ -968,7 +969,7 @@ pub struct ModelExtendedEntry<'id, Id: SlotIdentity, const I: u8> {
 pub struct ModelClient<'c, 'id, Id: SlotIdentity, const I: u8> {
     shared: &'c Shared,
     held: &'c LentPermits<'id, Id>,
-    pool: &'c ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+    pool: &'c OperationPool<Id>,
     loan: BodyLoan<'id, Id, OwnedModel<Id>>,
 }
 
@@ -1300,7 +1301,7 @@ pub struct ModelFrontendRaw<'s, Id: SlotIdentity> {
 pub struct ModelFrontend<'p, Id: SlotIdentity> {
     shared: Shared,
     held: LentPermits<'p, Id>,
-    pool: &'p ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+    pool: &'p OperationPool<Id>,
     loan: BodyLoan<'p, Id, OwnedModel<Id>>,
     end: Option<oer_radio_port::EventEnd<ModelFault>>,
 }
@@ -1335,8 +1336,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
             state.lost = false;
         });
         let (interface0, interface1, work) = mint.into_pools();
-        let (permits, operation) =
-            OperationPermits::new(work, |supply, _| ModelPermitPool::new(supply));
+        let (permits, operation) = OperationPermits::new(work, FifoPermitPool::new);
         *backing = Some(ModelQueues {
             shared: self.shared.clone(),
             held: ModelHeld { permits },

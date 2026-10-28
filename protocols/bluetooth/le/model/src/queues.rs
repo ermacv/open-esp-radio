@@ -11,7 +11,8 @@ use oer_bluetooth_le_port::{
     *,
 };
 use oer_radio_port::{
-    BodyLoan, Child, Correlation, Permit, PortContext, PortPhase, Root, Seat, SlotIdentity,
+    BodyLoan, Child, Correlation, FifoPermitPool, Permit, PermitPool, PortContext, PortPhase, Root,
+    Seat, SlotIdentity,
 };
 use oer_time::Instant;
 
@@ -19,7 +20,9 @@ pub(crate) const CAPACITY: usize = 2;
 pub(crate) const SEATS: usize = 3;
 type Path<Id> = Root<Id>;
 type Capacity<Id> = Permit<'static, CommandCapacity, Child<Path<Id>, 0>>;
-use super::capacity::Pool;
+/// The FIFO pool of command capacity and its line of body seats.
+pub(crate) type Pool<Id> =
+    FifoPermitPool<'static, CommandCapacity, CAPACITY, SEATS, Child<Path<Id>, 0>>;
 type Retained<Id> = (OwnedCommand<Path<Id>, ModelCaps>, Capacity<Id>);
 pub(crate) type Work<Id, X> = OwnedRequest<Path<Id>, X, ModelCaps>;
 
@@ -86,7 +89,8 @@ pub(crate) struct Attachment {
 pub(crate) struct Shared<Id: SlotIdentity, X> {
     pub attachment: Option<Attachment>,
     pub epoch: u64,
-    pub pool: Pool<Id>,
+    /// Present once the queues are prepared; a body view borrows it.
+    pub pool: Option<Pool<Id>>,
     pub pending: Local<VecDeque<(Work<Id, X>, Instant)>>,
     pub events: Local<VecDeque<OwnedEvent<Id, X>>>,
     pub quarantine: Local<Vec<Retained<Id>>>,
@@ -104,7 +108,7 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
         Self {
             attachment: None,
             epoch: 0,
-            pool: Pool::vacant(),
+            pool: None,
             pending: Local::new(VecDeque::new()),
             events: Local::new(VecDeque::new()),
             quarantine: Local::new(Vec::new()),
@@ -287,16 +291,16 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
         self.wake_body();
         self.wake_driver();
     }
-    pub fn delivered(&self, id: LeOperationId, capacity: Option<Capacity<Id>>) {
+    pub fn delivered(&self, pool: &Pool<Id>, id: LeOperationId, capacity: Option<Capacity<Id>>) {
         if let Some(capacity) = capacity {
-            self.pool.release(capacity);
+            pool.release(capacity);
         }
         self.outstanding
             .with(|outstanding| outstanding.retain(|held| *held != id));
     }
-    pub fn pop(&self) -> Option<OwnedEvent<Id, X>> {
+    pub fn pop(&self, pool: &Pool<Id>) -> Option<OwnedEvent<Id, X>> {
         let mut event = self.events.with(VecDeque::pop_front)?;
-        self.delivered(event.admitted.id, event.capacity.take());
+        self.delivered(pool, event.admitted.id, event.capacity.take());
         Some(event)
     }
 }
@@ -340,12 +344,10 @@ impl<'p, Id: SlotIdentity, X> LePhase<'p, Path<Id>, X> for ModelPhase<'_, 'p, Id
         'p: 'a,
     {
         // Borrowing the typed seat keeps its unique index occupied on P1.
-        let capacity = self.view.shared.pool.take(seat.index()).await;
-        self.view.loan.lend_permit(capacity)
+        self.view.pool.take_loaned(seat, self.view.loan).await
     }
     fn release(&self, capacity: Permit<'p, CommandCapacity, Child<Path<Id>, 0>>) {
         self.view
-            .shared
             .pool
             .release(self.view.loan.reclaim_permit(capacity));
     }
@@ -407,7 +409,7 @@ impl<'p, Id: SlotIdentity, X> PortPhase for ModelPhase<'_, 'p, Id, X> {
         let _wait = BodyWait(q);
         poll_fn(|cx| {
             q.body.register(cx.waker());
-            if let Some(event) = q.pop() {
+            if let Some(event) = q.pop(self.view.pool) {
                 return Poll::Ready(Ok(Ok(Event::Terminal(event.lend(&self.view.loan)))));
             }
             if let Some(end) = q.end.get() {

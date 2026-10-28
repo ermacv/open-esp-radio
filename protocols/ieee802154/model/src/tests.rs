@@ -1346,9 +1346,11 @@ fn the_operation_pool_serves_takers_in_arrival_order() {
         _,
     >(async |mint| {
         let oer_radio_port::PermitTokens {
-            supply, mut seats, ..
+            supply,
+            line,
+            mut seats,
         } = mint.into_pools();
-        let pool = ModelPermitPool::new(supply);
+        let pool = oer_radio_port::FifoPermitPool::new(supply, line);
         oer_radio_port::conformance::permits_serve_takers_in_arrival_order(&pool, &mut seats, []);
     }));
 }
@@ -1563,7 +1565,7 @@ fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
     use oer_radio_port::{Permits, branded};
     ready(branded::<Permits<Operation, 1, 2>, _>(async |mint| {
         let (permits, [mut first, mut second]) =
-            OperationPermits::new(mint.into_pools(), |supply, _| ModelPermitPool::new(supply));
+            OperationPermits::new(mint.into_pools(), oer_radio_port::FifoPermitPool::new);
         let token = ready(permits.pool().take(&mut first));
         drop(permits.guard(token));
         let token = ready(permits.pool().take(&mut second));
