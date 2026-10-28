@@ -12,6 +12,7 @@ use crate::bluetooth::engine::sram_link::ControllerSramLink;
 
 use crate::bluetooth::engine::shared_layout::BufferHeaderImage;
 use crate::layouts::*;
+use oer_memory::VolatileCell;
 
 /// Bytes in one common controller RX/TX buffer header.
 pub const BLUETOOTH_LE_BUFFER_HEADER_BYTES: usize = BleBufferHeader::SIZE;
@@ -291,22 +292,28 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketPreparedLength<ALLOCATION_BYTES> {
     }
 }
 
-/// CPU-owned storage for one common ESP32-S31 LE controller TX allocation.
+/// Storage for one common ESP32-S31 LE controller TX allocation.
 ///
 /// `ALLOCATION_BYTES` includes the complete controller prefix. A role chooses
 /// the smallest capacity it needs; DTM uses all 255 LE payload octets while
 /// legacy advertising needs at most 37.
+///
+/// The prefix holds three opaque ranges without an established writer
+/// (`BLE_TX_PACKET_PREFIX`), so every byte is a [`VolatileCell`], as in the RX
+/// packet: the CPU never holds an ordinary reference to memory the controller
+/// may write. `&mut self` operations still require the enclosing graph's CPU
+/// ownership; they preserve bytes they do not change.
 #[repr(C, align(4))]
-#[derive(Debug, Eq, PartialEq, bytemuck::Zeroable)]
+#[derive(bytemuck::Zeroable)]
 pub struct LeTxPacketStorage<const ALLOCATION_BYTES: usize> {
-    bytes: [u8; ALLOCATION_BYTES],
+    bytes: [VolatileCell<u8>; ALLOCATION_BYTES],
 }
 
 impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
     /// Reserve a zero-based, CPU-owned allocation.
     pub const fn new() -> Self {
         Self {
-            bytes: [0; ALLOCATION_BYTES],
+            bytes: [const { VolatileCell::new(0) }; ALLOCATION_BYTES],
         }
     }
 
@@ -336,19 +343,7 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
         }
 
         let length = payload.len() as u8;
-        let prefix_bytes = (&mut self.bytes[..BleTxPacketPrefix::SIZE])
-            .try_into()
-            .expect("validated allocation holds the prefix");
-        let mut prefix = BleTxPacketPrefixMut::new(prefix_bytes);
-        prefix.set_allocation(
-            prefix
-                .allocation()
-                .with_class(TX_PACKET_ALLOCATION.class())
-                .with_state(TX_PACKET_ALLOCATION.state()),
-        );
-        prefix.set_pdu_header(BleTxPacketPrefixPduHeader::from_bits(0).with_value(header));
-        prefix.set_payload_length(BleTxPacketPrefixPayloadLength::from_bits(0).with_value(length));
-        self.bytes[BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES..][..payload.len()].copy_from_slice(payload);
+        self.install(header, length, payload);
         Ok(LeTxPacketPreparedLength(length))
     }
 
@@ -367,21 +362,52 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
     ) -> LeTxPacketPreparedLength<ALLOCATION_BYTES> {
         let pdu = packet.as_bytes();
         let length = packet.payload_bytes();
-        let prefix_bytes = (&mut self.bytes[..BleTxPacketPrefix::SIZE])
-            .try_into()
-            .expect("validated allocation holds the prefix");
-        let mut prefix = BleTxPacketPrefixMut::new(prefix_bytes);
-        prefix.set_allocation(
-            prefix
-                .allocation()
-                .with_class(TX_PACKET_ALLOCATION.class())
-                .with_state(TX_PACKET_ALLOCATION.state()),
-        );
-        prefix.set_pdu_header(BleTxPacketPrefixPduHeader::from_bits(0).with_value(pdu[0]));
-        prefix.set_payload_length(BleTxPacketPrefixPayloadLength::from_bits(0).with_value(length));
-        self.bytes[BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES..][..usize::from(length)]
-            .copy_from_slice(&pdu[2..]);
+        self.install(pdu[0], length, &pdu[2..]);
         LeTxPacketPreparedLength(length)
+    }
+
+    /// Write the allocation class, PDU header, length and payload of a
+    /// length already validated against this allocation.
+    fn install(&mut self, header: u8, length: u8, payload: &[u8]) {
+        self.update_prefix(|prefix| {
+            prefix.set_allocation(
+                prefix
+                    .allocation()
+                    .with_class(TX_PACKET_ALLOCATION.class())
+                    .with_state(TX_PACKET_ALLOCATION.state()),
+            );
+            prefix.set_pdu_header(BleTxPacketPrefixPduHeader::from_bits(0).with_value(header));
+            prefix.set_payload_length(
+                BleTxPacketPrefixPayloadLength::from_bits(0).with_value(length),
+            );
+        });
+        for (cell, &byte) in self.payload_cells().zip(payload) {
+            cell.set(byte);
+        }
+    }
+
+    fn prefix(&self) -> [u8; BleTxPacketPrefix::SIZE] {
+        let mut prefix = [0; BleTxPacketPrefix::SIZE];
+        for (byte, cell) in prefix.iter_mut().zip(&self.bytes) {
+            *byte = cell.get();
+        }
+        prefix
+    }
+
+    /// Update the generated prefix view; only the bytes it changes are stored.
+    fn update_prefix(&mut self, update: impl FnOnce(&mut BleTxPacketPrefixMut<'_>)) {
+        let original = self.prefix();
+        let mut updated = original;
+        update(&mut BleTxPacketPrefixMut::new(&mut updated));
+        for ((cell, before), after) in self.bytes.iter().zip(original).zip(updated) {
+            if before != after {
+                cell.set(after);
+            }
+        }
+    }
+
+    fn payload_cells(&self) -> impl Iterator<Item = &VolatileCell<u8>> + Clone {
+        self.bytes.iter().skip(BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES)
     }
 
     /// Legacy advertising hardware inserts AdvA before consuming these bytes.
@@ -392,56 +418,72 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
     ) {
         let payload_length = usize::from(length.payload_bytes());
         assert!(payload_length >= 6, "the advertising role supplies AdvA");
-        let start = BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES;
-        self.bytes
-            .copy_within(start + 6..start + payload_length, start);
-        self.bytes[start + payload_length - 6..start + payload_length].fill(0);
+        let payload = self.payload_cells().take(payload_length);
+        for (target, source) in payload.clone().zip(payload.clone().skip(6)) {
+            target.set(source.get());
+        }
+        for cell in payload.skip(payload_length - 6) {
+            cell.set(0);
+        }
     }
 
     #[cfg(test)]
     pub(super) fn pdu_header(&self) -> [u8; 2] {
-        {
-            let prefix = BleTxPacketPrefix::new(
-                (&self.bytes[..BleTxPacketPrefix::SIZE])
-                    .try_into()
-                    .expect("prepared prefix exists"),
-            );
-            [prefix.pdu_header().value(), prefix.payload_length().value()]
-        }
+        let prefix = self.prefix();
+        let prefix = BleTxPacketPrefix::new(&prefix);
+        [prefix.pdu_header().value(), prefix.payload_length().value()]
     }
 
-    /// Borrow the semantic Link Layer PDU installed by the enclosing owner.
-    pub fn prepared_pdu(&self, length: LeTxPacketPreparedLength<ALLOCATION_BYTES>) -> &[u8] {
-        &self.bytes[CONTROLLER_METADATA_BYTES..][..length.pdu_bytes()]
+    /// Read the semantic Link Layer PDU installed by the enclosing owner.
+    pub fn prepared_pdu(
+        &self,
+        length: LeTxPacketPreparedLength<ALLOCATION_BYTES>,
+    ) -> impl ExactSizeIterator<Item = u8> + '_ {
+        self.bytes
+            .iter()
+            .skip(CONTROLLER_METADATA_BYTES)
+            .take(length.pdu_bytes())
+            .map(VolatileCell::get)
     }
 
     pub(super) fn prepared_allocation(
         &self,
         length: LeTxPacketPreparedLength<ALLOCATION_BYTES>,
-    ) -> &[u8] {
-        &self.bytes[..BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + usize::from(length.payload_bytes())]
+    ) -> impl ExactSizeIterator<Item = u8> + '_ {
+        self.bytes
+            .iter()
+            .take(BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + usize::from(length.payload_bytes()))
+            .map(VolatileCell::get)
     }
 
     #[cfg(test)]
-    pub(super) fn model_pdu(&self) -> &[u8] {
-        &self.bytes[CONTROLLER_METADATA_BYTES..][..2 + usize::from(
-            BleTxPacketPrefix::new(
-                (&self.bytes[..BleTxPacketPrefix::SIZE])
-                    .try_into()
-                    .expect("prepared prefix exists"),
-            )
-            .payload_length()
-            .value(),
-        )]
+    pub(super) fn model_pdu(&self) -> std::vec::Vec<u8> {
+        let [_, length] = self.pdu_header();
+        self.prepared_pdu(LeTxPacketPreparedLength(length))
+            .collect()
     }
 
     pub(super) fn clear(&mut self) {
-        self.bytes.fill(0);
+        for cell in &self.bytes {
+            cell.set(0);
+        }
     }
 
     #[cfg(test)]
-    pub(super) const fn snapshot(&self) -> [u8; ALLOCATION_BYTES] {
-        self.bytes
+    pub(super) fn snapshot(&self) -> [u8; ALLOCATION_BYTES] {
+        let mut bytes = [0; ALLOCATION_BYTES];
+        for (byte, cell) in bytes.iter_mut().zip(&self.bytes) {
+            *byte = cell.get();
+        }
+        bytes
+    }
+
+    /// Model a controller store into the allocation while the graph owns it.
+    #[cfg(test)]
+    pub(super) fn model_controller_write(&self, offset: usize, value: u8) {
+        if let Some(cell) = self.bytes.get(offset) {
+            cell.set(value);
+        }
     }
 }
 

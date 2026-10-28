@@ -140,7 +140,7 @@ fn transmit(
     if header.transmission_completed() {
         return None;
     }
-    let pdu = graph.tx_packet.model_pdu().to_vec();
+    let pdu = graph.tx_packet.model_pdu();
     if acknowledged {
         header.model_complete_transmission();
         let old = path.read();

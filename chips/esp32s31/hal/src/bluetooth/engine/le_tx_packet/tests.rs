@@ -11,7 +11,10 @@ fn encoded_pdu_round_trips_at_the_role_boundary() {
         .prepare_encoded_pdu(&[0x42, 3, 1, 2, 3])
         .expect("the encoded PDU fits the controller allocation");
 
-    assert_eq!(packet.prepared_pdu(length), &[0x42, 3, 1, 2, 3]);
+    assert_eq!(
+        packet.prepared_pdu(length).collect::<std::vec::Vec<_>>(),
+        [0x42, 3, 1, 2, 3]
+    );
     assert_eq!(length.payload_bytes(), 3);
 }
 
