@@ -17,7 +17,7 @@ instrumentation = ["profile", "debug-control"]
 diagnostic-phy = []
 diagnostic-radio-health = ["diagnostic-phy", "oer-hil-protocol/health", "oer-hil-agent/health", "oer-esp32s31-phy/radio-health"]
 
-[dependencies]
+[target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-memory = { path = "../../../portable/memory" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 heapless = { version = "0.9.3", features = ["serde"] }
@@ -41,6 +41,14 @@ oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-espressif-ieee802154-engine = { path = "../../../chips/espressif/ieee802154-engine" }
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
+
+[target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
+oer-memory = { path = "../../../portable/memory" }
+oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
+oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "async-io"] }
+oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
 
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }

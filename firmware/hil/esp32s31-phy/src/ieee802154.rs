@@ -84,6 +84,8 @@ pub fn poll_deadline() -> Option<oer_time::Instant> {
 
 /// Serve the running engine's events and return its delivered slots. A
 /// slot the engine refuses fails the session, which its exit reports.
+// Keep MAC event scratch off unrelated Wi-Fi calibration/hold call chains.
+#[inline(never)]
 pub fn poll() {
     let _entered = ENGINE.with(|running| {
         if let Some(running) = running.as_mut() {
@@ -184,15 +186,23 @@ impl Rx {
             #[cfg(oer_profile)]
             let timer_window = oer_espressif_executor::timer_observation::Window::begin();
             let result = {
-                let (returned, result) = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-                    &crate::PHY_CLOCK,
-                    require_radio(domain_slot.take(), fault),
-                    &mut (),
-                    &mut observer,
-                )
-                .await;
-                *domain_slot = Some(returned);
-                result
+                let mut platform = ();
+                let domain = require_radio(domain_slot.take(), fault);
+                let observer = &mut observer;
+                let mut maintain =
+                    core::pin::pin!(crate::completion::construct(|| maintain_concurrent_phy::<
+                        _,
+                        (),
+                        RomShortDelay,
+                        _,
+                    >(
+                        &crate::PHY_CLOCK,
+                        domain,
+                        &mut platform,
+                        observer,
+                    )));
+                crate::completion::run(maintain.as_mut(), domain_slot, crate::completion::restore)
+                    .await
             };
             observer.report(0).await;
             #[cfg(oer_profile)]
@@ -334,14 +344,19 @@ impl Rx {
         )
         .await?;
         {
-            let (returned, result) = close_concurrent_rf::<_, (), RomShortDelay>(
-                &crate::PHY_CLOCK,
-                require_radio(domain_slot.take(), fault),
-                &mut (),
-            )
-            .await;
-            *domain_slot = Some(returned);
-            result
+            let mut platform = ();
+            let domain = require_radio(domain_slot.take(), fault);
+            let mut close =
+                core::pin::pin!(crate::completion::construct(|| close_concurrent_rf::<
+                    _,
+                    (),
+                    RomShortDelay,
+                >(
+                    &crate::PHY_CLOCK,
+                    domain,
+                    &mut platform,
+                )));
+            crate::completion::run(close.as_mut(), domain_slot, crate::completion::restore).await
         }
         .map_err(|_| RejectReason::Internal)?;
         Ok(())
