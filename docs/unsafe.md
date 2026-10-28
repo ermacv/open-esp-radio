@@ -8,10 +8,10 @@ holds without `unsafe`. The policy lives in standard Rust and Cargo lint
 settings, so every `cargo check`, `cargo build` and `cargo clippy` enforces
 it:
 
-- Every crate above the boundary starts with `#![forbid(unsafe_code)]`. The
-  layer test `every_crate_above_the_unsafe_boundary_forbids_unsafe_code`
+- Every sans-IO crate and every crate above the boundary starts with
+  `#![forbid(unsafe_code)]`. The layer test `every_crate_above_the_unsafe_boundary_forbids_unsafe_code`
   (`tools/test/layers`) checks each library and executable root against the
-  boundary below, which it lists.
+  boundary below. Sans-IO membership is defined in [architecture](architecture.md).
 - A crate below the boundary starts with
   `#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]`, permits unsafe
   code only through documented item- or module-level allowances and retains
@@ -24,13 +24,34 @@ it:
 - `[workspace.lints.clippy]` denies `disallowed_methods`; `clippy.toml` lists
   them, including direct `core::mem::{zeroed, transmute}` and their `std`
   counterparts. An intentional use carries a local `allow` or `expect`
-  with a reason. Crate-local Clippy configurations retain these bans.
+  with a reason. Every `clippy.toml` in the tree retains all common method
+  bans; `every_clippy_config_retains_all_common_method_bans` checks this.
+  The root also sets `suppress-restriction-lint-in-const = false`: a
+  runtime-callable `const fn` is not a compile-time-only check.
 - A clean panic lint is denied at the crate root while `[lints]` retains
   `workspace = true`. A non-test local `allow` or `expect` means the lint
   is not clean, even when the host emits no diagnostic. New panic-lint
   allowances belong only in tests. Remove existing non-test allowances as
-  the crate is cleaned, then move each clean lint to `deny`. Compile-time
-  checks remain allowed.
+  the crate is cleaned, then move each clean lint to `deny`.
+  `tools/test/layers/sans-io-lints.toml` is the canonical sans-IO catalogue:
+  assertion macros (including `vendor_assert!`), panicking core methods and
+  `core::task::Waker::noop`. A sans-IO crate with explicit crate-root deny of
+  both `disallowed_methods` and `disallowed_macros` has a local `clippy.toml`
+  containing that entire catalogue, all common root bans and its existing
+  local entries. Layer tests enforce catalogue membership; they do not
+  replace Clippy or prove transitive absence of panics.
+
+Sans-IO code contains no `unsafe` and no runtime panic paths, including
+`panic!`, `unreachable!`, `todo!`, `unimplemented!`, assertions and debug
+assertions, `vendor_assert!`, `unwrap`/`expect`, indexing or slicing that can
+panic, arithmetic overflow or invalid division, and panicking core methods.
+Those paths return typed errors. Sans-IO crates do not depend on fatal,
+reset or retained-record owners and do not reset: reset belongs to the
+image or HAL owner. Compile-time checks use a const item or inline const
+of the form `const { if !cond { panic!("…") } }`; assertion macros are
+forbidden in these checks. Panics evaluated at compile time and test
+assertions are allowed. A `const fn` alone does not require compile-time
+evaluation.
 
 Every `unsafe` block and `unsafe impl` below the boundary needs a
 `// SAFETY:` comment on the lines immediately before it, stating why its
