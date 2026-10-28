@@ -33,7 +33,7 @@ The typed scenario model that replaces the scenario documents lives in
 The wire contract lives in `protocol/`, versioned scenarios in `scenarios/`,
 host orchestration in `host/runner/`, and embedded consumers in `targets/`.
 Chip-independent target logic and its host tests live in
-[`agent/`](../../../portable/hil-agent/README.md).
+[`agent/`](../../../protocols/hil/agent/README.md).
 The evidence contract — the run vocabulary and canonical scenarios — lives
 in the `schema/` crate; the observer's build identity and its content store
 live in [`observer/`](../observer/README.md), whose `producer` feature

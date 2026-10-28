@@ -1866,11 +1866,7 @@ const FAMILY_BELOW_THE_CHIPS: &[Deviation] = &[
 
 /// `portable` depends on no protocol and no chip; `portable/embassy` alone
 /// adapts protocol boundaries.
-const PORTABLE_BELOW_THE_PROTOCOLS: &[Deviation] = &[(
-    "portable/hil-agent",
-    "protocols/hil/protocol",
-    "the move of hil-agent to protocols/hil/agent (#848, B6)",
-)];
+const PORTABLE_BELOW_THE_PROTOCOLS: &[Deviation] = &[];
 
 #[test]
 fn no_normal_edge_reaches_an_image_or_a_program() {
