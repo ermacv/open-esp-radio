@@ -1,5 +1,5 @@
 [package]
-name = "oer-ieee80211-softmac"
+name = "oer-ieee80211-esp-now"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

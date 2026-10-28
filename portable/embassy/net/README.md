@@ -1,7 +1,10 @@
 # Embassy network adapter (owned packets)
 
 `oer-embassy-net` is the owned-packet boundary between the Wi-Fi
-datapath and the Embassy/Xarxa network stack (`docs/network.md`).
+datapath and the Embassy/Xarxa network stack (`docs/network.md`). Its
+`datapath` module holds the software/physical TX ownership contracts, the
+destination/flow queue arena `TxQueues` and, under the `model` feature, the
+host model `MemoryTxQueues`.
 
 The pinned Xarxa fork keeps packet-pool Waker registration in a separate
 `#[inline(never)]` frame from the availability recheck and wake. This retains

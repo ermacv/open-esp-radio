@@ -23,7 +23,7 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   radio/        the radio port with its FIFO permit pool, coexistence vocabulary,
                 regulatory domain
   ieee80211/    Wi-Fi: MAC formats and state, lower and upper MAC, station,
-                access point, RSN, arbiter, runtime, datapath
+                access point, RSN, arbiter, ESP-NOW, runtime
   bluetooth/    HCI and LE wire formats, link layer, controller, port, runtime and model
   ieee802154/   IEEE 802.15.4 wire codecs, backend port, MAC core and host model
   network/      the network stack boundary
@@ -31,7 +31,8 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
 portable/   generic support no protocol or chip owns (no_std)
   time/ time-virtual/ memory/ sync/ trace/ wire/
   riscv/        architectural RISC-V constants and instructions
-  embassy/      bindings to Embassy (time, net)
+  embassy/      bindings to Embassy (time; net, with the radio TX datapath
+                contracts)
   hil-agent/    the agent core the HIL images run
 chips/      everything about Espressif hardware
   espressif/    IP shared by Espressif chips: analog, modem

@@ -39,7 +39,7 @@ the portable runtime drives role services over that port.
 | `upper-mac/src/qos.rs` | Ethernet traffic classification, DSCP mapping and admission downgrade |
 | `upper-mac/src/vif.rs` | Receive routing for one same-channel STA plus SoftAP pair |
 | `upper-mac/src/monitor.rs` | The frames a monitor keeps and the channels it visits |
-| `softmac/src/configuration.rs` | The requested owner topology against a backend's service description |
+| `esp-now/src/configuration.rs` | The requested owner topology against a backend's service description |
 | `sta/src/port.rs` | The station's tokens on a lower-MAC port and its numbered pairwise key |
 | `wire/src/channel.rs` | Validated 2.4/5 GHz channels and 20/40 MHz geometry |
 | `wire/src/channel_switch.rs` | Channel Switch Announcement parsing and encoding |
@@ -51,7 +51,7 @@ the portable runtime drives role services over that port.
 | `wire/src/monitor_injection.rs` | Header geometry of a monitor-injected MPDU |
 | `wire/src/extensions/wmm.rs` | WMM AC parameters and vendor IE parsing |
 | `wire/src/extensions/espressif/esp_now.rs` | ESP-NOW framing and protected-envelope validation |
-| `softmac/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
+| `esp-now/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
 
 Frame builders, sequence owners and reorder windows use
 `wire::sequence::SequenceNumber`, validating the twelve-bit range at
@@ -102,11 +102,11 @@ supplied number. Its `sequence.rs` owns the transmit sequence spaces of every
 role. Espressif policy parameters live in
 [`oer-espressif-ieee80211-policy`](../../chips/espressif/ieee80211-policy/README.md).
 
-`softmac/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
+`esp-now/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
 protocol state. Its `security.rs` sibling owns secrets and generations; each
 peer's packet numbers and replay frontier are `upper-mac`'s CCMP owners. Both use the wire codecs, the interface identities of
-`softmac/src/interface.rs` and the PHY requests of
-`softmac/src/extensions/espressif/phy.rs`.
+`esp-now/src/interface.rs` and the PHY requests of
+`esp-now/src/extensions/espressif/phy.rs`.
 
 The [`runtime`](runtime/README.md) is the asynchronous glue: it waits on
 port events, deadlines and commands, hands each input to the cores and

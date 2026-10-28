@@ -35,9 +35,8 @@ Git source and revision do.
 | Crate | Owns | Does not own |
 | --- | --- | --- |
 | `oer-network` (`protocols/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
-| `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools | radio scheduling, DMA descriptors |
-| `oer-ieee80211-datapath` | software/physical TX ownership traits, `TxQueues`, the airtime ledger | a concrete allocator, stack or executor |
-| `oer-esp32s31-ieee80211-mac` | the TX cost model (`tx_cost`) and work receipts (`tx_work`) of its publications | the airtime ledger |
+| `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools; in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
+| `oer-esp32s31-ieee80211-mac` | the TX cost model (`tx_cost`), work receipts (`tx_work`) of its publications and the airtime ledger (`airtime`) | packet storage |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |
 
 ## TX path
@@ -85,7 +84,7 @@ radio runner (P2)
   Order holds within a FIFO, not across a fragmented and an unfragmented class.
   Packet round-robin is not byte or airtime fairness.
 
-## Airtime ledger (`oer-ieee80211-datapath::airtime`)
+## Airtime ledger (`oer-esp32s31-ieee80211-mac::airtime`)
 
 - `AirtimeStorage` holds bounded per-peer deficit accounts apart from packet
   storage; `scheduler()` borrows it exclusively. Tokens of one ledger cannot
@@ -104,7 +103,7 @@ radio runner (P2)
 - `with_observer` attaches a bounded synchronous observer of grants,
   settlements and cancellations; it must not log, await or re-enter.
 
-## TX cost model (`oer-ieee80211-softmac`)
+## TX cost model (`oer-esp32s31-ieee80211-mac`)
 
 - `PpduTiming` includes preamble, SERVICE and tail bits, whole-symbol rounding
   and the 2.4 GHz signal extension; HT uses the exact bits per symbol, not
@@ -135,7 +134,7 @@ radio runner (P2)
 - `TxCompletion` exposes completion class, ACK SNR and trigger-flow packet
   counts (not retry counts); it exposes no response PHY or measured airtime.
 
-## Physical storage contracts (`oer-ieee80211-datapath`)
+## Physical storage contracts (`oer-embassy-net::datapath`)
 
 - `SoftwareTxFrame`: an affine software owner and Ethernet view.
 - `MaterializedTxFrame`: stable DMA ownership, Ethernet geometry and

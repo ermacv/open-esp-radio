@@ -11,7 +11,7 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use crate::{DestinationTxHead, DestinationTxQueues, SoftwareTxFrame, TxQueues};
+use super::{DestinationTxHead, DestinationTxQueues, SoftwareTxFrame, TxQueues};
 
 /// Up to `N` frames, queued by their Ethernet destination.
 pub struct MemoryTxQueues<F, const N: usize> {

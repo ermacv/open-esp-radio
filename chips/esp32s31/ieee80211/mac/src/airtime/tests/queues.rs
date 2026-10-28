@@ -1,10 +1,10 @@
 use super::*;
-use crate::TxQueues;
-use core::num::NonZeroU16;
-use oer_esp32s31_ieee80211_mac::{
+use crate::{
     tx_cost::{PpduTiming, TxCost, TxProtectionTiming, TxResponse},
     tx_work::MacTxWork,
 };
+use core::num::NonZeroU16;
+use oer_embassy_net::datapath::TxQueues;
 
 fn data_phy(peer: u8) -> PpduTiming {
     PpduTiming::BccOfdm {

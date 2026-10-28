@@ -370,9 +370,9 @@ PN with the installed key ID.
 | Transmit packet-number allocation and receive replay | `oer-ieee80211-upper-mac` `ccmp` |
 | Receive Block Ack agreements and reordering | `oer-ieee80211-upper-mac` `block_ack::banks`, `block_ack::recipient`, `block_ack::reorder` |
 | The station's lifecycle, from its scan to its disconnect | `oer-ieee80211-sta` `machine` |
-| The Wi-Fi owner topology checked against a backend's service | `oer-ieee80211-softmac` `configuration` |
+| The Wi-Fi owner topology checked against a backend's service | `oer-ieee80211-esp-now` `configuration` |
 | Which frames a monitor keeps and the channels it visits | `oer-ieee80211-upper-mac` `monitor` |
-| Virtual-interface identities and ESP-NOW PHY requests | `oer-ieee80211-softmac` `interface`, `extensions::espressif::phy` |
+| Virtual-interface identities and ESP-NOW PHY requests | `oer-ieee80211-esp-now` `interface`, `extensions::espressif::phy` |
 
 Limits, rate ladders and duration estimates in which implementations differ
 are parameters of those algorithms; the Espressif values recovered from the

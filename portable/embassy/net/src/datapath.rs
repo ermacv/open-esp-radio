@@ -1,25 +1,11 @@
-#![no_std]
-#![forbid(unsafe_code)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
-
 //! Radio-owned boundary between durable software backlog and physical TX.
 //!
 //! Network integrations may retain packets in different memory and ownership
 //! models. Radio admission accepts opaque selected requests; packet-oriented
 //! policy additionally uses affine Ethernet owners and batch materialization.
 //! Selection precedes scarce SRAM admission without exposing a network stack,
-//! executor or adapter queue to STA/AP policy.
+//! executor or adapter queue to STA/AP policy. The radio's airtime ledger is
+//! chip scheduling (`oer-esp32s31-ieee80211-mac::airtime`).
 
 use oer_memory::{
     DmaIndexReturn, PinnedDmaTxRadioLease, ReturningStableDmaBacking, StableDmaBacking,
@@ -27,7 +13,6 @@ use oer_memory::{
 };
 use oer_network::NetworkInterfaceId;
 
-pub mod airtime;
 #[cfg(any(test, feature = "model"))]
 pub mod memory;
 

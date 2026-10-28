@@ -77,7 +77,7 @@ impl<'owner, K: Copy> AirtimeReservation<'owner, K> {
 /// It cannot use the unpublished-reservation cancellation API.
 /// ```compile_fail,E0308
 /// use core::num::NonZeroU32;
-/// use oer_ieee80211_datapath::airtime::{AirtimeStorage, AirtimeCandidate};
+/// use oer_esp32s31_ieee80211_mac::airtime::{AirtimeStorage, AirtimeCandidate};
 /// let us = NonZeroU32::new(100).unwrap();
 /// let mut storage = AirtimeStorage::<_, 1>::new(us);
 /// let mut scheduler = storage.scheduler();
@@ -174,7 +174,7 @@ fn funded_account<K>(
 /// A live reservation prevents replacement of its storage:
 /// ```compile_fail,E0505
 /// use core::num::NonZeroU32;
-/// use oer_ieee80211_datapath::airtime::{AirtimeStorage, AirtimeCandidate};
+/// use oer_esp32s31_ieee80211_mac::airtime::{AirtimeStorage, AirtimeCandidate};
 /// let us = NonZeroU32::new(100).unwrap();
 /// let mut storage = AirtimeStorage::<_, 1>::new(us);
 /// let mut scheduler = storage.scheduler();
@@ -205,13 +205,13 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
     ///
     /// ```compile_fail,E0080
     /// use core::num::NonZeroU32;
-    /// use oer_ieee80211_datapath::airtime::AirtimeStorage;
+    /// use oer_esp32s31_ieee80211_mac::airtime::AirtimeStorage;
     /// let _ = AirtimeStorage::<u8, 0>::new(NonZeroU32::MIN);
     /// ```
     ///
     /// ```compile_fail,E0080
     /// use core::num::NonZeroU32;
-    /// use oer_ieee80211_datapath::airtime::AirtimeStorage;
+    /// use oer_esp32s31_ieee80211_mac::airtime::AirtimeStorage;
     /// let _ = AirtimeStorage::<u8, 1, 0>::new(NonZeroU32::MIN);
     /// ```
     pub const fn new(quantum_micros: NonZeroU32) -> Self {

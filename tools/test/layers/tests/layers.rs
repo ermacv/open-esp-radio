@@ -1053,7 +1053,7 @@ const IEEE80211_CORES: [&str; 7] = [
     "oer-ieee80211-sta",
     "oer-ieee80211-ap",
     "oer-ieee80211-arbiter",
-    "oer-ieee80211-softmac",
+    "oer-ieee80211-esp-now",
     "oer-ieee80211-runtime",
 ];
 
@@ -1419,7 +1419,7 @@ const IEEE80211_SANS_IO_CORES: [&str; 6] = [
     "protocols/ieee80211/sta",
     "protocols/ieee80211/ap",
     "protocols/ieee80211/arbiter",
-    "protocols/ieee80211/softmac",
+    "protocols/ieee80211/esp-now",
 ];
 
 /// The identifiers of waiting: an `async` item and the task vocabulary.

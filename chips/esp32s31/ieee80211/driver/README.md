@@ -10,7 +10,7 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   caller-selected single attempt and a fixed-rate `ManagementTxPlan`. The
   caller supplies RTS/CTS or CTS-to-self and its legacy control rate; the
   driver retains no BSS protection or retry ladder. ESP-NOW protocol state
-  stays in softmac, with no dedicated driver TX entry point. A protected
+  stays in `oer-ieee80211-esp-now`, with no dedicated driver TX entry point. A protected
   MPDU is numbered at its first launch; DMA
   is reached only through its owner type, never alongside a quiescence proof.
 - **MAC ownership.** The driver coordinates MAC stop, RX draining and the

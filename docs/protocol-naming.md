@@ -46,9 +46,9 @@ Portable MAC mechanisms and a chip's hardware MAC backend may both use
 Consistent ownership does not require identical protocol subdirectories,
 shared frame types, IRQ queues or separate crates at every level.
 
-`softmac` describes the division of MAC work between software and hardware;
-it does not mean that all offloads are absent. The repository's
-`MacOperationOwnership` is the per-operation contract. Similar names in
+No package is named for the division of MAC work between software and
+hardware: the port's `MacOperationOwnership` is the per-operation contract.
+The softmac and fullmac terms of
 [Linux mac80211](https://wireless.docs.kernel.org/en/latest/en/developers/documentation/mac80211.html)
 do not establish the same ownership here.
 

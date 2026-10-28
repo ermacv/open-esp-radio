@@ -25,6 +25,8 @@ subtle = { version = "2.6.1", default-features = false }
 zeroize = { version = "1.9.0", default-features = false }
 
 [dev-dependencies]
+# The airtime tests draw peer queues from the network TX queue arena.
+oer-embassy-net = { path = "../../../../portable/embassy/net" }
 oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
 oer-ieee80211-upper-mac = { path = "../../../../protocols/ieee80211/upper-mac" }
 
