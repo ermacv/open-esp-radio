@@ -19,7 +19,7 @@ fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
     assert!(matches!(world.station.lease, Held::Lease(_)));
     assert_eq!(world.station.tickets.len(), 2);
     assert_eq!(world.station.buffers.len(), 2);
-    assert_eq!(world.station.lost_tokens(), 0);
+    assert_eq!(world.station.config.observer.tokens.get(), 0);
     assert!(world.station.poll_deadline().is_none());
     assert!(world.station.poll_action(now).is_none());
     assert!(world.arbiter.poll_action(now).is_none());

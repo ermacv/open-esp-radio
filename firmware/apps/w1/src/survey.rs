@@ -176,7 +176,7 @@ pub struct SurveyCounters {
     /// Management frames that are no well-formed beacon or probe response.
     pub ignored_management: u32,
     /// Beacons and probe responses of a new BSSID the full table refused
-    /// (the table's `dropped_unique_bss`).
+    /// (the table's result is then truncated).
     pub table_full: u32,
     /// Beacons and probe responses whose DS Parameter Set names another
     /// channel than the one the receiver was configured to.
@@ -243,8 +243,10 @@ impl<const N: usize> Survey<N> {
                     self.counters.ignored_management.saturating_add(1);
                 return;
             }
-            // The table counts it in its summary.
-            ScanObservation::Dropped => return,
+            ScanObservation::Dropped => {
+                self.counters.table_full = self.counters.table_full.saturating_add(1);
+                return;
+            }
             ScanObservation::Inserted { index }
             | ScanObservation::Updated { index }
             | ScanObservation::Duplicate { index } => index,
@@ -294,10 +296,7 @@ impl<const N: usize> Survey<N> {
 
     /// The frame counters.
     pub fn counters(&self) -> SurveyCounters {
-        SurveyCounters {
-            table_full: self.table.summary().dropped_unique_bss,
-            ..self.counters
-        }
+        self.counters
     }
 
     /// The stand BSSID's late beacon gaps, oldest first.

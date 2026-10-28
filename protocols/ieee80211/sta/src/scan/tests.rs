@@ -1,4 +1,4 @@
-use super::{ScanObservation, ScanTable, best_matching_ssid};
+use super::{ScanCompleteness, ScanObservation, ScanTable, best_matching_ssid};
 use oer_ieee80211_wire::{
     ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
     scan::{
@@ -297,7 +297,8 @@ fn table_deduplicates_by_bssid_and_retains_latest_record() {
         ScanObservation::Updated { index: 0 }
     );
     assert_eq!(table.records().next().unwrap().rssi, -60);
-    assert_eq!(table.summary().observed_frames, 3);
+    assert_eq!(table.summary().records, 1);
+    assert_eq!(table.summary().completeness, ScanCompleteness::Complete);
 }
 
 #[test]
@@ -504,10 +505,15 @@ fn observe_management_never_panics(count: usize) {
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
     let mut table = ScanTable::<4>::new();
     let mut rssi = 0_i8;
+    let mut observed = 0_u32;
     oer_ieee80211_wire::fuzz::inputs(&seeds, count, 320, |frame| {
         rssi = rssi.wrapping_sub(7);
-        let _ = table.observe_management(frame, 1, rssi, Some(Instant::from_micros(1)));
-        if table.summary().observed_frames.is_multiple_of(64) {
+        if table.observe_management(frame, 1, rssi, Some(Instant::from_micros(1)))
+            != ScanObservation::Ignored
+        {
+            observed += 1;
+        }
+        if observed % 64 == 0 {
             table.clear();
         }
     });
@@ -686,6 +692,8 @@ fn a_full_table_drops_a_new_bss_and_keeps_its_records() {
         ScanObservation::Dropped
     );
     assert_eq!(table.summary().records, 1);
-    assert_eq!(table.summary().dropped_unique_bss, 1);
+    assert_eq!(table.summary().completeness, ScanCompleteness::Truncated);
     assert_eq!(table.records().count(), 1);
+    table.clear();
+    assert_eq!(table.summary().completeness, ScanCompleteness::Complete);
 }

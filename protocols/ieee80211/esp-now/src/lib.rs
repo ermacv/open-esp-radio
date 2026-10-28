@@ -34,12 +34,11 @@ pub use extensions::espressif::esp_now::protocol::{
 };
 pub use extensions::espressif::esp_now::security::{
     ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY, ESP_NOW_KEY_LEN, EspNowEncryptedPeerConfig,
-    EspNowEncryptedPeerDiagnostics, EspNowEncryptedPeerError, EspNowEncryptedPeerId,
-    EspNowEncryptedPeerMutationFailure, EspNowEncryptedPeerReplacement,
-    EspNowEncryptedPeerRestoreFailure, EspNowEncryptedPeerTable, EspNowEncryptedPeerView,
-    EspNowEncryptedProtocol, EspNowEncryptedReceiveError, EspNowEncryptedRxCandidate,
-    EspNowEncryptedSendError, EspNowLmk, EspNowPmk, EspNowPmkError, EspNowPmkId,
-    EspNowPmkMutationFailure, EspNowPmkOwner, EspNowPreparedEncryptedV1Tx,
+    EspNowEncryptedPeerError, EspNowEncryptedPeerId, EspNowEncryptedPeerMutationFailure,
+    EspNowEncryptedPeerReplacement, EspNowEncryptedPeerRestoreFailure, EspNowEncryptedPeerTable,
+    EspNowEncryptedPeerView, EspNowEncryptedProtocol, EspNowEncryptedReceiveError,
+    EspNowEncryptedRxCandidate, EspNowEncryptedSendError, EspNowLmk, EspNowPmk, EspNowPmkError,
+    EspNowPmkId, EspNowPmkMutationFailure, EspNowPmkOwner, EspNowPreparedEncryptedV1Tx,
     EspNowRemovedEncryptedPeer, EspNowRxReplayCandidate, encrypted_peer_destination,
     esp_now_encrypted_v1_codec_status,
 };

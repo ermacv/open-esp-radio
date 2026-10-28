@@ -83,14 +83,8 @@ pub enum StaAssociationFailure {
 #[must_use = "retain the active association or deliver its terminal"]
 pub enum StaAssociationEvent {
     Irrelevant(StaAssociationRuntime),
-    Associated {
-        response: AssociationResponse,
-        total_received_frames: u32,
-    },
-    Failed {
-        failure: StaAssociationFailure,
-        total_received_frames: u32,
-    },
+    Associated { response: AssociationResponse },
+    Failed { failure: StaAssociationFailure },
 }
 
 /// What the association asks of its executor at one instant.
@@ -105,7 +99,6 @@ pub enum StaAssociationPoll {
     },
     Failed {
         failure: StaAssociationFailure,
-        total_received_frames: u32,
     },
 }
 
@@ -132,7 +125,6 @@ pub struct StaAssociationRuntime {
     bssid: Bssid,
     security: LinkProtection,
     stage: AssociationStage,
-    received_frames: u32,
 }
 
 #[derive(Debug)]
@@ -193,7 +185,6 @@ impl StaAssociationRuntime {
             bssid,
             security,
             stage: AssociationStage::Initial(epoch),
-            received_frames: 0,
         })
     }
 
@@ -216,7 +207,6 @@ impl StaAssociationRuntime {
         if now >= epoch.deadline {
             return StaAssociationPoll::Failed {
                 failure: StaAssociationFailure::Timeout,
-                total_received_frames: self.received_frames,
             };
         }
         let ordinal = epoch.sent.saturating_add(1);
@@ -257,13 +247,6 @@ impl StaAssociationRuntime {
         }
     }
 
-    /// Account for one completed RX descriptor, including a frame which is
-    /// not a valid management input. The station owns this runtime only while
-    /// its exchange is active; accounting has no dynamic refusal.
-    pub fn observe_received_frame(&mut self) {
-        self.received_frames = self.received_frames.saturating_add(1);
-    }
-
     /// Classify one extracted management frame for the selected peer,
     /// received at `now`.
     pub fn observe_management_frame(self, frame: &[u8], now: Instant) -> StaAssociationEvent {
@@ -287,14 +270,7 @@ impl StaAssociationRuntime {
         if !response.matches_security(self.security) {
             return self.fail(StaAssociationFailure::SecurityModeMismatch);
         }
-        StaAssociationEvent::Associated {
-            response,
-            total_received_frames: self.received_frames,
-        }
-    }
-
-    pub const fn total_received_frames(&self) -> u32 {
-        self.received_frames
+        StaAssociationEvent::Associated { response }
     }
 
     /// Wait out one temporary refusal, then send a fresh Association Request
@@ -329,10 +305,7 @@ impl StaAssociationRuntime {
     }
 
     fn fail(self, failure: StaAssociationFailure) -> StaAssociationEvent {
-        StaAssociationEvent::Failed {
-            failure,
-            total_received_frames: self.received_frames,
-        }
+        StaAssociationEvent::Failed { failure }
     }
 }
 

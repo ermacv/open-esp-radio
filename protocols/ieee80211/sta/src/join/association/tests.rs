@@ -38,16 +38,11 @@ fn continuing(event: StaAssociationEvent) -> StaAssociationRuntime {
     runtime
 }
 
-fn failed(event: StaAssociationEvent, expected: StaAssociationFailure, received: u32) {
-    let StaAssociationEvent::Failed {
-        failure,
-        total_received_frames,
-    } = event
-    else {
+fn failed(event: StaAssociationEvent, expected: StaAssociationFailure) {
+    let StaAssociationEvent::Failed { failure } = event else {
         panic!("expected a failure terminal: {event:?}");
     };
     assert_eq!(failure, expected);
-    assert_eq!(total_received_frames, received);
 }
 
 #[test]
@@ -76,17 +71,12 @@ fn association_runtime_owns_epoch_schedule_sequence_and_timeout() {
                 attempts.push((millis, attempt));
                 runtime
             }
-            StaAssociationPoll::Failed {
-                failure,
-                total_received_frames,
-            } => {
+            StaAssociationPoll::Failed { failure } => {
                 assert_eq!(failure, StaAssociationFailure::Timeout);
-                assert_eq!(total_received_frames, 1_000);
                 timed_out_at = Some(millis);
                 break;
             }
         };
-        runtime.observe_received_frame();
     }
 
     assert_eq!(timed_out_at, Some(1_000));
@@ -128,16 +118,11 @@ fn association_runtime_accepts_only_selected_peer_response() {
     let mut sequence = SequenceCounter::new(SequenceNumber::new(7).unwrap());
     let (mut runtime, first) = transmit(runtime, at(0), &mut sequence);
     assert_eq!(first.ordinal, 1);
-    runtime.observe_received_frame();
     let mut other_peer = association_response(0);
     other_peer[10] ^= 1;
     let runtime = continuing(runtime.observe_management_frame(&other_peer, at(1)));
     let event = runtime.observe_management_frame(&association_response(0), at(1));
-    let StaAssociationEvent::Associated {
-        response,
-        total_received_frames,
-    } = event
-    else {
+    let StaAssociationEvent::Associated { response } = event else {
         panic!("selected peer succeeds: {event:?}");
     };
     assert_eq!(
@@ -154,27 +139,23 @@ fn association_runtime_accepts_only_selected_peer_response() {
             association_comeback_tu: None,
         }
     );
-    assert_eq!(total_received_frames, 1);
 }
 
 #[test]
 fn association_runtime_reports_peer_disconnect_and_rejection() {
     let mut sequence = SequenceCounter::new(SequenceNumber::new(0).unwrap());
     let (mut disconnected, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
-    disconnected.observe_received_frame();
     failed(
         disconnected.observe_management_frame(&deauthentication(7), at(0)),
         StaAssociationFailure::PeerDisconnect(StaDisconnect {
             kind: StaDisconnectKind::Deauthentication,
             reason_code: 7,
         }),
-        1,
     );
     let (rejected, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     failed(
         rejected.observe_management_frame(&association_response(17), at(0)),
         StaAssociationFailure::Rejected { status_code: 17 },
-        0,
     );
 }
 
@@ -208,7 +189,6 @@ fn a_temporary_refusal_comes_back_once_after_its_comeback_time() {
     failed(
         runtime.observe_management_frame(&refused_temporarily(1_000), at(1_127)),
         StaAssociationFailure::ComebackRefused { comeback_tu: 1_000 },
-        0,
     );
 }
 
@@ -219,13 +199,11 @@ fn a_long_or_unnamed_temporary_refusal_ends_the_association() {
     failed(
         long.observe_management_frame(&refused_temporarily(5_001), at(0)),
         StaAssociationFailure::ComebackRefused { comeback_tu: 5_001 },
-        0,
     );
     let (unnamed, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     failed(
         unnamed.observe_management_frame(&association_response(30), at(0)),
         StaAssociationFailure::Rejected { status_code: 30 },
-        0,
     );
 }
 
@@ -242,11 +220,9 @@ fn association_and_comeback_require_the_complete_response_deadline() {
     // but cannot fit its new response epoch. Both end explicitly.
     for now in [last_start, Instant::from_micros(u64::MAX - 6_000_000)] {
         let mut runtime = begin(now).unwrap();
-        runtime.observe_received_frame();
         failed(
             runtime.observe_management_frame(&refused_temporarily(5_000), now),
             StaAssociationFailure::DeadlineOverflow,
-            1,
         );
     }
 }
@@ -254,16 +230,13 @@ fn association_and_comeback_require_the_complete_response_deadline() {
 #[test]
 fn disconnect_during_comeback_consumes_the_owner_and_keeps_accounting() {
     let mut runtime = begin(at(0)).unwrap();
-    runtime.observe_received_frame();
     let mut runtime =
         continuing(runtime.observe_management_frame(&refused_temporarily(100), at(1)));
-    runtime.observe_received_frame();
     failed(
         runtime.observe_management_frame(&deauthentication(8), at(2)),
         StaAssociationFailure::PeerDisconnect(StaDisconnect {
             kind: StaDisconnectKind::Deauthentication,
             reason_code: 8,
         }),
-        2,
     );
 }

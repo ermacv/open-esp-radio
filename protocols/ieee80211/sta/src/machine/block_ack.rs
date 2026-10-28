@@ -157,7 +157,9 @@ pub(super) fn unprotected_action(
     parse_block_ack_action(header.body())
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T, K, C> {
+impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observer>
+    Station<'id, T, K, C, O>
+{
     /// Attempt a response using the station's existing control credits and,
     /// when negotiated, its management protection. Busy returns the owner.
     #[inline(never)]
@@ -203,8 +205,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             Err(Unsent::NoConnection) => return Err((reply, BlockAckReplyRefusal::LinkChanged)),
         };
         if protected && !matches!(&self.keys.pairwise, KeyCell::Installed(_)) {
-            self.tickets.put(transmit.ticket);
-            self.buffers.put(transmit.buffer);
+            self.tickets.put(transmit.ticket, &self.config.observer);
+            self.buffers.put(transmit.buffer, &self.config.observer);
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
         if let State::Connected(connected) = &mut self.state {
@@ -214,8 +216,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             match &self.keys.pairwise {
                 KeyCell::Installed(key) => Ok(StaAction::TransmitProtected { transmit, key }),
                 _ => {
-                    self.tickets.put(transmit.ticket);
-                    self.buffers.put(transmit.buffer);
+                    self.tickets.put(transmit.ticket, &self.config.observer);
+                    self.buffers.put(transmit.buffer, &self.config.observer);
                     Err((reply, BlockAckReplyRefusal::LinkChanged))
                 }
             }

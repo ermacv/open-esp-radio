@@ -37,19 +37,15 @@ pub enum StaAuthenticationEvent {
     Irrelevant(StaAuthenticationExchange),
     Authenticated {
         attempt: u16,
-        total_received_frames: u32,
     },
     Retry {
         runtime: StaAuthenticationRuntime,
         attempt: u16,
         failure: StaAuthenticationFailure,
-        received_frames: u32,
-        total_received_frames: u32,
     },
     Failed {
         attempts: u16,
         failure: StaAuthenticationFailure,
-        total_received_frames: u32,
     },
 }
 
@@ -69,7 +65,6 @@ pub struct StaAuthenticationRuntime {
     local: OwnAddress,
     bssid: Bssid,
     attempts_started: u16,
-    total_received_frames: u32,
 }
 
 /// One active exchange. Only this owner accepts received frames or a timeout;
@@ -77,7 +72,6 @@ pub struct StaAuthenticationRuntime {
 #[derive(Debug)]
 pub struct StaAuthenticationExchange {
     runtime: StaAuthenticationRuntime,
-    received_frames: u32,
 }
 
 impl StaAuthenticationRuntime {
@@ -86,7 +80,6 @@ impl StaAuthenticationRuntime {
             local,
             bssid,
             attempts_started: 0,
-            total_received_frames: 0,
         }
     }
 
@@ -105,26 +98,11 @@ impl StaAuthenticationRuntime {
             sequence_number: sequence.take(),
             response_timeout: STA_RESPONSE_TIMEOUT,
         };
-        (
-            StaAuthenticationExchange {
-                runtime: self,
-                received_frames: 0,
-            },
-            attempt,
-        )
-    }
-
-    pub const fn total_received_frames(&self) -> u32 {
-        self.total_received_frames
+        (StaAuthenticationExchange { runtime: self }, attempt)
     }
 }
 
 impl StaAuthenticationExchange {
-    /// Account for one received descriptor while this exchange owns RX.
-    pub fn observe_received_frame(&mut self) {
-        self.received_frames = self.received_frames.saturating_add(1);
-    }
-
     /// Consume the active exchange and classify one management frame.
     /// An irrelevant input returns this same owner unchanged.
     pub fn observe_management_frame(self, frame: &[u8]) -> StaAuthenticationEvent {
@@ -144,7 +122,6 @@ impl StaAuthenticationExchange {
         if response.status_code == status_code::SUCCESS {
             StaAuthenticationEvent::Authenticated {
                 attempt: runtime.attempts_started,
-                total_received_frames: runtime.total_received_frames,
             }
         } else {
             StaAuthenticationEvent::Failed {
@@ -152,7 +129,6 @@ impl StaAuthenticationExchange {
                 failure: StaAuthenticationFailure::Rejected {
                     status_code: response.status_code,
                 },
-                total_received_frames: runtime.total_received_frames,
             }
         }
     }
@@ -162,42 +138,24 @@ impl StaAuthenticationExchange {
         self.finish_retryable(StaAuthenticationFailure::Timeout)
     }
 
-    pub const fn total_received_frames(&self) -> u32 {
-        self.runtime
-            .total_received_frames
-            .saturating_add(self.received_frames)
-    }
-    pub const fn active_received_frames(&self) -> u32 {
-        self.received_frames
-    }
-
     fn finish_retryable(self, failure: StaAuthenticationFailure) -> StaAuthenticationEvent {
-        let received_frames = self.received_frames;
         let runtime = self.finish_attempt();
         let attempt = runtime.attempts_started;
-        let total_received_frames = runtime.total_received_frames;
         if attempt < STA_AUTHENTICATION_ATTEMPT_LIMIT {
             StaAuthenticationEvent::Retry {
                 runtime,
                 attempt,
                 failure,
-                received_frames,
-                total_received_frames,
             }
         } else {
             StaAuthenticationEvent::Failed {
                 attempts: attempt,
                 failure,
-                total_received_frames,
             }
         }
     }
     fn finish_attempt(self) -> StaAuthenticationRuntime {
-        let mut runtime = self.runtime;
-        runtime.total_received_frames = runtime
-            .total_received_frames
-            .saturating_add(self.received_frames);
-        runtime
+        self.runtime
     }
 }
 

@@ -1,13 +1,13 @@
 //! A bounded pool of tokens, whose capacity a const check proves.
 
+use oer_trace::Observer;
+
 /// The tokens of one kind a machine holds at most.
 pub(crate) const POOL_CAPACITY: usize = 8;
 
 /// A bounded pool of tokens of one kind.
 pub(crate) struct Pool<X> {
     items: [Option<X>; POOL_CAPACITY],
-    /// Tokens given back to a full pool: dropped, counted.
-    lost: crate::Counter,
 }
 
 impl<X> Pool<X> {
@@ -21,7 +21,6 @@ impl<X> Pool<X> {
         };
         let mut pool = Self {
             items: [const { None }; POOL_CAPACITY],
-            lost: crate::Counter::ZERO,
         };
         for (slot, item) in pool.items.iter_mut().zip(items) {
             *slot = Some(item);
@@ -33,7 +32,6 @@ impl<X> Pool<X> {
         let mut items = items.into_iter();
         Self {
             items: core::array::from_fn(|_| items.next()),
-            lost: crate::Counter::ZERO,
         }
     }
 
@@ -42,11 +40,9 @@ impl<X> Pool<X> {
         let mut items = items.into_iter();
         let free = Self {
             items: core::array::from_fn(|index| if index < active { items.next() } else { None }),
-            lost: crate::Counter::ZERO,
         };
         let spare = Self {
             items: core::array::from_fn(|_| items.next()),
-            lost: crate::Counter::ZERO,
         };
         (free, spare)
     }
@@ -76,17 +72,12 @@ impl<X> Pool<X> {
     /// Keep `item`, a token of its kind the machine was granted and gave
     /// out: the tokens are unique and their number checked at the pool's
     /// creation, so a free entry waits for it. A token beyond them (not
-    /// one of the machine's) is dropped and counted.
-    pub(crate) fn put(&mut self, item: X) {
+    /// one of the machine's) is dropped and reported to `observer`.
+    pub(crate) fn put(&mut self, item: X, observer: &impl Observer) {
         match self.items.iter_mut().find(|slot| slot.is_none()) {
             Some(slot) => *slot = Some(item),
-            None => self.lost.increment(),
+            None => oer_trace::observe!(observer, oer_ieee80211_instrumentation::TokenLost),
         }
-    }
-
-    /// The tokens dropped because the pool was full.
-    pub(crate) const fn lost(&self) -> crate::Counter {
-        self.lost
     }
 }
 

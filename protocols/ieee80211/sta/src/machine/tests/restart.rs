@@ -94,7 +94,7 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
                 .any(|terminal| terminal.request.correlation() == 1000
                     && matches!(terminal.outcome, StaCommandOutcome::Connected { .. }))
         );
-        assert_eq!(world.station.lost_tokens(), 0);
+        assert_eq!(world.station.config.observer.tokens.get(), 0);
     });
 }
 

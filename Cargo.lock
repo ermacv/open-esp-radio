@@ -3058,10 +3058,12 @@ name = "oer-ieee80211-esp-now"
 version = "0.1.0"
 dependencies = [
  "oer-ieee80211-arbiter",
+ "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-time",
+ "oer-trace",
  "zeroize",
 ]
 
@@ -3165,6 +3167,7 @@ dependencies = [
  "oer-crypto",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
@@ -3175,6 +3178,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
+ "oer-trace",
 ]
 
 [[package]]

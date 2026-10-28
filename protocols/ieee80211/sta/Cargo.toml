@@ -25,10 +25,13 @@ oer-ieee80211-wire = { path = "../wire" }
 oer-ieee80211-rsn = { path = "../rsn" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-time = { path = "../../../portable/time" }
+oer-trace = { path = "../../../portable/trace" }
+oer-ieee80211-instrumentation = { path = "../instrumentation" }
 oer-radio-port = { path = "../../radio/port" }
 oer-radio-regulatory = { path = "../../radio/regulatory" }
 
 [dev-dependencies]
+oer-ieee80211-instrumentation = { path = "../instrumentation", features = ["test-support"] }
 oer-ieee80211-rsn = { path = "../rsn", features = ["test-support"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
