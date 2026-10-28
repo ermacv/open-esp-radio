@@ -19,8 +19,8 @@ pub use active_power::ActivePower;
 pub use brownout::{BrownoutFailure, BrownoutRegisters, THRESHOLD_WAIT, apply_idf_policy};
 pub use cache::{CacheMap, CacheRegisters};
 pub use clock::{
-    BusDividers, ClockRegisters, CpllDividers, CpuRoot, FlashClockWord, MemDivider,
-    PsramSupplyLevel,
+    BusDividers, ClockRegisters, CpllDividers, CpuRoot, FlashClockWord, LP_FAST_SOURCE,
+    LpFastClock, MemDivider, PsramSupplyLevel,
 };
 pub use flash::{FlashRegisters, FlashTimingCandidate, FlashTimingWords};
 pub use oer_espressif_boot::{

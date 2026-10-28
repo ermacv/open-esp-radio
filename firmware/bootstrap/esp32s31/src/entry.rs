@@ -42,10 +42,11 @@ extern "C" fn bootstrap_main() -> ! {
     let root = root.unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=root-taken\r\n"));
     let mut hardware = root.into_bootstrap().unwrap_or_else(|error| {
         print("OER_BOOT bootstrap=FAIL reason=");
-        print(error.name());
+        print(error.name().as_str());
         fail("\r\n")
     });
     let deadline = boot::BootDeadline::start(&hardware.monotonic, boot::BOOT_BUDGET);
+    checked(hardware.lp_fast_clock.select(&deadline));
     hardware
         .soc
         .initialize(&deadline)

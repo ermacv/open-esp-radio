@@ -182,6 +182,26 @@ fn boot_failure_records_preserve_the_named_wait() {
     );
 }
 
+#[test]
+fn lp_fast_readback_failure_records_keep_both_selector_codes() {
+    use oer_espressif_boot::ClockFailure;
+
+    for observed in [0, 2, 3] {
+        assert_eq!(
+            boot_failure_record(
+                ClockFailure::LpFastReadback {
+                    expected: 1,
+                    observed
+                }
+                .into()
+            ),
+            std::format!(
+                "OER_BOOT bootstrap=FAIL reason=lp-fast-readback expected=1 observed={observed}\r\n"
+            )
+        );
+    }
+}
+
 fn boot_failure_record(error: oer_espressif_boot::BootFailure) -> std::string::String {
     let mut bytes = Vec::new();
     super::BootFailureRecord(error).write(|chunk| bytes.extend_from_slice(chunk));

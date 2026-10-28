@@ -28,7 +28,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."LP_AONCLKRST_ROOT_CLK_CONF.LP_AONCLKRST_FAST_CLK_SEL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000", "ESP_IDF_4D59230D_S31_RTC_FAST_CLOCK_SOURCE"]
 
 [review.entity."LP_AONCLKRST_ROOT_CLK_CONF.LP_AONCLKRST_PLL80M_CLK_FORCE_ON"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
@@ -66,7 +66,7 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PA
 [[registers]]
 name = "LP_AONCLKRST_ROOT_CLK_CONF"
 offset = 0x0
-description = "Low-power root clock configuration. Only the RTC slow-clock source selector is published. The access states the radio's: the radio reads the slow-clock source, and esp-hal's clock tree alone writes the word."
+description = "Low-power root clock configuration. The bootstrap explicitly selects the LP-fast source; the radio observes the RTC slow-clock source and the full diagnostic image. Writes preserve all other fields."
 reset = { value = 0x4000000 }
 
 [[registers.fields]]
@@ -85,7 +85,9 @@ description = "RTC slow-clock source: zero is the RC slow oscillator and one the
 name = "LP_AONCLKRST_FAST_CLK_SEL"
 bits = "27:26"
 class = "plain"
-description = "need_des"
+description = "RTC fast-clock source. SOURCE: ESP_IDF_4D59230D_S31_RTC_FAST_CLOCK_SOURCE; codes two and three are invalid."
+values = [{ name = "RC_FAST", value = 0, description = "Fast RC oscillator.", sources = ["ESP_IDF_4D59230D_S31_RTC_FAST_CLOCK_SOURCE"] }, { name = "XTAL", value = 1, description = "Main crystal, without a divide by two.", sources = ["ESP_IDF_4D59230D_S31_RTC_FAST_CLOCK_SOURCE"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "LP_AONCLKRST_PLL80M_CLK_FORCE_ON"

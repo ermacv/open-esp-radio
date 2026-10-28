@@ -17,6 +17,21 @@ use crate::{Facts, Region, Result, Rom};
 
 mod stacks;
 
+/// A typed PAC selection for the boot clock owner. Register encodings stay
+/// in the register model; a missing policy is an error, never an inherited root.
+pub fn lp_fast_source(facts: &Facts) -> Result<String> {
+    let variant = match facts
+        .lp_fast_source
+        .ok_or_else(|| format!("{}: LP-fast startup needs `lp-fast-source`", facts.id))?
+    {
+        crate::LpFastSource::Xtal => "Xtal",
+    };
+    Ok(format!(
+        "// Generated from chip/profile `lp-fast-source`; edit the facts.\n\
+         pub const LP_FAST_SOURCE: root_clk_conf::FastClkSel = root_clk_conf::FastClkSel::{variant};\n"
+    ))
+}
+
 /// The linker assignments for exactly the ROM functions in the facts.
 /// No vendor script or libc symbols are included implicitly.
 pub fn rom_script(rom: &Rom) -> Result<String> {
@@ -489,6 +504,28 @@ pub fn entry_symbols(vectors: &Vectors) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::tests::tracked;
+
+    #[test]
+    fn lp_fast_selection_is_generated_from_the_profile_and_requires_a_policy() {
+        let mut facts = tracked("esp32s31");
+        assert_eq!(facts.lp_fast_source, Some(crate::LpFastSource::Xtal));
+        assert!(lp_fast_source(&facts).expect("explicit policy").contains(
+            "pub const LP_FAST_SOURCE: root_clk_conf::FastClkSel = root_clk_conf::FastClkSel::Xtal;"
+        ));
+        facts.lp_fast_source = None;
+        assert!(lp_fast_source(&facts).is_err());
+        assert_eq!(
+            toml::Value::String("xtal".into()).try_into::<crate::LpFastSource>(),
+            Ok(crate::LpFastSource::Xtal)
+        );
+        for unsupported in ["rc-fast", "2", "3"] {
+            assert!(
+                toml::Value::String(unsupported.into())
+                    .try_into::<crate::LpFastSource>()
+                    .is_err()
+            );
+        }
+    }
 
     #[test]
     fn levels_derive_from_mnlbits_and_excess_level_bits_are_refused() {

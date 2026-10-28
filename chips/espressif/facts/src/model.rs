@@ -24,6 +24,14 @@ pub enum Boot {
     EspIdfBootloader,
 }
 
+/// Supported LP-fast startup policy, independent of the register encoding.
+/// RC_FAST requires a separate power/readiness policy and is not supported.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LpFastSource {
+    Xtal,
+}
+
 /// The `[core-start]` table: the functions that release a core other than
 /// core 0 from reset or stall. An image that links one has a core running code
 /// of its own, which its stack policy must then declare with a proven root;

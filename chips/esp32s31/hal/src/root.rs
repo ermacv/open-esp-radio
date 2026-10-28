@@ -29,7 +29,7 @@ use crate::{
     bluetooth::{BluetoothControllerParts, BluetoothModemLpTimerParts, BluetoothPartition},
     boot::{
         ActivePower, Brownout, CacheRegisters, ClockRegisters, FLASH_MMU_WINDOW, FlashRegisters,
-        MmuWindow, PsramRegisters, Soc,
+        LpFastClock, MmuWindow, PsramRegisters, Soc,
     },
     cores,
     domain::{
@@ -172,6 +172,7 @@ impl Root {
                 hp_alive_sys_pll_clock,
             ),
             active_power: ActivePower::new(radio_phy.pmu_radio),
+            lp_fast_clock: LpFastClock::new(radio_phy.lp_aon_radio_clock),
             psram: PsramRegisters::new(memspi2_psram, memspi3_psram, iomux_mspi_psram_pins),
             cache: CacheRegisters::new(cache_boot),
             flash: FlashRegisters::new(spi0_flash, spi1_flash),
@@ -309,6 +310,8 @@ pub struct Bootstrap {
     /// The CPU clock, its PLL and update, the flash clock, the memory PLL
     /// and the PSRAM supply.
     pub clock: ClockRegisters,
+    /// Explicit LP-fast root selection, before any LP consumer starts.
+    pub lp_fast_clock: LpFastClock,
     /// The PLLs' active-state power.
     pub active_power: ActivePower,
     /// The PSRAM controllers, command port, pads and MMU.

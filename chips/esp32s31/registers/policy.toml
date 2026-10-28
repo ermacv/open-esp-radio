@@ -886,7 +886,7 @@ registers = ["TICK_CONF"]
 name = "LpAonRadioClock"
 instance = "LP_AON_CLKRST"
 registers = ["LP_AONCLKRST_ROOT_CLK_CONF"]
-description = "RTC slow-clock source used by modem power."
+description = "LP root clock word: bootstrap selects LP-fast before consumers start; runtime PHY observes the RTC slow-clock source and diagnostic image."
 
 [[partitions.parts]]
 name = "LpAonClkrst"
