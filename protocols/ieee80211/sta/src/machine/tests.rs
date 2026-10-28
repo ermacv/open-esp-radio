@@ -4525,6 +4525,7 @@ fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
 }
 
 mod deadlines;
+mod transmit;
 mod management;
 
 #[test]

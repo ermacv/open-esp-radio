@@ -676,37 +676,53 @@ impl StaFrameClass {
     }
 }
 
+impl StaRatePlan {
+    /// The retry plan of an individual frame at this plan's rates, as
+    /// `rates` select them; `carried` turns a rate into the phase's. `None`
+    /// when no stage of the selection is carried.
+    pub fn individual<R, M: RxMetadata, A>(
+        self,
+        rates: &impl RateSelection<M, A>,
+        carried: impl Fn(oer_ieee80211_port::PhyRate) -> Option<R>,
+    ) -> Option<oer_ieee80211_port::RetryPlan<R>> {
+        match self {
+            // A Null's retries are its plan's.
+            Self::Null => rates
+                .plan(FrameRates::Control, carried)
+                .map(|plan| plan.limit(crate::power_save::NULL_TRANSMISSIONS)),
+            Self::Management | Self::Group => rates.plan(FrameRates::Control, carried),
+        }
+    }
+
+    /// The one rate of a group frame: the first stage of the probe record.
+    pub fn group<R, M: RxMetadata, A>(
+        rates: &impl RateSelection<M, A>,
+        carried: impl Fn(oer_ieee80211_port::PhyRate) -> Option<R>,
+    ) -> Option<R> {
+        rates
+            .plan(FrameRates::Probe, carried)
+            .map(|plan| plan.into_first().rate)
+    }
+}
+
 impl<K: Ieee80211Capabilities, C> StaFrame<K, C> {
     /// The frame on the phase's channel at the rates of `plan`, as `rates`
     /// select them; `carried` turns a rate into the phase's. `None` when no
     /// stage of the selection is carried: the frame does not go.
-    pub fn rated<'p, 'id, M, A>(
+    pub fn rated<'p, 'id, M: RxMetadata, A>(
         self,
         plan: StaRatePlan,
         rates: &impl RateSelection<M, A>,
         carried: impl Fn(
             oer_ieee80211_port::PhyRate,
         ) -> Option<oer_ieee80211_port::PhaseRate<'p, 'id, K>>,
-    ) -> Option<oer_ieee80211_port::ClassFrame<'p, 'id, C, K>>
-    where
-        M: RxMetadata,
-    {
+    ) -> Option<oer_ieee80211_port::ClassFrame<'p, 'id, C, K>> {
         match self {
-            Self::Individual(frame) => {
-                let plan = match plan {
-                    // A Null's retries are its plan's.
-                    StaRatePlan::Null => rates
-                        .plan(FrameRates::Control, carried)
-                        .map(|plan| plan.limit(crate::power_save::NULL_TRANSMISSIONS)),
-                    StaRatePlan::Management | StaRatePlan::Group => {
-                        rates.plan(FrameRates::Control, carried)
-                    }
-                };
-                plan.map(|plan| oer_ieee80211_port::ClassFrame::individual(frame, plan))
-            }
-            Self::Group(frame) => rates.plan(FrameRates::Probe, carried).map(|plan| {
-                oer_ieee80211_port::ClassFrame::group(frame, plan.into_first().rate)
-            }),
+            Self::Individual(frame) => plan
+                .individual(rates, carried)
+                .map(|plan| oer_ieee80211_port::ClassFrame::individual(frame, plan)),
+            Self::Group(frame) => StaRatePlan::group(rates, carried)
+                .map(|rate| oer_ieee80211_port::ClassFrame::group(frame, rate)),
         }
     }
 }

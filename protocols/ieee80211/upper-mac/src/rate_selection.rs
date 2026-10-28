@@ -156,3 +156,51 @@ pub trait RateSelection<M: RxMetadata, A> {
         }
     }
 }
+
+#[cfg(test)]
+mod learn_tests {
+    use super::*;
+    use core::num::NonZeroU16;
+    use oer_ieee80211_port::{Air, RxMeta, SingleEnd, SingleResponse, TxOutcome, WithdrawCause};
+    use std::vec::Vec;
+
+    /// Records which record each taught completion reached.
+    struct Taught(Vec<FrameRates>);
+
+    impl RateSelection<RxMeta, ()> for Taught {
+        fn packet_number_step(&self) -> crate::ccmp::CcmpPacketNumberStep {
+            crate::ccmp::CcmpPacketNumberStep::ONE
+        }
+
+        fn plan<R>(&self, _: FrameRates, _: impl Fn(PhyRate) -> Option<R>) -> Option<RetryPlan<R>> {
+            None
+        }
+
+        fn associated(&mut self, _: &RatePeer, _: &RxMeta) {}
+
+        fn disconnected(&mut self) {}
+
+        fn completed<D>(&mut self, _: Instant, frame: FrameRates, _: &SingleOutcome<(), D>) {
+            self.0.push(frame);
+        }
+    }
+
+    #[test]
+    fn only_a_current_links_sampled_completion_teaches_its_record() {
+        let delivered: SingleOutcome<(), ()> = TxOutcome::Ended(SingleEnd::Delivered {
+            air: Air {
+                transmissions: NonZeroU16::MIN,
+                rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+            },
+            response: SingleResponse::Ack(()),
+        });
+        let withdrawn: SingleOutcome<(), ()> = TxOutcome::Withdrawn(WithdrawCause::GateClosed);
+        let mut rates = Taught(Vec::new());
+        let now = Instant::from_micros(1);
+        rates.learn(now, FrameRates::Probe, true, &delivered);
+        rates.learn(now, FrameRates::Data, false, &delivered);
+        rates.learn(now, FrameRates::Control, true, &withdrawn);
+        rates.learn(now, FrameRates::Data, true, &delivered);
+        assert_eq!(rates.0, [FrameRates::Probe, FrameRates::Data]);
+    }
+}
