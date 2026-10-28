@@ -7,7 +7,7 @@
 //! (for example a reconnecting station's connection frames) is state of the
 //! coexistence owner, never of the row.
 
-use crate::pti::{CoexEventId, wifi_events};
+use crate::pti::{CoexEventId, ieee802154_events, wifi_events};
 use oer_ieee80211_port::{ConnectionFrame, Operation as WifiOperation, TxOperation};
 use oer_ieee802154_mac::RadioOperation;
 
@@ -58,15 +58,13 @@ pub const fn wifi_event(operation: WifiOperation) -> Option<CoexEventId> {
 /// `CslSlot`: product choice: the archive names no CSL row; a slot is a
 /// timed reception, so it reads the timed-reception event.
 pub const fn ieee802154_event(operation: RadioOperation) -> CoexEventId {
-    let event = match operation {
-        RadioOperation::Idle => 44,
-        RadioOperation::Tx | RadioOperation::Rx => 43,
-        RadioOperation::TxAt | RadioOperation::RxAt | RadioOperation::Ack => 42,
-        RadioOperation::CslSlot => 42,
-    };
-    match CoexEventId::new(event) {
-        Some(event) => event,
-        None => panic!("the IEEE 802.15.4 events lie in the vendor table"),
+    match operation {
+        RadioOperation::Idle => ieee802154_events::IDLE,
+        RadioOperation::Tx | RadioOperation::Rx => ieee802154_events::IMMEDIATE,
+        RadioOperation::TxAt | RadioOperation::RxAt | RadioOperation::Ack => {
+            ieee802154_events::TIMED
+        }
+        RadioOperation::CslSlot => ieee802154_events::TIMED,
     }
 }
 

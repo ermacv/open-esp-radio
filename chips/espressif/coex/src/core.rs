@@ -41,8 +41,7 @@ impl CoexCore {
 
     pub fn disable<H: CoexTimerHardware>(&mut self, hardware: &mut H) -> Result<(), CoexError> {
         for index in CoexTimerIndex::ALL {
-            if self.active[usize::from(index.value())].is_some()
-                || self.uncertain_timers & timer_bit(index) != 0
+            if index.entry(&self.active).is_some() || self.uncertain_timers & timer_bit(index) != 0
             {
                 self.disable_timer(hardware, index)?;
             }
@@ -106,7 +105,7 @@ impl CoexCore {
             request.duration,
         )?;
         hardware.enable(index)?;
-        self.active[usize::from(index.value())] = Some(CoexRequest { client, request });
+        *index.entry_mut(&mut self.active) = Some(CoexRequest { client, request });
         self.uncertain_timers &= !timer_bit(index);
         Ok(index)
     }
@@ -128,16 +127,16 @@ impl CoexCore {
     ) -> Result<(), CoexError> {
         self.uncertain_timers |= timer_bit(index);
         hardware.disable(index)?;
-        self.active[usize::from(index.value())] = None;
+        *index.entry_mut(&mut self.active) = None;
         self.uncertain_timers &= !timer_bit(index);
         Ok(())
     }
 
     pub fn status(&self) -> CoexStatus {
         let mut active_timers = 0_u8;
-        for (index, request) in self.active.iter().enumerate() {
-            if request.is_some() {
-                active_timers |= 1 << index;
+        for index in CoexTimerIndex::ALL {
+            if index.entry(&self.active).is_some() {
+                active_timers |= timer_bit(index);
             }
         }
         CoexStatus {
@@ -159,5 +158,11 @@ impl Default for CoexCore {
 }
 
 const fn timer_bit(index: CoexTimerIndex) -> u8 {
-    1 << index.value()
+    match index {
+        CoexTimerIndex::Timer0 => 0x01,
+        CoexTimerIndex::Timer1 => 0x02,
+        CoexTimerIndex::Timer2 => 0x04,
+        CoexTimerIndex::Timer3 => 0x08,
+        CoexTimerIndex::Timer4 => 0x10,
+    }
 }

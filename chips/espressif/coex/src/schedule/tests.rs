@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
+
 use super::*;
 use CoexSchemeId as S;
 
@@ -438,7 +444,7 @@ fn a_connected_wifi_stops_at_the_last_phase_until_it_restarts_them() {
     let scheme = schedule.scheme().scheme();
     let last = scheme.phases().len() - 1;
 
-    let step = schedule.restart().expect("a restart always steps");
+    let step = schedule.restart();
     assert_eq!(schedule.phase_index(), 0);
     assert!(step.timer_micros.is_some());
     for _ in 1..last {
@@ -486,4 +492,88 @@ fn only_the_other_radios_status_counts_for_a_radio() {
     let with_ieee802154 = words([wifi_status::SCAN, 0, 0, 0, 1]);
     assert!(with_ieee802154.others_publish(CoexStatusType::Wifi));
     assert!(!words([0; 5]).others_publish(CoexStatusType::Ieee802154));
+}
+
+#[test]
+fn every_scheme_restarts_and_visits_each_phase_without_looping() {
+    for id in CoexSchemeId::ALL {
+        let mut schedule = CoexSchedule::new();
+        schedule.scheme = id;
+        schedule.set_interval(u32::MAX);
+        let mut phases = id.scheme().phases().iter().enumerate().peekable();
+        let first = schedule.restart();
+        while let Some((index, &phase)) = phases.next() {
+            let step = if index == 0 {
+                first
+            } else {
+                schedule.timeout().unwrap()
+            };
+            assert_eq!(usize::from(schedule.phase_index()), index, "{}", id.name());
+            assert_eq!(step.phase, phase);
+            assert_eq!(step.notify_wifi, phase.wifi() != 0);
+            assert_eq!(step.notify_bluetooth, phase.bluetooth() != [0; 2]);
+            let duration = (u64::from(id.scheme().period())
+                * u64::from(u32::MAX)
+                * u64::from(phase.share_percent())) as u32;
+            assert_eq!(step.timer_micros, phases.peek().map(|_| duration));
+        }
+        assert_eq!(schedule.timeout(), Err(CoexScheduleIdle::LastPhase));
+        assert_eq!(schedule.restart(), first);
+    }
+}
+
+#[test]
+fn a_phase_beyond_a_shorter_scheme_stays_idle_or_restarts_when_looping() {
+    let mut schedule = CoexSchedule::new();
+    schedule.scheme = CoexSchemeId::ALL
+        .into_iter()
+        .find(|id| id.scheme().phases().len() == 5)
+        .unwrap();
+    schedule.restart();
+    for _ in 1..5 {
+        schedule.timeout().unwrap();
+    }
+    schedule.set_status_bits(CoexStatusType::Wifi, wifi_status::CONNECTED);
+    assert_eq!(schedule.phase_index(), 4);
+    assert_eq!(schedule.current_phase(), None);
+    assert_eq!(schedule.phase_by_index(u8::MAX), None);
+    assert_eq!(schedule.timeout(), Err(CoexScheduleIdle::LastPhase));
+    assert_eq!(schedule.phase_index(), 4);
+
+    // Change an already-looping schedule without triggering an implicit
+    // restart: the pending timeout must wrap its stale index to phase zero.
+    schedule.set_status_bits(CoexStatusType::Ble, 1);
+    assert_eq!(
+        schedule.set_status_bits(CoexStatusType::Wifi, wifi_status::SCAN),
+        None
+    );
+    schedule.clear_status_bits(CoexStatusType::Wifi, wifi_status::CONNECTED);
+    let step = schedule.timeout().unwrap();
+    assert_eq!(schedule.phase_index(), 0);
+    assert_eq!(step.phase, schedule.scheme().scheme().phases()[0]);
+}
+
+#[test]
+fn status_group_and_other_radio_tests_cover_every_presence_combination() {
+    for mask in 0..32_u8 {
+        let bits = core::array::from_fn(|index| u16::from(mask & (1 << index) != 0));
+        let status = words(bits);
+        let groups = [
+            bits[0] != 0,
+            bits[1] != 0 || bits[2] != 0,
+            bits[3] != 0,
+            bits[4] != 0,
+        ];
+        assert_eq!(
+            status.loop_allowed(),
+            groups.into_iter().filter(|set| *set).count() >= 2
+        );
+        for (index, radio) in CoexStatusType::ALL.into_iter().enumerate() {
+            let others = bits
+                .iter()
+                .enumerate()
+                .any(|(other, &word)| other != index && word != 0);
+            assert_eq!(status.others_publish(radio), others);
+        }
+    }
 }

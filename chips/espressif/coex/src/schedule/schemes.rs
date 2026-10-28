@@ -7,7 +7,7 @@
 //! vendor image is one phase-count byte, one period byte and four bytes per
 //! phase; this module keeps the same values as typed records.
 
-use super::{CoexPhase, CoexScheme};
+use super::{CoexPhase, CoexPhases, CoexScheme};
 
 /// One recovered vendor scheme.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -615,742 +615,766 @@ impl CoexSchemeId {
 
 const ALL_DEFAULT: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x03, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_A2DP_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(30, 0x03, [0x00, 0x00]),
         CoexPhase::new(70, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_A2DP_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     33,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(30, 0x02, [0x00, 0x00]),
         CoexPhase::new(70, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_A2DP_WIFI_DEFAULT: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(30, 0x03, [0x00, 0x00]),
         CoexPhase::new(70, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_A2DP_WIFI_SCAN: CoexScheme = CoexScheme::new(
     34,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(30, 0x02, [0x00, 0x00]),
         CoexPhase::new(70, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_DEFAULT_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x03, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_DEFAULT_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     25,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_DEFAULT_WIFI_SCAN: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_IDLE_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x03, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_IDLE_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_IDLE_WIFI_DEFAULT: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x03, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_DEFAULT_BT_IDLE_WIFI_SCAN: CoexScheme = CoexScheme::new(
     24,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
-const BLE_IDLE_BT_IDLE_WIFI_DEFAULT: CoexScheme =
-    CoexScheme::new(1, &[CoexPhase::new(100, 0x00, [0x00, 0x00])]);
+const BLE_IDLE_BT_IDLE_WIFI_DEFAULT: CoexScheme = CoexScheme::new(
+    1,
+    CoexPhases::One(&[CoexPhase::new(100, 0x00, [0x00, 0x00])]),
+);
 const BLE_MESH_CONFIG_BT_A2DP_PAUSED_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x03, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_A2DP_PAUSED_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_A2DP_PAUSED_WIFI_SCAN: CoexScheme = CoexScheme::new(
     12,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_A2DP_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x03, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_A2DP_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_A2DP_WIFI_SCAN: CoexScheme = CoexScheme::new(
     12,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_CONN_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x03, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_CONN_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_CONN_WIFI_SCAN: CoexScheme = CoexScheme::new(
     12,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_DEFAULT_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x03, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_DEFAULT_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_DEFAULT_WIFI_SCAN: CoexScheme = CoexScheme::new(
     12,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(25, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(55, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_PISCAN_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(45, 0x03, [0x20, 0x02]),
         CoexPhase::new(55, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_PISCAN_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(45, 0x02, [0x20, 0x02]),
         CoexPhase::new(55, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_PISCAN_WIFI_SCAN: CoexScheme = CoexScheme::new(
     12,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(45, 0x02, [0x20, 0x02]),
         CoexPhase::new(55, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_SNIFF_SCO_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(45, 0x03, [0x20, 0x00]),
         CoexPhase::new(55, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_SNIFF_SCO_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(45, 0x02, [0x20, 0x00]),
         CoexPhase::new(55, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_BT_SNIFF_SCO_WIFI_SCAN: CoexScheme = CoexScheme::new(
     12,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(45, 0x02, [0x20, 0x00]),
         CoexPhase::new(55, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(45, 0x03, [0x00, 0x00]),
         CoexPhase::new(55, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(45, 0x02, [0x00, 0x00]),
         CoexPhase::new(55, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_CONFIG_WIFI_SCAN: CoexScheme = CoexScheme::new(
     12,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_A2DP_PAUSED_WIFI_CONN: CoexScheme = CoexScheme::new(
     2,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(58, 0x03, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(12, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_A2DP_PAUSED_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(45, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(25, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_A2DP_PAUSED_WIFI_SCAN: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_A2DP_WIFI_CONN: CoexScheme = CoexScheme::new(
     2,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(28, 0x03, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x20, 0x04]),
         CoexPhase::new(12, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_A2DP_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Five(&[
         CoexPhase::new(30, 0x02, [0x00, 0x00]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_A2DP_WIFI_SCAN: CoexScheme = CoexScheme::new(
     25,
-    &[
+    CoexPhases::Five(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(5, 0x00, [0x02, 0x40]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(5, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_CONN_WIFI_CONN: CoexScheme = CoexScheme::new(
     2,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(63, 0x03, [0x00, 0x00]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(12, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_CONN_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(45, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(25, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_CONN_WIFI_SCAN: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_DEFAULT_WIFI_CONN: CoexScheme = CoexScheme::new(
     2,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(38, 0x03, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x20, 0x04]),
         CoexPhase::new(12, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_DEFAULT_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Five(&[
         CoexPhase::new(34, 0x02, [0x00, 0x00]),
         CoexPhase::new(23, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
         CoexPhase::new(23, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_DEFAULT_WIFI_SCAN: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Five(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(5, 0x00, [0x02, 0x40]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(5, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_PISCAN_WIFI_CONN: CoexScheme = CoexScheme::new(
     2,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(88, 0x03, [0x20, 0x20]),
         CoexPhase::new(12, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_PISCAN_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x20, 0x02]),
         CoexPhase::new(30, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_PISCAN_WIFI_SCAN: CoexScheme = CoexScheme::new(
     17,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x20, 0x02]),
         CoexPhase::new(30, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_SNIFF_SCO_WIFI_CONN: CoexScheme = CoexScheme::new(
     2,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(88, 0x03, [0x20, 0x00]),
         CoexPhase::new(12, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_SNIFF_SCO_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x20, 0x00]),
         CoexPhase::new(30, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_BT_SNIFF_SCO_WIFI_SCAN: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(60, 0x02, [0x20, 0x00]),
         CoexPhase::new(40, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_WIFI_CONN: CoexScheme = CoexScheme::new(
     2,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(80, 0x03, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_STANDBY_WIFI_SCAN: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(60, 0x02, [0x00, 0x00]),
         CoexPhase::new(40, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_A2DP_PAUSED_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x03, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_A2DP_PAUSED_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     25,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_A2DP_PAUSED_WIFI_SCAN: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_A2DP_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(20, 0x03, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_A2DP_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Five(&[
         CoexPhase::new(30, 0x02, [0x00, 0x00]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_A2DP_WIFI_SCAN: CoexScheme = CoexScheme::new(
     34,
-    &[
+    CoexPhases::Five(&[
         CoexPhase::new(30, 0x02, [0x00, 0x00]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
         CoexPhase::new(25, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_CONN_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x03, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_CONN_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     25,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_CONN_WIFI_SCAN: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_DEFAULT_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Three(&[
         CoexPhase::new(40, 0x03, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x20, 0x04]),
         CoexPhase::new(30, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_DEFAULT_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Five(&[
         CoexPhase::new(34, 0x02, [0x00, 0x00]),
         CoexPhase::new(23, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
         CoexPhase::new(23, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_DEFAULT_WIFI_SCAN: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Five(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
         CoexPhase::new(20, 0x00, [0x20, 0x04]),
         CoexPhase::new(10, 0x00, [0x02, 0x40]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_PISCAN_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x03, [0x20, 0x02]),
         CoexPhase::new(30, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_PISCAN_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x20, 0x02]),
         CoexPhase::new(30, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_PISCAN_WIFI_SCAN: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(60, 0x02, [0x20, 0x02]),
         CoexPhase::new(40, 0x00, [0x02, 0x20]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_SNIFF_SCO_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x03, [0x20, 0x00]),
         CoexPhase::new(30, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_SNIFF_SCO_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x20, 0x00]),
         CoexPhase::new(30, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_BT_SNIFF_SCO_WIFI_SCAN: CoexScheme = CoexScheme::new(
     24,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x20, 0x00]),
         CoexPhase::new(50, 0x00, [0x02, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(60, 0x03, [0x00, 0x00]),
         CoexPhase::new(40, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BLE_MESH_TRAFFIC_WIFI_SCAN: CoexScheme = CoexScheme::new(
     24,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_A2DP_PAUSED_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x03, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x00, 0x04]),
-    ],
+    ]),
 );
 const BT_A2DP_PAUSED_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x00, 0x04]),
-    ],
+    ]),
 );
 const BT_A2DP_PAUSED_WIFI_SCAN: CoexScheme = CoexScheme::new(
     17,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x00, 0x04]),
-    ],
+    ]),
 );
 const BT_A2DP_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x03, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x04]),
-    ],
+    ]),
 );
 const BT_A2DP_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     25,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_A2DP_WIFI_SCAN: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_CONN_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x03, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x04]),
-    ],
+    ]),
 );
 const BT_CONN_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     10,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_CONN_WIFI_SCAN: CoexScheme = CoexScheme::new(
     17,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(70, 0x02, [0x00, 0x00]),
         CoexPhase::new(30, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_DEFAULT_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x03, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_DEFAULT_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_DEFAULT_WIFI_SCAN: CoexScheme = CoexScheme::new(
     24,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
-const BT_IDLE_WIFI_CONN: CoexScheme =
-    CoexScheme::new(1, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
-const BT_IDLE_WIFI_CONNECTING: CoexScheme =
-    CoexScheme::new(10, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
-const BT_IDLE_WIFI_SCAN: CoexScheme =
-    CoexScheme::new(12, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
+const BT_IDLE_WIFI_CONN: CoexScheme = CoexScheme::new(
+    1,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
+const BT_IDLE_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
+    10,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
+const BT_IDLE_WIFI_SCAN: CoexScheme = CoexScheme::new(
+    12,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
 const BT_INQ_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_INQ_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_INQ_WIFI_SCAN: CoexScheme = CoexScheme::new(
     30,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(40, 0x02, [0x00, 0x00]),
         CoexPhase::new(60, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_PAGE_WIFI_CONN: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(30, 0x02, [0x00, 0x00]),
         CoexPhase::new(70, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_PAGE_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
     20,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const BT_PAGE_WIFI_SCAN: CoexScheme = CoexScheme::new(
     40,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(30, 0x02, [0x00, 0x00]),
         CoexPhase::new(70, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
-const BT_PISCAN_WIFI_CONN: CoexScheme =
-    CoexScheme::new(1, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
-const BT_PISCAN_WIFI_CONNECTING: CoexScheme =
-    CoexScheme::new(10, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
-const BT_PISCAN_WIFI_SCAN: CoexScheme =
-    CoexScheme::new(12, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
-const BT_SNIFF_SCO_WIFI_CONN: CoexScheme =
-    CoexScheme::new(1, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
-const BT_SNIFF_SCO_WIFI_CONNECTING: CoexScheme =
-    CoexScheme::new(10, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
-const BT_SNIFF_SCO_WIFI_SCAN: CoexScheme =
-    CoexScheme::new(12, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
-const EXTERNAL_COEX_WIFI_CONNECTING: CoexScheme =
-    CoexScheme::new(10, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
+const BT_PISCAN_WIFI_CONN: CoexScheme = CoexScheme::new(
+    1,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
+const BT_PISCAN_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
+    10,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
+const BT_PISCAN_WIFI_SCAN: CoexScheme = CoexScheme::new(
+    12,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
+const BT_SNIFF_SCO_WIFI_CONN: CoexScheme = CoexScheme::new(
+    1,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
+const BT_SNIFF_SCO_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
+    10,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
+const BT_SNIFF_SCO_WIFI_SCAN: CoexScheme = CoexScheme::new(
+    12,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
+const EXTERNAL_COEX_WIFI_CONNECTING: CoexScheme = CoexScheme::new(
+    10,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
 const EXTERNAL_COEX_WIFI_DEFAULT: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x03, [0x00, 0x00]),
         CoexPhase::new(50, 0x00, [0x00, 0x00]),
-    ],
+    ]),
 );
 const EXTERNAL_COEX_WIFI_DEFAULT_RXONLY: CoexScheme = CoexScheme::new(
     1,
-    &[
+    CoexPhases::Two(&[
         CoexPhase::new(50, 0x02, [0x00, 0x00]),
         CoexPhase::new(50, 0x04, [0x00, 0x00]),
-    ],
+    ]),
 );
-const EXTERNAL_COEX_WIFI_SCAN: CoexScheme =
-    CoexScheme::new(12, &[CoexPhase::new(100, 0x02, [0x00, 0x00])]);
+const EXTERNAL_COEX_WIFI_SCAN: CoexScheme = CoexScheme::new(
+    12,
+    CoexPhases::One(&[CoexPhase::new(100, 0x02, [0x00, 0x00])]),
+);
