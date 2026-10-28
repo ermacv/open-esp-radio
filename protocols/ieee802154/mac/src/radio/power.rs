@@ -27,15 +27,18 @@ pub struct TransmitPowerLevels {
 impl TransmitPowerLevels {
     /// Validate a level set.
     pub const fn new(levels_dbm: &'static [i8]) -> Result<Self, TransmitPowerLevelsError> {
-        if levels_dbm.is_empty() {
+        let Some((&first, mut rest)) = levels_dbm.split_first() else {
             return Err(TransmitPowerLevelsError::Empty);
-        }
-        let mut index = 1;
-        while index < levels_dbm.len() {
-            if levels_dbm[index] < levels_dbm[index - 1] {
+        };
+        let mut previous = first;
+        while let Some((&level, tail)) = rest.split_first() {
+            if level < previous {
+                // rest is a suffix of levels_dbm, so this difference is exact.
+                let index = levels_dbm.len().saturating_sub(rest.len());
                 return Err(TransmitPowerLevelsError::Descending { index });
             }
-            index += 1;
+            previous = level;
+            rest = tail;
         }
         Ok(Self { levels_dbm })
     }
@@ -47,12 +50,30 @@ impl TransmitPowerLevels {
 
     /// The lowest level.
     pub const fn lowest_dbm(self) -> i8 {
-        self.levels_dbm[0]
+        // Min's identity is MAX; construction proves at least one level.
+        let mut lowest = i8::MAX;
+        let mut rest = self.levels_dbm;
+        while let Some((&level, tail)) = rest.split_first() {
+            if level < lowest {
+                lowest = level;
+            }
+            rest = tail;
+        }
+        lowest
     }
 
     /// The highest level.
     pub const fn highest_dbm(self) -> i8 {
-        self.levels_dbm[self.levels_dbm.len() - 1]
+        // Max's identity is MIN; construction proves at least one level.
+        let mut highest = i8::MIN;
+        let mut rest = self.levels_dbm;
+        while let Some((&level, tail)) = rest.split_first() {
+            if level > highest {
+                highest = level;
+            }
+            rest = tail;
+        }
+        highest
     }
 
     /// The level a request of `requested_dbm` radiates: the greatest level
@@ -65,11 +86,16 @@ impl TransmitPowerLevels {
                 highest_dbm: self.highest_dbm(),
             });
         }
-        let mut index = self.levels_dbm.len() - 1;
-        while self.levels_dbm[index] > requested_dbm {
-            index -= 1;
+        let mut selected = self.lowest_dbm();
+        let mut rest = self.levels_dbm;
+        while let Some((&level, tail)) = rest.split_first() {
+            if level > requested_dbm {
+                break;
+            }
+            selected = level;
+            rest = tail;
         }
-        Ok(self.levels_dbm[index])
+        Ok(selected)
     }
 }
 

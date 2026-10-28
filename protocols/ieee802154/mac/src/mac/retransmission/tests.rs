@@ -44,11 +44,47 @@ fn no_ack_retries_wait_a_growing_random_delay() {
 
     assert_eq!(
         RetryStart::AfterDelay { exponent: 0 }.delay_micros(u32::MAX),
-        0
+        Ok(0)
     );
     assert_eq!(
         RetryStart::AfterDelay { exponent: 3 }.delay_micros(13),
-        5 * 320
+        Ok(5 * 320)
     );
-    assert_eq!(RetryStart::Now.delay_micros(13), 0);
+    assert_eq!(RetryStart::Now.delay_micros(13), Ok(0));
+}
+
+#[test]
+fn an_api_retry_window_that_previously_overflowed_returns_an_error() {
+    use super::RetryDelayError;
+    for exponent in [32, 63, u8::MAX] {
+        assert_eq!(
+            RetryStart::AfterDelay { exponent }.delay_micros(u32::MAX),
+            Err(RetryDelayError::ExponentOutOfRange { exponent })
+        );
+    }
+}
+
+#[test]
+fn both_overflowing_delay_products_return_the_original_inputs() {
+    use super::RetryDelayError;
+    for (exponent, random) in [(31, 1 << 30), (24, (1 << 24) - 1)] {
+        assert_eq!(
+            RetryStart::AfterDelay { exponent }.delay_micros(random),
+            Err(RetryDelayError::DurationOverflow { exponent, random })
+        );
+    }
+}
+
+#[test]
+fn every_protocol_retry_stays_bounded_through_the_largest_retry_count() {
+    let mut retries = FrameRetries::new(u8::MAX);
+    for expected in 1..=u8::MAX {
+        let start = retries.retry(AttemptFailure::NoAcknowledgement).unwrap();
+        assert_eq!(retries.retries(), expected);
+        for random in [0, 1, u32::MAX] {
+            assert!(start.delay_micros(random).unwrap() <= 31 * 320);
+        }
+    }
+    assert_eq!(retries.retry(AttemptFailure::NoAcknowledgement), None);
+    assert_eq!(retries.retries(), u8::MAX);
 }

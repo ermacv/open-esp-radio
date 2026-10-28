@@ -34,13 +34,16 @@ impl TimeSync {
     /// the network time offset, wrapping, little endian. Returns `false`,
     /// leaving the bytes, when the IE does not fit.
     pub fn write(&self, mac: &mut [u8], now_micros: u64) -> bool {
-        let start = usize::from(self.ie_offset);
-        let Some(content) = mac.get_mut(start..start + TIME_IE_CONTENT) else {
+        let Some((_, content)) = mac.split_at_mut_checked(usize::from(self.ie_offset)) else {
             return false;
         };
-        let time = (now_micros as i64).wrapping_add(self.network_time_offset) as u64;
-        content[0] = self.sequence;
-        content[1..].copy_from_slice(&time.to_le_bytes());
+        let Some((content, _)) = content.split_first_chunk_mut::<TIME_IE_CONTENT>() else {
+            return false;
+        };
+        let [t0, t1, t2, t3, t4, t5, t6, t7] = (now_micros as i64)
+            .wrapping_add(self.network_time_offset)
+            .to_le_bytes();
+        *content = [self.sequence, t0, t1, t2, t3, t4, t5, t6, t7];
         true
     }
 }

@@ -343,10 +343,9 @@ impl<K: Ieee802154Caps, F: Feature> Has<K, F> {
     /// generation, even when called outside a constant expression.
     pub const fn from_const() -> Self {
         const {
-            assert!(
-                K::CAPS.operations.contains(F::REQUIRED),
-                "the backend does not state this feature"
-            );
+            if !K::CAPS.operations.contains(F::REQUIRED) {
+                panic!("the backend does not state this feature");
+            }
         }
         Self { brand: PhantomData }
     }
@@ -651,14 +650,12 @@ impl<K: Ieee802154Caps, const I: u8, const P: usize> oer_radio_port::PoolSet
         builder: oer_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
         const {
-            assert!(
-                I < K::CAPS.interfaces,
-                "the capabilities state no such interface"
-            );
-            assert!(
-                P == 0 || K::CAPS.operations.contains(RadioCapabilities::SOURCE_MATCH),
-                "pending slots need the frame-pending table"
-            );
+            if !(I < K::CAPS.interfaces) {
+                panic!("the capabilities state no such interface");
+            }
+            if !(P == 0 || K::CAPS.operations.contains(RadioCapabilities::SOURCE_MATCH)) {
+                panic!("pending slots need the frame-pending table");
+            }
         };
         let ([interface], short, extended) = builder.into_pools::<(
             oer_radio_port::Slots<InterfaceKind<I>, 1>,
@@ -735,6 +732,33 @@ pub struct CompletionMismatch {
     pub held: Option<(Interface, RequestId)>,
 }
 
+/// Admission could not borrow the work state; the unadmitted guard stays owned.
+/// Dropping or resubmitting that guard retains its ordinary cancellation rules.
+pub struct AdmissionBorrowConflict<T> {
+    /// Interface of the refused admission.
+    pub interface: Interface,
+    /// Identity of the refused admission.
+    pub id: RequestId,
+    /// Original guard; no capacity was consumed or overwritten.
+    pub permit: T,
+}
+
+/// A query could not observe work state because an exclusive access is active.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WorkStateBorrowConflict;
+
+/// A terminal could not return its retained operation capacity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompletionError {
+    /// The terminal does not identify the admitted operation.
+    Mismatch(CompletionMismatch),
+    /// State is exclusively borrowed; every retained owner stays in place.
+    BorrowConflict {
+        /// Terminal identity that could not be processed.
+        received: RequestId,
+    },
+}
+
 /// The work in flight: whose it is and its permit.
 struct InFlight<'id, K, Path: PoolPath> {
     interface: Interface,
@@ -797,22 +821,35 @@ impl<
     }
 
     /// Move the admitted permit into owned Id state, ending its frontend guard.
-    pub fn admit(&self, interface: Interface, id: RequestId, permit: WorkPermit<'_, 'p, K, Path>) {
+    pub fn admit<'q>(
+        &self,
+        interface: Interface,
+        id: RequestId,
+        permit: WorkPermit<'q, 'p, K, Path>,
+    ) -> Result<(), AdmissionBorrowConflict<WorkPermit<'q, 'p, K, Path>>> {
+        let Ok(mut in_flight) = self.owned.in_flight.try_borrow_mut() else {
+            return Err(AdmissionBorrowConflict {
+                interface,
+                id,
+                permit,
+            });
+        };
         let HeldPermit { permit, .. } = scopeguard::ScopeGuard::into_inner(permit.held);
-        *self.owned.in_flight.borrow_mut() = Some(InFlight {
+        *in_flight = Some(InFlight {
             interface,
             id,
             permit: self.loan.reclaim_permit(permit),
         });
+        Ok(())
     }
 
     /// Return a terminal's retained capacity before delivering that terminal.
-    pub fn complete(&self, id: RequestId) -> Result<Completed, CompletionMismatch> {
+    pub fn complete(&self, id: RequestId) -> Result<Completed, CompletionError> {
         self.owned.complete(id)
     }
 
     /// The current admitted identity, without borrowing its affine owner.
-    pub fn in_flight(&self) -> Option<(Interface, RequestId)> {
+    pub fn in_flight(&self) -> Result<Option<(Interface, RequestId)>, WorkStateBorrowConflict> {
         self.owned.in_flight()
     }
 }
@@ -875,41 +912,61 @@ impl<'id, K, Path: PoolPath, P: PermitPool<'id, K, Path>> WorkPermits<'id, K, P,
 
     /// Keep the permit of the admitted work `id` of `interface` until its
     /// terminal; a backend's submission calls it.
-    pub fn admit(&self, interface: Interface, id: RequestId, permit: WorkPermit<'_, 'id, K, Path>) {
+    pub fn admit<'q>(
+        &self,
+        interface: Interface,
+        id: RequestId,
+        permit: WorkPermit<'q, 'id, K, Path>,
+    ) -> Result<(), AdmissionBorrowConflict<WorkPermit<'q, 'id, K, Path>>> {
+        let Ok(mut in_flight) = self.in_flight.try_borrow_mut() else {
+            return Err(AdmissionBorrowConflict {
+                interface,
+                id,
+                permit,
+            });
+        };
         let HeldPermit { permit, .. } = scopeguard::ScopeGuard::into_inner(permit.held);
         // The pool holds one permit, so the entry is free while it was out.
-        *self.in_flight.borrow_mut() = Some(InFlight {
+        *in_flight = Some(InFlight {
             interface,
             id,
             permit,
         });
+        Ok(())
     }
 
     /// Return the permit of the terminal `id` and its affine completion.
     /// A mismatch leaves the admitted operation and its capacity intact.
-    pub fn complete(&self, id: RequestId) -> Result<Completed, CompletionMismatch> {
-        let mut in_flight = self.in_flight.borrow_mut();
+    pub fn complete(&self, id: RequestId) -> Result<Completed, CompletionError> {
+        let mut in_flight = self
+            .in_flight
+            .try_borrow_mut()
+            .map_err(|_| CompletionError::BorrowConflict { received: id })?;
         match in_flight.take_if(|held| held.id == id) {
             Some(held) => {
+                // A pool may wake a taker synchronously. It must observe the
+                // completed state without reentering a live RefCell borrow.
+                drop(in_flight);
                 self.pool.release(held.permit);
                 Ok(Completed {
                     interface: held.interface,
                     id: held.id,
                 })
             }
-            None => Err(CompletionMismatch {
+            None => Err(CompletionError::Mismatch(CompletionMismatch {
                 received: id,
                 held: in_flight.as_ref().map(|held| (held.interface, held.id)),
-            }),
+            })),
         }
     }
 
     /// The work in flight, by interface and identity.
-    pub fn in_flight(&self) -> Option<(Interface, RequestId)> {
-        self.in_flight
-            .borrow()
-            .as_ref()
-            .map(|held| (held.interface, held.id))
+    pub fn in_flight(&self) -> Result<Option<(Interface, RequestId)>, WorkStateBorrowConflict> {
+        let in_flight = self
+            .in_flight
+            .try_borrow()
+            .map_err(|_| WorkStateBorrowConflict)?;
+        Ok(in_flight.as_ref().map(|held| (held.interface, held.id)))
     }
 }
 
@@ -1290,3 +1347,6 @@ pub trait Ieee802154Events: PortPhase {
     /// The portable view of an owned event.
     fn view(event: &Self::Event) -> PhaseEvent<'_>;
 }
+
+#[cfg(test)]
+mod tests;

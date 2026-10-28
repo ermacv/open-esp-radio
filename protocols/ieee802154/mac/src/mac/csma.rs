@@ -58,8 +58,17 @@ impl CsmaCa {
         } else {
             exponent
         };
-        let periods = random % (1 << exponent);
-        Some(periods * UNIT_BACKOFF_PERIOD_SYMBOLS * SYMBOL_MICROS)
+        let periods = random
+            & match exponent {
+                CSMA_MIN_BACKOFF_EXPONENT => 7,
+                4 => 15,
+                _ => 31,
+            };
+        // BE <= 5 admits at most 31 periods, so both products fit in u32.
+        match periods.checked_mul(UNIT_BACKOFF_PERIOD_SYMBOLS) {
+            Some(symbols) => symbols.checked_mul(SYMBOL_MICROS),
+            None => None,
+        }
     }
 
     /// `SubMac::HandleTransmitDone` after a channel-access failure: count
@@ -67,7 +76,8 @@ impl CsmaCa {
     /// transmission ends with a busy channel.
     pub fn channel_busy(&mut self) -> bool {
         if self.backoffs < self.max_backoffs {
-            self.backoffs += 1;
+            // The request's maximum is the terminal counter value.
+            self.backoffs = self.backoffs.saturating_add(1);
             true
         } else {
             false

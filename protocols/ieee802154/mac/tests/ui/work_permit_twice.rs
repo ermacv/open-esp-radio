@@ -10,7 +10,7 @@ pub fn admit<'q, 'id, K, P: PermitPool<'id, K>>(
     interface: Interface,
     id: RequestId,
 ) {
-    pool.admit(interface, id, permit);
+    let _ = pool.admit(interface, id, permit);
     #[cfg(ui_reject)]
-    pool.admit(interface, id, permit); // ui-error: E0382
+    let _ = pool.admit(interface, id, permit); // ui-error: E0382
 }

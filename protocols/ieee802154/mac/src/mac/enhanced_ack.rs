@@ -19,6 +19,7 @@
 //! read past its frame.
 
 use crate::mac::frame::{FrameView, MAX_MAC_FRAME_LEN};
+use oer_wire::{PrefixLength, Reader, Writer};
 
 const FCF_FRAME_TYPE_ACK: u16 = 0x0002;
 const FCF_SECURITY_ENABLED: u16 = 1 << 3;
@@ -43,7 +44,6 @@ const SHORT_ADDR_SIZE: usize = 2;
 const EXT_ADDR_SIZE: usize = 8;
 const SECURITY_CONTROL_SIZE: usize = 1;
 const FRAME_COUNTER_SIZE: usize = 4;
-const KEY_INDEX_SIZE: usize = 1;
 const MIC32_SIZE: usize = 4;
 
 const SEC_LEVEL_MASK: u8 = 0x07;
@@ -79,13 +79,6 @@ impl KeyIdMode {
             Self::Implicit | Self::Index => 0,
             Self::Source4 => 4,
             Self::Source8 => 8,
-        }
-    }
-
-    const fn key_identifier_size(self) -> usize {
-        match self {
-            Self::Implicit => 0,
-            _ => self.key_source_size() + KEY_INDEX_SIZE,
         }
     }
 }
@@ -126,14 +119,14 @@ pub struct EnhancedAckSecurity {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EnhancedAck {
     bytes: [u8; MAX_MAC_FRAME_LEN],
-    len: usize,
+    len: PrefixLength<MAX_MAC_FRAME_LEN>,
     security: Option<EnhancedAckSecurity>,
 }
 
 impl EnhancedAck {
     /// The MAC bytes, including the MIC placeholder of a secured ACK.
     pub fn bytes(&self) -> &[u8] {
-        &self.bytes[..self.len]
+        self.len.borrow(&self.bytes)
     }
 
     /// The security header, when the received frame was secured.
@@ -146,8 +139,16 @@ impl EnhancedAck {
     pub fn set_frame_counter(&mut self, frame_counter: u32) {
         if let Some(security) = self.security {
             let offset = security.frame_counter_offset;
-            self.bytes[offset..offset + FRAME_COUNTER_SIZE]
-                .copy_from_slice(&frame_counter.to_le_bytes());
+            // Only the generator creates this offset, after writing the whole
+            // auxiliary header. Its four counter octets are admitted by that write.
+            for (destination, source) in self
+                .bytes
+                .iter_mut()
+                .skip(offset)
+                .zip(frame_counter.to_le_bytes())
+            {
+                *destination = source;
+            }
         }
     }
 }
@@ -192,8 +193,9 @@ impl<'frame> Received<'frame> {
     }
 
     fn field(&self, offset: usize, len: usize) -> Result<&'frame [u8], EnhancedAckError> {
+        let end = offset.checked_add(len).ok_or(EnhancedAckError::Malformed)?;
         self.bytes
-            .get(offset..offset + len)
+            .get(offset..end)
             .ok_or(EnhancedAckError::Malformed)
     }
 
@@ -210,29 +212,39 @@ impl<'frame> Received<'frame> {
     }
 
     fn dst_addr_offset(&self) -> usize {
-        Self::dst_pan_offset()
-            + if self.dst_pan_present() {
+        if self.dst_pan_present() {
+            const { FCF_SIZE + DSN_SIZE + PANID_SIZE }
+        } else {
+            Self::dst_pan_offset()
+        }
+    }
+
+    fn src_pan_offset(&self) -> Result<usize, EnhancedAckError> {
+        self.dst_addr_offset()
+            .checked_add(Self::address_size(self.dst_mode()))
+            .ok_or(EnhancedAckError::Malformed)
+    }
+
+    fn src_addr_offset(&self) -> Result<usize, EnhancedAckError> {
+        self.src_pan_offset()?
+            .checked_add(if self.src_pan_present() {
                 PANID_SIZE
             } else {
                 0
-            }
+            })
+            .ok_or(EnhancedAckError::Malformed)
     }
 
-    fn src_pan_offset(&self) -> usize {
-        self.dst_addr_offset() + Self::address_size(self.dst_mode())
+    fn security_offset(&self) -> Result<usize, EnhancedAckError> {
+        self.src_addr_offset()?
+            .checked_add(Self::address_size(self.src_mode()))
+            .ok_or(EnhancedAckError::Malformed)
     }
 
-    fn src_addr_offset(&self) -> usize {
-        self.src_pan_offset()
-            + if self.src_pan_present() {
-                PANID_SIZE
-            } else {
-                0
-            }
-    }
-
-    fn security_offset(&self) -> usize {
-        self.src_addr_offset() + Self::address_size(self.src_mode())
+    fn byte(&self, offset: usize) -> Result<u8, EnhancedAckError> {
+        Reader::new(self.field(offset, 1)?)
+            .u8()
+            .map_err(|_| EnhancedAckError::Malformed)
     }
 }
 
@@ -267,7 +279,7 @@ pub fn generate_enhanced_ack(
     if fcf & FCF_SEQUENCE_SUPPRESSION != 0 {
         return Err(EnhancedAckError::SequenceSuppressed);
     }
-    let sequence = rx.field(FCF_SIZE, DSN_SIZE)?[0];
+    let sequence = rx.byte(FCF_SIZE)?;
 
     // A valid unicast destination; the ACK itself has no source.
     let destination = match rx.dst_mode() {
@@ -286,26 +298,25 @@ pub fn generate_enhanced_ack(
         ADDR_SHORT | ADDR_EXT => rx.src_mode(),
         _ => return Err(EnhancedAckError::Malformed),
     };
-    let ack_destination = rx.field(rx.src_addr_offset(), Received::address_size(ack_dst_mode))?;
+    let ack_destination = rx.field(rx.src_addr_offset()?, Received::address_size(ack_dst_mode))?;
 
     let security = if fcf & FCF_SECURITY_ENABLED != 0 {
-        let offset = rx.security_offset();
-        let control = rx.field(offset, SECURITY_CONTROL_SIZE)?[0];
+        let offset = rx.security_offset()?;
+        let control = rx.byte(offset)?;
         if control & SEC_LEVEL_MASK != SEC_ENC_MIC32 {
             return Err(EnhancedAckError::UnsupportedSecurityLevel);
         }
         let key_id_mode = KeyIdMode::from_security_control(control);
         let key_index = match key_id_mode {
             KeyIdMode::Implicit => None,
-            _ => Some(
-                rx.field(
-                    offset
-                        + SECURITY_CONTROL_SIZE
-                        + FRAME_COUNTER_SIZE
-                        + key_id_mode.key_source_size(),
-                    KEY_INDEX_SIZE,
-                )?[0],
-            ),
+            _ => {
+                let offset = offset
+                    .checked_add(SECURITY_CONTROL_SIZE)
+                    .and_then(|end| end.checked_add(FRAME_COUNTER_SIZE))
+                    .and_then(|end| end.checked_add(key_id_mode.key_source_size()))
+                    .ok_or(EnhancedAckError::Malformed)?;
+                Some(rx.byte(offset)?)
+            }
         };
         Some((
             control & (SEC_LEVEL_MASK | KEY_ID_MODE_MASK),
@@ -317,7 +328,7 @@ pub fn generate_enhanced_ack(
     };
 
     let pan = if rx.src_pan_present() {
-        Some(rx.field(rx.src_pan_offset(), PANID_SIZE)?)
+        Some(rx.field(rx.src_pan_offset()?, PANID_SIZE)?)
     } else if rx.dst_pan_present() {
         Some(rx.field(Received::dst_pan_offset(), PANID_SIZE)?)
     } else {
@@ -340,51 +351,55 @@ pub fn generate_enhanced_ack(
         ack_fcf |= FCF_IE_PRESENT;
     }
 
-    let security_size = security.map_or(0, |(_, mode, _)| {
-        SECURITY_CONTROL_SIZE + FRAME_COUNTER_SIZE + mode.key_identifier_size()
-    });
-    let mic_size = if security.is_some() { MIC32_SIZE } else { 0 };
-    let len = FCF_SIZE
-        + DSN_SIZE
-        + pan.map_or(0, <[u8]>::len)
-        + ack_destination.len()
-        + security_size
-        + header_ies.len()
-        + mic_size;
-    if len > MAX_MAC_FRAME_LEN {
-        return Err(EnhancedAckError::TooLong);
-    }
-
+    // The cursor admits complete fields before each write. A failed generation
+    // owns only local bytes, so no partial ACK escapes to a caller.
     let mut bytes = [0; MAX_MAC_FRAME_LEN];
-    let mut at = 0;
-    let mut put = |field: &[u8]| {
-        bytes[at..at + field.len()].copy_from_slice(field);
-        at += field.len();
-        at
-    };
-    put(&ack_fcf.to_le_bytes());
-    put(&[sequence]);
+    let mut writer = Writer::new(&mut bytes);
+    writer
+        .u16_le(ack_fcf)
+        .map_err(|_| EnhancedAckError::TooLong)?;
+    writer.u8(sequence).map_err(|_| EnhancedAckError::TooLong)?;
     if let Some(pan) = pan {
-        put(pan);
+        writer.write(pan).map_err(|_| EnhancedAckError::TooLong)?;
     }
-    let header_end = put(ack_destination);
-    let security = security.map(|(control, key_id_mode, key_index)| {
-        // The frame counter and any key source stay zero; the key index is
-        // mirrored.
-        let identifier = key_id_mode.key_identifier_size();
-        let mut header = [0; SECURITY_CONTROL_SIZE + FRAME_COUNTER_SIZE + 9];
-        header[0] = control;
-        if let Some(index) = key_index {
-            header[SECURITY_CONTROL_SIZE + FRAME_COUNTER_SIZE + identifier - 1] = index;
+    writer
+        .write(ack_destination)
+        .map_err(|_| EnhancedAckError::TooLong)?;
+    let security = if let Some((control, key_id_mode, key_index)) = security {
+        writer.u8(control).map_err(|_| EnhancedAckError::TooLong)?;
+        let frame_counter_offset = writer.written();
+        writer
+            .write(&[0; FRAME_COUNTER_SIZE])
+            .map_err(|_| EnhancedAckError::TooLong)?;
+        match key_id_mode {
+            KeyIdMode::Source4 => writer
+                .write(&[0; 4])
+                .map_err(|_| EnhancedAckError::TooLong)?,
+            KeyIdMode::Source8 => writer
+                .write(&[0; 8])
+                .map_err(|_| EnhancedAckError::TooLong)?,
+            KeyIdMode::Implicit | KeyIdMode::Index => {}
         }
-        put(&header[..SECURITY_CONTROL_SIZE + FRAME_COUNTER_SIZE + identifier]);
-        EnhancedAckSecurity {
+        if let Some(index) = key_index {
+            writer.u8(index).map_err(|_| EnhancedAckError::TooLong)?;
+        }
+        Some(EnhancedAckSecurity {
             key_id_mode,
             key_index,
-            frame_counter_offset: header_end + SECURITY_CONTROL_SIZE,
-        }
-    });
-    put(header_ies);
+            frame_counter_offset,
+        })
+    } else {
+        None
+    };
+    writer
+        .write(header_ies)
+        .map_err(|_| EnhancedAckError::TooLong)?;
+    if security.is_some() {
+        writer
+            .write(&[0; MIC32_SIZE])
+            .map_err(|_| EnhancedAckError::TooLong)?;
+    }
+    let len = PrefixLength::new(writer.written()).ok_or(EnhancedAckError::TooLong)?;
     Ok(EnhancedAck {
         bytes,
         len,

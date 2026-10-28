@@ -54,7 +54,13 @@ fn rssi_fits_only_behind_one_other_metric() {
         rssi: true,
     };
     probing.configure(1, EXTENDED, all).unwrap();
-    assert_eq!(probing.data(FrameAddress::Short([1, 0]), 9, -65).len, 2);
+    assert_eq!(
+        probing
+            .data(FrameAddress::Short([1, 0]), 9, -65)
+            .bytes()
+            .len(),
+        2
+    );
 }
 
 /// The link margin is zero below the noise floor and for an invalid RSSI.

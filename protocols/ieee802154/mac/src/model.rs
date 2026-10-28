@@ -993,7 +993,10 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> ModelClient<'c, 'id, Id, I> {
             state.operation = Some((interface, id, kind));
             id
         };
-        self.held.admit(interface, id, permit);
+        if self.held.admit(interface, id, permit).is_err() {
+            self.shared.borrow_mut().poisoned = Some(ModelFault);
+            return Err(Poisoned { cause: ModelFault });
+        }
         Ok(ModelToken { interface, id })
     }
 }
@@ -1352,7 +1355,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
         Id: 's,
     {
         retire.wait().await;
-        if held.permits.in_flight().is_some() {
+        if !matches!(held.permits.in_flight(), Ok(None)) {
             // An undelivered admitted owner cannot authorize a fresh mint.
             retire.request_quarantine();
             core::future::pending::<()>().await;
