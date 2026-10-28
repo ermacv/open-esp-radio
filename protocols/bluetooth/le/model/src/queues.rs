@@ -127,8 +127,10 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
         &self,
         initial: &mut Option<Initial<Id>>,
         loan: &BodyLoan<'p, Id, Backend<Id, X>>,
-    ) -> Result<super::Resources<'p, Id>, Fault> {
-        self.attachment()?;
+    ) -> Result<super::Resources<'p, Id>, oer_radio_port::SlotInitError> {
+        if self.attachment.is_none() {
+            return Err(oer_radio_port::SlotInitError::QueuesUnprepared);
+        }
         Initial::lend(initial, loan)
     }
     pub fn wake_driver(&self) {
@@ -311,8 +313,12 @@ impl<Id: SlotIdentity> Initial<Id> {
     pub fn lend<'p, X>(
         initial: &mut Option<Self>,
         loan: &BodyLoan<'p, Id, Backend<Id, X>>,
-    ) -> Result<super::Resources<'p, Id>, Fault> {
-        let initial = initial.take().ok_or(Fault::ResourcesExhausted)?;
+    ) -> Result<super::Resources<'p, Id>, oer_radio_port::SlotInitError> {
+        let initial = initial
+            .take()
+            .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                "BLE initial resources",
+            ))?;
         Ok(super::Resources {
             seats: initial.seats.map(|seat| loan.lend_seat(seat)),
             session: initial.idle.lend(loan),

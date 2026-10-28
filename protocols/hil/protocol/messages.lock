@@ -137,7 +137,7 @@ wifi/station/arp-frame 7c17039e1f1d0df0 topic
 wifi/station/counters 3435d1c1f6700713 topic
 wifi/station/counters/get c3c4a743d084a9bb endpoint
 wifi/station/group-key 27ab2647264945bc topic
-wifi/station/link 00c159efdbd9733f topic
+wifi/station/link 885d92b6dcfb65ee topic
 wifi/station/probe e37fc052d9ec85e9 endpoint
 wifi/station/probe/finished e156497f15ad8e46 topic
 wifi/station/probe/ready 940908ee7694d30f topic

@@ -2980,6 +2980,7 @@ dependencies = [
  "cmac",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
+ "oer-wire",
  "subtle",
  "zeroize",
 ]

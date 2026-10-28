@@ -74,13 +74,13 @@ macro_rules! port {
                 fn split<'s>(
                     queues: &'s mut Self::Queues,
                     _: SlotWakes<'s, Id>,
-                ) -> (&'r Probe, &'r Probe)
+                ) -> Result<(&'r Probe, &'r Probe), oer_radio_port::SlotInitError>
                 where
                     Self: 's,
                     Id: 's,
                 {
                     let probe = queues.expect("prepared probe");
-                    (probe, probe)
+                    Ok((probe, probe))
                 }
                 async fn run<'s>(
                     &mut self,
@@ -132,16 +132,16 @@ macro_rules! port {
                 fn lend<'p, 's>(
                     frontend: &'p mut Self::Frontend<'s>,
                     loan: BodyLoan<'p, Id, Self>,
-                ) -> Self::Body<'p>
+                ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
                 where
                     Self: 's,
                     Id: 's,
                     's: 'p,
                 {
-                    View {
+                    Ok(View {
                         probe: frontend,
                         loan,
-                    }
+                    })
                 }
             }
             impl<'r, Id: SlotIdentity> PortBackend<Id> for Backend<'r> {
@@ -310,10 +310,13 @@ macro_rules! port {
             pub fn run(probe: &Probe) -> usize {
                 let future = with_local_slot(async |claim| {
                     let mut slot = claim.place();
-                    let registered = slot
-                        .register(Backend(probe))
-                        .ok()
-                        .expect("fresh cost probe");
+                    let registered = match slot.register(Backend(probe)) {
+                        Ok(registered) => registered,
+                        Err(error) => {
+                            core::hint::black_box(error);
+                            return;
+                        }
+                    };
                     let end = LocalExecution
                         .scope(registered, |frontend| run_port(frontend, Body))
                         .await;

@@ -495,6 +495,11 @@ A port is the contract between a protocol's logic and a chip backend
 protocol ports are not frozen; they grow with the protocols, each change with
 its model and conformance case.
 
+- Queue splitting and initial body lending return typed construction errors.
+  Failed splitting retains the registered owner and its P2 cleanup guard in
+  the registration error; it publishes no frontend or ordinary join.
+  Failed lending quarantines the registration and returns its source cause.
+  No missing resource is replaced with an empty or newly minted owner.
 - Every port has a reference model in its own host crate,
   `protocols/<protocol>/model`; the hardware backend runs the same
   conformance cases. Frame protection is the `cipher` layer that backends

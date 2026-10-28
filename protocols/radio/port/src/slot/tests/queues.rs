@@ -125,19 +125,19 @@ impl<Id: SlotIdentity> SlotBodyOwner<Id> for QueueOwner<'_, Id> {
     fn lend<'p, 's>(
         frontend: &'p mut Self::Frontend<'s>,
         loan: BodyLoan<'p, Id, Self>,
-    ) -> Self::Body<'p>
+    ) -> Result<Self::Body<'p>, crate::SlotInitError>
     where
         Self: 's,
         Id: 's,
         's: 'p,
     {
-        BodyViews {
+        Ok(BodyViews {
             commands: frontend.commands.borrow_local(),
             events: frontend.events.borrow_local(),
             token: frontend.token.take().map(|token| loan.lend_slot(token)),
             loan,
             wakes: frontend.wakes,
-        }
+        })
     }
 }
 
@@ -229,7 +229,7 @@ fn fresh_body_loan_returns_owned_payloads_without_leaving_a_body_reference_in_p2
         );
         let mut outer = Box::pin(outer);
         assert!(poll(outer.as_mut()).is_pending());
-        assert_eq!(poll(outer.as_mut()), Poll::Ready(Some(7)));
+        assert_eq!(poll(outer.as_mut()), Poll::Ready(Ok(7)));
         assert_eq!(model.finishes.get(), 1);
         assert_eq!(model.drops.get(), 1);
         assert_eq!(Rc::strong_count(&context), 1);
@@ -303,7 +303,11 @@ fn supervisor_cancels_an_unrelated_body_wait_but_keeps_a_returned_request() {
                     result
                 },
             );
-            let expected = returns.then_some("requested");
+            let expected = if returns {
+                Ok("requested")
+            } else {
+                Err(SlotInitError::Quarantined)
+            };
             assert_eq!(finish(outer), expected);
             assert_eq!(
                 model.starts.get(),
@@ -348,14 +352,14 @@ impl<Id: SlotIdentity> SlotOwner<Id> for QueueOwner<'_, Id> {
     fn split<'s>(
         queues: &'s mut Self::Queues,
         wakes: SlotWakes<'s, Id>,
-    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), crate::SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
         let (commands_tx, commands_rx) = queues.commands.split();
         let (events_tx, events_rx) = queues.events.split();
-        (
+        Ok((
             Frontend {
                 commands: commands_tx,
                 events: events_rx,
@@ -367,7 +371,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for QueueOwner<'_, Id> {
                 events: events_tx,
                 wakes,
             },
-        )
+        ))
     }
 
     async fn run<'s>(
@@ -610,8 +614,11 @@ fn a_registration_never_lends_its_initial_body_resources_twice() {
                 .ok()
                 .expect("fresh registration"),
             async |mut frontend| {
-                assert_eq!(frontend.run_body(EmptyBody).await, Some(()));
-                assert_eq!(frontend.run_body(EmptyBody).await, None);
+                assert_eq!(frontend.run_body(EmptyBody).await, Ok(()));
+                assert_eq!(
+                    frontend.run_body(EmptyBody).await,
+                    Err(SlotInitError::BodyAlreadyIssued)
+                );
                 assert!(frontend.abandon().wait().await.is_err());
             },
         );

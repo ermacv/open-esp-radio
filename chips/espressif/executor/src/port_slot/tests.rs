@@ -26,12 +26,15 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     ) {
         mint.into_pools();
     }
-    fn split<'s>(_: &'s mut (), _: oer_radio_port::SlotWakes<'s, Id>) -> ((), ())
+    fn split<'s>(
+        _: &'s mut (),
+        _: oer_radio_port::SlotWakes<'s, Id>,
+    ) -> Result<((), ()), oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
-        ((), ())
+        Ok(((), ()))
     }
 
     async fn run<'s>(

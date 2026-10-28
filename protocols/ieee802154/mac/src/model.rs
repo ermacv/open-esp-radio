@@ -1329,20 +1329,22 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
     fn split<'s>(
         queues: &'s mut Self::Queues,
         _: SlotWakes<'s, Id>,
-    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
-        let queues = queues.as_mut().expect("prepared model queues");
-        (
+        let queues = queues
+            .as_mut()
+            .ok_or(oer_radio_port::SlotInitError::QueuesUnprepared)?;
+        Ok((
             ModelFrontendRaw {
                 shared: queues.shared.clone(),
                 held: &queues.held,
                 resources: &mut queues.resources,
             },
             &queues.held,
-        )
+        ))
     }
 
     async fn run<'s>(
@@ -1424,13 +1426,21 @@ impl<Id: SlotIdentity> SlotBodyOwner<Id> for OwnedModel<Id> {
     where
         Self: 'p,
         Id: 'p;
-    fn lend<'p, 's>(raw: &'p mut Self::Frontend<'s>, loan: BodyLoan<'p, Id, Self>) -> Self::Body<'p>
+    fn lend<'p, 's>(
+        raw: &'p mut Self::Frontend<'s>,
+        loan: BodyLoan<'p, Id, Self>,
+    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
         's: 'p,
     {
-        let resources = raw.resources.take().expect("one resource set per body");
+        let resources =
+            raw.resources
+                .take()
+                .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                    "802.15.4 resources",
+                ))?;
         let lend_interface =
             |resources: InterfaceResources<'static, 0, MODEL_PENDING_SLOTS, Child<Root<Id>, 0>>| {
                 InterfaceResources {
@@ -1439,7 +1449,7 @@ impl<Id: SlotIdentity> SlotBodyOwner<Id> for OwnedModel<Id> {
                     extended: resources.extended.map(|s| loan.lend_slot(s)),
                 }
             };
-        InstallParts {
+        Ok(InstallParts {
             view: ModelFrontend {
                 shared: raw.shared.clone(),
                 held: raw.held.permits.lend(loan),
@@ -1457,7 +1467,7 @@ impl<Id: SlotIdentity> SlotBodyOwner<Id> for OwnedModel<Id> {
                 },
                 rssi: resources.rssi,
             },
-        }
+        })
     }
 }
 

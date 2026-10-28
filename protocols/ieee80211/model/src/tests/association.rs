@@ -67,7 +67,7 @@ impl Work for WirePeer {
                 .held
                 .air
                 .associations
-                .borrow()
+                .get()
                 .get(key.identity.0.role)
                 .spp(),
             self.0
@@ -163,7 +163,7 @@ impl Work for WirePeer {
                 .held
                 .air
                 .associations
-                .borrow()
+                .get()
                 .get(VifRole::AccessPoint)
                 .spp(),
             ap_spp
@@ -173,7 +173,7 @@ impl Work for WirePeer {
                 .held
                 .air
                 .associations
-                .borrow()
+                .get()
                 .get(VifRole::Station)
                 .spp(),
             self.0
@@ -221,7 +221,7 @@ impl Work for WirePeer {
                     oer_ieee80211_cipher::ccmp_mpdu::CcmpMpduError::InvalidMic
                 ))
             );
-            assert!(phase.held.air.rx.borrow().is_empty());
+            assert!(phase.held.air.rx.inspect().is_empty());
         } else {
             result.unwrap();
             let Ok(Ok(LowerMacEvent::Received { frame, .. })) = phase.next_event().await else {

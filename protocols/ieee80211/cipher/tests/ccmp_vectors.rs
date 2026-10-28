@@ -1,3 +1,8 @@
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects
+)]
 //! Independent CCMP known-answer tests; only vector facts are incorporated.
 //!
 //! SOURCE: IEEE Std 802.11-2020 Annex J.6.4 (CCMP-128 PV0) and J.9.2

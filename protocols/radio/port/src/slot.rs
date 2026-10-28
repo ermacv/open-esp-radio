@@ -47,10 +47,11 @@ pub trait SlotOwner<Id: SlotIdentity>: Sized {
     );
 
     /// Split each queue exactly once, transferring its affine endpoints.
+    /// On error every payload stays in backing and no endpoint is published.
     fn split<'s>(
         queues: &'s mut Self::Queues,
         wakes: SlotWakes<'s, Id>,
-    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), SlotInitError>
     where
         Self: 's,
         Id: 's;
@@ -98,10 +99,12 @@ pub trait SlotBodyOwner<Id: SlotIdentity>: SlotOwner<Id> {
 
     /// Lend public resources while retaining conversion authority privately.
     /// Only owned Id payloads may be published to the P2 queues.
+    /// Validate all initial resources before taking any; error retains them
+    /// in backing for P2 quarantine and never calls the user's body.
     fn lend<'p, 's>(
         frontend: &'p mut Self::Frontend<'s>,
         loan: crate::BodyLoan<'p, Id, Self>,
-    ) -> Self::Body<'p>
+    ) -> Result<Self::Body<'p>, SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -181,6 +184,43 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> SlotRetire<'_, Id, S> {
 pub struct SlotStopped<Id: SlotIdentity, S: SlotOwner<Id>> {
     owner: PhantomData<fn(S) -> S>,
     identity: PhantomData<fn(Id) -> Id>,
+}
+
+/// Refused construction of queue endpoints or the body's affine resources.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotInitError {
+    /// Queue backing has not been prepared.
+    QueuesUnprepared,
+    /// The named initial resource is absent; no substitute is minted.
+    MissingResource(&'static str),
+    /// A registration already issued its single body resource set.
+    BodyAlreadyIssued,
+    /// The registration entered absorbing quarantine before construction.
+    Quarantined,
+}
+
+/// Registration refusal, retaining rejected input or P2's cleanup authority.
+/// Like a successful registration, this value must be destroyed on P2.
+pub enum SlotRegisterError<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's, Rejected = S> {
+    /// The slot cannot accept this input; the input is returned unchanged.
+    Occupied(Rejected),
+    /// The owner stays in its permanent backing; cleanup remains on P2.
+    Initialization {
+        /// Why endpoint construction failed.
+        cause: SlotInitError,
+        /// Cleanup authority; dropping it quarantines without ordinary release.
+        registration: SlotRegistration<'s, Id, S>,
+    },
+}
+impl<Id: SlotIdentity, S: SlotOwner<Id>, R> core::fmt::Debug for SlotRegisterError<'_, Id, S, R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Occupied(_) => f.write_str("Occupied"),
+            Self::Initialization { cause, .. } => {
+                f.debug_tuple("Initialization").field(cause).finish()
+            }
+        }
+    }
 }
 
 /// One construction authority, consumed to create exactly one backing slot.
@@ -386,15 +426,15 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
     pub fn register<'s>(
         &'s mut self,
         owner: S,
-    ) -> Result<(SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>), S>
+    ) -> Result<(SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>), SlotRegisterError<'s, Id, S>>
     where
         S: 's,
         Id: 's,
     {
         if self.signals.state.load(Ordering::Acquire) != INITIAL {
-            return Err(owner);
+            return Err(SlotRegisterError::Occupied(owner));
         }
-        Ok(self.install(owner))
+        self.install(owner)
     }
 
     /// Reinstall only with this slot's ordinary, consuming join authority.
@@ -402,14 +442,17 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
         &'s mut self,
         joined: Joined<Id>,
         resume: Resume,
-    ) -> Result<(SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>), Resume>
+    ) -> Result<
+        (SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>),
+        SlotRegisterError<'s, Id, S, Resume>,
+    >
     where
         S: 's,
         Id: 's,
     {
         let Joined { identity: _ } = joined;
         if self.signals.state.load(Ordering::Acquire) != JOINED {
-            return Err(resume);
+            return Err(SlotRegisterError::Occupied(resume));
         }
         let Some(Stored::Vacant(vacant)) = self.owner.as_mut() else {
             unreachable!("ordinary join retains vacant state");
@@ -418,10 +461,16 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
         // Queue storage stays at its permanent address. The backend prepares
         // that empty backing in place after all old endpoint loans ended.
         let owner = resume(vacant);
-        Ok(self.install(owner))
+        self.install(owner)
     }
 
-    fn install<'s>(&'s mut self, owner: S) -> (SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>)
+    fn install<'s, Rejected>(
+        &'s mut self,
+        owner: S,
+    ) -> Result<
+        (SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>),
+        SlotRegisterError<'s, Id, S, Rejected>,
+    >
     where
         S: 's,
         Id: 's,
@@ -441,15 +490,25 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
             &mut self.queues,
             crate::Mint::<'static, S::Pools, Id>::new(),
         );
-        let (ports, invocation) = S::split(
+        let endpoints = S::split(
             &mut self.queues,
             SlotWakes {
                 signals: &self.signals,
                 identity: PhantomData,
             },
         );
+        let (ports, invocation) = match endpoints {
+            Ok(endpoints) => endpoints,
+            Err(cause) => {
+                self.signals.quarantine();
+                return Err(SlotRegisterError::Initialization {
+                    cause,
+                    registration,
+                });
+            }
+        };
         registration.invocation = Some(invocation);
-        (
+        Ok((
             SlotFrontend {
                 ports: Some(ports),
                 signals: &self.signals,
@@ -458,7 +517,7 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
                 identity: PhantomData,
             },
             registration,
-        )
+        ))
     }
 }
 
@@ -509,30 +568,39 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotFrontend<'s, Id, S> {
     /// published its request still forwards its typed result to the supervisor.
     /// Each registration lends its one initial resource set at most once;
     /// another attempt quarantines without calling the backend constructor.
-    pub async fn run_body<P: SlotBody<Id, S>>(&mut self, body: P) -> Option<P::Output>
+    pub async fn run_body<P: SlotBody<Id, S>>(
+        &mut self,
+        body: P,
+    ) -> Result<P::Output, SlotInitError>
     where
         S: SlotBodyOwner<Id>,
     {
         let signals = self.signals;
         if signals.state.load(Ordering::Acquire) == QUARANTINED {
-            return None;
+            return Err(SlotInitError::Quarantined);
         }
         if self.body_issued {
             signals.quarantine();
-            return None;
+            return Err(SlotInitError::BodyAlreadyIssued);
         }
         self.body_issued = true;
-        let views = S::lend(self.ports(), crate::BodyLoan::new());
+        let views = match S::lend(self.ports(), crate::BodyLoan::new()) {
+            Ok(views) => views,
+            Err(error) => {
+                signals.quarantine();
+                return Err(error);
+            }
+        };
         let mut body = pin!(body.run(views));
         poll_fn(|cx| {
             signals.join.register(cx.waker());
             if signals.state.load(Ordering::Acquire) == QUARANTINED {
-                return Poll::Ready(None);
+                return Poll::Ready(Err(SlotInitError::Quarantined));
             }
             match poll_body(body.as_mut(), cx) {
-                Poll::Ready(output) => Poll::Ready(Some(output)),
+                Poll::Ready(output) => Poll::Ready(Ok(output)),
                 Poll::Pending if signals.state.load(Ordering::Acquire) == QUARANTINED => {
-                    Poll::Ready(None)
+                    Poll::Ready(Err(SlotInitError::Quarantined))
                 }
                 Poll::Pending => Poll::Pending,
             }

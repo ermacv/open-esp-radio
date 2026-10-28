@@ -1,6 +1,9 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(
+    clippy::expect_used,
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
     clippy::unwrap_used,
     clippy::panic,
     clippy::unreachable,
@@ -8,6 +11,14 @@
     clippy::unimplemented,
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::arithmetic_side_effects
+    )
 )]
 
 //! Stateless IEEE 802.11 frame protection and bounded AES key wrapping.

@@ -96,7 +96,7 @@ where
                 drop(outcome);
                 Report::Stopped(output)
             }
-            PortEnd::Abandoned { outcome } => {
+            PortEnd::Abandoned { outcome, .. } => {
                 drop(outcome);
                 Report::Abandoned
             }

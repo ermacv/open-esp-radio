@@ -81,3 +81,33 @@ fn external_unwrap_backends_can_construct_only_bounded_plaintext() {
         Some(RsnUnwrappedKeyDataCapacityError)
     );
 }
+
+#[test]
+fn key_data_zeroization_resets_the_proved_prefix_and_all_storage() {
+    let mut wrapped = software_aes128_key_wrap(&[7; 16], &[9; 16]).unwrap();
+    wrapped.zeroize();
+    assert!(wrapped.as_bytes().is_empty());
+    assert!(wrapped.bytes.iter().all(|byte| *byte == 0));
+    let mut plain =
+        RsnUnwrappedKeyData::try_copy(&[0x5a; RSN_UNWRAPPED_KEY_DATA_CAPACITY]).unwrap();
+    plain.zeroize();
+    assert!(plain.as_bytes().is_empty());
+    assert!(plain.bytes.iter().all(|byte| *byte == 0));
+}
+
+#[test]
+fn rfc3394_uses_the_full_bounded_buffer_and_refuses_the_next_block() {
+    let plaintext = [0x91; RSN_UNWRAPPED_KEY_DATA_CAPACITY];
+    let wrapped = software_aes128_key_wrap(&[0x27; 16], &plaintext).unwrap();
+    assert_eq!(wrapped.as_bytes().len(), RSN_KEY_DATA_CAPACITY);
+    let unwrapped = software_aes128_key_unwrap(&[0x27; 16], wrapped.as_bytes()).unwrap();
+    assert_eq!(unwrapped.as_bytes(), plaintext);
+    assert_eq!(
+        software_aes128_key_wrap(&[0; 16], &[0; RSN_KEY_DATA_CAPACITY]).err(),
+        Some(SoftwareAesKeyWrapError::CapacityExceeded)
+    );
+    assert_eq!(
+        software_aes128_key_unwrap(&[0; 16], &[0; RSN_KEY_DATA_CAPACITY + 8]).err(),
+        Some(SoftwareAesKeyUnwrapError::CapacityExceeded)
+    );
+}

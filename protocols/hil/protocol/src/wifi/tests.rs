@@ -232,6 +232,9 @@ fn link_events_preserve_epoch_and_typed_disconnect_reason() {
         StationDisconnectReason::TransmitRefused(StationTransmitRefusal::Preparation(
             StationPreparationError::BlockAckWindow,
         )),
+        StationDisconnectReason::TransmitRefused(StationTransmitRefusal::Preparation(
+            StationPreparationError::MissingBodyLoan,
+        )),
         StationDisconnectReason::TransmitRefused(StationTransmitRefusal::Layout(
             StationLayoutError::BodyOverlap,
         )),

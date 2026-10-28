@@ -363,19 +363,21 @@ pub async fn drive(boot: Boot, slot: Slot, channel: DriverChannel) {
                 let backend = Esp32s31Backend::new(parts)
                     .ok()
                     .expect("validated conformance port parts");
-                slot.register(backend)
-                    .ok()
-                    .expect("one initial registration")
+                match slot.register(backend) {
+                    Ok(registered) => registered,
+                    Err(error) => { response.answer(Err(RejectReason::Internal)); drop(error); continue; }
+                }
             }
-            DriverRequest::Resume { joined, epoch } => slot
+            DriverRequest::Resume { joined, epoch } => match slot
                 .reinstall(joined, |stopped| {
                     stopped
                         .reinstall(epoch)
                         .ok()
                         .expect("Joined retains stopped DMA and a distinct epoch")
-                })
-                .ok()
-                .expect("Joined grants the next endpoint epoch"),
+                }) {
+                    Ok(registered) => registered,
+                    Err(error) => { response.answer(Err(RejectReason::Internal)); drop(error); continue; }
+                },
         };
         let (frontend, registration) = registered;
         response.answer(Ok(frontend));

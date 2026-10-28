@@ -28,8 +28,9 @@ pub(crate) fn seal(
 ) -> Result<[u8; MIC_LEN], ccm::Error> {
     // Both arrays have their cipher's exact, statically checked lengths.
     let cipher = CcmpCcm::new(key.into());
+    let nonce = Nonce::<U13>::from(*nonce);
     cipher
-        .encrypt_in_place_detached(Nonce::<U13>::from_slice(nonce), aad.bytes(), body)
+        .encrypt_in_place_detached(&nonce, aad.bytes(), body)
         .map(Into::into)
 }
 
@@ -43,10 +44,7 @@ pub(crate) fn open(
     let cipher = CcmpCcm::new(key.into());
     // RustCrypto checks the detached tag with ConstantTimeEq. Aes128's
     // enabled zeroize feature erases its schedule when the cipher is dropped.
-    cipher.decrypt_in_place_detached(
-        Nonce::<U13>::from_slice(nonce),
-        aad.bytes(),
-        body,
-        Tag::<U8>::from_slice(mic),
-    )
+    let nonce = Nonce::<U13>::from(*nonce);
+    let mic = Tag::<U8>::from(*mic);
+    cipher.decrypt_in_place_detached(&nonce, aad.bytes(), body, &mic)
 }

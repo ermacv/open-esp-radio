@@ -51,14 +51,14 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
     fn split<'s>(
         q: &'s mut Self::Queues,
         wakes: SlotWakes<'s, Id>,
-    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
         let (commands, driver_commands) = q.commands.split();
         let (driver_events, events) = q.events.split();
-        (
+        Ok((
             Frontend {
                 shared: &q.shared,
                 commands,
@@ -66,11 +66,22 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
                 failed_request: &q.failed_request,
                 failed_terminal: &q.failed_terminal,
                 resources: &mut q.resources,
-                credits: q.credits.as_mut().expect("prepared command credit"),
+                credits: q.credits.as_mut().ok_or(
+                    oer_radio_port::SlotInitError::MissingResource("BLE command credit"),
+                )?,
                 outstanding: &mut q.outstanding,
                 wakes,
-                timer: q.timer.as_ref().expect("prepared timer").clone(),
-                clock: q.clock.as_mut().expect("prepared clock endpoint"),
+                timer: q
+                    .timer
+                    .as_ref()
+                    .ok_or(oer_radio_port::SlotInitError::MissingResource("BLE timer"))?
+                    .clone(),
+                clock: q
+                    .clock
+                    .as_mut()
+                    .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                        "BLE clock endpoint",
+                    ))?,
                 epoch: q.epoch,
                 bound: q.bound,
             },
@@ -80,7 +91,7 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
                 events: driver_events,
                 wakes,
             },
-        )
+        ))
     }
     async fn run<'s>(
         &mut self,
@@ -227,18 +238,26 @@ impl<Id: SlotIdentity, D: Device, X> SlotBodyOwner<Id> for Backend<Id, D, X> {
     where
         Self: 'p,
         Id: 'p;
-    fn lend<'p, 's>(f: &'p mut Self::Frontend<'s>, loan: BodyLoan<'p, Id, Self>) -> Self::Body<'p>
+    fn lend<'p, 's>(
+        f: &'p mut Self::Frontend<'s>,
+        loan: BodyLoan<'p, Id, Self>,
+    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
         's: 'p,
     {
-        let (seats, session) = f.resources.take().expect("one initial body resource set");
+        let (seats, session) =
+            f.resources
+                .take()
+                .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                    "BLE resources",
+                ))?;
         let resources = Resources {
             seats: seats.map(|s| loan.lend_seat(s)),
             session: session.lend(&loan),
         };
-        InstallParts {
+        Ok(InstallParts {
             resources,
             view: View {
                 shared: f.shared,
@@ -254,7 +273,7 @@ impl<Id: SlotIdentity, D: Device, X> SlotBodyOwner<Id> for Backend<Id, D, X> {
                 epoch: f.epoch,
                 loan,
             },
-        }
+        })
     }
 }
 impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {

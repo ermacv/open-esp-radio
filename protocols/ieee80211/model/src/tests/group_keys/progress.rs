@@ -156,14 +156,14 @@ fn retained<Id: SlotIdentity>(
             .held
             .commands
             .items
-            .borrow()
+            .inspect()
             .iter()
             .filter_map(|c| match c {
                 Command::Group { change, .. } => Some(command(change)),
                 _ => None,
             }),
     );
-    owners.extend(phase.held.failed_group.items.borrow().iter().map(command));
+    owners.extend(phase.held.failed_group.items.inspect().iter().map(command));
     for removal in phase.held.air.driver_observation().group_removals {
         if removal.role == VifRole::Station {
             owners.push(admitted(removal.slot, removal.permission));

@@ -2,6 +2,7 @@ use super::*;
 use core::{cell::Cell, future::pending, pin::pin, task::Waker};
 use std::{boxed::Box, rc::Rc};
 
+mod initialization;
 mod queues;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,12 +53,15 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     fn prepare_queues(&mut self, _: &mut Self::Queues, mint: crate::Mint<'static, (), Id>) {
         mint.into_pools();
     }
-    fn split<'s>(_: &'s mut (), _: crate::SlotWakes<'s, Id>) -> ((), ())
+    fn split<'s>(
+        _: &'s mut (),
+        _: crate::SlotWakes<'s, Id>,
+    ) -> Result<((), ()), crate::SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
-        ((), ())
+        Ok(((), ()))
     }
 
     fn run<'s>(
@@ -253,12 +257,12 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
         fn prepare_queues(&mut self, _: &mut Self::Queues, mint: crate::Mint<'static, (), Id>) {
             mint.into_pools();
         }
-        fn split<'s>(_: &'s mut (), _: SlotWakes<'s, Id>) -> ((), ())
+        fn split<'s>(_: &'s mut (), _: SlotWakes<'s, Id>) -> Result<((), ()), crate::SlotInitError>
         where
             Self: 's,
             Id: 's,
         {
-            ((), ())
+            Ok(((), ()))
         }
         async fn run<'s>(
             &mut self,

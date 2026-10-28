@@ -152,7 +152,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
     async fn run<'a, 'p>(
         self,
         owner: oer_radio_port::Owner<'a, 'p, Id, Backend<Id, Tracked>, oer_radio_port::Disabled>,
-        resources: Result<Resources<'p, Id>, Fault>,
+        resources: Resources<'p, Id>,
     ) -> oer_radio_port::Ended<Id, Backend<Id, Tracked>, ()>
     where
         Backend<Id, Tracked>: 'p,
@@ -166,7 +166,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
         let Resources {
             seats: [mut seat, ..],
             session,
-        } = resources.expect("prepared initial model resources");
+        } = resources;
         {
             let phase = owner.phase();
             let capacity = phase.take(&mut seat).await;
@@ -236,7 +236,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id>>
     async fn run<'a, 'p>(
         self,
         owner: oer_radio_port::Owner<'a, 'p, Id, Backend<Id>, oer_radio_port::Disabled>,
-        _: Result<Resources<'p, Id>, Fault>,
+        _: Resources<'p, Id>,
     ) -> oer_radio_port::Ended<Id, Backend<Id>, ()>
     where
         Backend<Id>: 'p,
@@ -296,7 +296,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
     async fn run<'a, 'p>(
         self,
         owner: oer_radio_port::Owner<'a, 'p, Id, Backend<Id, Tracked>, oer_radio_port::Disabled>,
-        resources: Result<Resources<'p, Id>, Fault>,
+        resources: Resources<'p, Id>,
     ) -> oer_radio_port::Ended<Id, Backend<Id, Tracked>, ()>
     where
         Backend<Id, Tracked>: 'p,
@@ -313,7 +313,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, 
             let Resources {
                 seats: [mut seat, ..],
                 session,
-            } = resources.expect("prepared initial model resources");
+            } = resources;
             let capacity = phase.take(&mut seat).await;
             let config = Supported::new(rx(19)).expect("supported RX");
             assert!(matches!(

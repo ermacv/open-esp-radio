@@ -184,11 +184,8 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
                     }
                 }
                 timing.completed_at = Instant::from_micros(self.air.monotonic_now().as_micros());
-                let retained = phase
-                    .held
-                    .failed_group
-                    .items
-                    .borrow()
+                let retained_commands = phase.held.failed_group.items.take_batch();
+                let retained = retained_commands
                     .iter()
                     .filter_map(|command| {
                         if let GroupChange::Replace {
@@ -206,6 +203,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
                         }
                     })
                     .collect();
+                phase.held.failed_group.items.0.set(retained_commands);
                 Ok(ProgressTrace {
                     rollback: self.air.group_rollback(),
                     admitted,

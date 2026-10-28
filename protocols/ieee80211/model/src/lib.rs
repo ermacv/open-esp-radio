@@ -11,7 +11,8 @@
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::disallowed_macros
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 #![cfg_attr(
     test,
@@ -27,6 +28,7 @@
         clippy::todo,
         clippy::unimplemented,
         clippy::disallowed_macros,
+        clippy::disallowed_methods,
     )
 )]
 
@@ -141,6 +143,7 @@
 //! from a separate test crate, so the model itself is compiled without that cfg.
 
 #[cfg(any(test, feature = "test-support"))]
+#[allow(clippy::disallowed_methods, clippy::disallowed_macros)]
 mod fixture;
 #[cfg(any(test, feature = "test-support"))]
 use fixture::plain_context;
@@ -152,6 +155,8 @@ use owned::*;
 extern crate alloc;
 #[cfg(test)]
 extern crate std;
+#[cfg(test)]
+use core::cell::RefCell;
 
 use alloc::{
     boxed::Box,
@@ -160,7 +165,7 @@ use alloc::{
     vec::Vec,
 };
 use core::{
-    cell::{Cell, RefCell},
+    cell::Cell,
     future::{Future, poll_fn},
     marker::PhantomData,
     num::NonZeroU16,
@@ -321,7 +326,7 @@ pub const MODEL_EVENTS: usize = MODEL_TERMINALS + MODEL_RX_EVENTS;
 /// A queue of the contract's capacity: an overflow is a broken promise and
 /// poisons the install while retaining every owner.
 struct Bounded<T> {
-    items: RefCell<VecDeque<T>>,
+    items: OwnedQueue<T>,
     capacity: usize,
     name: &'static str,
 }
@@ -341,15 +346,14 @@ impl core::fmt::Debug for QueueCapacityViolation {
 impl<T> Bounded<T> {
     fn new(capacity: usize, name: &'static str) -> Self {
         Self {
-            items: RefCell::new(VecDeque::with_capacity(capacity)),
+            items: OwnedQueue::with_capacity(capacity),
             capacity,
             name,
         }
     }
 
     fn push(&self, item: T) -> Result<(), QueueCapacityViolation> {
-        let mut items = self.items.borrow_mut();
-        let failure = (items.len() >= self.capacity).then_some(QueueCapacityViolation {
+        let failure = (self.items.len() >= self.capacity).then_some(QueueCapacityViolation {
             queue: self.name,
             capacity: self.capacity,
         });
@@ -357,7 +361,7 @@ impl<T> Bounded<T> {
         // queue for fail-stop. No terminal or command is dropped or delivered
         // after the caller latches poisoning. Healthy queues stay bounded by
         // their tickets/slots; Rust cannot connect a VecDeque length to them.
-        items.push_back(item);
+        self.items.push_back(item);
         match failure {
             Some(error) => Err(error),
             None => Ok(()),
@@ -365,11 +369,11 @@ impl<T> Bounded<T> {
     }
 
     fn pop(&self) -> Option<T> {
-        self.items.borrow_mut().pop_front()
+        self.items.pop_front()
     }
 
     fn is_empty(&self) -> bool {
-        self.items.borrow().is_empty()
+        self.items.is_empty()
     }
 }
 
@@ -1007,17 +1011,21 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
         let mut wire: Vec<u8> = bytes.into();
         if let Some(identity) = key {
             let air = identity.0.air.upgrade().ok_or(ModelFault)?;
-            let installations = air.key_installations.borrow();
-            let material = installations
-                .iter()
-                .find(|entry| entry.identity.ptr_eq(&Rc::downgrade(&identity.0)))
-                .ok_or(ModelFault)?;
-            wire.extend_from_slice(&[0; 8]);
-            air.associations
-                .borrow()
-                .get(identity.0.role)
-                .seal(&material.key, &mut wire)
-                .map_err(|_| ModelFault)?;
+            let installations = air.key_installations.take();
+            let result = (|| {
+                let material = installations
+                    .iter()
+                    .find(|entry| entry.identity.ptr_eq(&Rc::downgrade(&identity.0)))
+                    .ok_or(ModelFault)?;
+                wire.extend_from_slice(&[0; 8]);
+                air.associations
+                    .get()
+                    .get(identity.0.role)
+                    .seal(&material.key, &mut wire)
+                    .map_err(|_| ModelFault)
+            })();
+            air.key_installations.set(installations);
+            result?;
         }
         Ok(AirFrame {
             ticket,
@@ -1757,30 +1765,30 @@ pub struct DriverObservation {
 /// The air and the world of a model: shared by the backend's driver and
 /// the test.
 pub struct ModelAir {
-    observation: RefCell<DriverObservation>,
-    sent: RefCell<Vec<AirFrame>>,
+    observation: Cell<DriverObservation>,
+    sent: Cell<Vec<AirFrame>>,
     /// The answers of the next transmissions, in order; once none is
     /// queued, each is acknowledged.
-    answers: RefCell<VecDeque<AirAnswer>>,
+    answers: OwnedQueue<AirAnswer>,
     /// Conformance air input: an absent peer supplies no response to any PPDU.
     #[cfg(feature = "test-support")]
     absent_peer: Cell<bool>,
-    rx: RefCell<VecDeque<(Vec<u8>, ModelRxMeta)>>,
-    rx_stream: RefCell<Option<(Vec<u8>, ModelRxMeta)>>,
+    rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
+    rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<bool>,
     group_failure: Cell<Option<GroupFaultStage>>,
     group_rollback: Cell<Option<oer_ieee80211_port::conformance::group_keys::Rollback>>,
     group_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
-    key_installations: RefCell<Vec<KeyInstallation>>,
-    associations: RefCell<InterfaceAssociations>,
-    crypto_operations: RefCell<Vec<ModelCryptoOperation>>,
-    group_rx: RefCell<VecDeque<CapturedGroupRx>>,
+    key_installations: Cell<Vec<KeyInstallation>>,
+    associations: Cell<InterfaceAssociations>,
+    crypto_operations: Cell<Vec<ModelCryptoOperation>>,
+    group_rx: OwnedQueue<CapturedGroupRx>,
     group_writes: Cell<usize>,
     stream: Cell<ModelStream>,
     disables: Cell<u32>,
-    driver: RefCell<Option<Waker>>,
+    driver: Cell<Option<Waker>>,
     /// The driver's passes.
     passes: Cell<u32>,
     /// The commands the driver took, of every kind.
@@ -1788,24 +1796,24 @@ pub struct ModelAir {
     /// The settings the driver applied.
     settings: Cell<u32>,
     /// The EDCA set each interface's attempts contend with, by role.
-    edca: RefCell<ModelEdca>,
+    edca: Cell<ModelEdca>,
     /// The queues the air keeps busy: their attempts wait unpublished.
     held: Cell<[bool; WmmAccessCategory::ALL.len()]>,
     /// Keep a published PPDU's result pending, independently of prepublication CCA.
     held_results: Cell<[bool; WmmAccessCategory::ALL.len()]>,
     time: ModelTime,
-    receive_agreements: RefCell<BTreeMap<u8, ModelReceiveAgreement>>,
+    receive_agreements: Cell<BTreeMap<u8, ModelReceiveAgreement>>,
     expired_msdus: Cell<u32>,
 }
 impl ModelAir {
     /// Inspect P2's last published snapshot without borrowing its driver.
     pub fn driver_observation(&self) -> DriverObservation {
-        self.observation.borrow().clone()
+        self.observation.snapshot()
     }
 
     fn new(clock: Rc<dyn Clock>) -> Self {
         Self {
-            observation: RefCell::default(),
+            observation: Cell::default(),
             sent: Default::default(),
             answers: Default::default(),
             #[cfg(feature = "test-support")]
@@ -1898,60 +1906,57 @@ pub enum ModelCcmpError {
 // from that owner and the driver applies it before publishing material.
 // Like key-table hardware, vacant interfaces retain their last mode; changing
 // it requires a new owner obtained through the complete returned slot bank.
+#[derive(Clone, Copy)]
 struct InterfaceAssociations {
-    station: oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation,
-    access_point: oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation,
+    station: oer_ieee80211_wire::security::Spp,
+    access_point: oer_ieee80211_wire::security::Spp,
 }
 impl Default for InterfaceAssociations {
     fn default() -> Self {
-        use oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation;
         use oer_ieee80211_wire::security::Spp;
         Self {
-            station: CcmpAssociation::new(Spp::NotNegotiated),
-            access_point: CcmpAssociation::new(Spp::NotNegotiated),
+            station: Spp::NotNegotiated,
+            access_point: Spp::NotNegotiated,
         }
     }
 }
 impl InterfaceAssociations {
-    fn get(&self, role: VifRole) -> &oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation {
-        match role {
-            VifRole::Station => &self.station,
-            VifRole::AccessPoint => &self.access_point,
-        }
+    fn get(&self, role: VifRole) -> oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation {
+        oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation::new(match role {
+            VifRole::Station => self.station,
+            VifRole::AccessPoint => self.access_point,
+        })
     }
     fn apply(&mut self, role: VifRole, spp: oer_ieee80211_wire::security::Spp) {
         let record = match role {
             VifRole::Station => &mut self.station,
             VifRole::AccessPoint => &mut self.access_point,
         };
-        *record = oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation::new(spp);
+        *record = spp;
     }
 }
 
 impl ModelAir {
     fn install_material(&self, identity: &RawKeyIdentity, key: Ccmp128Key) {
-        self.crypto_operations
-            .borrow_mut()
-            .push(ModelCryptoOperation::Key {
-                role: identity.0.role,
-                slot: identity.0.index,
-            });
-        self.key_installations.borrow_mut().push(KeyInstallation {
+        self.crypto_operations.record(ModelCryptoOperation::Key {
+            role: identity.0.role,
+            slot: identity.0.index,
+        });
+        self.key_installations.record(KeyInstallation {
             identity: Rc::downgrade(&identity.0),
             key,
         });
     }
 
     fn apply_association(&self, role: VifRole, spp: oer_ieee80211_wire::security::Spp) {
-        self.associations.borrow_mut().apply(role, spp);
+        self.associations.apply(role, spp);
         self.crypto_operations
-            .borrow_mut()
-            .push(ModelCryptoOperation::Association { role, spp });
+            .record(ModelCryptoOperation::Association { role, spp });
     }
 
     /// Programming observations, in the same order as the driver's FIFO.
     pub fn crypto_operations(&self) -> Vec<ModelCryptoOperation> {
-        self.crypto_operations.borrow().clone()
+        self.crypto_operations.snapshot()
     }
 
     /// Receive actual encrypted data. Only successful MIC verification can
@@ -1973,33 +1978,38 @@ impl ModelAir {
             .key_id()
             .value();
         let group = oer_ieee80211_port::GroupAddress::new(header.receiver()).is_some();
-        let installations = self.key_installations.borrow();
-        let material = installations
-            .iter()
-            .find(|entry| {
-                entry.identity.upgrade().is_some_and(|key| {
-                    key.role == role
-                        && key.key_id == key_id
-                        && key.active.get()
-                        && if group {
-                            key.group_role.is_some() && key.rx_active.get()
-                        } else {
-                            key.peer
-                                .is_some_and(|peer| peer.get() == header.transmitter())
-                        }
+        let installations = self.key_installations.take();
+        let result = (|| {
+            let material = installations
+                .iter()
+                .find(|entry| {
+                    entry.identity.upgrade().is_some_and(|key| {
+                        key.role == role
+                            && key.key_id == key_id
+                            && key.active.get()
+                            && if group {
+                                key.group_role.is_some() && key.rx_active.get()
+                            } else {
+                                key.peer
+                                    .is_some_and(|peer| peer.get() == header.transmitter())
+                            }
+                    })
                 })
-            })
-            .ok_or(ModelCcmpError::MissingKey)?;
-        let identity = material
-            .identity
-            .upgrade()
-            .ok_or(ModelCcmpError::MissingKey)?;
-        let mut plaintext = frame.to_vec();
-        self.associations
-            .borrow()
-            .get(identity.role)
-            .open(&material.key, &mut plaintext)
-            .map_err(ModelCcmpError::Authentication)?;
+                .ok_or(ModelCcmpError::MissingKey)?;
+            let identity = material
+                .identity
+                .upgrade()
+                .ok_or(ModelCcmpError::MissingKey)?;
+            let mut plaintext = frame.to_vec();
+            self.associations
+                .get()
+                .get(identity.role)
+                .open(&material.key, &mut plaintext)
+                .map_err(ModelCcmpError::Authentication)?;
+            Ok(plaintext)
+        })();
+        self.key_installations.set(installations);
+        let plaintext = result?;
         let (plaintext, _mic) = plaintext
             .split_last_chunk::<8>()
             .ok_or(ModelCcmpError::MalformedHeader)?;
@@ -2013,22 +2023,23 @@ impl ModelAir {
     }
 
     fn remove_key_material(&self, identity: &RawKeyIdentity) {
-        self.key_installations
-            .borrow_mut()
-            .retain(|entry| !entry.identity.ptr_eq(&Rc::downgrade(&identity.0)));
+        let mut installations = self.key_installations.take();
+        installations.retain(|entry| !entry.identity.ptr_eq(&Rc::downgrade(&identity.0)));
+        self.key_installations.set(installations);
     }
 
     fn end_installation(&self) {
-        let mut installations = self.key_installations.borrow_mut();
+        let mut installations = self.key_installations.take();
         for entry in installations.iter() {
             if let Some(identity) = entry.identity.upgrade() {
                 identity.active.set(false);
                 identity.rx_active.set(false);
             }
         }
-        self.group_rx.borrow_mut().clear();
+        self.group_rx.clear();
         // Ccmp128Key clears its bytes even if an external identity still exists.
         installations.clear();
+        self.key_installations.set(installations);
     }
 
     /// Inject uncertainty before or after a GTK hardware mutation. No success
@@ -2069,9 +2080,8 @@ impl ModelAir {
         material: &[u8; 16],
         stage: GroupRxStage,
     ) -> bool {
-        let installation = self
-            .key_installations
-            .borrow()
+        let installations = self.key_installations.take();
+        let installation = installations
             .iter()
             .filter_map(|entry| {
                 (entry.key.as_bytes() == material)
@@ -2084,10 +2094,11 @@ impl ModelAir {
                     && key.key_id == key_id.get()
                     && key.group_role == Some(role)
             });
+        self.key_installations.set(installations);
         let Some(installation) = installation else {
             return false;
         };
-        self.group_rx.borrow_mut().push_back(CapturedGroupRx {
+        self.group_rx.push_back(CapturedGroupRx {
             frame: frame.into(),
             meta,
             installation: RawKeyIdentity(installation),
@@ -2099,42 +2110,44 @@ impl ModelAir {
 
     /// Every publication so far, including collisions and unknown outcomes.
     pub fn sent(&self) -> Vec<AirFrame> {
-        self.sent.borrow().clone()
+        self.sent.snapshot()
     }
 
     /// Supply exactly one result for the next publication. A Block Ack cannot
     /// be left behind for a later aggregate when a Single is ahead of it.
     pub fn answer(&self, answer: AirAnswer) {
-        self.answers.borrow_mut().push_back(answer);
+        self.answers.push_back(answer);
     }
 
     /// Applied receive agreements by hardware slot. Pending writes remain
     /// invisible until the driver takes the latest value of each slot.
     pub fn receive_agreements(&self) -> Vec<(u8, ModelReceiveAgreement)> {
-        self.receive_agreements
-            .borrow()
+        let agreements = self.receive_agreements.take();
+        let result = agreements
             .iter()
             .map(|(&slot, &agreement)| (slot, agreement))
-            .collect()
+            .collect();
+        self.receive_agreements.set(agreements);
+        result
     }
 
     /// Keep reception ready on every service poll, like an RX interrupt
     /// source on another executor. This exercises scheduling against a
     /// continuously ready source, rather than a finite queued burst.
     pub fn receive_continuously(&self, frame: &[u8], meta: ModelRxMeta) {
-        self.rx_stream.borrow_mut().replace((frame.into(), meta));
+        self.rx_stream.set(Some((frame.into(), meta)));
         self.wake_driver();
     }
 
     /// Stop generating RX events. Already returned buffers still require
     /// recycling through the phase.
     pub fn stop_continuous_receive(&self) {
-        self.rx_stream.borrow_mut().take();
+        self.rx_stream.take();
     }
 
     /// Deliver `frame` to the radio.
     pub fn receive(&self, frame: &[u8], meta: ModelRxMeta) {
-        self.rx.borrow_mut().push_back((frame.into(), meta));
+        self.rx.push_back((frame.into(), meta));
         self.wake_driver();
     }
 
@@ -2233,26 +2246,26 @@ impl ModelAir {
 
     /// The complete EDCA set currently installed for this interface.
     pub fn edca(&self, role: VifRole) -> EdcaParameterSet {
-        self.edca.borrow().parameters(role)
+        self.edca.parameters(role)
     }
 
     /// Actual contention draws, one per PPDU publication attempt.
     pub fn contentions(&self) -> Vec<ModelContention> {
-        self.edca.borrow().draws.clone()
+        self.edca.contentions()
     }
 
     /// Inject a deterministic entropy word for subsequent backoff draws.
     pub fn set_backoff_entropy(&self, entropy: u32) {
-        self.edca.borrow_mut().entropy = entropy;
+        self.edca.set_entropy(entropy);
     }
 
     /// The frames the air holds for the driver yet.
     pub fn pending_rx(&self) -> usize {
-        self.rx.borrow().len()
+        self.rx.len()
     }
 
     fn wake_driver(&self) {
-        if let Some(waker) = self.driver.borrow_mut().take() {
+        if let Some(waker) = self.driver.take() {
             waker.wake();
         }
     }
@@ -2262,7 +2275,7 @@ impl ModelAir {
         if self.absent_peer.get() {
             return AirAnswer::NoResponse;
         }
-        self.answers.borrow_mut().pop_front().unwrap_or(default)
+        self.answers.pop_front().unwrap_or(default)
     }
 
     /// The next answer to a single MPDU of `response`, checked against it.
@@ -2615,7 +2628,7 @@ pub struct ModelHeld<'id, B: ModelComposition> {
     commands: Bounded<Command<'id, B>>,
     /// The received buffers the body gives back, at most one per buffer.
     recycled: Bounded<OwnedRxBuffer<B::Identity>>,
-    settings: RefCell<Settings>,
+    settings: Cell<Settings>,
     events: Bounded<OwnedLowerMacEvent<'id, B>>,
     quarantined: Bounded<Work<'id, B>>,
     failed_group: Bounded<GroupChange<'id, B>>,
@@ -2624,9 +2637,9 @@ pub struct ModelHeld<'id, B: ModelComposition> {
     rx_out: Cell<usize>,
     /// Received frames dropped since the stream last said so.
     lost: Cell<bool>,
-    body: RefCell<Option<Waker>>,
+    body: Cell<Option<Waker>>,
     /// The backend alone attests the hardware barrier with the one gate place.
-    gate_issuer: RefCell<GateIssuer<'id, ModelPool<<B as ModelComposition>::Identity, 0>>>,
+    gate_issuer: GateIssuer<'id, ModelPool<<B as ModelComposition>::Identity, 0>>,
     /// Disable asks the driver to return all queued operations before the
     /// owner ends the phase. Unlike poison, this is an ordinary terminal.
     draining: Cell<bool>,
@@ -2654,7 +2667,7 @@ impl<'id, B: ModelComposition> ModelHeld<'id, B> {
     }
 
     fn wake_body(&self) {
-        if let Some(waker) = self.body.borrow_mut().take() {
+        if let Some(waker) = self.body.take() {
             waker.wake();
         }
     }
@@ -2700,10 +2713,7 @@ mod lifecycle;
 pub use lifecycle::{ModelBackend, ModelFrontend, ModelSetup, ModelVacant};
 
 /// The composition's initial software depth for each access category.
-pub const MODEL_TX_QUEUE_DEPTH: core::num::NonZeroU8 = match core::num::NonZeroU8::new(2) {
-    Some(depth) => depth,
-    None => panic!("a queue holds an attempt"),
-};
+pub const MODEL_TX_QUEUE_DEPTH: core::num::NonZeroU8 = core::num::NonZeroU8::MIN.saturating_add(1);
 
 /// The driver retains the unique open place throughout the closing barrier.
 enum DriverGate<'id, B: ModelComposition> {
@@ -2781,9 +2791,9 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                 return;
             }
             // The settings come before the next command.
-            let settings = core::mem::take(&mut *held.settings.borrow_mut());
+            let settings = held.settings.take();
             for (slot, wanted) in settings.block_acks {
-                let mut applied = held.air.receive_agreements.borrow_mut();
+                let mut applied = held.air.receive_agreements.take();
                 match wanted {
                     Some(agreement) => {
                         applied.insert(slot, agreement);
@@ -2792,6 +2802,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                         applied.remove(&slot);
                     }
                 }
+                held.air.receive_agreements.set(applied);
             }
             while let Some(mut buffer) = held.recycled.pop() {
                 buffer.recycled = true;
@@ -2824,7 +2835,6 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                     }) {
                         held.commands
                             .items
-                            .borrow_mut()
                             .push_front(Command::Configure(permission));
                         break;
                     }
@@ -2892,7 +2902,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                     if held.air.group_held.get() && !held.draining.get() {
                         // We popped exactly this cell; restore it without creating
                         // capacity or allowing a later command to pass it.
-                        held.commands.items.borrow_mut().push_front(Command::Group {
+                        held.commands.items.push_front(Command::Group {
                             admitted_at,
                             change,
                         });
@@ -2924,7 +2934,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         if idle {
             self.gate = match core::mem::replace(&mut self.gate, DriverGate::Closed) {
                 DriverGate::Closing(gate) => {
-                    let closed = held.gate_issuer.borrow_mut().close(gate);
+                    let closed = held.gate_issuer.close(gate);
                     held.post(OwnedLowerMacEvent::Terminal(
                         OwnedLowerMacTerminal::GateClosed(closed),
                     ));
@@ -3009,8 +3019,8 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         // New-key ingress captured by delivery callbacks stays in the live
         // queues until after this command's terminal. No drain-to-idle loop
         // can postpone the boundary under continuous traffic.
-        let received = core::mem::take(&mut *held.air.rx.borrow_mut());
-        let captured = core::mem::take(&mut *held.air.group_rx.borrow_mut());
+        let received = held.air.rx.take_batch();
+        let captured = held.air.group_rx.take_batch();
         let terminal = match change {
             GroupChange::Install(GroupInstallationCommand::Station(pending)) => {
                 Some(self.install_group(held, pending))
@@ -3025,10 +3035,17 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                 key,
             } => {
                 if held.air.group_failure.get() == Some(GroupFaultStage::ReplacementWrite) {
-                    let mut table = held.air.key_installations.borrow_mut();
+                    let mut table = held.air.key_installations.take();
                     let Some(index) = table.iter().position(|entry| {
                         entry.identity.ptr_eq(&Rc::downgrade(&installed.identity.0))
                     }) else {
+                        held.air.key_installations.set(table);
+                        let _capacity_fault = held.failed_group.push(GroupChange::Replace {
+                            permission,
+                            installed,
+                            key_id,
+                            key,
+                        });
                         held.poison();
                         return;
                     };
@@ -3053,7 +3070,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                             }),
                         },
                     ));
-                    drop(table);
+                    held.air.key_installations.set(table);
                     let _capacity_fault = held.failed_group.push(GroupChange::Replace {
                         permission,
                         installed,
@@ -3238,11 +3255,11 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
     /// Capture only this finite batch; newly arriving traffic belongs to the
     /// next pass. Delayed ingress is forced through before a GTK boundary.
     fn receive(&mut self, held: &ModelHeld<'id, B>) {
-        let captured = core::mem::take(&mut *held.air.rx.borrow_mut());
+        let captured = held.air.rx.take_batch();
         for (frame, meta) in captured {
             self.deliver(held, frame, meta);
         }
-        let captured = core::mem::take(&mut *held.air.group_rx.borrow_mut());
+        let captured = held.air.group_rx.take_batch();
         for received in captured {
             if received.stage == GroupRxStage::Ready {
                 // Integrity was established at capture under this owner.
@@ -3250,7 +3267,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                 let _installation = received.installation;
                 self.deliver(held, received.frame, received.meta);
             } else {
-                held.air.group_rx.borrow_mut().push_back(received);
+                held.air.group_rx.push_back(received);
             }
         }
     }
@@ -3355,11 +3372,11 @@ impl<'id, B: ModelComposition> Published<'id, B> {
                     TxOutcome::Ended(SingleEnd::AckTimeout(_) | SingleEnd::ContentionLimit(_))
                 ) && let Some(rate) = plan.remaining.pop_front()
                 {
-                    held.air.edca.borrow_mut().failure(plan.prepared.queue);
+                    held.air.edca.failure(plan.prepared.queue);
                     plan.rate = rate;
                     return publish_single(held, keys, plan);
                 }
-                held.air.edca.borrow_mut().reset(plan.prepared.queue);
+                held.air.edca.reset(plan.prepared.queue);
                 terminal(held, *plan.prepared, outcome);
             }
             Self::Aggregate {
@@ -3368,7 +3385,7 @@ impl<'id, B: ModelComposition> Published<'id, B> {
                 answer,
             } => {
                 let outcome = aggregate_outcome(answer, prepared.rate, report, cause);
-                held.air.edca.borrow_mut().reset(prepared.queue);
+                held.air.edca.reset(prepared.queue);
                 terminal_aggregate(held, prepared, outcome);
             }
         }
@@ -3512,7 +3529,7 @@ fn publish_single<'id, B: ModelComposition>(
         .msdu_lifetime;
     if plan.prepared.operation.payload().expired(now, lifetime) {
         held.air.expired(1);
-        held.air.edca.borrow_mut().reset(plan.prepared.queue);
+        held.air.edca.reset(plan.prepared.queue);
         terminal(held, *plan.prepared, TxOutcome::Expired { msdus: 1 });
         return None;
     }
@@ -3558,13 +3575,10 @@ fn publish_single<'id, B: ModelComposition>(
             return None;
         }
     };
-    held.air
-        .edca
-        .borrow_mut()
-        .draw(plan.prepared.role, plan.prepared.queue);
+    held.air.edca.draw(plan.prepared.role, plan.prepared.queue);
     // A denied PPDU never reached the air the journal records.
     if !matches!(answer, SingleAnswer::AirDenied) {
-        held.air.sent.borrow_mut().push(frame);
+        held.air.sent.record(frame);
     }
     Some(Publication {
         started: held.air.monotonic_now().as_micros(),
@@ -3600,6 +3614,11 @@ fn terminal_aggregate<'id, B: ModelComposition>(
     ));
 }
 
+fn subframe_bit(index: usize) -> Result<u64, ModelFault> {
+    let shift = u32::try_from(index).map_err(|_| ModelFault)?;
+    1_u64.checked_shl(shift).ok_or(ModelFault)
+}
+
 fn publish_aggregate<'id, B: ModelComposition>(
     held: &ModelHeld<'id, B>,
     keys: &[RawKeyIdentity],
@@ -3611,19 +3630,28 @@ fn publish_aggregate<'id, B: ModelComposition>(
         .edca(aggregate.role)
         .access_category(aggregate.queue)
         .msdu_lifetime;
-    let expired = aggregate.operation.payload().0.iter().enumerate().fold(
+    let expired = aggregate.operation.payload().0.iter().enumerate().try_fold(
         0_u64,
         |mask, (index, subframe)| {
-            if subframe.mpdu.expired(now, lifetime) {
-                mask | (1_u64 << index)
+            let bit = subframe_bit(index)?;
+            Ok(if subframe.mpdu.expired(now, lifetime) {
+                mask | bit
             } else {
                 mask
-            }
+            })
         },
     );
+    let expired = match expired {
+        Ok(expired) => expired,
+        Err(ModelFault) => {
+            let _fault = held.quarantined.push(Work::Aggregate(aggregate));
+            held.poison();
+            return None;
+        }
+    };
     if expired != 0 {
         held.air.expired(expired);
-        held.air.edca.borrow_mut().reset(aggregate.queue);
+        held.air.edca.reset(aggregate.queue);
         terminal_aggregate(held, aggregate, TxOutcome::Expired { msdus: expired });
         return None;
     }
@@ -3659,16 +3687,21 @@ fn publish_aggregate<'id, B: ModelComposition>(
     };
     let mut bitmap = 0_u64;
     for (index, subframe) in aggregate.operation.payload().0.iter().enumerate() {
-        if acknowledged & (1 << index) != 0 {
+        let bit = match subframe_bit(index) {
+            Ok(bit) => bit,
+            Err(ModelFault) => {
+                let _fault = held.quarantined.push(Work::Aggregate(aggregate));
+                held.poison();
+                return None;
+            }
+        };
+        if acknowledged & bit != 0 {
             bitmap |= subframe.acknowledgement_bit;
         }
     }
-    held.air
-        .edca
-        .borrow_mut()
-        .draw(aggregate.role, aggregate.queue);
+    held.air.edca.draw(aggregate.role, aggregate.queue);
     if !matches!(answer, AggregateAnswer::AirDenied) {
-        held.air.sent.borrow_mut().extend(frames);
+        held.air.sent.record_all(frames);
     }
     // NonEmptyAggregate carries the first sequence into PreparedAggregate below.
     let report = BlockAckReport {
@@ -3752,26 +3785,27 @@ impl<'id, C, B: ModelComposition + 'id> PortPhase for ModelPhase<'_, 'id, C, B> 
                     held.air.wake_driver();
                     return Poll::Ready(Err(end));
                 }
-                *held.body.borrow_mut() = Some(cx.waker().clone());
+                held.body.set(Some(cx.waker().clone()));
                 held.air.wake_driver();
                 return Poll::Pending;
             }
-            if let Some((bytes, meta)) = held.air.rx_stream.borrow().as_ref()
+            if held.rx_out.get() < MODEL_RX_EVENTS
+                && let Some((bytes, meta)) = held.air.rx_stream.snapshot()
                 && held.charge_rx()
             {
                 return Poll::Ready(Ok(Ok(OwnedLowerMacEvent::Received {
                     frame: OwnedRxBuffer {
                         identity: PhantomData,
-                        bytes: bytes.clone(),
+                        bytes,
                         recycled: false,
                         air: Rc::downgrade(&held.air),
                         streamed: true,
                     },
-                    meta: *meta,
+                    meta,
                 }
                 .lend(&loan))));
             }
-            *held.body.borrow_mut() = Some(cx.waker().clone());
+            held.body.set(Some(cx.waker().clone()));
             Poll::Pending
         })
     }
@@ -3824,7 +3858,6 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacP
         let open = self
             .held
             .gate_issuer
-            .borrow_mut()
             .open(gate.into_owned(&self.frontend.loan));
         self.held.command(Command::OpenGate);
         open.lend(&self.frontend.loan)
@@ -3939,6 +3972,7 @@ type ModelPreparation<'k, 'p, 'id, R, K, B, C> = Result<
 /// Dropping or submitting it ends that borrow; a queued operation owns only
 /// the backend identity, never a reference to a portable machine.
 pub struct ModelPrepared<'k, 'p, 'id, R, K, B: ModelComposition> {
+    loan: BodyLoan<'id, B::Identity, B>,
     mpdu: ModelMpdu<'id, B>,
     plan: oer_ieee80211_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
@@ -3967,7 +4001,7 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
         Self::OwnedPayload,
         Self::Execution,
     > {
-        let loan = self.mpdu.buffer.loan();
+        let loan = self.loan;
         oer_ieee80211_port::AdmissionOwners {
             context: context.enclose().into_owned(&loan),
             ticket: loan.reclaim_slot(ticket),
@@ -4087,22 +4121,34 @@ fn prepare_model<
 >(
     source: ModelCheckedSource<'k, 'p, 'id, C, K, R, B>,
 ) -> ModelPreparation<'k, 'p, 'id, R, K, B, C> {
-    let (mpdu, plan, key) = match source {
+    let (mpdu, plan, key, loan) = match source {
         CheckedTxSource::Fresh(fresh) => {
-            let (
-                FreshSource {
-                    buffer,
-                    frame,
-                    body,
-                    protection,
-                },
-                layout,
-            ) = fresh.into_parts();
-            #[expect(
-                clippy::expect_used,
-                reason = "only loaned body buffers can enter preparation"
-            )]
-            let loan = buffer.loan.expect("body buffer authority");
+            let (fresh, layout) = fresh.into_parts();
+            let Some(loan) = fresh.buffer.loan else {
+                return Err(PreparationRefused {
+                    reason: PreparationError::MissingBodyLoan,
+                    operation: {
+                        let FreshSource {
+                            buffer,
+                            frame,
+                            body,
+                            protection,
+                        } = fresh;
+                        TxSource::Fresh {
+                            buffer,
+                            frame,
+                            body,
+                            protection,
+                        }
+                    },
+                });
+            };
+            let FreshSource {
+                buffer,
+                frame,
+                body,
+                protection,
+            } = fresh;
             let (key, packet_number) = match protection {
                 TxProtection::Open => (None, None),
                 TxProtection::Ccmp(numbered) => (
@@ -4123,9 +4169,16 @@ fn prepare_model<
                 },
                 plan,
                 key,
+                loan,
             )
         }
         CheckedTxSource::Retransmission { mpdu, plan } => {
+            let Some(loan) = mpdu.buffer.loan else {
+                return Err(PreparationRefused {
+                    reason: PreparationError::MissingBodyLoan,
+                    operation: TxSource::Retransmission { mpdu, plan },
+                });
+            };
             let checked = if mpdu.role != R::ROLE {
                 Err(PreparationError::RetransmissionKind)
             } else if mpdu.key.as_ref().is_some_and(|key| !key.0.active.get()) {
@@ -4149,10 +4202,12 @@ fn prepare_model<
                 ModelMpdu::from_sent(C::erase_sent(mpdu), layout, response),
                 stages,
                 key,
+                loan,
             )
         }
     };
     Ok(ModelPrepared {
+        loan,
         mpdu,
         plan,
         key: key.map(PreparedKey::new),
@@ -4176,8 +4231,8 @@ where
 
     /// The model applies each interface's set exactly.
     fn set_edca(&mut self, parameters: SupportedEdca<K>) -> SupportedEdca<K> {
-        *self.held.air.edca.borrow_mut().parameters_mut(R::ROLE) = parameters.get();
-        self.held.settings.borrow_mut().other = true;
+        self.held.air.edca.set_parameters(R::ROLE, parameters.get());
+        self.held.settings.mark_other();
         self.held.air.wake_driver();
         parameters
     }
@@ -4298,7 +4353,7 @@ where
         slot: ModelBlockAckSlot<'id, B>,
         agreement: SupportedBlockAck<K>,
     ) -> ModelBlockAck<'id, B> {
-        self.held.settings.borrow_mut().block_acks.insert(
+        self.held.settings.set_block_ack(
             slot.index(),
             Some(ModelReceiveAgreement::checked(R::ROLE, agreement)),
         );
@@ -4311,7 +4366,7 @@ where
         running: ModelBlockAck<'id, B>,
         agreement: SupportedBlockAck<K>,
     ) -> ModelBlockAck<'id, B> {
-        self.held.settings.borrow_mut().block_acks.insert(
+        self.held.settings.set_block_ack(
             running.slot.index(),
             Some(ModelReceiveAgreement::checked(R::ROLE, agreement)),
         );
@@ -4322,9 +4377,7 @@ where
     fn remove_block_ack(&mut self, agreement: ModelBlockAck<'id, B>) -> ModelBlockAckSlot<'id, B> {
         self.held
             .settings
-            .borrow_mut()
-            .block_acks
-            .insert(agreement.slot.index(), None);
+            .set_block_ack(agreement.slot.index(), None);
         self.held.air.wake_driver();
         agreement.slot
     }
@@ -4725,7 +4778,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> Stati
     }
 
     fn set_bss_color(&mut self, _: BssColor) {
-        self.held.settings.borrow_mut().other = true;
+        self.held.settings.mark_other();
         self.held.air.wake_driver();
     }
 }
@@ -4755,4 +4808,8 @@ mod tests;
 
 /// Reusable reference fixtures for the physical conformance runner.
 #[cfg(feature = "test-support")]
+#[allow(clippy::disallowed_methods, clippy::disallowed_macros)]
 pub mod conformance;
+
+mod values;
+use values::*;

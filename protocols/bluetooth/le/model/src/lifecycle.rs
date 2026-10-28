@@ -114,19 +114,22 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
     fn split<'s>(
         queues: &'s mut Self::Queues,
         _: SlotWakes<'s, Id>,
-    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
         let q = queues;
-        (
+        if q.shared.attachment.is_none() {
+            return Err(SlotInitError::QueuesUnprepared);
+        }
+        Ok((
             Frontend {
                 shared: &q.shared,
                 initial: &mut q.initial,
             },
             Invocation { shared: &q.shared },
-        )
+        ))
     }
     async fn run<'s>(
         &mut self,
@@ -200,23 +203,23 @@ impl<Id: SlotIdentity, X> SlotBodyOwner<Id> for Backend<Id, X> {
     where
         Self: 'p,
         Id: 'p;
-    fn lend<'p, 's>(f: &'p mut Self::Frontend<'s>, loan: BodyLoan<'p, Id, Self>) -> Self::Body<'p>
+    fn lend<'p, 's>(
+        f: &'p mut Self::Frontend<'s>,
+        loan: BodyLoan<'p, Id, Self>,
+    ) -> Result<Self::Body<'p>, SlotInitError>
     where
         Self: 's,
         Id: 's,
         's: 'p,
     {
-        let resources = f.shared.lend_initial(f.initial, &loan);
-        if let Err(fault) = &resources {
-            f.shared.poison(*fault);
-        }
-        InstallParts {
+        let resources = f.shared.lend_initial(f.initial, &loan)?;
+        Ok(InstallParts {
             view: View {
                 shared: f.shared,
                 loan,
             },
             resources,
-        }
+        })
     }
 }
 impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
@@ -239,7 +242,7 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
         Self: 'p,
         Id: 'p;
     type Resources<'p>
-        = Result<Resources<'p, Id>, Fault>
+        = Resources<'p, Id>
     where
         Self: 'p,
         Id: 'p;
@@ -400,14 +403,14 @@ mod tests {
     use super::*;
     struct InspectInitial;
     impl<Id: SlotIdentity> SlotBody<Id, Backend<Id>> for InspectInitial {
-        type Output = (Fault, Fault);
+        type Output = (SlotInitError, SlotInitError);
         async fn run<'p>(self, parts: InstallParts<'p, Id, Backend<Id>>) -> Self::Output
         where
             Backend<Id>: 'p,
             Id: 'p,
         {
             let InstallParts { view, resources } = parts;
-            let Resources { seats, session } = resources.expect("prepared resources");
+            let Resources { seats, session } = resources;
             let mut initial = Some(Initial {
                 seats: seats.map(|seat| view.loan.reclaim_seat(seat)),
                 idle: OwnedSession::retain(session, &view.loan),
@@ -417,7 +420,7 @@ mod tests {
                 .lend_initial(&mut initial, &view.loan)
                 .err()
                 .expect("vacant queues refuse the loan");
-            assert_eq!(unprepared, Fault::UnpreparedQueues);
+            assert_eq!(unprepared, SlotInitError::QueuesUnprepared);
             assert!(
                 initial.is_some(),
                 "a refused loan retains every initial owner"
@@ -433,7 +436,10 @@ mod tests {
                 .lend_initial(&mut initial, &view.loan)
                 .err()
                 .expect("resources issued once");
-            assert_eq!(exhausted, Fault::ResourcesExhausted);
+            assert_eq!(
+                exhausted,
+                SlotInitError::MissingResource("BLE initial resources")
+            );
             assert!(initial.is_none());
             (unprepared, exhausted)
         }
@@ -449,7 +455,10 @@ mod tests {
                 .expect("fresh model slot");
             assert_eq!(
                 frontend.run_body(InspectInitial).await,
-                Some((Fault::UnpreparedQueues, Fault::ResourcesExhausted))
+                Ok((
+                    SlotInitError::QueuesUnprepared,
+                    SlotInitError::MissingResource("BLE initial resources")
+                ))
             );
             drop(frontend);
             drop(registration);
