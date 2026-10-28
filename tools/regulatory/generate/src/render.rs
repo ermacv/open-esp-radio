@@ -13,15 +13,35 @@ pub fn render(revision: &str, countries: &[(&str, &[Rule])]) -> Result<String, S
          //!\n\
          //! SOURCE: https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git\n\
          //! (ISC licence, see the repository NOTICE).\n\n\
-         use crate::{{Country, FrequencySpan, RegulatoryDomain, Rule, RuleFlags}};\n\n\
-         const fn rule(\n    low_khz: u32,\n    high_khz: u32,\n    max_bandwidth_khz: u32,\n    max_eirp_mbm: i32,\n    flags: RuleFlags,\n) -> Rule {{\n    match FrequencySpan::new(low_khz, high_khz) {{\n        Some(span) => Rule::new(span, max_bandwidth_khz, max_eirp_mbm, flags),\n        None => panic!(\"generated rule has an empty span\"),\n    }}\n}}\n\n\
-         const fn domain(code: [u8; 2], rules: &'static [Rule]) -> RegulatoryDomain {{\n    let country = match Country::new(code) {{\n        Ok(country) => country,\n        Err(_) => panic!(\"generated country code is invalid\"),\n    }};\n    match RegulatoryDomain::new(country, rules) {{\n        Ok(domain) => domain,\n        Err(_) => panic!(\"generated rules overlap\"),\n    }}\n}}\n\n"
+         use crate::{{Country, FrequencySpan, RegulatoryDomain, Rule, RuleFlags}};\n\n"
+    ))?;
+    write(format_args!(
+        "{}",
+        r#"const fn rule<const LOW: u32, const HIGH: u32>(
+    max_bandwidth_khz: u32,
+    max_eirp_mbm: i32,
+    flags: RuleFlags,
+) -> Rule {
+    const {
+        if LOW >= HIGH {
+            panic!("generated rule has an empty span");
+        }
+    }
+    Rule::new(
+        FrequencySpan { low_khz: LOW, high_khz: HIGH },
+        max_bandwidth_khz,
+        max_eirp_mbm,
+        flags,
+    )
+}
+
+"#
     ))?;
     for (code, rules) in countries {
         write(format_args!("const {code}: &[Rule] = &[\n"))?;
         for rule in *rules {
             write(format_args!(
-                "    rule({}, {}, {}, {}, {}),\n",
+                "    rule::<{}, {}>({}, {}, {}),\n",
                 group(rule.low_khz),
                 group(rule.high_khz),
                 group(rule.max_bandwidth_khz),
@@ -35,7 +55,18 @@ pub fn render(revision: &str, countries: &[(&str, &[Rule])]) -> Result<String, S
         "/// The generated domains, by country.\npub const DOMAINS: &[RegulatoryDomain] = &[\n"
     ))?;
     for (code, _) in countries {
-        write(format_args!("    domain(*b\"{code}\", {code}),\n"))?;
+        write(format_args!(
+            "    const {{\n\
+             if Country::new(*b\"{code}\").is_err() {{\n\
+                 panic!(\"generated country code is invalid\");\n\
+             }}\n\
+             let country = Country(*b\"{code}\");\n\
+             if RegulatoryDomain::new(country, {code}).is_err() {{\n\
+                 panic!(\"generated rules overlap\");\n\
+             }}\n\
+             RegulatoryDomain {{ country, rules: {code} }}\n\
+             }},\n"
+        ))?;
     }
     write(format_args!("];\n"))?;
     Ok(out)
@@ -91,9 +122,73 @@ mod tests {
         };
         let source = render("abc", &[("DE", std::slice::from_ref(&rule))]).unwrap();
         assert!(source.contains(
-            "rule(5_250_000, 5_350_000, 80_000, 2000, RuleFlags::DFS.union(RuleFlags::NO_OUTDOOR))"
+            "rule::<5_250_000, 5_350_000>(80_000, 2000, RuleFlags::DFS.union(RuleFlags::NO_OUTDOOR))"
         ));
-        assert!(source.contains("domain(*b\"DE\", DE)"));
+        assert!(source.contains("RegulatoryDomain { country, rules: DE }"));
         assert!(source.contains("at abc"));
+    }
+
+    /// Compile only metadata, using the actual regulatory implementation as
+    /// the fixture root; no firmware, network or process-wide state is used.
+    fn compile_generated(countries: &[(&str, &[Rule])]) -> std::process::Output {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("lib.rs");
+        std::fs::write(
+            &root,
+            include_str!("../../../../protocols/radio/regulatory/src/lib.rs"),
+        )
+        .unwrap();
+        std::fs::write(
+            directory.path().join("generated.rs"),
+            render("test", countries).unwrap(),
+        )
+        .unwrap();
+        std::process::Command::new("rustc")
+            .args(["--edition=2024", "--crate-type=lib", "--emit=metadata"])
+            .arg(&root)
+            .arg("--out-dir")
+            .arg(directory.path())
+            .output()
+            .unwrap()
+    }
+
+    #[test]
+    fn generated_checks_accept_valid_tables_and_reject_invalid_constants() {
+        let rule = Rule {
+            low_khz: 1,
+            high_khz: 2,
+            max_bandwidth_khz: 1,
+            max_eirp_mbm: 0,
+            no_ir: false,
+            dfs: false,
+            no_outdoor: false,
+        };
+        let valid = compile_generated(&[("DE", std::slice::from_ref(&rule))]);
+        assert!(
+            valid.status.success(),
+            "{}",
+            String::from_utf8_lossy(&valid.stderr)
+        );
+        let empty = Rule {
+            high_khz: 1,
+            ..rule.clone()
+        };
+        for (code, rules, message) in [
+            ("DE", vec![empty], "generated rule has an empty span"),
+            (
+                "dE",
+                vec![rule.clone()],
+                "generated country code is invalid",
+            ),
+            ("DE", vec![rule.clone(), rule], "generated rules overlap"),
+        ] {
+            let rejected = compile_generated(&[(code, &rules)]);
+            let error = String::from_utf8_lossy(&rejected.stderr);
+            assert!(!rejected.status.success(), "{code}: {message}");
+            assert!(
+                error.contains("E0080") && error.contains(message),
+                "{error}"
+            );
+        }
     }
 }

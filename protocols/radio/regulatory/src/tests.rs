@@ -290,3 +290,39 @@ fn a_hopping_radio_is_bounded_by_the_width_of_one_hop() {
         Refused::Bandwidth
     );
 }
+
+#[test]
+fn span_width_covers_the_entire_u32_domain_without_overflow() {
+    for (low, high) in [(0, u32::MAX), (u32::MAX - 1, u32::MAX), (0, 1)] {
+        let span = FrequencySpan::new(low, high).unwrap();
+        assert_eq!(span.width_khz(), high.checked_sub(low).unwrap());
+    }
+    assert_eq!(FrequencySpan::new(u32::MAX, 0), None);
+    assert_eq!(FrequencySpan::new(u32::MAX, u32::MAX), None);
+}
+
+#[test]
+fn overlap_reports_the_later_rules_index_after_a_valid_prefix() {
+    const MANY: &[Rule] = &[
+        Rule::new(FrequencySpan::new(0, 1).unwrap(), 1, 0, RuleFlags::NONE),
+        Rule::new(FrequencySpan::new(1, 2).unwrap(), 1, 0, RuleFlags::NONE),
+        Rule::new(FrequencySpan::new(1, 3).unwrap(), 1, 0, RuleFlags::NONE),
+    ];
+    assert_eq!(
+        RegulatoryDomain::new(Country::new(*b"XX").unwrap(), MANY),
+        Err(InvalidDomain::Overlapping { index: 2 })
+    );
+    assert!(RegulatoryDomain::new(Country::new(*b"XX").unwrap(), &[]).is_ok());
+}
+
+#[test]
+fn power_rounding_matches_euclidean_division_at_boundaries() {
+    for mbm in (i32::MIN..=i32::MIN + 200)
+        .chain(-13_000..=13_000)
+        .chain(i32::MAX - 200..=i32::MAX)
+    {
+        let expected = |unit| mbm.div_euclid(unit).clamp(i8::MIN.into(), i8::MAX.into()) as i8;
+        assert_eq!(TxCeiling(mbm).quarter_dbm(), expected(25), "{mbm}");
+        assert_eq!(TxCeiling(mbm).dbm(), expected(100), "{mbm}");
+    }
+}

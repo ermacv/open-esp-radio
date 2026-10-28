@@ -1,12 +1,16 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(
+    clippy::panic,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! Which channels a country permits, and at what power.
@@ -27,6 +31,12 @@
 pub mod generated;
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    reason = "tests assert behavior and compare against standard-library arithmetic"
+)]
 mod tests;
 
 /// An ISO 3166-1 alpha-2 country code, two uppercase ASCII letters.
@@ -82,7 +92,8 @@ impl FrequencySpan {
 
     /// The width.
     pub const fn width_khz(self) -> u32 {
-        self.high_khz - self.low_khz
+        // Construction guarantees high > low; abs_diff is total on u32.
+        self.high_khz.abs_diff(self.low_khz)
     }
 }
 
@@ -162,15 +173,15 @@ impl RegulatoryDomain {
     /// spans are allowed).
     pub const fn new(country: Country, rules: &'static [Rule]) -> Result<Self, InvalidDomain> {
         let mut rest = rules;
-        let mut index = 1;
         while let [previous, tail @ ..] = rest {
             if let [next, ..] = tail
                 && next.span.low_khz < previous.span.high_khz
             {
-                return Err(InvalidDomain::Overlapping { index });
+                return Err(InvalidDomain::Overlapping {
+                    index: rules.len().abs_diff(tail.len()),
+                });
             }
             rest = tail;
-            index += 1;
         }
         Ok(Self { country, rules })
     }
@@ -373,7 +384,13 @@ impl TxCeiling {
 
     /// The ceiling in quarter dBm, rounded down and saturated to `i8`.
     pub const fn quarter_dbm(self) -> i8 {
-        let quarter = self.0.div_euclid(25);
+        // For negative x, !x is -1-x: complementing the quotient rounds
+        // down without a potentially overflowing negation or subtraction.
+        let quarter = if self.0 < 0 {
+            !(!self.0 / 25)
+        } else {
+            self.0 / 25
+        };
         if quarter > i8::MAX as i32 {
             i8::MAX
         } else if quarter < i8::MIN as i32 {
@@ -385,7 +402,12 @@ impl TxCeiling {
 
     /// The ceiling in whole dBm, rounded down and saturated to `i8`.
     pub const fn dbm(self) -> i8 {
-        let dbm = self.0.div_euclid(100);
+        // The same complement identity as quarter_dbm, with a fixed divisor.
+        let dbm = if self.0 < 0 {
+            !(!self.0 / 100)
+        } else {
+            self.0 / 100
+        };
         if dbm > i8::MAX as i32 {
             i8::MAX
         } else if dbm < i8::MIN as i32 {
