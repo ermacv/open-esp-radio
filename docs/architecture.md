@@ -91,10 +91,17 @@ bindings below the unsafe boundary. Staged-layout owns an unsafe memory/ABI
 contract;
 staged-bootstrap, staged-runtime and executor depend on the platform.
 `oer-espressif-platform-port` holds the family's platform contracts (the
-early console writer and the executor's sources, reads and owned blocks)
-and the hart geometry of the chip its HAL selects; the chip's HAL implements
-the contracts on its own types, and the staged bootstrap reaches the chip
-only through them.
+early console writer, the fatal path's mask, stop of the other harts and
+software reset, and the executor's sources, reads and owned blocks) and the
+hart geometry of the chip its HAL selects; the chip's HAL implements the
+contracts on its own types, and the staged bootstrap and staged runtime reach
+the chip only through them. The staged runtime's vectors come from the facts
+of the chip the port names in its build metadata, and an image names its
+platform (the HAL's port type) once, in the runtime's `entry!`, which also
+defines its panic handler and, as a parameter, its panic hook.
+`oer-esp32s31-compose` is the chip's side of an image's platform: the PHY
+transaction and Wi-Fi fault records, which need both the HAL's types and the
+runtime's retained memory and fatal path.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-time::deadline` contains only the deadline policy,

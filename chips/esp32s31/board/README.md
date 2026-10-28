@@ -16,12 +16,13 @@ dependency.
 | `chips/esp32s31/platform/partitions` | Application partition layout |
 | `chips/esp32s31/platform/stack.toml` | Stack policy: each stack's root function, storage and reserve, the move limit and the frame-coverage review (`stack-coverage.toml`) |
 
-The runtime owns every image's `#[panic_handler]`. It writes a bounded record
+The runtime's `entry!` defines every image's `#[panic_handler]`. It writes a bounded record
 of the panic to `.rtc_fast.persistent` without formatting (the end of the
 location's file path, line, column, the start of the message when it is a
 static string, hart and, on an interrupt stack, the interrupted PC), so the
-panic path stays a short leaf in every stack bound. An image with
-`panic-hook` names its hook with `panic_hook!`, which the entry calls after
+panic path stays a short leaf in every stack bound. An image with a hook
+names it as the parameter of its entry (`entry!(main, Port, hook = path)`),
+which the panic entry calls after
 the record, in the fatal path with the hart masked and the other hart
 stopped (`cores::StopTheWorld`, or the `StopError` why not), to record more
 of its own state the same way; it returns. Under that stop a record may read
@@ -30,7 +31,7 @@ hart 0's routes and CLIC lines as the hardware holds them
 image's own reset-retained records are `retained_static!` cells, one holder
 at a time without waiting, with their claim in the SRAM critical BSS. Every
 image then resets, and its next boot reads and clears the record with
-`panic::take_previous` and prints it.
+`panic::take_previous::<Port>` and prints it.
 The hook receives `panic::PanicDetails`, rather than the original `PanicInfo`.
 Interrupt-context panics retain hart and interrupted PC, but omit location and
 message: compiler metadata can live in cached PSRAM. Task-context panics keep
@@ -64,8 +65,8 @@ It does not return or carry Rust peripheral owners across the image boundary.
 
 Stage-two assembly initializes application data and SRAM interrupt/DMA sections
 before entering `runtime_main`, which the image defines with
-`oer_espressif_staged_runtime::entry!`; it hands the image's `main` the one
-`Handoff`. Hardware ownership comes from the HAL's reset root: the
+`oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port)`;
+it hands the image's `main` the one `Handoff`. Hardware ownership comes from the HAL's reset root: the
 application takes it (`Root::take`, then `Root::into_runtime`), which
 installs the console's parts for the early writer and returns the
 watchdogs, system timer, software lines, interrupt controller, eFuse,
@@ -73,8 +74,9 @@ entropy, reset causes, the Wi-Fi interrupt banks, the platform clock owner
 (`ChipClocks`) and `RadioHardware`. The bootstrap uses its own `Root::take`
 and `Root::into_bootstrap` for the bounded SoC, brownout, clock, PSRAM, cache
 and flash sequences. The application then calls
-`handoff.adopt(INTERRUPT_TABLE, runtime.interrupts.controller, BootstrapPsram)`:
-the board's `BootstrapPsram` implements the staged layout's
+`handoff.adopt(INTERRUPT_TABLE, runtime.interrupts.controller, BootstrapPsram, phy_fault::report_previous)`
+(the previous boot's named fault, then the chip composition's PHY record,
+`oer-esp32s31-compose`, print before adoption): the board's `BootstrapPsram` implements the staged layout's
 `AdoptsBootstrapMapping`, the promise that it adopts the bootstrap's mapping
 without resetting or remapping PSRAM; stage two owns no PSRAM, cache or MMU
 register, so adoption writes nothing. `into_runtime` arms the RTC watchdog:

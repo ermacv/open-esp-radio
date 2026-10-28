@@ -122,8 +122,8 @@ same fault without clearing it. While Masked (or Closed), a new fatal cause
 remains in RAW; detection waits for a later handler entry, which that masked
 cause alone does not guarantee.
 
-Staged Wi-Fi images select the runtime's `wifi-fault` feature and pass the RAW
-sample to `wifi_fault::reset`, retaining their interrupt and preempted DMA
+Staged Wi-Fi images select the `wifi-fault` feature of the chip composition
+(`oer-esp32s31-compose`) and pass the RAW sample to its `wifi_fault::reset`, retaining their interrupt and preempted DMA
 owners. That shared module owns one twelve-byte retained record and calls
 `fatal::reset_recording`; after `Root::into_runtime` installs the early console,
 its `report_previous` consumes and prints the reason and complete RAW word.

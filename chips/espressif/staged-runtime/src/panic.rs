@@ -14,17 +14,18 @@
 //! Named faults retain a numeric reason code and four observation words;
 //! only next-boot thread reporting decodes the reason's text.
 //!
-//! An image with the `panic-hook` feature defines `oer_platform_panic_hook`,
-//! which the entry calls after the record: it records more of the image's
+//! The image's [`entry!`](crate::entry) defines the panic handler, which
+//! calls [`handle`] with the image's platform. With its `hook` the entry
+//! calls the image's hook after the record: it records more of the image's
 //! state the same way, without formatting, and returns. The chip then resets
-//! ([`fatal::reset`](crate::fatal::reset));
+//! ([`fatal::reset_recording`](crate::fatal::reset_recording));
 //! the next boot takes the record with [`take_previous`] and reports it in
 //! thread context.
 use core::ops::DerefMut;
 mod fault;
 pub use fault::FaultReason;
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
 use oer_memory::retained::RetainedGuard;
 
 /// Bytes of the location's file path kept: its end, which names the file.
@@ -181,12 +182,12 @@ crate::retained_static! {
 /// through the early console and cleared only after successful output; they
 /// are never returned as panics.
 /// `None` when the previous boot did not panic, the chip lost
-/// power or the slot is held by a panic already being recorded.
-pub fn take_previous() -> Option<PanicRecord> {
+/// power or the slot is held by a panic already being recorded. `P`'s early
+/// writer reports a retained named fault.
+pub fn take_previous<P: oer_espressif_platform_port::EarlyText>() -> Option<PanicRecord> {
     let mut slot = SLOT.try_lock()?;
     if slot.invalid_hart().is_some() || slot.named_fault().is_some() {
-        #[cfg(feature = "esp32s31")]
-        report_fault_early(&mut slot);
+        report_fault_early::<P>(&mut slot);
         return None;
     }
     slot.take()
@@ -194,32 +195,24 @@ pub fn take_previous() -> Option<PanicRecord> {
 
 /// Every staged image attempts fault output during adoption, including images
 /// that do not consume ordinary previous-panic metadata.
-#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
-pub(crate) fn report_previous_fault() {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn report_previous_fault<P: oer_espressif_platform_port::EarlyText>() {
     if let Some(mut slot) = SLOT.try_lock() {
-        report_fault_early(&mut slot);
+        report_fault_early::<P>(&mut slot);
     }
 }
 
-#[cfg(feature = "esp32s31")]
-fn report_fault_early(slot: &mut Slot) {
+fn report_fault_early<P: oer_espressif_platform_port::EarlyText>(slot: &mut Slot) {
     let _reported = report_named_fault(slot, |name, observations| {
         write_named_fault(name, observations, |bytes| {
-            oer_esp32s31_hal::usb_serial_jtag::early_text(bytes)
-                .then_some(())
-                .ok_or(())
+            P::text(bytes).then_some(()).ok_or(())
         })
     });
     let _reported = report_invalid_hart(slot, |note| {
-        oer_diagnostics::emit_note(note, |bytes| {
-            oer_esp32s31_hal::usb_serial_jtag::early_text(bytes)
-                .then_some(())
-                .ok_or(())
-        })
+        oer_diagnostics::emit_note(note, |bytes| P::text(bytes).then_some(()).ok_or(()))
     });
 }
 
-#[cfg(any(test, feature = "esp32s31"))]
 fn report_invalid_hart<E>(
     slot: &mut Slot,
     emit: impl FnOnce(&oer_diagnostics::Note<'_>) -> Result<(), E>,
@@ -234,7 +227,7 @@ fn report_invalid_hart<E>(
     Ok(())
 }
 
-#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
 pub(crate) fn with_invalid_hart_record<R>(raw: u32, reset: impl FnOnce() -> R) -> R {
     let _record = SLOT.try_lock().map(|mut slot| {
         slot.record_invalid_hart(raw);
@@ -246,10 +239,13 @@ pub(crate) fn with_invalid_hart_record<R>(raw: u32, reset: impl FnOnce() -> R) -
 /// Retain a named fault or explicit reset request in the existing panic slot,
 /// holding its claim until reset. The four words are the caller's exact source
 /// observations. No owner is released, no cached reason text is read, and no
-/// retained allocation is added.
-#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
-pub fn reset_fault(reason: FaultReason, observations: [u32; 4]) -> ! {
-    crate::fatal::reset_recording(|_| {
+/// retained allocation is added. `P` is the image's platform.
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
+pub fn reset_fault<P: oer_espressif_platform_port::Platform>(
+    reason: FaultReason,
+    observations: [u32; 4],
+) -> ! {
+    crate::fatal::reset_recording::<P>(|_| {
         let _record = record_named_fault_in(SLOT.try_lock(), reason, observations).map(|slot| {
             // Keep the claim even if a later reset operation faults.
             core::mem::forget(slot);
@@ -260,7 +256,7 @@ pub fn reset_fault(reason: FaultReason, observations: [u32; 4]) -> ! {
 // The guard is the current boot's first-writer election: it stays held until
 // reset. A fresh claim may replace any retained bytes from an earlier boot,
 // even when that image never consumed the previous record.
-#[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
+#[cfg(any(test, all(target_arch = "riscv32", chip_vectors)))]
 fn record_named_fault_in<G: DerefMut<Target = Slot>>(
     slot: Option<G>,
     reason: FaultReason,
@@ -271,7 +267,6 @@ fn record_named_fault_in<G: DerefMut<Target = Slot>>(
     Some(slot)
 }
 
-#[cfg(any(test, feature = "esp32s31"))]
 fn write_named_fault<E>(
     name: &str,
     observations: [u32; 4],
@@ -297,7 +292,6 @@ fn write_named_fault<E>(
     emit(b"\n")
 }
 
-#[cfg(any(test, feature = "esp32s31"))]
 fn report_named_fault<E>(
     slot: &mut Slot,
     emit: impl FnOnce(&str, [u32; 4]) -> Result<(), E>,
@@ -310,7 +304,7 @@ fn report_named_fault<E>(
 }
 
 impl Slot {
-    #[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
+    #[cfg(any(test, all(target_arch = "riscv32", chip_vectors)))]
     fn record_named_fault(&mut self, reason: FaultReason, observations: [u32; 4]) {
         self.magic = 0;
         self.file = [0; FILE_BYTES];
@@ -345,7 +339,7 @@ impl Slot {
             .then_some(self.hart)
     }
 
-    #[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
+    #[cfg(any(test, all(target_arch = "riscv32", chip_vectors)))]
     fn record_invalid_hart(&mut self, raw: u32) {
         // The retained cell's current-boot claim, not stale valid bytes,
         // excludes nested fault writers.
@@ -413,12 +407,12 @@ fn record_in<'a, G: DerefMut<Target = Slot>>(
 }
 
 /// Record `info` in the retained slot without formatting.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
 fn record<'a>(
     info: &'a core::panic::PanicInfo<'_>,
 ) -> Option<(RetainedGuard<'static, Slot>, PanicDetails<'a>)> {
     let hart = oer_riscv::hart_id();
-    if oer_esp32s31_hal::platform::Hart::new(hart as u32).is_err() {
+    if oer_espressif_platform_port::Hart::new(hart as u32).is_err() {
         let mut slot = SLOT.try_lock()?;
         slot.record_invalid_hart(hart as u32);
         return Some((
@@ -456,23 +450,17 @@ fn record<'a>(
     })
 }
 
-#[cfg(all(target_arch = "riscv32", feature = "panic-hook"))]
-// SAFETY: `panic_hook!` defines this symbol with the same Rust signature
-// and no memory-safety precondition; a missing definition fails the link.
-unsafe extern "Rust" {
-    /// The image's record of its own state after the platform's record, in
-    /// the fatal path with the other hart stopped (or why it is not). It
-    /// formats nothing, like the entry: it runs in every context's stack
-    /// bound.
-    safe fn oer_platform_panic_hook(
-        details: &PanicDetails<'_>,
-        stop: Result<&crate::fatal::StopTheWorld<'_>, crate::fatal::StopError>,
-    );
-}
-
-#[cfg(target_arch = "riscv32")]
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
+/// The panic entry of the image's [`entry!`](crate::entry), for its platform
+/// `P`: mask the hart, record `info` without formatting, then reset through
+/// `P`'s fatal path, giving `hook` the record and the stop of the other hart
+/// (or why there is none). A nested panic, which finds the slot claimed,
+/// resets without the hook.
+#[doc(hidden)]
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
+pub fn handle<'i, P: oer_espressif_platform_port::Platform>(
+    info: &'i core::panic::PanicInfo<'_>,
+    hook: impl for<'a, 'b> FnOnce(&PanicDetails<'i>, Result<&'b P::Stop<'a>, P::StopError>),
+) -> ! {
     let recorded = with_panic_mask(
         || {
             let _ = oer_riscv::swap_interrupt_threshold(u8::MAX);
@@ -481,15 +469,9 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
         || record(info),
     );
     let Some((_slot, details)) = recorded else {
-        crate::fatal::reset()
+        crate::fatal::reset::<P>()
     };
-    #[cfg(feature = "panic-hook")]
-    crate::fatal::reset_recording(|stop| oer_platform_panic_hook(&details, stop));
-    #[cfg(not(feature = "panic-hook"))]
-    {
-        let _ = details;
-        crate::fatal::reset()
-    }
+    crate::fatal::reset_recording::<P>(|stop| hook(&details, stop))
 }
 
 /// Prevent interrupt reentry from resetting a partially written first

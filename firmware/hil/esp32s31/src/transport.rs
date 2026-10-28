@@ -67,7 +67,7 @@ pub(crate) fn console_fault(fault: oer_hil_agent::console::ConsoleFault) -> ! {
         ConsoleFault::ReadLength { length, capacity } => [0, length as u32, capacity as u32, 0],
         ConsoleFault::CountersBorrowed { writing } => [1, u32::from(writing), 0, 0],
     };
-    oer_espressif_staged_runtime::panic::reset_fault(
+    oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
         oer_espressif_staged_runtime::panic::FaultReason::HilConsole,
         observations,
     )

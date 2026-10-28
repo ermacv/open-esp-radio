@@ -60,12 +60,12 @@ use oer_riscv::{
 
 /// The harts with an interrupt stack: the chip facts' harts.
 #[cfg(target_arch = "riscv32")]
-use crate::vectors::HARTS;
+use oer_espressif_platform_port::HARTS;
 
 /// The words of one hart's vector table in `_runtime_mtvt`, the table's
 /// alignment in words, generated from the chip facts
 /// (`vector-table-hart-slots`).
-#[cfg(feature = "esp32s31")]
+#[cfg(chip_vectors)]
 pub use crate::vectors::VECTOR_TABLE_WORDS;
 
 #[cfg(target_arch = "riscv32")]
@@ -103,13 +103,13 @@ fn interrupt_stack_guard_bytes(hart: usize) -> Option<usize> {
 
 /// Linked interrupt allocation for a checked hart, including explicit zero.
 #[cfg(target_arch = "riscv32")]
-pub fn irq_stack_bytes(hart: oer_esp32s31_hal::platform::Hart) -> usize {
+pub fn irq_stack_bytes(hart: oer_espressif_platform_port::Hart) -> usize {
     hart.at(&crate::layout::stack_symbols()).irq.len()
 }
 
 /// Linked PSRAM task allocation for a checked hart, including explicit zero.
 #[cfg(target_arch = "riscv32")]
-pub fn task_stack_bytes(hart: oer_esp32s31_hal::platform::Hart) -> usize {
+pub fn task_stack_bytes(hart: oer_espressif_platform_port::Hart) -> usize {
     hart.at(&crate::layout::stack_symbols()).task.len()
 }
 

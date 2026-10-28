@@ -99,21 +99,23 @@ type Actor = RadioSystem<
 /// The image's entropy owner.
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 
-oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
-oer_espressif_staged_runtime::entry!(main);
-fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    let previous = oer_espressif_staged_runtime::panic::take_previous();
+oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
+oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
+fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
+    let previous =
+        oer_espressif_staged_runtime::panic::take_previous::<oer_esp32s31_hal::platform::Port>();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
     let runtime = root
         .into_runtime()
         .unwrap_or_else(|error| fail(error.name()));
-    oer_espressif_staged_runtime::wifi_fault::report_previous();
+    oer_esp32s31_compose::wifi_fault::report_previous();
     let (_psram, mut adopted) = match handoff.adopt(
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
     ) {
         Ok(adopted) => adopted,
         Err(error) => fail(error.name()),
@@ -137,12 +139,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
-            oer_espressif_staged_runtime::phy_fault::identity(),
+            oer_esp32s31_compose::phy_fault::identity(),
         )
         .unwrap_or_else(|failure| {
             let fault = failure.fault();
             let _owners = failure;
-            oer_espressif_staged_runtime::phy_fault::reset(fault)
+            oer_esp32s31_compose::phy_fault::reset(fault)
         });
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         park()
@@ -183,7 +185,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             interrupts.wifi,
             WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(lower)),
         )
-        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
+        .unwrap_or_else(|error| {
+            oer_espressif_staged_runtime::interrupts::reset_binding::<
+                oer_esp32s31_hal::platform::Port,
+                _,
+            >(error)
+        });
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let bell = irq::ImageDoorbell(bell);
     let (hart, router) = adopted.parts();
@@ -255,7 +262,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 /// Halt the image on a failed boot step, its reason on the console while
 /// no one holds the block.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal_halt(|_path| {
+    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_path| {
         let _note = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
         );

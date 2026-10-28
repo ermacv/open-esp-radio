@@ -1,5 +1,6 @@
-//! Statics in SRAM and reset-retained RTC fast memory, and exported panic
-//! hook and exception-handler symbols. Data macros name only sections the
+//! Statics in SRAM and reset-retained RTC fast memory, and the exported
+//! exception-handler symbol (the panic hook is a parameter of
+//! [`entry!`](crate::entry)). Data macros name only sections the
 //! runtime linker script maps. The image linker places strict code in SRAM
 //! from its analysis; functions need no manual section attributes.
 
@@ -51,28 +52,6 @@ macro_rules! retained_static {
         $crate::__memory::__retained_static! {
             $(#[$attribute])* $vis static $name: $ty,
             in ".rtc_fast.persistent", held in ".critical.bss.retained";
-        }
-    };
-}
-
-/// The image's panic hook (feature `panic-hook`): the panic entry calls
-/// `$hook` with the platform's record after its own, in the fatal path
-/// with the hart masked and the other hart stopped (or why it is not:
-/// `cores::StopError`), before it resets the chip. `$hook` formats nothing.
-/// The image linker analyses the panic path and places the hook and its
-/// strict callees in SRAM.
-#[macro_export]
-macro_rules! panic_hook {
-    ($hook:path) => {
-        #[unsafe(no_mangle)]
-        fn oer_platform_panic_hook(
-            details: &$crate::panic::PanicDetails<'_>,
-            stop: ::core::result::Result<
-                &$crate::fatal::StopTheWorld<'_>,
-                $crate::fatal::StopError,
-            >,
-        ) {
-            $hook(details, stop)
         }
     };
 }

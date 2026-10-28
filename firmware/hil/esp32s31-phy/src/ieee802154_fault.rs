@@ -20,11 +20,13 @@ oer_espressif_staged_runtime::retained_static! {
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset(fault: Fault) -> ! {
-    oer_espressif_staged_runtime::fatal::reset_recording(|_stop| {
-        if let Some(mut record) = EVENT_FAULT.try_lock() {
-            record.record(fault);
-        }
-    })
+    oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
+        |_stop| {
+            if let Some(mut record) = EVENT_FAULT.try_lock() {
+                record.record(fault);
+            }
+        },
+    )
 }
 
 #[cfg(target_arch = "riscv32")]

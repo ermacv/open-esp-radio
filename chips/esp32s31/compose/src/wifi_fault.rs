@@ -18,6 +18,10 @@ struct RetainedFault {
 }
 
 impl RetainedFault {
+    #[cfg_attr(
+        not(target_arch = "riscv32"),
+        allow(dead_code, reason = "only the target's reset records")
+    )]
     fn record(&mut self, raw: u32) {
         self.magic = 0;
         self.raw = raw;
@@ -36,7 +40,7 @@ const fn checksum(raw: u32) -> u32 {
     (MAGIC ^ raw).wrapping_mul(0x0100_0193)
 }
 
-crate::retained_static! {
+oer_espressif_staged_runtime::retained_static! {
     static WIFI_FAULT: RetainedFault;
 }
 
@@ -45,11 +49,13 @@ crate::retained_static! {
 /// preempted DMA owners or drops them before reset.
 #[cfg(target_arch = "riscv32")]
 pub fn reset(raw: u32) -> ! {
-    crate::fatal::reset_recording(|_stop| {
-        if let Some(mut record) = WIFI_FAULT.try_lock() {
-            record.record(raw);
-        }
-    })
+    oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
+        |_stop| {
+            if let Some(mut record) = WIFI_FAULT.try_lock() {
+                record.record(raw);
+            }
+        },
+    )
 }
 
 /// Consume and report the previous boot's Wi-Fi fault, after

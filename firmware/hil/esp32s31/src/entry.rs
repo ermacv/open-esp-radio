@@ -147,9 +147,6 @@ oer_memory::zeroed_static! {
 use oer_espressif_staged_runtime as _;
 
 #[cfg(feature = "panic-hook")]
-oer_espressif_staged_runtime::panic_hook!(panic_hook);
-
-#[cfg(feature = "panic-hook")]
 /// The image's record of a panic, which the platform's panic entry calls
 /// after its own record, with the other hart stopped, before it resets the
 /// chip (feature `panic-hook`): it records the post-mortem fault and the machine state,
@@ -158,10 +155,7 @@ oer_espressif_staged_runtime::panic_hook!(panic_hook);
 #[inline(always)]
 fn panic_hook(
     details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>,
-    stop: Result<
-        &oer_espressif_staged_runtime::fatal::StopTheWorld<'_>,
-        oer_espressif_staged_runtime::fatal::StopError,
-    >,
+    stop: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
 ) {
     #[cfg(feature = "system-watchdog")]
     system::postmortem::record_panic(details);
@@ -179,10 +173,13 @@ fn panic_hook(
 ))]
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::EmbassyClock>;
 
-oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
-oer_espressif_staged_runtime::entry!(main);
+oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
+#[cfg(feature = "panic-hook")]
+oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port, hook = panic_hook);
+#[cfg(not(feature = "panic-hook"))]
+oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 
-fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     #[cfg(feature = "wifi-station")]
     wifi_station::start(handoff);
     #[cfg(not(feature = "wifi-station"))]
@@ -190,7 +187,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 }
 
 #[cfg(not(feature = "wifi-station"))]
-fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+fn system_main(
+    handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>,
+) -> ! {
     early(&Note::runtime_start(PROFILE_NAME));
     // Before anything can fail and overwrite it.
     fatal::report_previous();
@@ -218,6 +217,7 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         oer_esp32s31_board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
     ) {
         Ok(adopted) => adopted,
         Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
@@ -421,7 +421,7 @@ fn fail(failure: fatal::Failure) -> ! {
         cores,
         usb_serial_jtag::{FatalNote, fatal_note},
     };
-    oer_espressif_staged_runtime::fatal_halt(|path| {
+    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|path| {
         if fatal_note(&Note::runtime_fail(failure.name())) == FatalNote::Written {
             return;
         }

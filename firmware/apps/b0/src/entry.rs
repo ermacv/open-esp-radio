@@ -14,10 +14,10 @@ pub struct Profile {
 include!(concat!(env!("OUT_DIR"), "/profile.rs"));
 mod bridge;
 mod gate_fault;
-mod release_fault;
 mod host;
 mod irq;
 mod radio;
+mod release_fault;
 mod usb;
 
 mod phy_pilot;
@@ -41,9 +41,9 @@ oer_espressif_staged_runtime::interrupt_table! {
     console_usb: ConsoleUsb = ConsoleInterrupt => usb::interrupt, line 42, context app_wake, hart 0, Hardware;
 }
 type X = InterruptExecutor<2>;
-oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
-oer_espressif_staged_runtime::entry!(main);
-fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
+oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
+fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     radio::boot(handoff)
 }
 

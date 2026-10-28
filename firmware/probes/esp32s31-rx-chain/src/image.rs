@@ -94,9 +94,13 @@ struct Boot {
     mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
     traffic: &'static mut traffic::Trace,
 }
-oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::reset);
-oer_espressif_staged_runtime::entry!(main);
-fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
+oer_espressif_staged_runtime::entry!(
+    main,
+    oer_esp32s31_hal::platform::Port,
+    hook = crate::diagnostic::panic
+);
+fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root"; 32));
     };
@@ -107,6 +111,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
     ) {
         Ok(value) => value,
         Err(error) => fail(error.name()),
@@ -128,12 +133,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
-            oer_espressif_staged_runtime::phy_fault::identity(),
+            oer_esp32s31_compose::phy_fault::identity(),
         )
         .unwrap_or_else(|failure| {
             let fault = failure.fault();
             let _owners = failure;
-            oer_espressif_staged_runtime::phy_fault::reset(fault)
+            oer_esp32s31_compose::phy_fault::reset(fault)
         });
     let Some(lp) = LpClock::<RcSlow>::claim() else {
         fail(oer_diagnostics::name!("claim"; 32));
@@ -214,7 +219,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal_halt(|_| {
+    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_| {
         let _ = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
         );

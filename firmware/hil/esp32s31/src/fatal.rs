@@ -14,7 +14,7 @@
 
 use oer_diagnostics::Note;
 use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
-use oer_espressif_staged_runtime::fatal::{StopError, StopTheWorld};
+use oer_esp32s31_hal::cores::{StopError, StopTheWorld};
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
 use oer_riscv::clic::Trigger;
 

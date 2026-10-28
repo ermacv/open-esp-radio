@@ -7,17 +7,6 @@ license = "Apache-2.0"
 publish = false
 description = "Stage-two entry, relocation, traps, per-hart interrupt stacks, critical-section, panic record and fatal paths of the Espressif staged boot"
 
-[features]
-# The chip; an image selects exactly one. The build generates the vectors
-# from its facts (its harts and CLIC lines); the chip's HAL holds the fatal
-# path's proof, the stop of the other hart and the software reset.
-esp32s31 = ["dep:oer-esp32s31-hal"]
-## After the record, call the image's `oer_platform_panic_hook`, which
-## records more of its state without formatting, then reset.
-panic-hook = []
-## Shared retained Wi-Fi fatal assertion record, reset and next-boot reporting.
-wifi-fault = ["esp32s31"]
-
 [dependencies]
 oer-trace = { path = "../../../portable/trace" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
@@ -26,8 +15,9 @@ oer-espressif-staged-layout.workspace = true
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-espressif-interrupt-table = { path = "../interrupt-table" }
-
-oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
+# The chip the HAL selects reaches the build script as this package's
+# `chip` metadata; the fatal path's primitives are its `Platform`.
+oer-espressif-platform-port = { path = "../platform-port" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 critical-section = { workspace = true, features = ["restore-state-u32"] }

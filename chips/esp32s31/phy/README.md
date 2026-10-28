@@ -161,7 +161,8 @@ its first poll, quarantines all payloads without dropping their owners or
 restoring registers. Its named fault retains the cancelled operation
 and registration observation. Both halves report the same operation,
 independently of drop order. Firmware binds the fault directly at link
-time through the HAL's `phy_fault_reporter!` macro to `fatal::reset_recording`;
+time through the HAL's `phy_fault_reporter!` macro to the chip composition's
+`phy_fault::reset` (`oer-esp32s31-compose`), which calls `fatal::reset_recording`;
 a 16-byte record naming the operation and epoch is printed on the next
 boot and cleared only after successful output. Host tests use an independent
 seat and catch their own never-returning reporter. There is no lock, unsafe

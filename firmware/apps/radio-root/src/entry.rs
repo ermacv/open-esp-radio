@@ -25,11 +25,11 @@ oer_espressif_executor::tasks! {
     }
 }
 
-oer_espressif_staged_runtime::entry!(main);
+oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 
-fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     // Before anything can panic and overwrite it.
-    let previous = panic::take_previous();
+    let previous = panic::take_previous::<oer_esp32s31_hal::platform::Port>();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
@@ -40,6 +40,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
     ) {
         Ok(adopted) => adopted,
         Err(error) => fail(error.name()),
@@ -135,7 +136,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 /// Halt the image on a failed boot step, its reason on the console while
 /// no one holds the block.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal_halt(|_path| {
+    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_path| {
         let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
     })
 }

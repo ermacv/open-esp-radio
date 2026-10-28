@@ -38,15 +38,19 @@ pub(crate) fn init(
     if HANDLER.install(handler).is_err() {
         reset(SarSetupFault::Storage(SarSetupStorage::Handler));
     }
-    let bound = router
-        .bind(token, interrupt)
-        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
+    let bound =
+        router.bind(token, interrupt).unwrap_or_else(|error| {
+            oer_espressif_staged_runtime::interrupts::reset_binding::<
+                oer_esp32s31_hal::platform::Port,
+                _,
+            >(error)
+        });
     client.bind(bound)
 }
 pub(crate) fn interrupt(part: &mut Timg0AlarmInterrupt) {
     match HANDLER.with(|handler| handler.service(part, &oer_embassy_time::EmbassyClock)) {
         Some(Ok(())) => {}
-        Some(Err(fault)) => oer_espressif_staged_runtime::phy_fault::reset(Fault {
+        Some(Err(fault)) => oer_esp32s31_compose::phy_fault::reset(Fault {
             reason: FaultReason::SarAlarmWithoutBundle(fault),
             registration: None,
         }),
@@ -55,7 +59,7 @@ pub(crate) fn interrupt(part: &mut Timg0AlarmInterrupt) {
 }
 
 fn reset(fault: SarSetupFault) -> ! {
-    oer_espressif_staged_runtime::phy_fault::reset(Fault {
+    oer_esp32s31_compose::phy_fault::reset(Fault {
         reason: FaultReason::SarSetup(fault),
         registration: None,
     })

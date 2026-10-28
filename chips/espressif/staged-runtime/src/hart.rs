@@ -36,7 +36,7 @@ impl<const H: u8> Hart<H> {
 /// ```
 /// ```compile_fail
 /// use oer_espressif_staged_runtime::Handoff;
-/// fn cannot_keep_authority(mut handoff: Handoff) {
+/// fn cannot_keep_authority<P>(mut handoff: Handoff<P>) {
 ///     let admission = handoff.pre_admission();
 ///     drop(handoff);
 ///     let _ = admission.hart();
@@ -50,7 +50,7 @@ pub struct PreAdmission<const H: u8> {
 impl<const H: u8> PreAdmission<H> {
     /// Called only while wrapping the entry's unique handoff proof.
     pub(crate) const fn new() -> Self {
-        const { assert!((H as usize) < crate::vectors::HARTS) };
+        const { assert!((H as usize) < oer_espressif_platform_port::HARTS) };
         Self {
             hart: Hart {
                 _local: PhantomData,

@@ -68,9 +68,13 @@ pub fn open_usb<C: oer_espressif_interrupt_table::Controller>(
     token: crate::ConsoleUsb,
 ) -> Result<(Usb, UsbPads), &'static str> {
     let (endpoint, interrupt, pads) = retire_early_writer().map_err(|_| "console-retire")?;
-    let bound = router
-        .bind(token, interrupt)
-        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
+    let bound =
+        router.bind(token, interrupt).unwrap_or_else(|error| {
+            oer_espressif_staged_runtime::interrupts::reset_binding::<
+                oer_esp32s31_hal::platform::Port,
+                _,
+            >(error)
+        });
     Ok((
         Endpoint::new(endpoint, USB_INTERRUPT.signal(), &bound),
         pads,
@@ -83,7 +87,7 @@ pub(crate) fn console_fault(fault: oer_hil_agent::console::ConsoleFault) -> ! {
         ConsoleFault::ReadLength { length, capacity } => [0, length as u32, capacity as u32, 0],
         ConsoleFault::CountersBorrowed { writing } => [1, u32::from(writing), 0, 0],
     };
-    oer_espressif_staged_runtime::panic::reset_fault(
+    oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
         oer_espressif_staged_runtime::panic::FaultReason::HilConsole,
         observations,
     )

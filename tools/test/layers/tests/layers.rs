@@ -1851,18 +1851,11 @@ const NO_EDGE_ON_AN_IMAGE_OR_PROGRAM: &[Deviation] = &[(
 
 /// `chips/espressif` depends on no chip, through a normal or a build
 /// dependency: it is the family below them.
-const FAMILY_BELOW_THE_CHIPS: &[Deviation] = &[
-    (
-        "chips/espressif/executor",
-        "chips/esp32s31/hal",
-        "the executor over a chip binding (#848, B1)",
-    ),
-    (
-        "chips/espressif/staged-runtime",
-        "chips/esp32s31/hal",
-        "the staged runtime over the platform port (#848, B1)",
-    ),
-];
+const FAMILY_BELOW_THE_CHIPS: &[Deviation] = &[(
+    "chips/espressif/executor",
+    "chips/esp32s31/hal",
+    "the executor over a chip binding (#848, B1)",
+)];
 
 /// `portable` depends on no protocol and no chip; `portable/embassy` alone
 /// adapts protocol boundaries.

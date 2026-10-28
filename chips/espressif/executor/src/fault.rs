@@ -139,7 +139,10 @@ impl Fault {
         #[cfg(target_arch = "riscv32")]
         {
             let (reason, observations) = self.diagnostic();
-            oer_espressif_staged_runtime::panic::reset_fault(reason, observations)
+            oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
+                reason,
+                observations,
+            )
         }
         #[cfg(not(target_arch = "riscv32"))]
         oer_esp32s31_hal::cores::fatal(|_| ())

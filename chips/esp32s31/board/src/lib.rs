@@ -54,7 +54,12 @@ pub const fn wifi_power_limits(
 /// handoff adopts it:
 ///
 /// ```ignore
-/// let (psram, adopted) = match handoff.adopt(INTERRUPT_TABLE, controller, BootstrapPsram) {
+/// let (psram, adopted) = match handoff.adopt(
+///     INTERRUPT_TABLE,
+///     controller,
+///     BootstrapPsram,
+///     oer_esp32s31_compose::phy_fault::report_previous,
+/// ) {
 ///     Ok(adopted) => adopted,
 ///     Err(error) => fail(error.name()),
 /// };

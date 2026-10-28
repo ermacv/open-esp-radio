@@ -416,13 +416,15 @@ pub(crate) fn reset_interrupt_policy(
 
 #[cfg(target_arch = "riscv32")]
 fn reset_record(record: Record) -> ! {
-    oer_espressif_staged_runtime::fatal::reset_recording(|_stop| {
-        if let Some(mut slot) = RECORD.try_lock() {
-            *slot = record;
-            // Keep the first record claimed until reset, including a nested fault.
-            core::mem::forget(slot);
-        }
-    })
+    oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
+        |_stop| {
+            if let Some(mut slot) = RECORD.try_lock() {
+                *slot = record;
+                // Keep the first record claimed until reset, including a nested fault.
+                core::mem::forget(slot);
+            }
+        },
+    )
 }
 
 /// Print before the early console is retired to the application.

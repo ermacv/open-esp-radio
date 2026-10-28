@@ -14,12 +14,14 @@ pub(crate) fn phase(value: u32) {
 
 runtime::exception_handler!(exception);
 fn exception(frame: &TrapFrame) -> ! {
-    runtime::reset_recording(|_| record(1, frame.mcause, frame.mepc, frame.ra))
+    runtime::reset_recording::<oer_esp32s31_hal::platform::Port>(|_| {
+        record(1, frame.mcause, frame.mepc, frame.ra)
+    })
 }
-runtime::panic_hook!(panic);
-fn panic(
+/// The image's panic hook, which its entry names.
+pub(crate) fn panic(
     _: &runtime::panic::PanicDetails<'_>,
-    _: Result<&runtime::fatal::StopTheWorld<'_>, runtime::fatal::StopError>,
+    _: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
 ) {
     let registers = runtime::trap::TrapRegisters::read();
     record(2, registers.mcause as u32, registers.mepc as u32, 0);
@@ -41,7 +43,7 @@ fn record(kind: u32, cause: u32, pc: u32, ra: u32) {
 }
 
 pub(crate) fn report_previous() {
-    if let Some(previous) = runtime::panic::take_previous() {
+    if let Some(previous) = runtime::panic::take_previous::<oer_esp32s31_hal::platform::Port>() {
         let _ = runtime::diagnostics::emit_previous_panic(
             |bytes| {
                 if oer_esp32s31_hal::usb_serial_jtag::early_text(bytes) {
@@ -76,5 +78,5 @@ pub(crate) fn report_previous() {
     let _ = oer_esp32s31_hal::usb_serial_jtag::early_text(
         b"OER-RESULT: fail rx-chain previous-fault\n",
     );
-    runtime::fatal_halt(|_| {});
+    runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_| {});
 }

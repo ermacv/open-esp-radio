@@ -9,10 +9,10 @@ mod release_fault;
 oer_espressif_staged_runtime::interrupt_table! {
     contexts {}
 }
-oer_espressif_staged_runtime::entry!(main);
+oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 
-fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    let previous = panic::take_previous();
+fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
+    let previous = panic::take_previous::<oer_esp32s31_hal::platform::Port>();
     let Some(root) = Root::take() else {
         fail("root-taken");
     };
@@ -24,6 +24,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         oer_esp32s31_board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
     ) {
         Ok(adopted) => adopted,
         Err(error) => fail(error.name().as_str()),

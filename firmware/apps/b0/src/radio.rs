@@ -2,8 +2,8 @@
 use super::*;
 use core::future::{pending, poll_fn};
 use embassy_futures::select::{Either, select};
-use oer_bluetooth_le_port::TxPower;
 use oer_bluetooth_le_port::LeBand;
+use oer_bluetooth_le_port::TxPower;
 use oer_esp32s31_bluetooth_driver::{
     modem_timer::{
         ControllerModemTimerBegin, ControllerModemTimerPlanSubmission,
@@ -148,8 +148,9 @@ pub fn permission(profile: Profile) -> (Permission, TxPower) {
     (permission, power)
 }
 
-pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    let previous = oer_espressif_staged_runtime::panic::take_previous();
+pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
+    let previous =
+        oer_espressif_staged_runtime::panic::take_previous::<oer_esp32s31_hal::platform::Port>();
     let Some(root) = Root::take() else {
         crate::fail("root-taken")
     };
@@ -160,6 +161,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
     ) {
         Ok(adopted) => adopted,
         Err(error) => crate::fail(error.name().as_str()),
@@ -184,12 +186,12 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
-            oer_espressif_staged_runtime::phy_fault::identity(),
+            oer_esp32s31_compose::phy_fault::identity(),
         )
         .unwrap_or_else(|failure| {
             let fault = failure.fault();
             let _owners = failure;
-            oer_espressif_staged_runtime::phy_fault::reset(fault)
+            oer_esp32s31_compose::phy_fault::reset(fault)
         });
     let cold = ColdOwner::from_partition(parts.bluetooth);
     let (Some((end, _)), Some((inbox, cell)), Some(lp)) = (

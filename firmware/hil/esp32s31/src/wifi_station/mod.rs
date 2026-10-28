@@ -79,7 +79,9 @@ type Actor = RadioSystem<
     EmbassyClock,
 >;
 
-pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+pub(crate) fn start(
+    handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>,
+) -> ! {
     crate::early(&oer_diagnostics::Note::runtime_start(crate::PROFILE_NAME));
     crate::fatal::report_previous();
     crate::validate_runtime_layout();
@@ -90,11 +92,12 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let runtime = root
         .into_runtime()
         .unwrap_or_else(|_| crate::fail(crate::fatal::Failure::RootInitialization));
-    oer_espressif_staged_runtime::wifi_fault::report_previous();
+    oer_esp32s31_compose::wifi_fault::report_previous();
     let (_psram, mut adopted) = match handoff.adopt(
         crate::INTERRUPT_TABLE,
         runtime.interrupts.controller,
         board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
     ) {
         Ok(adopted) => adopted,
         Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
@@ -117,12 +120,12 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
-            oer_espressif_staged_runtime::phy_fault::identity(),
+            oer_esp32s31_compose::phy_fault::identity(),
         )
         .unwrap_or_else(|failure| {
             let fault = failure.fault();
             let _owners = failure;
-            oer_espressif_staged_runtime::phy_fault::reset(fault)
+            oer_esp32s31_compose::phy_fault::reset(fault)
         });
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         park()
@@ -163,7 +166,12 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             interrupts.wifi,
             WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(lower)),
         )
-        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
+        .unwrap_or_else(|error| {
+            oer_espressif_staged_runtime::interrupts::reset_binding::<
+                oer_esp32s31_hal::platform::Port,
+                _,
+            >(error)
+        });
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let bell = irq::ImageDoorbell(bell);
     let (hart, router) = adopted.parts();
