@@ -654,8 +654,17 @@ its model and conformance case.
 
 ## Instrumentation and probes
 
-`oer-trace` contains only event values, encoding, decoding and ordering of
-caller-owned record slices. `oer-espressif-staged-runtime::trace` owns the
+`oer-trace` contains only event values, encoding, decoding, ordering of
+caller-owned record slices and the observer contract
+([portable/trace](../portable/trace/README.md)). An owner holds an
+`O: Observer` field, by default the zero-sized `Noop`, and reports through
+`observe!`. The observer receives a `Copy + 'static` event value and returns
+`()`: it holds no owner, register block or lease and cannot steer the owner.
+Without `cfg(oer_trace)` an observation point evaluates no argument and
+leaves no code. Instrumentation is never a Cargo feature of a library under
+`chips/`, `protocols/` or `portable/`; `oer-test-layers` rejects feature
+names carrying an instrumentation word, and its list of remaining ones only
+shrinks. `oer-espressif-staged-runtime::trace` owns the
 retained recorder, commit/clear protocol, global installation and previous-boot
 policy. The image places its retained storage and recorder and supplies its
 clock with `trace_clock!`. The platform preserves OETR layout 1: the six-word

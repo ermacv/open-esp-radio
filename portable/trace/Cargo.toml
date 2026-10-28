@@ -5,7 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Typed trace events, decoding and caller-owned record buffers"
+description = "Typed trace events, decoding, caller-owned record buffers and the observer contract"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
 
 [lints]
 workspace = true
