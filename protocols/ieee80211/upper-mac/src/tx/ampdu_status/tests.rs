@@ -33,4 +33,3 @@ fn ampdu_status_joins_block_ack_and_individual_retries() {
     assert_eq!(delivered.individual_retries.final_rate, Some(5));
     assert!(delivered.fully_delivered());
 }
-

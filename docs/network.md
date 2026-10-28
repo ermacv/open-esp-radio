@@ -37,7 +37,7 @@ Git source and revision do.
 | `oer-network` (`protocols/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
 | `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools | radio scheduling, DMA descriptors |
 | `oer-ieee80211-datapath` | software/physical TX ownership traits, `TxQueues`, the airtime ledger | a concrete allocator, stack or executor |
-| `oer-ieee80211-softmac` | the TX cost model (`tx_cost`) and work receipts (`tx_work`) | hardware |
+| `oer-esp32s31-ieee80211-mac` | the TX cost model (`tx_cost`) and work receipts (`tx_work`) of its publications | the airtime ledger |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |
 
 ## TX path

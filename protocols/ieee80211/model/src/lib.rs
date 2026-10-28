@@ -165,6 +165,7 @@ use alloc::{
     rc::{Rc, Weak},
     vec::Vec,
 };
+use contention::ModelWindow;
 use core::{
     cell::Cell,
     future::{Future, poll_fn},
@@ -172,7 +173,6 @@ use core::{
     num::NonZeroU16,
     task::{Poll, Waker},
 };
-use contention::ModelWindow;
 use oer_ieee80211_port::{EdcaAcParameters, EdcaParameterSet};
 use oer_ieee80211_port::{
     association,

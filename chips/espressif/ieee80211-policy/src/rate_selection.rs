@@ -26,9 +26,9 @@
 //! port without 5 GHz, checked at compile time, until the records of a
 //! 5 GHz chip are recovered.
 
+use crate::rate_record::RateScheduleRef;
 use core::marker::PhantomData;
 use core::num::NonZeroU8;
-use crate::rate_record::RateScheduleRef;
 
 use oer_ieee80211_port::{
     AckSnr, Band, Ieee80211Capabilities, Protection, RateSample, RetryPlan, RetryStage,

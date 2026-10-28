@@ -6,8 +6,8 @@
 //! secrets, peer generations, packet numbers and replay state, but never
 //! claims to produce or authenticate encrypted on-air bytes.
 
-use core::{array, fmt};
 use crate::extensions::espressif::phy::EspNowPhyMode;
+use core::{array, fmt};
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};

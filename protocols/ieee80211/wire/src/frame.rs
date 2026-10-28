@@ -311,7 +311,9 @@ impl MacHeader {
             header.address3(),
             header.sequence_control(),
             header.address4(),
-            header.qos().map(|field| QosControl::from_bytes(field.to_le_bytes())),
+            header
+                .qos()
+                .map(|field| QosControl::from_bytes(field.to_le_bytes())),
             header.ht_control(),
         )
     }

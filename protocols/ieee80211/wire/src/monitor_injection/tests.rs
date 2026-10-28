@@ -22,24 +22,38 @@ fn every_prefix_of_an_injection_frame_is_handled() {
 fn admits_management_data_and_exact_null_data() {
     let beacon = header([0x80, 0x00]);
     assert_eq!(
-        MonitorInjectionMpdu::from_no_fcs(&beacon).unwrap().frame_type(),
+        MonitorInjectionMpdu::from_no_fcs(&beacon)
+            .unwrap()
+            .frame_type(),
         MonitorInjectionFrameType::Management
     );
     let mut data = [0_u8; 30];
     data[..BASE_HEADER_LENGTH].copy_from_slice(&header([0x08, 0x01]));
     assert_eq!(
-        MonitorInjectionMpdu::from_no_fcs(&data).unwrap().frame_type(),
+        MonitorInjectionMpdu::from_no_fcs(&data)
+            .unwrap()
+            .frame_type(),
         MonitorInjectionFrameType::Data
     );
     let null = header([0x48, 0x01]);
     assert_eq!(
-        MonitorInjectionMpdu::from_no_fcs(&null).unwrap().frame_type(),
+        MonitorInjectionMpdu::from_no_fcs(&null)
+            .unwrap()
+            .frame_type(),
         MonitorInjectionFrameType::NullData
     );
-    assert!(!MonitorInjectionMpdu::from_no_fcs(&beacon).unwrap().is_group_addressed());
+    assert!(
+        !MonitorInjectionMpdu::from_no_fcs(&beacon)
+            .unwrap()
+            .is_group_addressed()
+    );
     let mut broadcast = beacon;
     broadcast[4] = 0xff;
-    assert!(MonitorInjectionMpdu::from_no_fcs(&broadcast).unwrap().is_group_addressed());
+    assert!(
+        MonitorInjectionMpdu::from_no_fcs(&broadcast)
+            .unwrap()
+            .is_group_addressed()
+    );
 }
 
 #[test]

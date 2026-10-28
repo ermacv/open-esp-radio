@@ -35,6 +35,14 @@ pub const LEGACY_RATES: [(u8, LegacyRate); 12] = [
     (108, LegacyRate::Ofdm54M),
 ];
 
+/// The bits of a [`LegacyRateSet`] that name an entry of [`LEGACY_RATES`].
+const RATE_BITS: u16 = const {
+    match 1_u16.checked_shl(LEGACY_RATES.len() as u32) {
+        Some(beyond) => beyond.wrapping_sub(1),
+        None => panic!("every legacy rate has a bit"),
+    }
+};
+
 /// Which rate fields of the elements a set collects.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RateSelection {
@@ -55,7 +63,7 @@ impl LegacyRateSet {
     /// The set whose bit `i` names entry `i` of [`LEGACY_RATES`]; bits
     /// above the table name no rate.
     pub const fn from_bits(bits: u16) -> Self {
-        Self(bits & ((1 << LEGACY_RATES.len()) - 1))
+        Self(bits & RATE_BITS)
     }
 
     /// The rates `selection` admits in Supported Rates and Extended
@@ -63,7 +71,11 @@ impl LegacyRateSet {
     /// encodings name no legacy rate.
     pub fn from_rate_elements(supported: &[u8], extended: &[u8], selection: RateSelection) -> Self {
         let mut bits = 0_u16;
-        for field in supported.iter().chain(extended).map(|&octet| RateField::from_bytes([octet])) {
+        for field in supported
+            .iter()
+            .chain(extended)
+            .map(|&octet| RateField::from_bytes([octet]))
+        {
             if selection == RateSelection::Basic && !field.basic() {
                 continue;
             }
@@ -90,7 +102,11 @@ impl LegacyRateSet {
     pub fn rates(self) -> impl Iterator<Item = LegacyRate> {
         (0_u16..)
             .zip(LEGACY_RATES)
-            .filter(move |(bit, _)| self.0.checked_shr(u32::from(*bit)).is_some_and(|rest| rest & 1 != 0))
+            .filter(move |(bit, _)| {
+                self.0
+                    .checked_shr(u32::from(*bit))
+                    .is_some_and(|rest| rest & 1 != 0)
+            })
             .map(|(_, (_, rate))| rate)
     }
 }

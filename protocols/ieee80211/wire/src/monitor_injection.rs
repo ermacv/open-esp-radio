@@ -98,7 +98,9 @@ impl<'frame> MonitorInjectionMpdu<'frame> {
                             actual: bytes.len(),
                         });
                     }
-                    QOS_SUBTYPE_FIRST..=QOS_SUBTYPE_LAST => return Err(MonitorInjectionFrameError::QosData),
+                    QOS_SUBTYPE_FIRST..=QOS_SUBTYPE_LAST => {
+                        return Err(MonitorInjectionFrameError::QosData);
+                    }
                     subtype => {
                         return Err(MonitorInjectionFrameError::UnsupportedDataSubtype(
                             subtype as u8,
@@ -199,7 +201,6 @@ impl fmt::Display for MonitorInjectionFrameError {
 }
 
 impl core::error::Error for MonitorInjectionFrameError {}
-
 
 #[cfg(test)]
 mod tests;

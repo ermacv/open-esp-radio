@@ -22,8 +22,8 @@ fn every_valid_header_shape_writes_all_fields_and_leaves_its_tail_untouched() {
         let address4 = control.is_four_address().then_some([4, 3, 2, 1, 0, 9]);
         let qos = control.is_qos_data().then_some(qos());
         let ht = control.has_ht_control().then_some([0x10, 0x20, 0x30, 0x40]);
-        let header = MacHeader::new(control, 0x5634, [0xff; 6], A, B, 0x789a, address4, qos, ht)
-            .unwrap();
+        let header =
+            MacHeader::new(control, 0x5634, [0xff; 6], A, B, 0x789a, address4, qos, ht).unwrap();
         let mut expected = std::vec::Vec::new();
         expected.extend(raw.to_le_bytes());
         expected.extend(0x5634_u16.to_le_bytes());
@@ -41,7 +41,11 @@ fn every_valid_header_shape_writes_all_fields_and_leaves_its_tail_untouched() {
             expected.extend(ht);
         }
         let mut out = [0xa5; 40];
-        assert_eq!(header.encode(&mut out), Ok(expected.len()), "control {raw:#06x}");
+        assert_eq!(
+            header.encode(&mut out),
+            Ok(expected.len()),
+            "control {raw:#06x}"
+        );
         assert_eq!(header.header_len(), expected.len(), "control {raw:#06x}");
         assert_eq!(&out[..expected.len()], expected, "control {raw:#06x}");
         assert!(out[expected.len()..].iter().all(|byte| *byte == 0xa5));
@@ -66,7 +70,12 @@ fn optional_fields_agree_with_the_frame_control() {
     assert!(header(0x8008, None, None, None).is_some());
     assert!(header(0x8008, None, None, Some([0; 4])).is_none());
     // Only a QoS data header takes a new QoS Control.
-    assert!(header(0x0008, None, None, None).unwrap().with_qos(qos()).is_none());
+    assert!(
+        header(0x0008, None, None, None)
+            .unwrap()
+            .with_qos(qos())
+            .is_none()
+    );
 }
 
 #[test]
@@ -97,8 +106,19 @@ fn a_short_buffer_is_refused_unwritten_and_a_short_frame_undecoded() {
 
 #[test]
 fn the_qos_field_places_each_subfield() {
-    let field = QosControl::new(oer_wire::U8::constant::<6>(), false, QosAckPolicy::Normal, false, 0);
+    let field = QosControl::new(
+        oer_wire::U8::constant::<6>(),
+        false,
+        QosAckPolicy::Normal,
+        false,
+        0,
+    );
     assert_eq!(field.to_bytes(), [0x06, 0x00]);
     assert_eq!(qos().to_bytes(), [0xb9, 0x72]);
-    assert_eq!(qos().with_ack_policy(QosAckPolicy::Normal.field()).to_bytes(), [0x99, 0x72]);
+    assert_eq!(
+        qos()
+            .with_ack_policy(QosAckPolicy::Normal.field())
+            .to_bytes(),
+        [0x99, 0x72]
+    );
 }

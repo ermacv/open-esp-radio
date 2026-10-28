@@ -360,13 +360,22 @@ impl MpduLayout {
         let (prefix, body_memory) = self.memory(bytes)?;
         match frame {
             TxFrame::Individual { frame, .. } => {
-                frame.header().with_protection(self.protection).encode(prefix)?;
+                frame
+                    .header()
+                    .with_protection(self.protection)
+                    .encode(prefix)?;
             }
             TxFrame::IndividualNoAck { frame, .. } => {
-                frame.header().with_protection(self.protection).encode(prefix)?;
+                frame
+                    .header()
+                    .with_protection(self.protection)
+                    .encode(prefix)?;
             }
             TxFrame::Group { frame, .. } => {
-                frame.header().with_protection(self.protection).encode(prefix)?;
+                frame
+                    .header()
+                    .with_protection(self.protection)
+                    .encode(prefix)?;
             }
             TxFrame::BlockAckRequest {
                 receiver,
@@ -404,7 +413,9 @@ impl MpduLayout {
         tid: Tid,
     ) -> Result<Self, LayoutError> {
         let (prefix, body_memory) = self.memory(bytes)?;
-        frame.header(receiver, tid, self.protection).encode(prefix)?;
+        frame
+            .header(receiver, tid, self.protection)
+            .encode(prefix)?;
         // The retained body view has exactly the tail length proved above.
         if let Some(body) = body {
             for (destination, source) in body_memory.iter_mut().zip(body) {

@@ -199,10 +199,7 @@ impl StaCallbacks for Callbacks {
         self.nonce_calls += 1;
         SNONCE
     }
-    fn he_packet_padding(
-        &self,
-        _: &[u8],
-    ) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
+    fn he_packet_padding(&self, _: &[u8]) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
         oer_ieee80211_upper_mac::protection::HePacketPadding::None
     }
 }

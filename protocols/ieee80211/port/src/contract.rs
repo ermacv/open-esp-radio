@@ -4,7 +4,6 @@
 use crate::{HardwareServices, RxCryptoStatus, RxEvidence, TxStatus};
 use oer_ieee80211_wire::{channel::Channel, phy::PhyRate};
 
-
 /// Owner that must perform one indivisible MAC operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacOperationOwner {

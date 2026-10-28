@@ -28,8 +28,8 @@
 //! completion back. A retransmission carries the bytes first encoded, so
 //! its sequence number and CCMP packet number repeat.
 
-use crate::retry::FrameClass;
 use crate::protection::{ProtectedPpdu, TxProtectionDecision, TxPsdu, TxReceiver};
+use crate::retry::FrameClass;
 use oer_ieee80211_port::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
 use oer_ieee80211_port::{MacTxResult, MacTxStatus};
 
@@ -966,7 +966,10 @@ impl TxAttemptPlan {
 
     /// Whether the attempt is protected by a control exchange.
     pub const fn is_protected(&self) -> bool {
-        !matches!(self.protection.protection, oer_ieee80211_port::Protection::None)
+        !matches!(
+            self.protection.protection,
+            oer_ieee80211_port::Protection::None
+        )
     }
 }
 

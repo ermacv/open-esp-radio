@@ -35,7 +35,7 @@ impl ModelWindow {
         let (minimum, maximum) = bounds(ecw_min, ecw_max);
         self.minimum = minimum;
         self.maximum = maximum;
-        self.current = self.current.clamp(minimum, maximum);
+        self.current = self.current.max(minimum).min(maximum);
     }
 
     /// Return to `CWmin` when the frame ends.

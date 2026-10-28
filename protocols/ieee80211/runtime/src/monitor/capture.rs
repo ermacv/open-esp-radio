@@ -16,9 +16,8 @@ use embassy_sync::{
 use oer_memory::{RxHandoffPool, RxNetworkLease};
 use {
     oer_ieee80211_port::{
-        MacRxMetadata, MonitorDropReason, MonitorFrame, MonitorInjectionChannelBinding,
-        MonitorPublishOutcome, MonitorSink,
-        ChannelContextId, MonitorTapPoint,
+        ChannelContextId, MacRxMetadata, MonitorDropReason, MonitorFrame,
+        MonitorInjectionChannelBinding, MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
     },
     oer_ieee80211_wire::channel::WifiChannel,
 };

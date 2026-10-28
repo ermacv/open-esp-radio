@@ -4,8 +4,8 @@
 //! channel. It owns peer admission and frame construction, but deliberately
 //! does not claim receive-filter, key-slot, PHY-low-rate or DMA authority.
 
-use core::fmt;
 use crate::extensions::espressif::phy::EspNowPhyMode;
+use core::fmt;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use {

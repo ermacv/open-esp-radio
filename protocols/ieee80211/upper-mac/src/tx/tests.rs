@@ -1,8 +1,8 @@
 use oer_ieee80211_wire::phy::LegacyRate;
 
 use super::*;
-use crate::retry::AckFailureAccounting;
 use crate::protection::RtsLengthThreshold;
+use crate::retry::AckFailureAccounting;
 
 const LIMITS: RetryLimits = RetryLimits {
     short: 4,

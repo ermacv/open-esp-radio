@@ -13,8 +13,8 @@ use oer_ieee80211_port::{Band, RetryPlan, RxMetadata, SingleOutcome};
 use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_time::Instant;
 
-use crate::rate_control::RatePeer;
 use crate::protection::BasicRates;
+use crate::rate_control::RatePeer;
 
 /// Lowest management/group rate admitted by the band and BSS basic set.
 ///

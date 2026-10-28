@@ -3,10 +3,10 @@
 //! The hardware profile decides eligibility, including supported MCS and width.
 //! This policy neither advertises capabilities nor encodes a PHY channel command.
 
+use oer_ieee80211_upper_mac::phy_mode::PhyMode;
 use oer_ieee80211_upper_mac::protection::{
     BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
 };
-use oer_ieee80211_upper_mac::phy_mode::PhyMode;
 
 /// Caller policy applied before constructing one STA association request.
 ///

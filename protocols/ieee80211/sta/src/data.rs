@@ -22,8 +22,7 @@
 use crate::Counter;
 use oer_ieee80211_port::{
     AckHeader, HeaderSpec, MpduLength, ResponseHeader, ReturnedMpdu, RxCryptoStatus, RxEvidence,
-    RxMeta, SingleEnd,
-    SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
+    RxMeta, SingleEnd, SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_wire::{
@@ -1049,9 +1048,9 @@ fn sized<K: oer_ieee80211_port::Ieee80211Capabilities, C: oer_ieee80211_port::Tx
     frame: &[u8],
 ) -> Option<oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>> {
     let header = HeaderSpec::from_mac_header(
-                    oer_ieee80211_wire::frame::MacHeader::decode(frame)?,
-                    IndividualAddress::new,
-                )?;
+        oer_ieee80211_wire::frame::MacHeader::decode(frame)?,
+        IndividualAddress::new,
+    )?;
     oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(
         AckHeader::new(header)?,
         MpduLength::new(frame.len())?,

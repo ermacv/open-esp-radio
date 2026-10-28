@@ -3,6 +3,13 @@
 `oer-ieee80211-runtime`: portable Wi-Fi execution primitives — monitor
 handoffs, task shutdown, station network ownership and poll boundaries.
 
+`configuration` checks a requested Wi-Fi owner topology (station, access
+point, monitor) against a backend's `MacServiceCapabilities` and assigns its
+virtual-interface identities; `WifiPlan::standalone_monitor` and
+`standalone_esp_now` narrow it to an exclusive monitor or ESP-NOW station.
+`monitor::policy` holds the bounded `MonitorFilter` a monitor applies to
+tapped frames and its channel policy (fixed or a hopping sequence).
+
 Host tests use the allocating in-memory backend from `oer-ieee80211-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in
 `oer-ieee80211-port`; runtime tests cover its station service over that model.

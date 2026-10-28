@@ -2,7 +2,11 @@ use super::*;
 
 #[test]
 fn basic_selection_keeps_only_flagged_rates_of_both_elements() {
-    let basic = LegacyRateSet::from_rate_elements(&[2, 0x84, 0x8b], &[0x8c, 0x98, 0xb0], RateSelection::Basic);
+    let basic = LegacyRateSet::from_rate_elements(
+        &[2, 0x84, 0x8b],
+        &[0x8c, 0x98, 0xb0],
+        RateSelection::Basic,
+    );
     assert_eq!(
         basic.rates().collect::<std::vec::Vec<_>>(),
         [
@@ -17,7 +21,11 @@ fn basic_selection_keeps_only_flagged_rates_of_both_elements() {
 
 #[test]
 fn all_selection_ignores_the_basic_flag_and_unknown_encodings() {
-    let all = LegacyRateSet::from_rate_elements(&[0x82, 0x84, 0x96, 0xff], &[0x0c, 0x30, 0x7f], RateSelection::All);
+    let all = LegacyRateSet::from_rate_elements(
+        &[0x82, 0x84, 0x96, 0xff],
+        &[0x0c, 0x30, 0x7f],
+        RateSelection::All,
+    );
     assert_eq!(
         all.rates().collect::<std::vec::Vec<_>>(),
         [

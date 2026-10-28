@@ -13,8 +13,8 @@
 
 use core::num::{NonZeroU16, NonZeroU32};
 
-use crate::rate_schedule::schedule_state;
 use crate::rate_record::RateScheduleRef;
+use crate::rate_schedule::schedule_state;
 use oer_ieee80211_port::backend::RateScheduleKind;
 use oer_ieee80211_port::{BlockAckSnr, LinkMetric, SnrSample};
 use oer_ieee80211_upper_mac::rate_control::{

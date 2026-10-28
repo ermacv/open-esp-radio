@@ -57,9 +57,11 @@ use oer_ieee80211_port::conformance;
 //! publishes them. The services it performs autonomously are its
 //! [`LowerMacCapabilities::services`].
 //!
-//! The values its backends' cores take (attempts, settings, key installs,
-//! A-MPDU and beacon timing values) live beside it ([`tx`], [`control`],
-//! [`extensions`]).
+//! The values that cross the port (attempts, settings, key installs,
+//! A-MPDU and beacon timing values, outcomes and the backend's service
+//! description) live beside it ([`tx`], [`control`], [`extensions`],
+//! [`contract`], [`monitor`]). Codecs, policy, vendor records and chip
+//! models live in the layers that own them.
 //!
 //! The PHY and channel values the port carries ([`Channel`], [`PhyRate`])
 //! are the portable ones of `oer-ieee80211-wire`. This package only declares
@@ -138,9 +140,9 @@ pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
     AccessPoint, AckHeader, AddressSetup, BssColor, FrameHeader, GroupAddress, HeaderSpec,
     Ieee80211Capabilities, InterfaceRole, LegacyPhaseRate, LowerMacBackend, LowerMacSetup,
-    MpduLength, NoAckHeader, PhaseRate, QosControl, ReceiverAddress, ResponseHeader,
-    SizedFrame, Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca,
-    SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
+    MpduLength, NoAckHeader, PhaseRate, QosControl, ReceiverAddress, ResponseHeader, SizedFrame,
+    Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca, SupportedFilter,
+    SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub use owner::{
     AdmittedAggregate, AdmittedAggregateParts, AggregateAttempt, AggregatePushResult,
@@ -208,8 +210,6 @@ pub use monitor::{
     MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest,
     MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
 };
-
-
 
 pub mod backend;
 

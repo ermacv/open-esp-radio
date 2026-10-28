@@ -3,7 +3,9 @@ use oer_ieee80211_wire::extensions::wmm::WmmParameterSet;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 fn best_effort() -> ModelWindow {
-    ModelWindow::from_wmm(WmmParameterSet::STANDARD_DEFAULT.access_category(WmmAccessCategory::BestEffort))
+    ModelWindow::from_wmm(
+        WmmParameterSet::STANDARD_DEFAULT.access_category(WmmAccessCategory::BestEffort),
+    )
 }
 
 #[test]

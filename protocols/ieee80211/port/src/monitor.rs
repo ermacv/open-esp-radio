@@ -234,4 +234,3 @@ pub trait MonitorSink<Rate> {
 
 #[cfg(test)]
 mod tests;
-
