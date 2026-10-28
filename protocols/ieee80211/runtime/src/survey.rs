@@ -391,7 +391,8 @@ impl BssTally {
 /// `interval` µs apart: round(elapsed / interval) − 1, at least zero and
 /// saturating at `u32::MAX`.
 fn missed_beacons(elapsed: u64, interval: NonZeroU64) -> u32 {
-    let half = interval.get().div_ceil(2);
+    // midpoint computes floor((interval + 1) / 2) without overflowing.
+    let half = interval.get().midpoint(1);
     let periods = elapsed.saturating_add(half) / interval;
     u32::try_from(periods.saturating_sub(1)).unwrap_or(u32::MAX)
 }

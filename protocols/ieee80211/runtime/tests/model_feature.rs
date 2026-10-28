@@ -26,6 +26,7 @@
         clippy::todo,
         clippy::unimplemented,
         clippy::disallowed_macros,
+        clippy::disallowed_methods,
     )
 )]
 

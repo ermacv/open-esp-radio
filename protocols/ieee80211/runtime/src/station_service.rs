@@ -494,15 +494,9 @@ struct Levels<K>(PhantomData<fn() -> K>);
 
 impl<K: Ieee80211Capabilities> Levels<K> {
     /// The calibrated power.
-    const POWER: SupportedPower<K> = {
-        #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-        const fn checked<K: Ieee80211Capabilities>() -> SupportedPower<K> {
-            match SupportedPower::new(TxPower::Calibrated) {
-                Some(power) => power,
-                None => panic!("a station's port sends at its calibrated power"),
-            }
-        }
-        checked::<K>()
+    const POWER: SupportedPower<K> = match SupportedPower::new(TxPower::Calibrated) {
+        Some(power) => power,
+        None => panic!("a station's port sends at its calibrated power"),
     };
 }
 
@@ -1189,16 +1183,11 @@ impl<
         // The port's values, checked as the type is built.
         const {
             let _power = Levels::<B::Caps>::POWER;
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn check(storage: usize, terminals: usize) {
-                if storage < terminals {
-                    panic!("the service retains the backend's complete terminal capacity");
-                }
+            if B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
+                < <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY
+            {
+                panic!("the service retains the backend's complete terminal capacity");
             }
-            check(
-                B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY,
-                <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY,
-            );
         };
         Self {
             arbiter,
@@ -1242,16 +1231,11 @@ impl<
     ) -> oer_memory::Placed<'s, Self> {
         const {
             let _power = Levels::<B::Caps>::POWER;
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn check(storage: usize, terminals: usize) {
-                if storage < terminals {
-                    panic!("the service retains the backend's complete terminal capacity");
-                }
+            if B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
+                < <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY
+            {
+                panic!("the service retains the backend's complete terminal capacity");
             }
-            check(
-                B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY,
-                <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY,
-            );
         };
         oer_memory::Placed::init(storage, |place| {
             oer_memory::init_in_place!(place, Self {
@@ -1323,21 +1307,16 @@ impl<
             oer_memory::init_in_place!(place, ServiceCompleted {
                 end => |place| end.init_end(place, custody),
                 retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, C, S, GROUPS>>| {
-                    let mut places = None;
+                    // Destructure the complete finish result before constructing
+                    // the retired bank with its station and returned places.
+                    let mut station_storage = core::mem::MaybeUninit::uninit();
+                    let (station, places) = Station::finish_placed(station, &mut station_storage, reason);
                     let mut retired = oer_memory::Placed::init(place, |place| oer_memory::init_in_place!(place, RetiredService {
-                        station => |place| {
-                            let (station, returned) = Station::finish_placed(station, place, reason);
-                            places = Some(returned);
-                            station.into_mut()
-                        },
+                        station => |place| station.move_to(place).into_mut(),
                         data => |place| StaData::finish_placed(data, place).into_mut(),
                         rates: { rates.disconnected(); rates.read() },
                         counters: counters.read(),
-                        _places: {
-                            #[expect(clippy::expect_used, reason = "the preceding station initializer returns its places")]
-                            let places = places.take().expect("station returns its places");
-                            places
-                        },
+                        _places: places,
                         _arbiter: arbiter,
                         _pending: pending.read(),
                         _terminal_access: terminal_access.read(),
