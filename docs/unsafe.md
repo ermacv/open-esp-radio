@@ -120,12 +120,16 @@ C5 code lies outside the workspace and its checks:
 
 `oer-espressif-interrupt-table` owns the Espressif interrupt matrix contract,
 CLIC encodings, vector ABI and staged-runtime symbols. Its narrow unsafe
-contracts cover signal execution contexts. Entry tokens are safe: the root
-Clippy rule restricts direct construction, while binding checks table
-membership and refuses claimed storage. The memory core owns handler-part
-storage and the symbol-export attributes used by the table macros.
-It depends on the memory and MMIO cores;
-chip crates and firmware consume its bindings directly.
+contracts cover signal execution contexts and the existing vector/table/
+exemption slot names and ABI types. Every safe `Entry` implementation carries
+`EntryProof<Self>`; root Clippy policy restricts both proof and token
+constructors to the table macro. This policy requires an explicit lint waiver
+to bypass; it cannot validate scheduling metadata supplied under such a waiver.
+Binding checks source, line, level, hart, class and the proof's vector/cell
+identity before placement or controller writes, returning typed refusals on
+mismatch. Claimed storage retains owners in quarantine. Memory cells enforce
+exclusive access independently of entry metadata. The memory core owns the
+symbol-export attributes. Chip crates and firmware consume the bindings directly.
 
 ## Generated access and trusted handwritten code
 
@@ -746,14 +750,23 @@ staged runtime's `retained_static!` names the sections. `read_volatile`
 reads a value behind a shared borrow with a volatile load; `write_volatile`
 stores a `Copy` value through an exclusive borrow. `StaticRef<T>`
 publishes a `&'static T` through an atomic pointer that interrupt handlers
-and the panic path read without a lock. `link_fn!` binds a function at link
-time: the calling crate declares the symbol and its own macro has the image
-define it, so every call is a direct call that the stack analysis follows,
-where a function pointer would leave the callee unknown; the trace's clock
-is one. Its `export` arms also name immutable statics and safe C ABI
-functions; the defining crate owns each symbol's unique name and signature.
-The interrupt table uses them for its table slice, associated handler
-functions and exemption bytes, preserving the staged vector and tools ABI.
+and the panic path read without a lock. `link_fn!` binds a function at link time through an unsafe-owned `LinkSlot`.
+The slot reserves its name (or indexed family), function/static kind and exact
+value type, including a function's calling convention and complete signature.
+Safe declarations and definitions check all three; private emission arms also
+check the name, so a direct call cannot select another symbol. The former
+unrestricted `define fn` and string-named `export` forms are unavailable.
+`oer-memory::TraceClockSlot` owns `__oer_trace_now_micros: fn() -> u64`;
+`oer-trace` retains `forbid(unsafe_code)` and contains no unsafe site.
+The HAL's `domain::transaction::PhyFaultSlot` owns
+`__oer_phy_transaction_fault: fn(Fault) -> !`. This one narrow unsafe slot
+implementation is the HAL's permitted one-site caller-count exception.
+`oer-espressif-interrupt-table` owns its table, vector and exemption slot
+contracts; the memory home emits their attributes, preserving the image ABI.
+Duplicate strong definitions are rejected by the linker. A slot's unsafe owner
+must keep its declared name/type consistent with every foreign reader; safe
+exports cannot establish that external contract on the owner's behalf.
+Calls remain direct for stack analysis.
 `DmaBytes<N>` holds bytes whose address a driver publishes to a
 DMA engine: reads copy them out by volatile accesses through `&self`,
 writes copy them in through `&mut self`, so no reference aliases memory the

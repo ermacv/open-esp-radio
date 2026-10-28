@@ -45,6 +45,7 @@ mod dma_bytes;
 mod handler_cell;
 mod indexed_custody;
 mod init_in_place;
+mod link;
 mod once_value;
 mod pinned_tx;
 mod request_slot;
@@ -77,6 +78,7 @@ pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
 #[doc(hidden)]
 pub use init_in_place::__InitField;
+pub use link::{LinkSlot, NamePart, SlotKind, SlotName, TraceClockSlot};
 pub use once_value::OnceValue;
 pub use pinned_tx::{
     DmaIndexReturn, IndexedStableDmaLease, PinnedDmaTxNetworkLease, PinnedDmaTxPool,

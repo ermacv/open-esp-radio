@@ -9,6 +9,7 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use oer_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
+use oer_radio_port::conformance::registration::guarded;
 use oer_radio_port::*;
 use oer_time::Duration;
 use std::{rc::Rc, vec::Vec};
@@ -548,16 +549,19 @@ fn scenario(scenario: Scenario) {
             backend.inject(oer_bluetooth_le_model::Stimulus::Indeterminate);
         }
         let end = LocalExecution
-            .scope(slot.register(backend).ok().unwrap(), async |front| {
-                run_port(
-                    front,
-                    Body {
-                        env: env.clone(),
-                        scenario,
-                    },
-                )
-                .await
-            })
+            .scope(
+                guarded(slot.register(backend).ok().unwrap()),
+                async |front| {
+                    run_port(
+                        front,
+                        Body {
+                            env: env.clone(),
+                            scenario,
+                        },
+                    )
+                    .await
+                },
+            )
             .await;
         if matches!(
             scenario,
@@ -696,7 +700,7 @@ fn active_reset_is_acknowledged_only_after_joined_reinstallation() {
         let mut slot = claim.place();
         let first = LocalExecution
             .scope(
-                slot.register(Backend::new(env.clone())).ok().unwrap(),
+                guarded(slot.register(Backend::new(env.clone())).ok().unwrap()),
                 async |front| run_port(front, ResetFlow::First).await,
             )
             .await;
@@ -710,9 +714,11 @@ fn active_reset_is_acknowledged_only_after_joined_reinstallation() {
         assert_eq!(env.active_radios(), 0);
         let second = LocalExecution
             .scope(
-                slot.reinstall(joined, |vacant| Backend::resume(vacant).unwrap())
-                    .ok()
-                    .unwrap(),
+                guarded(
+                    slot.reinstall(joined, |vacant| Backend::resume(vacant).unwrap())
+                        .ok()
+                        .unwrap(),
+                ),
                 async |front| run_port(front, ResetFlow::Reinstalled(reset)).await,
             )
             .await;

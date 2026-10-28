@@ -1,4 +1,6 @@
 disallowed-methods = [
+    { path = "oer_espressif_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
+    { path = "oer_espressif_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
     { path = "core::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
     { path = "core::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
     { path = "std::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },

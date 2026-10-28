@@ -99,8 +99,11 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     // writes nothing.
     let mut zero = fake_router(0);
     let before = zero.controller.writes.len();
-    let crate::BindError::Refused { error, token, part } =
-        zero.bind(tokens.radio, RadioIrq).unwrap_err()
+    let crate::BindError::Refused {
+        error,
+        token,
+        part: radio_part,
+    } = zero.bind(tokens.radio, RadioIrq).unwrap_err()
     else {
         panic!("a foreign hart is a pre-admission refusal");
     };
@@ -114,11 +117,80 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     );
     assert_eq!(zero.controller.writes.len(), before);
 
+    // A table cannot reinterpret a token's class or route it to a handler
+    // that reads another cell. Both refusals precede placement and writes.
+    let original = &INTERRUPT_TABLE[0];
+    let table = |class, handler| {
+        std::boxed::Box::leak(std::boxed::Box::new([crate::Binding {
+            source: original.source,
+            line: original.line,
+            level: original.level,
+            hart: original.hart,
+            class,
+            handler: Some(handler),
+        }])) as &'static crate::Table
+    };
+    let mut wrong_class = Router::install(
+        FakeController::new(0),
+        table(crate::Class::Executor, timer_handler),
+    )
+    .unwrap();
+    let before_class = wrong_class.controller.writes.len();
+    let crate::BindError::Refused {
+        error,
+        token: timer,
+        part,
+    } = wrong_class
+        .bind(tokens.timer, TimerIrq::default())
+        .unwrap_err()
+    else {
+        panic!("class mismatch must return the unchanged owners");
+    };
+    assert_eq!(
+        error,
+        Error::WrongClass {
+            source: 3,
+            table: crate::Class::Executor,
+            entry: crate::Class::Hardware
+        }
+    );
+    assert_eq!(wrong_class.controller.writes.len(), before_class);
+    assert!(
+        wrong_class
+            .controller
+            .lines
+            .iter()
+            .all(|line| !line.enabled)
+    );
+
+    static OTHER_CELL: oer_memory::HandlerCell<TimerIrq> = oer_memory::HandlerCell::new();
+    extern "C" fn other_cell_handler() {
+        let _ = OTHER_CELL.with(on_timer);
+    }
+    let mut wrong_cell = Router::install(
+        FakeController::new(0),
+        table(TimerToken::CLASS, other_cell_handler as extern "C" fn()),
+    )
+    .unwrap();
+    let before_cell = wrong_cell.controller.writes.len();
+    let crate::BindError::Refused {
+        error,
+        token: timer,
+        part,
+    } = wrong_cell.bind(timer, part).unwrap_err()
+    else {
+        panic!("cell mismatch must return the unchanged owners");
+    };
+    assert_eq!(error, Error::HandlerCellMismatch { source: 3 });
+    assert_eq!(wrong_cell.controller.writes.len(), before_cell);
+    assert!(wrong_cell.controller.lines.iter().all(|line| !line.enabled));
+    assert!(OTHER_CELL.with(|_| ()).is_none());
+
     // Before its binding the timer's handler finds no part and runs nothing.
     assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
     timer_handler();
 
-    let _bound: crate::Bound<TimerToken> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
+    let _bound: crate::Bound<TimerToken> = zero.bind(timer, part).unwrap();
     assert_eq!(crate::Bound::<TimerToken>::SOURCE, 3);
     assert_eq!(
         zero.controller.writes[before..],
@@ -189,40 +261,10 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert_eq!(TimerToken::cell().with(|part| part.handled), Some(3));
 
     let mut one = fake_router(1);
-    let _bound = one.bind(token, part).unwrap();
+    let _bound = one.bind(token, radio_part).unwrap();
     assert_eq!(one.controller.routes[5], Some(17));
     assert_eq!(one.controller.lines[17], LineState::bound(2, 3));
     one.verify().unwrap();
-}
-
-#[test]
-fn a_safe_entry_with_different_metadata_is_refused_before_placement() {
-    #[derive(Debug)]
-    struct Forged;
-    impl Entry for Forged {
-        type Part = TimerIrq;
-        const LINE: u8 = 19;
-        const LEVEL: u8 = TimerToken::LEVEL;
-        const HART: u8 = TimerToken::HART;
-        const CLASS: crate::Class = TimerToken::CLASS;
-        fn storage() -> &'static static_cell::StaticCell<TimerIrq> {
-            TimerToken::storage()
-        }
-        fn cell() -> &'static oer_memory::HandlerCell<TimerIrq> {
-            TimerToken::cell()
-        }
-    }
-
-    let mut router = fake_router(0);
-    let before = router.controller.writes.len();
-    let crate::BindError::Refused { error, part, .. } =
-        router.bind(Forged, TimerIrq { handled: 7 }).unwrap_err()
-    else {
-        panic!("an entry absent from the table is a pre-admission refusal");
-    };
-    assert_eq!(error, Error::NotInTable { source: 3 });
-    assert_eq!(part.handled, 7);
-    assert_eq!(router.controller.writes.len(), before);
 }
 
 #[test]

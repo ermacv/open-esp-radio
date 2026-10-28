@@ -161,6 +161,12 @@ fn error_words(error: Error) -> [u32; 3] {
             source.into(),
             u32::from(hart) | (u32::from(current) << 8),
         ],
+        Error::WrongClass {
+            source,
+            table,
+            entry,
+        } => [12, source.into(), (table as u32) | ((entry as u32) << 8)],
+        Error::HandlerCellMismatch { source } => [13, source.into(), 0],
         Error::NotInTable { source } => [5, source.into(), 0],
         Error::ForeignRoute { source, line } => [6, source.into(), line.into()],
         Error::WrongLine {

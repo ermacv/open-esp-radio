@@ -121,6 +121,14 @@ pub enum Error {
     WrongHart { source: u16, hart: u8, current: u8 },
     /// The table holds no entry of the token's source, line, level and hart.
     NotInTable { source: u16 },
+    /// The token and table assign different handler classes to this source.
+    WrongClass {
+        source: u16,
+        table: crate::Class,
+        entry: crate::Class,
+    },
+    /// The table's vector and token do not identify the same handler cell.
+    HandlerCellMismatch { source: u16 },
     /// `source` is routed to `line`, which no entry of this hart binds it to.
     ForeignRoute { source: u16, line: u8 },
     /// `line` holds `state`, not what the table's entries leave in it.
@@ -348,12 +356,31 @@ impl<C: Controller> Router<C> {
                 part,
             );
         }
-        if let Some(&source) = sources.iter().find(|&&source| {
-            !present(self.table, current).any(|binding| {
+        let proof = E::PROOF;
+        for &source in sources {
+            let Some(binding) = present(self.table, current).find(|binding| {
                 binding.source == source && binding.line == E::LINE && binding.level == E::LEVEL
-            })
-        }) {
-            return refuse(Error::NotInTable { source }, token, part);
+            }) else {
+                return refuse(Error::NotInTable { source }, token, part);
+            };
+            if binding.class != E::CLASS {
+                return refuse(
+                    Error::WrongClass {
+                        source,
+                        table: binding.class,
+                        entry: E::CLASS,
+                    },
+                    token,
+                    part,
+                );
+            }
+            if !binding
+                .handler
+                .is_some_and(|handler| core::ptr::fn_addr_eq(handler, proof.handler()))
+                || !core::ptr::eq(E::cell(), proof.cell())
+            {
+                return refuse(Error::HandlerCellMismatch { source }, token, part);
+            }
         }
         let fault = |source, kind| BindFault {
             source,
@@ -369,7 +396,7 @@ impl<C: Controller> Router<C> {
             )));
         };
         let place = storage.write(part);
-        if let Err(place) = E::cell().install(place) {
+        if let Err(place) = proof.cell().install(place) {
             return Err(BindError::Fault(Quarantined::placed(
                 fault(source, BindFaultKind::HandlerOccupied),
                 token,

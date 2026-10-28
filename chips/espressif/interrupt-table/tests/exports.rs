@@ -11,13 +11,71 @@ fn safe_table_exports_keep_their_abi_and_only_the_macro_may_construct_tokens() {
     let scratch_root = Path::new(env!("CARGO_TARGET_TMPDIR"));
     fs::create_dir_all(scratch_root).unwrap();
     let scratch = tempfile::tempdir_in(scratch_root).unwrap();
+    let memory = manifest
+        .join("../../../portable/memory")
+        .canonicalize()
+        .unwrap();
     fs::write(
         scratch.path().join("Cargo.toml"),
         format!(
-            "[package]\nname = \"interrupt-exports\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {manifest:?} }}\n"
+            "[package]\nname = \"interrupt-exports\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {manifest:?} }}\noer-memory = {{ path = {memory:?} }}\n"
         ),
     )
     .unwrap();
+    // Keep every dependency resolution from the pinned workspace lock.
+    // Only the isolated root package itself is added to the copied lock.
+    let mut lock = fs::read_to_string(manifest.join("../../../Cargo.lock")).unwrap();
+    lock.push_str(
+        r#"
+[[package]]
+name = "interrupt-exports"
+version = "0.0.0"
+dependencies = ["oer-espressif-interrupt-table", "oer-memory"]
+"#,
+    );
+    fs::write(scratch.path().join("Cargo.lock"), &lock).unwrap();
+    // Cargo prunes workspace-only packages for the isolated root. Verify
+    // that this normalization preserves every resolved dependency identity,
+    // then forbid any further lock changes in every compiler invocation.
+    let normalized = Command::new("cargo")
+        .args([
+            "metadata",
+            "--offline",
+            "--format-version=1",
+            "--manifest-path",
+        ])
+        .arg(scratch.path().join("Cargo.toml"))
+        .output()
+        .unwrap();
+    assert!(
+        normalized.status.success(),
+        "{}",
+        String::from_utf8_lossy(&normalized.stderr)
+    );
+    let identities = |text: &str| -> Vec<String> {
+        text.split("\n[[package]]\n")
+            .skip(1)
+            .map(|package| {
+                package
+                    .lines()
+                    .filter(|line| {
+                        ["name =", "version =", "source =", "checksum ="]
+                            .iter()
+                            .any(|key| line.starts_with(key))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .collect()
+    };
+    let pinned = identities(&lock);
+    let normalized = fs::read_to_string(scratch.path().join("Cargo.lock")).unwrap();
+    for identity in identities(&normalized) {
+        assert!(
+            pinned.contains(&identity),
+            "dependency changed from workspace lock: {identity}"
+        );
+    }
     let source = r#"#![forbid(unsafe_code)]
 #![deny(clippy::disallowed_methods)]
 oer_espressif_interrupt_table::__fake_parts!();
@@ -42,12 +100,12 @@ oer_espressif_interrupt_table::interrupt_table! {
         let export_args = ["--", emit_ir.as_str()];
         let output = Command::new("cargo")
             .args(args)
-            .args(["--offline", "--lib", "--manifest-path"])
+            .args(["--offline", "--locked", "--lib", "--manifest-path"])
             .arg(scratch.path().join("Cargo.toml"))
             .arg("--target-dir")
             .arg(scratch.path().join("build"))
             .env("CLIPPY_CONF_DIR", manifest.ancestors().nth(3).unwrap())
-            .args(if name == "exports" {
+            .args(if args == ["rustc"] {
                 &export_args[..]
             } else {
                 &["--", "-D", "warnings"][..]
@@ -80,6 +138,71 @@ oer_espressif_interrupt_table::interrupt_table! {
         diagnostics.contains("interrupt entry tokens come from"),
         "{diagnostics}"
     );
+
+    fs::write(&case, format!("{source}\npub fn proof() {{ let _ = oer_espressif_interrupt_table::__private::EntryProof::<TimerToken>::new(TimerToken::PROOF.handler(), <TimerToken as oer_espressif_interrupt_table::Entry>::cell()); }}\nuse oer_espressif_interrupt_table::Entry;" )).unwrap();
+    let reject = run("direct-proof", &["clippy"]);
+    assert_eq!(reject.status.code(), Some(101));
+    assert!(
+        String::from_utf8_lossy(&reject.stderr)
+            .contains("implementations and handler/cell proofs come from")
+    );
+
+    for (name, body, expected) in [
+        (
+            "wrong-signature",
+            "fn wrong() -> u8 { 0 } oer_memory::link_fn! { define oer_memory::TraceClockSlot => fn __oer_trace_now_micros() -> u8 = wrong; }",
+            "mismatched types",
+        ),
+        (
+            "wrong-kind",
+            r#"fn clock() -> u64 { 0 } oer_memory::link_fn! { @static oer_memory::TraceClockSlot, "__oer_trace_now_micros" => static BAD: fn() -> u64 = clock; }"#,
+            "a function slot cannot define a static",
+        ),
+        (
+            "wrong-name",
+            "fn clock() -> u64 { 0 } oer_memory::link_fn! { define oer_memory::TraceClockSlot => fn memcpy() -> u64 = clock; }",
+            "definition names another slot",
+        ),
+        (
+            "wrong-abi",
+            r#"oer_memory::link_fn! { @function oer_memory::TraceClockSlot, "__oer_trace_now_micros" => extern "C" fn bad() -> u64 { 0 } }"#,
+            "mismatched types",
+        ),
+        (
+            "free-name",
+            r#"oer_memory::link_fn! { export "memcpy" => static BAD: u8 = 0; }"#,
+            "no rules expected",
+        ),
+        (
+            "missing-proof",
+            r#"struct Forged;
+impl oer_espressif_interrupt_table::Entry for Forged {
+    type Part = TimerIrq;
+    const LINE: u8 = 18;
+    const LEVEL: u8 = 2;
+    const HART: u8 = 0;
+    const CLASS: oer_espressif_interrupt_table::Class = oer_espressif_interrupt_table::Class::Hardware;
+    fn storage() -> &'static oer_espressif_interrupt_table::__private::StaticCell<TimerIrq> {
+        <TimerToken as oer_espressif_interrupt_table::Entry>::storage()
+    }
+    fn cell() -> &'static oer_memory::HandlerCell<TimerIrq> {
+        <TimerToken as oer_espressif_interrupt_table::Entry>::cell()
+    }
+}"#,
+            "not all trait items implemented",
+        ),
+        (
+            "foreign-proof",
+            "const BAD: oer_espressif_interrupt_table::__private::EntryProof<RadioToken> = <TimerToken as oer_espressif_interrupt_table::Entry>::PROOF;",
+            "mismatched types",
+        ),
+    ] {
+        fs::write(&case, format!("{source}\n{body}\n")).unwrap();
+        let reject = run(name, &["rustc"]);
+        let stderr = String::from_utf8_lossy(&reject.stderr);
+        assert_eq!(reject.status.code(), Some(101), "{name}: {stderr}");
+        assert!(stderr.contains(expected), "{name}: {stderr}");
+    }
 
     fs::write(&case, source).unwrap();
     let compiled = run("exports", &["rustc"]);

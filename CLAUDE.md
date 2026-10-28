@@ -43,11 +43,15 @@ system these rules serve.
   are allowed. Unsafe contracts cover memory safety; operation order and
   lifecycle are enforced by `&mut` ownership and typestate. Moving existing
   unsafe sites into their narrow home (`oer-riscv` for architectural
-  instructions, `oer-memory` for cells, placement and DMA proofs, the HAL's
+  instructions, `oer-memory` for cells, placement, DMA proofs and typed symbol exports, the HAL's
   PSRAM owner for slice creation) may increase the home's count only by the
   moved sites, when the touched crates' total decreases and no calling crate's
   count increases; each site retains its narrow
   contract and `// SAFETY:` proof.
+  The PHY-fault slot's ABI declaration belongs to the HAL, with one narrow
+  `LinkSlot` unsafe implementation; its one-site caller-count increase is
+  permitted. The trace clock slot belongs to `oer-memory`, and trace retains
+  `forbid(unsafe_code)`. Other callers retain the no-growth rule.
   Context-local mutable payloads use `oer-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
   An impossible state returns a named fault retaining its source observations;
@@ -146,7 +150,8 @@ system these rules serve.
   Generated register code has no `unsafe`: volatile access lives in
   `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
   instructions in `portable/riscv`, Espressif interrupt bindings in
-  `chips/espressif/interrupt-table`, the PAC's one root claim, probe images,
+  `chips/espressif/interrupt-table`, typed symbol export attributes in
+  `portable/memory`, the PAC's one root claim, probe images,
   the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
   Only `oer-riscv` contains `asm!` for architectural operations. Entry/trap
